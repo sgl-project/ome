@@ -60,8 +60,8 @@ func (c *FakeOmeV1beta1) InferenceServices(namespace string) v1beta1.InferenceSe
 	return &FakeInferenceServices{c, namespace}
 }
 
-func (c *FakeOmeV1beta1) OciPostgresClusters(namespace string) v1beta1.OciPostgresClusterInterface {
-	return &FakeOciPostgresClusters{c, namespace}
+func (c *FakeOmeV1beta1) OciPostgreses(namespace string) v1beta1.OciPostgresInterface {
+	return &FakeOciPostgreses{c, namespace}
 }
 
 func (c *FakeOmeV1beta1) OciPostgresDBInstances() v1beta1.OciPostgresDBInstanceInterface {

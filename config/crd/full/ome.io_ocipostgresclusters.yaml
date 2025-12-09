@@ -57,6 +57,11 @@ spec:
               instanceOcpuCount:
                 default: 2
                 type: integer
+              logicalDatabases:
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
               networkDetails:
                 properties:
                   nsgIds:
@@ -84,6 +89,7 @@ spec:
                 type: object
             required:
             - compartmentId
+            - logicalDatabases
             - networkDetails
             type: object
           status:
@@ -129,6 +135,31 @@ spec:
                   type: object
                 type: array
                 x-kubernetes-list-type: atomic
+              dbInstances:
+                items:
+                  properties:
+                    appUserSecretName:
+                      type: string
+                    appUserSecretNamespace:
+                      type: string
+                    databaseName:
+                      type: string
+                    lifecycleState:
+                      enum:
+                      - READY
+                      - CREATING
+                      - DELETING
+                      - DELETED
+                      - FAILED
+                      - UPDATING
+                      type: string
+                  required:
+                  - databaseName
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - databaseName
+                x-kubernetes-list-type: map
               dbSystemId:
                 type: string
               endpoint:

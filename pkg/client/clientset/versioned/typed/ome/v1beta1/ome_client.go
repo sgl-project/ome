@@ -24,7 +24,7 @@ type OmeV1beta1Interface interface {
 	FineTunedWeightsGetter
 	InferenceGraphsGetter
 	InferenceServicesGetter
-	OciPostgresClustersGetter
+	OciPostgresesGetter
 	OciPostgresDBInstancesGetter
 	OciRedisClustersGetter
 	OrganizationsGetter
@@ -91,8 +91,8 @@ func (c *OmeV1beta1Client) InferenceServices(namespace string) InferenceServiceI
 	return newInferenceServices(c, namespace)
 }
 
-func (c *OmeV1beta1Client) OciPostgresClusters(namespace string) OciPostgresClusterInterface {
-	return newOciPostgresClusters(c, namespace)
+func (c *OmeV1beta1Client) OciPostgreses(namespace string) OciPostgresInterface {
+	return newOciPostgreses(c, namespace)
 }
 
 func (c *OmeV1beta1Client) OciPostgresDBInstances() OciPostgresDBInstanceInterface {

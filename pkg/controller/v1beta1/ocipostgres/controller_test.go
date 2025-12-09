@@ -1,4 +1,4 @@
-package ocipostgrescluster
+package ocipostgres
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	ocipostgresdbsystem "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ocidbsystem"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	PostgreSQLUtil "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/ocipostgrescluster/utils"
+	PostgreSQLUtil "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/ocipostgres/utils"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/psql"
 	"github.com/stretchr/testify/assert"
@@ -55,7 +55,7 @@ func TestHashCreateDetails_DeterministicAndSensitiveToFields(t *testing.T) {
 }
 
 func TestAddFinalizerIfNeeded_AddsWhenMissing(t *testing.T) {
-	cr := &v1beta1.OciPostgresCluster{
+	cr := &v1beta1.OciPostgres{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test",
 			Namespace:  "ns",
@@ -69,7 +69,7 @@ func TestAddFinalizerIfNeeded_AddsWhenMissing(t *testing.T) {
 }
 
 func TestAddFinalizerIfNeeded_NoChangeIfAlreadyPresent(t *testing.T) {
-	cr := &v1beta1.OciPostgresCluster{
+	cr := &v1beta1.OciPostgres{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "ns",
@@ -86,7 +86,7 @@ func TestAddFinalizerIfNeeded_NoChangeIfAlreadyPresent(t *testing.T) {
 }
 
 func TestRemoveFinalizer_RemovesOnlyOurFinalizer(t *testing.T) {
-	cr := &v1beta1.OciPostgresCluster{
+	cr := &v1beta1.OciPostgres{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "ns",
@@ -111,7 +111,7 @@ func TestGetOrCreateAdminCred_CreateWhenNotFound(t *testing.T) {
 
 	fc := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-	r := &DBClusterReconciler{
+	r := &PostgresReconciler{
 		Client: fc,
 		Scheme: scheme,
 		Log:    ctrl.Log.WithName("test"),
@@ -169,7 +169,7 @@ func TestGetOrCreateAdminCred_UsesExistingSecret(t *testing.T) {
 		WithObjects(secret).
 		Build()
 
-	r := &DBClusterReconciler{
+	r := &PostgresReconciler{
 		Client: fc,
 		Scheme: scheme,
 		Log:    ctrl.Log.WithName("test"),
@@ -194,7 +194,7 @@ func TestReconcileDelete_RemovesSecretAndFinalizer_WhenDbSystemIdEmpty(t *testin
 	// Cluster name is used as the namespace for the secret in reconcileDelete
 	clusterName := "cluster-ns"
 
-	cluster := &v1beta1.OciPostgresCluster{
+	cluster := &v1beta1.OciPostgres{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      clusterName,
 			Namespace: "ignored-ns",
@@ -203,7 +203,7 @@ func TestReconcileDelete_RemovesSecretAndFinalizer_WhenDbSystemIdEmpty(t *testin
 				"other/finalizer",
 			},
 		},
-		Status: v1beta1.OciPostgresClusterStatus{
+		Status: v1beta1.OciPostgresStatus{
 			DbSystemId: "", // ensures DeleteDbSystem is NOT called
 		},
 	}
@@ -220,7 +220,7 @@ func TestReconcileDelete_RemovesSecretAndFinalizer_WhenDbSystemIdEmpty(t *testin
 		WithObjects(secret, cluster).
 		Build()
 
-	r := &DBClusterReconciler{
+	r := &PostgresReconciler{
 		Client: fc,
 		Scheme: scheme,
 		Log:    ctrl.Log.WithName("test"),
@@ -243,7 +243,7 @@ func TestReconcileDelete_RemovesSecretAndFinalizer_WhenDbSystemIdEmpty(t *testin
 	assert.Error(t, err, "expected secret to be deleted")
 
 	// Finalizer should be removed from stored cluster object
-	updated := &v1beta1.OciPostgresCluster{}
+	updated := &v1beta1.OciPostgres{}
 	err = fc.Get(ctx, ktypes.NamespacedName{
 		Namespace: cluster.Namespace,
 		Name:      cluster.Name,

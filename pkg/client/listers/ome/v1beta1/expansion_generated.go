@@ -70,13 +70,13 @@ type InferenceServiceListerExpansion interface{}
 // InferenceServiceNamespaceLister.
 type InferenceServiceNamespaceListerExpansion interface{}
 
-// OciPostgresClusterListerExpansion allows custom methods to be added to
-// OciPostgresClusterLister.
-type OciPostgresClusterListerExpansion interface{}
+// OciPostgresListerExpansion allows custom methods to be added to
+// OciPostgresLister.
+type OciPostgresListerExpansion interface{}
 
-// OciPostgresClusterNamespaceListerExpansion allows custom methods to be added to
-// OciPostgresClusterNamespaceLister.
-type OciPostgresClusterNamespaceListerExpansion interface{}
+// OciPostgresNamespaceListerExpansion allows custom methods to be added to
+// OciPostgresNamespaceLister.
+type OciPostgresNamespaceListerExpansion interface{}
 
 // OciPostgresDBInstanceListerExpansion allows custom methods to be added to
 // OciPostgresDBInstanceLister.

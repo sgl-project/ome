@@ -1,4 +1,4 @@
-package ocipostgrescluster
+package ocipostgres
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 
-	PostgreSQLUtil "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/ocipostgrescluster/utils"
+	PostgreSQLUtil "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/ocipostgres/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,7 +41,7 @@ type adminCreds struct {
 const (
 	tagCreatedBy           = "ome:created-by"
 	tagCRUID               = "ome:cr-uid"
-	adminSecretUserKey     = "username" // [ADDED]
+	adminSecretUserKey     = "username"
 	adminSecretPasswordKey = "password"
 	defaultAdminSecretName = "pg-admin"
 	finalizerName          = "ocipostgrescluster/finalizer"
@@ -56,23 +56,23 @@ var (
 	}
 )
 
-// +kubebuilder:rbac:groups=ome.io,resources=ocipostgresclusters,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=ome.io,resources=ocipostgresclusters/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=ome.io,resources=ocipostgresclusters/finalizers,verbs=update
+// +kubebuilder:rbac:groups=ome.io,resources=ocipostgress,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ome.io,resources=ocipostgress/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=ocipostgress/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;create;update;patch;watch
 
-type DBClusterReconciler struct {
+type PostgresReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 	Log      logr.Logger
 }
 
-func (r *DBClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("PostgresCluster", req.NamespacedName)
 
-	ociPostgresCluster := &v1beta1.OciPostgresCluster{}
-	if err := r.Get(ctx, req.NamespacedName, ociPostgresCluster); err != nil {
+	ociPostgres := &v1beta1.OciPostgres{}
+	if err := r.Get(ctx, req.NamespacedName, ociPostgres); err != nil {
 		// IgnoreNotFound tells controller-runtime not to requeue for deleted CRs
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -86,21 +86,21 @@ func (r *DBClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, fmt.Errorf("failed to create ocipostgresDbConfig config: %w", err)
 	}
 
-	ocipostgresDbConfig.AuthType = Ptr(principals.AuthenticationType(ociPostgresCluster.Spec.AuthType))
+	ocipostgresDbConfig.AuthType = Ptr(principals.AuthenticationType(ociPostgres.Spec.ClusterSpec.AuthType))
 	pgClient, err := newPGClient(ocipostgresDbConfig)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create postgres client: %w", err)
 	}
 
 	// handle deletion via finalizer
-	if !ociPostgresCluster.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, log, ociPostgresCluster, pgClient)
+	if !ociPostgres.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, log, ociPostgres, pgClient)
 	}
 
-	if addFinalizerIfNeeded(ociPostgresCluster) {
-		if err := r.Update(ctx, ociPostgresCluster); err != nil {
-			log.Error(err, "Failed to add finalizer", "name", ociPostgresCluster.Name)
-			r.Recorder.Event(ociPostgresCluster, corev1.EventTypeWarning, "FinalizerAddFailed", "Failed to add finalizer")
+	if addFinalizerIfNeeded(ociPostgres) {
+		if err := r.Update(ctx, ociPostgres); err != nil {
+			log.Error(err, "Failed to add finalizer", "name", ociPostgres.Name)
+			r.Recorder.Event(ociPostgres, corev1.EventTypeWarning, "FinalizerAddFailed", "Failed to add finalizer")
 			return ctrl.Result{}, fmt.Errorf("add finalizer: %w", err)
 		}
 		// requeue to continue normal flow
@@ -108,28 +108,28 @@ func (r *DBClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// If we don't have a DB System yet, create it
-	if strings.TrimSpace(ociPostgresCluster.Status.DbSystemId) == "" {
+	if strings.TrimSpace(ociPostgres.Status.DbSystemId) == "" {
 		creds, err := r.getOrCreateAdminCred(ctx, req.Namespace, defaultAdminSecretName)
 		if err != nil {
 			log.Error(err, "Failed to get or create admin credentials", "namespace", req.Namespace)
-			r.Recorder.Event(ociPostgresCluster, corev1.EventTypeWarning, "AdminSecretError", err.Error())
+			r.Recorder.Event(ociPostgres, corev1.EventTypeWarning, "AdminSecretError", err.Error())
 			return ctrl.Result{}, fmt.Errorf("get or create admin credentials: %w", err)
 		}
 
-		log.Info("Creating new DB system", "dbName", ociPostgresCluster.Name)
-		newID, cerr := r.createDbSystem(ctx, ociPostgresCluster, creds, log, pgClient, string(ociPostgresCluster.UID))
+		log.Info("Creating new DB system", "dbName", ociPostgres.Name)
+		newID, cerr := r.createDbSystem(ctx, ociPostgres, creds, log, pgClient, string(ociPostgres.UID))
 		if cerr != nil {
-			log.Error(cerr, "Failed to create dbsystem", "name", ociPostgresCluster.Name)
+			log.Error(cerr, "Failed to create dbsystem", "name", ociPostgres.Name)
 			return ctrl.Result{}, cerr
 		}
-		log.Info("Created PostgreSQL DB System", "dbSystemId", newID, "dbName", ociPostgresCluster.Name)
+		log.Info("Created PostgreSQL DB System", "dbSystemId", newID, "dbName", ociPostgres.Name)
 
 		// Update status with the new ID
-		ociPostgresCluster.Status.DbSystemId = newID
-		ociPostgresCluster.Status.LifecycleState = "CREATING"
-		if uerr := r.Status().Update(ctx, ociPostgresCluster); uerr != nil {
-			log.Error(uerr, "Failed to update status", "name", ociPostgresCluster.Name)
-			r.Recorder.Event(ociPostgresCluster, corev1.EventTypeWarning, "UpdateStatusFailed", "Failed to update status")
+		ociPostgres.Status.DbSystemId = newID
+		ociPostgres.Status.LifecycleState = "CREATING"
+		if uerr := r.Status().Update(ctx, ociPostgres); uerr != nil {
+			log.Error(uerr, "Failed to update status", "name", ociPostgres.Name)
+			r.Recorder.Event(ociPostgres, corev1.EventTypeWarning, "UpdateStatusFailed", "Failed to update status")
 			return ctrl.Result{}, uerr
 		}
 		// Requeue to poll state transition
@@ -137,79 +137,79 @@ func (r *DBClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// DB System exists — poll its lifecycle and fetch connection details
-	log.Info("Checking available DB Cluster", "clusterId", ociPostgresCluster.Status.DbSystemId)
+	log.Info("Checking available DB Cluster", "clusterId", ociPostgres.Status.DbSystemId)
 
 	get, gerr := pgClient.GetDbSystem(ctx, psql.GetDbSystemRequest{
-		DbSystemId: common.String(ociPostgresCluster.Status.DbSystemId),
+		DbSystemId: common.String(ociPostgres.Status.DbSystemId),
 	})
 	if gerr != nil {
 		if apierr.IsNotFound(gerr) {
-			log.Info("DB system not found by ID; will recreate", "dbSystemId", ociPostgresCluster.Status.DbSystemId)
-			ociPostgresCluster.Status.DbSystemId = ""
-			if uerr := r.Status().Update(ctx, ociPostgresCluster); uerr != nil {
+			log.Info("DB system not found by ID; will recreate", "dbSystemId", ociPostgres.Status.DbSystemId)
+			ociPostgres.Status.DbSystemId = ""
+			if uerr := r.Status().Update(ctx, ociPostgres); uerr != nil {
 				return ctrl.Result{}, uerr
 			}
 			return ctrl.Result{Requeue: true}, nil
 		}
-		log.Error(gerr, "Failed to get db system", "name", ociPostgresCluster.Name)
-		r.Recorder.Event(ociPostgresCluster, corev1.EventTypeWarning, "GetDbSystemFailed", "Failed to get db system")
+		log.Error(gerr, "Failed to get db system", "name", ociPostgres.Name)
+		r.Recorder.Event(ociPostgres, corev1.EventTypeWarning, "GetDbSystemFailed", "Failed to get db system")
 		return ctrl.Result{}, fmt.Errorf("get db system: %w", gerr)
 	}
 
 	state := get.DbSystem.LifecycleState
-	log.Info("PostgreSQL lifecycle", "dbSystemId", ociPostgresCluster.Status.DbSystemId, "state", state)
+	log.Info("PostgreSQL lifecycle", "dbSystemId", ociPostgres.Status.DbSystemId, "state", state)
 
 	switch state {
 	case psql.DbSystemLifecycleStateActive:
-		ociPostgresCluster.Status.AdminSecretNamespace = req.Namespace
-		ociPostgresCluster.Status.AdminSecretName = defaultAdminSecretName
-		ociPostgresCluster.Status.LifecycleState = "READY"
+		ociPostgres.Status.AdminSecretNamespace = req.Namespace
+		ociPostgres.Status.AdminSecretName = defaultAdminSecretName
+		ociPostgres.Status.LifecycleState = "READY"
 
-		if uerr := r.Status().Update(ctx, ociPostgresCluster); uerr != nil {
+		if uerr := r.Status().Update(ctx, ociPostgres); uerr != nil {
 			return ctrl.Result{}, uerr
 		}
-		log.Info("DB ociPostgresCluster is ready")
+		log.Info("DB ociPostgres is ready")
 		return ctrl.Result{}, nil
 
 	case psql.DbSystemLifecycleStateCreating:
-		ociPostgresCluster.Status.LifecycleState = "CREATING"
+		ociPostgres.Status.LifecycleState = "CREATING"
 		// Keep polling
-		if uerr := r.Status().Update(ctx, ociPostgresCluster); uerr != nil {
+		if uerr := r.Status().Update(ctx, ociPostgres); uerr != nil {
 			return ctrl.Result{}, uerr
 		}
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	case psql.DbSystemLifecycleStateUpdating:
-		ociPostgresCluster.Status.LifecycleState = "UPDATING"
+		ociPostgres.Status.LifecycleState = "UPDATING"
 		// Keep polling
-		if uerr := r.Status().Update(ctx, ociPostgresCluster); uerr != nil {
+		if uerr := r.Status().Update(ctx, ociPostgres); uerr != nil {
 			return ctrl.Result{}, uerr
 		}
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	default:
-		ociPostgresCluster.Status.LifecycleState = "FAILED"
-		_ = r.Status().Update(ctx, ociPostgresCluster)
+		ociPostgres.Status.LifecycleState = "FAILED"
+		_ = r.Status().Update(ctx, ociPostgres)
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 }
 
-func (r *DBClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).For(&v1beta1.OciPostgresCluster{}).Complete(r)
+func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).For(&v1beta1.OciPostgres{}).Complete(r)
 }
 
 // createDbSystem creates an OCI PostgreSQL DB System and returns its OCID.
-func (r *DBClusterReconciler) createDbSystem(
+func (r *PostgresReconciler) createDbSystem(
 	ctx context.Context,
-	PostgresDBCluster *v1beta1.OciPostgresCluster,
+	PostgresDBCluster *v1beta1.OciPostgres,
 	creds *adminCreds,
 	log logr.Logger,
 	pgClient *ocipostgresdbsystem.OciPostgresClient,
 	crUID string,
 ) (string, error) {
-	compartmentID := PostgresDBCluster.Spec.CompartmentId
+	compartmentID := PostgresDBCluster.Spec.ClusterSpec.CompartmentId
 	if compartmentID == "" {
 		return "", fmt.Errorf("spec.compartmentId is required")
 	}
-	subnetId := PostgresDBCluster.Spec.NetworkDetails.SubnetId
+	subnetId := PostgresDBCluster.Spec.ClusterSpec.NetworkDetails.SubnetId
 	if subnetId == "" {
 		return "", fmt.Errorf("TargetSubnetOCID must be set")
 	}
@@ -224,7 +224,7 @@ func (r *DBClusterReconciler) createDbSystem(
 	if err != nil {
 		return "", fmt.Errorf("build identity config: %w", err)
 	}
-	idCfg.AuthType = Ptr(principals.AuthenticationType(PostgresDBCluster.Spec.AuthType))
+	idCfg.AuthType = Ptr(principals.AuthenticationType(PostgresDBCluster.Spec.ClusterSpec.AuthType))
 
 	idc, err := newIdentityClient(idCfg)
 	if err != nil {
@@ -258,10 +258,11 @@ func (r *DBClusterReconciler) createDbSystem(
 	details := psql.CreateDbSystemDetails{
 		DisplayName:   common.String(displayName),
 		CompartmentId: common.String(compartmentID),
-		DbVersion:     common.String(PostgresDBCluster.Spec.DbVersion),
-		Shape:         common.String(PostgresDBCluster.Spec.Shape),
+		DbVersion:     common.String(PostgresDBCluster.Spec.ClusterSpec.DbVersion),
+		Shape:         common.String(PostgresDBCluster.Spec.ClusterSpec.Shape),
 		NetworkDetails: &psql.NetworkDetails{
 			SubnetId: common.String(subnetId),
+			NsgIds:   PostgresDBCluster.Spec.ClusterSpec.NetworkDetails.NsgIds,
 		},
 		Credentials: &psql.Credentials{
 			Username: common.String(creds.Username),
@@ -270,9 +271,9 @@ func (r *DBClusterReconciler) createDbSystem(
 			},
 		},
 		StorageDetails:          storageDetails,
-		InstanceCount:           common.Int(PostgresDBCluster.Spec.InstanceCount),
-		InstanceOcpuCount:       common.Int(*PostgresDBCluster.Spec.InstanceOcpuCount),
-		InstanceMemorySizeInGBs: common.Int(*PostgresDBCluster.Spec.InstanceMemorySizeInGbs),
+		InstanceCount:           common.Int(PostgresDBCluster.Spec.ClusterSpec.InstanceCount),
+		InstanceOcpuCount:       common.Int(*PostgresDBCluster.Spec.ClusterSpec.InstanceOcpuCount),
+		InstanceMemorySizeInGBs: common.Int(*PostgresDBCluster.Spec.ClusterSpec.InstanceMemorySizeInGbs),
 		Source:                  psql.NoneSourceDetails{},
 		FreeformTags:            tags,
 	}
@@ -290,7 +291,7 @@ func (r *DBClusterReconciler) createDbSystem(
 	return *resp.DbSystem.Id, nil
 }
 
-func (r *DBClusterReconciler) getOrCreateAdminCred(ctx context.Context, ns string, name string) (*adminCreds, error) {
+func (r *PostgresReconciler) getOrCreateAdminCred(ctx context.Context, ns string, name string) (*adminCreds, error) {
 	current := &corev1.Secret{}
 	err := r.Client.Get(ctx, types.NamespacedName{Namespace: ns, Name: name}, current)
 	if err != nil {
@@ -340,7 +341,7 @@ func hashCreateDetails(d psql.CreateDbSystemDetails) string {
 
 func Ptr[T any](v T) *T { return &v }
 
-func addFinalizerIfNeeded(cr *v1beta1.OciPostgresCluster) bool {
+func addFinalizerIfNeeded(cr *v1beta1.OciPostgres) bool {
 	for _, f := range cr.Finalizers {
 		if f == finalizerName {
 			return false
@@ -350,10 +351,10 @@ func addFinalizerIfNeeded(cr *v1beta1.OciPostgresCluster) bool {
 	return true
 }
 
-func (r *DBClusterReconciler) reconcileDelete(
+func (r *PostgresReconciler) reconcileDelete(
 	ctx context.Context,
 	log logr.Logger,
-	cluster *v1beta1.OciPostgresCluster,
+	cluster *v1beta1.OciPostgres,
 	pgClient *ocipostgresdbsystem.OciPostgresClient,
 ) (ctrl.Result, error) {
 	// We only act if our finalizer is present
@@ -401,7 +402,7 @@ func (r *DBClusterReconciler) reconcileDelete(
 	return ctrl.Result{}, nil
 }
 
-func removeFinalizer(cr *v1beta1.OciPostgresCluster) {
+func removeFinalizer(cr *v1beta1.OciPostgres) {
 	fs := make([]string, 0, len(cr.Finalizers))
 	for _, f := range cr.Finalizers {
 		if f != finalizerName {

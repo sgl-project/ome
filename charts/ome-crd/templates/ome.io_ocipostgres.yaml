@@ -4,14 +4,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.2
-  name: ocipostgresclusters.ome.io
+  name: ocipostgres.ome.io
 spec:
   group: ome.io
   names:
-    kind: OciPostgresCluster
-    listKind: OciPostgresClusterList
-    plural: ocipostgresclusters
-    singular: ocipostgrescluster
+    kind: OciPostgres
+    listKind: OciPostgresList
+    plural: ocipostgres
+    singular: ocipostgres
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -33,64 +33,75 @@ spec:
             type: object
           spec:
             properties:
-              authType:
-                default: InstancePrincipal
-                enum:
-                - InstancePrincipal
-                - UserPrincipal
-                type: string
-              compartmentId:
-                type: string
-              dbVersion:
-                default: "16"
-                type: string
-              description:
-                type: string
-              displayName:
-                type: string
-              instanceCount:
-                default: 1
-                type: integer
-              instanceMemorySizeInGbs:
-                default: 16
-                type: integer
-              instanceOcpuCount:
-                default: 2
-                type: integer
-              logicalDatabases:
-                items:
-                  type: string
-                type: array
-                x-kubernetes-list-type: set
-              networkDetails:
+              clusterSpec:
                 properties:
-                  nsgIds:
+                  authType:
+                    default: InstancePrincipal
+                    enum:
+                    - InstancePrincipal
+                    - UserPrincipal
+                    type: string
+                  compartmentId:
+                    type: string
+                  dbVersion:
+                    default: "16"
+                    type: string
+                  description:
+                    type: string
+                  displayName:
+                    type: string
+                  instanceCount:
+                    default: 1
+                    type: integer
+                  instanceMemorySizeInGbs:
+                    default: 16
+                    type: integer
+                  instanceOcpuCount:
+                    default: 2
+                    type: integer
+                  networkDetails:
+                    properties:
+                      nsgIds:
+                        items:
+                          type: string
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      primaryDbEndpointPrivateIp:
+                        type: string
+                      subnetId:
+                        type: string
+                    required:
+                    - nsgIds
+                    - subnetId
+                    type: object
+                  shape:
+                    default: PostgreSQL.VM.Standard.E5.Flex
+                    type: string
+                  storageDetails:
+                    properties:
+                      availabilityDomain:
+                        type: string
+                      isRegionallyDurable:
+                        default: false
+                        type: boolean
+                    type: object
+                required:
+                - compartmentId
+                - networkDetails
+                type: object
+              dbInstanceSpec:
+                properties:
+                  logicalDatabases:
                     items:
                       type: string
                     type: array
-                    x-kubernetes-list-type: atomic
-                  primaryDbEndpointPrivateIp:
-                    type: string
-                  subnetId:
-                    type: string
+                    x-kubernetes-list-type: set
                 required:
-                - subnetId
-                type: object
-              shape:
-                default: PostgreSQL.VM.Standard.E5.Flex
-                type: string
-              storageDetails:
-                properties:
-                  availabilityDomain:
-                    type: string
-                  isRegionallyDurable:
-                    default: false
-                    type: boolean
+                - logicalDatabases
                 type: object
             required:
-            - compartmentId
-            - logicalDatabases
-            - networkDetails
+            - clusterSpec
+            - dbInstanceSpec
             type: object
           status:
             properties:

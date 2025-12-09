@@ -290,8 +290,8 @@ rules:
   - finetunedweights/finalizers
   - inferenceservices
   - inferenceservices/finalizers
-  - ocipostgresclusters
   - ocipostgresdbinstances
+  - ocipostgress
   - ociredisclusters
   - projects
   - ratelimits
@@ -321,8 +321,8 @@ rules:
   - dedicatedaiclusters/status
   - finetunedweights/status
   - inferenceservices/status
-  - ocipostgresclusters/status
   - ocipostgresdbinstances/status
+  - ocipostgress/status
   - ociredisclusters/finalizers
   - ociredisclusters/status
   - projects/finalizers
@@ -347,8 +347,8 @@ rules:
   - clusterbasemodels/finalizers
   - clustercapacityreservations/finalizers
   - dedicatedaiclusters/finalizers
-  - ocipostgresclusters/finalizers
   - ocipostgresdbinstances/finalizers
+  - ocipostgress/finalizers
   verbs:
   - update
 - apiGroups:

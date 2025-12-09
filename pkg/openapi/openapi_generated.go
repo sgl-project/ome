@@ -38,6 +38,8 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":              schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CoschedulingPodGroupPolicyConfig": schema_pkg_apis_ome_v1beta1_CoschedulingPodGroupPolicyConfig(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CrossReference":                   schema_pkg_apis_ome_v1beta1_CrossReference(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DbInstanceSpec":                   schema_pkg_apis_ome_v1beta1_DbInstanceSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DbInstanceStatus":                 schema_pkg_apis_ome_v1beta1_DbInstanceStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DbSystemNetworkDetails":           schema_pkg_apis_ome_v1beta1_DbSystemNetworkDetails(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DbSystemStorageDetails":           schema_pkg_apis_ome_v1beta1_DbSystemStorageDetails(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DecoderSpec":                      schema_pkg_apis_ome_v1beta1_DecoderSpec(ref),
@@ -90,14 +92,15 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelStatus":                      schema_pkg_apis_ome_v1beta1_ModelStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelStatusSpec":                  schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ObjectReference":                  schema_pkg_apis_ome_v1beta1_ObjectReference(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresCluster":               schema_pkg_apis_ome_v1beta1_OciPostgresCluster(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresClusterList":           schema_pkg_apis_ome_v1beta1_OciPostgresClusterList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgres":                      schema_pkg_apis_ome_v1beta1_OciPostgres(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresClusterSpec":           schema_pkg_apis_ome_v1beta1_OciPostgresClusterSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresClusterStatus":         schema_pkg_apis_ome_v1beta1_OciPostgresClusterStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresDBInstance":            schema_pkg_apis_ome_v1beta1_OciPostgresDBInstance(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresDBInstanceList":        schema_pkg_apis_ome_v1beta1_OciPostgresDBInstanceList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresDBInstanceSpec":        schema_pkg_apis_ome_v1beta1_OciPostgresDBInstanceSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresDBInstanceStatus":      schema_pkg_apis_ome_v1beta1_OciPostgresDBInstanceStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresList":                  schema_pkg_apis_ome_v1beta1_OciPostgresList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresSpec":                  schema_pkg_apis_ome_v1beta1_OciPostgresSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresStatus":                schema_pkg_apis_ome_v1beta1_OciPostgresStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciRedisCluster":                  schema_pkg_apis_ome_v1beta1_OciRedisCluster(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciRedisClusterList":              schema_pkg_apis_ome_v1beta1_OciRedisClusterList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciRedisClusterSpec":              schema_pkg_apis_ome_v1beta1_OciRedisClusterSpec(ref),
@@ -1736,6 +1739,78 @@ func schema_pkg_apis_ome_v1beta1_CrossReference(ref common.ReferenceCallback) co
 						},
 					},
 				},
+				
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_DbInstanceSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"logicalDatabases": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"logicalDatabases"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_DbInstanceStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"databaseName": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"appUserSecretName": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"appUserSecretNamespace": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"lifecycleState": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LifecycleState represents the current lifecycle state of the ocipostgres_dbinstance (e.g., READY, CREATING)",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"databaseName"},
 			},
 		},
 	}
@@ -1780,7 +1855,7 @@ func schema_pkg_apis_ome_v1beta1_DbSystemNetworkDetails(ref common.ReferenceCall
 						},
 					},
 				},
-				Required: []string{"subnetId"},
+				Required: []string{"subnetId", "nsgIds"},
 			},
 		},
 	}
@@ -3767,6 +3842,7 @@ func schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref common.Reference
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -4499,6 +4575,7 @@ func schema_pkg_apis_ome_v1beta1_InferenceStep(ref common.ReferenceCallback) com
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -5420,6 +5497,7 @@ func schema_pkg_apis_ome_v1beta1_ModelFormat(ref common.ReferenceCallback) commo
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -5447,6 +5525,7 @@ func schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref common.ReferenceCallback
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -5501,6 +5580,7 @@ func schema_pkg_apis_ome_v1beta1_ModelRef(ref common.ReferenceCallback) common.O
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -5903,6 +5983,7 @@ func schema_pkg_apis_ome_v1beta1_ModelSpec(ref common.ReferenceCallback) common.
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -6040,16 +6121,17 @@ func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) c
 						},
 					},
 				},
+				
 			},
 		},
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_OciPostgresCluster(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_ome_v1beta1_OciPostgres(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "OCIPostgresDBCluster is the Schema for the PostgresDBCluster API",
+				Description: "OciPostgres is the Schema for the PostgresDB API",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
@@ -6075,13 +6157,13 @@ func schema_pkg_apis_ome_v1beta1_OciPostgresCluster(ref common.ReferenceCallback
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresClusterSpec"),
+							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresClusterStatus"),
+							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresStatus"),
 						},
 					},
 				},
@@ -6089,56 +6171,7 @@ func schema_pkg_apis_ome_v1beta1_OciPostgresCluster(ref common.ReferenceCallback
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresClusterSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresClusterStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
-	}
-}
-
-func schema_pkg_apis_ome_v1beta1_OciPostgresClusterList(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "PostgresDBClusterList contains a list of PostgresDBCluster",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"kind": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"apiVersion": {
-						SchemaProps: spec.SchemaProps{
-							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"metadata": {
-						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
-						},
-					},
-					"items": {
-						SchemaProps: spec.SchemaProps{
-							Type: []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresCluster"),
-									},
-								},
-							},
-						},
-					},
-				},
-				Required: []string{"items"},
-			},
-		},
-		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresCluster", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -6170,9 +6203,8 @@ func schema_pkg_apis_ome_v1beta1_OciPostgresClusterSpec(ref common.ReferenceCall
 					},
 					"dbVersion": {
 						SchemaProps: spec.SchemaProps{
-							Default: "",
-							Type:    []string{"string"},
-							Format:  "",
+							Type:   []string{"string"},
+							Format: "",
 						},
 					},
 					"displayName": {
@@ -6183,9 +6215,8 @@ func schema_pkg_apis_ome_v1beta1_OciPostgresClusterSpec(ref common.ReferenceCall
 					},
 					"shape": {
 						SchemaProps: spec.SchemaProps{
-							Default: "",
-							Type:    []string{"string"},
-							Format:  "",
+							Type:   []string{"string"},
+							Format: "",
 						},
 					},
 					"instanceCount": {
@@ -6227,70 +6258,6 @@ func schema_pkg_apis_ome_v1beta1_OciPostgresClusterSpec(ref common.ReferenceCall
 		},
 		Dependencies: []string{
 			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DbSystemNetworkDetails", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DbSystemStorageDetails"},
-	}
-}
-
-func schema_pkg_apis_ome_v1beta1_OciPostgresClusterStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
-				Properties: map[string]spec.Schema{
-					"lifecycleState": {
-						SchemaProps: spec.SchemaProps{
-							Description: "LifecycleState represents the current lifecycle state of the ocipostgres_cluster (e.g., READY, CREATING)",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"dbSystemId": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"endpoint": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"adminSecretName": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"adminSecretNamespace": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"conditions": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "atomic",
-							},
-						},
-						SchemaProps: spec.SchemaProps{
-							Description: "Conditions represent the latest available observations of an object's state",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
 	}
 }
 
@@ -6503,6 +6470,167 @@ func schema_pkg_apis_ome_v1beta1_OciPostgresDBInstanceStatus(ref common.Referenc
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_OciPostgresList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PostgresList contains a list of PostgresDBCluster",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgres"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgres", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_OciPostgresSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"clusterSpec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresClusterSpec"),
+						},
+					},
+					"dbInstanceSpec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DbInstanceSpec"),
+						},
+					},
+				},
+				Required: []string{"clusterSpec", "dbInstanceSpec"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DbInstanceSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OciPostgresClusterSpec"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_OciPostgresStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"lifecycleState": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LifecycleState represents the current lifecycle state of the ocipostgres_cluster (e.g., READY, CREATING)",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"dbSystemId": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"endpoint": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"adminSecretName": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"adminSecretNamespace": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions represent the latest available observations of an object's state",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+					"dbInstances": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"databaseName",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DbInstanceStatus"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DbInstanceStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
 	}
 }
 
@@ -7896,6 +8024,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref common.ReferenceCall
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -10018,6 +10147,7 @@ func schema_pkg_apis_ome_v1beta1_RunnerSpec(ref common.ReferenceCallback) common
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -10055,6 +10185,7 @@ func schema_pkg_apis_ome_v1beta1_RuntimeRef(ref common.ReferenceCallback) common
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -10665,6 +10796,7 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref common.ReferenceCallback)
 						},
 					},
 				},
+				
 			},
 		},
 	}

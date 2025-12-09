@@ -4,7 +4,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// OCIPostgresDBCluster is the Schema for the PostgresDBCluster API
+// OciPostgres is the Schema for the PostgresDB API
 // +k8s:openapi-gen=true
 // +genclient
 // +kubebuilder:object:root=true
@@ -12,14 +12,14 @@ import (
 // +kubebuilder:resource:scope="Namespaced"
 // +kubebuilder:printcolumn:name="Lifecycle_State",type="string",JSONPath=".status.lifecycleState"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-type OciPostgresCluster struct {
+type OciPostgres struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              OciPostgresClusterSpec   `json:"spec"`
-	Status            OciPostgresClusterStatus `json:"status,omitempty"`
+	Spec              OciPostgresSpec   `json:"spec"`
+	Status            OciPostgresStatus `json:"status,omitempty"`
 }
 
-type OciPostgresClusterStatus struct {
+type OciPostgresStatus struct {
 	// LifecycleState represents the current lifecycle state of the ocipostgres_cluster (e.g., READY, CREATING)
 	// +optional
 	LifecycleState       LifecycleState `json:"lifecycleState,omitempty"`
@@ -31,6 +31,20 @@ type OciPostgresClusterStatus struct {
 	// +optional
 	// +listType=atomic
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// +optional
+	// +listType=map
+	// +listMapKey=databaseName
+	DbInstances []DbInstanceStatus `json:"dbInstances,omitempty"`
+}
+
+type DbInstanceStatus struct {
+	// +required
+	DatabaseName           string `json:"databaseName"`
+	AppUserSecretName      string `json:"appUserSecretName,omitempty"`
+	AppUserSecretNamespace string `json:"appUserSecretNamespace,omitempty"`
+	// LifecycleState represents the current lifecycle state of the ocipostgres_dbinstance (e.g., READY, CREATING)
+	// +optional
+	LifecycleState LifecycleState `json:"lifecycleState,omitempty"`
 }
 
 // LifecycleState enum
@@ -45,6 +59,17 @@ const (
 	LifecycleStateFailed   LifecycleState = "FAILED"
 	LifecycleStateUpdating LifecycleState = "UPDATING"
 )
+
+type OciPostgresSpec struct {
+	ClusterSpec    OciPostgresClusterSpec `json:"clusterSpec"`
+	DbInstanceSpec DbInstanceSpec         `json:"dbInstanceSpec"`
+}
+
+type DbInstanceSpec struct {
+	// +required
+	// +listType=set
+	LogicalDatabases []string `json:"logicalDatabases"`
+}
 
 type OciPostgresClusterSpec struct {
 	// +required
@@ -61,14 +86,14 @@ type OciPostgresClusterSpec struct {
 
 	// +optional
 	// +kubebuilder:default="16"
-	DbVersion string `json:"dbVersion"`
+	DbVersion string `json:"dbVersion,omitempty"`
 
 	// +optional
 	DisplayName string `json:"displayName,omitempty"`
 
 	// +optional
 	// +kubebuilder:default="PostgreSQL.VM.Standard.E5.Flex"
-	Shape string `json:"shape"`
+	Shape string `json:"shape,omitempty"`
 
 	// # of nodes (writer + replicas). Size must match InstancesDetails if provided.
 	// +optional
@@ -86,7 +111,7 @@ type OciPostgresClusterSpec struct {
 	InstanceMemorySizeInGbs *int `json:"instanceMemorySizeInGbs,omitempty"`
 
 	// +optional
-	StorageDetails DbSystemStorageDetails `json:"storageDetails"`
+	StorageDetails DbSystemStorageDetails `json:"storageDetails,omitempty"`
 
 	// +optional
 	Description string `json:"description,omitempty"`
@@ -96,9 +121,9 @@ type DbSystemNetworkDetails struct {
 	// +required
 	SubnetId string `json:"subnetId"`
 
-	// +optional
+	// +required
 	// +listType=atomic
-	NsgIds []string `json:"nsgIds,omitempty"`
+	NsgIds []string `json:"nsgIds"`
 
 	// +optional
 	PrimaryDbEndpointPrivateIp string `json:"primaryDbEndpointPrivateIp,omitempty"`
@@ -114,15 +139,15 @@ type DbSystemStorageDetails struct {
 	AvailabilityDomain string `json:"availabilityDomain,omitempty"`
 }
 
-// PostgresDBClusterList contains a list of PostgresDBCluster
+// PostgresList contains a list of PostgresDBCluster
 // +k8s:openapi-gen=true
 // +kubebuilder:object:root=true
-type OciPostgresClusterList struct {
+type OciPostgresList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []OciPostgresCluster `json:"items"`
+	Items           []OciPostgres `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&OciPostgresCluster{}, &OciPostgresClusterList{})
+	SchemeBuilder.Register(&OciPostgres{}, &OciPostgresList{})
 }
