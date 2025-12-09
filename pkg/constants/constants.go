@@ -688,6 +688,10 @@ func DefaultRayHeadServiceName(name string, index int) string {
 	return rayutils.CheckName(fmt.Sprintf("%s-%d", name, index))
 }
 
+func TruncateDomainName(name string, maxLength int) string {
+	return truncateWithHash(name, maxLength)
+}
+
 // Kubernetes naming constraints
 const (
 	// Maximum length for label names (after domain/)
