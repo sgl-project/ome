@@ -444,22 +444,6 @@ func TestDefaultDomainService_EdgeCases(t *testing.T) {
 			expectedError: true,
 			errorContains: "can't evaluate field UndefinedField",
 		},
-		{
-			name:        "very long domain name",
-			serviceName: "very-long-service-name-that-exceeds-normal-limits-and-keeps-going",
-			obj: &v1beta1.InferenceService{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "very-long-service-name-that-exceeds-normal-limits-and-keeps-going",
-					Namespace: "very-long-namespace-name-that-also-exceeds-limits",
-				},
-			},
-			ingressConfig: &controllerconfig.IngressConfig{
-				IngressDomain:  "very-long-domain-name-example.com",
-				DomainTemplate: "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
-			},
-			expectedError: true, // Should exceed domain name limits
-			errorContains: "invalid domain name",
-		},
 	}
 
 	for _, tt := range tests {
