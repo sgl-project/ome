@@ -219,6 +219,17 @@ const (
 	ModelCapabilityTextToText      ModelCapability = "TEXT_TO_TEXT"
 	ModelCapabilityImageTextToText ModelCapability = "IMAGE_TEXT_TO_TEXT"
 	ModelCapabilityUnknown         ModelCapability = ""
+
+	// Endpoints capabilities
+	ModelCapability_OpenAI_V1_CHAT_COMPLETIONS     ModelCapability = "OPENAI_V1_CHAT_COMPLETIONS"
+	ModelCapability_OpenAI_V1_RESPONSES            ModelCapability = "OPENAI_V1_RESPONSES"
+	ModelCapability_OpenAI_V1_EMBEDDINGS           ModelCapability = "OPENAI_V1_EMBEDDINGS"
+	ModelCapability_OpenAI_V1_IMAGES_GENERATIONS   ModelCapability = "OPENAI_V1_IMAGES_GENERATIONS"
+	ModelCapability_OpenAI_V1_IMAGES_EDITS         ModelCapability = "OPENAI_V1_IMAGES_EDITS"
+	ModelCapability_OpenAI_V1_AUDIO_SPEECH         ModelCapability = "OPENAI_V1_AUDIO_SPEECH"
+	ModelCapability_OpenAI_V1_AUDIO_TRANSCRIPTIONS ModelCapability = "OPENAI_V1_AUDIO_TRANSCRIPTIONS"
+	ModelCapability_OpenAI_V1_AUDIO_TRANSLATIONS   ModelCapability = "OPENAI_V1_AUDIO_TRANSLATIONS"
+	ModelCapability_OpenAI_V1_REALTIME             ModelCapability = "OPENAI_V1_AUDIO_TRANSLATIONS"
 )
 
 // ModelWeightStatus enum
