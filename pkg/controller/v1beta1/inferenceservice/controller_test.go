@@ -883,6 +883,104 @@ func determineEngineDeploymentMode(engineSpec *v1beta1.EngineSpec) constants.Dep
 	return constants.RawDeployment
 }
 
+func TestEnsureIngressDisableAnnotation(t *testing.T) {
+	tests := []struct {
+		name                string
+		isvc                *v1beta1.InferenceService
+		expectedAnnotation  bool
+		expectedAnnotations map[string]string
+		description         string
+	}{
+		{
+			name: "add annotation when no annotations exist",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+			expectedAnnotation: true,
+			expectedAnnotations: map[string]string{
+				"ome.io/ingress-disable-creation": "true",
+			},
+			description: "should add ingress disable annotation when no annotations exist",
+		},
+		{
+			name: "preserve annotation when already present",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"ome.io/ingress-disable-creation": "true",
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+			expectedAnnotation: true,
+			expectedAnnotations: map[string]string{
+				"ome.io/ingress-disable-creation": "true",
+			},
+			description: "should preserve existing annotation",
+		},
+		{
+			name: "add annotation while preserving other annotations",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"existing-key": "existing-value",
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+			expectedAnnotation: true,
+			expectedAnnotations: map[string]string{
+				"existing-key":                    "existing-value",
+				"ome.io/ingress-disable-creation": "true",
+			},
+			description: "should add annotation while preserving existing annotations",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reconciler := &InferenceServiceReconciler{}
+			err := reconciler.ensureIngressDisableAnnotation(tt.isvc)
+
+			if err != nil {
+				t.Errorf("ensureIngressDisableAnnotation returned error: %v", err)
+				return
+			}
+
+			if tt.expectedAnnotation {
+				if tt.isvc.Annotations == nil {
+					t.Errorf("expected annotations to be non-nil")
+					return
+				}
+				if tt.isvc.Annotations["ome.io/ingress-disable-creation"] != "true" {
+					t.Errorf("expected ome.io/ingress-disable-creation annotation to be 'true', got '%s'", tt.isvc.Annotations["ome.io/ingress-disable-creation"])
+				}
+			}
+
+			// Verify all expected annotations are present
+			for key, value := range tt.expectedAnnotations {
+				if tt.isvc.Annotations[key] != value {
+					t.Errorf("expected annotation %s to have value '%s', got '%s'", key, value, tt.isvc.Annotations[key])
+				}
+			}
+		})
+	}
+}
+
 func TestMergeRuntimeSpecs(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 

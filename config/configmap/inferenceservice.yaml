@@ -19,7 +19,7 @@ data:
         "urlScheme": "http",
         "disableIstioVirtualHost": false,
         "pathTemplate": "",
-        "disableIngressCreation": false,
+        "disableIngressCreation": true,
         "enableGatewayAPI": false
     }
 
