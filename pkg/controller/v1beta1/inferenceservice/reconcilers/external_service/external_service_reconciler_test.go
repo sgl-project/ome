@@ -280,29 +280,41 @@ func TestExternalServiceReconciler_buildExternalService(t *testing.T) {
 	_ = corev1.AddToScheme(scheme)
 
 	tests := []struct {
-		name        string
-		isvc        *v1beta1.InferenceService
-		description string
+		name               string
+		isvc               *v1beta1.InferenceService
+		internalService    *corev1.Service
+		expectedTargetPort int32
+		description        string
 	}{
 		{
-			name: "basic service creation",
+			name: "basic service creation with engine",
 			isvc: &v1beta1.InferenceService{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-service",
 					Namespace: "default",
 				},
 				Spec: v1beta1.InferenceServiceSpec{
-					Predictor: v1beta1.PredictorSpec{
-						Model: &v1beta1.ModelSpec{
-							BaseModel: stringPtr("test-model"),
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+			internalService: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service-engine",
+					Namespace: "default",
+				},
+				Spec: corev1.ServiceSpec{
+					Ports: []corev1.ServicePort{
+						{
+							Port: 8081,
 						},
 					},
 				},
 			},
-			description: "should create basic external service",
+			expectedTargetPort: 8081,
+			description:        "should create basic external service with port from internal engine service",
 		},
 		{
-			name: "service with LoadBalancer type annotation",
+			name: "service with LoadBalancer type annotation and router",
 			isvc: &v1beta1.InferenceService{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-service",
@@ -312,6 +324,33 @@ func TestExternalServiceReconciler_buildExternalService(t *testing.T) {
 					},
 				},
 				Spec: v1beta1.InferenceServiceSpec{
+					Router: &v1beta1.RouterSpec{},
+				},
+			},
+			internalService: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service-router",
+					Namespace: "default",
+				},
+				Spec: corev1.ServiceSpec{
+					Ports: []corev1.ServicePort{
+						{
+							Port: 8082,
+						},
+					},
+				},
+			},
+			expectedTargetPort: 8082,
+			description:        "should create LoadBalancer type external service with port from internal router service",
+		},
+		{
+			name: "fallback to default port when internal service not found",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
 					Predictor: v1beta1.PredictorSpec{
 						Model: &v1beta1.ModelSpec{
 							BaseModel: stringPtr("test-model"),
@@ -319,18 +358,25 @@ func TestExternalServiceReconciler_buildExternalService(t *testing.T) {
 					},
 				},
 			},
-			description: "should create LoadBalancer type external service",
+			internalService:    nil, // No internal service
+			expectedTargetPort: constants.CommonISVCPort,
+			description:        "should fallback to default port when internal service not found",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := ctrlclient.NewClientBuilder().WithScheme(scheme).Build()
+			var objects []client.Object
+			if tt.internalService != nil {
+				objects = append(objects, tt.internalService)
+			}
+
+			client := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			clientset := fake.NewSimpleClientset()
 			ingressConfig := &controllerconfig.IngressConfig{}
 
 			reconciler := NewExternalServiceReconciler(client, clientset, scheme, ingressConfig)
-			service, err := reconciler.buildExternalService(tt.isvc)
+			service, err := reconciler.buildExternalService(context.TODO(), tt.isvc)
 
 			assert.NoError(t, err, "should not return error when building external service")
 			assert.NotNil(t, service, "external service should not be nil")
@@ -344,11 +390,11 @@ func TestExternalServiceReconciler_buildExternalService(t *testing.T) {
 				assert.Equal(t, corev1.ServiceTypeClusterIP, service.Spec.Type, "service type should default to ClusterIP")
 			}
 
-			// Check ports
+			// Check ports - both Port and TargetPort use the dynamic port from internal service
 			assert.Len(t, service.Spec.Ports, 1, "should have one port")
 			assert.Equal(t, "http", service.Spec.Ports[0].Name, "port name should be http")
-			assert.Equal(t, int32(80), service.Spec.Ports[0].Port, "port should be 80")
-			assert.Equal(t, intstr.FromInt(8080), service.Spec.Ports[0].TargetPort, "target port should be 8080")
+			assert.Equal(t, tt.expectedTargetPort, service.Spec.Ports[0].Port, "port should match internal service port")
+			assert.Equal(t, intstr.FromInt32(tt.expectedTargetPort), service.Spec.Ports[0].TargetPort, "target port should match internal service port")
 		})
 	}
 }
@@ -363,6 +409,7 @@ func TestExternalServiceReconciler_Reconcile(t *testing.T) {
 		isvc            *v1beta1.InferenceService
 		ingressConfig   *controllerconfig.IngressConfig
 		existingService *corev1.Service
+		internalService *corev1.Service
 		expectedAction  string
 		expectError     bool
 		description     string
@@ -382,9 +429,22 @@ func TestExternalServiceReconciler_Reconcile(t *testing.T) {
 				DisableIngressCreation: true,
 			},
 			existingService: nil,
-			expectedAction:  "create",
-			expectError:     false,
-			description:     "should create external service when none exists and ingress is disabled",
+			internalService: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service-engine",
+					Namespace: "default",
+				},
+				Spec: corev1.ServiceSpec{
+					Ports: []corev1.ServicePort{
+						{
+							Port: 8080,
+						},
+					},
+				},
+			},
+			expectedAction: "create",
+			expectError:    false,
+			description:    "should create external service when none exists and ingress is disabled",
 		},
 		{
 			name: "update external service when spec changes",
@@ -420,6 +480,19 @@ func TestExternalServiceReconciler_Reconcile(t *testing.T) {
 							Port:       80,
 							TargetPort: intstr.FromInt(8080),
 							Protocol:   corev1.ProtocolTCP,
+						},
+					},
+				},
+			},
+			internalService: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service-router",
+					Namespace: "default",
+				},
+				Spec: corev1.ServiceSpec{
+					Ports: []corev1.ServicePort{
+						{
+							Port: 8080,
 						},
 					},
 				},
@@ -463,9 +536,10 @@ func TestExternalServiceReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: "delete",
-			expectError:    false,
-			description:    "should delete external service when ingress is enabled",
+			internalService: nil,
+			expectedAction:  "delete",
+			expectError:     false,
+			description:     "should delete external service when ingress is enabled",
 		},
 		{
 			name: "no action when ingress enabled and no service exists",
@@ -482,6 +556,7 @@ func TestExternalServiceReconciler_Reconcile(t *testing.T) {
 				DisableIngressCreation: false,
 			},
 			existingService: nil,
+			internalService: nil,
 			expectedAction:  "none",
 			expectError:     false,
 			description:     "should take no action when ingress is enabled and no service exists",
@@ -493,6 +568,9 @@ func TestExternalServiceReconciler_Reconcile(t *testing.T) {
 			var objects []client.Object
 			if tt.existingService != nil {
 				objects = append(objects, tt.existingService)
+			}
+			if tt.internalService != nil {
+				objects = append(objects, tt.internalService)
 			}
 
 			client := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
