@@ -527,3 +527,259 @@ func checkResourceExists(t *testing.T, ctx context.Context, client client.Client
 		t.Errorf("Expected resource %s to exist, but it was not found", name)
 	}
 }
+
+func TestShouldKeepExternalService(t *testing.T) {
+	testCases := []struct {
+		name             string
+		isvc             *v1beta1.InferenceService
+		activeComponents map[v1beta1.ComponentType]bool
+		expected         bool
+		description      string
+	}{
+		{
+			name: "Keep external service when annotation is set and engine is active",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					UID:       "test-uid",
+					Annotations: map[string]string{
+						"ome.io/ingress-disable-creation": "true",
+					},
+				},
+			},
+			activeComponents: map[v1beta1.ComponentType]bool{
+				v1beta1.EngineComponent: true,
+			},
+			expected:    true,
+			description: "should keep external service when annotation is set and engine is active",
+		},
+		{
+			name: "Keep external service when annotation is set and router is active",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					UID:       "test-uid",
+					Annotations: map[string]string{
+						"ome.io/ingress-disable-creation": "true",
+					},
+				},
+			},
+			activeComponents: map[v1beta1.ComponentType]bool{
+				v1beta1.RouterComponent: true,
+			},
+			expected:    true,
+			description: "should keep external service when annotation is set and router is active",
+		},
+		{
+			name: "Keep external service when annotation is set and predictor is active",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					UID:       "test-uid",
+					Annotations: map[string]string{
+						"ome.io/ingress-disable-creation": "true",
+					},
+				},
+			},
+			activeComponents: map[v1beta1.ComponentType]bool{
+				v1beta1.PredictorComponent: true,
+			},
+			expected:    true,
+			description: "should keep external service when annotation is set and predictor is active",
+		},
+		{
+			name: "Do not keep external service when annotation is not set",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					UID:       "test-uid",
+				},
+			},
+			activeComponents: map[v1beta1.ComponentType]bool{
+				v1beta1.EngineComponent: true,
+			},
+			expected:    false,
+			description: "should not keep external service when annotation is not set",
+		},
+		{
+			name: "Do not keep external service when annotation is set to false",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					UID:       "test-uid",
+					Annotations: map[string]string{
+						"ome.io/ingress-disable-creation": "false",
+					},
+				},
+			},
+			activeComponents: map[v1beta1.ComponentType]bool{
+				v1beta1.EngineComponent: true,
+			},
+			expected:    false,
+			description: "should not keep external service when annotation is set to false",
+		},
+		{
+			name: "Do not keep external service when no active components even with annotation",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					UID:       "test-uid",
+					Annotations: map[string]string{
+						"ome.io/ingress-disable-creation": "true",
+					},
+				},
+			},
+			activeComponents: map[v1beta1.ComponentType]bool{},
+			expected:         false,
+			description:      "should not keep external service when no active components exist",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &InferenceServiceReconciler{}
+			result := r.shouldKeepExternalService(tc.isvc, tc.activeComponents)
+			assert.Equal(t, tc.expected, result, tc.description)
+		})
+	}
+}
+
+func TestCleanupExternalServiceWithAnnotation(t *testing.T) {
+	ctx := context.Background()
+	ctx = log.IntoContext(ctx, log.Log)
+
+	// Create scheme
+	scheme := runtime.NewScheme()
+	_ = v1beta1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = autoscalingv2.AddToScheme(scheme)
+	_ = networkingv1.AddToScheme(scheme)
+
+	// Test case: External service should NOT be deleted when annotation is set
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-isvc",
+			Namespace: "default",
+			UID:       "test-uid",
+			Annotations: map[string]string{
+				"ome.io/ingress-disable-creation": "true",
+			},
+		},
+	}
+
+	// Create external service with "external-service" component label
+	externalService := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-isvc",
+			Namespace: "default",
+			Labels: map[string]string{
+				constants.InferenceServicePodLabelKey: "test-isvc",
+				constants.OMEComponentLabel:           "external-service",
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind:       "InferenceService",
+					APIVersion: v1beta1.SchemeGroupVersion.String(),
+					Name:       "test-isvc",
+					UID:        types.UID("test-uid"),
+				},
+			},
+		},
+	}
+
+	// Create fake client with existing resources
+	allObjects := []client.Object{isvc, externalService}
+	fakeClient := fakeclient.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(allObjects...).
+		Build()
+
+	// Create reconciler
+	r := &InferenceServiceReconciler{
+		Client:    fakeClient,
+		Clientset: fake.NewSimpleClientset(),
+	}
+
+	// Execute cleanup with engine active
+	engineSpec := &v1beta1.EngineSpec{}
+	err := r.cleanupRemovedComponents(ctx, isvc, engineSpec, nil, nil)
+	require.NoError(t, err)
+
+	// Verify external service still exists
+	service := &corev1.Service{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-isvc", Namespace: "default"}, service)
+	assert.NoError(t, err, "External service should still exist after cleanup when annotation is set")
+}
+
+func TestCleanupExternalServiceWithoutAnnotation(t *testing.T) {
+	ctx := context.Background()
+	ctx = log.IntoContext(ctx, log.Log)
+
+	// Create scheme
+	scheme := runtime.NewScheme()
+	_ = v1beta1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = autoscalingv2.AddToScheme(scheme)
+	_ = networkingv1.AddToScheme(scheme)
+
+	// Test case: External service SHOULD be deleted when annotation is NOT set
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-isvc",
+			Namespace: "default",
+			UID:       "test-uid",
+			// No annotation set
+		},
+	}
+
+	// Create external service with "external-service" component label
+	externalService := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-isvc",
+			Namespace: "default",
+			Labels: map[string]string{
+				constants.InferenceServicePodLabelKey: "test-isvc",
+				constants.OMEComponentLabel:           "external-service",
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind:       "InferenceService",
+					APIVersion: v1beta1.SchemeGroupVersion.String(),
+					Name:       "test-isvc",
+					UID:        types.UID("test-uid"),
+				},
+			},
+		},
+	}
+
+	// Create fake client with existing resources
+	allObjects := []client.Object{isvc, externalService}
+	fakeClient := fakeclient.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(allObjects...).
+		Build()
+
+	// Create reconciler
+	r := &InferenceServiceReconciler{
+		Client:    fakeClient,
+		Clientset: fake.NewSimpleClientset(),
+	}
+
+	// Execute cleanup with engine active
+	engineSpec := &v1beta1.EngineSpec{}
+	err := r.cleanupRemovedComponents(ctx, isvc, engineSpec, nil, nil)
+	require.NoError(t, err)
+
+	// Verify external service was deleted
+	service := &corev1.Service{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-isvc", Namespace: "default"}, service)
+	assert.Error(t, err, "External service should be deleted when annotation is not set")
+}
