@@ -101,6 +101,11 @@ func (r *DeploymentReconciler) checkDeploymentExist() (constants.CheckResultType
 		return constants.CheckResultUnknown, nil, err
 	}
 
+	if existingDeployment.Spec.Replicas != nil {
+		r.Deployment.Spec.Replicas = existingDeployment.Spec.Replicas
+		log.V(1).Info("Preserving existing replicas in target state", "namespace", r.Deployment.Namespace, "name", r.Deployment.Name, "replicas", *r.Deployment.Spec.Replicas)
+	}
+
 	diff, err := kmp.SafeDiff(r.Deployment.Spec, existingDeployment.Spec, ignoreFields)
 	if err != nil {
 		return constants.CheckResultUnknown, nil, err
