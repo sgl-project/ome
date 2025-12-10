@@ -359,6 +359,12 @@ func (m *DefaultRuntimeMatcher) compareModelFormatVersions(supportedFormat *v1be
 		return modelVer.Equal(supportedVersion, baseVersion)
 	}
 
+	// Check for version precision mismatch and major version prefix mismatch
+	if baseVersion.Precision != supportedVersion.Precision ||
+		strings.Compare(baseVersion.MajorPrefix, supportedVersion.MajorPrefix) != 0 {
+		return false
+	}
+
 	switch operator {
 	case "GreaterThan":
 		return modelVer.GreaterThan(supportedVersion, baseVersion)
@@ -390,6 +396,12 @@ func (m *DefaultRuntimeMatcher) compareModelFrameworkVersions(supportedFramework
 	// If there are unofficial versions or operator is Equal, use Equal comparison
 	if hasUnofficial || operator == "Equal" {
 		return modelVer.Equal(supportedVersion, baseVersion)
+	}
+
+	// Check for version precision mismatch and major version prefix mismatch
+	if baseVersion.Precision != supportedVersion.Precision ||
+		strings.Compare(baseVersion.MajorPrefix, supportedVersion.MajorPrefix) != 0 {
+		return false
 	}
 
 	switch operator {

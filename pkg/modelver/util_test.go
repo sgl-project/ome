@@ -77,6 +77,55 @@ func TestVersionComparison(t *testing.T) {
 			equal:       false,
 			greaterThan: true,
 		},
+		{
+			name:        "v0.8.0 equal to v0.8.0",
+			v1:          "v0.8.0",
+			v2:          "v0.8.0",
+			equal:       true,
+			greaterThan: false,
+		},
+		{
+			name:        "v1 equal to v1",
+			v1:          "v1",
+			v2:          "v1",
+			equal:       true,
+			greaterThan: false,
+		},
+		{
+			name:        "1 equal to 1",
+			v1:          "1",
+			v2:          "1",
+			equal:       true,
+			greaterThan: false,
+		},
+		{
+			name:        "two-part version 1.12 equal to 1.12",
+			v1:          "1.12",
+			v2:          "1.12",
+			equal:       true,
+			greaterThan: false,
+		},
+		{
+			name:        "less major version, with precision 1",
+			v1:          "1",
+			v2:          "2",
+			equal:       false,
+			greaterThan: false,
+		},
+		{
+			name:        "less major version, with major prefix and precision 3",
+			v1:          "v1.9.0",
+			v2:          "v2.9.0",
+			equal:       false,
+			greaterThan: false,
+		},
+		{
+			name:        "greater minor version, with major prefix and precision 3",
+			v1:          "v0.9.0",
+			v2:          "v0.8.0",
+			equal:       false,
+			greaterThan: true,
+		},
 	}
 
 	for _, tt := range tests {

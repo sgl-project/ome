@@ -13,14 +13,22 @@ const (
 	alphanum        = alphas + numbers
 )
 
+var (
+	// acceptedMajorVersionPrefixes contains the accepted prefixes for major version
+	// Currently only "v" is supported, but keep as a slice for future extensibility
+	acceptedMajorVersionPrefixes = []string{"v"}
+)
+
 // Version represents a semver compatible version
 type Version struct {
-	Major uint64
-	Minor uint64
-	Patch uint64
-	Pre   []string
-	Build []string //No Precedence
-	Dev   []string
+	Major       uint64
+	MajorPrefix string
+	Minor       uint64
+	Patch       uint64
+	Pre         []string
+	Build       []string //No Precedence
+	Dev         []string
+	Precision   int // Number of version parts specified (1=major, 2=major.minor, 3=major.minor.patch)
 }
 
 // Parse parses version strings like:
@@ -28,6 +36,11 @@ type Version struct {
 //   - 4.43.0.dev0
 //   - 4.43.0+build
 //   - 0.6.0
+//   - v0.8.0 (only lowercase "v" is supported as major version prefix)
+//   - 1 (single major version)
+//   - v1
+//   - 1.12 (two-part version)
+//   - v1.12
 
 func Parse(s string) (Version, error) {
 	if len(s) == 0 {
@@ -36,28 +49,45 @@ func Parse(s string) (Version, error) {
 
 	// Split into major.minor.(patch+pr+meta)
 	parts := strings.SplitN(s, ".", 3)
-	if len(parts) != 3 {
-		return Version{}, errors.New("No Major.Minor.Patch elements found")
+	precision := len(parts)
+
+	// Check if parts[0] starts with an accepted prefix
+	majorStr := parts[0]
+	majorPrefix := ""
+	for _, prefix := range acceptedMajorVersionPrefixes {
+		if strings.HasPrefix(majorStr, prefix) {
+			majorPrefix = prefix
+			majorStr = strings.TrimPrefix(majorStr, prefix)
+			break
+		}
 	}
 
 	// Major
-	major, err := parseNumeric(parts[0], "major")
+	major, err := parseNumeric(majorStr, "major")
 	if err != nil {
 		return Version{}, err
 	}
 
 	// Minor
-	minor, err := parseNumeric(parts[1], "minor")
+	minorStr := "0"
+	if precision > 1 {
+		minorStr = parts[1]
+	}
+	minor, err := parseNumeric(minorStr, "minor")
 	if err != nil {
 		return Version{}, err
 	}
 
-	v := Version{Major: major, Minor: minor}
+	v := Version{Major: major, MajorPrefix: majorPrefix, Minor: minor, Precision: precision}
 
+	// Patch
 	var (
 		build, prerelease, dev []string
 	)
-	patchStr := parts[2]
+	patchStr := "0"
+	if precision > 2 {
+		patchStr = parts[2]
+	}
 
 	// Extract +build
 	if buildIndex := strings.IndexRune(patchStr, '+'); buildIndex != -1 {
