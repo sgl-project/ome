@@ -49,7 +49,7 @@ ome:
       omeIngressGateway: ""
       additionalIngressDomains: null
       pathTemplate: ""
-      disableIngressCreation: false
+      disableIngressCreation: true
       enableGatewayAPI: false
     nodeSelector: {}
     tolerations: []

@@ -408,8 +408,12 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile external service")
 	}
 
-	// Set Status.Address for external service when ingress is disabled
+	// Set Status.Address for external service and add ingress disable annotation when ingress is disabled
 	if resolvedIngressConfig.DisableIngressCreation {
+		// Add annotation to InferenceService so cleanup logic knows to keep the external service
+		if err := r.ensureIngressDisableAnnotation(isvc); err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "fails to add ingress disable annotation")
+		}
 		if err := r.setExternalServiceURL(ctx, isvc, resolvedIngressConfig); err != nil {
 			r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
 			return reconcile.Result{}, errors.Wrapf(err, "fails to set external service URL")
@@ -574,6 +578,25 @@ func inferenceServiceReadiness(status v1beta1.InferenceServiceStatus) bool {
 
 func inferenceServiceStatusEqual(s1, s2 v1beta1.InferenceServiceStatus) bool {
 	return equality.Semantic.DeepEqual(s1, s2)
+}
+
+// ensureIngressDisableAnnotation adds the ome.io/ingress-disable-creation annotation to the InferenceService
+// This annotation is used by the cleanup logic to determine if external service should be kept
+func (r *InferenceServiceReconciler) ensureIngressDisableAnnotation(isvc *v1beta1.InferenceService) error {
+	const ingressDisableAnnotation = "ome.io/ingress-disable-creation"
+
+	// Check if annotation already exists
+	if val, ok := isvc.Annotations[ingressDisableAnnotation]; ok && val == "true" {
+		return nil
+	}
+
+	// Add annotation
+	if isvc.Annotations == nil {
+		isvc.Annotations = make(map[string]string)
+	}
+	isvc.Annotations[ingressDisableAnnotation] = "true"
+
+	return nil
 }
 
 func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployConfig *controllerconfig.DeployConfig, ingressConfig *controllerconfig.IngressConfig) error {

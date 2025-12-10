@@ -35,7 +35,7 @@ OME Resources and Controller
 | ome.controller.deploymentMode | string | `"RawDeployment"` |  |
 | ome.controller.image | string | `"ome-manager"` |  |
 | ome.controller.ingressGateway.additionalIngressDomains | string | `nil` |  |
-| ome.controller.ingressGateway.disableIngressCreation | bool | `false` |  |
+| ome.controller.ingressGateway.disableIngressCreation | bool | `true` |  |
 | ome.controller.ingressGateway.disableIstioVirtualHost | bool | `false` |  |
 | ome.controller.ingressGateway.domain | string | `"svc.cluster.local"` |  |
 | ome.controller.ingressGateway.domainTemplate | string | `"{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"` |  |
