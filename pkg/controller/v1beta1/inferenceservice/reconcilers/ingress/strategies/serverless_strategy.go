@@ -32,6 +32,7 @@ import (
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/builders"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
+	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 )
 
 var log = logf.Log.WithName("ServerlessStrategy")
@@ -87,11 +88,23 @@ func (s *ServerlessStrategy) Reconcile(ctx context.Context, isvc *v1beta1.Infere
 	}
 
 	if url, err := apis.ParseURL(serviceUrl); err == nil {
+		// Get the service port from the target component service
+		servicePort, err := isvcutils.GetTargetServicePort(ctx, s.client, isvc, true)
+		if err != nil {
+			log.Info("Failed to get target service port, using default", "error", err)
+			servicePort = constants.CommonISVCPort
+		}
+
 		isvc.Status.URL = url
+		isvc.Status.URL.Host = fmt.Sprintf("%s:%d", url.Host, servicePort)
+
 		hostPrefix := s.getHostPrefix(isvc, disableIstioVirtualHost)
+
+		// Include port in Address URL
+		hostWithPort := fmt.Sprintf("%s:%d", network.GetServiceHostname(hostPrefix, isvc.Namespace), servicePort)
 		isvc.Status.Address = &duckv1.Addressable{
 			URL: &apis.URL{
-				Host:   network.GetServiceHostname(hostPrefix, isvc.Namespace),
+				Host:   hostWithPort,
 				Scheme: "http",
 			},
 		}

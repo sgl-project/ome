@@ -548,3 +548,131 @@ func setComponentStatusReady(isvc *v1beta1.InferenceService) {
 func stringPtr(s string) *string {
 	return &s
 }
+
+func TestServerlessStrategy_URLWithPort(t *testing.T) {
+	tests := []struct {
+		name                string
+		isvc                *v1beta1.InferenceService
+		ingressConfig       *controllerconfig.IngressConfig
+		services            []corev1.Service
+		expectedURLHost     string
+		expectedAddressHost string
+	}{
+		{
+			name: "engine only with custom port",
+			isvc: createTestInferenceServiceWithEngineStatus("test-isvc", "default"),
+			ingressConfig: &controllerconfig.IngressConfig{
+				IngressGateway:             "knative-serving/knative-ingress-gateway",
+				LocalGateway:               "knative-serving/knative-local-gateway",
+				IngressDomain:              "example.com",
+				LocalGatewayServiceName:    "knative-local-gateway",
+				KnativeLocalGatewayService: "knative-local-gateway.istio-system.svc.cluster.local",
+				DomainTemplate:             "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
+				UrlScheme:                  "https",
+				DisableIstioVirtualHost:    true, // Skip VirtualService creation to focus on URL
+			},
+			services: []corev1.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-isvc", // PredictorServiceName returns just the name
+						Namespace: "default",
+					},
+					Spec: corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{
+							{Port: 8081},
+						},
+					},
+				},
+			},
+			// URL host comes from engine status URL (test-isvc-engine-default.default.example.com)
+			expectedURLHost:     "test-isvc-engine-default.default.example.com:8081",
+			expectedAddressHost: "test-isvc.default.svc.cluster.local:8081",
+		},
+		{
+			name: "with router and custom port",
+			isvc: createTestInferenceServiceWithRouterStatus("test-isvc", "default"),
+			ingressConfig: &controllerconfig.IngressConfig{
+				IngressGateway:             "knative-serving/knative-ingress-gateway",
+				LocalGateway:               "knative-serving/knative-local-gateway",
+				IngressDomain:              "example.com",
+				LocalGatewayServiceName:    "knative-local-gateway",
+				KnativeLocalGatewayService: "knative-local-gateway.istio-system.svc.cluster.local",
+				DomainTemplate:             "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
+				UrlScheme:                  "https",
+				DisableIstioVirtualHost:    true,
+			},
+			services: []corev1.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-isvc-router-default", // DefaultRouterServiceName
+						Namespace: "default",
+					},
+					Spec: corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{
+							{Port: 8082},
+						},
+					},
+				},
+			},
+			// URL host comes from router status URL (test-isvc-router-default.default.example.com)
+			expectedURLHost:     "test-isvc-router-default.default.example.com:8082",
+			expectedAddressHost: "test-isvc-router-default.default.svc.cluster.local:8082",
+		},
+		{
+			name: "service not found uses default port",
+			isvc: createTestInferenceServiceWithEngineStatus("test-isvc", "default"),
+			ingressConfig: &controllerconfig.IngressConfig{
+				IngressGateway:             "knative-serving/knative-ingress-gateway",
+				LocalGateway:               "knative-serving/knative-local-gateway",
+				IngressDomain:              "example.com",
+				LocalGatewayServiceName:    "knative-local-gateway",
+				KnativeLocalGatewayService: "knative-local-gateway.istio-system.svc.cluster.local",
+				DomainTemplate:             "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
+				UrlScheme:                  "https",
+				DisableIstioVirtualHost:    true,
+			},
+			services: []corev1.Service{}, // No services
+			// URL host comes from engine status URL
+			expectedURLHost:     "test-isvc-engine-default.default.example.com:8080",
+			expectedAddressHost: "test-isvc.default.svc.cluster.local:8080",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			require.NoError(t, v1beta1.AddToScheme(scheme))
+			require.NoError(t, istioclientv1beta1.AddToScheme(scheme))
+			require.NoError(t, corev1.AddToScheme(scheme))
+
+			setComponentStatusReady(tt.isvc)
+
+			objs := []client.Object{tt.isvc}
+			for i := range tt.services {
+				objs = append(objs, &tt.services[i])
+			}
+
+			fakeClient := fakeclient.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objs...).
+				Build()
+			fakeClientset := fake.NewSimpleClientset()
+
+			opts := interfaces.ReconcilerOptions{
+				Client:        fakeClient,
+				Scheme:        scheme,
+				IngressConfig: tt.ingressConfig,
+				IsvcConfig:    &controllerconfig.InferenceServicesConfig{},
+			}
+			strategy := NewServerlessStrategy(opts, fakeClientset, services.NewDomainService(), services.NewPathService())
+
+			err := strategy.Reconcile(context.Background(), tt.isvc)
+
+			assert.NoError(t, err)
+			assert.NotNil(t, tt.isvc.Status.URL)
+			assert.Equal(t, tt.expectedURLHost, tt.isvc.Status.URL.Host)
+			assert.NotNil(t, tt.isvc.Status.Address)
+			assert.Equal(t, tt.expectedAddressHost, tt.isvc.Status.Address.URL.Host)
+		})
+	}
+}

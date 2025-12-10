@@ -1,10 +1,14 @@
 package utils
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
@@ -60,4 +64,39 @@ func GetValueFromRawExtension(raw runtime.RawExtension, key string) (interface{}
 	}
 
 	return val, nil
+}
+
+// GetTargetServicePort returns the port of the target service (router or engine).
+// For raw deployment mode, it uses RouterServiceName/EngineServiceName.
+// For serverless mode, it uses DefaultRouterServiceName/PredictorServiceName.
+// Returns the port from the service, or constants.CommonISVCPort as default if service lookup fails.
+func GetTargetServicePort(ctx context.Context, c client.Client, isvc *v1beta1.InferenceService, serverless bool) (int32, error) {
+	var serviceName string
+	if serverless {
+		// Serverless mode uses different service naming
+		if isvc.Spec.Router != nil {
+			serviceName = constants.DefaultRouterServiceName(isvc.Name)
+		} else {
+			serviceName = constants.PredictorServiceName(isvc.Name)
+		}
+	} else {
+		// Raw deployment mode
+		if isvc.Spec.Router != nil {
+			serviceName = constants.RouterServiceName(isvc.Name)
+		} else {
+			serviceName = constants.EngineServiceName(isvc.Name)
+		}
+	}
+
+	service := &corev1.Service{}
+	if err := c.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: isvc.Namespace}, service); err != nil {
+		return 0, err
+	}
+
+	port := int32(constants.CommonISVCPort) // default port
+	if len(service.Spec.Ports) > 0 {
+		port = service.Spec.Ports[0].Port
+	}
+
+	return port, nil
 }
