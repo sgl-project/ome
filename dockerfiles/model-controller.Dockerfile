@@ -4,7 +4,7 @@
 # Note: Ubuntu 22.04 has glibc 2.35, but golang:1.25 requires glibc 2.38+
 ARG BASE_IMAGE=oraclelinux:10-slim
 
-# Build the manager binary
+# Build the model-controller binary
 FROM golang:1.25 AS builder
 
 # Install Rust and Cargo for building the XET library
@@ -45,13 +45,13 @@ ARG VERSION
 ARG GIT_TAG
 ARG GIT_COMMIT
 
-# Build the manager binary with Go build cache (CGO required for XET library dependency)
+# Build the model-controller binary with Go build cache (CGO required for XET library dependency)
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=1 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     go build -a \
     -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${GIT_TAG} -X github.com/sgl-project/ome/pkg/version.GitCommit=${GIT_COMMIT}" \
-    -o manager ./cmd/manager
+    -o model-controller ./cmd/model
 
 # Use the base image specified at the top of the file
 ARG BASE_IMAGE
@@ -78,7 +78,7 @@ RUN if [ -f /usr/bin/microdnf ]; then \
         apt-get clean && rm -rf /var/lib/apt/lists/*; \
     fi
 WORKDIR /
-COPY --from=builder /workspace/manager .
+COPY --from=builder /workspace/model-controller .
 USER 65532:65532
 
-ENTRYPOINT ["/manager"]
+ENTRYPOINT ["/model-controller"]

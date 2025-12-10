@@ -105,7 +105,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        component: [ome-manager, model-agent, multinode-prober, ome-agent]
+        component: [isvc-controller, model-controller, benchmark-controller, ac-controller, model-agent, multinode-prober, ome-agent]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -150,7 +150,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        image: [ome-image, model-agent-image, multinode-prober-image, ome-agent-image]
+        image: [isvc-controller-image, model-controller-image, benchmark-controller-image, ac-controller-image, model-agent-image, multinode-prober-image, ome-agent-image]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6

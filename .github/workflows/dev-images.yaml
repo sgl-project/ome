@@ -24,9 +24,18 @@ jobs:
     strategy:
       matrix:
         component:
-          - name: manager
-            dockerfile: dockerfiles/manager.Dockerfile
-            image: ome-manager
+          - name: isvc-controller
+            dockerfile: dockerfiles/isvc-controller.Dockerfile
+            image: ome-isvc-controller
+          - name: model-controller
+            dockerfile: dockerfiles/model-controller.Dockerfile
+            image: ome-model-controller
+          - name: benchmark-controller
+            dockerfile: dockerfiles/benchmark-controller.Dockerfile
+            image: ome-benchmark-controller
+          - name: ac-controller
+            dockerfile: dockerfiles/ac-controller.Dockerfile
+            image: ome-ac-controller
           - name: model-agent
             dockerfile: dockerfiles/model-agent.Dockerfile
             image: model-agent
@@ -192,7 +201,10 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Component | Image |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| OME Manager | \`ghcr.io/moirai-internal/ome-manager:dev\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| InferenceService Controller | \`ghcr.io/moirai-internal/ome-isvc-controller:dev\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Model Controller | \`ghcr.io/moirai-internal/ome-model-controller:dev\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Benchmark Controller | \`ghcr.io/moirai-internal/ome-benchmark-controller:dev\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| AcceleratorClass Controller | \`ghcr.io/moirai-internal/ome-ac-controller:dev\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Model Agent | \`ghcr.io/moirai-internal/model-agent:dev\` |" >> $GITHUB_STEP_SUMMARY
           echo "| OME Agent | \`ghcr.io/moirai-internal/ome-agent:dev\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Multinode Prober | \`ghcr.io/moirai-internal/multinode-prober:dev\` |" >> $GITHUB_STEP_SUMMARY

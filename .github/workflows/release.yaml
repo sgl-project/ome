@@ -49,9 +49,18 @@ jobs:
     strategy:
       matrix:
         component:
-          - name: manager
-            dockerfile: dockerfiles/manager.Dockerfile
-            image: ome-manager
+          - name: isvc-controller
+            dockerfile: dockerfiles/isvc-controller.Dockerfile
+            image: ome-isvc-controller
+          - name: model-controller
+            dockerfile: dockerfiles/model-controller.Dockerfile
+            image: ome-model-controller
+          - name: benchmark-controller
+            dockerfile: dockerfiles/benchmark-controller.Dockerfile
+            image: ome-benchmark-controller
+          - name: ac-controller
+            dockerfile: dockerfiles/ac-controller.Dockerfile
+            image: ome-ac-controller
           - name: model-agent
             dockerfile: dockerfiles/model-agent.Dockerfile
             image: model-agent
@@ -266,15 +275,24 @@ jobs:
           The following container images are available:
           
           \`\`\`bash
-          # OME Manager
-          docker pull ghcr.io/moirai-internal/ome-manager:${{ needs.prepare.outputs.tag }}
-          
+          # InferenceService Controller
+          docker pull ghcr.io/moirai-internal/ome-isvc-controller:${{ needs.prepare.outputs.tag }}
+
+          # Model Controller (BaseModel/ClusterBaseModel)
+          docker pull ghcr.io/moirai-internal/ome-model-controller:${{ needs.prepare.outputs.tag }}
+
+          # Benchmark Controller
+          docker pull ghcr.io/moirai-internal/ome-benchmark-controller:${{ needs.prepare.outputs.tag }}
+
+          # AcceleratorClass Controller
+          docker pull ghcr.io/moirai-internal/ome-ac-controller:${{ needs.prepare.outputs.tag }}
+
           # Model Agent
           docker pull ghcr.io/moirai-internal/model-agent:${{ needs.prepare.outputs.tag }}
-          
+
           # OME Agent
           docker pull ghcr.io/moirai-internal/ome-agent:${{ needs.prepare.outputs.tag }}
-          
+
           # Multinode Prober
           docker pull ghcr.io/moirai-internal/multinode-prober:${{ needs.prepare.outputs.tag }}
           \`\`\`
@@ -316,7 +334,7 @@ jobs:
           All container images are signed with cosign. Verify with:
           
           \`\`\`bash
-          cosign verify ghcr.io/moirai-internal/ome-manager:${{ needs.prepare.outputs.tag }} \
+          cosign verify ghcr.io/moirai-internal/ome-isvc-controller:${{ needs.prepare.outputs.tag }} \
             --certificate-identity-regexp=https://github.com/sgl-project/ome/.github/workflows/release.yaml@refs/tags/.* \
             --certificate-oidc-issuer=https://token.actions.githubusercontent.com
           \`\`\`

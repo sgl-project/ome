@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ome-isvc-controller-service
+  namespace: ome
+  labels:
+    control-plane: ome-isvc-controller
+    controller-tools.k8s.io: "1.0"
+spec:
+  selector:
+    control-plane: ome-isvc-controller
+    controller-tools.k8s.io: "1.0"
+  ports:
+  - port: 8443
+    targetPort: https
+    protocol: TCP

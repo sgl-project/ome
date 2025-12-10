@@ -5,7 +5,10 @@ CHARTS_DIR := ./charts
 REGISTRY     ?= ghcr.io/moirai-internal
 TAG          ?= $(GIT_TAG)
 ARCH         ?= linux/amd64
-MANAGER_IMG  ?= $(REGISTRY)/ome-manager:$(TAG)
+ISVC_CONTROLLER_IMG ?= $(REGISTRY)/ome-isvc-controller:$(TAG)
+MODEL_CONTROLLER_IMG ?= $(REGISTRY)/ome-model-controller:$(TAG)
+BENCHMARK_CONTROLLER_IMG ?= $(REGISTRY)/ome-benchmark-controller:$(TAG)
+AC_CONTROLLER_IMG ?= $(REGISTRY)/ome-ac-controller:$(TAG)
 
 # Git version and commit information for build
 version_pkg = github.com/sgl-project/ome/pkg/version
@@ -68,13 +71,6 @@ ERROR_404_ISVC_IMG ?= error-404-isvc
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
-
-# CPU/Memory limits for controller-manager
-OME_CONTROLLER_CPU_LIMIT ?= 100m
-OME_CONTROLLER_MEMORY_LIMIT ?= 300Mi
-$(shell perl -pi -e 's/cpu:.*/cpu: $(OME_CONTROLLER_CPU_LIMIT)/' config/default/manager_resources_patch.yaml)
-$(shell perl -pi -e 's/memory:.*/memory: $(OME_CONTROLLER_MEMORY_LIMIT)/' config/default/manager_resources_patch.yaml)
-
 
 # By default, wait for the OME controller pod to become ready
 WAIT_FOR_CONTROLLER ?= true
@@ -273,10 +269,28 @@ helm-version-update: yq ## 🔄 Update Helm chart version
 
 ##@ 🛠️  Build
 
-.PHONY: ome-manager
-ome-manager: xet-build ## 🏗️  Build ome-manager binary.
-	@echo "🏗️  Building ome-manager..."
-	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/manager ./cmd/manager
+.PHONY: isvc-controller
+isvc-controller: xet-build ## 🏗️  Build isvc-controller binary.
+	@echo "🏗️  Building isvc-controller..."
+	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/isvc-controller ./cmd/isvc
+	@echo "✅ Build complete"
+
+.PHONY: model-controller
+model-controller: xet-build ## 🏗️  Build model-controller binary.
+	@echo "🏗️  Building model-controller..."
+	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/model-controller ./cmd/model
+	@echo "✅ Build complete"
+
+.PHONY: benchmark-controller
+benchmark-controller: xet-build ## 🏗️  Build benchmark-controller binary.
+	@echo "🏗️  Building benchmark-controller..."
+	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/benchmark-controller ./cmd/benchmark
+	@echo "✅ Build complete"
+
+.PHONY: ac-controller
+ac-controller: xet-build ## 🏗️  Build ac-controller binary.
+	@echo "🏗️  Building ac-controller..."
+	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/ac-controller ./cmd/ac
 	@echo "✅ Build complete"
 
 .PHONY: model-agent
@@ -296,11 +310,6 @@ multinode-prober: ## 🔍 Build multinode-prober binary.
 	@echo "🔍 Building multinode-prober..."
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/multinode-prober ./cmd/multinode-prober
 	@echo "✅ Build complete"
-
-.PHONY: run-ome-manager
-run-ome-manager: manifests generate fmt vet ## Run ome-manager binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
-	@echo "🏃‍♂️ Running ome-manager..."
-	$(GO_BUILD_ENV) $(GO_CMD) run ./cmd/manager/main.go
 
 .PHONY: run-model-agent
 run-model-agent: fmt vet ## Run model-agent binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
@@ -327,16 +336,6 @@ run-ome-agent-fine-tuned-adapter: fmt vet ome-agent ## Run ome-agent binary from
 run-ome-agent-replica: fmt vet ome-agent ## Run ome-agent binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
 	@echo "🏃‍♂️ Running ome-agent replica..."
 	bin/ome-agent replica -d -c config/ome-agent/ome-agent.yaml
-
-.PHONY: ome-image
-ome-image: fmt vet ## Build ome-manager image.
-	@echo "🚀 Building ome-manager image..."
-	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
-		--build-arg VERSION=$(GIT_TAG) \
-		--build-arg GIT_TAG=$(GIT_TAG) \
-		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		. -f dockerfiles/manager.Dockerfile -t $(MANAGER_IMG)
-	@echo "✅ Image built"
 
 .PHONY: model-agent-image
 model-agent-image: fmt vet ## Build model-agent image.
@@ -368,6 +367,46 @@ ome-agent-image: fmt vet xet-build ## Build ome-agent image.
 		. -f dockerfiles/ome-agent.Dockerfile -t $(REGISTRY)/ome-agent:$(TAG)
 	@echo "✅ Image built"
 
+.PHONY: isvc-controller-image
+isvc-controller-image: fmt vet ## Build isvc-controller image.
+	@echo "🚀 Building isvc-controller image..."
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/isvc-controller.Dockerfile -t $(ISVC_CONTROLLER_IMG)
+	@echo "✅ Image built"
+
+.PHONY: model-controller-image
+model-controller-image: fmt vet ## Build model-controller image.
+	@echo "🚀 Building model-controller image..."
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/model-controller.Dockerfile -t $(MODEL_CONTROLLER_IMG)
+	@echo "✅ Image built"
+
+.PHONY: benchmark-controller-image
+benchmark-controller-image: fmt vet ## Build benchmark-controller image.
+	@echo "🚀 Building benchmark-controller image..."
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/benchmark-controller.Dockerfile -t $(BENCHMARK_CONTROLLER_IMG)
+	@echo "✅ Image built"
+
+.PHONY: ac-controller-image
+ac-controller-image: fmt vet ## Build ac-controller image.
+	@echo "🚀 Building ac-controller image..."
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/ac-controller.Dockerfile -t $(AC_CONTROLLER_IMG)
+	@echo "✅ Image built"
+
 .PHONY: docker-buildx-setup
 docker-buildx-setup: ## 🔧 Setup Docker buildx for multi-arch builds
 	@echo "🔧 Setting up Docker buildx..."
@@ -378,7 +417,10 @@ docker-buildx-setup: ## 🔧 Setup Docker buildx for multi-arch builds
 .PHONY: build-all-images
 build-all-images: fmt vet ## 🚀 Build all images for current architecture
 	@echo "🚀 Building all OME images for $(ARCH)..."
-	@$(MAKE) ome-image
+	@$(MAKE) isvc-controller-image
+	@$(MAKE) model-controller-image
+	@$(MAKE) benchmark-controller-image
+	@$(MAKE) ac-controller-image
 	@$(MAKE) model-agent-image
 	@$(MAKE) multinode-prober-image
 	@$(MAKE) ome-agent-image
@@ -391,7 +433,22 @@ build-all-images-multiarch: fmt vet docker-buildx-setup ## 🌍 Build all images
 		--build-arg VERSION=$(GIT_TAG) \
 		--build-arg GIT_TAG=$(GIT_TAG) \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		. -f dockerfiles/manager.Dockerfile -t $(MANAGER_IMG) --push
+		. -f dockerfiles/isvc-controller.Dockerfile -t $(ISVC_CONTROLLER_IMG) --push
+	$(DOCKER_BUILD_CMD) buildx build --platform=linux/amd64,linux/arm64 \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/model-controller.Dockerfile -t $(MODEL_CONTROLLER_IMG) --push
+	$(DOCKER_BUILD_CMD) buildx build --platform=linux/amd64,linux/arm64 \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/benchmark-controller.Dockerfile -t $(BENCHMARK_CONTROLLER_IMG) --push
+	$(DOCKER_BUILD_CMD) buildx build --platform=linux/amd64,linux/arm64 \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/ac-controller.Dockerfile -t $(AC_CONTROLLER_IMG) --push
 	$(DOCKER_BUILD_CMD) buildx build --platform=linux/amd64,linux/arm64 \
 		--build-arg VERSION=$(GIT_TAG) \
 		--build-arg GIT_TAG=$(GIT_TAG) \
@@ -463,7 +520,10 @@ install: kustomize ## 🚀 Deploy controller in the configured Kubernetes cluste
 	
 	@if [ ${WAIT_FOR_CONTROLLER} = true ]; then \
 		echo "\n⏳ Step 3: Waiting for OME controller to be ready..."; \
-		kubectl wait --for=condition=ready pod -l control-plane=ome-controller-manager -n ome --timeout=300s; \
+		kubectl wait --for=condition=ready pod -l control-plane=ome-isvc-controller -n ome --timeout=300s; \
+		kubectl wait --for=condition=ready pod -l control-plane=ome-model-controller -n ome --timeout=300s; \
+		kubectl wait --for=condition=ready pod -l control-plane=ome-benchmark-controller -n ome --timeout=300s; \
+		kubectl wait --for=condition=ready pod -l control-plane=ome-ac-controller -n ome --timeout=300s; \
 	fi
 	
 	@echo "\n🔄 Step 4: Applying cluster resources..."
@@ -493,12 +553,6 @@ kustomize-validate: kustomize ## 🔍 Validate kustomize configuration without a
 	@cd config/clusterresources && $(KUSTOMIZE) build --load-restrictor=LoadRestrictionsNone . > /dev/null && echo "✅ Cluster resources configuration is valid" || (echo "❌ Error in cluster resources configuration" && exit 1)
 	@echo "\n✅ Kustomize validation completed successfully!\n"
 
-.PHONY: push-manager-image
-push-manager-image: ome-image ## Push manager image to registry.
-	@echo "🚀 Pushing manager image to registry..."
-	$(DOCKER_BUILD_CMD) push $(MANAGER_IMG)
-	@echo "✅ Image pushed"
-
 .PHONY: push-model-agent-image
 push-model-agent-image: model-agent-image ## Push model-agent image to registry.
 	@echo "🚀 Pushing model-agent image to registry..."
@@ -516,13 +570,6 @@ push-ome-agent-image: ome-agent-image ## Push ome-agent image to registry.
 	@echo "🚀 Pushing ome-agent image to registry..."
 	$(DOCKER_BUILD_CMD) push $(REGISTRY)/ome-agent:$(TAG)
 	@echo "✅ Image pushed"
-
-.PHONY: patch-manager-dev
-patch-manager-dev: push-manager-image ## Deploy manager image to dev cluster.
-	@echo "🔄 Patching manager image to dev cluster..."
-	echo "Patch manager image to dev: $(MANAGER_IMG)"
-	./hack/patch_image_dev.sh $(MANAGER_IMG) manager
-	@echo "✅ Patch complete"
 
 .PHONY: patch-model-agent-dev
 patch-model-agent-dev: push-model-agent-image ## Deploy model-agent image to dev cluster.

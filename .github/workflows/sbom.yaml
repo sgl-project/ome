@@ -42,7 +42,7 @@ jobs:
           syft dir:. -o cyclonedx-json > ome-${TAG}-sbom.cyclonedx.json
           
           # Generate SBOM for container images with retry logic
-          for image in ome-manager model-agent ome-agent multinode-prober; do
+          for image in ome-isvc-controller ome-model-controller ome-benchmark-controller ome-ac-controller model-agent ome-agent multinode-prober; do
             echo "Generating SBOM for ${image}..."
             
             # Retry up to 5 times with 30 second delays
