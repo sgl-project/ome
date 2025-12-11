@@ -282,54 +282,6 @@ func TestSetDefaultDeploymentSpec(t *testing.T) {
 	}
 }
 
-func TestUpdateDeploymentName(t *testing.T) {
-	tests := []struct {
-		name                 string
-		annotations          map[string]string
-		expectedNameModified bool
-	}{
-		{
-			name: "DAC without Volcano",
-			annotations: map[string]string{
-				constants.DedicatedAICluster: "true",
-			},
-			expectedNameModified: true,
-		},
-		{
-			name: "DAC with Volcano",
-			annotations: map[string]string{
-				constants.DedicatedAICluster: "true",
-				constants.VolcanoScheduler:   "true",
-			},
-			expectedNameModified: false,
-		},
-		{
-			name:                 "Non-DAC deployment",
-			annotations:          map[string]string{},
-			expectedNameModified: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			deployment := &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:        "test-deployment",
-					Annotations: tt.annotations,
-				},
-			}
-
-			updateDeploymentName(deployment)
-
-			if tt.expectedNameModified {
-				assert.Equal(t, "test-deployment-new", deployment.Name)
-			} else {
-				assert.Equal(t, "test-deployment", deployment.Name)
-			}
-		})
-	}
-}
-
 func TestCreateRawDeployment(t *testing.T) {
 	testContainer := corev1.Container{
 		Name:  "test-container",
@@ -409,12 +361,7 @@ func TestCreateRawDeployment(t *testing.T) {
 				assert.Equal(t, appsv1.RollingUpdateDeploymentStrategyType, deployment.Spec.Strategy.Type)
 			}
 
-			// Check DAC name update
-			if _, ok := tt.componentMeta.Annotations[constants.DedicatedAICluster]; ok {
-				assert.Equal(t, tt.componentMeta.Name+"-new", deployment.Name)
-			} else {
-				assert.Equal(t, tt.componentMeta.Name, deployment.Name)
-			}
+			assert.Equal(t, tt.componentMeta.Name, deployment.Name)
 
 			// Check defaults set
 			assert.NotNil(t, deployment.Spec.RevisionHistoryLimit)

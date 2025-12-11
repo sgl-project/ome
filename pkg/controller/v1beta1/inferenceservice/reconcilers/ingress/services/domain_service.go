@@ -81,7 +81,7 @@ func (d *DefaultDomainService) GenerateDomainName(name string, obj interface{}, 
 	// Truncate name to ensure the final domain does not exceed DNS limits 63.
 	// If the name fits within maxLength, it's returned as-is
 	// Otherwise, it returns: {hash_prefix}-{suffix}
-	name = constants.TruncateDomainName(name, 63)
+	name = constants.TruncateNameWithMaxLength(name, 63)
 
 	values := DomainTemplateValues{
 		Name:          name,

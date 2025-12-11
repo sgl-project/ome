@@ -83,10 +83,13 @@ func buildServiceWithLoadBalancer(
 		spec.LoadBalancerIP = loadBalancerIP
 	}
 
-	return &corev1.Service{
+	service := &corev1.Service{
 		ObjectMeta: componentMeta,
 		Spec:       spec,
 	}
+	// service metadata name has 63 limitation, update metadata name if it reaches the limitation
+	service.Name = constants.TruncateNameWithMaxLength(service.Name, 63)
+	return service
 }
 
 // buildService constructs a Service object from the given specifications
@@ -98,7 +101,7 @@ func buildService(componentMeta metav1.ObjectMeta, componentExt *v1beta1.Compone
 	servicePorts := buildServicePorts(podSpec)
 	serviceType := determineServiceType(componentMeta)
 	if selector == nil {
-		selector = map[string]string{"app": constants.GetRawServiceLabel(componentMeta.Name)}
+		selector = map[string]string{"app": constants.TruncateNameWithMaxLength(componentMeta.Name, 63)}
 	}
 
 	return buildServiceWithLoadBalancer(componentMeta, serviceType, servicePorts, selector)
