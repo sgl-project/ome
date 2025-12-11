@@ -226,6 +226,12 @@ func (c *ConfigMapReconciler) recreateConfigMap(ctx context.Context) {
 			config.ModelParameterSize = cacheEntry.ModelMetadata.ModelParameterSize
 			config.MaxTokens = cacheEntry.ModelMetadata.MaxTokens
 			config.Quantization = string(cacheEntry.ModelMetadata.Quantization)
+			if len(cacheEntry.ModelMetadata.Endpoints) > 0 {
+				config.Endpoints = make([]string, len(cacheEntry.ModelMetadata.Endpoints))
+				for i, endpoint := range cacheEntry.ModelMetadata.Endpoints {
+					config.Endpoints[i] = string(endpoint)
+				}
+			}
 
 			modelEntry.Config = config
 		}
@@ -279,6 +285,12 @@ func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry
 		config.ModelParameterSize = cacheEntry.ModelMetadata.ModelParameterSize
 		config.MaxTokens = cacheEntry.ModelMetadata.MaxTokens
 		config.Quantization = string(cacheEntry.ModelMetadata.Quantization)
+		if len(cacheEntry.ModelMetadata.Endpoints) > 0 {
+			config.Endpoints = make([]string, len(cacheEntry.ModelMetadata.Endpoints))
+			for i, endpoint := range cacheEntry.ModelMetadata.Endpoints {
+				config.Endpoints[i] = string(endpoint)
+			}
+		}
 
 		modelEntry.Config = config
 	}

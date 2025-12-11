@@ -589,6 +589,15 @@
           },
           "x-kubernetes-list-type": "atomic"
         },
+        "endpoints": {
+          "description": "Endpoints supported by the model, e.g., \"OPENAI_V1_CHAT_COMPLETIONS\"",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
         "modelConfiguration": {
           "description": "Configuration of the model, stored as generic JSON for flexibility.",
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"

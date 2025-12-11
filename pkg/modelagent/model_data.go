@@ -34,6 +34,7 @@ type ModelMetadata struct {
 	ModelParameterSize        string
 	MaxTokens                 int32
 	ModelCapabilities         []string
+	Endpoints                 []v1beta1.ModelEndpoint
 	ModelConfiguration        []byte
 	DecodedModelConfiguration map[string]interface{} `json:"DecodedModelConfiguration,omitempty"`
 	Quantization              v1beta1.ModelQuantization
@@ -54,6 +55,7 @@ type ModelConfig struct {
 	ModelParameterSize string   `json:"modelParameterSize,omitempty"` // Human-readable size, e.g., "7.11B"
 	MaxTokens          int32    `json:"maxTokens,omitempty"`          // Maximum context length, e.g., 32768
 	ModelCapabilities  []string `json:"modelCapabilities,omitempty"`  // e.g., ["TEXT_GENERATION", "TEXT_EMBEDDINGS"]
+	Endpoints          []string `json:"endpoints,omitempty"`          // e.g., ["OPENAI_V1_CHAT_COMPLETIONS"]
 
 	// Advanced information
 	DecodedModelConfiguration map[string]interface{} `json:"decodedModelConfiguration,omitempty"` // Detailed configuration
@@ -117,6 +119,15 @@ func ConvertMetadataToModelConfig(metadata ModelMetadata) *ModelConfig {
 		quantization = string(metadata.Quantization)
 	}
 
+	// Convert endpoints to strings
+	var endpoints []string
+	if len(metadata.Endpoints) > 0 {
+		endpoints = make([]string, len(metadata.Endpoints))
+		for i, endpoint := range metadata.Endpoints {
+			endpoints[i] = string(endpoint)
+		}
+	}
+
 	// If DecodedModelConfiguration is nil but we have ModelConfiguration,
 	// try to decode it
 	decodedConfig := metadata.DecodedModelConfiguration
@@ -135,6 +146,7 @@ func ConvertMetadataToModelConfig(metadata ModelMetadata) *ModelConfig {
 		ModelParameterSize:        metadata.ModelParameterSize,
 		MaxTokens:                 metadata.MaxTokens,
 		ModelCapabilities:         metadata.ModelCapabilities,
+		Endpoints:                 endpoints,
 		DecodedModelConfiguration: decodedConfig,
 		Quantization:              quantization,
 	}

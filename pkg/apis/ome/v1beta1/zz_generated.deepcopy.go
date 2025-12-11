@@ -604,6 +604,11 @@ func (in *BaseModelSpec) DeepCopyInto(out *BaseModelSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.Endpoints != nil {
+		in, out := &in.Endpoints, &out.Endpoints
+		*out = make([]ModelEndpoint, len(*in))
+		copy(*out, *in)
+	}
 	in.ModelConfiguration.DeepCopyInto(&out.ModelConfiguration)
 	if in.Storage != nil {
 		in, out := &in.Storage, &out.Storage

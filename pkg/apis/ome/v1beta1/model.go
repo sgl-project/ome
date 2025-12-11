@@ -134,6 +134,11 @@ type BaseModelSpec struct {
 	// +optional
 	ModelCapabilities []string `json:"modelCapabilities,omitempty"`
 
+	// Endpoints supported by the model, e.g., "OPENAI_V1_CHAT_COMPLETIONS"
+	// +listType=atomic
+	// +optional
+	Endpoints []ModelEndpoint `json:"endpoints,omitempty"`
+
 	// Configuration of the model, stored as generic JSON for flexibility.
 	// +optional
 	ModelConfiguration runtime.RawExtension `json:"modelConfiguration,omitempty"`
@@ -201,7 +206,7 @@ const (
 // ModelCapability enum
 // TODO: Remove legacy capabilities
 //
-// +kubebuilder:validation:Enum=TEXT_GENERATION;TEXT_SUMMARIZATION;TEXT_EMBEDDINGS;TEXT_RERANK;CHAT;VISION;EMBEDDING;RERANK;TEXT_TO_TEXT;IMAGE_TEXT_TO_TEXT
+// +kubebuilder:validation:Enum=TEXT_GENERATION;TEXT_SUMMARIZATION;TEXT_EMBEDDINGS;TEXT_RERANK;CHAT;VISION;EMBEDDING;RERANK;TEXT_TO_TEXT;IMAGE_TEXT_TO_TEXT;TEXT_TO_IMAGE;IMAGE_TEXT_TO_IMAGE;TEXT_TO_SPEECH;SPEECH_TO_TEXT;AUDIO_TRANSLATION
 type ModelCapability string
 
 const (
@@ -214,22 +219,32 @@ const (
 	ModelCapabilityVision            ModelCapability = "VISION"
 
 	// New capabilities (preferred naming)
-	ModelCapabilityEmbedding       ModelCapability = "EMBEDDING"
-	ModelCapabilityRerank          ModelCapability = "RERANK"
-	ModelCapabilityTextToText      ModelCapability = "TEXT_TO_TEXT"
-	ModelCapabilityImageTextToText ModelCapability = "IMAGE_TEXT_TO_TEXT"
-	ModelCapabilityUnknown         ModelCapability = ""
+	ModelCapabilityEmbedding        ModelCapability = "EMBEDDING"
+	ModelCapabilityRerank           ModelCapability = "RERANK"
+	ModelCapabilityTextToText       ModelCapability = "TEXT_TO_TEXT"
+	ModelCapabilityImageTextToText  ModelCapability = "IMAGE_TEXT_TO_TEXT"
+	ModelCapabilityTextToImage      ModelCapability = "TEXT_TO_IMAGE"
+	ModelCapabilityImageTextToImage ModelCapability = "IMAGE_TEXT_TO_IMAGE"
+	ModelCapabilityTextToSpeech     ModelCapability = "TEXT_TO_SPEECH"
+	ModelCapabilitySpeechToText     ModelCapability = "SPEECH_TO_TEXT"
+	ModelCapabilityAudioTranslation ModelCapability = "AUDIO_TRANSLATION"
+	ModelCapabilityUnknown          ModelCapability = ""
+)
 
-	// Endpoints capabilities
-	ModelCapability_OpenAI_V1_CHAT_COMPLETIONS     ModelCapability = "OPENAI_V1_CHAT_COMPLETIONS"
-	ModelCapability_OpenAI_V1_RESPONSES            ModelCapability = "OPENAI_V1_RESPONSES"
-	ModelCapability_OpenAI_V1_EMBEDDINGS           ModelCapability = "OPENAI_V1_EMBEDDINGS"
-	ModelCapability_OpenAI_V1_IMAGES_GENERATIONS   ModelCapability = "OPENAI_V1_IMAGES_GENERATIONS"
-	ModelCapability_OpenAI_V1_IMAGES_EDITS         ModelCapability = "OPENAI_V1_IMAGES_EDITS"
-	ModelCapability_OpenAI_V1_AUDIO_SPEECH         ModelCapability = "OPENAI_V1_AUDIO_SPEECH"
-	ModelCapability_OpenAI_V1_AUDIO_TRANSCRIPTIONS ModelCapability = "OPENAI_V1_AUDIO_TRANSCRIPTIONS"
-	ModelCapability_OpenAI_V1_AUDIO_TRANSLATIONS   ModelCapability = "OPENAI_V1_AUDIO_TRANSLATIONS"
-	ModelCapability_OpenAI_V1_REALTIME             ModelCapability = "OPENAI_V1_AUDIO_TRANSLATIONS"
+// ModelEndpoint enum
+// +kubebuilder:validation:Enum=OPENAI_V1_CHAT_COMPLETIONS;OPENAI_V1_RESPONSES;OPENAI_V1_EMBEDDINGS;OPENAI_V1_IMAGES_GENERATIONS;OPENAI_V1_IMAGES_EDITS;OPENAI_V1_AUDIO_SPEECH;OPENAI_V1_AUDIO_TRANSCRIPTIONS;OPENAI_V1_AUDIO_TRANSLATIONS;OPENAI_V1_REALTIME
+type ModelEndpoint string
+
+const (
+	ModelEndpointOpenAIv1ChatCompletions     ModelEndpoint = "OPENAI_V1_CHAT_COMPLETIONS"
+	ModelEndpointOpenAIv1Responses           ModelEndpoint = "OPENAI_V1_RESPONSES"
+	ModelEndpointOpenAIv1Embeddings          ModelEndpoint = "OPENAI_V1_EMBEDDINGS"
+	ModelEndpointOpenAIv1ImagesGenerations   ModelEndpoint = "OPENAI_V1_IMAGES_GENERATIONS"
+	ModelEndpointOpenAIv1ImagesEdits         ModelEndpoint = "OPENAI_V1_IMAGES_EDITS"
+	ModelEndpointOpenAIv1AudioSpeech         ModelEndpoint = "OPENAI_V1_AUDIO_SPEECH"
+	ModelEndpointOpenAIv1AudioTranscriptions ModelEndpoint = "OPENAI_V1_AUDIO_TRANSCRIPTIONS"
+	ModelEndpointOpenAIv1AudioTranslations   ModelEndpoint = "OPENAI_V1_AUDIO_TRANSLATIONS"
+	ModelEndpointOpenAIv1Realtime            ModelEndpoint = "OPENAI_V1_REALTIME"
 )
 
 // ModelWeightStatus enum
