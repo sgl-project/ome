@@ -533,7 +533,7 @@ func TestDecoderReconcileObjectMeta(t *testing.T) {
 			).(*Decoder)
 
 			// Test reconcileObjectMeta
-			objectMeta, err := decoder.reconcileObjectMeta(tt.isvc, true)
+			objectMeta, err := decoder.reconcileObjectMeta(tt.isvc)
 			g.Expect(err).NotTo(gomega.HaveOccurred())
 
 			// Validate name
