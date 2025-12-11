@@ -697,17 +697,26 @@ func (r *InferenceServiceReconciler) setExternalServiceURL(ctx context.Context, 
 		return err
 	}
 
-	// Set the URL and Address of the external service
+	// Get the port from the external service
+	var port int32 = constants.CommonISVCPort // default port
+	if len(externalService.Spec.Ports) > 0 {
+		port = externalService.Spec.Ports[0].Port
+	}
+
+	// Set the URL and Address of the external service with port
 	host := network.GetServiceHostname(externalService.Name, externalService.Namespace)
-	openAIURL := knapis.HTTP(host)
-	addressURL := &duckv1.Addressable{
+	hostWithPort := fmt.Sprintf("%s:%d", host, port)
+
+	isvc.Status.URL = &knapis.URL{
+		Host:   hostWithPort,
+		Scheme: "http",
+	}
+	isvc.Status.Address = &duckv1.Addressable{
 		URL: &knapis.URL{
-			Host:   host,
+			Host:   hostWithPort,
 			Scheme: "http",
 		},
 	}
-	isvc.Status.URL = openAIURL
-	isvc.Status.Address = addressURL
 
 	return nil
 }

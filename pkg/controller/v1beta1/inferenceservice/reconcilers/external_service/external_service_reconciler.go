@@ -17,6 +17,7 @@ import (
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
+	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 )
 
 // ExternalServiceReconciler reconciles the external service for an InferenceService
@@ -62,7 +63,7 @@ func (r *ExternalServiceReconciler) Reconcile(ctx context.Context, isvc *v1beta1
 
 	if shouldCreateExternalService {
 		// Build the desired service
-		desiredService, err := r.buildExternalService(isvc)
+		desiredService, err := r.buildExternalService(ctx, isvc)
 		if err != nil {
 			return errors.Wrapf(err, "failed to build external service for InferenceService %s", isvc.Name)
 		}
@@ -132,8 +133,14 @@ func (r *ExternalServiceReconciler) determineTargetSelector(isvc *v1beta1.Infere
 }
 
 // buildExternalService builds the external service specification
-func (r *ExternalServiceReconciler) buildExternalService(isvc *v1beta1.InferenceService) (*corev1.Service, error) {
+func (r *ExternalServiceReconciler) buildExternalService(ctx context.Context, isvc *v1beta1.InferenceService) (*corev1.Service, error) {
 	selector := r.determineTargetSelector(isvc)
+
+	// Get the target port from the internal service
+	targetPort, err := isvcutils.GetTargetServicePort(ctx, r.client, isvc)
+	if err != nil {
+		targetPort = constants.CommonISVCPort
+	}
 
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -150,8 +157,8 @@ func (r *ExternalServiceReconciler) buildExternalService(isvc *v1beta1.Inference
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "http",
-					Port:       80,
-					TargetPort: intstr.FromInt(8080),
+					Port:       targetPort,
+					TargetPort: intstr.FromInt32(targetPort),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},
