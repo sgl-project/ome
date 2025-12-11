@@ -223,62 +223,8 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 		return
 	}
 
-	// Determine if this is a ClusterBaseModel or BaseModel
-	var labelKey string
-	isClusterScoped := b.BaseModelMeta.Namespace == ""
-
-	if isClusterScoped {
-		// ClusterBaseModel
-		labelKey = constants.GetClusterBaseModelLabel(b.BaseModelMeta.Name)
-	} else {
-		// BaseModel (namespace-scoped)
-		labelKey = constants.GetBaseModelLabel(b.BaseModelMeta.Namespace, b.BaseModelMeta.Name)
-	}
-
-	// Add preferred node affinity for model readiness label.
-	// This allows cluster autoscaler to scale up nodes that don't yet have the model label
-	// (which is dynamically added after nodes join), while still preferring nodes where
-	// the model is already ready for optimal performance.
-	if podSpec.Affinity == nil {
-		podSpec.Affinity = &corev1.Affinity{}
-	}
-	if podSpec.Affinity.NodeAffinity == nil {
-		podSpec.Affinity.NodeAffinity = &corev1.NodeAffinity{}
-	}
-
-	// Check if this model affinity term already exists to avoid duplicates during reconciliation
-	affinityExists := false
-	for _, term := range podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
-		for _, expr := range term.Preference.MatchExpressions {
-			if expr.Key == labelKey {
-				affinityExists = true
-				break
-			}
-		}
-		if affinityExists {
-			break
-		}
-	}
-
-	if !affinityExists {
-		// Use max weight (100) to strongly prefer nodes with ready models
-		preferredTerm := corev1.PreferredSchedulingTerm{
-			Weight: 100,
-			Preference: corev1.NodeSelectorTerm{
-				MatchExpressions: []corev1.NodeSelectorRequirement{
-					{
-						Key:      labelKey,
-						Operator: corev1.NodeSelectorOpIn,
-						Values:   []string{"Ready"},
-					},
-				},
-			},
-		}
-		podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = append(
-			podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
-			preferredTerm,
-		)
-	}
+	// Add preferred node affinity for model readiness using the shared utility function
+	isvcutils.AddPreferredNodeAffinityForModel(podSpec, b.BaseModelMeta)
 
 	// Add node selector merged from AcceleratorClass if applicable
 	// Only add mergedNodeSelector to engine and decoder component.
@@ -293,7 +239,6 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 	}
 
 	b.Log.Info("Added preferred node affinity for model scheduling",
-		"labelKey", labelKey,
 		"modelName", b.BaseModelMeta.Name,
 		"namespace", b.BaseModelMeta.Namespace,
 		"inferenceService", isvc.Name)

@@ -215,10 +215,45 @@ func (r *BenchmarkJobReconciler) createPodSpec(ctx context.Context, benchmarkJob
 
 	podSpec := r.buildBasePodSpec(container, volumes)
 
+	// Add node selector for InferenceService base model if specified
+	if benchmarkJob.Spec.Endpoint.InferenceService != nil {
+		if err := r.addNodeSelectorFromInferenceService(ctx, benchmarkJob, podSpec); err != nil {
+			r.Log.Error(err, "Failed to add node selector from InferenceService, continuing without it")
+			// Don't fail the whole reconciliation, just log the error
+		}
+	}
+
 	if benchmarkJob.Spec.PodOverride != nil {
 		return r.applyPodOverrides(podSpec, benchmarkJob.Spec.PodOverride)
 	}
 	return podSpec, nil
+}
+
+// addNodeSelectorFromInferenceService adds node affinity based on the InferenceService's base model
+func (r *BenchmarkJobReconciler) addNodeSelectorFromInferenceService(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob, podSpec *v1.PodSpec) error {
+	ref := benchmarkJob.Spec.Endpoint.InferenceService
+	inferenceService, err := benchmarkutils.GetInferenceService(ctx, r.Client, ref)
+	if err != nil {
+		return err
+	}
+
+	baseModelName := benchmarkutils.GetBaseModelName(inferenceService)
+	if baseModelName == "" {
+		return fmt.Errorf("InferenceService %s/%s has no Model defined", inferenceService.Namespace, inferenceService.Name)
+	}
+
+	_, baseModelMeta, err := isvcutils.GetBaseModel(r.Client, baseModelName, inferenceService.Namespace)
+	if err != nil {
+		return err
+	}
+
+	isvcutils.AddPreferredNodeAffinityForModel(podSpec, baseModelMeta)
+	r.Log.Info("Added node affinity for benchmark job",
+		"baseModel", baseModelMeta.Name,
+		"namespace", baseModelMeta.Namespace,
+		"benchmarkJob", benchmarkJob.Name)
+
+	return nil
 }
 
 // buildDefaultContainer creates the default benchmark container with resources and env vars
@@ -387,6 +422,7 @@ func (r *BenchmarkJobReconciler) applyPodOverrides(podSpec *v1.PodSpec, override
 		Containers:    []v1.Container{*mergedContainer},
 		Volumes:       podSpec.Volumes,
 		Tolerations:   podSpec.Tolerations,
+		Affinity:      podSpec.Affinity,
 		RestartPolicy: v1.RestartPolicyNever,
 	}
 
