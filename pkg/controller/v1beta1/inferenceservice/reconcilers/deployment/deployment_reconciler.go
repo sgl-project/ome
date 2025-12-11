@@ -2,7 +2,6 @@ package deployment
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/go-cmp/cmp/cmpopts"
 	appsv1 "k8s.io/api/apps/v1"
@@ -49,7 +48,7 @@ func createRawDeployment(componentMeta metav1.ObjectMeta,
 	podSpec *corev1.PodSpec) *appsv1.Deployment {
 
 	podMetadata := componentMeta
-	podMetadata.Labels["app"] = constants.GetRawServiceLabel(componentMeta.Name)
+	podMetadata.Labels["app"] = constants.TruncateNameWithMaxLength(componentMeta.Name, 63)
 	utils.SetPodLabelsFromAnnotations(&podMetadata)
 	setDefaultPodSpec(podSpec)
 
@@ -58,7 +57,7 @@ func createRawDeployment(componentMeta metav1.ObjectMeta,
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": constants.GetRawServiceLabel(componentMeta.Name),
+					"app": constants.TruncateNameWithMaxLength(componentMeta.Name, 63),
 				},
 			},
 			Template: corev1.PodTemplateSpec{
@@ -74,8 +73,6 @@ func createRawDeployment(componentMeta metav1.ObjectMeta,
 
 	setDefaultDeploymentSpec(&deployment.Spec)
 
-	// Only update deployment name after we use it to populate pod selector label value
-	updateDeploymentName(deployment)
 	return deployment
 }
 
@@ -215,23 +212,4 @@ func (r *DeploymentReconciler) Reconcile() (*appsv1.Deployment, error) {
 	}
 
 	return r.Deployment, nil
-}
-
-/* Need a different name for ome.io based DAC inference service raw deployment under OME migration context since:
- *  1. Kueue required labels: kueue.x-k8s.io/queue-name & kueue.x-k8s.io/priority-class are 2 immutable fields;
- *  2. Kueue is only introduced in new OME, not old OME. So for OME migration from old OME to new OME, need to recreate a
- *     new deployment resource with a different name so new OME inference service can be up successfully with Kueue,
- *     it cannot directly update the existing old OME deployment resource due to above point #1;
- *  Note: Only need to adopt a new deployment name when it comes to migrate old OME DAC inference service, no need to do
- *        this for below:
- *     1). on-demand model serving;
- *     2). DAC inference service deployment from new OME with Volcano reconciled; (Out of scope, will handle its migration
- *         separately)
- */
-func updateDeploymentName(deployment *appsv1.Deployment) {
-	if _, ok := deployment.Annotations[constants.DedicatedAICluster]; ok {
-		if _, ok = deployment.Annotations[constants.VolcanoScheduler]; !ok {
-			deployment.Name = fmt.Sprintf("%s-%s", deployment.Name, "new")
-		}
-	}
 }

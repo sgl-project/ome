@@ -688,9 +688,8 @@ func DefaultRayHeadServiceName(name string, index int) string {
 	return rayutils.CheckName(fmt.Sprintf("%s-%d", name, index))
 }
 
-func TruncateDomainName(name string, maxLength int) string {
-	return truncateWithHash(name, maxLength)
-}
+// label has 63 characters limit
+// we will have inferenceservicename-engine, inferenceservicename
 
 // Kubernetes naming constraints
 const (
@@ -701,6 +700,39 @@ const (
 	// Length of hash prefix when truncating
 	HashPrefixLength = 8
 )
+
+// truncateWithHashTweaks truncates a string to maxLength, taking suffix and adding hash prefix for uniqueness
+// If the original string fits within maxLength, it's returned as-is
+// Otherwise, it returns: {hash_prefix}-{suffix}
+// If the return starts with a numeric character, prepend a leading character
+func truncateWithHashTweaks(original string, maxLength int) string {
+	if len(original) <= maxLength {
+		return original
+	}
+
+	// Generate hash of the original string
+	hasher := sha256.New()
+	hasher.Write([]byte(original))
+	hashBytes := hasher.Sum(nil)
+	hashPrefix := hex.EncodeToString(hashBytes)[:HashPrefixLength]
+
+	if hashPrefix[0] >= '0' && hashPrefix[0] <= '9' {
+		// Replace the first char with a letter but keep the rest
+		hashPrefix = "a" + hashPrefix[1:]
+	}
+
+	// Calculate available space for suffix (minus hash prefix and separator)
+	suffixLength := maxLength - HashPrefixLength - 1
+	if suffixLength <= 0 {
+		// If maxLength is too small, just return hash
+		return hashPrefix[:maxLength]
+	}
+
+	// Take suffix from original string
+	suffix := original[len(original)-suffixLength:]
+
+	return fmt.Sprintf("%s-%s", hashPrefix, suffix)
+}
 
 // truncateWithHash truncates a string to maxLength, taking suffix and adding hash prefix for uniqueness
 // If the original string fits within maxLength, it's returned as-is
@@ -848,6 +880,11 @@ func GetModelConfigMapKey(namespace, modelName string, isClusterBaseModel bool) 
 	truncatedModelName := truncateModelName(modelName, modelNameMaxLength)
 
 	return fmt.Sprintf("%s.%s.%s", truncatedNamespace, BaseModelLabelType, truncatedModelName)
+}
+
+// TruncateNameWithMaxLength return a valid DNS name
+func TruncateNameWithMaxLength(name string, maxLength int) string {
+	return truncateWithHashTweaks(name, maxLength)
 }
 
 // ParseModelInfoFromConfigMapKey attempts to parse model information from a ConfigMap key
