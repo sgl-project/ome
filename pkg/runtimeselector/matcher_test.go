@@ -1108,3 +1108,145 @@ func TestCompareModelFrameworkVersions(t *testing.T) {
 		})
 	}
 }
+
+func TestGetFormatMismatchReason(t *testing.T) {
+	matcher := NewDefaultRuntimeMatcher(NewConfig(nil)).(*DefaultRuntimeMatcher)
+
+	t.Run("architecture mismatch", func(t *testing.T) {
+		model := &v1beta1.BaseModelSpec{
+			ModelFormat:       v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+			ModelArchitecture: ptr("LlamaForCausalLM"),
+		}
+		format := v1beta1.SupportedModelFormat{
+			ModelFormat:       &v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+			ModelArchitecture: ptr("MistralForCausalLM"),
+		}
+		reason := matcher.getFormatMismatchReason(model, format)
+		assert.Contains(t, reason, "architecture mismatch")
+		assert.Contains(t, reason, "LlamaForCausalLM")
+		assert.Contains(t, reason, "MistralForCausalLM")
+	})
+
+	t.Run("model has architecture but runtime does not", func(t *testing.T) {
+		model := &v1beta1.BaseModelSpec{
+			ModelFormat:       v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+			ModelArchitecture: ptr("LlamaForCausalLM"),
+		}
+		format := v1beta1.SupportedModelFormat{
+			ModelFormat:       &v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+			ModelArchitecture: nil,
+		}
+		reason := matcher.getFormatMismatchReason(model, format)
+		assert.Contains(t, reason, "model has architecture LlamaForCausalLM but runtime has no architecture requirement")
+	})
+
+	t.Run("quantization mismatch", func(t *testing.T) {
+		model := &v1beta1.BaseModelSpec{
+			ModelFormat:  v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+			Quantization: ptr(v1beta1.ModelQuantization("fp8")),
+		}
+		format := v1beta1.SupportedModelFormat{
+			ModelFormat:  &v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+			Quantization: ptr(v1beta1.ModelQuantization("int4")),
+		}
+		reason := matcher.getFormatMismatchReason(model, format)
+		assert.Contains(t, reason, "quantization mismatch")
+	})
+
+	t.Run("format name mismatch", func(t *testing.T) {
+		model := &v1beta1.BaseModelSpec{
+			ModelFormat: v1beta1.ModelFormat{Name: "pytorch", Version: ptr("1.0.0")},
+		}
+		format := v1beta1.SupportedModelFormat{
+			ModelFormat: &v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+		}
+		reason := matcher.getFormatMismatchReason(model, format)
+		assert.Contains(t, reason, "format name mismatch")
+	})
+
+	t.Run("framework mismatch", func(t *testing.T) {
+		model := &v1beta1.BaseModelSpec{
+			ModelFormat:    v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+			ModelFramework: &v1beta1.ModelFrameworkSpec{Name: "transformers", Version: ptr("4.0.0")},
+		}
+		format := v1beta1.SupportedModelFormat{
+			ModelFormat:    &v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+			ModelFramework: &v1beta1.ModelFrameworkSpec{Name: "pytorch", Version: ptr("2.0.0")},
+		}
+		reason := matcher.getFormatMismatchReason(model, format)
+		assert.Contains(t, reason, "framework name mismatch")
+	})
+
+	t.Run("model has framework but runtime does not", func(t *testing.T) {
+		model := &v1beta1.BaseModelSpec{
+			ModelFormat:    v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+			ModelFramework: &v1beta1.ModelFrameworkSpec{Name: "transformers", Version: ptr("4.0.0")},
+		}
+		format := v1beta1.SupportedModelFormat{
+			ModelFormat:    &v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+			ModelFramework: nil,
+		}
+		reason := matcher.getFormatMismatchReason(model, format)
+		assert.Contains(t, reason, "model has framework transformers but runtime has no framework requirement")
+	})
+
+	t.Run("multiple mismatches combined", func(t *testing.T) {
+		model := &v1beta1.BaseModelSpec{
+			ModelFormat:       v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+			ModelArchitecture: ptr("LlamaForCausalLM"),
+			Quantization:      ptr(v1beta1.ModelQuantization("fp8")),
+		}
+		format := v1beta1.SupportedModelFormat{
+			ModelFormat:       &v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+			ModelArchitecture: ptr("MistralForCausalLM"),
+			Quantization:      ptr(v1beta1.ModelQuantization("int4")),
+		}
+		reason := matcher.getFormatMismatchReason(model, format)
+		assert.Contains(t, reason, "architecture mismatch")
+		assert.Contains(t, reason, "quantization mismatch")
+	})
+}
+
+func TestGetCompatibilityDetails_DetailedFormatMismatch(t *testing.T) {
+	matcher := NewDefaultRuntimeMatcher(NewConfig(nil))
+
+	t.Run("architecture mismatch provides detailed reason", func(t *testing.T) {
+		runtime := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{
+					ModelFormat:       &v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+					ModelArchitecture: ptr("MistralForCausalLM"),
+				},
+			},
+		}
+		model := &v1beta1.BaseModelSpec{
+			ModelFormat:       v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+			ModelArchitecture: ptr("LlamaForCausalLM"),
+		}
+
+		isvc := &v1beta1.InferenceService{}
+		report, err := matcher.GetCompatibilityDetails(runtime, model, isvc, "test-runtime")
+		assert.NoError(t, err)
+		assert.False(t, report.IsCompatible)
+		assert.NotEmpty(t, report.IncompatibilityReasons)
+		assert.Contains(t, report.IncompatibilityReasons[0], "architecture mismatch")
+		assert.Contains(t, report.IncompatibilityReasons[0], "LlamaForCausalLM")
+		assert.Contains(t, report.IncompatibilityReasons[0], "MistralForCausalLM")
+	})
+
+	t.Run("empty supported formats provides clear reason", func(t *testing.T) {
+		runtime := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{},
+		}
+		model := &v1beta1.BaseModelSpec{
+			ModelFormat: v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+		}
+
+		isvc := &v1beta1.InferenceService{}
+		report, err := matcher.GetCompatibilityDetails(runtime, model, isvc, "test-runtime")
+		assert.NoError(t, err)
+		assert.False(t, report.IsCompatible)
+		assert.NotEmpty(t, report.IncompatibilityReasons)
+		assert.Contains(t, report.IncompatibilityReasons[0], "no supported formats defined")
+	})
+}
