@@ -1,7 +1,6 @@
 package raw
 
 import (
-	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,14 +30,20 @@ type RawKubeReconciler struct {
 }
 
 // NewRawKubeReconciler creates raw kubernetes resource reconciler.
-func NewRawKubeReconciler(client client.Client, clientset kubernetes.Interface, scheme *runtime.Scheme, componentMeta isvcutils.ObjectMetaPack, inferenceServiceSpec *v1beta1.InferenceServiceSpec, podSpec *corev1.PodSpec) (*RawKubeReconciler, error) {
-	as, err := autoscaler.NewAutoscalerReconciler(client, clientset, scheme, componentMeta.Normal, inferenceServiceSpec)
+func NewRawKubeReconciler(client client.Client,
+	clientset kubernetes.Interface,
+	scheme *runtime.Scheme,
+	componentMeta metav1.ObjectMeta,
+	inferenceServiceSpec *v1beta1.InferenceServiceSpec,
+	podSpec *corev1.PodSpec,
+) (*RawKubeReconciler, error) {
+	as, err := autoscaler.NewAutoscalerReconciler(client, clientset, scheme, componentMeta, inferenceServiceSpec)
 	if err != nil {
 		return nil, err
 	}
 
-	pdb := pdb.NewPDBReconciler(client, scheme, componentMeta.Normal, &inferenceServiceSpec.Predictor.ComponentExtensionSpec)
-	url, err := createRawURL(clientset, componentMeta.Normal)
+	pdb := pdb.NewPDBReconciler(client, scheme, componentMeta, &inferenceServiceSpec.Predictor.ComponentExtensionSpec)
+	url, err := createRawURL(clientset, componentMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -50,8 +55,8 @@ func NewRawKubeReconciler(client client.Client, clientset kubernetes.Interface, 
 	return &RawKubeReconciler{
 		client:              client,
 		scheme:              scheme,
-		Deployment:          deployment.NewDeploymentReconciler(client, scheme, componentMeta.Pod, componentExt, podSpec),
-		Service:             service.NewServiceReconciler(client, scheme, componentMeta.Normal, componentExt, podSpec, nil),
+		Deployment:          deployment.NewDeploymentReconciler(client, scheme, componentMeta, componentExt, podSpec),
+		Service:             service.NewServiceReconciler(client, scheme, componentMeta, componentExt, podSpec, nil),
 		Scaler:              as,
 		PodDisruptionBudget: pdb,
 		URL:                 url,
