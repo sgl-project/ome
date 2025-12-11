@@ -68,7 +68,6 @@ func GetValueFromRawExtension(raw runtime.RawExtension, key string) (interface{}
 
 // GetTargetServicePort returns the port of the target service (router or engine).
 // For raw deployment mode, it uses RouterServiceName/EngineServiceName.
-// For serverless mode, it uses DefaultRouterServiceName/PredictorServiceName.
 // Returns the port from the service, or constants.CommonISVCPort as default if service lookup fails.
 func GetTargetServicePort(ctx context.Context, c client.Client, isvc *v1beta1.InferenceService) (int32, error) {
 	var serviceName string
@@ -77,6 +76,9 @@ func GetTargetServicePort(ctx context.Context, c client.Client, isvc *v1beta1.In
 	} else {
 		serviceName = constants.EngineServiceName(isvc.Name)
 	}
+
+	// if serviceName reached 63 character, the service name will be truncated during service creation. update name otherwise the service can't found
+	serviceName = constants.TruncateNameWithMaxLength(serviceName, 63)
 
 	service := &corev1.Service{}
 	if err := c.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: isvc.Namespace}, service); err != nil {
