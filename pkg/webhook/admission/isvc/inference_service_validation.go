@@ -105,6 +105,11 @@ func (v *InferenceServiceValidator) validateInferenceService(ctx context.Context
 		return allWarnings, err
 	}
 
+	// Validate that referenced model exists (for new Engine architecture using isvc.Spec.Model)
+	if err := v.validateModelExists(ctx, isvc); err != nil {
+		return allWarnings, err
+	}
+
 	// Validate runtime and model resolution for new architecture
 	if isvc.Spec.Engine != nil {
 		warnings, err := v.validateRuntimeAndModelResolution(ctx, isvc)
@@ -191,6 +196,20 @@ func validateEngineDecoderConfiguration(isvc *v1beta1.InferenceService) error {
 	// Rule 1: If inference service has decoder defined, but not engine, fail
 	if isvc.Spec.Decoder != nil && isvc.Spec.Engine == nil {
 		return fmt.Errorf("decoder cannot be specified without engine")
+	}
+
+	return nil
+}
+
+// validateModelExists validates that the referenced model (BaseModel or ClusterBaseModel) exists
+func (v *InferenceServiceValidator) validateModelExists(ctx context.Context, isvc *v1beta1.InferenceService) error {
+	// Check new architecture model reference (isvc.Spec.Model)
+	if isvc.Spec.Model != nil && isvc.Spec.Model.Name != "" {
+		_, _, err := isvcutils.GetBaseModel(v.Client, isvc.Spec.Model.Name, isvc.Namespace)
+		if err != nil {
+			return fmt.Errorf("referenced model %q not found in namespace %q: ensure a BaseModel exists in this namespace or a ClusterBaseModel exists cluster-wide with this name",
+				isvc.Spec.Model.Name, isvc.Namespace)
+		}
 	}
 
 	return nil
