@@ -68,7 +68,7 @@ func createPDB(componentMeta metav1.ObjectMeta,
 			MaxUnavailable: maxUnavailable,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": constants.GetRawServiceLabel(componentMeta.Name),
+					"app": constants.TruncateNameWithMaxLength(componentMeta.Name, 63),
 				},
 			},
 		},
