@@ -688,9 +688,6 @@ func DefaultRayHeadServiceName(name string, index int) string {
 	return rayutils.CheckName(fmt.Sprintf("%s-%d", name, index))
 }
 
-// label has 63 characters limit
-// we will have inferenceservicename-engine, inferenceservicename
-
 // Kubernetes naming constraints
 const (
 	// Maximum length for label names (after domain/)
