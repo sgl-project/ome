@@ -16,9 +16,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/builders"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
+	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 )
 
 // KubernetesIngressStrategy handles Kubernetes Ingress (raw deployment mode)
@@ -101,14 +103,25 @@ func (k *KubernetesIngressStrategy) Reconcile(ctx context.Context, isvc *v1beta1
 		}
 	}
 
+	// Get the service port
+	servicePort, err := isvcutils.GetTargetServicePort(ctx, k.client, isvc)
+	if err != nil {
+		klog.Warning("Failed to get target service port, using default", "error", err)
+		servicePort = constants.CommonISVCPort
+	}
+
 	// Set status URL and Address
-	isvc.Status.URL, err = k.createRawURL(isvc)
+	serviceHost, err := k.createRawURL(isvc)
 	if err != nil {
 		return err
 	}
+	serviceHost.Host = fmt.Sprintf("%s:%d", serviceHost.Host, servicePort)
+	isvc.Status.URL = serviceHost
+
+	hostWithPort := fmt.Sprintf("%s:%d", k.getRawServiceHost(isvc), servicePort)
 	isvc.Status.Address = &duckv1.Addressable{
 		URL: &apis.URL{
-			Host:   k.getRawServiceHost(isvc),
+			Host:   hostWithPort,
 			Scheme: k.ingressConfig.UrlScheme,
 			Path:   "",
 		},

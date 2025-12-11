@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
@@ -1664,6 +1665,207 @@ func TestDetermineEntrypointComponent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			entrypoint := DetermineEntrypointComponent(tt.isvc)
 			assert.Equal(t, tt.expectedEntrypoint, entrypoint)
+		})
+	}
+}
+
+func TestGetTargetServicePort(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = v1.AddToScheme(scheme)
+	_ = v1beta1.AddToScheme(scheme)
+
+	tests := []struct {
+		name         string
+		isvc         *v1beta1.InferenceService
+		services     []v1.Service
+		expectedPort int32
+		expectError  bool
+	}{
+		{
+			name: "raw deployment mode - engine only with custom port",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+			services: []v1.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-isvc-engine",
+						Namespace: "default",
+					},
+					Spec: v1.ServiceSpec{
+						Ports: []v1.ServicePort{
+							{Port: 8081},
+						},
+					},
+				},
+			},
+			expectedPort: 8081,
+			expectError:  false,
+		},
+		{
+			name: "raw deployment mode - with router and custom port",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine: &v1beta1.EngineSpec{},
+					Router: &v1beta1.RouterSpec{},
+				},
+			},
+			services: []v1.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-isvc-router",
+						Namespace: "default",
+					},
+					Spec: v1.ServiceSpec{
+						Ports: []v1.ServicePort{
+							{Port: 8082},
+						},
+					},
+				},
+			},
+			expectedPort: 8082,
+			expectError:  false,
+		},
+		{
+			name: "raw deployment mode - service not found",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+			services:     []v1.Service{},
+			expectedPort: 0,
+			expectError:  true,
+		},
+		{
+			name: "raw deployment mode - service with no ports uses default",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+			services: []v1.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-isvc-engine",
+						Namespace: "default",
+					},
+					Spec: v1.ServiceSpec{
+						Ports: []v1.ServicePort{},
+					},
+				},
+			},
+			expectedPort: constants.CommonISVCPort,
+			expectError:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build fake client with services
+			objs := make([]runtime.Object, 0, len(tt.services))
+			for i := range tt.services {
+				objs = append(objs, &tt.services[i])
+			}
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(objs...).
+				Build()
+
+			port, err := GetTargetServicePort(context.Background(), fakeClient, tt.isvc)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedPort, port)
+			}
+		})
+	}
+}
+
+func TestGetTargetServicePort_ServiceNameResolution(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = v1.AddToScheme(scheme)
+	_ = v1beta1.AddToScheme(scheme)
+
+	// Test that the correct service names are used based on mode and router presence
+	tests := []struct {
+		name                string
+		isvc                *v1beta1.InferenceService
+		expectedServiceName string
+	}{
+		{
+			name: "raw mode - engine only uses EngineServiceName",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-model",
+					Namespace: "test-ns",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+			expectedServiceName: constants.EngineServiceName("my-model"), // my-model-engine
+		},
+		{
+			name: "raw mode - with router uses RouterServiceName",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-model",
+					Namespace: "test-ns",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine: &v1beta1.EngineSpec{},
+					Router: &v1beta1.RouterSpec{},
+				},
+			},
+			expectedServiceName: constants.RouterServiceName("my-model"), // my-model-router
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a service with the expected name
+			svc := &v1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      tt.expectedServiceName,
+					Namespace: tt.isvc.Namespace,
+				},
+				Spec: v1.ServiceSpec{
+					Ports: []v1.ServicePort{
+						{Port: 9999}, // Use distinct port to verify correct service was found
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(svc).
+				Build()
+
+			port, err := GetTargetServicePort(context.Background(), fakeClient, tt.isvc)
+
+			assert.NoError(t, err)
+			assert.Equal(t, int32(9999), port, "Should find the service with expected name: %s", tt.expectedServiceName)
 		})
 	}
 }
