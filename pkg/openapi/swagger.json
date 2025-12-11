@@ -589,8 +589,8 @@
           },
           "x-kubernetes-list-type": "atomic"
         },
-        "endpoints": {
-          "description": "Endpoints supported by the model, e.g., \"OPENAI_V1_CHAT_COMPLETIONS\"",
+        "apiCapabilities": {
+          "description": "API capabilities supported by the model, e.g., \"OPENAI_V1_CHAT_COMPLETIONS\"",
           "type": "array",
           "items": {
             "type": "string",

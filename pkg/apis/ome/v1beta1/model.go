@@ -134,10 +134,10 @@ type BaseModelSpec struct {
 	// +optional
 	ModelCapabilities []string `json:"modelCapabilities,omitempty"`
 
-	// Endpoints supported by the model, e.g., "OPENAI_V1_CHAT_COMPLETIONS"
+	// API capabilities supported by the model, e.g., "OPENAI_V1_CHAT_COMPLETIONS"
 	// +listType=atomic
 	// +optional
-	Endpoints []ModelEndpoint `json:"endpoints,omitempty"`
+	ApiCapabilities []ModelAPICapability `json:"apiCapabilities,omitempty"`
 
 	// Configuration of the model, stored as generic JSON for flexibility.
 	// +optional
@@ -231,20 +231,20 @@ const (
 	ModelCapabilityUnknown          ModelCapability = ""
 )
 
-// ModelEndpoint enum
+// ModelAPICapability enum
 // +kubebuilder:validation:Enum=OPENAI_V1_CHAT_COMPLETIONS;OPENAI_V1_RESPONSES;OPENAI_V1_EMBEDDINGS;OPENAI_V1_IMAGES_GENERATIONS;OPENAI_V1_IMAGES_EDITS;OPENAI_V1_AUDIO_SPEECH;OPENAI_V1_AUDIO_TRANSCRIPTIONS;OPENAI_V1_AUDIO_TRANSLATIONS;OPENAI_V1_REALTIME
-type ModelEndpoint string
+type ModelAPICapability string
 
 const (
-	ModelEndpointOpenAIv1ChatCompletions     ModelEndpoint = "OPENAI_V1_CHAT_COMPLETIONS"
-	ModelEndpointOpenAIv1Responses           ModelEndpoint = "OPENAI_V1_RESPONSES"
-	ModelEndpointOpenAIv1Embeddings          ModelEndpoint = "OPENAI_V1_EMBEDDINGS"
-	ModelEndpointOpenAIv1ImagesGenerations   ModelEndpoint = "OPENAI_V1_IMAGES_GENERATIONS"
-	ModelEndpointOpenAIv1ImagesEdits         ModelEndpoint = "OPENAI_V1_IMAGES_EDITS"
-	ModelEndpointOpenAIv1AudioSpeech         ModelEndpoint = "OPENAI_V1_AUDIO_SPEECH"
-	ModelEndpointOpenAIv1AudioTranscriptions ModelEndpoint = "OPENAI_V1_AUDIO_TRANSCRIPTIONS"
-	ModelEndpointOpenAIv1AudioTranslations   ModelEndpoint = "OPENAI_V1_AUDIO_TRANSLATIONS"
-	ModelEndpointOpenAIv1Realtime            ModelEndpoint = "OPENAI_V1_REALTIME"
+	ModelAPICapabilityOpenAIv1ChatCompletions     ModelAPICapability = "OPENAI_V1_CHAT_COMPLETIONS"
+	ModelAPICapabilityOpenAIv1Responses           ModelAPICapability = "OPENAI_V1_RESPONSES"
+	ModelAPICapabilityOpenAIv1Embeddings          ModelAPICapability = "OPENAI_V1_EMBEDDINGS"
+	ModelAPICapabilityOpenAIv1ImagesGenerations   ModelAPICapability = "OPENAI_V1_IMAGES_GENERATIONS"
+	ModelAPICapabilityOpenAIv1ImagesEdits         ModelAPICapability = "OPENAI_V1_IMAGES_EDITS"
+	ModelAPICapabilityOpenAIv1AudioSpeech         ModelAPICapability = "OPENAI_V1_AUDIO_SPEECH"
+	ModelAPICapabilityOpenAIv1AudioTranscriptions ModelAPICapability = "OPENAI_V1_AUDIO_TRANSCRIPTIONS"
+	ModelAPICapabilityOpenAIv1AudioTranslations   ModelAPICapability = "OPENAI_V1_AUDIO_TRANSLATIONS"
+	ModelAPICapabilityOpenAIv1Realtime            ModelAPICapability = "OPENAI_V1_REALTIME"
 )
 
 // ModelWeightStatus enum

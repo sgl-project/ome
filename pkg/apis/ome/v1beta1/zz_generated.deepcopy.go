@@ -604,9 +604,9 @@ func (in *BaseModelSpec) DeepCopyInto(out *BaseModelSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	if in.Endpoints != nil {
-		in, out := &in.Endpoints, &out.Endpoints
-		*out = make([]ModelEndpoint, len(*in))
+	if in.ApiCapabilities != nil {
+		in, out := &in.ApiCapabilities, &out.ApiCapabilities
+		*out = make([]ModelAPICapability, len(*in))
 		copy(*out, *in)
 	}
 	in.ModelConfiguration.DeepCopyInto(&out.ModelConfiguration)
