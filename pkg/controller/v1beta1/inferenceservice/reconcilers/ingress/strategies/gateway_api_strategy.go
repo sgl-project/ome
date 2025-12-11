@@ -20,11 +20,9 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/builders"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
-	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 )
 
 const (
@@ -102,25 +100,14 @@ func (g *GatewayAPIStrategy) Reconcile(ctx context.Context, isvc *v1beta1.Infere
 		})
 	}
 
-	// Get port number in service
-	servicePort, err := isvcutils.GetTargetServicePort(ctx, g.client, isvc, false)
-	if err != nil {
-		klog.Warning("Failed to get target service port, using default", "error", err)
-		servicePort = constants.CommonISVCPort
-	}
-
 	// Set status URL and Address
-	serviceHost, err := g.createRawURL(isvc)
+	isvc.Status.URL, err = g.createRawURL(isvc)
 	if err != nil {
 		return err
 	}
-	serviceHost.Host = fmt.Sprintf("%s:%d", serviceHost.Host, servicePort)
-	isvc.Status.URL = serviceHost
-
-	hostWithPort := fmt.Sprintf("%s:%d", g.getRawServiceHost(isvc), servicePort)
 	isvc.Status.Address = &duckv1.Addressable{
 		URL: &apis.URL{
-			Host:   hostWithPort,
+			Host:   g.getRawServiceHost(isvc),
 			Scheme: g.ingressConfig.UrlScheme,
 			Path:   "",
 		},

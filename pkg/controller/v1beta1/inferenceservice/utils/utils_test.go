@@ -1677,7 +1677,6 @@ func TestGetTargetServicePort(t *testing.T) {
 	tests := []struct {
 		name         string
 		isvc         *v1beta1.InferenceService
-		serverless   bool
 		services     []v1.Service
 		expectedPort int32
 		expectError  bool
@@ -1693,7 +1692,6 @@ func TestGetTargetServicePort(t *testing.T) {
 					Engine: &v1beta1.EngineSpec{},
 				},
 			},
-			serverless: false,
 			services: []v1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1722,7 +1720,6 @@ func TestGetTargetServicePort(t *testing.T) {
 					Router: &v1beta1.RouterSpec{},
 				},
 			},
-			serverless: false,
 			services: []v1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1750,7 +1747,6 @@ func TestGetTargetServicePort(t *testing.T) {
 					Engine: &v1beta1.EngineSpec{},
 				},
 			},
-			serverless:   false,
 			services:     []v1.Service{},
 			expectedPort: 0,
 			expectError:  true,
@@ -1766,7 +1762,6 @@ func TestGetTargetServicePort(t *testing.T) {
 					Engine: &v1beta1.EngineSpec{},
 				},
 			},
-			serverless: false,
 			services: []v1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1780,79 +1775,6 @@ func TestGetTargetServicePort(t *testing.T) {
 			},
 			expectedPort: constants.CommonISVCPort,
 			expectError:  false,
-		},
-		{
-			name: "serverless mode - engine only (predictor service)",
-			isvc: &v1beta1.InferenceService{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-isvc",
-					Namespace: "default",
-				},
-				Spec: v1beta1.InferenceServiceSpec{
-					Engine: &v1beta1.EngineSpec{},
-				},
-			},
-			serverless: true,
-			services: []v1.Service{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-isvc", // PredictorServiceName returns just the name
-						Namespace: "default",
-					},
-					Spec: v1.ServiceSpec{
-						Ports: []v1.ServicePort{
-							{Port: 80},
-						},
-					},
-				},
-			},
-			expectedPort: 80,
-			expectError:  false,
-		},
-		{
-			name: "serverless mode - with router",
-			isvc: &v1beta1.InferenceService{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-isvc",
-					Namespace: "default",
-				},
-				Spec: v1beta1.InferenceServiceSpec{
-					Engine: &v1beta1.EngineSpec{},
-					Router: &v1beta1.RouterSpec{},
-				},
-			},
-			serverless: true,
-			services: []v1.Service{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-isvc-router-default", // DefaultRouterServiceName
-						Namespace: "default",
-					},
-					Spec: v1.ServiceSpec{
-						Ports: []v1.ServicePort{
-							{Port: 8083},
-						},
-					},
-				},
-			},
-			expectedPort: 8083,
-			expectError:  false,
-		},
-		{
-			name: "serverless mode - service not found",
-			isvc: &v1beta1.InferenceService{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-isvc",
-					Namespace: "default",
-				},
-				Spec: v1beta1.InferenceServiceSpec{
-					Engine: &v1beta1.EngineSpec{},
-				},
-			},
-			serverless:   true,
-			services:     []v1.Service{},
-			expectedPort: 0,
-			expectError:  true,
 		},
 	}
 
@@ -1868,7 +1790,7 @@ func TestGetTargetServicePort(t *testing.T) {
 				WithRuntimeObjects(objs...).
 				Build()
 
-			port, err := GetTargetServicePort(context.Background(), fakeClient, tt.isvc, tt.serverless)
+			port, err := GetTargetServicePort(context.Background(), fakeClient, tt.isvc)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -1889,7 +1811,6 @@ func TestGetTargetServicePort_ServiceNameResolution(t *testing.T) {
 	tests := []struct {
 		name                string
 		isvc                *v1beta1.InferenceService
-		serverless          bool
 		expectedServiceName string
 	}{
 		{
@@ -1903,7 +1824,6 @@ func TestGetTargetServicePort_ServiceNameResolution(t *testing.T) {
 					Engine: &v1beta1.EngineSpec{},
 				},
 			},
-			serverless:          false,
 			expectedServiceName: constants.EngineServiceName("my-model"), // my-model-engine
 		},
 		{
@@ -1918,37 +1838,7 @@ func TestGetTargetServicePort_ServiceNameResolution(t *testing.T) {
 					Router: &v1beta1.RouterSpec{},
 				},
 			},
-			serverless:          false,
 			expectedServiceName: constants.RouterServiceName("my-model"), // my-model-router
-		},
-		{
-			name: "serverless mode - engine only uses PredictorServiceName",
-			isvc: &v1beta1.InferenceService{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-model",
-					Namespace: "test-ns",
-				},
-				Spec: v1beta1.InferenceServiceSpec{
-					Engine: &v1beta1.EngineSpec{},
-				},
-			},
-			serverless:          true,
-			expectedServiceName: constants.PredictorServiceName("my-model"), // my-model
-		},
-		{
-			name: "serverless mode - with router uses DefaultRouterServiceName",
-			isvc: &v1beta1.InferenceService{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-model",
-					Namespace: "test-ns",
-				},
-				Spec: v1beta1.InferenceServiceSpec{
-					Engine: &v1beta1.EngineSpec{},
-					Router: &v1beta1.RouterSpec{},
-				},
-			},
-			serverless:          true,
-			expectedServiceName: constants.DefaultRouterServiceName("my-model"), // my-model-router-default
 		},
 	}
 
@@ -1972,7 +1862,7 @@ func TestGetTargetServicePort_ServiceNameResolution(t *testing.T) {
 				WithRuntimeObjects(svc).
 				Build()
 
-			port, err := GetTargetServicePort(context.Background(), fakeClient, tt.isvc, tt.serverless)
+			port, err := GetTargetServicePort(context.Background(), fakeClient, tt.isvc)
 
 			assert.NoError(t, err)
 			assert.Equal(t, int32(9999), port, "Should find the service with expected name: %s", tt.expectedServiceName)

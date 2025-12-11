@@ -104,7 +104,7 @@ func (k *KubernetesIngressStrategy) Reconcile(ctx context.Context, isvc *v1beta1
 	}
 
 	// Get the service port
-	servicePort, err := isvcutils.GetTargetServicePort(ctx, k.client, isvc, false)
+	servicePort, err := isvcutils.GetTargetServicePort(ctx, k.client, isvc)
 	if err != nil {
 		klog.Warning("Failed to get target service port, using default", "error", err)
 		servicePort = constants.CommonISVCPort

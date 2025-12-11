@@ -137,7 +137,7 @@ func (r *ExternalServiceReconciler) buildExternalService(ctx context.Context, is
 	selector := r.determineTargetSelector(isvc)
 
 	// Get the target port from the internal service
-	targetPort, err := isvcutils.GetTargetServicePort(ctx, r.client, isvc, false)
+	targetPort, err := isvcutils.GetTargetServicePort(ctx, r.client, isvc)
 	if err != nil {
 		targetPort = constants.CommonISVCPort
 	}

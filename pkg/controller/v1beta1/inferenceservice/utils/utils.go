@@ -70,22 +70,12 @@ func GetValueFromRawExtension(raw runtime.RawExtension, key string) (interface{}
 // For raw deployment mode, it uses RouterServiceName/EngineServiceName.
 // For serverless mode, it uses DefaultRouterServiceName/PredictorServiceName.
 // Returns the port from the service, or constants.CommonISVCPort as default if service lookup fails.
-func GetTargetServicePort(ctx context.Context, c client.Client, isvc *v1beta1.InferenceService, serverless bool) (int32, error) {
+func GetTargetServicePort(ctx context.Context, c client.Client, isvc *v1beta1.InferenceService) (int32, error) {
 	var serviceName string
-	if serverless {
-		// Serverless mode uses different service naming
-		if isvc.Spec.Router != nil {
-			serviceName = constants.DefaultRouterServiceName(isvc.Name)
-		} else {
-			serviceName = constants.PredictorServiceName(isvc.Name)
-		}
+	if isvc.Spec.Router != nil {
+		serviceName = constants.RouterServiceName(isvc.Name)
 	} else {
-		// Raw deployment mode
-		if isvc.Spec.Router != nil {
-			serviceName = constants.RouterServiceName(isvc.Name)
-		} else {
-			serviceName = constants.EngineServiceName(isvc.Name)
-		}
+		serviceName = constants.EngineServiceName(isvc.Name)
 	}
 
 	service := &corev1.Service{}
