@@ -1,0 +1,64 @@
+{{- range $modelName, $model := .Values.models }}
+{{- if and $model.enabled $model.namespaceScope }}
+{{/*
+  Generate storageUri from simplified options:
+  - hfModelId: Qwen/Qwen3-8B → hf://Qwen/Qwen3-8B
+  - oci.namespace + oci.bucket + oci.object → oci://n/{ns}/b/{bucket}/o/{object}
+  - storageUri: direct override
+*/}}
+{{- $storageUri := "" }}
+{{- if $model.hfModelId }}
+{{- $storageUri = printf "hf://%s" $model.hfModelId }}
+{{- else if $model.oci }}
+{{- $storageUri = printf "oci://n/%s/b/%s/o/%s" $model.oci.namespace $model.oci.bucket $model.oci.object }}
+{{- else if $model.storageUri }}
+{{- $storageUri = $model.storageUri }}
+{{- end }}
+{{- $namespace := $model.namespace | default $modelName }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $namespace }}
+  labels:
+    {{- include "ome-serving.labels" $ | nindent 4 }}
+---
+apiVersion: ome.io/v1beta1
+kind: BaseModel
+metadata:
+  name: {{ $modelName }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "ome-serving.labels" $ | nindent 4 }}
+spec:
+  modelCapabilities:
+    {{- toYaml $model.capabilities | nindent 4 }}
+  vendor: {{ $model.vendor }}
+  disabled: false
+  version: "1.0.0"
+  displayName: {{ $model.vendor }}.{{ $modelName }}
+  storage:
+    storageUri: {{ $storageUri }}
+    {{- with $model.path }}
+    path: {{ . }}
+    {{- end }}
+    {{- with $model.schemaPath }}
+    schemaPath: {{ . }}
+    {{- end }}
+    {{- with $model.key }}
+    key: {{ . }}
+    {{- end }}
+    {{- with $model.parameters }}
+    parameters:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with $model.nodeSelector }}
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with $model.nodeAffinity }}
+    nodeAffinity:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,27 @@
+{{- range $modelName, $model := .Values.models }}
+{{- if $model.enabled }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $modelName }}
+  labels:
+    {{- include "ome-serving.labels" $ | nindent 4 }}
+---
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: {{ $modelName }}
+  namespace: {{ $modelName }}
+  labels:
+    {{- include "ome-serving.labels" $ | nindent 4 }}
+spec:
+  model:
+    name: {{ $modelName }}
+  runtime:
+    name: srt-{{ $modelName }}
+  engine:
+    minReplicas: {{ $model.minReplicas | default $.Values.defaults.minReplicas }}
+    maxReplicas: {{ $model.maxReplicas | default $.Values.defaults.maxReplicas }}
+{{- end }}
+{{- end }}
