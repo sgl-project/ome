@@ -667,13 +667,6 @@ kimi-k2-pd:
   servedName: kimi-k2-pd
 
 # Mistral models
-e5-7b-mistral-instruct:
-  architecture: MistralModel
-  transformersVersion: "4.34.0"
-  autoSelect: true
-  priority: 1
-  sizeRange: ["5B", "10B"]
-  servedName: intfloat/e5-mistral-7b-instruct
 e5-mistral-7b-instruct:
   architecture: MistralModel
   transformersVersion: "4.34.0"

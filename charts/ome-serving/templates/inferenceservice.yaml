@@ -1,10 +1,14 @@
 {{- range $modelName, $model := .Values.models }}
 {{- if $model.enabled }}
+{{- $namespace := $modelName }}
+{{- if $model.namespaceScope }}
+{{-   $namespace = $model.namespace | default $modelName }}
+{{- end }}
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: {{ $modelName }}
+  name: {{ $namespace }}
   labels:
     {{- include "ome-serving.labels" $ | nindent 4 }}
 ---
@@ -12,7 +16,7 @@ apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
   name: {{ $modelName }}
-  namespace: {{ $modelName }}
+  namespace: {{ $namespace }}
   labels:
     {{- include "ome-serving.labels" $ | nindent 4 }}
 spec:

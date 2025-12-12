@@ -6,6 +6,9 @@
   - oci.namespace + oci.bucket + oci.object → oci://n/{ns}/b/{bucket}/o/{object}
   - storageUri: direct override
 */}}
+{{- if not (or $model.hfModelId $model.oci $model.storageUri) -}}
+{{-   fail (printf "For model '%s', one of 'hfModelId', 'oci', or 'storageUri' must be provided." $modelName) -}}
+{{- end -}}
 {{- $storageUri := "" }}
 {{- if $model.hfModelId }}
 {{- $storageUri = printf "hf://%s" $model.hfModelId }}

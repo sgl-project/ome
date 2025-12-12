@@ -6,6 +6,9 @@
   - oci.namespace + oci.bucket + oci.object → oci://n/{ns}/b/{bucket}/o/{object}
   - storageUri: direct override
 */}}
+{{- if not (or $model.hfModelId $model.oci $model.storageUri) -}}
+{{-   fail (printf "For model '%s', one of 'hfModelId', 'oci', or 'storageUri' must be provided." $modelName) -}}
+{{- end -}}
 {{- $storageUri := "" }}
 {{- if $model.hfModelId }}
 {{- $storageUri = printf "hf://%s" $model.hfModelId }}
@@ -15,13 +18,6 @@
 {{- $storageUri = $model.storageUri }}
 {{- end }}
 {{- $namespace := $model.namespace | default $modelName }}
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ $namespace }}
-  labels:
-    {{- include "ome-serving.labels" $ | nindent 4 }}
 ---
 apiVersion: ome.io/v1beta1
 kind: BaseModel

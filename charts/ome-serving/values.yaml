@@ -254,14 +254,6 @@ models:
     runtime:
       gpus: 1
 
-  e5-7b-mistral-instruct:
-    enabled: false
-    vendor: mistral
-    capabilities: [EMBEDDING]
-    hfModelId: intfloat/e5-mistral-7b-instruct
-    runtime:
-      gpus: 1
-
   e5-mistral-7b-instruct:
     enabled: false
     vendor: mistral
