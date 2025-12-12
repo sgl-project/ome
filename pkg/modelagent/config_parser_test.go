@@ -569,3 +569,54 @@ func TestFormatParamCount(t *testing.T) {
 		})
 	}
 }
+
+func TestPopulateArtifactAttribute_SetsFields(t *testing.T) {
+	logger := zap.NewNop().Sugar()
+	parser := &ModelConfigParser{logger: logger}
+
+	orig := ModelMetadata{} // empty input metadata
+	sha := "abc123"
+	parent := "/models/model1"
+
+	out := parser.populateArtifactAttribute(sha, parent, orig)
+	assert.NotNil(t, out, "returned metadata should not be nil")
+
+	// Verify Artifact fields
+	assert.Equal(t, sha, out.Artifact.Sha)
+	assert.Equal(t, parent, out.Artifact.ParentPath)
+	assert.NotNil(t, out.Artifact.ChildrenPaths, "ChildrenPaths should be initialized to an empty slice")
+	assert.Len(t, out.Artifact.ChildrenPaths, 0, "ChildrenPaths should be empty")
+}
+
+func TestPopulateArtifactAttribute_DoesNotMutateInput(t *testing.T) {
+	logger := zap.NewNop().Sugar()
+	parser := &ModelConfigParser{logger: logger}
+
+	// Prepare input with pre-filled artifact to ensure immutability of the input value
+	original := ModelMetadata{
+		Artifact: Artifact{
+			Sha:           "old",
+			ParentPath:    "/models/old",
+			ChildrenPaths: []string{"/models/child1"},
+		},
+	}
+	sha := "newsha"
+	parent := "/models/new"
+
+	out := parser.populateArtifactAttribute(sha, parent, original)
+
+	// Verify output is updated
+	assert.Equal(t, sha, out.Artifact.Sha)
+	assert.Equal(t, parent, out.Artifact.ParentPath)
+	assert.NotNil(t, out.Artifact.ChildrenPaths)
+	assert.Len(t, out.Artifact.ChildrenPaths, 0)
+
+	// Verify original was NOT mutated (function receives value and updates a copy)
+	assert.Equal(t, "old", original.Artifact.Sha)
+	assert.Equal(t, "/models/old", original.Artifact.ParentPath)
+	assert.Equal(t, []string{"/models/child1"}, original.Artifact.ChildrenPaths)
+
+	// Mutating the returned ChildrenPaths should not affect the original
+	out.Artifact.ChildrenPaths = append(out.Artifact.ChildrenPaths, "/child")
+	assert.Equal(t, []string{"/models/child1"}, original.Artifact.ChildrenPaths)
+}

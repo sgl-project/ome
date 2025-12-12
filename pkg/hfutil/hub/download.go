@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -1013,4 +1014,91 @@ func copyWithContext(ctx context.Context, dst io.Writer, src io.Reader) (int64, 
 	// 32KB buffer provides good balance between performance and update frequency
 	buf := make([]byte, 32*1024)
 	return io.CopyBuffer(dst, contextSrc, buf)
+}
+
+// FetchAttributeFromHfModelMetaData retrieves a single top-level attribute from the Hugging Face model metadata endpoint for the provided modelId.
+func FetchAttributeFromHfModelMetaData(ctx context.Context, modelId string, attribute string) (interface{}, error) {
+	modelMetaDataUrl, err := hfModelMetaDataUrl(modelId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build model metadata URL: %s", err)
+	}
+	// Get retry configuration from context (HubConfig)
+	maxRetries := 3                   // default
+	retryInterval := 10 * time.Second // default
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		// build request
+		req, err := http.NewRequestWithContext(ctx, "GET", modelMetaDataUrl, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %s", err)
+		}
+
+		client := NewHTTPClientWithTimeout(DefaultRequestTimeout)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			// Network errors are retryable
+			if attempt < maxRetries {
+				delay := exponentialBackoffWithJitter(attempt+1, retryInterval, 60*time.Second)
+				select {
+				case <-time.After(delay):
+					continue
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
+			return nil, fmt.Errorf("failed to perform request: %s", err)
+		}
+		defer resp.Body.Close()
+
+		// Handle successful response
+		var data map[string]interface{}
+		if resp.StatusCode == http.StatusOK {
+			if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+				return "", fmt.Errorf("failed to decode response: %s", err)
+			}
+			val, exists := data[attribute]
+			if !exists {
+				return "", fmt.Errorf("attribute %s not found in JSON of the response", attribute)
+			}
+
+			return val, nil
+		}
+
+		// Handle rate limiting
+		if resp.StatusCode == http.StatusTooManyRequests {
+			retryAfter := parseRetryAfter(resp)
+			if retryAfter == 0 {
+				// Use exponential backoff with jitter if no Retry-After header
+				retryAfter = exponentialBackoffWithJitter(attempt+1, retryInterval, 300*time.Second) // Max 5 minutes
+			}
+
+			// Only retry if we haven't exhausted attempts
+			if attempt < maxRetries {
+				select {
+				case <-time.After(retryAfter):
+					continue
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
+		}
+
+		// Handle other HTTP errors with retry for server errors
+		if resp.StatusCode >= 500 && attempt < maxRetries {
+			delay := exponentialBackoffWithJitter(attempt+1, retryInterval, 60*time.Second)
+			select {
+			case <-time.After(delay):
+				continue
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+
+		// Handle non-retryable error responses
+		return nil, fmt.Errorf("failed to invoke HuggingFace endpoint: response status code %d and response %s", resp.StatusCode, resp.Body)
+	}
+
+	// Should not reach here
+	return nil, fmt.Errorf("failed to retrieve attribute %s value from HuggingFace after %d attempts", attribute, maxRetries+1)
 }

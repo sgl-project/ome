@@ -19,6 +19,7 @@ import (
 var (
 	commitHashRegex = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	sha256Regex     = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	modelIdPattern  = regexp.MustCompile(`^[^/]+/[^/]+$`)
 )
 
 // URL construction functions
@@ -67,6 +68,28 @@ func HfHubURL(repoID, filename string, opts *DownloadConfig) (string, error) {
 	escapedFilename := escapeFilePath(filename)
 
 	return fmt.Sprintf("%s/%s/resolve/%s/%s", endpoint, repoPath, escapedRevision, escapedFilename), nil
+}
+
+// hfModelMetaDataUrl builds the Hugging Face model metadata API URL for the
+// given modelId.
+// Behavior:
+// - Trims surrounding whitespace from modelId.
+// - Validates modelId against modelIdPattern, requiring format "<orgnization>/<modelName>".
+// - Returns an error if modelId is empty or invalid.
+// Resulting URL format:
+// {https://huggingface.co/api/models/{modelId}
+func hfModelMetaDataUrl(modelId string) (string, error) {
+	if modelId == "" {
+		return "", fmt.Errorf("no model name has been specified")
+	}
+	modelId = strings.TrimSpace(modelId)
+
+	if !modelIdPattern.MatchString(modelId) {
+		return "", fmt.Errorf("invalid model name %q: expected format <namespace>/<model>", modelId)
+	}
+
+	baseUrl := fmt.Sprintf("%s/%s", DefaultEndpoint, HfAPI)
+	return fmt.Sprintf("%s/models/%s", baseUrl, modelId), nil
 }
 
 // escapeFilePath escapes each component of a file path separately, preserving forward slashes

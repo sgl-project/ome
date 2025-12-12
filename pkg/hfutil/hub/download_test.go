@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -1034,4 +1035,88 @@ func TestGetMetadataWithRetries(t *testing.T) {
 		assert.IsType(t, &EntryNotFoundError{}, err)
 		assert.Equal(t, int32(1), atomic.LoadInt32(&attemptCount)) // No retries for 404
 	})
+}
+
+func TestFetchAttributeFromHfModelMetaData(t *testing.T) {
+	tests := []struct {
+		name          string
+		modelId       string
+		attribute     string
+		statusCode    int
+		expectedValue interface{}
+		wantErr       bool
+		errMessageStr string
+	}{
+		{
+			name:          "successfully fetch the attribute",
+			modelId:       "deepseek-ai/DeepSeek-V3",
+			attribute:     "sha",
+			statusCode:    200,
+			wantErr:       false,
+			expectedValue: "e815299b0bcbac849fa540c768ef21845365c9eb",
+		},
+		{
+			name:          "model metadata returned but cannot fetch attribute value",
+			modelId:       "deepseek-ai/DeepSeek-V3",
+			attribute:     "random",
+			statusCode:    200,
+			wantErr:       true,
+			expectedValue: "",
+			errMessageStr: "attribute random not found in JSON of the response",
+		},
+		{
+			name:          "fail to fetch model metadata",
+			modelId:       "deepseek-ai/DeepSeek-V3-unknown",
+			attribute:     "sha",
+			statusCode:    404,
+			wantErr:       true,
+			expectedValue: "",
+			errMessageStr: "failed to invoke HuggingFace endpoint: response status code",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !tt.wantErr || tt.statusCode > 0 {
+				server := createMockHfMetaDataServer(tt.statusCode, tt.attribute, tt.modelId)
+				defer server.Close()
+			}
+
+			ctx := context.Background()
+
+			value, err := FetchAttributeFromHfModelMetaData(ctx, tt.modelId, tt.attribute)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMessageStr)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedValue, value)
+			}
+		})
+	}
+}
+
+func createMockHfMetaDataServer(statusCode int, attribute string, modelId string) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == "GET" {
+			if statusCode == 200 {
+				if modelId == "deepseek-ai/DeepSeek-V3" {
+					if attribute == "sha" {
+						var data map[string]interface{}
+						data[attribute] = "e815299b0bcbac849fa540c768ef21845365c9eb"
+						bytes, _ := json.Marshal(data)
+						writer.Write(bytes)
+					} else {
+						writer.Write(make([]byte, 100))
+					}
+
+				}
+			} else if statusCode == 404 {
+				writer.Write([]byte("Repository not found"))
+			}
+		}
+
+	}))
+
 }

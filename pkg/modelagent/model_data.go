@@ -37,6 +37,7 @@ type ModelMetadata struct {
 	ModelConfiguration        []byte
 	DecodedModelConfiguration map[string]interface{} `json:"DecodedModelConfiguration,omitempty"`
 	Quantization              v1beta1.ModelQuantization
+	Artifact                  Artifact
 }
 
 // ModelConfig represents the configuration of a model
@@ -58,6 +59,15 @@ type ModelConfig struct {
 	// Advanced information
 	DecodedModelConfiguration map[string]interface{} `json:"decodedModelConfiguration,omitempty"` // Detailed configuration
 	Quantization              string                 `json:"quantization,omitempty"`              // Quantization type if applicable
+	// artifact downloading info
+	Artifact Artifact `json:"artifact"` // FIXME: Do we need to add this???
+}
+
+// Artifact records the information of model artifact, including version (Sha) and storage paths
+type Artifact struct {
+	Sha           string   `json:"sha"`
+	ParentPath    string   `json:"parentPath"`
+	ChildrenPaths []string `json:"childrenPaths"`
 }
 
 // DownloadProgress tracks the progress of a model download
@@ -90,7 +100,7 @@ type ModelEntry struct {
 
 // ConvertMetadataToModelConfig converts internal ModelMetadata to a client-facing ModelConfig
 // This transforms the internal representation to the structured format stored in ConfigMaps
-func ConvertMetadataToModelConfig(metadata ModelMetadata) *ModelConfig {
+func ConvertMetadataToModelConfig(metadata ModelMetadata) *ModelConfig { // need add artifact
 	// Convert ModelFramework to map
 	var modelFramework map[string]string
 	if metadata.ModelFramework != nil {

@@ -39,6 +39,9 @@ const (
 	DefaultEndpoint = "https://huggingface.co"
 	DefaultRevision = "main"
 
+	// Endpoint
+	HfAPI = "api"
+
 	// Cache directory
 	DefaultCacheDir = ".cache/huggingface/hub"
 
@@ -98,6 +101,11 @@ const (
 	SafetensorsSingleFile      = "model.safetensors"
 	SafetensorsIndexFile       = "model.safetensors.index.json"
 	SafetensorsMaxHeaderLength = 25_000_000
+)
+
+// HF metadata attributes name
+const (
+	Sha = "sha"
 )
 
 // Repository types

@@ -1,8 +1,10 @@
 package hub
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -845,5 +847,108 @@ func BenchmarkBuildHeaders(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		BuildHeaders(token, userAgent, extra)
+	}
+}
+
+func TestHFModelMetaDataUrl_SuccessCases(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple valid model",
+			input:    "bigscience/bloom",
+			expected: "https://huggingface.co/api/models/bigscience/bloom",
+		},
+		{
+			name:     "org scoped with hyphens and numbers",
+			input:    "openai/clip-vit-base-patch32",
+			expected: "https://huggingface.co/api/models/openai/clip-vit-base-patch32",
+		},
+		{
+			name:     "trims surrounding whitespace",
+			input:    "   user/model-name   ",
+			expected: "https://huggingface.co/api/models/user/model-name",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := hfModelMetaDataUrl(tc.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if got != tc.expected {
+				t.Fatalf("hfModelMetaDataUrl(%q) = %q, want %q", tc.input, got, tc.expected)
+			}
+
+			if _, err := url.ParseRequestURI(got); err != nil {
+				t.Fatalf("resulting URL is not a valid URI: %v (url=%q)", err, got)
+			}
+		})
+	}
+}
+
+func TestHFModelMetaDataUrl_ErrorCases(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name          string
+		input         string
+		wantErrSubstr string
+	}{
+		{
+			name:          "empty input",
+			input:         "",
+			wantErrSubstr: "no model name has been specified",
+		},
+		{
+			name:          "missing namespace (no slash)",
+			input:         "bert-base-uncased",
+			wantErrSubstr: "invalid model name",
+		},
+		{
+			name:          "leading slash",
+			input:         "/org/model",
+			wantErrSubstr: "invalid model name",
+		},
+		{
+			name:          "trailing slash",
+			input:         "org/model/",
+			wantErrSubstr: "invalid model name",
+		},
+		{
+			name:          "double slash",
+			input:         "org//model",
+			wantErrSubstr: "invalid model name",
+		},
+		{
+			name:          "whitespace only (becomes empty after trim -> invalid format)",
+			input:         "   ",
+			wantErrSubstr: "invalid model name",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := hfModelMetaDataUrl(tc.input)
+			if err == nil {
+				t.Fatalf("expected error for input %q, got nil (url=%q)", tc.input, got)
+			}
+			if got != "" {
+				t.Fatalf("expected empty URL on error, got %q", got)
+			}
+			if !strings.Contains(err.Error(), tc.wantErrSubstr) {
+				t.Fatalf("error %q does not contain expected substring %q", err.Error(), tc.wantErrSubstr)
+			}
+		})
 	}
 }

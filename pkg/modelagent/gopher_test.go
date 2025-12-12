@@ -1,7 +1,9 @@
 package modelagent
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	omev1beta1lister "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
@@ -566,5 +569,153 @@ func TestIsReservingModelArtifact(t *testing.T) {
 			got := s.isReservingModelArtifact(task)
 			assert.Equal(t, tc.want, got)
 		})
+	}
+}
+
+func makeConfigMap(nodeName string, data map[string]string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nodeName,
+			Namespace: "ome",
+		},
+		Data: data,
+	}
+}
+
+func newGopherWithConfigMap(cm *corev1.ConfigMap) *Gopher {
+	client := k8sfake.NewSimpleClientset(cm)
+	logger := zap.NewNop().Sugar()
+	cmr := NewConfigMapReconciler(cm.Name, cm.Namespace, client, logger)
+	return &Gopher{
+		configMapReconciler: cmr,
+		logger:              logger,
+	}
+}
+
+func entryJSON(sha, parentPath string) string {
+	return fmt.Sprintf(`{"config":{"artifact":{"sha":"%s","parentPath":"%s","childrenPaths":[]}}}`, sha, parentPath)
+}
+
+func TestHandelReuseArtifactIfNecessary_NoReusePolicy(t *testing.T) {
+	nodeName := "node-1"
+	// Even if CM has content, when policy is AlwaysDownload we should not reuse.
+	cm := makeConfigMap(nodeName, map[string]string{
+		"clusterbasemodel.model1": entryJSON("abc123", "/models/parent1"),
+	})
+	g := newGopherWithConfigMap(cm)
+
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: v1beta1.AlwaysDownload,
+		},
+	}
+
+	key, parent, raw := g.handelReuseArtifactIfNecessary(context.Background(), spec, "ClusterBaseModel", "foo", "", "abc123")
+	if key != "" || parent != "" || raw != "" {
+		t.Fatalf("expected no reuse with AlwaysDownload, got key=%q parent=%q raw=%q", key, parent, raw)
+	}
+}
+
+func TestHandelReuseArtifactIfNecessary_HasMatchedEntry(t *testing.T) {
+	nodeName := "node-1"
+	expectedKey := "clusterbasemodel.model1"
+	expectedParent := "/models/parent1"
+	expectedSha := "abc123"
+	cm := makeConfigMap(nodeName, map[string]string{
+		expectedKey: entryJSON(expectedSha, expectedParent),
+	})
+	g := newGopherWithConfigMap(cm)
+
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: v1beta1.ReuseIfExists,
+		},
+	}
+
+	key, parent, raw := g.handelReuseArtifactIfNecessary(context.Background(), spec, "ClusterBaseModel", "model1", "", expectedSha)
+	if key != expectedKey {
+		t.Fatalf("expected key %q, got %q", expectedKey, key)
+	}
+	if parent != expectedParent {
+		t.Fatalf("expected parentPath %q, got %q", expectedParent, parent)
+	}
+	if raw == "" {
+		t.Fatalf("expected non-empty raw JSON")
+	}
+}
+
+func TestHandelReuseArtifactIfNecessary_BaseModelPrefersClusterBaseModelWhenBothMatch(t *testing.T) {
+	nodeName := "node-1"
+	sha := "samesha"
+	clusterBaseModelKey := "clusterbasemodel.model1"
+	baseModelKey := "namespace.basemodel.model2"
+	clusterParent := "/models/parent1"
+	baseParent := "/base/parent2"
+	cm := makeConfigMap(nodeName, map[string]string{
+		clusterBaseModelKey: entryJSON(sha, clusterParent),
+		baseModelKey:        entryJSON(sha, baseParent),
+	})
+	g := newGopherWithConfigMap(cm)
+
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: v1beta1.ReuseIfExists,
+		},
+	}
+
+	key, parent, _ := g.handelReuseArtifactIfNecessary(context.Background(), spec, "BaseModel", "newModel", "namespace", sha)
+	if key != clusterBaseModelKey {
+		t.Fatalf("expected to prefer cluster match key %q, got %q", clusterBaseModelKey, key)
+	}
+	if parent != clusterParent {
+		t.Fatalf("expected parentPath %q, got %q", clusterParent, parent)
+	}
+}
+
+func TestHandelReuseArtifactIfNecessary_BaseModelFallbackToNamespaceScoped(t *testing.T) {
+	nodeName := "node-1"
+	sha := "target-sha"
+	// Cluster entry exists but with different sha, so it shouldn't match.
+	clusterBaseModelKey := "clusterbasemodel.model1"
+	baseModelKey := "namespace.basemodel.model2"
+	baseModelParent := "/models/parent2"
+	cm := makeConfigMap(nodeName, map[string]string{
+		clusterBaseModelKey: entryJSON("different-sha", "/models/parent1"),
+		baseModelKey:        entryJSON(sha, baseModelParent),
+	})
+	g := newGopherWithConfigMap(cm)
+
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: v1beta1.ReuseIfExists,
+		},
+	}
+
+	key, parent, _ := g.handelReuseArtifactIfNecessary(context.Background(), spec, "BaseModel", "name", "namespace", sha)
+	if key != baseModelKey {
+		t.Fatalf("expected fallback to basemodel match key %q, got %q", baseModelKey, key)
+	}
+	if parent != baseModelParent {
+		t.Fatalf("expected parentPath %q, got %q", baseModelParent, parent)
+	}
+}
+
+func TestHandelReuseArtifactIfNecessary_NoMatchReturnsEmpty(t *testing.T) {
+	nodeName := "node-1"
+	cm := makeConfigMap(nodeName, map[string]string{
+		"clusterbasemodel.model1":    entryJSON("sha-1", "/models/parent1"),
+		"namespace.basemodel.model2": entryJSON("sha-2", "/base/parent2"),
+	})
+	g := newGopherWithConfigMap(cm)
+
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: v1beta1.ReuseIfExists,
+		},
+	}
+
+	key, parent, raw := g.handelReuseArtifactIfNecessary(context.Background(), spec, "BaseModel", "name", "namespace", "non-existent-sha")
+	if key != "" || parent != "" || raw != "" {
+		t.Fatalf("expected empty results when no match found, got key=%q parent=%q raw=%q", key, parent, raw)
 	}
 }
