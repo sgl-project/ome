@@ -1696,6 +1696,279 @@ func TestConvertToInferenceService_ErrorCases(t *testing.T) {
 }
 
 // =============================================================================
+// MODEL EXISTS VALIDATION TESTS
+// =============================================================================
+
+func TestValidateModelExists(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = v1beta1.AddToScheme(scheme)
+
+	// Create test models
+	clusterModel := &v1beta1.ClusterBaseModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "existing-cluster-model",
+		},
+		Spec: v1beta1.BaseModelSpec{
+			ModelArchitecture:  stringPtr("llama"),
+			ModelParameterSize: stringPtr("7B"),
+			ModelFormat: v1beta1.ModelFormat{
+				Name:    "llama",
+				Version: stringPtr("1.0.0"),
+			},
+		},
+	}
+
+	namespaceModel := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "existing-namespace-model",
+			Namespace: "test-namespace",
+		},
+		Spec: v1beta1.BaseModelSpec{
+			ModelArchitecture:  stringPtr("llama"),
+			ModelParameterSize: stringPtr("7B"),
+			ModelFormat: v1beta1.ModelFormat{
+				Name:    "llama",
+				Version: stringPtr("1.0.0"),
+			},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		objects []client.Object
+		isvc    *v1beta1.InferenceService
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "no model reference - should pass",
+			objects: []client.Object{},
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					// No Model reference
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:    "model reference with empty name - should pass",
+			objects: []client.Object{},
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model: &v1beta1.ModelRef{
+						Name: "", // Empty name
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:    "referenced ClusterBaseModel exists - should pass",
+			objects: []client.Object{clusterModel},
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model: &v1beta1.ModelRef{
+						Name: "existing-cluster-model",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:    "referenced BaseModel exists in namespace - should pass",
+			objects: []client.Object{namespaceModel},
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "test-namespace",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model: &v1beta1.ModelRef{
+						Name: "existing-namespace-model",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:    "referenced model does not exist - should fail",
+			objects: []client.Object{}, // No models
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model: &v1beta1.ModelRef{
+						Name: "nonexistent-model",
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "referenced model \"nonexistent-model\" not found in namespace \"default\"",
+		},
+		{
+			name:    "referenced BaseModel exists but in different namespace - should fail",
+			objects: []client.Object{namespaceModel}, // Model is in test-namespace
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "different-namespace", // Different namespace
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model: &v1beta1.ModelRef{
+						Name: "existing-namespace-model",
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "referenced model \"existing-namespace-model\" not found in namespace \"different-namespace\"",
+		},
+		{
+			name:    "ClusterBaseModel is accessible from any namespace - should pass",
+			objects: []client.Object{clusterModel},
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "any-namespace",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model: &v1beta1.ModelRef{
+						Name: "existing-cluster-model",
+					},
+				},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.objects...).
+				Build()
+
+			validator := &InferenceServiceValidator{
+				Client:          fakeClient,
+				RuntimeSelector: runtimeselector.New(fakeClient),
+			}
+
+			err := validator.validateModelExists(context.Background(), tt.isvc)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// Test that validateModelExists is called during full validation
+func TestValidateInferenceService_ModelExistsIntegration(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = v1beta1.AddToScheme(scheme)
+
+	tests := []struct {
+		name    string
+		objects []client.Object
+		isvc    *v1beta1.InferenceService
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "full validation rejects missing model",
+			objects: []client.Object{},
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model: &v1beta1.ModelRef{
+						Name: "nonexistent-model",
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "referenced model \"nonexistent-model\" not found in namespace \"default\"",
+		},
+		{
+			name: "full validation passes with existing model",
+			objects: []client.Object{
+				&v1beta1.ClusterBaseModel{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "existing-model",
+					},
+					Spec: v1beta1.BaseModelSpec{
+						ModelArchitecture:  stringPtr("llama"),
+						ModelParameterSize: stringPtr("7B"),
+						ModelFormat: v1beta1.ModelFormat{
+							Name:    "llama",
+							Version: stringPtr("1.0.0"),
+						},
+					},
+				},
+			},
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model: &v1beta1.ModelRef{
+						Name: "existing-model",
+					},
+					// No Engine, so runtime resolution won't be triggered
+				},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.objects...).
+				Build()
+
+			validator := &InferenceServiceValidator{
+				Client:          fakeClient,
+				RuntimeSelector: runtimeselector.New(fakeClient),
+			}
+
+			_, err := validator.validateInferenceService(context.Background(), tt.isvc)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
 
