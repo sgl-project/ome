@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"regexp"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -88,6 +89,9 @@ func MigratePredictor(isvc *v1beta2.InferenceService) error {
 		// Set default kind and API group
 		kind := "ClusterBaseModel"
 		apiGroup := "ome.io"
+		if IsOCIDModelName(*isvc.Spec.Predictor.Model.BaseModel) {
+			kind = "BaseModel"
+		}
 		isvc.Spec.Model.Kind = &kind
 		isvc.Spec.Model.APIGroup = &apiGroup
 
@@ -232,4 +236,10 @@ func MigratePredictor(isvc *v1beta2.InferenceService) error {
 	isvc.Spec.Predictor = v1beta2.PredictorSpec{}
 
 	return nil
+}
+
+// IsOCIDModelName detects if the model name follows an OCI OCID-style naming pattern
+func IsOCIDModelName(name string) bool {
+	ocidModelNameRegex := regexp.MustCompile(`^[a-z0-9]{60,}$`)
+	return ocidModelNameRegex.MatchString(name)
 }

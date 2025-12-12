@@ -113,6 +113,49 @@ func TestIsPredictorUsed(t *testing.T) {
 	}
 }
 
+func TestIsOCIDModelName(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{
+			name:     "Valid OCID model name - 60 lowercase alphanumeric characters",
+			input:    "amaaaaaaak7gbriazywlog33tkarveohsfnt3isxwvzddibu7gz7cxs26laa",
+			expected: true,
+		},
+		{
+			name:     "Invalid - too short",
+			input:    "abcdefghijklmnopqrstuvwxyz01234567",
+			expected: false,
+		},
+		{
+			name:     "Invalid - contains uppercase letters",
+			input:    "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWX",
+			expected: false,
+		},
+		{
+			name:     "Invalid - too short and contains special characters",
+			input:    "llama-3-1-70b-instruct",
+			expected: false,
+		},
+		{
+			name:     "Invalid - empty string",
+			input:    "",
+			expected: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := IsOCIDModelName(test.input)
+			g.Expect(result).To(gomega.Equal(test.expected))
+		})
+	}
+}
+
 func TestMigratePredictor(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
@@ -318,6 +361,36 @@ func TestMigratePredictor(t *testing.T) {
 				g.Expect(isvc.Spec.Engine.MinReplicas).NotTo(gomega.BeNil())
 				g.Expect(*isvc.Spec.Engine.MinReplicas).To(gomega.Equal(2))
 				g.Expect(isvc.Spec.Engine.MaxReplicas).To(gomega.Equal(5))
+			},
+		},
+		{
+			name: "Predictor with OCID model name",
+			isvc: &v1beta2.InferenceService{
+				Spec: v1beta2.InferenceServiceSpec{
+					Predictor: v1beta2.PredictorSpec{
+						Model: &v1beta2.ModelSpec{
+							BaseModel:        stringPtr("abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwx"),
+							FineTunedWeights: []string{"weight1"},
+						},
+						PodSpec: v1beta2.PodSpec{
+							Containers: []v1.Container{
+								{
+									Name:  "predictor",
+									Image: "predictor:latest",
+								},
+							},
+						},
+					},
+				},
+			},
+			validate: func(t *testing.T, isvc *v1beta2.InferenceService) {
+				g.Expect(isvc.Spec.Model).NotTo(gomega.BeNil())
+				g.Expect(isvc.Spec.Model.Name).To(gomega.Equal("abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwx"))
+				g.Expect(isvc.Spec.Model.FineTunedWeights).To(gomega.Equal([]string{"weight1"}))
+				// OCID model names should use "BaseModel" kind instead of "ClusterBaseModel"
+				g.Expect(*isvc.Spec.Model.Kind).To(gomega.Equal("BaseModel"))
+				g.Expect(*isvc.Spec.Model.APIGroup).To(gomega.Equal("ome.io"))
+				g.Expect(isvc.Spec.Engine).NotTo(gomega.BeNil())
 			},
 		},
 	}
