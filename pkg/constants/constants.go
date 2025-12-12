@@ -543,6 +543,13 @@ const (
 	ServingBaseModel BaseModelType = "Serving"
 )
 
+const (
+	BaseModel                 string = "BaseModel"
+	ClusterBaseModel          string = "ClusterBaseModel"
+	LowerCaseBaseModel        string = "basemodel"
+	LowerCaseClusterBaseModel string = "clusterbasemodel"
+)
+
 func (c CheckResultType) String() string {
 	switch c {
 	case CheckResultCreate:

@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/sgl-project/ome/pkg/utils"
 
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -16,6 +19,15 @@ import (
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
+)
+
+// constants related to attribute name in the configmap data
+const (
+	ConfigAttr        = "config"
+	ArtifactAttr      = "artifact"
+	ShaAttr           = "sha"
+	ParentPath        = "parentPath"
+	ChildrenPathsAttr = "childrenPaths"
 )
 
 // CacheEntry represents an entry in the model cache for ConfigMap reconciliation.
@@ -232,7 +244,7 @@ func (c *ConfigMapReconciler) recreateConfigMap(ctx context.Context) {
 					config.ApiCapabilities[i] = string(capability)
 				}
 			}
-
+			config.Artifact = cacheEntry.ModelMetadata.Artifact
 			modelEntry.Config = config
 		}
 
@@ -428,8 +440,8 @@ func (c *ConfigMapReconciler) ReconcileModelStatus(ctx context.Context, statusOp
 // getModelID generates a unique deterministic identifier string for a model.
 // It handles both namespace-scoped BaseModel and cluster-scoped ClusterBaseModel objects.
 //
-// For BaseModel: The format is "namespace/name".
-// For ClusterBaseModel: The format is "cluster/name".
+// For BaseModel: The format is {namespace}.basemodel.{model_name}.
+// For ClusterBaseModel: The format is clusterbasemodel.{model_name}.
 //
 // These IDs serve as consistent keys for the in-memory cache and ConfigMap entries,
 // ensuring proper reconciliation between cache and ConfigMap state.
@@ -855,26 +867,16 @@ func (c *ConfigMapReconciler) saveConfigMap(ctx context.Context, configMap *core
 		// Store the data we want to apply - this is the caller's intended changes
 		dataToApply := configMap.Data
 
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			// Re-fetch the latest ConfigMap to get current ResourceVersion
-			latestCM, err := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Get(ctx, c.nodeName, metav1.GetOptions{})
-			if err != nil {
-				return err
-			}
-
-			// Merge our data into the latest ConfigMap
-			// This preserves other keys that may have been updated concurrently
-			if latestCM.Data == nil {
-				latestCM.Data = make(map[string]string)
+		updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+			if currentConfigMap.Data == nil {
+				currentConfigMap.Data = make(map[string]string)
 			}
 			for key, value := range dataToApply {
-				latestCM.Data[key] = value
+				currentConfigMap.Data[key] = value
 			}
-
-			// Update with the merged data
-			_, updateErr := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Update(ctx, latestCM, metav1.UpdateOptions{})
-			return updateErr
-		})
+			return currentConfigMap, nil
+		}
+		err := c.updateConfigMapWithRetry(ctx, updateConfigMap)
 
 		if err != nil {
 			c.logger.Errorf("Failed to update ConfigMap '%s' in namespace '%s' for %s: %v", c.nodeName, c.namespace, modelInfo, err)
@@ -885,6 +887,51 @@ func (c *ConfigMapReconciler) saveConfigMap(ctx context.Context, configMap *core
 	return nil
 }
 
+// updateConfigMapWithRetry A fundamental method to update configmap via a read-modify-write update with retry.
+// Parameters:
+//   - ctx: Context for cancellation / timeouts
+//   - updateConfigmap: a pure function that takes the latest ConfigMap object and
+//     returns the mutated ConfigMap (or an error). If it returns an error, no update
+//     is attempted and the error is immediately returned.
+//
+// Returns:
+//   - error: Any error of updateConfigmap function, operation error of Kube, or final retry exhaustion.
+func (c *ConfigMapReconciler) updateConfigMapWithRetry(ctx context.Context, updateConfigmap func(currentConfigMap *corev1.ConfigMap) (*corev1.ConfigMap, error)) error {
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Re-fetch the latest ConfigMap to get current ResourceVersion
+		latestCM, err := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Get(ctx, c.nodeName, metav1.GetOptions{})
+		if err != nil {
+			c.logger.Errorf("failed to get ConfigMap from Kube API server: %s", err)
+			return err
+		}
+
+		updatedConfigmap, err := updateConfigmap(latestCM)
+		if err != nil {
+			c.logger.Errorf("failed to compute updated ConfigMap: %s", err)
+			return err
+		}
+
+		// Update with the merged data
+		_, updateErr := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Update(ctx, updatedConfigmap, metav1.UpdateOptions{})
+		if updateErr != nil {
+			if errors.IsConflict(updateErr) {
+				// Avoid noisy error logs for expected conflicts that will be retried
+				c.logger.Debugf("ConfigMap update conflict for %s/%s, will retry: %v", c.namespace, c.nodeName, updateErr)
+			} else {
+				c.logger.Errorf("failed to update ConfigMap to Kube API server: %s", updateErr)
+			}
+			return updateErr
+		}
+		return nil
+	})
+	if err != nil {
+		if errors.IsConflict(err) {
+			c.logger.Warnf("exhausted retries updating ConfigMap %s/%s due to conflicts", c.namespace, c.nodeName)
+		}
+	}
+	return err
+}
+
 // Helper function to get a string representation of the model for logging
 func getConfigMapModelInfo(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) string {
 	if baseModel != nil {
@@ -893,4 +940,142 @@ func getConfigMapModelInfo(baseModel *v1beta1.BaseModel, clusterBaseModel *v1bet
 		return fmt.Sprintf("ClusterBaseModel %s", clusterBaseModel.Name)
 	}
 	return "unknown model"
+}
+
+/*
+FindMatchedModelFromConfigMap scans the provided ConfigMap Data for the first entry
+whose key has the provided modelType and whose JSON value contains config.artifact.sha equal to targetSha.
+
+Returns:
+  - modelKey:   The matched ConfigMap Data key (modelType + model identifier).
+  - parentPath: The value of config.artifact.parentPath for the matched entry.
+  - err:        The last JSON parsing error encountered during scanning; nil if none.
+*/
+// TODO: Further Potential optimization could be to retrieve the matched model with the most children paths hoping concentrating on several parent paths
+func (c *ConfigMapReconciler) FindMatchedModelFromConfigMap(configMap *corev1.ConfigMap, targetSha string, modelType string) (string, string, error) {
+	var searchingError error // the last
+	for modelTypeAndModelName, jsonStr := range configMap.Data {
+		if !strings.HasPrefix(strings.ToLower(modelTypeAndModelName), strings.ToLower(modelType)) {
+			continue
+		}
+		// parsed JSON for this entry
+		var obj map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &obj); err != nil {
+			// Ignore entries containing invalid JSON
+			searchingError = fmt.Errorf("fail to Unmarshal %s during FindMatchedModelFromConfigMap: %s", jsonStr, err)
+			c.logger.Errorf(searchingError.Error())
+			continue
+		}
+		// Navigate: config → artifact → sha
+		config, ok := obj[ConfigAttr].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		artifact, ok := config[ArtifactAttr].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		sha, ok := artifact[ShaAttr].(string)
+		if !ok {
+			continue
+		}
+
+		if sha == targetSha {
+			parentPath := artifact[ParentPath].(string)
+			return modelTypeAndModelName, parentPath, nil
+		}
+	}
+	return "", "", searchingError
+}
+
+// getModelDataByArtifactSha fetches the node-scoped ConfigMap (namespace "ome", name c.nodeName) and searches it for a model entry whose artifact SHA equals
+// targetSha and whose key is prefixed by modelType (case-insensitive).
+// Returns:
+// - modelKey:   The matched ConfigMap Data key (modelType + model identifier).
+// - parentPath: The value of config.artifact.parentPath for the matched entry.
+// - err:        The last JSON parsing error encountered during scanning; nil if none.
+func (c *ConfigMapReconciler) getModelDataByArtifactSha(ctx context.Context, targetSha string, modelType string) (string, string, error) {
+	cm, err := c.kubeClient.CoreV1().ConfigMaps("ome").Get(ctx, c.nodeName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.logger.Warn("cannot find configmap %s", c.nodeName)
+			// ConfigMap doesn't exist, recreate it from scratch
+			return "", "", fmt.Errorf("cannot find configmap %s", c.nodeName)
+		}
+		c.logger.Errorf("Failed to get ConfigMap %s: %v", c.nodeName, err)
+		return "", "", fmt.Errorf("Failed to get ConfigMap %s: %v", c.nodeName, err)
+	}
+	return c.FindMatchedModelFromConfigMap(cm, targetSha, modelType)
+}
+
+// addPathToChildrenPaths appends newPath to the config.artifact.childrenPaths array if the newPath is not contained in the children paths
+func (c *ConfigMapReconciler) addPathToChildrenPaths(modelTypeAndModelName string, newPath string, dataEntry string) (string, error) {
+	// Parse the JSON into a generic map
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(dataEntry), &obj); err != nil {
+		return "", fmt.Errorf("invalid JSON for key %s: %w", modelTypeAndModelName, err)
+	}
+	c.logger.Infof("current data: modelTypeAndModelName: %s, dataEntry: %s", modelTypeAndModelName, dataEntry)
+	// Navigate or create nested structure: config → artifact
+	config, ok := obj[ConfigAttr].(map[string]interface{})
+	if !ok {
+		config = map[string]interface{}{}
+		obj[ConfigAttr] = config
+	}
+	artifact, ok := config[ArtifactAttr].(map[string]interface{})
+	if !ok {
+		artifact = map[string]interface{}{}
+		config[ArtifactAttr] = artifact
+	}
+
+	// Ensure childrenPaths exists
+	children, ok := artifact[ChildrenPathsAttr].([]interface{})
+	if !ok {
+		children = make([]interface{}, 0)
+		artifact[ChildrenPathsAttr] = children
+	}
+	if !utils.ContainsString(children, newPath, false) {
+		children = append(children, newPath)
+	}
+	artifact[ChildrenPathsAttr] = children
+
+	updated, err := json.Marshal(obj)
+	if err != nil {
+		return "", err
+	}
+	c.logger.Infof("will update: modelTypeAndModelName: %s, dataEntry: %s", modelTypeAndModelName, string(updated))
+	return string(updated), nil
+}
+
+// updateConfigMapWithUpdatedChildrenPaths appends newPath into the JSON array
+// config.artifact.childrenPaths for the given modelTypeAndModelName entry and
+// persists the change to the Kubernetes API server with retry.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeouts
+//   - modelTypeAndModelName: Key inside ConfigMap.Data to update
+//   - newPath: The path to append into config.artifact.childrenPaths
+//
+// Returns:
+//   - error: Any JSON parsing/validation error or API server update error
+func (c *ConfigMapReconciler) updateConfigMapWithUpdatedChildrenPaths(ctx context.Context, modelTypeAndModelName string, newPath string) error {
+	// Recompute the merged JSON inside the retry closure using the freshest data to avoid
+	// stomping concurrent updates and to reduce conflict retries.
+	updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+		existingDataEntry, exists := currentConfigMap.Data[modelTypeAndModelName]
+		if !exists {
+			return currentConfigMap, fmt.Errorf("key %s not found in ConfigMap", modelTypeAndModelName)
+		}
+		mergedEntry, err := c.addPathToChildrenPaths(modelTypeAndModelName, newPath, existingDataEntry)
+		if err != nil {
+			return currentConfigMap, err
+		}
+		currentConfigMap.Data[modelTypeAndModelName] = mergedEntry
+		return currentConfigMap, nil
+	}
+	err := c.updateConfigMapWithRetry(ctx, updateConfigMap)
+	if err != nil {
+		c.logger.Errorf("failed to add child paths %s to modelTypeAndModelName %s", newPath, modelTypeAndModelName)
+	}
+	return err
 }

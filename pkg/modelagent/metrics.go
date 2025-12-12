@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/sgl-project/ome/pkg/constants"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -265,9 +267,9 @@ func RegisterMetricsHandler(mux *http.ServeMux) {
 // GetModelTypeNamespaceAndName extracts the model type, namespace, and name from a gopher task
 func GetModelTypeNamespaceAndName(task *GopherTask) (string, string, string) {
 	if task.BaseModel != nil {
-		return "BaseModel", task.BaseModel.Namespace, task.BaseModel.Name
+		return constants.BaseModel, task.BaseModel.Namespace, task.BaseModel.Name
 	} else if task.ClusterBaseModel != nil {
-		return "ClusterBaseModel", "", task.ClusterBaseModel.Name
+		return constants.ClusterBaseModel, "", task.ClusterBaseModel.Name
 	}
 	return "unknown", "unknown", "unknown"
 }

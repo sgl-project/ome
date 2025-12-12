@@ -39,6 +39,11 @@ spec:
                 type: object
               dataset:
                 properties:
+                  downloadPolicy:
+                    enum:
+                    - AlwaysDownload
+                    - ReuseIfExists
+                    type: string
                   key:
                     type: string
                   nodeAffinity:
@@ -211,6 +216,11 @@ spec:
                 x-kubernetes-list-type: set
               outputLocation:
                 properties:
+                  downloadPolicy:
+                    enum:
+                    - AlwaysDownload
+                    - ReuseIfExists
+                    type: string
                   key:
                     type: string
                   nodeAffinity:
