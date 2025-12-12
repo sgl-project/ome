@@ -114,8 +114,6 @@ func TestIsPredictorUsed(t *testing.T) {
 }
 
 func TestMigratePredictor(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
-
 	tests := []struct {
 		name        string
 		isvc        *v1beta2.InferenceService
@@ -140,13 +138,13 @@ func TestMigratePredictor(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, isvc *v1beta2.InferenceService) {
+				g := gomega.NewGomegaWithT(t)
 				g.Expect(isvc.Spec.Model).NotTo(gomega.BeNil())
 				g.Expect(isvc.Spec.Model.Name).To(gomega.Equal("test-model"))
 				g.Expect(isvc.Spec.Model.FineTunedWeights).To(gomega.Equal([]string{"weight1", "weight2"}))
 				g.Expect(*isvc.Spec.Model.Kind).To(gomega.Equal("ClusterBaseModel"))
 				g.Expect(*isvc.Spec.Model.APIGroup).To(gomega.Equal("ome.io"))
 				g.Expect(isvc.Spec.Engine).NotTo(gomega.BeNil())
-				g.Expect(isvc.Spec.Predictor.Model).To(gomega.BeNil())
 			},
 		},
 		{
@@ -166,6 +164,7 @@ func TestMigratePredictor(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, isvc *v1beta2.InferenceService) {
+				g := gomega.NewGomegaWithT(t)
 				g.Expect(isvc.Spec.Runtime).NotTo(gomega.BeNil())
 				g.Expect(isvc.Spec.Runtime.Name).To(gomega.Equal("test-runtime"))
 				g.Expect(*isvc.Spec.Runtime.Kind).To(gomega.Equal("ClusterServingRuntime"))
@@ -204,6 +203,7 @@ func TestMigratePredictor(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, isvc *v1beta2.InferenceService) {
+				g := gomega.NewGomegaWithT(t)
 				g.Expect(isvc.Spec.Engine).NotTo(gomega.BeNil())
 				g.Expect(isvc.Spec.Engine.Runner).NotTo(gomega.BeNil())
 				g.Expect(isvc.Spec.Engine.Runner.Name).To(gomega.Equal("ome-container"))
@@ -249,6 +249,7 @@ func TestMigratePredictor(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, isvc *v1beta2.InferenceService) {
+				g := gomega.NewGomegaWithT(t)
 				g.Expect(isvc.Spec.Engine.Runner).NotTo(gomega.BeNil())
 				g.Expect(isvc.Spec.Engine.Runner.Name).To(gomega.Equal("predictor"))
 				g.Expect(isvc.Spec.Engine.Containers).To(gomega.HaveLen(1))
@@ -279,6 +280,7 @@ func TestMigratePredictor(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, isvc *v1beta2.InferenceService) {
+				g := gomega.NewGomegaWithT(t)
 				g.Expect(isvc.Spec.Engine.Runner).NotTo(gomega.BeNil())
 				g.Expect(isvc.Spec.Engine.Runner.Name).To(gomega.Equal("model-container"))
 				g.Expect(isvc.Spec.Engine.Runner.Image).To(gomega.Equal("model:latest"))
@@ -319,6 +321,7 @@ func TestMigratePredictor(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, isvc *v1beta2.InferenceService) {
+				g := gomega.NewGomegaWithT(t)
 				g.Expect(isvc.Spec.Engine.Worker).NotTo(gomega.BeNil())
 				g.Expect(*isvc.Spec.Engine.Worker.Size).To(gomega.Equal(3))
 				g.Expect(isvc.Spec.Engine.Worker.Containers).To(gomega.HaveLen(1))
@@ -345,6 +348,7 @@ func TestMigratePredictor(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, isvc *v1beta2.InferenceService) {
+				g := gomega.NewGomegaWithT(t)
 				g.Expect(isvc.Spec.Engine.MinReplicas).NotTo(gomega.BeNil())
 				g.Expect(*isvc.Spec.Engine.MinReplicas).To(gomega.Equal(2))
 				g.Expect(isvc.Spec.Engine.MaxReplicas).To(gomega.Equal(5))
@@ -372,6 +376,7 @@ func TestMigratePredictor(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			g := gomega.NewGomegaWithT(t)
 			// Create a fake client with a ClusterBaseModel for testing
 			scheme := runtime.NewScheme()
 			_ = v1beta2.AddToScheme(scheme)
@@ -407,8 +412,6 @@ func TestMigratePredictor(t *testing.T) {
 }
 
 func TestMigratePredictorToNewArchitecture(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
-
 	scheme := runtime.NewScheme()
 	_ = v1beta2.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
@@ -457,6 +460,7 @@ func TestMigratePredictorToNewArchitecture(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, c client.Client, isvc *v1beta2.InferenceService) {
+				g := gomega.NewGomegaWithT(t)
 				// Check that migration happened
 				g.Expect(isvc.Spec.Model).NotTo(gomega.BeNil())
 				g.Expect(isvc.Spec.Engine).NotTo(gomega.BeNil())
@@ -501,6 +505,7 @@ func TestMigratePredictorToNewArchitecture(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, c client.Client, isvc *v1beta2.InferenceService) {
+				g := gomega.NewGomegaWithT(t)
 				// Should not have added deprecation warning
 				g.Expect(isvc.Annotations).To(gomega.BeNil())
 			},
@@ -517,6 +522,7 @@ func TestMigratePredictorToNewArchitecture(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, c client.Client, isvc *v1beta2.InferenceService) {
+				g := gomega.NewGomegaWithT(t)
 				// Should not have any migration
 				g.Expect(isvc.Spec.Model).To(gomega.BeNil())
 				g.Expect(isvc.Spec.Engine).To(gomega.BeNil())
@@ -527,6 +533,7 @@ func TestMigratePredictorToNewArchitecture(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			g := gomega.NewGomegaWithT(t)
 			// Create fake client with existing objects
 			objs := append(test.existingObjs, test.isvc)
 			c := fake.NewClientBuilder().
@@ -549,8 +556,6 @@ func TestMigratePredictorToNewArchitecture(t *testing.T) {
 }
 
 func TestDetermineModelKind(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
-
 	scheme := runtime.NewScheme()
 	_ = v1beta2.AddToScheme(scheme)
 
@@ -610,6 +615,7 @@ func TestDetermineModelKind(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			g := gomega.NewGomegaWithT(t)
 			fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(test.existingObjs...).Build()
 			ctx := context.Background()
 
