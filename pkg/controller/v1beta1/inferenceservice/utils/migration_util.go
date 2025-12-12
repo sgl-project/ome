@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -28,7 +30,7 @@ func MigratePredictorToNewArchitecture(ctx context.Context, c client.Client, log
 		isvc.ObjectMeta.Annotations[constants.DeprecationWarning] = "The Predictor field is deprecated and will be removed in a future release. Please use Engine and Model fields instead."
 
 		// Perform the migration
-		if err := MigratePredictor(isvc); err != nil {
+		if err := MigratePredictor(ctx, c, isvc); err != nil {
 			return err
 		}
 
@@ -77,7 +79,7 @@ func IsPredictorUsed(isvc *v1beta2.InferenceService) bool {
 }
 
 // MigratePredictor performs the actual migration from predictor to engine/model
-func MigratePredictor(isvc *v1beta2.InferenceService) error {
+func MigratePredictor(ctx context.Context, c client.Client, isvc *v1beta2.InferenceService) error {
 	// Migrate Model
 	if isvc.Spec.Predictor.Model != nil && isvc.Spec.Predictor.Model.BaseModel != nil {
 		isvc.Spec.Model = &v1beta2.ModelRef{
@@ -85,8 +87,14 @@ func MigratePredictor(isvc *v1beta2.InferenceService) error {
 			FineTunedWeights: isvc.Spec.Predictor.Model.FineTunedWeights,
 		}
 
-		// Set default kind and API group
-		kind := "ClusterBaseModel"
+		// Determine the model kind dynamically
+		modelName := *isvc.Spec.Predictor.Model.BaseModel
+		kind, err := DetermineModelKind(ctx, c, modelName, isvc.Namespace)
+		if err != nil {
+			return err
+		}
+
+		// Set kind and API group
 		apiGroup := "ome.io"
 		isvc.Spec.Model.Kind = &kind
 		isvc.Spec.Model.APIGroup = &apiGroup
@@ -232,4 +240,32 @@ func MigratePredictor(isvc *v1beta2.InferenceService) error {
 	isvc.Spec.Predictor = v1beta2.PredictorSpec{}
 
 	return nil
+}
+
+func DetermineModelKind(ctx context.Context, c client.Client, modelName string, namespace string) (string, error) {
+	// First, try to get ClusterBaseModel (cluster-scoped)
+	clusterBaseModelGetErr := c.Get(ctx, client.ObjectKey{Name: modelName}, &v1beta2.ClusterBaseModel{})
+	if clusterBaseModelGetErr == nil {
+		return "ClusterBaseModel", nil
+	}
+
+	// Try BaseModel (namespace-scoped) even if ClusterBaseModel lookup had an error
+	baseModelGetErr := c.Get(ctx, client.ObjectKey{Name: modelName, Namespace: namespace}, &v1beta2.BaseModel{})
+	if baseModelGetErr == nil {
+		return "BaseModel", nil
+	}
+
+	// Both lookups failed - determine the appropriate error to return
+	if apierrors.IsNotFound(clusterBaseModelGetErr) && apierrors.IsNotFound(baseModelGetErr) {
+		return "", errors.Errorf("neither ClusterBaseModel nor BaseModel found with name %s", modelName)
+	} else if !apierrors.IsNotFound(clusterBaseModelGetErr) && apierrors.IsNotFound(baseModelGetErr) {
+		return "", errors.Errorf("failed to get ClusterBaseModel %s: %v; BaseModel %s not found in namespace %s",
+			modelName, clusterBaseModelGetErr, modelName, namespace)
+	} else if apierrors.IsNotFound(clusterBaseModelGetErr) && !apierrors.IsNotFound(baseModelGetErr) {
+		return "", errors.Errorf("ClusterBaseModel %s not found; failed to get BaseModel %s in namespace %s: %v",
+			modelName, modelName, namespace, baseModelGetErr)
+	} else {
+		return "", errors.Errorf("failed to get ClusterBaseModel %s: %v; failed to get BaseModel %s in namespace %s: %v",
+			modelName, clusterBaseModelGetErr, modelName, namespace, baseModelGetErr)
+	}
 }
