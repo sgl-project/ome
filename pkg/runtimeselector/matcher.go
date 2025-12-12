@@ -83,6 +83,7 @@ func (m *DefaultRuntimeMatcher) GetCompatibilityDetails(runtime *v1beta1.Serving
 
 	// Check supported formats (mimics original RuntimeSupportsModel logic)
 	formatSupported := false
+	var formatMismatchReasons []string
 	for _, format := range runtime.SupportedModelFormats {
 		if m.compareSupportedModelFormats(model, format) {
 			formatSupported = true
@@ -90,11 +91,20 @@ func (m *DefaultRuntimeMatcher) GetCompatibilityDetails(runtime *v1beta1.Serving
 			report.MatchDetails = match
 			break
 		}
+		// Collect mismatch reasons for debugging
+		formatMismatchReasons = append(formatMismatchReasons, m.getFormatMismatchReason(model, format))
 	}
 
 	if !formatSupported {
-		report.IncompatibilityReasons = append(report.IncompatibilityReasons,
-			fmt.Sprintf("model format '%s' not in supported formats", getModelFormatLabel(model)))
+		if len(formatMismatchReasons) > 0 {
+			report.IncompatibilityReasons = append(report.IncompatibilityReasons,
+				fmt.Sprintf("model format '%s' not in supported formats: %s",
+					getModelFormatLabel(model), strings.Join(formatMismatchReasons, "; ")))
+		} else {
+			report.IncompatibilityReasons = append(report.IncompatibilityReasons,
+				fmt.Sprintf("model format '%s' not in supported formats: no supported formats defined",
+					getModelFormatLabel(model)))
+		}
 		return report, nil
 	}
 
@@ -334,6 +344,101 @@ func (m *DefaultRuntimeMatcher) compareSupportedModelFormats(model *v1beta1.Base
 	}
 
 	return true
+}
+
+// getFormatMismatchReason returns a human-readable reason why a model doesn't match a supported format.
+// Example outputs:
+//   - "architecture mismatch (model=LlamaForCausalLM, runtime=MistralForCausalLM)"
+//   - "quantization mismatch (model=fp8, runtime=int4)"
+//   - "format name mismatch (model=pytorch, runtime=safetensors), quantization mismatch (model=fp8, runtime=int4)"
+func (m *DefaultRuntimeMatcher) getFormatMismatchReason(model *v1beta1.BaseModelSpec, format v1beta1.SupportedModelFormat) string {
+	var reasons []string
+
+	// Check architecture mismatch
+	if model.ModelArchitecture != nil && format.ModelArchitecture != nil {
+		if *model.ModelArchitecture != *format.ModelArchitecture {
+			reasons = append(reasons, fmt.Sprintf("architecture mismatch (model=%s, runtime=%s)",
+				*model.ModelArchitecture, *format.ModelArchitecture))
+		}
+	} else if (model.ModelArchitecture == nil) != (format.ModelArchitecture == nil) {
+		if model.ModelArchitecture == nil {
+			reasons = append(reasons, fmt.Sprintf("model has no architecture but runtime requires %s",
+				*format.ModelArchitecture))
+		} else {
+			reasons = append(reasons, fmt.Sprintf("model has architecture %s but runtime has no architecture requirement",
+				*model.ModelArchitecture))
+		}
+	}
+
+	// Check quantization mismatch
+	if model.Quantization != nil && format.Quantization != nil {
+		if *model.Quantization != *format.Quantization {
+			reasons = append(reasons, fmt.Sprintf("quantization mismatch (model=%s, runtime=%s)",
+				*model.Quantization, *format.Quantization))
+		}
+	} else if (model.Quantization == nil) != (format.Quantization == nil) {
+		if model.Quantization == nil {
+			reasons = append(reasons, fmt.Sprintf("model has no quantization but runtime requires %s",
+				*format.Quantization))
+		} else {
+			reasons = append(reasons, fmt.Sprintf("model has quantization %s but runtime has no quantization requirement",
+				*model.Quantization))
+		}
+	}
+
+	// Check model format mismatch
+	// Note: model.ModelFormat is a non-pointer struct, always present
+	if format.ModelFormat != nil {
+		if format.ModelFormat.Name != model.ModelFormat.Name {
+			reasons = append(reasons, fmt.Sprintf("format name mismatch (model=%s, runtime=%s)",
+				model.ModelFormat.Name, format.ModelFormat.Name))
+		} else if format.ModelFormat.Version != nil && model.ModelFormat.Version != nil {
+			if !m.compareModelFormatVersions(format.ModelFormat, &model.ModelFormat) {
+				reasons = append(reasons, fmt.Sprintf("format version mismatch (model=%s, runtime=%s)",
+					*model.ModelFormat.Version, *format.ModelFormat.Version))
+			}
+		} else if (format.ModelFormat.Version == nil) != (model.ModelFormat.Version == nil) {
+			if model.ModelFormat.Version == nil {
+				reasons = append(reasons, fmt.Sprintf("model has no format version but runtime requires %s",
+					*format.ModelFormat.Version))
+			} else {
+				reasons = append(reasons, "model has format version but runtime has no version requirement")
+			}
+		}
+	}
+
+	// Check model framework mismatch
+	if format.ModelFramework != nil && model.ModelFramework != nil {
+		if format.ModelFramework.Name != model.ModelFramework.Name {
+			reasons = append(reasons, fmt.Sprintf("framework name mismatch (model=%s, runtime=%s)",
+				model.ModelFramework.Name, format.ModelFramework.Name))
+		} else if format.ModelFramework.Version != nil && model.ModelFramework.Version != nil {
+			if !m.compareModelFrameworkVersions(format.ModelFramework, model.ModelFramework) {
+				reasons = append(reasons, fmt.Sprintf("framework version mismatch (model=%s, runtime=%s)",
+					*model.ModelFramework.Version, *format.ModelFramework.Version))
+			}
+		} else if (format.ModelFramework.Version == nil) != (model.ModelFramework.Version == nil) {
+			if model.ModelFramework.Version == nil {
+				reasons = append(reasons, fmt.Sprintf("model has no framework version but runtime requires %s",
+					*format.ModelFramework.Version))
+			} else {
+				reasons = append(reasons, "model has framework version but runtime has no version requirement")
+			}
+		}
+	} else if (format.ModelFramework != nil) != (model.ModelFramework != nil) {
+		if model.ModelFramework == nil {
+			reasons = append(reasons, fmt.Sprintf("model has no framework but runtime requires %s",
+				format.ModelFramework.Name))
+		} else {
+			reasons = append(reasons, fmt.Sprintf("model has framework %s but runtime has no framework requirement",
+				model.ModelFramework.Name))
+		}
+	}
+
+	if len(reasons) == 0 {
+		return "unknown mismatch"
+	}
+	return strings.Join(reasons, ", ")
 }
 
 // compareModelFormatVersions compares model format versions based on operator.
