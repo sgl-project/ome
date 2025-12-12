@@ -236,9 +236,6 @@ func MigratePredictor(ctx context.Context, c client.Client, isvc *v1beta2.Infere
 		isvc.Spec.Engine.Worker = isvc.Spec.Predictor.Worker
 	}
 
-	// Clear the predictor spec after migration
-	isvc.Spec.Predictor = v1beta2.PredictorSpec{}
-
 	return nil
 }
 
