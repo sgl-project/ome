@@ -38,11 +38,15 @@ spec:
     - "CHAT"
   maxTokens: 256000
   additionalMetadata:
+    {{/* this model will use SMALL_COHERE_4 in DXB, LARGE_COHERE_V2_2 in other regions*/}}
+    {{- $cfg := index .Values "command-a-reasoning" "compatibleDACShapes" -}}
+    {{- if $cfg }}
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: LARGE_COHERE_V2_2
+        - name: {{ $cfg }}
           quotaUnit: 1
           default: true
+    {{ end }}
     internalName: "command-a-reasoning"
     type: "Serving"
 {{- end }}
