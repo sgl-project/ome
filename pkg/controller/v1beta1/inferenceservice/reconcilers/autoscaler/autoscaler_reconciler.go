@@ -117,6 +117,13 @@ func deleteExistingScaledObject(client client.Client, componentMeta metav1.Objec
 		if apierr.IsNotFound(err) {
 			return nil
 		}
+		// Handle case where KEDA CRD is not available or types not registered in scheme.
+		// This can happen if KEDA was uninstalled after the controller started.
+		if runtime.IsNotRegisteredError(err) {
+			log.Info("KEDA ScaledObject type not registered in scheme, skipping cleanup",
+				"namespace", componentMeta.Namespace, "name", scaledObjectName)
+			return nil
+		}
 		return err
 	}
 	// Delete the existing ScaledObject
