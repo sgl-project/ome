@@ -1,0 +1,176 @@
+{{- $registry := include "ome-serving.modelRegistry" . | fromYaml }}
+{{- range $modelName, $model := .Values.models }}
+{{- if $model.enabled }}
+{{- $modelInfo := index $registry $modelName }}
+{{- if not $modelInfo }}
+{{- fail (printf "Model '%s' not found in registry. Please check the model name or add it to the registry in _helpers.tpl" $modelName) }}
+{{- end }}
+{{- $gpus := $model.runtime.gpus | default 1 | int }}
+{{- $preset := index $.Values.gpuPresets (printf "%d" $gpus) }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: srt-{{ $modelName }}
+  labels:
+    {{- include "ome-serving.labels" $ | nindent 4 }}
+spec:
+  disabled: false
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: {{ $modelInfo.transformersVersion | quote }}
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: {{ $modelInfo.architecture }}
+      autoSelect: {{ $modelInfo.autoSelect }}
+      priority: {{ $modelInfo.priority }}
+  protocolVersions:
+    - openAI
+  modelSizeRange:
+    min: {{ index $modelInfo.sizeRange 0 }}
+    max: {{ index $modelInfo.sizeRange 1 }}
+  engineConfig:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+      prometheus.io/path: "/metrics"
+    labels:
+      logging-forward: enabled
+    tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+    runner:
+      name: ome-container
+      image: {{ $model.runtime.image | default $.Values.defaults.image }}
+      ports:
+        - containerPort: 8080
+          name: http1
+          protocol: TCP
+      command:
+        - python3
+        - -m
+        - sglang.launch_server
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --enable-metrics
+        - --log-requests
+        - --model-path
+        - $(MODEL_PATH)
+        - --tp-size
+        - "{{ $gpus }}"
+        - --mem-frac
+        - "{{ $model.runtime.memFrac | default $.Values.defaults.memFrac }}"
+        - --served-model-name
+        - {{ $modelInfo.servedName }}
+        {{- with $model.runtime.extraArgs }}
+        {{- range . }}
+        - {{ . | quote }}
+        {{- end }}
+        {{- end }}
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: {{ $preset.cpu }}
+          memory: {{ $preset.memory }}
+          nvidia.com/gpu: {{ $gpus }}
+        limits:
+          cpu: {{ $preset.cpu }}
+          memory: {{ $preset.memory }}
+          nvidia.com/gpu: {{ $gpus }}
+      readinessProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
+  routerConfig:
+    runner:
+      name: router
+      image: {{ $model.runtime.routerImage | default $.Values.defaults.routerImage }}
+      resources:
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+      ports:
+        - containerPort: 8080
+          name: http
+      command:
+        - python3
+        - -m
+        - sglang_router.launch_router
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --service-discovery
+        - --service-discovery-namespace
+        - $(NAMESPACE)
+        - --service-discovery-port
+        - "8080"
+        - --selector
+        - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: INFERENCESERVICE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['ome.io/inferenceservice']
+      readinessProbe:
+        httpGet:
+          path: /readiness
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 30
+        timeoutSeconds: 10
+      livenessProbe:
+        httpGet:
+          path: /liveness
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 30
+        timeoutSeconds: 10
+      startupProbe:
+        httpGet:
+          path: /readiness
+          port: 8080
+        failureThreshold: 10
+        successThreshold: 1
+        periodSeconds: 20
+        timeoutSeconds: 10
+{{- end }}
+{{- end }}

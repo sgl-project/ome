@@ -1,0 +1,14 @@
+apiVersion: v2
+name: ome-serving
+description: OME Model Serving - ClusterBaseModels, ClusterServingRuntimes, and InferenceServices
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - ome
+  - inference
+  - serving
+  - models
+  - llm
+maintainers:
+  - name: OME Team
