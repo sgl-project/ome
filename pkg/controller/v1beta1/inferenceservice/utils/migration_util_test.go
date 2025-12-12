@@ -117,13 +117,19 @@ func TestMigratePredictor(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
 	tests := []struct {
-		name     string
-		isvc     *v1beta2.InferenceService
-		validate func(*testing.T, *v1beta2.InferenceService)
+		name        string
+		isvc        *v1beta2.InferenceService
+		validate    func(*testing.T, *v1beta2.InferenceService)
+		expectError bool
+		errorMsg    string
 	}{
 		{
 			name: "Basic predictor with model",
 			isvc: &v1beta2.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
 				Spec: v1beta2.InferenceServiceSpec{
 					Predictor: v1beta2.PredictorSpec{
 						Model: &v1beta2.ModelSpec{
@@ -146,6 +152,10 @@ func TestMigratePredictor(t *testing.T) {
 		{
 			name: "Predictor with runtime",
 			isvc: &v1beta2.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
 				Spec: v1beta2.InferenceServiceSpec{
 					Predictor: v1beta2.PredictorSpec{
 						Model: &v1beta2.ModelSpec{
@@ -165,6 +175,10 @@ func TestMigratePredictor(t *testing.T) {
 		{
 			name: "Predictor with containers - ome-container",
 			isvc: &v1beta2.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
 				Spec: v1beta2.InferenceServiceSpec{
 					Predictor: v1beta2.PredictorSpec{
 						PodSpec: v1beta2.PodSpec{
@@ -213,6 +227,10 @@ func TestMigratePredictor(t *testing.T) {
 		{
 			name: "Predictor with containers - first container as runner",
 			isvc: &v1beta2.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
 				Spec: v1beta2.InferenceServiceSpec{
 					Predictor: v1beta2.PredictorSpec{
 						PodSpec: v1beta2.PodSpec{
@@ -240,6 +258,10 @@ func TestMigratePredictor(t *testing.T) {
 		{
 			name: "Predictor with model container spec",
 			isvc: &v1beta2.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
 				Spec: v1beta2.InferenceServiceSpec{
 					Predictor: v1beta2.PredictorSpec{
 						Model: &v1beta2.ModelSpec{
@@ -273,6 +295,10 @@ func TestMigratePredictor(t *testing.T) {
 		{
 			name: "Predictor with worker spec",
 			isvc: &v1beta2.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
 				Spec: v1beta2.InferenceServiceSpec{
 					Predictor: v1beta2.PredictorSpec{
 						Model: &v1beta2.ModelSpec{
@@ -302,6 +328,10 @@ func TestMigratePredictor(t *testing.T) {
 		{
 			name: "Predictor with component extension spec",
 			isvc: &v1beta2.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
 				Spec: v1beta2.InferenceServiceSpec{
 					Predictor: v1beta2.PredictorSpec{
 						Model: &v1beta2.ModelSpec{
@@ -320,13 +350,58 @@ func TestMigratePredictor(t *testing.T) {
 				g.Expect(isvc.Spec.Engine.MaxReplicas).To(gomega.Equal(5))
 			},
 		},
+		{
+			name: "Predictor with model but model not found",
+			isvc: &v1beta2.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta2.InferenceServiceSpec{
+					Predictor: v1beta2.PredictorSpec{
+						Model: &v1beta2.ModelSpec{
+							BaseModel: stringPtr("non-existent-model"),
+						},
+					},
+				},
+			},
+			expectError: true,
+			errorMsg:    "neither ClusterBaseModel nor BaseModel found with name non-existent-model",
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := MigratePredictor(test.isvc)
-			g.Expect(err).NotTo(gomega.HaveOccurred())
-			test.validate(t, test.isvc)
+			// Create a fake client with a ClusterBaseModel for testing
+			scheme := runtime.NewScheme()
+			_ = v1beta2.AddToScheme(scheme)
+
+			// Create a ClusterBaseModel that will be found by DetermineModelKind
+			// Only create it if the test ISVC has a model reference AND we don't expect an error
+			var fakeClient client.Client
+			if !test.expectError && test.isvc.Spec.Predictor.Model != nil && test.isvc.Spec.Predictor.Model.BaseModel != nil {
+				clusterBaseModel := &v1beta2.ClusterBaseModel{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: *test.isvc.Spec.Predictor.Model.BaseModel,
+					},
+				}
+				fakeClient = fake.NewClientBuilder().WithScheme(scheme).WithObjects(clusterBaseModel).Build()
+			} else {
+				fakeClient = fake.NewClientBuilder().WithScheme(scheme).Build()
+			}
+
+			ctx := context.Background()
+
+			err := MigratePredictor(ctx, fakeClient, test.isvc)
+			if test.expectError {
+				g.Expect(err).To(gomega.HaveOccurred())
+				if test.errorMsg != "" {
+					g.Expect(err.Error()).To(gomega.ContainSubstring(test.errorMsg))
+				}
+			} else {
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+				test.validate(t, test.isvc)
+			}
 		})
 	}
 }
@@ -375,6 +450,11 @@ func TestMigratePredictorToNewArchitecture(t *testing.T) {
 						Namespace: "default",
 					},
 				},
+				&v1beta2.ClusterBaseModel{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-model",
+					},
+				},
 			},
 			validate: func(t *testing.T, c client.Client, isvc *v1beta2.InferenceService) {
 				// Check that migration happened
@@ -411,6 +491,13 @@ func TestMigratePredictorToNewArchitecture(t *testing.T) {
 						},
 					},
 					Engine: &v1beta2.EngineSpec{},
+				},
+			},
+			existingObjs: []client.Object{
+				&v1beta2.ClusterBaseModel{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-model",
+					},
 				},
 			},
 			validate: func(t *testing.T, c client.Client, isvc *v1beta2.InferenceService) {
@@ -456,6 +543,87 @@ func TestMigratePredictorToNewArchitecture(t *testing.T) {
 			} else {
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 				test.validate(t, c, test.isvc)
+			}
+		})
+	}
+}
+
+func TestDetermineModelKind(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	scheme := runtime.NewScheme()
+	_ = v1beta2.AddToScheme(scheme)
+
+	tests := []struct {
+		name         string
+		modelName    string
+		namespace    string
+		existingObjs []client.Object
+		expectedKind string
+		expectError  bool
+		errorMsg     string
+	}{
+		{
+			name:      "ClusterBaseModel found",
+			modelName: "test-model",
+			namespace: "default",
+			existingObjs: []client.Object{
+				&v1beta2.ClusterBaseModel{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-model",
+					},
+				},
+			},
+			expectedKind: "ClusterBaseModel",
+			expectError:  false,
+		},
+		{
+			name:      "BaseModel found",
+			modelName: "test-model",
+			namespace: "test-ns",
+			existingObjs: []client.Object{
+				&v1beta2.BaseModel{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-model",
+						Namespace: "test-ns",
+					},
+				},
+			},
+			expectedKind: "BaseModel",
+			expectError:  false,
+		},
+		{
+			name:      "Neither ClusterBaseModel nor BaseModel found",
+			modelName: "test-model",
+			namespace: "default",
+			existingObjs: []client.Object{
+				&v1beta2.ClusterBaseModel{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-embed-model",
+					},
+				},
+			},
+			expectError: true,
+			errorMsg:    "neither ClusterBaseModel nor BaseModel found with name test-model",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(test.existingObjs...).Build()
+			ctx := context.Background()
+
+			kind, err := DetermineModelKind(ctx, fakeClient, test.modelName, test.namespace)
+
+			if test.expectError {
+				g.Expect(err).To(gomega.HaveOccurred())
+				if test.errorMsg != "" {
+					g.Expect(err.Error()).To(gomega.ContainSubstring(test.errorMsg))
+				}
+				g.Expect(kind).To(gomega.BeEmpty())
+			} else {
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+				g.Expect(kind).To(gomega.Equal(test.expectedKind))
 			}
 		})
 	}
