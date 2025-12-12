@@ -11,7 +11,10 @@ resources:
 - ../crd
 - ../configmap
 - ../rbac
-- ../manager
+- ../isvc
+- ../model
+- ../benchmark
+- ../ac
 - ../webhook
 - ../certmanager
 - ../model-agent
@@ -66,7 +69,7 @@ replacements:
 - source:
     fieldPath: metadata.namespace
     kind: Deployment
-    name: ome-controller-manager
+    name: ome-isvc-controller
     version: v1
   targets:
   - fieldPaths:
@@ -154,14 +157,15 @@ replacements:
       name: servingruntime.ome.io
 
 patches:
-- path: manager_image_patch.yaml
+- path: isvc_controller_image_patch.yaml
+- path: model_controller_image_patch.yaml
+- path: benchmark_controller_image_patch.yaml
+- path: ac_controller_image_patch.yaml
 - path: model_agent_image_patch.yaml
-- path: manager_auth_proxy_patch.yaml
 - path: isvc_mutatingwebhook_cainjection_patch.yaml
 - path: isvc_validatingwebhook_cainjection_patch.yaml
 - path: clusterservingruntime_validatingwebhook_cainjection_patch.yaml
 - path: servingruntime_validationwebhook_cainjection_patch.yaml
-- path: manager_resources_patch.yaml
 - path: isvc_conversion_webhook.yaml
 - path: cainjection_conversion_webhook.yaml
 - path: benchmarkjob_validationwebhook_cainjection_patch.yaml

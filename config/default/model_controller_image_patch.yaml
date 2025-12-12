@@ -1,0 +1,11 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ome-model-controller
+  namespace: ome
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          image: ghcr.io/moirai-internal/ome-model-controller:v0.1.4

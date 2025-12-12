@@ -116,7 +116,7 @@ jobs:
 
       - name: Build binaries
         run: |
-          make ome-manager
+          make isvc-controller model-controller benchmark-controller ac-controller
           make model-agent
 
   docker-validation:
@@ -126,7 +126,7 @@ jobs:
     needs: quick-checks
     strategy:
       matrix:
-        image: [ome-image, model-agent-image, multinode-prober-image, ome-agent-image]
+        image: [isvc-controller-image, model-controller-image, benchmark-controller-image, ac-controller-image, model-agent-image, multinode-prober-image, ome-agent-image]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -219,9 +219,30 @@ jobs:
             --build-arg VERSION=pr-test \
             --build-arg GIT_TAG=pr-${{ github.event.pull_request.number }} \
             --build-arg GIT_COMMIT=${{ github.sha }} \
-            . -f dockerfiles/manager.Dockerfile \
-            -t local/ome-manager:pr-test
-          
+            . -f dockerfiles/isvc-controller.Dockerfile \
+            -t local/ome-isvc-controller:pr-test
+
+          docker buildx build --platform=linux/amd64,linux/arm64 \
+            --build-arg VERSION=pr-test \
+            --build-arg GIT_TAG=pr-${{ github.event.pull_request.number }} \
+            --build-arg GIT_COMMIT=${{ github.sha }} \
+            . -f dockerfiles/model-controller.Dockerfile \
+            -t local/ome-model-controller:pr-test
+
+          docker buildx build --platform=linux/amd64,linux/arm64 \
+            --build-arg VERSION=pr-test \
+            --build-arg GIT_TAG=pr-${{ github.event.pull_request.number }} \
+            --build-arg GIT_COMMIT=${{ github.sha }} \
+            . -f dockerfiles/benchmark-controller.Dockerfile \
+            -t local/ome-benchmark-controller:pr-test
+
+          docker buildx build --platform=linux/amd64,linux/arm64 \
+            --build-arg VERSION=pr-test \
+            --build-arg GIT_TAG=pr-${{ github.event.pull_request.number }} \
+            --build-arg GIT_COMMIT=${{ github.sha }} \
+            . -f dockerfiles/ac-controller.Dockerfile \
+            -t local/ome-ac-controller:pr-test
+
           docker buildx build --platform=linux/amd64,linux/arm64 \
             --build-arg VERSION=pr-test \
             --build-arg GIT_TAG=pr-${{ github.event.pull_request.number }} \

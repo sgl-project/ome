@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ome-controller-manager
+  name: ome-isvc-controller
   namespace: ome
   labels:
-    control-plane: ome-controller-manager
+    control-plane: ome-isvc-controller
     controller-tools.k8s.io: "1.0"
 spec:
   selector:
     matchLabels:
-      control-plane: ome-controller-manager
+      control-plane: ome-isvc-controller
       controller-tools.k8s.io: "1.0"
   template:
     metadata:
       labels:
-        control-plane: ome-controller-manager
+        control-plane: ome-isvc-controller
         controller-tools.k8s.io: "1.0"
       annotations:
         kubectl.kubernetes.io/default-container: manager
@@ -24,13 +24,13 @@ spec:
         runAsNonRoot: false
       containers:
       - command:
-        - /manager
+        - /isvc-controller
         args:
           - "--metrics-bind-address=:8080"
           - "--leader-elect"
           - "webhook"
           - "--zap-encoder=console"
-        image: ghcr.io/moirai-internal/ome-manager:v0.1.2
+        image: ghcr.io/moirai-internal/ome-isvc-controller:v0.1.2
         imagePullPolicy: Always
         name: manager
         securityContext:
@@ -78,9 +78,3 @@ spec:
         secret:
           defaultMode: 420
           secretName: ome-webhook-server-cert
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ome-webhook-server-secret
-  namespace: ome

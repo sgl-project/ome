@@ -39,22 +39,18 @@ import (
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
-	v1beta1acceleratorclasscontroller "github.com/sgl-project/ome/pkg/controller/v1beta1/acceleratorclass"
-	v1beta1basemodelcontroller "github.com/sgl-project/ome/pkg/controller/v1beta1/basemodel"
-	v1beta1benchmarkjobcontroller "github.com/sgl-project/ome/pkg/controller/v1beta1/benchmark"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 	v1beta1isvccontroller "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice"
 	"github.com/sgl-project/ome/pkg/runtimeselector"
 	"github.com/sgl-project/ome/pkg/utils"
 	"github.com/sgl-project/ome/pkg/version"
-	"github.com/sgl-project/ome/pkg/webhook/admission/benchmark"
 	"github.com/sgl-project/ome/pkg/webhook/admission/isvc"
 	"github.com/sgl-project/ome/pkg/webhook/admission/pod"
 	"github.com/sgl-project/ome/pkg/webhook/admission/servingruntime"
 )
 
 const (
-	LeaderLockName          = "ome-controller-manager-leader-lock"
+	LeaderLockName          = "ome-controller-isvc-lock"
 	LeaderElectionNamespace = "ome"
 )
 
@@ -146,7 +142,7 @@ func main() {
 	options := GetOptions()
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&options.zapOpts)))
 
-	setupLog.Info("Initializing", "gitVersion", version.GitVersion, "gitCommit", version.GitCommit)
+	setupLog.Info("Initializing InferenceService Controller", "gitVersion", version.GitVersion, "gitCommit", version.GitCommit)
 
 	// Get a config to talk to the apiserver
 	setupLog.Info("Configuring API client connection")
@@ -257,55 +253,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup BaseModel and ClusterBaseModel controllers with the manager
-	setupLog.Info("Setting up BaseModel controller")
-	if err = (&v1beta1basemodelcontroller.BaseModelReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("BaseModel"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create BaseModel controller")
-		os.Exit(1)
-	}
-
-	setupLog.Info("Setting up ClusterBaseModel controller")
-	if err = (&v1beta1basemodelcontroller.ClusterBaseModelReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("ClusterBaseModel"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create ClusterBaseModel controller")
-		os.Exit(1)
-	}
-
-	benchmarkJobEventBroadcaster := record.NewBroadcaster()
-	setupLog.Info("Setting up BenchmarkJob controller")
-	benchmarkJobEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
-	if err = (&v1beta1benchmarkjobcontroller.BenchmarkJobReconciler{
-		Client:    mgr.GetClient(),
-		Clientset: clientSet,
-		Log:       ctrl.Log.WithName("BenchmarkJob"),
-		Scheme:    mgr.GetScheme(),
-		Recorder:  benchmarkJobEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create Benchmark Job controller")
-		os.Exit(1)
-	}
-
-	// Setup AcceleratorClass controller
-	acceleratorClassEventBroadcaster := record.NewBroadcaster()
-	setupLog.Info("Setting up AcceleratorClass controller")
-	acceleratorClassEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
-	if err = (&v1beta1acceleratorclasscontroller.AcceleratorClassReconciler{
-		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("AcceleratorClass"),
-		Scheme:   mgr.GetScheme(),
-		Recorder: acceleratorClassEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create AcceleratorClass controller")
-		os.Exit(1)
-	}
-
 	if options.enableWebhook {
 		setupLog.Info("Configuring webhook server", "port", options.webhookPort)
 		hookServer := mgr.GetWebhookServer()
@@ -323,11 +270,6 @@ func main() {
 		setupLog.Info("Registering serving runtime validator webhook to the webhook server")
 		hookServer.Register("/validate-ome-io-v1beta1-servingruntime", &webhook.Admission{
 			Handler: &servingruntime.ServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
-		})
-
-		setupLog.Info("Registering benchmark job validator webhook to the webhook server")
-		hookServer.Register("/validate-ome-io-v1beta1-benchmarkjob", &webhook.Admission{
-			Handler: &benchmark.BenchmarkJobValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
 		if err = ctrl.NewWebhookManagedBy(mgr).
@@ -359,7 +301,7 @@ func main() {
 	}
 
 	// Start the Cmd
-	setupLog.Info("Starting manager")
+	setupLog.Info("Starting InferenceService controller manager")
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "Failed to start manager")
 		os.Exit(1)

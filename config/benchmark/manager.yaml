@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ome-benchmark-controller
+  namespace: ome
+  labels:
+    control-plane: ome-benchmark-controller
+    controller-tools.k8s.io: "1.0"
+spec:
+  selector:
+    matchLabels:
+      control-plane: ome-benchmark-controller
+      controller-tools.k8s.io: "1.0"
+  template:
+    metadata:
+      labels:
+        control-plane: ome-benchmark-controller
+        controller-tools.k8s.io: "1.0"
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+    spec:
+      serviceAccountName: ome-controller-manager
+      securityContext:
+        runAsNonRoot: false
+      containers:
+      - command:
+        - /benchmark-controller
+        args:
+          - "--metrics-bind-address=:8080"
+          - "--leader-elect"
+          - "webhook"
+          - "--zap-encoder=console"
+        image: ghcr.io/moirai-internal/ome-benchmark-controller:v0.1.2
+        imagePullPolicy: Always
+        name: manager
+        securityContext:
+          allowPrivilegeEscalation: false
+        env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: SECRET_NAME
+            value: ome-webhook-server-cert
+        livenessProbe:
+          failureThreshold: 5
+          initialDelaySeconds: 10
+          httpGet:
+            path: /healthz
+            port: 8081
+          timeoutSeconds: 5
+        readinessProbe:
+          initialDelaySeconds: 10
+          failureThreshold: 10
+          periodSeconds: 5
+          httpGet:
+            path: /readyz
+            port: 8081
+          timeoutSeconds: 5
+        resources:
+          limits:
+            cpu: 100m
+            memory: 300Mi
+          requests:
+            cpu: 100m
+            memory: 200Mi
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: ome-webhook-server-cert

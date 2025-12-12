@@ -1,11 +1,11 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ome-controller-manager
+  name: ome-ac-controller
   namespace: ome
 spec:
   template:
     spec:
       containers:
         - name: manager
-          image: ghcr.io/moirai-internal/ome-manager:v0.1.4
+          image: ghcr.io/moirai-internal/ome-ac-controller:v0.1.4
