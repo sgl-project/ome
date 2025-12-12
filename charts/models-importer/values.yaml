@@ -520,7 +520,37 @@ gpt-5-1-codex-mini:
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
+gpt-5-1-codex-max:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
 gpt-5-1-chat-latest:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-2:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-2-2025-12-11:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-2-pro:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-2-pro-2025-12-11:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-2-chat-latest:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
