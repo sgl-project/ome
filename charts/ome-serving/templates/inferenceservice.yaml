@@ -4,6 +4,21 @@
 {{- if $model.namespaceScope }}
 {{-   $namespace = $model.namespace | default $modelName }}
 {{- end }}
+{{/*
+  PD mode: explicitly set via pdMode field
+  PD mode requires both decoder and router
+  Non-PD mode can optionally include router (but not decoder)
+*/}}
+{{- $isPdMode := $model.pdMode }}
+{{/*
+  Helper to get replica values - supports both nested (engine.minReplicas) and flat (minReplicas) format
+*/}}
+{{- $engineMinReplicas := coalesce (dig "engine" "minReplicas" nil $model) $model.minReplicas $.Values.defaults.minReplicas }}
+{{- $engineMaxReplicas := coalesce (dig "engine" "maxReplicas" nil $model) $model.maxReplicas $.Values.defaults.maxReplicas }}
+{{- $decoderMinReplicas := coalesce (dig "decoder" "minReplicas" nil $model) $.Values.defaults.minReplicas }}
+{{- $decoderMaxReplicas := coalesce (dig "decoder" "maxReplicas" nil $model) $.Values.defaults.maxReplicas }}
+{{- $routerMinReplicas := coalesce (dig "router" "minReplicas" nil $model) $.Values.defaults.minReplicas }}
+{{- $routerMaxReplicas := coalesce (dig "router" "maxReplicas" nil $model) $.Values.defaults.maxReplicas }}
 ---
 apiVersion: v1
 kind: Namespace
@@ -22,10 +37,23 @@ metadata:
 spec:
   model:
     name: {{ $modelName }}
-  runtime:
-    name: srt-{{ $modelName }}
   engine:
-    minReplicas: {{ $model.minReplicas | default $.Values.defaults.minReplicas }}
-    maxReplicas: {{ $model.maxReplicas | default $.Values.defaults.maxReplicas }}
+    minReplicas: {{ $engineMinReplicas }}
+    maxReplicas: {{ $engineMaxReplicas }}
+{{- if $isPdMode }}
+  decoder:
+    minReplicas: {{ $decoderMinReplicas }}
+    maxReplicas: {{ $decoderMaxReplicas }}
+  router:
+    minReplicas: {{ $routerMinReplicas }}
+    maxReplicas: {{ $routerMaxReplicas }}
+{{- else }}
+{{/* Non-PD mode: router is optional, decoder is not allowed */}}
+{{- if $model.router }}
+  router:
+    minReplicas: {{ $routerMinReplicas }}
+    maxReplicas: {{ $routerMaxReplicas }}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- end }}

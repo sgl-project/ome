@@ -5,9 +5,10 @@ Deploy ClusterBaseModels, ClusterServingRuntimes, and InferenceServices for LLM 
 ## Features
 
 - **Auto-detection**: Model architecture, transformers version, size range, and served name are automatically detected from the model name
-- **176 Models**: Built-in registry supports Qwen, Llama, DeepSeek, Mistral, Gemma, Phi, and more
+- **165 Models**: Built-in registry supports Qwen, Llama, DeepSeek, Mistral, Gemma, Phi, and more
 - **Simplified Storage**: Use `hfModelId` for HuggingFace or `oci` for OCI Object Storage
 - **Scope Options**: Create ClusterBaseModel (cluster-wide) or BaseModel (namespace-scoped)
+- **PD Mode**: Support for Prefill-Decode disaggregated serving with `pdMode: true`
 
 ## Installation
 
@@ -202,9 +203,37 @@ models:
       gpus: 2
 ```
 
+### PD Mode (Prefill-Decode Disaggregated)
+
+For models that support disaggregated serving, enable PD mode to deploy with separate prefill (engine) and decode (decoder) components:
+
+```yaml
+models:
+  kimi-k2-instruct:
+    enabled: true
+    pdMode: true           # Enable PD mode
+    vendor: moonshot
+    capabilities: [TEXT_TO_TEXT]
+    hfModelId: moonshotai/Kimi-K2-Instruct
+    runtime:
+      gpus: 8
+    # Optional: customize replicas for each component
+    engine:
+      minReplicas: 1
+      maxReplicas: 2
+    decoder:
+      minReplicas: 1
+      maxReplicas: 2
+    router:
+      minReplicas: 1
+      maxReplicas: 1
+```
+
+Models that support PD mode: `kimi-k2-instruct`, `deepseek-rdma`, `llama-3-1-70b-instruct`, `llama-3-2-1b-instruct`, `llama-3-2-3b-instruct`, `llama-3-3-70b-instruct`, `llama-4-maverick-17b-128e-instruct-fp8`, `llama-4-scout-17b-16e-instruct`, `mistral-7b-instruct`, `mixtral-8x7b-instruct`
+
 ## Supported Models
 
-The chart includes a built-in registry of **176 models**. Model names in values.yaml must match registry entries exactly.
+The chart includes a built-in registry of **165 models**. Model names in values.yaml must match registry entries exactly.
 
 ### Qwen3
 `qwen3-0-6b`, `qwen3-32b`, `qwen3-4b`, `qwen3-8b`, `qwen3-embedding-0-6b`, `qwen3-embedding-4b`, `qwen3-next-80b-a3b-instruct`
@@ -222,19 +251,19 @@ The chart includes a built-in registry of **176 models**. Model names in values.
 `deepseek-r1-distill-qwen-1-5b`, `deepseek-r1-distill-qwen-14b`, `deepseek-r1-distill-qwen-32b`, `deepseek-r1-distill-qwen-7b`, `gte-qwen2-7b-instruct`, `qwen-7b-chat`, `qwen1-5-110b-chat`, `qwen1-5-32b-chat`, `qwen1-5-72b-chat`, `qwen1-5-7b-chat`, `qwen2-5-1-5b`, `qwen2-5-14b`, `qwen2-5-32b-instruct`, `qwen2-5-3b`, `qwen2-5-72b-instruct`, `qwen2-5-7b`, `qwen2-5-coder-32b-instruct`, `qwen2-5-coder-7b-instruct`, `qwen2-72b-instruct`, `qwen2-7b-instruct`, `skywork-or1-7b-preview`
 
 ### Meta Llama 4
-`llama-4-maverick-17b-128e-instruct`, `llama-4-maverick-17b-128e-instruct-fp8`, `llama-4-maverick-17b-128e-instruct-fp8-grpc`, `llama-4-maverick-17b-128e-instruct-fp8-pd`, `llama-4-maverick-17b-128e-instruct-fp8-pd-grpc`, `llama-4-scout-17b-16e-instruct`, `llama-4-scout-17b-16e-instruct-pd`
+`llama-4-maverick-17b-128e-instruct`, `llama-4-maverick-17b-128e-instruct-fp8`, `llama-4-maverick-17b-128e-instruct-fp8-grpc`, `llama-4-scout-17b-16e-instruct`
 
 ### Meta Llama Vision
 `llama-3-2-11b-vision-instruct`, `llama-3-2-90b-vision-instruct`, `llama-3-2-90b-vision-instruct-fp8`
 
 ### Meta Llama
-`deepseek-coder-7b-instruct-v1-5`, `deepseek-llm-7b-chat`, `deepseek-r1-distill-llama-70b`, `deepseek-r1-distill-llama-8b`, `falcon3-10b-instruct`, `hermes-2-pro-llama-3-8b`, `llama-2-13b`, `llama-2-13b-chat-hf`, `llama-2-70b`, `llama-2-70b-chat-hf`, `llama-2-7b`, `llama-2-7b-chat-hf`, `llama-3-1-405b-instruct-fp8`, `llama-3-1-70b-instruct`, `llama-3-1-70b-instruct-pd`, `llama-3-1-8b-instruct`, `llama-3-1-8b-instruct-grpc`, `llama-3-1-nemotron-70b-instruct-hf`, `llama-3-1-nemotron-nano-8b-v1`, `llama-3-1-nemotron-ultra-253b-v1`, `llama-3-2-1b-instruct`, `llama-3-2-1b-instruct-pd`, `llama-3-2-3b-instruct`, `llama-3-2-3b-instruct-pd`, `llama-3-3-70b-instruct`, `llama-3-3-70b-instruct-fp8-dynamic`, `llama-3-3-70b-instruct-pd`, `llama-3-70b-instruct`, `llama-3-8b-instruct`, `llama-guard-3-8b`, `smollm-1-7b`, `smollm2-1-7b-instruct`, `solar-10-7b-instruct-v1-0`, `vicuna-13b-v1-5`, `vicuna-7b-v1-5`
+`deepseek-coder-7b-instruct-v1-5`, `deepseek-llm-7b-chat`, `deepseek-r1-distill-llama-70b`, `deepseek-r1-distill-llama-8b`, `falcon3-10b-instruct`, `hermes-2-pro-llama-3-8b`, `llama-2-13b`, `llama-2-13b-chat-hf`, `llama-2-70b`, `llama-2-70b-chat-hf`, `llama-2-7b`, `llama-2-7b-chat-hf`, `llama-3-1-405b-instruct-fp8`, `llama-3-1-70b-instruct`, `llama-3-1-8b-instruct`, `llama-3-1-8b-instruct-grpc`, `llama-3-1-nemotron-70b-instruct-hf`, `llama-3-1-nemotron-nano-8b-v1`, `llama-3-1-nemotron-ultra-253b-v1`, `llama-3-2-1b-instruct`, `llama-3-2-3b-instruct`, `llama-3-3-70b-instruct`, `llama-3-3-70b-instruct-fp8-dynamic`, `llama-3-70b-instruct`, `llama-3-8b-instruct`, `llama-guard-3-8b`, `smollm-1-7b`, `smollm2-1-7b-instruct`, `solar-10-7b-instruct-v1-0`, `vicuna-13b-v1-5`, `vicuna-7b-v1-5`
 
 ### LLaVA
 `llava-next-72b`, `llava-onevision-qwen2-7b-ov`, `llava-v1-5-13b`, `nvila-8b`
 
 ### DeepSeek V3
-`deepseek-rdma`, `deepseek-rdma-pd`, `deepseek-v3`, `deepseek-v3-0324`, `kimi-k2-instruct`, `kimi-k2-pd`
+`deepseek-rdma`, `deepseek-v3`, `deepseek-v3-0324`, `kimi-k2-instruct`
 
 ### DeepSeek V2
 `deepseek-v2-lite-chat`
@@ -249,10 +278,10 @@ The chart includes a built-in registry of **176 models**. Model names in values.
 `mistral-small-3-1-24b-instruct-2503`
 
 ### Mistral (Mixtral)
-`mixtral-8x22b`, `mixtral-8x7b`, `mixtral-8x7b-instruct`, `mixtral-8x7b-instruct-pd`
+`mixtral-8x22b`, `mixtral-8x7b`, `mixtral-8x7b-instruct`
 
 ### Mistral
-`e5-7b-mistral-instruct`, `e5-mistral-7b-instruct`, `mistral-7b-instruct`, `mistral-7b-instruct-pd`, `mistral-7b-instruct-v0-2`, `mistral-7b-instruct-v0-3`, `mistral-nemo-instruct-2407`
+`e5-mistral-7b-instruct`, `mistral-7b-instruct`, `mistral-7b-instruct-v0-2`, `mistral-7b-instruct-v0-3`, `mistral-nemo-instruct-2407`
 
 ### Google Gemma 3
 `gemma-3-12b-it`, `gemma-3-1b-it`, `gemma-3-4b-it`
