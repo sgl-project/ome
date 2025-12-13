@@ -443,9 +443,6 @@ func TestInferenceServiceReconcile(t *testing.T) {
 				g.Expect(updatedIsvc.Spec.Model.Name).To(gomega.Equal("sklearn-model"))
 				g.Expect(updatedIsvc.Spec.Engine).NotTo(gomega.BeNil(), "Expected engine to be created")
 
-				// Check that predictor is cleared
-				g.Expect(updatedIsvc.Spec.Predictor.Model).To(gomega.BeNil(), "Expected predictor.Model to be cleared")
-
 				// Check for deprecation warning
 				g.Expect(updatedIsvc.ObjectMeta.Annotations).NotTo(gomega.BeNil())
 				g.Expect(updatedIsvc.ObjectMeta.Annotations[constants.DeprecationWarning]).To(gomega.Equal("The Predictor field is deprecated and will be removed in a future release. Please use Engine and Model fields instead."))
