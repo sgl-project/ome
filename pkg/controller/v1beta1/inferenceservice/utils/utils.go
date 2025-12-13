@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -91,4 +92,77 @@ func GetTargetServicePort(ctx context.Context, c client.Client, isvc *v1beta1.In
 	}
 
 	return port, nil
+}
+
+// AddPreferredNodeAffinityForModel adds a preferred node affinity term to the pod spec
+// for scheduling pods on nodes where the base model is ready.
+// This is used by both InferenceService and BenchmarkJob controllers to ensure pods
+// are scheduled on nodes with the model available.
+//
+// Parameters:
+//   - podSpec: The pod spec to update (must not be nil)
+//   - baseModelMeta: The metadata of the base model (ClusterBaseModel or BaseModel)
+//
+// The function:
+//   - Determines the label key based on whether it's a ClusterBaseModel (empty namespace) or BaseModel
+//   - Adds a preferred node affinity with weight 100 to prefer nodes with "Ready" model status
+//   - Avoids adding duplicate affinity terms if one already exists for the same model
+func AddPreferredNodeAffinityForModel(podSpec *corev1.PodSpec, baseModelMeta *metav1.ObjectMeta) {
+	if podSpec == nil || baseModelMeta == nil {
+		return
+	}
+
+	// Determine if this is a ClusterBaseModel or BaseModel based on namespace
+	var labelKey string
+	isClusterScoped := baseModelMeta.Namespace == ""
+
+	if isClusterScoped {
+		// ClusterBaseModel
+		labelKey = constants.GetClusterBaseModelLabel(baseModelMeta.Name)
+	} else {
+		// BaseModel (namespace-scoped)
+		labelKey = constants.GetBaseModelLabel(baseModelMeta.Namespace, baseModelMeta.Name)
+	}
+
+	// Initialize affinity structures if nil
+	if podSpec.Affinity == nil {
+		podSpec.Affinity = &corev1.Affinity{}
+	}
+	if podSpec.Affinity.NodeAffinity == nil {
+		podSpec.Affinity.NodeAffinity = &corev1.NodeAffinity{}
+	}
+
+	// Check if this model affinity term already exists to avoid duplicates
+	affinityExists := false
+	for _, term := range podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+		for _, expr := range term.Preference.MatchExpressions {
+			if expr.Key == labelKey {
+				affinityExists = true
+				break
+			}
+		}
+		if affinityExists {
+			break
+		}
+	}
+
+	if !affinityExists {
+		// Use max weight (100) to strongly prefer nodes with ready models
+		preferredTerm := corev1.PreferredSchedulingTerm{
+			Weight: 100,
+			Preference: corev1.NodeSelectorTerm{
+				MatchExpressions: []corev1.NodeSelectorRequirement{
+					{
+						Key:      labelKey,
+						Operator: corev1.NodeSelectorOpIn,
+						Values:   []string{"Ready"},
+					},
+				},
+			},
+		}
+		podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = append(
+			podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+			preferredTerm,
+		)
+	}
 }
