@@ -10,6 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
@@ -19,6 +23,22 @@ import (
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+// createTestScheme creates a runtime scheme with v1beta1 types for testing
+func createTestScheme() *runtime.Scheme {
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = v1beta1.AddToScheme(scheme)
+	return scheme
+}
+
+// createFakeClient creates a fake client with optional ClusterBaseModel or BaseModel objects
+func createFakeClient(t *testing.T, models ...client.Object) client.Client {
+	scheme := createTestScheme()
+	objects := []client.Object{}
+	objects = append(objects, models...)
+	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+}
 
 // Helper function to create string pointers
 func stringPtr(s string) *string {
@@ -146,7 +166,23 @@ func TestDefaultInferenceService(t *testing.T) {
 			}(EnablePredictorMigrationEnvVar, originalValue)
 			_ = os.Setenv(EnablePredictorMigrationEnvVar, "true") // Enable migration for these tests
 
-			DefaultInferenceService(tt.isvc, tt.deployConfig)
+			// Create fake client with test model if needed
+			var c client.Client
+			if tt.wantModel && tt.isvc.Spec.Predictor.Model != nil && tt.isvc.Spec.Predictor.Model.BaseModel != nil {
+				modelName := *tt.isvc.Spec.Predictor.Model.BaseModel
+				clusterBaseModel := &v1beta1.ClusterBaseModel{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: modelName,
+					},
+				}
+				c = createFakeClient(t, clusterBaseModel)
+			} else {
+				c = createFakeClient(t)
+			}
+
+			ctx := context.Background()
+			err := DefaultInferenceService(ctx, c, tt.isvc, tt.deployConfig)
+			require.NoError(t, err)
 
 			// Check annotations
 			if tt.wantAnnotations == nil {
@@ -248,7 +284,10 @@ func TestDeploymentModeDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			DefaultInferenceService(tt.isvc, tt.deployConfig)
+			c := createFakeClient(t)
+			ctx := context.Background()
+			err := DefaultInferenceService(ctx, c, tt.isvc, tt.deployConfig)
+			require.NoError(t, err)
 
 			require.NotNil(t, tt.isvc.ObjectMeta.Annotations, "Annotations should exist")
 			mode, exists := tt.isvc.ObjectMeta.Annotations[constants.DeploymentMode]
@@ -393,16 +432,20 @@ func TestMigrateFromPredictorToNewArchitecture(t *testing.T) {
 	tests := []struct {
 		name            string
 		isvc            *v1beta1.InferenceService
+		setupClient     func(t *testing.T, isvc *v1beta1.InferenceService) client.Client
 		wantEngine      bool
 		wantModel       bool
+		wantModelKind   *string // Expected model kind (ClusterBaseModel or BaseModel)
 		wantRuntime     bool
 		wantMinReplicas *int
 		wantMaxReplicas int
 		wantRunner      bool
 		wantContainers  int
+		expectError     bool
+		errorMsg        string
 	}{
 		{
-			name: "basic predictor with model",
+			name: "basic predictor with model - ClusterBaseModel",
 			isvc: &v1beta1.InferenceService{
 				Spec: v1beta1.InferenceServiceSpec{
 					Predictor: v1beta1.PredictorSpec{
@@ -414,11 +457,75 @@ func TestMigrateFromPredictorToNewArchitecture(t *testing.T) {
 					},
 				},
 			},
+			setupClient: func(t *testing.T, isvc *v1beta1.InferenceService) client.Client {
+				modelName := *isvc.Spec.Predictor.Model.BaseModel
+				clusterBaseModel := &v1beta1.ClusterBaseModel{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: modelName,
+					},
+				}
+				return createFakeClient(t, clusterBaseModel)
+			},
 			wantEngine:      true,
 			wantModel:       true,
+			wantModelKind:   stringPtr("ClusterBaseModel"),
 			wantRuntime:     false,
 			wantMinReplicas: intPtr(2),
 			wantMaxReplicas: 5,
+		},
+		{
+			name: "basic predictor with model - BaseModel (namespace-scoped)",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test-namespace",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Predictor: v1beta1.PredictorSpec{
+						Model: &v1beta1.ModelSpec{BaseModel: stringPtr("test-basemodel")},
+						ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+							MinReplicas: intPtr(1),
+							MaxReplicas: 3,
+						},
+					},
+				},
+			},
+			setupClient: func(t *testing.T, isvc *v1beta1.InferenceService) client.Client {
+				modelName := *isvc.Spec.Predictor.Model.BaseModel
+				baseModel := &v1beta1.BaseModel{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      modelName,
+						Namespace: isvc.Namespace,
+					},
+				}
+				return createFakeClient(t, baseModel)
+			},
+			wantEngine:      true,
+			wantModel:       true,
+			wantModelKind:   stringPtr("BaseModel"),
+			wantRuntime:     false,
+			wantMinReplicas: intPtr(1),
+			wantMaxReplicas: 3,
+		},
+		{
+			name: "predictor with model not found - should return error",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test-namespace",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Predictor: v1beta1.PredictorSpec{
+						Model: &v1beta1.ModelSpec{BaseModel: stringPtr("non-existent-model")},
+					},
+				},
+			},
+			setupClient: func(t *testing.T, isvc *v1beta1.InferenceService) client.Client {
+				// No model objects in the client
+				return createFakeClient(t)
+			},
+			wantEngine:  false,
+			wantModel:   false,
+			expectError: true,
+			errorMsg:    "neither ClusterBaseModel nor BaseModel found with name non-existent-model",
 		},
 		{
 			name: "predictor with model and runtime",
@@ -432,9 +539,19 @@ func TestMigrateFromPredictorToNewArchitecture(t *testing.T) {
 					},
 				},
 			},
-			wantEngine:  true,
-			wantModel:   true,
-			wantRuntime: true,
+			setupClient: func(t *testing.T, isvc *v1beta1.InferenceService) client.Client {
+				modelName := *isvc.Spec.Predictor.Model.BaseModel
+				clusterBaseModel := &v1beta1.ClusterBaseModel{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: modelName,
+					},
+				}
+				return createFakeClient(t, clusterBaseModel)
+			},
+			wantEngine:    true,
+			wantModel:     true,
+			wantModelKind: stringPtr("ClusterBaseModel"),
+			wantRuntime:   true,
 		},
 		{
 			name: "predictor with no model but other fields",
@@ -444,6 +561,9 @@ func TestMigrateFromPredictorToNewArchitecture(t *testing.T) {
 						PodSpec: v1beta1.PodSpec{ServiceAccountName: "test-sa"},
 					},
 				},
+			},
+			setupClient: func(t *testing.T, isvc *v1beta1.InferenceService) client.Client {
+				return createFakeClient(t)
 			},
 			wantEngine:  true,
 			wantModel:   false,
@@ -461,6 +581,9 @@ func TestMigrateFromPredictorToNewArchitecture(t *testing.T) {
 					},
 				},
 			},
+			setupClient: func(t *testing.T, isvc *v1beta1.InferenceService) client.Client {
+				return createFakeClient(t)
+			},
 			wantEngine:      true,
 			wantModel:       false,
 			wantRuntime:     false,
@@ -473,14 +596,51 @@ func TestMigrateFromPredictorToNewArchitecture(t *testing.T) {
 			// Create a deep copy to avoid modifying the original
 			isvc := tt.isvc.DeepCopy()
 
+			// Create fake client using setupClient function if provided, otherwise use default logic
+			var c client.Client
+			if tt.setupClient != nil {
+				c = tt.setupClient(t, isvc)
+			} else {
+				// Default: Create fake client with test model if needed
+				if tt.wantModel && isvc.Spec.Predictor.Model != nil && isvc.Spec.Predictor.Model.BaseModel != nil {
+					modelName := *isvc.Spec.Predictor.Model.BaseModel
+					clusterBaseModel := &v1beta1.ClusterBaseModel{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: modelName,
+						},
+					}
+					c = createFakeClient(t, clusterBaseModel)
+				} else {
+					c = createFakeClient(t)
+				}
+			}
+
+			ctx := context.Background()
 			// Migrate the predictor
-			migrateFromPredictorToNewArchitecture(isvc)
+			err := migrateFromPredictorToNewArchitecture(ctx, c, isvc)
+
+			// Check for expected errors
+			if tt.expectError {
+				require.Error(t, err)
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg)
+				}
+				return
+			}
+			require.NoError(t, err)
 
 			// Verify engine presence
 			assert.Equal(t, tt.wantEngine, isvc.Spec.Engine != nil)
 
 			// Verify model presence
 			assert.Equal(t, tt.wantModel, isvc.Spec.Model != nil)
+
+			// Verify model kind if specified
+			if tt.wantModel && tt.wantModelKind != nil {
+				require.NotNil(t, isvc.Spec.Model)
+				require.NotNil(t, isvc.Spec.Model.Kind)
+				assert.Equal(t, *tt.wantModelKind, *isvc.Spec.Model.Kind, "Model kind should match")
+			}
 
 			// Verify runtime presence
 			assert.Equal(t, tt.wantRuntime, isvc.Spec.Runtime != nil)
@@ -554,7 +714,10 @@ func TestMigrateFromPredictorToNewArchitectureContainerHandling(t *testing.T) {
 				},
 			}
 
-			migrateFromPredictorToNewArchitecture(isvc)
+			c := createFakeClient(t)
+			ctx := context.Background()
+			err := migrateFromPredictorToNewArchitecture(ctx, c, isvc)
+			require.NoError(t, err)
 
 			require.NotNil(t, isvc.Spec.Engine, "Engine should be created")
 			require.NotNil(t, isvc.Spec.Engine.Runner, "Runner should be created")
@@ -583,7 +746,10 @@ func TestMigrateFromPredictorToNewArchitectureWithWorker(t *testing.T) {
 		},
 	}
 
-	migrateFromPredictorToNewArchitecture(isvc)
+	c := createFakeClient(t)
+	ctx := context.Background()
+	err := migrateFromPredictorToNewArchitecture(ctx, c, isvc)
+	require.NoError(t, err)
 
 	require.NotNil(t, isvc.Spec.Engine, "Engine should be created")
 	require.NotNil(t, isvc.Spec.Engine.Worker, "Worker should be migrated")
@@ -603,7 +769,10 @@ func TestMigrateFromPredictorToNewArchitectureEdgeCases(t *testing.T) {
 			},
 		}
 
-		migrateFromPredictorToNewArchitecture(isvc)
+		c := createFakeClient(t)
+		ctx := context.Background()
+		err := migrateFromPredictorToNewArchitecture(ctx, c, isvc)
+		require.NoError(t, err)
 
 		assert.NotNil(t, isvc.Spec.Engine, "Engine should be created")
 		assert.Nil(t, isvc.Spec.Model, "Model should not be created when BaseModel is nil")
@@ -620,7 +789,10 @@ func TestMigrateFromPredictorToNewArchitectureEdgeCases(t *testing.T) {
 			},
 		}
 
-		migrateFromPredictorToNewArchitecture(isvc)
+		c := createFakeClient(t)
+		ctx := context.Background()
+		err := migrateFromPredictorToNewArchitecture(ctx, c, isvc)
+		require.NoError(t, err)
 
 		assert.NotNil(t, isvc.Spec.Engine, "Engine should be created")
 		assert.Equal(t, "existing-model", isvc.Spec.Model.Name, "Existing model should be preserved")
@@ -639,7 +811,16 @@ func TestMigrateFromPredictorToNewArchitectureEdgeCases(t *testing.T) {
 			},
 		}
 
-		migrateFromPredictorToNewArchitecture(isvc)
+		// Create fake client with test model
+		clusterBaseModel := &v1beta1.ClusterBaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-model",
+			},
+		}
+		c := createFakeClient(t, clusterBaseModel)
+		ctx := context.Background()
+		err := migrateFromPredictorToNewArchitecture(ctx, c, isvc)
+		require.NoError(t, err)
 
 		assert.NotNil(t, isvc.Spec.Engine, "Engine should be created")
 		assert.Equal(t, "existing-runtime", isvc.Spec.Runtime.Name, "Existing runtime should be preserved")
@@ -657,7 +838,16 @@ func TestMigrateFromPredictorToNewArchitectureEdgeCases(t *testing.T) {
 			},
 		}
 
-		migrateFromPredictorToNewArchitecture(isvc)
+		// Create fake client with test model
+		clusterBaseModel := &v1beta1.ClusterBaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-model",
+			},
+		}
+		c := createFakeClient(t, clusterBaseModel)
+		ctx := context.Background()
+		err := migrateFromPredictorToNewArchitecture(ctx, c, isvc)
+		require.NoError(t, err)
 
 		assert.NotNil(t, isvc.Spec.Engine, "Engine should be created")
 		assert.NotNil(t, isvc.Spec.Model, "Model should be created")
@@ -676,7 +866,10 @@ func TestMigrateFromPredictorToNewArchitectureEdgeCases(t *testing.T) {
 			},
 		}
 
-		migrateFromPredictorToNewArchitecture(isvc)
+		c := createFakeClient(t)
+		ctx := context.Background()
+		err := migrateFromPredictorToNewArchitecture(ctx, c, isvc)
+		require.NoError(t, err)
 
 		assert.NotNil(t, isvc.Spec.Engine, "Engine should be created")
 		assert.Nil(t, isvc.Spec.Engine.Runner, "Runner should not be created when no containers")
@@ -696,7 +889,16 @@ func TestMigrateFromPredictorToNewArchitectureEdgeCases(t *testing.T) {
 			},
 		}
 
-		migrateFromPredictorToNewArchitecture(isvc)
+		// Create fake client with test model
+		clusterBaseModel := &v1beta1.ClusterBaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-model",
+			},
+		}
+		c := createFakeClient(t, clusterBaseModel)
+		ctx := context.Background()
+		err := migrateFromPredictorToNewArchitecture(ctx, c, isvc)
+		require.NoError(t, err)
 
 		assert.NotNil(t, isvc.Spec.Engine, "Engine should be created")
 		assert.NotNil(t, isvc.Spec.Model, "Model should be created")
@@ -715,7 +917,16 @@ func TestMigrateFromPredictorToNewArchitectureEdgeCases(t *testing.T) {
 			},
 		}
 
-		migrateFromPredictorToNewArchitecture(isvc)
+		// Create fake client with test model
+		clusterBaseModel := &v1beta1.ClusterBaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-model",
+			},
+		}
+		c := createFakeClient(t, clusterBaseModel)
+		ctx := context.Background()
+		err := migrateFromPredictorToNewArchitecture(ctx, c, isvc)
+		require.NoError(t, err)
 
 		assert.NotNil(t, isvc.Spec.Engine, "Engine should be created")
 		assert.NotNil(t, isvc.Spec.Model, "Model should be created")
@@ -874,7 +1085,30 @@ func TestDeprecationWarning(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			DefaultInferenceService(tt.isvc, nil)
+			// Save and restore environment variable
+			originalValue := os.Getenv(EnablePredictorMigrationEnvVar)
+			defer func(key, value string) {
+				_ = os.Setenv(key, value)
+			}(EnablePredictorMigrationEnvVar, originalValue)
+			_ = os.Setenv(EnablePredictorMigrationEnvVar, "true") // Enable migration for these tests
+
+			// Create fake client with test model if predictor has a model
+			var c client.Client
+			if tt.isvc.Spec.Predictor.Model != nil && tt.isvc.Spec.Predictor.Model.BaseModel != nil {
+				modelName := *tt.isvc.Spec.Predictor.Model.BaseModel
+				clusterBaseModel := &v1beta1.ClusterBaseModel{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: modelName,
+					},
+				}
+				c = createFakeClient(t, clusterBaseModel)
+			} else {
+				c = createFakeClient(t)
+			}
+
+			ctx := context.Background()
+			err := DefaultInferenceService(ctx, c, tt.isvc, nil)
+			require.NoError(t, err)
 
 			hasWarning := hasDeprecationWarning(tt.isvc)
 			assert.Equal(t, tt.wantWarning, hasWarning)
@@ -904,7 +1138,16 @@ func TestDeprecationWarningEdgeCases(t *testing.T) {
 			},
 		}
 
-		DefaultInferenceService(isvc, nil)
+		// Create fake client with test model
+		clusterBaseModel := &v1beta1.ClusterBaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-model",
+			},
+		}
+		c := createFakeClient(t, clusterBaseModel)
+		ctx := context.Background()
+		err := DefaultInferenceService(ctx, c, isvc, nil)
+		require.NoError(t, err)
 
 		val, exists := isvc.ObjectMeta.Annotations[constants.DeprecationWarning]
 		assert.True(t, exists, "Deprecation warning annotation should exist")
@@ -912,6 +1155,13 @@ func TestDeprecationWarningEdgeCases(t *testing.T) {
 	})
 
 	t.Run("predictor with nil annotations should create annotations map", func(t *testing.T) {
+		// Save and restore environment variable
+		originalValue := os.Getenv(EnablePredictorMigrationEnvVar)
+		defer func(key, value string) {
+			_ = os.Setenv(key, value)
+		}(EnablePredictorMigrationEnvVar, originalValue)
+		_ = os.Setenv(EnablePredictorMigrationEnvVar, "true") // Enable migration for these tests
+
 		isvc := &v1beta1.InferenceService{
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations: nil, // Explicitly nil
@@ -923,7 +1173,16 @@ func TestDeprecationWarningEdgeCases(t *testing.T) {
 			},
 		}
 
-		DefaultInferenceService(isvc, nil)
+		// Create fake client with test model
+		clusterBaseModel := &v1beta1.ClusterBaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-model",
+			},
+		}
+		c := createFakeClient(t, clusterBaseModel)
+		ctx := context.Background()
+		err := DefaultInferenceService(ctx, c, isvc, nil)
+		require.NoError(t, err)
 
 		assert.NotNil(t, isvc.ObjectMeta.Annotations, "Annotations map should be created")
 		val, exists := isvc.ObjectMeta.Annotations[constants.DeprecationWarning]
@@ -976,16 +1235,35 @@ func TestPredictorMigrationWithEnvironmentVariable(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set environment variable for this test case
-			err := os.Setenv(EnablePredictorMigrationEnvVar, tt.envValue)
-			if err != nil {
+			if err := os.Setenv(EnablePredictorMigrationEnvVar, tt.envValue); err != nil {
 				return
 			}
 
 			// Create a test InferenceService with Predictor
 			isvc := createInferenceServiceWithPredictor("test-isvc", "default", "test-model")
 
+			// Create fake client with test model if migration is expected
+			var c client.Client
+			if tt.expectMigration {
+				clusterBaseModel := &v1beta1.ClusterBaseModel{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-model",
+					},
+				}
+				c = createFakeClient(t, clusterBaseModel)
+			} else {
+				c = createFakeClient(t)
+			}
+
+			ctx := context.Background()
 			// Apply defaulting
-			DefaultInferenceService(isvc, nil)
+			err := DefaultInferenceService(ctx, c, isvc, nil)
+			if tt.expectMigration {
+				require.NoError(t, err)
+			} else {
+				// When migration is disabled, we don't need the model to exist
+				require.NoError(t, err)
+			}
 
 			// Check if migration happened (by checking if Engine was populated)
 			if tt.expectMigration {
@@ -1122,7 +1400,9 @@ func TestDefault(t *testing.T) {
 	t.Run("conversion error", func(t *testing.T) {
 		// Create an object that cannot be converted to InferenceService
 		invalidObj := &v1.Pod{}
-		defaulter := &InferenceServiceDefaulter{}
+		defaulter := &InferenceServiceDefaulter{
+			Client: createFakeClient(t),
+		}
 
 		err := defaulter.Default(context.Background(), invalidObj)
 

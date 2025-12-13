@@ -333,6 +333,7 @@ func main() {
 		if err = ctrl.NewWebhookManagedBy(mgr).
 			For(&v1beta1.InferenceService{}).
 			WithDefaulter(&isvc.InferenceServiceDefaulter{
+				Client:    mgr.GetClient(),
 				ClientSet: clientSet,
 			}).
 			WithValidator(&isvc.InferenceServiceValidator{

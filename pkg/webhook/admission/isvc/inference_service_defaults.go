@@ -9,12 +9,14 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 )
 
 var (
@@ -35,6 +37,7 @@ var (
 // +kubebuilder:object:generate=false
 // +k8s:openapi-gen=false
 type InferenceServiceDefaulter struct {
+	Client    client.Client
 	ClientSet kubernetes.Interface
 }
 
@@ -53,12 +56,14 @@ func (d *InferenceServiceDefaulter) Default(ctx context.Context, obj runtime.Obj
 		mutatorLogger.Error(err, "Failed to get deploy config")
 		return err
 	}
-	DefaultInferenceService(isvc, deployConfig)
+	if err = DefaultInferenceService(ctx, d.Client, isvc, deployConfig); err != nil {
+		return err
+	}
 	return nil
 }
 
 // DefaultInferenceService sets default values on the InferenceService
-func DefaultInferenceService(isvc *v1beta1.InferenceService, deployConfig *controllerconfig.DeployConfig) {
+func DefaultInferenceService(ctx context.Context, c client.Client, isvc *v1beta1.InferenceService, deployConfig *controllerconfig.DeployConfig) error {
 	// Create annotations map if it doesn't exist
 	if isvc.ObjectMeta.Annotations == nil {
 		isvc.ObjectMeta.Annotations = map[string]string{}
@@ -102,7 +107,9 @@ func DefaultInferenceService(isvc *v1beta1.InferenceService, deployConfig *contr
 		enableMigration := shouldEnableMigration()
 		if enableMigration {
 			// Migrate Predictor fields to Engine and top-level Model/Runtime
-			migrateFromPredictorToNewArchitecture(isvc)
+			if err := migrateFromPredictorToNewArchitecture(ctx, c, isvc); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -120,6 +127,7 @@ func DefaultInferenceService(isvc *v1beta1.InferenceService, deployConfig *contr
 	if isvc.Spec.Router != nil {
 		defaultRouter(isvc.Spec.Router)
 	}
+	return nil
 }
 
 // isPredictorUsed checks if the Predictor field is used in the InferenceService
@@ -159,10 +167,10 @@ func isPredictorUsed(isvc *v1beta1.InferenceService) bool {
 }
 
 // migrateFromPredictorToNewArchitecture moves fields from Predictor to Engine and top-level Model/Runtime
-func migrateFromPredictorToNewArchitecture(isvc *v1beta1.InferenceService) {
+func migrateFromPredictorToNewArchitecture(ctx context.Context, c client.Client, isvc *v1beta1.InferenceService) error {
 	// Skip migration if Engine is already configured
 	if isvc.Spec.Engine != nil {
-		return
+		return nil
 	}
 
 	// Create Engine component from Predictor
@@ -231,10 +239,18 @@ func migrateFromPredictorToNewArchitecture(isvc *v1beta1.InferenceService) {
 	if isvc.Spec.Model == nil && isvc.Spec.Predictor.Model != nil {
 		// Create ModelRef from BaseModel if it exists
 		if isvc.Spec.Predictor.Model.BaseModel != nil {
-			clusterBaseModel := "ClusterBaseModel"
+			modelName := *isvc.Spec.Predictor.Model.BaseModel
+
+			// Determine the model kind dynamically
+			kind, err := utils.DetermineModelKind(ctx, c, modelName, isvc.Namespace)
+			if err != nil {
+				mutatorLogger.Error(err, "Failed to determine model kind", "modelName", modelName, "namespace", isvc.Namespace)
+				return err
+			}
+
 			isvc.Spec.Model = &v1beta1.ModelRef{
-				Name: *isvc.Spec.Predictor.Model.BaseModel,
-				Kind: &clusterBaseModel, // Kind is a *string, needs to be a pointer
+				Name: modelName,
+				Kind: &kind,
 			}
 
 			// Copy any fine-tuned weights if present
@@ -252,6 +268,7 @@ func migrateFromPredictorToNewArchitecture(isvc *v1beta1.InferenceService) {
 			Kind: &clusterServingRuntime, // Kind is a *string, needs to be a pointer
 		}
 	}
+	return nil
 }
 
 // migrateSpecViaJSON uses JSON marshaling/unmarshaling to safely migrate from one spec to another
