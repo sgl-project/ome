@@ -1869,3 +1869,165 @@ func TestGetTargetServicePort_ServiceNameResolution(t *testing.T) {
 		})
 	}
 }
+
+func TestAddPreferredNodeAffinityForModel(t *testing.T) {
+	tests := []struct {
+		name          string
+		podSpec       *v1.PodSpec
+		baseModelMeta *metav1.ObjectMeta
+		wantAffinity  bool
+		wantLabelKey  string
+	}{
+		{
+			name:    "ClusterBaseModel - adds node affinity",
+			podSpec: &v1.PodSpec{},
+			baseModelMeta: &metav1.ObjectMeta{
+				Name:      "test-cluster-model",
+				Namespace: "", // Empty namespace indicates ClusterBaseModel
+			},
+			wantAffinity: true,
+			wantLabelKey: "models.ome.io/clusterbasemodel.test-cluster-model",
+		},
+		{
+			name:    "BaseModel (namespace-scoped) - adds node affinity",
+			podSpec: &v1.PodSpec{},
+			baseModelMeta: &metav1.ObjectMeta{
+				Name:      "test-model",
+				Namespace: "default",
+			},
+			wantAffinity: true,
+			wantLabelKey: "models.ome.io/default.basemodel.test-model",
+		},
+		{
+			name:          "nil podSpec - no panic",
+			podSpec:       nil,
+			baseModelMeta: &metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
+			wantAffinity:  false,
+		},
+		{
+			name:          "nil baseModelMeta - no panic",
+			podSpec:       &v1.PodSpec{},
+			baseModelMeta: nil,
+			wantAffinity:  false,
+		},
+		{
+			name: "existing affinity - appends without duplicating",
+			podSpec: &v1.PodSpec{
+				Affinity: &v1.Affinity{
+					NodeAffinity: &v1.NodeAffinity{
+						PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
+							{
+								Weight: 50,
+								Preference: v1.NodeSelectorTerm{
+									MatchExpressions: []v1.NodeSelectorRequirement{
+										{
+											Key:      "existing-label",
+											Operator: v1.NodeSelectorOpIn,
+											Values:   []string{"value"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			baseModelMeta: &metav1.ObjectMeta{
+				Name:      "test-model",
+				Namespace: "default",
+			},
+			wantAffinity: true,
+			wantLabelKey: "models.ome.io/default.basemodel.test-model",
+		},
+		{
+			name: "duplicate affinity check - does not add duplicate",
+			podSpec: &v1.PodSpec{
+				Affinity: &v1.Affinity{
+					NodeAffinity: &v1.NodeAffinity{
+						PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
+							{
+								Weight: 100,
+								Preference: v1.NodeSelectorTerm{
+									MatchExpressions: []v1.NodeSelectorRequirement{
+										{
+											Key:      "models.ome.io/default.basemodel.test-model",
+											Operator: v1.NodeSelectorOpIn,
+											Values:   []string{"Ready"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			baseModelMeta: &metav1.ObjectMeta{
+				Name:      "test-model",
+				Namespace: "default",
+			},
+			wantAffinity: true,
+			wantLabelKey: "models.ome.io/default.basemodel.test-model",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initialTermCount := 0
+			if tt.podSpec != nil && tt.podSpec.Affinity != nil &&
+				tt.podSpec.Affinity.NodeAffinity != nil {
+				initialTermCount = len(tt.podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution)
+			}
+
+			AddPreferredNodeAffinityForModel(tt.podSpec, tt.baseModelMeta)
+
+			if !tt.wantAffinity {
+				// For nil cases, just verify no panic occurred
+				return
+			}
+
+			assert.NotNil(t, tt.podSpec.Affinity, "Affinity should not be nil")
+			assert.NotNil(t, tt.podSpec.Affinity.NodeAffinity, "NodeAffinity should not be nil")
+
+			preferredTerms := tt.podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+			assert.NotEmpty(t, preferredTerms, "PreferredDuringSchedulingIgnoredDuringExecution should not be empty")
+
+			// Check that the expected label key exists in one of the terms
+			found := false
+			for _, term := range preferredTerms {
+				for _, expr := range term.Preference.MatchExpressions {
+					if expr.Key == tt.wantLabelKey {
+						found = true
+						assert.Equal(t, v1.NodeSelectorOpIn, expr.Operator)
+						assert.Contains(t, expr.Values, "Ready")
+						assert.Equal(t, int32(100), term.Weight)
+						break
+					}
+				}
+			}
+			assert.True(t, found, "Expected label key %s not found in affinity terms", tt.wantLabelKey)
+
+			// For the duplicate test case, verify no additional term was added
+			if tt.name == "duplicate affinity check - does not add duplicate" {
+				assert.Equal(t, initialTermCount, len(preferredTerms),
+					"Should not add duplicate affinity term")
+			}
+
+			// For the existing affinity case, verify the existing term is preserved
+			if tt.name == "existing affinity - appends without duplicating" {
+				assert.Equal(t, initialTermCount+1, len(preferredTerms),
+					"Should append new affinity term")
+				// Check the existing term is still there
+				existingFound := false
+				for _, term := range preferredTerms {
+					for _, expr := range term.Preference.MatchExpressions {
+						if expr.Key == "existing-label" {
+							existingFound = true
+							break
+						}
+					}
+				}
+				assert.True(t, existingFound, "Existing affinity term should be preserved")
+			}
+		})
+	}
+}

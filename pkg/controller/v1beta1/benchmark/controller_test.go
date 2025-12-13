@@ -516,6 +516,446 @@ func TestBenchmarkJobReconciler_buildBenchmarkCommand(t *testing.T) {
 	}
 }
 
+func TestBenchmarkJobReconciler_addNodeSelectorFromInferenceService(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = v1beta1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	tests := []struct {
+		name             string
+		benchmarkJob     *v1beta1.BenchmarkJob
+		inferenceService *v1beta1.InferenceService
+		baseModel        *v1beta1.BaseModel
+		clusterBaseModel *v1beta1.ClusterBaseModel
+		expectAffinity   bool
+		expectLabelKey   string
+		expectErr        bool
+	}{
+		{
+			name: "adds node affinity for BaseModel (namespace-scoped)",
+			benchmarkJob: &v1beta1.BenchmarkJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-benchmark",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BenchmarkJobSpec{
+					Endpoint: v1beta1.EndpointSpec{
+						InferenceService: &v1beta1.InferenceServiceReference{
+							Name:      "test-isvc",
+							Namespace: "default",
+						},
+					},
+				},
+			},
+			inferenceService: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Predictor: v1beta1.PredictorSpec{
+						Model: &v1beta1.ModelSpec{
+							BaseModel: StringPtr("test-base-model"),
+						},
+					},
+				},
+			},
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-base-model",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BaseModelSpec{
+					ModelFormat: v1beta1.ModelFormat{Name: "pytorch"},
+					Storage:     &v1beta1.StorageSpec{Path: StringPtr("/models/test")},
+				},
+			},
+			expectAffinity: true,
+			expectLabelKey: "models.ome.io/default.basemodel.test-base-model",
+			expectErr:      false,
+		},
+		{
+			name: "adds node affinity for ClusterBaseModel",
+			benchmarkJob: &v1beta1.BenchmarkJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-benchmark",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BenchmarkJobSpec{
+					Endpoint: v1beta1.EndpointSpec{
+						InferenceService: &v1beta1.InferenceServiceReference{
+							Name:      "test-isvc",
+							Namespace: "default",
+						},
+					},
+				},
+			},
+			inferenceService: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Predictor: v1beta1.PredictorSpec{
+						Model: &v1beta1.ModelSpec{
+							BaseModel: StringPtr("test-cluster-model"),
+						},
+					},
+				},
+			},
+			clusterBaseModel: &v1beta1.ClusterBaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-cluster-model",
+				},
+				Spec: v1beta1.BaseModelSpec{
+					ModelFormat: v1beta1.ModelFormat{Name: "pytorch"},
+					Storage:     &v1beta1.StorageSpec{Path: StringPtr("/models/cluster-test")},
+				},
+			},
+			expectAffinity: true,
+			expectLabelKey: "models.ome.io/clusterbasemodel.test-cluster-model",
+			expectErr:      false,
+		},
+		{
+			name: "error when InferenceService not found",
+			benchmarkJob: &v1beta1.BenchmarkJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-benchmark",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BenchmarkJobSpec{
+					Endpoint: v1beta1.EndpointSpec{
+						InferenceService: &v1beta1.InferenceServiceReference{
+							Name:      "non-existent-isvc",
+							Namespace: "default",
+						},
+					},
+				},
+			},
+			expectAffinity: false,
+			expectErr:      true,
+		},
+		{
+			name: "error when BaseModel not found",
+			benchmarkJob: &v1beta1.BenchmarkJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-benchmark",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BenchmarkJobSpec{
+					Endpoint: v1beta1.EndpointSpec{
+						InferenceService: &v1beta1.InferenceServiceReference{
+							Name:      "test-isvc",
+							Namespace: "default",
+						},
+					},
+				},
+			},
+			inferenceService: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Predictor: v1beta1.PredictorSpec{
+						Model: &v1beta1.ModelSpec{
+							BaseModel: StringPtr("non-existent-model"),
+						},
+					},
+				},
+			},
+			expectAffinity: false,
+			expectErr:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clientBuilder := cfake.NewClientBuilder().WithScheme(scheme)
+
+			if tt.inferenceService != nil {
+				clientBuilder = clientBuilder.WithObjects(tt.inferenceService)
+			}
+			if tt.baseModel != nil {
+				clientBuilder = clientBuilder.WithObjects(tt.baseModel)
+			}
+			if tt.clusterBaseModel != nil {
+				clientBuilder = clientBuilder.WithObjects(tt.clusterBaseModel)
+			}
+
+			client := clientBuilder.Build()
+
+			r := &BenchmarkJobReconciler{
+				Client: client,
+				Scheme: scheme,
+				Log:    zap.New(),
+			}
+
+			podSpec := &corev1.PodSpec{
+				Containers: []corev1.Container{
+					{Name: "benchmark", Image: "test-image"},
+				},
+			}
+
+			err := r.addNodeSelectorFromInferenceService(context.TODO(), tt.benchmarkJob, podSpec)
+
+			if tt.expectErr {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+
+			if tt.expectAffinity {
+				assert.NotNil(t, podSpec.Affinity, "Affinity should not be nil")
+				assert.NotNil(t, podSpec.Affinity.NodeAffinity, "NodeAffinity should not be nil")
+
+				preferredTerms := podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+				assert.NotEmpty(t, preferredTerms, "PreferredDuringSchedulingIgnoredDuringExecution should not be empty")
+
+				// Check that the expected label key exists
+				found := false
+				for _, term := range preferredTerms {
+					for _, expr := range term.Preference.MatchExpressions {
+						if expr.Key == tt.expectLabelKey {
+							found = true
+							assert.Equal(t, corev1.NodeSelectorOpIn, expr.Operator)
+							assert.Contains(t, expr.Values, "Ready")
+							assert.Equal(t, int32(100), term.Weight)
+							break
+						}
+					}
+				}
+				assert.True(t, found, "Expected label key %s not found in affinity terms", tt.expectLabelKey)
+			}
+		})
+	}
+}
+
+func TestBenchmarkJobReconciler_createPodSpec_NodeAffinity(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = v1beta1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = batchv1.AddToScheme(scheme)
+
+	benchmarkJob := &v1beta1.BenchmarkJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-benchmark",
+			Namespace: "default",
+		},
+		Spec: v1beta1.BenchmarkJobSpec{
+			Endpoint: v1beta1.EndpointSpec{
+				InferenceService: &v1beta1.InferenceServiceReference{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+			},
+			Task:                    "chat",
+			MaxTimePerIteration:     IntPtr(60),
+			MaxRequestsPerIteration: IntPtr(100),
+			OutputLocation: &v1beta1.StorageSpec{
+				StorageUri: StringPtr("oci://n/my-namespace/b/my-bucket/o/results"),
+			},
+		},
+	}
+
+	inferenceService := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-isvc",
+			Namespace: "default",
+		},
+		Spec: v1beta1.InferenceServiceSpec{
+			Predictor: v1beta1.PredictorSpec{
+				Model: &v1beta1.ModelSpec{
+					BaseModel: StringPtr("test-model"),
+				},
+			},
+		},
+		Status: v1beta1.InferenceServiceStatus{
+			URL: &apis.URL{
+				Scheme: "http",
+				Host:   "test-isvc.default.svc.cluster.local",
+			},
+		},
+	}
+
+	baseModel := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-model",
+			Namespace: "default",
+		},
+		Spec: v1beta1.BaseModelSpec{
+			ModelFormat: v1beta1.ModelFormat{Name: "pytorch"},
+			Storage:     &v1beta1.StorageSpec{Path: StringPtr("/models/test")},
+		},
+	}
+
+	client := cfake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(benchmarkJob, inferenceService, baseModel).
+		Build()
+
+	r := &BenchmarkJobReconciler{
+		Client: client,
+		Scheme: scheme,
+		Log:    zap.New(),
+	}
+
+	benchmarkConfig := &controllerconfig.BenchmarkJobConfig{
+		PodConfig: controllerconfig.PodConfig{
+			Image:         "test-image",
+			CPURequest:    "100m",
+			CPULimit:      "200m",
+			MemoryRequest: "100Mi",
+			MemoryLimit:   "200Mi",
+		},
+	}
+
+	podSpec, err := r.createPodSpec(context.TODO(), benchmarkJob, benchmarkConfig)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, podSpec)
+
+	// Verify node affinity was added
+	assert.NotNil(t, podSpec.Affinity, "Affinity should not be nil")
+	assert.NotNil(t, podSpec.Affinity.NodeAffinity, "NodeAffinity should not be nil")
+
+	preferredTerms := podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+	assert.NotEmpty(t, preferredTerms, "PreferredDuringSchedulingIgnoredDuringExecution should not be empty")
+
+	// Check that the expected label key exists
+	expectedLabelKey := "models.ome.io/default.basemodel.test-model"
+	found := false
+	for _, term := range preferredTerms {
+		for _, expr := range term.Preference.MatchExpressions {
+			if expr.Key == expectedLabelKey {
+				found = true
+				assert.Equal(t, corev1.NodeSelectorOpIn, expr.Operator)
+				assert.Contains(t, expr.Values, "Ready")
+				assert.Equal(t, int32(100), term.Weight)
+				break
+			}
+		}
+	}
+	assert.True(t, found, "Expected label key %s not found in affinity terms", expectedLabelKey)
+}
+
+func TestBenchmarkJobReconciler_createPodSpec_NodeAffinity_WithPodOverride(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = v1beta1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = batchv1.AddToScheme(scheme)
+
+	// BenchmarkJob with PodOverride (this triggered the bug)
+	benchmarkJob := &v1beta1.BenchmarkJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-benchmark",
+			Namespace: "default",
+		},
+		Spec: v1beta1.BenchmarkJobSpec{
+			Endpoint: v1beta1.EndpointSpec{
+				InferenceService: &v1beta1.InferenceServiceReference{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+			},
+			Task:                    "chat",
+			MaxTimePerIteration:     IntPtr(60),
+			MaxRequestsPerIteration: IntPtr(100),
+			OutputLocation: &v1beta1.StorageSpec{
+				StorageUri: StringPtr("oci://n/my-namespace/b/my-bucket/o/results"),
+			},
+			// PodOverride triggers the applyPodOverrides path
+			PodOverride: &v1beta1.PodOverride{
+				Image: "custom-image:latest",
+			},
+		},
+	}
+
+	inferenceService := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-isvc",
+			Namespace: "default",
+		},
+		Spec: v1beta1.InferenceServiceSpec{
+			Predictor: v1beta1.PredictorSpec{
+				Model: &v1beta1.ModelSpec{
+					BaseModel: StringPtr("test-model"),
+				},
+			},
+		},
+		Status: v1beta1.InferenceServiceStatus{
+			URL: &apis.URL{
+				Scheme: "http",
+				Host:   "test-isvc.default.svc.cluster.local",
+			},
+		},
+	}
+
+	baseModel := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-model",
+			Namespace: "default",
+		},
+		Spec: v1beta1.BaseModelSpec{
+			ModelFormat: v1beta1.ModelFormat{Name: "pytorch"},
+			Storage:     &v1beta1.StorageSpec{Path: StringPtr("/models/test")},
+		},
+	}
+
+	client := cfake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(benchmarkJob, inferenceService, baseModel).
+		Build()
+
+	r := &BenchmarkJobReconciler{
+		Client: client,
+		Scheme: scheme,
+		Log:    zap.New(),
+	}
+
+	benchmarkConfig := &controllerconfig.BenchmarkJobConfig{
+		PodConfig: controllerconfig.PodConfig{
+			Image:         "test-image",
+			CPURequest:    "100m",
+			CPULimit:      "200m",
+			MemoryRequest: "100Mi",
+			MemoryLimit:   "200Mi",
+		},
+	}
+
+	podSpec, err := r.createPodSpec(context.TODO(), benchmarkJob, benchmarkConfig)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, podSpec)
+
+	// Verify PodOverride was applied (custom image)
+	assert.Equal(t, "custom-image:latest", podSpec.Containers[0].Image)
+
+	// Verify node affinity was preserved after PodOverride was applied
+	assert.NotNil(t, podSpec.Affinity, "Affinity should not be nil after PodOverride")
+	assert.NotNil(t, podSpec.Affinity.NodeAffinity, "NodeAffinity should not be nil after PodOverride")
+
+	preferredTerms := podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+	assert.NotEmpty(t, preferredTerms, "PreferredDuringSchedulingIgnoredDuringExecution should not be empty after PodOverride")
+
+	// Check that the expected label key exists
+	expectedLabelKey := "models.ome.io/default.basemodel.test-model"
+	found := false
+	for _, term := range preferredTerms {
+		for _, expr := range term.Preference.MatchExpressions {
+			if expr.Key == expectedLabelKey {
+				found = true
+				assert.Equal(t, corev1.NodeSelectorOpIn, expr.Operator)
+				assert.Contains(t, expr.Values, "Ready")
+				assert.Equal(t, int32(100), term.Weight)
+				break
+			}
+		}
+	}
+	assert.True(t, found, "Expected label key %s not found in affinity terms after PodOverride", expectedLabelKey)
+}
+
 func TestBenchmarkJobReconciler_updateStatus(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = v1beta1.AddToScheme(scheme)
