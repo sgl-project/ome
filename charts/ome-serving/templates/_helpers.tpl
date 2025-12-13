@@ -297,13 +297,6 @@ llama-4-maverick-17b-128e-instruct-fp8-grpc:
   priority: 2
   sizeRange: ["400B", "402B"]
   servedName: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
-llama-4-maverick-17b-128e-instruct-fp8-pd:
-  architecture: Llama4ForConditionalGeneration
-  transformersVersion: "4.51.0.dev0"
-  autoSelect: false
-  priority: 2
-  sizeRange: ["400B", "402B"]
-  servedName: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
 llama-4-maverick-17b-128e-instruct-fp8-pd-grpc:
   architecture: Llama4ForConditionalGeneration
   transformersVersion: "4.51.0"
@@ -314,13 +307,6 @@ llama-4-maverick-17b-128e-instruct-fp8-pd-grpc:
 llama-4-scout-17b-16e-instruct:
   architecture: Llama4ForConditionalGeneration
   transformersVersion: "4.51.0.dev0"
-  autoSelect: true
-  priority: 2
-  sizeRange: ["100B", "109B"]
-  servedName: meta-llama/Llama-4-Scout-17B-16E-Instruct
-llama-4-scout-17b-16e-instruct-pd:
-  architecture: Llama4ForConditionalGeneration
-  transformersVersion: "4.51.0"
   autoSelect: true
   priority: 2
   sizeRange: ["100B", "109B"]
@@ -425,13 +411,6 @@ llama-3-1-70b-instruct:
   priority: 1
   sizeRange: ["60B", "75B"]
   servedName: meta-llama/Meta-Llama-3.1-70B-Instruct
-llama-3-1-70b-instruct-pd:
-  architecture: LlamaForCausalLM
-  transformersVersion: "4.43.0"
-  autoSelect: false
-  priority: 1
-  sizeRange: ["60B", "75B"]
-  servedName: meta-llama/Llama-3.1-70B-Instruct
 llama-3-1-8b-instruct:
   architecture: LlamaForCausalLM
   transformersVersion: "4.42.3"
@@ -481,23 +460,9 @@ llama-3-2-1b-instruct:
   priority: 1
   sizeRange: ["500M", "2B"]
   servedName: meta-llama/Llama-3.2-1B-Instruct
-llama-3-2-1b-instruct-pd:
-  architecture: LlamaForCausalLM
-  transformersVersion: "4.43.0"
-  autoSelect: false
-  priority: 1
-  sizeRange: ["500M", "2B"]
-  servedName: meta-llama/Llama-3.2-1B-Instruct
 llama-3-2-3b-instruct:
   architecture: LlamaForCausalLM
   transformersVersion: "4.45.0.dev0"
-  autoSelect: false
-  priority: 1
-  sizeRange: ["2B", "4B"]
-  servedName: meta-llama/Llama-3.2-3B-Instruct
-llama-3-2-3b-instruct-pd:
-  architecture: LlamaForCausalLM
-  transformersVersion: "4.43.0"
   autoSelect: false
   priority: 1
   sizeRange: ["2B", "4B"]
@@ -530,13 +495,6 @@ llama-3-3-70b-instruct-fp8-dynamic:
   priority: 1
   sizeRange: ["60B", "75B"]
   servedName: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
-llama-3-3-70b-instruct-pd:
-  architecture: LlamaForCausalLM
-  transformersVersion: "4.45.0"
-  autoSelect: false
-  priority: 1
-  sizeRange: ["60B", "75B"]
-  servedName: meta-llama/Llama-3.3-70B-Instruct
 llama-3-70b-instruct:
   architecture: LlamaForCausalLM
   transformersVersion: "4.40.0.dev0"
@@ -616,13 +574,6 @@ deepseek-rdma:
   priority: 1
   sizeRange: ["650B", "700B"]
   servedName: deepseek-rdma
-deepseek-rdma-pd:
-  architecture: DeepseekV3ForCausalLM
-  transformersVersion: "4.33.1"
-  autoSelect: false
-  priority: 1
-  sizeRange: ["650B", "700B"]
-  servedName: deepseek-rdma-pd
 deepseek-v2-lite-chat:
   architecture: DeepseekV2ForCausalLM
   transformersVersion: "4.33.1"
@@ -658,13 +609,6 @@ kimi-k2-instruct:
   priority: 1
   sizeRange: ["900B", "1100B"]
   servedName: moonshotai/Kimi-K2-Instruct
-kimi-k2-pd:
-  architecture: DeepseekV3ForCausalLM
-  transformersVersion: "4.48.3"
-  autoSelect: true
-  priority: 1
-  sizeRange: ["1T", "1.5T"]
-  servedName: kimi-k2-pd
 
 # Mistral models
 e5-mistral-7b-instruct:
@@ -675,13 +619,6 @@ e5-mistral-7b-instruct:
   sizeRange: ["6B", "8B"]
   servedName: intfloat/e5-mistral-7b-instruct
 mistral-7b-instruct:
-  architecture: MistralForCausalLM
-  transformersVersion: "4.36.0"
-  autoSelect: false
-  priority: 1
-  sizeRange: ["5B", "9B"]
-  servedName: mistralai/Mistral-7B-Instruct-v0.2
-mistral-7b-instruct-pd:
   architecture: MistralForCausalLM
   transformersVersion: "4.36.0"
   autoSelect: false
@@ -736,13 +673,6 @@ mixtral-8x7b-instruct:
   autoSelect: false
   priority: 1
   sizeRange: ["40B", "50B"]
-  servedName: mistralai/Mixtral-8x7B-Instruct-v0.1
-mixtral-8x7b-instruct-pd:
-  architecture: MixtralForCausalLM
-  transformersVersion: "4.36.0.dev0"
-  autoSelect: false
-  priority: 1
-  sizeRange: ["45B", "50B"]
   servedName: mistralai/Mixtral-8x7B-Instruct-v0.1
 
 # Gemma models

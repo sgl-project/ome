@@ -5,11 +5,11 @@
 {{-   $namespace = $model.namespace | default $modelName }}
 {{- end }}
 {{/*
-  Detect PD mode: either explicitly set via pdMode field, or auto-detected from model name ending with "-pd"
+  PD mode: explicitly set via pdMode field
   PD mode requires both decoder and router
   Non-PD mode can optionally include router (but not decoder)
 */}}
-{{- $isPdMode := or $model.pdMode (hasSuffix "-pd" $modelName) }}
+{{- $isPdMode := $model.pdMode }}
 {{/*
   Helper to get replica values - supports both nested (engine.minReplicas) and flat (minReplicas) format
 */}}
