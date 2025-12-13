@@ -190,14 +190,6 @@ models:
     runtime:
       gpus: 1
 
-  deepseek-rdma-pd:
-    enabled: false
-    vendor: other
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: deepseek-rdma-pd
-    runtime:
-      gpus: 1
-
   deepseek-v2-lite-chat:
     enabled: false
     vendor: deepseek
@@ -526,14 +518,6 @@ models:
     runtime:
       gpus: 8
 
-  kimi-k2-pd:
-    enabled: false
-    vendor: other
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: kimi-k2-pd
-    runtime:
-      gpus: 1
-
   kimi-vl-a3b-instruct:
     enabled: false
     vendor: moonshot
@@ -622,14 +606,6 @@ models:
     runtime:
       gpus: 4
 
-  llama-3-1-70b-instruct-pd:
-    enabled: false
-    vendor: meta
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: meta-llama/Llama-3.1-70B-Instruct
-    runtime:
-      gpus: 4
-
   llama-3-1-8b-instruct:
     enabled: false
     vendor: meta
@@ -686,23 +662,7 @@ models:
     runtime:
       gpus: 1
 
-  llama-3-2-1b-instruct-pd:
-    enabled: false
-    vendor: meta
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: meta-llama/Llama-3.2-1B-Instruct
-    runtime:
-      gpus: 1
-
   llama-3-2-3b-instruct:
-    enabled: false
-    vendor: meta
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: meta-llama/Llama-3.2-3B-Instruct
-    runtime:
-      gpus: 1
-
-  llama-3-2-3b-instruct-pd:
     enabled: false
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
@@ -741,14 +701,6 @@ models:
     hfModelId: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
     runtime:
       gpus: 2
-
-  llama-3-3-70b-instruct-pd:
-    enabled: false
-    vendor: meta
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: meta-llama/Llama-3.3-70B-Instruct
-    runtime:
-      gpus: 4
 
   llama-3-3-nemotron-super-49b-v1:
     enabled: false
@@ -798,14 +750,6 @@ models:
     runtime:
       gpus: 8
 
-  llama-4-maverick-17b-128e-instruct-fp8-pd:
-    enabled: false
-    vendor: meta
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
-    runtime:
-      gpus: 8
-
   llama-4-maverick-17b-128e-instruct-fp8-pd-grpc:
     enabled: false
     vendor: meta
@@ -815,14 +759,6 @@ models:
       gpus: 8
 
   llama-4-scout-17b-16e-instruct:
-    enabled: false
-    vendor: meta
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: meta-llama/Llama-4-Scout-17B-16E-Instruct
-    runtime:
-      gpus: 4
-
-  llama-4-scout-17b-16e-instruct-pd:
     enabled: false
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
@@ -918,14 +854,6 @@ models:
     runtime:
       gpus: 2
 
-  mistral-7b-instruct-pd:
-    enabled: false
-    vendor: mistral
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: mistralai/Mistral-7B-Instruct-v0.2
-    runtime:
-      gpus: 2
-
   mistral-7b-instruct-v0-2:
     enabled: false
     vendor: mistral
@@ -981,14 +909,6 @@ models:
     hfModelId: mistralai/Mixtral-8x7B-Instruct-v0.1
     runtime:
       gpus: 4
-
-  mixtral-8x7b-instruct-pd:
-    enabled: false
-    vendor: mistral
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: mistralai/Mixtral-8x7B-Instruct-v0.1
-    runtime:
-      gpus: 2
 
   mpt-7b:
     enabled: false
