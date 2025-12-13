@@ -1160,6 +1160,26 @@ func schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref common.ReferenceCallback) com
 							},
 						},
 					},
+					"apiCapabilities": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "API capabilities supported by the model, e.g., \"OPENAI_V1_CHAT_COMPLETIONS\"",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
 					"modelConfiguration": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Configuration of the model, stored as generic JSON for flexibility.",

@@ -29,6 +29,7 @@ func TestConvertMetadataToModelConfig(t *testing.T) {
 				ModelParameterSize: "7.11B",
 				MaxTokens:          4096,
 				ModelCapabilities:  []string{"TEXT_GENERATION", "CHAT_COMPLETION"},
+				ApiCapabilities:    []v1beta1.ModelAPICapability{v1beta1.ModelAPICapabilityOpenAIv1ChatCompletions},
 				Quantization:       "FP16",
 				DecodedModelConfiguration: map[string]interface{}{
 					"hidden_size":         4096,
@@ -44,6 +45,7 @@ func TestConvertMetadataToModelConfig(t *testing.T) {
 				ModelParameterSize: "7.11B",
 				MaxTokens:          4096,
 				ModelCapabilities:  []string{"TEXT_GENERATION", "CHAT_COMPLETION"},
+				ApiCapabilities:    []string{"OPENAI_V1_CHAT_COMPLETIONS"},
 				Quantization:       "FP16",
 				DecodedModelConfiguration: map[string]interface{}{
 					"hidden_size":         4096,
@@ -159,6 +161,7 @@ func TestModelEntryMarshaling(t *testing.T) {
 			ModelParameterSize: "70B",
 			MaxTokens:          4096,
 			ModelCapabilities:  []string{"TEXT_GENERATION", "CHAT_COMPLETION"},
+			ApiCapabilities:    []string{string(v1beta1.ModelAPICapabilityOpenAIv1ChatCompletions)},
 		},
 	}
 
