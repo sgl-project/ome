@@ -1,3 +1,7 @@
+{{/*
+  ClusterServingRuntime template for model inference serving.
+  Currently supports sglang runtime. vLLM support coming soon.
+*/}}
 {{- $registry := include "ome-serving.modelRegistry" . | fromYaml }}
 {{- range $modelName, $model := .Values.models }}
 {{- if and $model.enabled (ne $model.createRuntime false) }}
