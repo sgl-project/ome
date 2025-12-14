@@ -7,6 +7,9 @@
 {{- end }}
 {{- $gpus := $model.runtime.gpus | default 1 | int }}
 {{- $preset := index $.Values.gpuPresets (printf "%d" $gpus) }}
+{{- $isPdMode := $model.pdMode | default false }}
+{{- $ibDevice := $model.runtime.ibDevice | default $.Values.defaults.ibDevice | default "mlx5_0" }}
+{{- $rdmaProfile := $model.runtime.rdmaProfile | default $.Values.defaults.rdmaProfile | default "oci-roce" }}
 ---
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
@@ -33,6 +36,11 @@ spec:
     max: {{ index $modelInfo.sizeRange 1 }}
   engineConfig:
     annotations:
+{{- if $isPdMode }}
+      rdma.ome.io/auto-inject: "true"
+      rdma.ome.io/profile: {{ $rdmaProfile | quote }}
+      rdma.ome.io/container-name: "ome-container"
+{{- end }}
       prometheus.io/scrape: "true"
       prometheus.io/port: "8080"
       prometheus.io/path: "/metrics"
@@ -46,6 +54,10 @@ spec:
       - name: dshm
         emptyDir:
           medium: Memory
+{{- if $isPdMode }}
+    dnsPolicy: ClusterFirstWithHostNet
+    hostNetwork: true
+{{- end }}
     runner:
       name: ome-container
       image: {{ $model.runtime.image | default $.Values.defaults.image }}
@@ -62,7 +74,6 @@ spec:
         - --port
         - "8080"
         - --enable-metrics
-        - --log-requests
         - --model-path
         - $(MODEL_PATH)
         - --tp-size
@@ -71,6 +82,12 @@ spec:
         - "{{ $model.runtime.memFrac | default $.Values.defaults.memFrac }}"
         - --served-model-name
         - {{ $modelInfo.servedName }}
+{{- if $isPdMode }}
+        - --disaggregation-mode
+        - prefill
+        - --disaggregation-ib-device
+        - {{ $ibDevice }}
+{{- end }}
         {{- with $model.runtime.extraArgs }}
         {{- range . }}
         - {{ . | quote }}
@@ -90,7 +107,11 @@ spec:
           nvidia.com/gpu: {{ $gpus }}
       readinessProbe:
         httpGet:
+{{- if $isPdMode }}
+          path: /health
+{{- else }}
           path: /health_generate
+{{- end }}
           port: 8080
         failureThreshold: 3
         successThreshold: 1
@@ -106,13 +127,109 @@ spec:
         timeoutSeconds: 60
       startupProbe:
         httpGet:
+{{- if $isPdMode }}
+          path: /health
+{{- else }}
           path: /health_generate
+{{- end }}
           port: 8080
         failureThreshold: 150
         successThreshold: 1
         periodSeconds: 6
         initialDelaySeconds: 60
         timeoutSeconds: 30
+{{- if $isPdMode }}
+  decoderConfig:
+    annotations:
+      rdma.ome.io/auto-inject: "true"
+      rdma.ome.io/profile: {{ $rdmaProfile | quote }}
+      rdma.ome.io/container-name: "ome-container"
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+      prometheus.io/path: "/metrics"
+    labels:
+      logging-forward: enabled
+    tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+    dnsPolicy: ClusterFirstWithHostNet
+    hostNetwork: true
+    runner:
+      name: ome-container
+      image: {{ $model.runtime.image | default $.Values.defaults.image }}
+      ports:
+        - containerPort: 8080
+          name: http1
+          protocol: TCP
+      command:
+        - python3
+        - -m
+        - sglang.launch_server
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --enable-metrics
+        - --model-path
+        - $(MODEL_PATH)
+        - --tp-size
+        - "{{ $gpus }}"
+        - --mem-frac
+        - "{{ $model.runtime.memFrac | default $.Values.defaults.memFrac }}"
+        - --served-model-name
+        - {{ $modelInfo.servedName }}
+        - --disaggregation-mode
+        - decode
+        - --disaggregation-ib-device
+        - {{ $ibDevice }}
+        {{- with $model.runtime.extraArgs }}
+        {{- range . }}
+        - {{ . | quote }}
+        {{- end }}
+        {{- end }}
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: {{ $preset.cpu }}
+          memory: {{ $preset.memory }}
+          nvidia.com/gpu: {{ $gpus }}
+        limits:
+          cpu: {{ $preset.cpu }}
+          memory: {{ $preset.memory }}
+          nvidia.com/gpu: {{ $gpus }}
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
+{{- end }}
   routerConfig:
     runner:
       name: router
@@ -132,13 +249,23 @@ spec:
         - "0.0.0.0"
         - --port
         - "8080"
+{{- if $isPdMode }}
+        - --pd-disaggregation
+{{- end }}
         - --service-discovery
         - --service-discovery-namespace
         - $(NAMESPACE)
         - --service-discovery-port
         - "8080"
+{{- if $isPdMode }}
+        - --prefill-selector
+        - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+        - --decode-selector
+        - component=decoder ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+{{- else }}
         - --selector
         - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+{{- end }}
       env:
         - name: NAMESPACE
           valueFrom:
