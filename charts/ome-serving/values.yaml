@@ -204,15 +204,6 @@ models:
     runtime:
       gpus: 1
 
-  deepseek-rdma:
-    enabled: false
-    createRuntime: true
-    vendor: other
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: deepseek-rdma
-    runtime:
-      gpus: 1
-
   deepseek-v2-lite-chat:
     enabled: false
     createRuntime: true
@@ -420,24 +411,6 @@ models:
     runtime:
       gpus: 4
 
-  gpt-oss-120b-bf16:
-    enabled: false
-    createRuntime: true
-    vendor: lmsys
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: lmsys/gpt-oss-120b-bf16
-    runtime:
-      gpus: 8
-
-  gpt-oss-120b-grpc:
-    enabled: false
-    createRuntime: true
-    vendor: openai
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: openai/gpt-oss-120b
-    runtime:
-      gpus: 2
-
   gpt-oss-20b:
     enabled: false
     createRuntime: true
@@ -446,24 +419,6 @@ models:
     hfModelId: openai/gpt-oss-20b
     runtime:
       gpus: 2
-
-  gpt-oss-20b-bf16:
-    enabled: false
-    createRuntime: true
-    vendor: lmsys
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: lmsys/gpt-oss-20b-bf16
-    runtime:
-      gpus: 2
-
-  gpt-oss-20b-grpc:
-    enabled: false
-    createRuntime: true
-    vendor: openai
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: openai/gpt-oss-20b
-    runtime:
-      gpus: 1
 
   granite-3-0-3b-a800m-instruct:
     enabled: false
@@ -609,7 +564,7 @@ models:
     runtime:
       gpus: 4
 
-  llama-2-13b:
+  llama-2-13b-hf:
     enabled: false
     createRuntime: true
     vendor: meta
@@ -627,7 +582,7 @@ models:
     runtime:
       gpus: 1
 
-  llama-2-70b:
+  llama-2-70b-hf:
     enabled: false
     createRuntime: true
     vendor: meta
@@ -682,15 +637,6 @@ models:
       gpus: 4
 
   llama-3-1-8b-instruct:
-    enabled: false
-    createRuntime: true
-    vendor: meta
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: meta-llama/Llama-3.1-8B-Instruct
-    runtime:
-      gpus: 1
-
-  llama-3-1-8b-instruct-grpc:
     enabled: false
     createRuntime: true
     vendor: meta
@@ -834,24 +780,6 @@ models:
     runtime:
       gpus: 8
 
-  llama-4-maverick-17b-128e-instruct-fp8-grpc:
-    enabled: false
-    createRuntime: true
-    vendor: meta
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
-    runtime:
-      gpus: 8
-
-  llama-4-maverick-17b-128e-instruct-fp8-pd-grpc:
-    enabled: false
-    createRuntime: true
-    vendor: meta
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
-    runtime:
-      gpus: 8
-
   llama-4-scout-17b-16e-instruct:
     enabled: false
     createRuntime: true
@@ -951,15 +879,6 @@ models:
     runtime:
       gpus: 4
 
-  mistral-7b-instruct:
-    enabled: false
-    createRuntime: true
-    vendor: mistral
-    capabilities: [TEXT_TO_TEXT]
-    hfModelId: mistralai/Mistral-7B-Instruct-v0.2
-    runtime:
-      gpus: 2
-
   mistral-7b-instruct-v0-2:
     enabled: false
     createRuntime: true
@@ -967,7 +886,7 @@ models:
     capabilities: [TEXT_TO_TEXT]
     hfModelId: mistralai/Mistral-7B-Instruct-v0.2
     runtime:
-      gpus: 1
+      gpus: 2
 
   mistral-7b-instruct-v0-3:
     enabled: false
@@ -996,7 +915,7 @@ models:
     runtime:
       gpus: 2
 
-  mixtral-8x22b:
+  mixtral-8x22b-v0-1:
     enabled: false
     createRuntime: true
     vendor: mistral
@@ -1005,7 +924,7 @@ models:
     runtime:
       gpus: 8
 
-  mixtral-8x7b:
+  mixtral-8x7b-v0-1:
     enabled: false
     createRuntime: true
     vendor: mistral
@@ -1014,7 +933,7 @@ models:
     runtime:
       gpus: 4
 
-  mixtral-8x7b-instruct:
+  mixtral-8x7b-instruct-v0-1:
     enabled: false
     createRuntime: true
     vendor: mistral
