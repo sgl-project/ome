@@ -1,5 +1,5 @@
 # OME Serving Helm Chart Values
-# All 176 models with enabled: false by default
+# All 165 models with enabled: false by default
 # Architecture details are auto-detected from model name
 
 # Defaults for sglang runtime
@@ -9,6 +9,9 @@ defaults:
   memFrac: "0.9"
   minReplicas: 1
   maxReplicas: 1
+  # PD (Prefill-Decode disaggregation) mode defaults
+  ibDevice: mlx5_0        # InfiniBand device for RDMA
+  rdmaProfile: oci-roce   # RDMA profile for network
 
 # GPU resource presets (gpus -> cpu, memory)
 gpuPresets:
