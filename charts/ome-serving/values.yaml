@@ -35,6 +35,7 @@ models:
 
   afm-4-5b-base:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: arcee-ai/AFM-4.5B-Base
@@ -43,6 +44,7 @@ models:
 
   baichuan2-13b-chat:
     enabled: false
+    createRuntime: true
     vendor: baichuan
     capabilities: [TEXT_TO_TEXT]
     hfModelId: baichuan-inc/Baichuan2-13B-Chat
@@ -51,6 +53,7 @@ models:
 
   baichuan2-7b-chat:
     enabled: false
+    createRuntime: true
     vendor: baichuan
     capabilities: [TEXT_TO_TEXT]
     hfModelId: baichuan-inc/Baichuan2-7B-Chat
@@ -59,6 +62,7 @@ models:
 
   bge-large-en-v1-5:
     enabled: false
+    createRuntime: true
     vendor: baai
     capabilities: [EMBEDDING]
     hfModelId: BAAI/bge-large-en-v1.5
@@ -67,6 +71,7 @@ models:
 
   bge-m3:
     enabled: false
+    createRuntime: true
     vendor: baai
     capabilities: [EMBEDDING]
     hfModelId: BAAI/bge-m3
@@ -75,6 +80,7 @@ models:
 
   bge-reranker-v2-m3:
     enabled: false
+    createRuntime: true
     vendor: baai
     capabilities: [EMBEDDING]
     hfModelId: BAAI/bge-reranker-v2-m3
@@ -83,6 +89,7 @@ models:
 
   bloomz-7b1:
     enabled: false
+    createRuntime: true
     vendor: bigscience
     capabilities: [TEXT_TO_TEXT]
     hfModelId: bigscience/bloomz-7b1
@@ -91,6 +98,7 @@ models:
 
   c4ai-command-r-v01:
     enabled: false
+    createRuntime: true
     vendor: cohere
     capabilities: [TEXT_TO_TEXT]
     hfModelId: CohereForAI/c4ai-command-r-v01
@@ -99,6 +107,7 @@ models:
 
   chatglm2-6b:
     enabled: false
+    createRuntime: true
     vendor: glm
     capabilities: [TEXT_TO_TEXT]
     hfModelId: THUDM/chatglm2-6b
@@ -107,6 +116,7 @@ models:
 
   clip-vit-large-patch14-336:
     enabled: false
+    createRuntime: true
     vendor: openai
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: openai/clip-vit-large-patch14-336
@@ -115,6 +125,7 @@ models:
 
   dbrx-instruct:
     enabled: false
+    createRuntime: true
     vendor: databricks
     capabilities: [TEXT_TO_TEXT]
     hfModelId: databricks/dbrx-instruct
@@ -123,6 +134,7 @@ models:
 
   deepseek-coder-7b-instruct-v1-5:
     enabled: false
+    createRuntime: true
     vendor: deepseek
     capabilities: [TEXT_TO_TEXT]
     hfModelId: deepseek-ai/deepseek-coder-7b-instruct-v1.5
@@ -131,6 +143,7 @@ models:
 
   deepseek-llm-7b-chat:
     enabled: false
+    createRuntime: true
     vendor: deepseek
     capabilities: [TEXT_TO_TEXT]
     hfModelId: deepseek-ai/deepseek-llm-7b-chat
@@ -139,6 +152,7 @@ models:
 
   deepseek-r1-distill-llama-70b:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: deepseek-ai/DeepSeek-R1-Distill-Llama-70B
@@ -147,6 +161,7 @@ models:
 
   deepseek-r1-distill-llama-8b:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: deepseek-ai/DeepSeek-R1-Distill-Llama-8B
@@ -155,6 +170,7 @@ models:
 
   deepseek-r1-distill-qwen-1-5b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
@@ -163,6 +179,7 @@ models:
 
   deepseek-r1-distill-qwen-14b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: deepseek-ai/DeepSeek-R1-Distill-Qwen-14B
@@ -171,6 +188,7 @@ models:
 
   deepseek-r1-distill-qwen-32b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
@@ -179,6 +197,7 @@ models:
 
   deepseek-r1-distill-qwen-7b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
@@ -187,6 +206,7 @@ models:
 
   deepseek-rdma:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: deepseek-rdma
@@ -195,6 +215,7 @@ models:
 
   deepseek-v2-lite-chat:
     enabled: false
+    createRuntime: true
     vendor: deepseek
     capabilities: [TEXT_TO_TEXT]
     hfModelId: deepseek-ai/DeepSeek-V2-Lite-Chat
@@ -203,6 +224,7 @@ models:
 
   deepseek-v3:
     enabled: false
+    createRuntime: true
     vendor: deepseek
     capabilities: [TEXT_TO_TEXT]
     hfModelId: deepseek-ai/DeepSeek-V3
@@ -211,6 +233,7 @@ models:
 
   deepseek-v3-0324:
     enabled: false
+    createRuntime: true
     vendor: deepseek
     capabilities: [TEXT_TO_TEXT]
     hfModelId: deepseek-ai/DeepSeek-V3-0324
@@ -219,6 +242,7 @@ models:
 
   deepseek-vl2:
     enabled: false
+    createRuntime: true
     vendor: deepseek
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: deepseek-ai/deepseek-vl2
@@ -227,6 +251,7 @@ models:
 
   dolly-v2-12b:
     enabled: false
+    createRuntime: true
     vendor: databricks
     capabilities: [TEXT_TO_TEXT]
     hfModelId: databricks/dolly-v2-12b
@@ -235,6 +260,7 @@ models:
 
   dots-ocr:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: rednote-hilab/dots.ocr
@@ -243,6 +269,7 @@ models:
 
   dots-vlm1-inst:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: rednote-hilab/dots.vlm1.inst
@@ -251,6 +278,7 @@ models:
 
   e5-mistral-7b-instruct:
     enabled: false
+    createRuntime: true
     vendor: mistral
     capabilities: [EMBEDDING]
     hfModelId: intfloat/e5-mistral-7b-instruct
@@ -259,6 +287,7 @@ models:
 
   ernie-4-5-21b-a3b-pt:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: baidu/ERNIE-4.5-21B-A3B-PT
@@ -267,6 +296,7 @@ models:
 
   exaone-3-5-7-8b-instruct:
     enabled: false
+    createRuntime: true
     vendor: lg
     capabilities: [TEXT_TO_TEXT]
     hfModelId: LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct
@@ -275,6 +305,7 @@ models:
 
   falcon-7b-instruct:
     enabled: false
+    createRuntime: true
     vendor: falcon
     capabilities: [TEXT_TO_TEXT]
     hfModelId: tiiuae/falcon-7b-instruct
@@ -283,6 +314,7 @@ models:
 
   falcon3-10b-instruct:
     enabled: false
+    createRuntime: true
     vendor: falcon
     capabilities: [TEXT_TO_TEXT]
     hfModelId: tiiuae/Falcon3-10B-Instruct
@@ -291,6 +323,7 @@ models:
 
   gemma-2-27b-it:
     enabled: false
+    createRuntime: true
     vendor: google
     capabilities: [TEXT_TO_TEXT]
     hfModelId: google/gemma-2-27b-it
@@ -299,6 +332,7 @@ models:
 
   gemma-2-2b-it:
     enabled: false
+    createRuntime: true
     vendor: google
     capabilities: [TEXT_TO_TEXT]
     hfModelId: google/gemma-2-2b-it
@@ -307,6 +341,7 @@ models:
 
   gemma-2-9b-it:
     enabled: false
+    createRuntime: true
     vendor: google
     capabilities: [TEXT_TO_TEXT]
     hfModelId: google/gemma-2-9b-it
@@ -315,6 +350,7 @@ models:
 
   gemma-3-12b-it:
     enabled: false
+    createRuntime: true
     vendor: google
     capabilities: [TEXT_TO_TEXT]
     hfModelId: google/gemma-3-12b-it
@@ -323,6 +359,7 @@ models:
 
   gemma-3-1b-it:
     enabled: false
+    createRuntime: true
     vendor: google
     capabilities: [TEXT_TO_TEXT]
     hfModelId: google/gemma-3-1b-it
@@ -331,6 +368,7 @@ models:
 
   gemma-3-4b-it:
     enabled: false
+    createRuntime: true
     vendor: google
     capabilities: [TEXT_TO_TEXT]
     hfModelId: google/gemma-3-4b-it
@@ -339,6 +377,7 @@ models:
 
   glm-4-5v:
     enabled: false
+    createRuntime: true
     vendor: glm
     capabilities: [TEXT_TO_TEXT]
     hfModelId: zai-org/GLM-4.5V
@@ -347,6 +386,7 @@ models:
 
   glm-4-9b-chat:
     enabled: false
+    createRuntime: true
     vendor: glm
     capabilities: [TEXT_TO_TEXT]
     hfModelId: ZhipuAI/glm-4-9b-chat
@@ -355,6 +395,7 @@ models:
 
   gme-qwen2-vl-2b-instruct:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: Alibaba-NLP/gme-Qwen2-VL-2B-Instruct
@@ -363,6 +404,7 @@ models:
 
   gpt-j-6b:
     enabled: false
+    createRuntime: true
     vendor: gpt
     capabilities: [TEXT_TO_TEXT]
     hfModelId: EleutherAI/gpt-j-6b
@@ -371,6 +413,7 @@ models:
 
   gpt-oss-120b:
     enabled: false
+    createRuntime: true
     vendor: openai
     capabilities: [TEXT_TO_TEXT]
     hfModelId: openai/gpt-oss-120b
@@ -379,6 +422,7 @@ models:
 
   gpt-oss-120b-bf16:
     enabled: false
+    createRuntime: true
     vendor: lmsys
     capabilities: [TEXT_TO_TEXT]
     hfModelId: lmsys/gpt-oss-120b-bf16
@@ -387,6 +431,7 @@ models:
 
   gpt-oss-120b-grpc:
     enabled: false
+    createRuntime: true
     vendor: openai
     capabilities: [TEXT_TO_TEXT]
     hfModelId: openai/gpt-oss-120b
@@ -395,6 +440,7 @@ models:
 
   gpt-oss-20b:
     enabled: false
+    createRuntime: true
     vendor: openai
     capabilities: [TEXT_TO_TEXT]
     hfModelId: openai/gpt-oss-20b
@@ -403,6 +449,7 @@ models:
 
   gpt-oss-20b-bf16:
     enabled: false
+    createRuntime: true
     vendor: lmsys
     capabilities: [TEXT_TO_TEXT]
     hfModelId: lmsys/gpt-oss-20b-bf16
@@ -411,6 +458,7 @@ models:
 
   gpt-oss-20b-grpc:
     enabled: false
+    createRuntime: true
     vendor: openai
     capabilities: [TEXT_TO_TEXT]
     hfModelId: openai/gpt-oss-20b
@@ -419,6 +467,7 @@ models:
 
   granite-3-0-3b-a800m-instruct:
     enabled: false
+    createRuntime: true
     vendor: ibm
     capabilities: [TEXT_TO_TEXT]
     hfModelId: ibm-granite/granite-3.0-3b-a800m-instruct
@@ -427,6 +476,7 @@ models:
 
   granite-3-1-8b-instruct:
     enabled: false
+    createRuntime: true
     vendor: ibm
     capabilities: [TEXT_TO_TEXT]
     hfModelId: ibm-granite/granite-3.1-8b-instruct
@@ -435,6 +485,7 @@ models:
 
   grok-1:
     enabled: false
+    createRuntime: true
     vendor: xai
     capabilities: [TEXT_TO_TEXT]
     hfModelId: xai-org/grok-1
@@ -443,6 +494,7 @@ models:
 
   grok-2:
     enabled: false
+    createRuntime: true
     vendor: xai
     capabilities: [TEXT_TO_TEXT]
     hfModelId: xai-org/grok-2
@@ -451,6 +503,7 @@ models:
 
   gte-qwen2-7b-instruct:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [EMBEDDING]
     hfModelId: Alibaba-NLP/gte-Qwen2-7B-instruct
@@ -459,6 +512,7 @@ models:
 
   hermes-2-pro-llama-3-8b:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: NousResearch/Hermes-2-Pro-Llama-3-8B
@@ -467,6 +521,7 @@ models:
 
   internlm2-20b:
     enabled: false
+    createRuntime: true
     vendor: intern
     capabilities: [TEXT_TO_TEXT]
     hfModelId: internlm/internlm2-20b
@@ -475,6 +530,7 @@ models:
 
   internlm2-7b:
     enabled: false
+    createRuntime: true
     vendor: intern
     capabilities: [TEXT_TO_TEXT]
     hfModelId: internlm/internlm2-7b
@@ -483,6 +539,7 @@ models:
 
   internlm2-7b-reward:
     enabled: false
+    createRuntime: true
     vendor: intern
     capabilities: [TEXT_TO_TEXT]
     hfModelId: internlm/internlm2-7b-reward
@@ -491,6 +548,7 @@ models:
 
   internvl2-5-8b:
     enabled: false
+    createRuntime: true
     vendor: intern
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: OpenGVLab/InternVL2_5-8B
@@ -499,6 +557,7 @@ models:
 
   janus-pro-7b:
     enabled: false
+    createRuntime: true
     vendor: deepseek
     capabilities: [TEXT_TO_TEXT]
     hfModelId: deepseek-ai/Janus-Pro-7B
@@ -507,6 +566,7 @@ models:
 
   jet-nemotron-2b:
     enabled: false
+    createRuntime: true
     vendor: nvidia
     capabilities: [TEXT_TO_TEXT]
     hfModelId: jet-ai/Jet-Nemotron-2B
@@ -515,6 +575,7 @@ models:
 
   kimi-k2-instruct:
     enabled: false
+    createRuntime: true
     vendor: moonshot
     capabilities: [TEXT_TO_TEXT]
     hfModelId: moonshotai/Kimi-K2-Instruct
@@ -523,6 +584,7 @@ models:
 
   kimi-vl-a3b-instruct:
     enabled: false
+    createRuntime: true
     vendor: moonshot
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: moonshotai/Kimi-VL-A3B-Instruct
@@ -531,6 +593,7 @@ models:
 
   ling-lite:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: inclusionAI/Ling-lite
@@ -539,6 +602,7 @@ models:
 
   ling-plus:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: inclusionAI/Ling-plus
@@ -547,6 +611,7 @@ models:
 
   llama-2-13b:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-2-13b-hf
@@ -555,6 +620,7 @@ models:
 
   llama-2-13b-chat-hf:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-2-13b-chat-hf
@@ -563,6 +629,7 @@ models:
 
   llama-2-70b:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-2-70b-hf
@@ -571,6 +638,7 @@ models:
 
   llama-2-70b-chat-hf:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-2-70b-chat-hf
@@ -579,6 +647,7 @@ models:
 
   llama-2-7b:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-2-7b-hf
@@ -587,6 +656,7 @@ models:
 
   llama-2-7b-chat-hf:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-2-7b-chat-hf
@@ -595,6 +665,7 @@ models:
 
   llama-3-1-405b-instruct-fp8:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-3.1-405B-Instruct-FP8
@@ -603,6 +674,7 @@ models:
 
   llama-3-1-70b-instruct:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Meta-Llama-3.1-70B-Instruct
@@ -611,6 +683,7 @@ models:
 
   llama-3-1-8b-instruct:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-3.1-8B-Instruct
@@ -619,6 +692,7 @@ models:
 
   llama-3-1-8b-instruct-grpc:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-3.1-8B-Instruct
@@ -627,6 +701,7 @@ models:
 
   llama-3-1-nemotron-70b-instruct-hf:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: nvidia/Llama-3.1-Nemotron-70B-Instruct-HF
@@ -635,6 +710,7 @@ models:
 
   llama-3-1-nemotron-nano-8b-v1:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: nvidia/Llama-3.1-Nemotron-Nano-8B-v1
@@ -643,6 +719,7 @@ models:
 
   llama-3-1-nemotron-ultra-253b-v1:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: nvidia/Llama-3.1-Nemotron-70B-Instruct
@@ -651,6 +728,7 @@ models:
 
   llama-3-2-11b-vision-instruct:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-3.2-11B-Vision-Instruct
@@ -659,6 +737,7 @@ models:
 
   llama-3-2-1b-instruct:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-3.2-1B-Instruct
@@ -667,6 +746,7 @@ models:
 
   llama-3-2-3b-instruct:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-3.2-3B-Instruct
@@ -675,6 +755,7 @@ models:
 
   llama-3-2-90b-vision-instruct:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-3.2-90B-Vision-Instruct
@@ -683,6 +764,7 @@ models:
 
   llama-3-2-90b-vision-instruct-fp8:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: RedHatAI/Llama-3.2-90B-Vision-Instruct-FP8-dynamic
@@ -691,6 +773,7 @@ models:
 
   llama-3-3-70b-instruct:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-3.3-70B-Instruct
@@ -699,6 +782,7 @@ models:
 
   llama-3-3-70b-instruct-fp8-dynamic:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
@@ -707,6 +791,7 @@ models:
 
   llama-3-3-nemotron-super-49b-v1:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: nvidia/Llama-3.3-Nemotron-Super-49B-v1
@@ -715,6 +800,7 @@ models:
 
   llama-3-70b-instruct:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Meta-Llama-3-70B-Instruct
@@ -723,6 +809,7 @@ models:
 
   llama-3-8b-instruct:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Meta-Llama-3-8B-Instruct
@@ -731,6 +818,7 @@ models:
 
   llama-4-maverick-17b-128e-instruct:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-4-Maverick-17B-128E-Instruct
@@ -739,6 +827,7 @@ models:
 
   llama-4-maverick-17b-128e-instruct-fp8:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
@@ -747,6 +836,7 @@ models:
 
   llama-4-maverick-17b-128e-instruct-fp8-grpc:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
@@ -755,6 +845,7 @@ models:
 
   llama-4-maverick-17b-128e-instruct-fp8-pd-grpc:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
@@ -763,6 +854,7 @@ models:
 
   llama-4-scout-17b-16e-instruct:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-4-Scout-17B-16E-Instruct
@@ -771,6 +863,7 @@ models:
 
   llama-guard-3-8b:
     enabled: false
+    createRuntime: true
     vendor: meta
     capabilities: [TEXT_TO_TEXT]
     hfModelId: meta-llama/Llama-Guard-3-8B
@@ -779,6 +872,7 @@ models:
 
   llava-next-72b:
     enabled: false
+    createRuntime: true
     vendor: llava
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: lmms-lab/llava-next-72b
@@ -787,6 +881,7 @@ models:
 
   llava-onevision-qwen2-7b-ov:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: lmms-lab/llava-onevision-qwen2-7b-ov
@@ -795,6 +890,7 @@ models:
 
   llava-v1-5-13b:
     enabled: false
+    createRuntime: true
     vendor: llava
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: liuhaotian/llava-v1.5-13b
@@ -803,6 +899,7 @@ models:
 
   mimo-7b-rl:
     enabled: false
+    createRuntime: true
     vendor: xiaomi
     capabilities: [TEXT_TO_TEXT]
     hfModelId: XiaomiMiMo/MiMo-7B-RL
@@ -811,6 +908,7 @@ models:
 
   mimo-vl-7b-rl:
     enabled: false
+    createRuntime: true
     vendor: xiaomi
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: XiaomiMiMo/MiMo-VL-7B-RL
@@ -819,6 +917,7 @@ models:
 
   minicpm-2b-sft-bf16:
     enabled: false
+    createRuntime: true
     vendor: openbmb
     capabilities: [TEXT_TO_TEXT]
     hfModelId: openbmb/MiniCPM-2B-sft-bf16
@@ -827,6 +926,7 @@ models:
 
   minicpm-v-2-6:
     enabled: false
+    createRuntime: true
     vendor: openbmb
     capabilities: [TEXT_TO_TEXT]
     hfModelId: openbmb/MiniCPM-V-2_6
@@ -835,6 +935,7 @@ models:
 
   minicpm3-4b:
     enabled: false
+    createRuntime: true
     vendor: openbmb
     capabilities: [TEXT_TO_TEXT]
     hfModelId: openbmb/MiniCPM3-4B
@@ -843,6 +944,7 @@ models:
 
   minimax-m2:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: minimax/MiniMax-M2
@@ -851,6 +953,7 @@ models:
 
   mistral-7b-instruct:
     enabled: false
+    createRuntime: true
     vendor: mistral
     capabilities: [TEXT_TO_TEXT]
     hfModelId: mistralai/Mistral-7B-Instruct-v0.2
@@ -859,6 +962,7 @@ models:
 
   mistral-7b-instruct-v0-2:
     enabled: false
+    createRuntime: true
     vendor: mistral
     capabilities: [TEXT_TO_TEXT]
     hfModelId: mistralai/Mistral-7B-Instruct-v0.2
@@ -867,6 +971,7 @@ models:
 
   mistral-7b-instruct-v0-3:
     enabled: false
+    createRuntime: true
     vendor: mistral
     capabilities: [TEXT_TO_TEXT]
     hfModelId: mistralai/Mistral-7B-Instruct-v0.3
@@ -875,6 +980,7 @@ models:
 
   mistral-nemo-instruct-2407:
     enabled: false
+    createRuntime: true
     vendor: mistral
     capabilities: [TEXT_TO_TEXT]
     hfModelId: mistralai/Mistral-Nemo-Instruct-2407
@@ -883,6 +989,7 @@ models:
 
   mistral-small-3-1-24b-instruct-2503:
     enabled: false
+    createRuntime: true
     vendor: mistral
     capabilities: [TEXT_TO_TEXT]
     hfModelId: mistralai/Mistral-Small-3.1-24B-Instruct-2503
@@ -891,6 +998,7 @@ models:
 
   mixtral-8x22b:
     enabled: false
+    createRuntime: true
     vendor: mistral
     capabilities: [TEXT_TO_TEXT]
     hfModelId: mistralai/Mixtral-8x22B-v0.1
@@ -899,6 +1007,7 @@ models:
 
   mixtral-8x7b:
     enabled: false
+    createRuntime: true
     vendor: mistral
     capabilities: [TEXT_TO_TEXT]
     hfModelId: mistralai/Mixtral-8x7B-v0.1
@@ -907,6 +1016,7 @@ models:
 
   mixtral-8x7b-instruct:
     enabled: false
+    createRuntime: true
     vendor: mistral
     capabilities: [TEXT_TO_TEXT]
     hfModelId: mistralai/Mixtral-8x7B-Instruct-v0.1
@@ -915,6 +1025,7 @@ models:
 
   mpt-7b:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: mosaicml/mpt-7b
@@ -923,6 +1034,7 @@ models:
 
   nvidia-nemotron-nano-12b-v2-vl-bf16:
     enabled: false
+    createRuntime: true
     vendor: nvidia
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16
@@ -931,6 +1043,7 @@ models:
 
   nvidia-nemotron-nano-9b-v2:
     enabled: false
+    createRuntime: true
     vendor: nvidia
     capabilities: [TEXT_TO_TEXT]
     hfModelId: nvidia/NVIDIA-Nemotron-Nano-9B-v2
@@ -939,6 +1052,7 @@ models:
 
   nvila-8b:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Efficient-Large-Model/NVILA-8B
@@ -947,6 +1061,7 @@ models:
 
   olmo-2-1124-7b-instruct:
     enabled: false
+    createRuntime: true
     vendor: allenai
     capabilities: [TEXT_TO_TEXT]
     hfModelId: allenai/OLMo-2-1124-7B-Instruct
@@ -955,6 +1070,7 @@ models:
 
   olmoe-1b-7b-0924:
     enabled: false
+    createRuntime: true
     vendor: allenai
     capabilities: [TEXT_TO_TEXT]
     hfModelId: allenai/OLMoE-1B-7B-0924
@@ -963,6 +1079,7 @@ models:
 
   orion-14b-base:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: OrionStarAI/Orion-14B-Base
@@ -971,6 +1088,7 @@ models:
 
   persimmon-8b-chat:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: adept/persimmon-8b-chat
@@ -979,6 +1097,7 @@ models:
 
   phi-2:
     enabled: false
+    createRuntime: true
     vendor: microsoft
     capabilities: [TEXT_TO_TEXT]
     hfModelId: microsoft/phi-2
@@ -987,6 +1106,7 @@ models:
 
   phi-3-5-mini-instruct:
     enabled: false
+    createRuntime: true
     vendor: microsoft
     capabilities: [TEXT_TO_TEXT]
     hfModelId: microsoft/Phi-3.5-mini-instruct
@@ -995,6 +1115,7 @@ models:
 
   phi-3-5-moe-instruct:
     enabled: false
+    createRuntime: true
     vendor: microsoft
     capabilities: [TEXT_TO_TEXT]
     hfModelId: microsoft/Phi-3.5-MoE-instruct
@@ -1003,6 +1124,7 @@ models:
 
   phi-3-mini-4k-instruct:
     enabled: false
+    createRuntime: true
     vendor: microsoft
     capabilities: [TEXT_TO_TEXT]
     hfModelId: microsoft/Phi-3-mini-4k-instruct
@@ -1011,6 +1133,7 @@ models:
 
   phi-3-vision-128k-instruct:
     enabled: false
+    createRuntime: true
     vendor: microsoft
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: microsoft/Phi-3-vision-128k-instruct
@@ -1019,6 +1142,7 @@ models:
 
   phi-4:
     enabled: false
+    createRuntime: true
     vendor: microsoft
     capabilities: [TEXT_TO_TEXT]
     hfModelId: microsoft/phi-4
@@ -1027,6 +1151,7 @@ models:
 
   phi-4-mini-instruct:
     enabled: false
+    createRuntime: true
     vendor: microsoft
     capabilities: [TEXT_TO_TEXT]
     hfModelId: microsoft/Phi-4-mini-instruct
@@ -1035,6 +1160,7 @@ models:
 
   phi-4-multimodal-instruct:
     enabled: false
+    createRuntime: true
     vendor: microsoft
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: microsoft/Phi-4-multimodal-instruct
@@ -1043,6 +1169,7 @@ models:
 
   qwen-7b-chat:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen-7B-Chat
@@ -1051,6 +1178,7 @@ models:
 
   qwen1-5-110b-chat:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen1.5-110B-Chat
@@ -1059,6 +1187,7 @@ models:
 
   qwen1-5-32b-chat:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen1.5-32B-Chat
@@ -1067,6 +1196,7 @@ models:
 
   qwen1-5-72b-chat:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen1.5-72B-Chat
@@ -1075,6 +1205,7 @@ models:
 
   qwen1-5-7b-chat:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen1.5-7B-Chat
@@ -1083,6 +1214,7 @@ models:
 
   qwen2-5-1-5b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen2.5-1.5B
@@ -1091,6 +1223,7 @@ models:
 
   qwen2-5-14b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen2.5-14B
@@ -1099,6 +1232,7 @@ models:
 
   qwen2-5-32b-instruct:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen2.5-32B-Instruct
@@ -1107,6 +1241,7 @@ models:
 
   qwen2-5-3b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen2.5-3B
@@ -1115,6 +1250,7 @@ models:
 
   qwen2-5-72b-instruct:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen2.5-72B-Instruct
@@ -1123,6 +1259,7 @@ models:
 
   qwen2-5-7b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen2.5-7B
@@ -1131,6 +1268,7 @@ models:
 
   qwen2-5-coder-32b-instruct:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen2.5-Coder-32B-Instruct
@@ -1139,6 +1277,7 @@ models:
 
   qwen2-5-coder-7b-instruct:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen2.5-Coder-7B-Instruct
@@ -1147,6 +1286,7 @@ models:
 
   qwen2-5-vl-7b-instruct:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen2.5-VL-7B-Instruct
@@ -1155,6 +1295,7 @@ models:
 
   qwen2-72b-instruct:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen2-72B-Instruct
@@ -1163,6 +1304,7 @@ models:
 
   qwen2-7b-instruct:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen2-7B-Instruct
@@ -1171,6 +1313,7 @@ models:
 
   qwen2-vl-7b-instruct:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen2-VL-7B-Instruct
@@ -1179,6 +1322,7 @@ models:
 
   qwen3-0-6b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen3-0.6B
@@ -1187,6 +1331,7 @@ models:
 
   qwen3-30b-a3b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen3-30B-A3B
@@ -1195,6 +1340,7 @@ models:
 
   qwen3-32b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen3-32B
@@ -1203,6 +1349,7 @@ models:
 
   qwen3-4b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen3-4B
@@ -1211,6 +1358,7 @@ models:
 
   qwen3-8b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen3-8B
@@ -1219,6 +1367,7 @@ models:
 
   qwen3-embedding-0-6b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [EMBEDDING]
     hfModelId: Qwen/Qwen3-Embedding-0.6B
@@ -1227,6 +1376,7 @@ models:
 
   qwen3-embedding-4b:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [EMBEDDING]
     hfModelId: Qwen/Qwen3-Embedding-4B
@@ -1235,6 +1385,7 @@ models:
 
   qwen3-next-80b-a3b-instruct:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen3-Next-80B-A3B-Instruct
@@ -1243,6 +1394,7 @@ models:
 
   qwen3-vl-235b-a22b-instruct:
     enabled: false
+    createRuntime: true
     vendor: qwen
     capabilities: [IMAGE_TEXT_TO_TEXT]
     hfModelId: Qwen/Qwen3-VL-235B-A22B-Instruct
@@ -1251,6 +1403,7 @@ models:
 
   skywork-or1-7b-preview:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Skywork/Skywork-OR1-7B-Preview
@@ -1259,6 +1412,7 @@ models:
 
   smollm-1-7b:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: HuggingFaceTB/SmolLM-1.7B
@@ -1267,6 +1421,7 @@ models:
 
   smollm2-1-7b-instruct:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: HuggingFaceTB/SmolLM2-1.7B-Instruct
@@ -1275,6 +1430,7 @@ models:
 
   solar-10-7b-instruct-v1-0:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: upstage/SOLAR-10.7B-Instruct-v1.0
@@ -1283,6 +1439,7 @@ models:
 
   stablelm-2-12b-chat:
     enabled: false
+    createRuntime: true
     vendor: stability
     capabilities: [TEXT_TO_TEXT]
     hfModelId: stabilityai/stablelm-2-12b-chat
@@ -1291,6 +1448,7 @@ models:
 
   stablelm-tuned-alpha-7b:
     enabled: false
+    createRuntime: true
     vendor: stability
     capabilities: [TEXT_TO_TEXT]
     hfModelId: stabilityai/stablelm-tuned-alpha-7b
@@ -1299,6 +1457,7 @@ models:
 
   starcoder2-15b:
     enabled: false
+    createRuntime: true
     vendor: bigcode
     capabilities: [TEXT_TO_TEXT]
     hfModelId: bigcode/starcoder2-15b
@@ -1307,6 +1466,7 @@ models:
 
   starcoder2-7b:
     enabled: false
+    createRuntime: true
     vendor: bigcode
     capabilities: [TEXT_TO_TEXT]
     hfModelId: bigcode/starcoder2-7b
@@ -1315,6 +1475,7 @@ models:
 
   tele-flm:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: CofeAI/Tele-FLM
@@ -1323,6 +1484,7 @@ models:
 
   vicuna-13b-v1-5:
     enabled: false
+    createRuntime: true
     vendor: lmsys
     capabilities: [TEXT_TO_TEXT]
     hfModelId: lmsys/vicuna-13b-v1.5
@@ -1331,6 +1493,7 @@ models:
 
   vicuna-7b-v1-5:
     enabled: false
+    createRuntime: true
     vendor: lmsys
     capabilities: [TEXT_TO_TEXT]
     hfModelId: lmsys/vicuna-7b-v1.5
@@ -1339,6 +1502,7 @@ models:
 
   xgen-7b-8k-inst:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: Salesforce/xgen-7b-8k-inst
@@ -1347,6 +1511,7 @@ models:
 
   xverse-moe-a36b:
     enabled: false
+    createRuntime: true
     vendor: other
     capabilities: [TEXT_TO_TEXT]
     hfModelId: xverse/XVERSE-MoE-A36B
