@@ -1,6 +1,6 @@
 {{- $registry := include "ome-serving.modelRegistry" . | fromYaml }}
 {{- range $modelName, $model := .Values.models }}
-{{- if $model.enabled }}
+{{- if and $model.enabled (ne $model.createRuntime false) }}
 {{- $modelInfo := index $registry $modelName }}
 {{- if not $modelInfo }}
 {{- fail (printf "Model '%s' not found in registry. Please check the model name or add it to the registry in _helpers.tpl" $modelName) }}

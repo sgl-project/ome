@@ -1,5 +1,5 @@
 {{- range $modelName, $model := .Values.models }}
-{{- if and $model.enabled $model.namespaceScope }}
+{{- if and $model.enabled $model.namespaceScope (ne $model.createModel false) }}
 {{/*
   Generate storageUri from simplified options:
   - hfModelId: Qwen/Qwen3-8B → hf://Qwen/Qwen3-8B
