@@ -1436,3 +1436,324 @@ models:
     hfModelId: xverse/XVERSE-MoE-A36B
     runtime:
       gpus: 4
+
+  deepseek-r1:
+    enabled: false
+    createRuntime: true
+    vendor: deepseek-ai
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: deepseek-ai/DeepSeek-R1
+    runtime:
+      gpus: 1
+  deepseek-r1-zero:
+    enabled: false
+    createRuntime: true
+    vendor: deepseek
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: deepseek-ai/DeepSeek-R1-Zero
+    runtime:
+      gpus: 1
+  deepseek-v2:
+    enabled: false
+    createRuntime: true
+    vendor: deepseek
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: deepseek-ai/DeepSeek-V2
+    runtime:
+      gpus: 1
+  deepseek-v2-5:
+    enabled: false
+    createRuntime: true
+    vendor: deepseek
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: deepseek-ai/DeepSeek-V2.5
+    runtime:
+      gpus: 1
+  gemma-2-27b:
+    enabled: false
+    createRuntime: true
+    vendor: google
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: google/gemma-2-27b
+    runtime:
+      gpus: 4
+  gemma-2-2b:
+    enabled: false
+    createRuntime: true
+    vendor: google
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: google/gemma-2-2b
+    runtime:
+      gpus: 1
+  gemma-2-9b:
+    enabled: false
+    createRuntime: true
+    vendor: google
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: google/gemma-2-9b
+    runtime:
+      gpus: 1
+  gemma-2b:
+    enabled: false
+    createRuntime: true
+    vendor: google
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: google/gemma-2b
+    runtime:
+      gpus: 1
+  gemma-3-27b-it:
+    enabled: false
+    createRuntime: true
+    vendor: google
+    capabilities: ['TEXT_TO_TEXT', 'IMAGE_TO_TEXT']
+    hfModelId: google/gemma-3-27b-it
+    runtime:
+      gpus: 4
+  gemma-7b:
+    enabled: false
+    createRuntime: true
+    vendor: google
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: google/gemma-7b
+    runtime:
+      gpus: 1
+  granite-3-0-2b-instruct:
+    enabled: false
+    createRuntime: true
+    vendor: ibm
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: ibm-granite/granite-3.0-2b-instruct
+    runtime:
+      gpus: 1
+  granite-3-0-8b-instruct:
+    enabled: false
+    createRuntime: true
+    vendor: ibm
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: ibm-granite/granite-3.0-8b-instruct
+    runtime:
+      gpus: 1
+  granite-3-1-2b-instruct:
+    enabled: false
+    createRuntime: true
+    vendor: ibm
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: ibm-granite/granite-3.1-2b-instruct
+    runtime:
+      gpus: 1
+  llava-next-8b:
+    enabled: false
+    createRuntime: true
+    vendor: lmms
+    capabilities: ['IMAGE_TO_TEXT']
+    hfModelId: lmms-lab/llava-next-8b
+    runtime:
+      gpus: 1
+  llava-v1-5-7b:
+    enabled: false
+    createRuntime: true
+    vendor: llava
+    capabilities: ['IMAGE_TO_TEXT']
+    hfModelId: liuhaotian/llava-v1.5-7b
+    runtime:
+      gpus: 1
+  llava-v1-6-vicuna-13b:
+    enabled: false
+    createRuntime: true
+    vendor: llava
+    capabilities: ['IMAGE_TO_TEXT']
+    hfModelId: liuhaotian/llava-v1.6-vicuna-13b
+    runtime:
+      gpus: 2
+  llava-v1-6-vicuna-7b:
+    enabled: false
+    createRuntime: true
+    vendor: llava
+    capabilities: ['IMAGE_TO_TEXT']
+    hfModelId: liuhaotian/llava-v1.6-vicuna-7b
+    runtime:
+      gpus: 1
+  mistral-7b-v0-1:
+    enabled: false
+    createRuntime: true
+    vendor: mistral
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: mistralai/Mistral-7B-v0.1
+    runtime:
+      gpus: 1
+  phi-1-5:
+    enabled: false
+    createRuntime: true
+    vendor: microsoft
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: microsoft/phi-1_5
+    runtime:
+      gpus: 1
+  phi-3-medium-4k-instruct:
+    enabled: false
+    createRuntime: true
+    vendor: microsoft
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: microsoft/Phi-3-medium-4k-instruct
+    runtime:
+      gpus: 1
+  phi-3-mini-128k-instruct:
+    enabled: false
+    createRuntime: true
+    vendor: microsoft
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: microsoft/Phi-3-mini-128k-instruct
+    runtime:
+      gpus: 1
+  phi-3-small-8k-instruct:
+    enabled: false
+    createRuntime: true
+    vendor: microsoft
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: microsoft/Phi-3-small-8k-instruct
+    runtime:
+      gpus: 1
+  qwen-vl:
+    enabled: false
+    createRuntime: true
+    vendor: qwen
+    capabilities: ['IMAGE_TO_TEXT']
+    hfModelId: Qwen/Qwen-VL
+    runtime:
+      gpus: 1
+  qwen-vl-chat:
+    enabled: false
+    createRuntime: true
+    vendor: qwen
+    capabilities: ['IMAGE_TO_TEXT']
+    hfModelId: Qwen/Qwen-VL-Chat
+    runtime:
+      gpus: 1
+  qwen2-5-0-5b:
+    enabled: false
+    createRuntime: true
+    vendor: qwen
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: Qwen/Qwen2.5-0.5B
+    runtime:
+      gpus: 1
+  qwen2-5-1-5b-apeach:
+    enabled: false
+    createRuntime: true
+    vendor: jason9693
+    capabilities: ['REWARD_SCORING']
+    hfModelId: jason9693/Qwen2.5-1.5B-apeach
+    runtime:
+      gpus: 1
+  qwen2-5-32b:
+    enabled: false
+    createRuntime: true
+    vendor: qwen
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: Qwen/Qwen2.5-32B
+    runtime:
+      gpus: 4
+  qwen2-5-72b:
+    enabled: false
+    createRuntime: true
+    vendor: qwen
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: Qwen/Qwen2.5-72B
+    runtime:
+      gpus: 8
+  qwen2-5-math-rm-72b:
+    enabled: false
+    createRuntime: true
+    vendor: qwen
+    capabilities: ['REWARD_SCORING']
+    hfModelId: Qwen/Qwen2.5-Math-RM-72B
+    runtime:
+      gpus: 8
+  qwen2-vl-2b-instruct:
+    enabled: false
+    createRuntime: true
+    vendor: qwen
+    capabilities: ['IMAGE_TO_TEXT']
+    hfModelId: Qwen/Qwen2-VL-2B-Instruct
+    runtime:
+      gpus: 1
+  qwen2-vl-72b-instruct:
+    enabled: false
+    createRuntime: true
+    vendor: qwen
+    capabilities: ['IMAGE_TO_TEXT']
+    hfModelId: Qwen/Qwen2-VL-72B-Instruct
+    runtime:
+      gpus: 8
+  qwen3-1-7b:
+    enabled: false
+    createRuntime: true
+    vendor: qwen
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: Qwen/Qwen3-1.7B
+    runtime:
+      gpus: 1
+  qwen3-14b:
+    enabled: false
+    createRuntime: true
+    vendor: qwen
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: Qwen/Qwen3-14B
+    runtime:
+      gpus: 2
+  qwen3-embedding-8b:
+    enabled: false
+    createRuntime: true
+    vendor: qwen
+    capabilities: ['TEXT_TO_EMBEDDING']
+    hfModelId: Qwen/Qwen3-Embedding-8B
+    runtime:
+      gpus: 1
+  skywork-reward-gemma-2-27b-v0-2:
+    enabled: false
+    createRuntime: true
+    vendor: skywork
+    capabilities: ['REWARD_SCORING']
+    hfModelId: Skywork/Skywork-Reward-Gemma-2-27B-v0.2
+    runtime:
+      gpus: 4
+  skywork-reward-llama-3-1-8b-v0-2:
+    enabled: false
+    createRuntime: true
+    vendor: skywork
+    capabilities: ['REWARD_SCORING']
+    hfModelId: Skywork/Skywork-Reward-Llama-3.1-8B-v0.2
+    runtime:
+      gpus: 1
+  smollm-135m:
+    enabled: false
+    createRuntime: true
+    vendor: huggingface
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: HuggingFaceTB/SmolLM-135M
+    runtime:
+      gpus: 1
+  smollm-360m:
+    enabled: false
+    createRuntime: true
+    vendor: huggingface
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: HuggingFaceTB/SmolLM-360M
+    runtime:
+      gpus: 1
+  starcoder2-3b:
+    enabled: false
+    createRuntime: true
+    vendor: bigcode
+    capabilities: ['TEXT_TO_TEXT']
+    hfModelId: bigcode/starcoder2-3b
+    runtime:
+      gpus: 1
+  unsloth-llama-3-2-11b-vision-instruct:
+    enabled: false
+    createRuntime: true
+    vendor: unsloth
+    capabilities: ['IMAGE_TEXT_TO_TEXT']
+    hfModelId: unsloth/Llama-3.2-11B-Vision-Instruct
+    runtime:
+      gpus: 1
