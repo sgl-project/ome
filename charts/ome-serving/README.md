@@ -65,6 +65,8 @@ models:
     clusterScope: true       # Create ClusterBaseModel (default: true)
     namespaceScope: false    # Create BaseModel (default: false)
     namespace: <name>        # Required if namespaceScope: true
+    createModel: true        # Create model resource (default: true)
+    createRuntime: true      # Create runtime resource (default: true)
 
     vendor: <vendor-name>
     capabilities: [TEXT_TO_TEXT|IMAGE_TEXT_TO_TEXT|EMBEDDING|...]
@@ -201,6 +203,41 @@ models:
     key: oci-credentials  # Optional: secret key
     runtime:
       gpus: 2
+```
+
+### Runtime Only (No Model Creation)
+
+Create only the ClusterServingRuntime without creating a model resource. Useful when the model already exists or is managed externally:
+
+```yaml
+models:
+  qwen3-8b:
+    enabled: true
+    createModel: false     # Don't create ClusterBaseModel/BaseModel
+    createRuntime: true    # Only create ClusterServingRuntime
+    vendor: qwen
+    capabilities: [TEXT_TO_TEXT]
+    hfModelId: Qwen/Qwen3-8B
+    runtime:
+      gpus: 1
+```
+
+### Model Only (No Runtime Creation)
+
+Create only the model resource without a runtime. Useful when using a shared runtime:
+
+```yaml
+models:
+  qwen3-8b:
+    enabled: true
+    createModel: true      # Create ClusterBaseModel
+    createRuntime: false   # Don't create ClusterServingRuntime
+    vendor: qwen
+    capabilities: [TEXT_TO_TEXT]
+    hfModelId: Qwen/Qwen3-8B
+    path: /raid/models/qwen/qwen3-8b
+    runtime:
+      gpus: 1
 ```
 
 ### PD Mode (Prefill-Decode Disaggregated)
