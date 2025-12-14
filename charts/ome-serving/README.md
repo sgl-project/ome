@@ -205,7 +205,9 @@ models:
 
 ### PD Mode (Prefill-Decode Disaggregated)
 
-For models that support disaggregated serving, enable PD mode to deploy with separate prefill (engine) and decode (decoder) components:
+For models that support disaggregated serving, enable PD mode to deploy with separate prefill (engine) and decode (decoder) components. PD mode uses RDMA/InfiniBand for high-performance inter-node communication.
+
+#### Basic PD Mode Configuration
 
 ```yaml
 models:
@@ -228,6 +230,49 @@ models:
       minReplicas: 1
       maxReplicas: 1
 ```
+
+#### Advanced PD Mode Configuration (RDMA Settings)
+
+```yaml
+models:
+  mistral-7b-instruct:
+    enabled: true
+    pdMode: true
+    vendor: mistral
+    capabilities: [TEXT_TO_TEXT]
+    hfModelId: mistralai/Mistral-7B-Instruct-v0.2
+    runtime:
+      gpus: 2
+      ibDevice: mlx5_0      # InfiniBand device (default: mlx5_0)
+      rdmaProfile: oci-roce # RDMA profile (default: oci-roce)
+```
+
+#### PD Mode Default Settings
+
+```yaml
+defaults:
+  # ... other defaults ...
+  ibDevice: mlx5_0        # InfiniBand device for RDMA
+  rdmaProfile: oci-roce   # RDMA profile for network
+```
+
+#### What PD Mode Configures
+
+When `pdMode: true`:
+
+1. **Engine (Prefill)**: Runs with `--disaggregation-mode prefill`
+   - Adds RDMA annotations for auto-injection
+   - Enables `hostNetwork: true` for direct network access
+   - Uses `/health` endpoint for probes
+
+2. **Decoder**: New component with `--disaggregation-mode decode`
+   - Same resources and configuration as engine
+   - RDMA-enabled for high-speed communication
+
+3. **Router**: Configured for PD disaggregation
+   - Adds `--pd-disaggregation` flag
+   - Uses `--prefill-selector` and `--decode-selector` instead of single selector
+   - Routes requests between prefill and decode pods
 
 Models that support PD mode: `kimi-k2-instruct`, `deepseek-rdma`, `llama-3-1-70b-instruct`, `llama-3-2-1b-instruct`, `llama-3-2-3b-instruct`, `llama-3-3-70b-instruct`, `llama-4-maverick-17b-128e-instruct-fp8`, `llama-4-scout-17b-16e-instruct`, `mistral-7b-instruct`, `mixtral-8x7b-instruct`
 
