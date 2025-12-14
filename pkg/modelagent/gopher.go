@@ -908,18 +908,38 @@ func (s *Gopher) deleteModel(destPath string, task *GopherTask) error {
 	return err
 }
 
-// isReservingModelArtifact reports whether the model's artifact directory should be preserved during deletion.
-// It returns true when the BaseModel has the label constants.ReserveModelArtifact set to "true" (case-insensitive).
-// In all other cases, it logs that the artifact will be deleted and returns false.
-// Note: Only BaseModel labels are considered by this helper; ClusterBaseModel labels are not checked here.
+// isReservingModelArtifact determines whether to preserve the model artifact directory during deletion.
+// Behavior:
+//   - Returns true if either ClusterBaseModel or BaseModel has the label models.ome/reserve-model-artifact
+//     (constants.ReserveModelArtifact) set to "true" (case-insensitive).
+//   - Returns false when the task is nil, labels are absent, or the label value is not "true".
+//
+// Precedence:
+//   - If both BaseModel and ClusterBaseModel exist and at least one has the reserve label set to "true",
+//     the function returns true (i.e., preserve the artifact).
 func (s *Gopher) isReservingModelArtifact(task *GopherTask) bool {
-	if val, exists := task.BaseModel.Labels[constants.ReserveModelArtifact]; exists && strings.EqualFold(val, "true") {
-		s.logger.Infof("Model artifact will be reserved as model has matched label")
-		return true
-	} else {
+	// Guard against nil task or BaseModel; reserve logic applies only to BaseModel labels
+	if task == nil {
 		s.logger.Infof("Model artifact will be deleted")
 		return false
 	}
+	// for clusterBaseModel
+	if task.ClusterBaseModel != nil && task.ClusterBaseModel.Labels != nil {
+		if val, exists := task.ClusterBaseModel.Labels[constants.ReserveModelArtifact]; exists && strings.EqualFold(val, "true") {
+			s.logger.Infof("Model artifact will be reserved as ClusterBaseModel has matched label")
+			return true
+		}
+	}
+	// for baseModel
+	if task.BaseModel != nil && task.BaseModel.Labels != nil {
+		if val, exists := task.BaseModel.Labels[constants.ReserveModelArtifact]; exists && strings.EqualFold(val, "true") {
+			s.logger.Infof("Model artifact will be reserved as BaseModel has matched label")
+			return true
+		}
+	}
+
+	s.logger.Infof("Model artifact will be deleted")
+	return false
 }
 
 // processHuggingFaceModel handles downloading models from Hugging Face Hub.
