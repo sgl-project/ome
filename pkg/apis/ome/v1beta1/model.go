@@ -134,6 +134,11 @@ type BaseModelSpec struct {
 	// +optional
 	ModelCapabilities []string `json:"modelCapabilities,omitempty"`
 
+	// API capabilities supported by the model, e.g., "OPENAI_V1_CHAT_COMPLETIONS"
+	// +listType=atomic
+	// +optional
+	ApiCapabilities []ModelAPICapability `json:"apiCapabilities,omitempty"`
+
 	// Configuration of the model, stored as generic JSON for flexibility.
 	// +optional
 	ModelConfiguration runtime.RawExtension `json:"modelConfiguration,omitempty"`
@@ -201,7 +206,7 @@ const (
 // ModelCapability enum
 // TODO: Remove legacy capabilities
 //
-// +kubebuilder:validation:Enum=TEXT_GENERATION;TEXT_SUMMARIZATION;TEXT_EMBEDDINGS;TEXT_RERANK;CHAT;VISION;EMBEDDING;RERANK;TEXT_TO_TEXT;IMAGE_TEXT_TO_TEXT
+// +kubebuilder:validation:Enum=TEXT_GENERATION;TEXT_SUMMARIZATION;TEXT_EMBEDDINGS;TEXT_RERANK;CHAT;VISION;EMBEDDING;RERANK;TEXT_TO_TEXT;IMAGE_TEXT_TO_TEXT;TEXT_TO_IMAGE;IMAGE_TEXT_TO_IMAGE;TEXT_TO_SPEECH;SPEECH_TO_TEXT;AUDIO_TRANSLATION
 type ModelCapability string
 
 const (
@@ -214,11 +219,32 @@ const (
 	ModelCapabilityVision            ModelCapability = "VISION"
 
 	// New capabilities (preferred naming)
-	ModelCapabilityEmbedding       ModelCapability = "EMBEDDING"
-	ModelCapabilityRerank          ModelCapability = "RERANK"
-	ModelCapabilityTextToText      ModelCapability = "TEXT_TO_TEXT"
-	ModelCapabilityImageTextToText ModelCapability = "IMAGE_TEXT_TO_TEXT"
-	ModelCapabilityUnknown         ModelCapability = ""
+	ModelCapabilityEmbedding        ModelCapability = "EMBEDDING"
+	ModelCapabilityRerank           ModelCapability = "RERANK"
+	ModelCapabilityTextToText       ModelCapability = "TEXT_TO_TEXT"
+	ModelCapabilityImageTextToText  ModelCapability = "IMAGE_TEXT_TO_TEXT"
+	ModelCapabilityTextToImage      ModelCapability = "TEXT_TO_IMAGE"
+	ModelCapabilityImageTextToImage ModelCapability = "IMAGE_TEXT_TO_IMAGE"
+	ModelCapabilityTextToSpeech     ModelCapability = "TEXT_TO_SPEECH"
+	ModelCapabilitySpeechToText     ModelCapability = "SPEECH_TO_TEXT"
+	ModelCapabilityAudioTranslation ModelCapability = "AUDIO_TRANSLATION"
+	ModelCapabilityUnknown          ModelCapability = ""
+)
+
+// ModelAPICapability enum
+// +kubebuilder:validation:Enum=OPENAI_V1_CHAT_COMPLETIONS;OPENAI_V1_RESPONSES;OPENAI_V1_EMBEDDINGS;OPENAI_V1_IMAGES_GENERATIONS;OPENAI_V1_IMAGES_EDITS;OPENAI_V1_AUDIO_SPEECH;OPENAI_V1_AUDIO_TRANSCRIPTIONS;OPENAI_V1_AUDIO_TRANSLATIONS;OPENAI_V1_REALTIME
+type ModelAPICapability string
+
+const (
+	ModelAPICapabilityOpenAIv1ChatCompletions     ModelAPICapability = "OPENAI_V1_CHAT_COMPLETIONS"
+	ModelAPICapabilityOpenAIv1Responses           ModelAPICapability = "OPENAI_V1_RESPONSES"
+	ModelAPICapabilityOpenAIv1Embeddings          ModelAPICapability = "OPENAI_V1_EMBEDDINGS"
+	ModelAPICapabilityOpenAIv1ImagesGenerations   ModelAPICapability = "OPENAI_V1_IMAGES_GENERATIONS"
+	ModelAPICapabilityOpenAIv1ImagesEdits         ModelAPICapability = "OPENAI_V1_IMAGES_EDITS"
+	ModelAPICapabilityOpenAIv1AudioSpeech         ModelAPICapability = "OPENAI_V1_AUDIO_SPEECH"
+	ModelAPICapabilityOpenAIv1AudioTranscriptions ModelAPICapability = "OPENAI_V1_AUDIO_TRANSCRIPTIONS"
+	ModelAPICapabilityOpenAIv1AudioTranslations   ModelAPICapability = "OPENAI_V1_AUDIO_TRANSLATIONS"
+	ModelAPICapabilityOpenAIv1Realtime            ModelAPICapability = "OPENAI_V1_REALTIME"
 )
 
 // ModelWeightStatus enum
