@@ -526,7 +526,7 @@ func TestIsPathReferencedByOtherModels(t *testing.T) {
 }
 
 // TestIsReservingModelArtifact tests isReservingModelArtifact method
-func TestIsReservingModelArtifact(t *testing.T) {
+func TestIsReservingModelArtifact_BaseModel(t *testing.T) {
 	// Create a test logger
 	logger, _ := zap.NewDevelopment()
 	sugaredLogger := logger.Sugar()
@@ -567,4 +567,52 @@ func TestIsReservingModelArtifact(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+func TestIsReservingModelArtifact_ClusterBaseModel(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	sugaredLogger := logger.Sugar()
+	defer func() { _ = sugaredLogger.Sync() }()
+
+	s := &Gopher{logger: sugaredLogger}
+	cases := []struct {
+		name   string
+		labels map[string]string
+		want   bool
+	}{
+		{"nil labels", nil, false},
+		{"true lower", map[string]string{"models.ome/reserve-model-artifact": "true"}, true},
+		{"true upper", map[string]string{"models.ome/reserve-model-artifact": "TRUE"}, true},
+		{"true mixed", map[string]string{"models.ome/reserve-model-artifact": "TrUe"}, true},
+		{"not containing matched key", map[string]string{"models.ome/reserve-model": "true"}, false},
+		{"false", map[string]string{"models.ome/reserve-model-artifact": "false"}, false},
+		{"empty", map[string]string{"models.ome/reserve-model-artifact": ""}, false},
+		{"other value", map[string]string{"models.ome/reserve-model-artifact": "otherValues"}, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cbm := &v1beta1.ClusterBaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: tc.labels,
+				},
+			}
+			task := &GopherTask{
+				TaskType:         Download, // value not important for this helper
+				ClusterBaseModel: cbm,
+			}
+
+			got := s.isReservingModelArtifact(task)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestIsReservingModelArtifact_NilTaskReturnsFalse(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	sugaredLogger := logger.Sugar()
+	defer func() { _ = sugaredLogger.Sync() }()
+
+	s := &Gopher{logger: sugaredLogger}
+	assert.False(t, s.isReservingModelArtifact(nil), "nil task should not reserve artifact")
 }
