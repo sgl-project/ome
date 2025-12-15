@@ -67,6 +67,21 @@ spec:
                 additionalProperties:
                   type: string
                 type: object
+              apiCapabilities:
+                items:
+                  enum:
+                  - OPENAI_V1_CHAT_COMPLETIONS
+                  - OPENAI_V1_RESPONSES
+                  - OPENAI_V1_EMBEDDINGS
+                  - OPENAI_V1_IMAGES_GENERATIONS
+                  - OPENAI_V1_IMAGES_EDITS
+                  - OPENAI_V1_AUDIO_SPEECH
+                  - OPENAI_V1_AUDIO_TRANSCRIPTIONS
+                  - OPENAI_V1_AUDIO_TRANSLATIONS
+                  - OPENAI_V1_REALTIME
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
               compartmentID:
                 type: string
               disabled:

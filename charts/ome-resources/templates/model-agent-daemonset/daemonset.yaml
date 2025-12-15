@@ -63,6 +63,11 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        - name: INSTANCE_TYPE_MAP
+          valueFrom:
+            configMapKeyRef:
+              name: model-agent-config-map
+              key: instance-type-map
         {{- range $key, $value := .Values.modelAgent.env }}
         - name: {{ $key }}
           value: {{ $value | quote }}

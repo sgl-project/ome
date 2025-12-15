@@ -141,13 +141,6 @@ The Model Agent supports extensive configuration through command-line arguments:
 | `--namespace`        | `ome`        | Kubernetes namespace for ConfigMaps and status tracking |
 | `--node-label-retry` | 5            | Number of retries for updating node labels              |
 
-#### GPU Type Configuration
-
-| Argument               | Default | Description                                                    |
-|------------------------|---------|----------------------------------------------------------------|
-| `--gpu-type`           | ``      | Override GPU type directly (bypasses instance type mapping)    |
-| `--gpu-type-configmap` | ``      | ConfigMap name containing custom instance-to-GPU type mappings |
-
 #### Logging and Monitoring
 
 | Argument         | Default | Description                              |
@@ -169,14 +162,13 @@ The Model Agent supports extensive configuration through command-line arguments:
 
 The Model Agent also supports configuration through environment variables:
 
-| Variable             | Description                                                    |
-| -------------------- | -------------------------------------------------------------- |
-| `NODE_NAME`          | Name of the current Kubernetes node                            |
-| `POD_NAMESPACE`      | Namespace where the Model Agent pod is running                 |
-| `OCI_CONFIG_FILE`    | Path to OCI configuration file                                 |
-| `HUGGINGFACE_TOKEN`  | Default Hugging Face access token                              |
-| `GPU_TYPE`           | Override GPU type directly (bypasses instance type mapping)    |
-| `GPU_TYPE_CONFIGMAP` | ConfigMap name containing custom instance-to-GPU type mappings |
+| Variable | Description |
+|----------|-------------|
+| `NODE_NAME` | Name of the current Kubernetes node |
+| `POD_NAMESPACE` | Namespace where the Model Agent pod is running |
+| `OCI_CONFIG_FILE` | Path to OCI configuration file |
+| `HUGGINGFACE_TOKEN` | Default Hugging Face access token |
+| `INSTANCE_TYPE_MAP` | JSON mapping of cloud instance types to GPU short names (e.g., `{"BM.GPU.H100.8": "H100"}`) |
 
 ## Advanced Download Features
 
@@ -189,6 +181,9 @@ For TensorRT-LLM models, the Model Agent provides intelligent shape filtering:
 1. **Hardware Detection**: The agent detects the GPU configuration on the current node
 2. **Shape Identification**: Maps GPU hardware to TensorRT-LLM shape identifiers (e.g., `GPU.A100.4`, `GPU.H100.8`)
 3. **File Filtering**: Only downloads model files that match the detected GPU shape
+
+The instance type to GPU short name mapping is configurable via the `ome-instance-type-map` ConfigMap, which is automatically deployed with the Model Agent. This allows you to add support for new cloud instance types without code changes.
+To add or modify mappings, you can edit this ConfigMap directly. For example, to add a mapping for a new instance type new-gpu-instance, you can use `kubectl edit configmap ome-instance-type-map -n <namespace>` and add the new entry to the instance-type-map data."
 
 #### Shape Filtering Logic
 
@@ -206,58 +201,6 @@ func (d *TensorRTLLMDownloader) filterByShape(files []string, nodeShape string) 
 ```
 
 This optimization can save significant storage space and download time for large TensorRT-LLM models that may contain multiple GPU shape variants.
-
-### Custom GPU Type Mapping
-
-The Model Agent automatically detects the GPU type from the node's instance type label (`node.kubernetes.io/instance-type`). However, newer cloud instance types may not be in the built-in mapping. You can configure custom GPU type mappings using two methods:
-
-#### Option 1: Direct GPU Type Override
-
-Use `GPU_TYPE` environment variable when all nodes in your deployment have the same GPU type:
-
-```yaml
-# Helm values.yaml
-modelAgent:
-  env:
-    GPU_TYPE: "H100"
-```
-
-This bypasses the instance type lookup entirely and uses the specified GPU type for all nodes.
-
-#### Option 2: Custom Mappings via ConfigMap
-
-For heterogeneous clusters or to add support for new instance types, create a ConfigMap with custom mappings:
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ome-gpu-type-mapping
-  namespace: ome
-data:
-  a3-megagpu-8g: "H100"
-  custom-instance-xyz: "A100-80G"
-```
-
-Then reference it in your Helm values:
-
-```yaml
-modelAgent:
-  env:
-    GPU_TYPE_CONFIGMAP: "ome-gpu-type-mapping"
-```
-
-#### Priority Order
-
-The GPU type is resolved in this order:
-
-1. `GPU_TYPE` environment variable (highest priority)
-2. Custom mappings from `GPU_TYPE_CONFIGMAP`
-3. Built-in `instanceTypeMap` (fallback)
-
-#### Supported GPU Types
-
-GPU type values must match supported types from the built-in mapping. Invalid values will be rejected at startup (for `GPU_TYPE`) or skipped with warnings (for ConfigMap entries), with an error message listing all valid GPU types. Check the model-agent startup logs for the current list of supported types.
 
 ### Concurrent Download Optimization
 

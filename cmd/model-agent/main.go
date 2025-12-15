@@ -15,7 +15,6 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/kubernetes"
@@ -26,7 +25,6 @@ import (
 	omev1beta1informers "github.com/sgl-project/ome/pkg/client/informers/externalversions"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/modelagent"
-	"github.com/sgl-project/ome/pkg/utils"
 	"github.com/sgl-project/ome/pkg/version"
 	"github.com/sgl-project/ome/pkg/xet"
 )
@@ -45,8 +43,6 @@ type config struct {
 	numDownloadWorker    int
 	namespace            string
 	logLevel             string
-	gpuType              string
-	gpuTypeConfigMap     string
 }
 
 // Logger type alias for zap.SugaredLogger
@@ -77,8 +73,6 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 5, "Number of download workers")
 	rootCmd.PersistentFlags().StringVar(&cfg.namespace, "namespace", "ome", "Kubernetes namespace to use")
 	rootCmd.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
-	rootCmd.PersistentFlags().StringVar(&cfg.gpuType, "gpu-type", "", "Override GPU type directly (bypasses instance type mapping)")
-	rootCmd.PersistentFlags().StringVar(&cfg.gpuTypeConfigMap, "gpu-type-configmap", "", "ConfigMap name containing custom instance-to-GPU type mappings")
 
 	_ = v.BindPFlags(rootCmd.PersistentFlags())
 	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
@@ -158,53 +152,6 @@ func setupKubernetesClients() (*kubernetes.Clientset, *omev1beta1client.Clientse
 	return kubeClient, omeClient, nil
 }
 
-// loadGPUTypeMappingsFromConfigMap loads custom instance-to-GPU type mappings from a ConfigMap.
-// Returns nil if configMapName is empty or the ConfigMap doesn't exist.
-// Validates that all mappings have non-empty keys and supported GPU type values.
-func loadGPUTypeMappingsFromConfigMap(ctx context.Context, kubeClient *kubernetes.Clientset, namespace, configMapName string, logger *Logger) map[string]string {
-	if configMapName == "" {
-		return nil
-	}
-
-	cm, err := kubeClient.CoreV1().ConfigMaps(namespace).Get(ctx, configMapName, metav1.GetOptions{})
-	if err != nil {
-		logger.Warnf("Failed to load GPU type mappings ConfigMap %s/%s: %v (using built-in mappings only)", namespace, configMapName, err)
-		return nil
-	}
-
-	if len(cm.Data) == 0 {
-		logger.Warnf("GPU type mappings ConfigMap %s/%s is empty (using built-in mappings only)", namespace, configMapName)
-		return nil
-	}
-
-	// Validate mappings: keys must be non-empty, values must be supported GPU types
-	validMappings := make(map[string]string)
-	for instanceType, gpuType := range cm.Data {
-		if instanceType == "" {
-			logger.Warnf("Skipping GPU type mapping with empty instance type key in ConfigMap %s/%s", namespace, configMapName)
-			continue
-		}
-		if gpuType == "" {
-			logger.Warnf("Skipping GPU type mapping for instance type %q with empty GPU type value in ConfigMap %s/%s", instanceType, namespace, configMapName)
-			continue
-		}
-		if !utils.IsSupportedGPUType(gpuType) {
-			logger.Warnf("Skipping GPU type mapping for instance type %q: unsupported GPU type %q (supported: %v) in ConfigMap %s/%s",
-				instanceType, gpuType, utils.GetSupportedGPUTypes(), namespace, configMapName)
-			continue
-		}
-		validMappings[instanceType] = gpuType
-	}
-
-	if len(validMappings) == 0 {
-		logger.Warnf("No valid GPU type mappings found in ConfigMap %s/%s (all entries were invalid)", namespace, configMapName)
-		return nil
-	}
-
-	logger.Infof("Loaded %d valid GPU type mappings from ConfigMap %s/%s", len(validMappings), namespace, configMapName)
-	return validMappings
-}
-
 // initializePrometheusMetrics sets up Prometheus metrics and registers collectors
 func initializePrometheusMetrics(logger *Logger) *modelagent.Metrics {
 	// Register Go and process collectors (safely, without panicking if already registered)
@@ -246,8 +193,6 @@ func initializeComponents(
 	omeInformerFactory omev1beta1informers.SharedInformerFactory,
 	metrics *modelagent.Metrics,
 	gopherTaskChan chan *modelagent.GopherTask,
-	gpuTypeOverride string,
-	customGPUTypeMappings map[string]string,
 	logger *Logger,
 ) (*modelagent.Scout, *modelagent.Gopher, error) {
 	// Create node label reconciler for labeling the node based on model status
@@ -274,8 +219,6 @@ func initializeComponents(
 		omeInformerFactory,
 		gopherTaskChan,
 		kubeClient,
-		gpuTypeOverride,
-		customGPUTypeMappings,
 		logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create scout: %w", err)
@@ -377,26 +320,6 @@ func runCommand(cmd *cobra.Command, args []string) {
 	// Create a download task communication channel
 	gopherTaskChan := make(chan *modelagent.GopherTask)
 
-	// Get GPU type configuration from viper (supports both flags and env vars)
-	gpuTypeOverride := v.GetString("gpu-type")
-	gpuTypeConfigMap := v.GetString("gpu-type-configmap")
-
-	// Validate GPU type override if provided
-	if gpuTypeOverride != "" {
-		if !utils.IsSupportedGPUType(gpuTypeOverride) {
-			logger.Fatalf("Invalid GPU_TYPE value %q: must be one of %v", gpuTypeOverride, utils.GetSupportedGPUTypes())
-		}
-		logger.Infof("Using GPU type override: %s", gpuTypeOverride)
-	}
-
-	// Load custom GPU type mappings from ConfigMap if specified
-	customGPUTypeMappings := loadGPUTypeMappingsFromConfigMap(ctx, kubeClient, cfg.namespace, gpuTypeConfigMap, logger)
-
-	// Log GPU type ConfigMap configuration
-	if gpuTypeConfigMap != "" {
-		logger.Infof("Using GPU type ConfigMap: %s/%s", cfg.namespace, gpuTypeConfigMap)
-	}
-
 	// Initialize components
 	scout, gopher, err := initializeComponents(
 		ctx,
@@ -405,8 +328,6 @@ func runCommand(cmd *cobra.Command, args []string) {
 		omeInformerFactory,
 		metrics,
 		gopherTaskChan,
-		gpuTypeOverride,
-		customGPUTypeMappings,
 		logger,
 	)
 	if err != nil {

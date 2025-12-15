@@ -6,3 +6,4 @@ resources:
   - clusterrolebinding.yaml
   - daemonset.yaml
   - serviceaccount.yaml
+  - configmap.yaml
