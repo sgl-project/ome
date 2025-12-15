@@ -52,7 +52,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: GptOssForCausalLM
-      autoSelect: true
+      autoSelect: false
       priority: 1
       quantization: mxfp4
   modelSizeRange:
@@ -155,11 +155,11 @@ spec:
           name: dshm
       resources:
         requests:
-          cpu: 30
+          cpu: 25
           memory: 100Gi
           nvidia.com/gpu: 2
         limits:
-          cpu: 30
+          cpu: 25
           memory: 100Gi
           nvidia.com/gpu: 2
 
@@ -326,11 +326,11 @@ spec:
           name: dshm
       resources:
         requests:
-          cpu: 30
+          cpu: 25
           memory: 100Gi
           nvidia.com/gpu: 2
         limits:
-          cpu: 30
+          cpu: 25
           memory: 100Gi
           nvidia.com/gpu: 2
 

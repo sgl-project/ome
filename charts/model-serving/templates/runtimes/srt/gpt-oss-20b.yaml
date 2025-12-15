@@ -45,24 +45,33 @@ spec:
   affinity: {{ .affinity | toYaml | nindent 4 }}
   {{ end }}
   supportedModelFormats:
-    - modelFramework:
+    - autoSelect: false
+      modelArchitecture: GptOssForCausalLM
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelFramework:
         name: transformers
         version: "4.55.0.dev0"
-      modelFormat:
-        name: safetensors
-        version: "1.0.0"
-      modelArchitecture: GptOssForCausalLM
-      autoSelect: true
       priority: 1
       quantization: mxfp4
-    - modelFramework:
-        name: transformers
-        version: "4.55.0"
+    - autoSelect: false
+      modelArchitecture: GptOssForCausalLM
       modelFormat:
         name: safetensors
         version: "1.0.0"
+      modelFramework:
+        name: transformers
+        version: "4.55.0"
+      priority: 1
+    - autoSelect: false
       modelArchitecture: GptOssForCausalLM
-      autoSelect: true
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelFramework:
+        name: transformers
+        version: "4.55.0.dev0"
       priority: 1
   modelSizeRange:
     min: 15B

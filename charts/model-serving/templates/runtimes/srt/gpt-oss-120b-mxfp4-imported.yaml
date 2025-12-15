@@ -1,34 +1,34 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-gpt-oss-120b
+  name: srt-gpt-oss-120b-mxfp4-imported
 spec:
   disabled: false
-  {{- if or .Values.commonAnnotations .Values.gpt_oss_120b_bf16.annotations }}
+  {{- if or .Values.commonAnnotations .Values.gpt_oss_120b_imported.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
     {{ toYaml .Values.commonAnnotations | nindent 4 }}
     {{- end }}
-    {{- if .Values.gpt_oss_120b_bf16.annotations }}
-    {{ toYaml .Values.gpt_oss_120b_bf16.annotations | nindent 4 }}
+    {{- if .Values.gpt_oss_120b_imported.annotations }}
+    {{ toYaml .Values.gpt_oss_120b_imported.annotations | nindent 4 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonLabels .Values.gpt_oss_120b_bf16.labels }}
+  {{- if or .Values.commonLabels .Values.gpt_oss_120b_imported.labels }}
   labels:
     {{- if .Values.commonLabels }}
     {{ toYaml .Values.commonLabels | nindent 4 }}
     {{- end }}
-    {{- if .Values.gpt_oss_120b_bf16.labels }}
-    {{ toYaml .Values.gpt_oss_120b_bf16.labels | nindent 4 }}
+    {{- if .Values.gpt_oss_120b_imported.labels }}
+    {{ toYaml .Values.gpt_oss_120b_imported.labels | nindent 4 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonTolerations .Values.gpt_oss_120b_bf16.tolerations }}
+  {{- if or .Values.commonTolerations .Values.gpt_oss_120b_imported.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
     {{ toYaml .Values.commonTolerations | nindent 4 }}
     {{- end }}
-    {{- if .Values.gpt_oss_120b_bf16.tolerations }}
-    {{ toYaml .Values.gpt_oss_120b_bf16.tolerations | nindent 4 }}
+    {{- if .Values.gpt_oss_120b_imported.tolerations }}
+    {{ toYaml .Values.gpt_oss_120b_imported.tolerations | nindent 4 }}
     {{- end }}
   {{- end }}
   volumes:
@@ -41,11 +41,21 @@ spec:
         path: /etc/pki
         type: Directory
     {{- end }}
-  {{ with .Values.gpt_oss_120b_bf16 }}
+  {{ with .Values.gpt_oss_120b_imported }}
   affinity: {{ .affinity | toYaml | nindent 4 }}
   {{ end }}
   supportedModelFormats:
-    - autoSelect: false
+    - autoSelect: true
+      modelArchitecture: GptOssForCausalLM
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelFramework:
+        name: transformers
+        version: "4.55.0.dev0"
+      priority: 1
+      quantization: mxfp4
+    - autoSelect: true
       modelArchitecture: GptOssForCausalLM
       modelFormat:
         name: safetensors
@@ -54,7 +64,7 @@ spec:
         name: transformers
         version: "4.55.0"
       priority: 1
-    - autoSelect: false
+    - autoSelect: true
       modelArchitecture: GptOssForCausalLM
       modelFormat:
         name: safetensors
@@ -71,7 +81,7 @@ spec:
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.gpt_oss_120b_bf16.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.gpt_oss_120b_bf16.image.tag | default .Values.sglang.commonImage.tag }}
+      image: {{ .Values.gpt_oss_120b_imported.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.gpt_oss_120b_imported.image.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}
           name: http1
@@ -82,17 +92,14 @@ spec:
         - --
       args:
         - |
-          python3 -m sglang.launch_server \
+          python3 -m sglang_router.launch_server \
           --host=0.0.0.0 \
-          --port={{ .Values.sglang.port }} \
-          --enable-metrics \
-          --log-requests \
+          --port=8080 \
+          --grpc-mode \
+          --tp-size=2 \
+          --served-model-name=vllm-model \
           --model-path="$MODEL_PATH" \
-          --tp 2 \
-          --log-requests-level=1 \
-          --tool-call-parser=gpt-oss \
-          --reasoning-parser=gpt-oss \
-          --context-length=131072
+          --router-model-path="$MODEL_PATH"
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -108,7 +115,7 @@ spec:
 
       readinessProbe:
         httpGet:
-          path: /health_generate
+          path: /health
           port: 8080
         failureThreshold: 3
         successThreshold: 1
@@ -126,7 +133,7 @@ spec:
 
       startupProbe:
         httpGet:
-          path: /health_generate
+          path: /health
           port: 8080
         failureThreshold: 150
         successThreshold: 1
@@ -135,31 +142,31 @@ spec:
         timeoutSeconds: 30
   engineConfig:
     schedulerName: {{ .Values.commonSchedulerName }}
-    {{- if or .Values.commonAnnotations .Values.gpt_oss_120b_bf16.annotations }}
+    {{- if or .Values.commonAnnotations .Values.gpt_oss_120b_imported.annotations }}
     annotations:
       {{- if .Values.commonAnnotations }}
       {{ toYaml .Values.commonAnnotations | nindent 6 }}
       {{- end }}
-      {{- if .Values.gpt_oss_120b_bf16.annotations }}
-      {{ toYaml .Values.gpt_oss_120b_bf16.annotations | nindent 6 }}
+      {{- if .Values.gpt_oss_120b_imported.annotations }}
+      {{ toYaml .Values.gpt_oss_120b_imported.annotations | nindent 6 }}
       {{- end }}
     {{- end }}
-    {{- if or .Values.commonLabels .Values.gpt_oss_120b_bf16.labels }}
+    {{- if or .Values.commonLabels .Values.gpt_oss_120b_imported.labels }}
     labels:
       {{- if .Values.commonLabels }}
       {{ toYaml .Values.commonLabels | nindent 6 }}
       {{- end }}
-      {{- if .Values.gpt_oss_120b_bf16.labels }}
-      {{ toYaml .Values.gpt_oss_120b_bf16.labels | nindent 6 }}
+      {{- if .Values.gpt_oss_120b_imported.labels }}
+      {{ toYaml .Values.gpt_oss_120b_imported.labels | nindent 6 }}
       {{- end }}
     {{- end }}
-    {{- if or .Values.commonTolerations .Values.gpt_oss_120b_bf16.tolerations }}
+    {{- if or .Values.commonTolerations .Values.gpt_oss_120b_imported.tolerations }}
     tolerations:
       {{- if .Values.commonTolerations }}
       {{ toYaml .Values.commonTolerations | nindent 6 }}
       {{- end }}
-      {{- if .Values.gpt_oss_120b_bf16.tolerations }}
-      {{ toYaml .Values.gpt_oss_120b_bf16.tolerations | nindent 6 }}
+      {{- if .Values.gpt_oss_120b_imported.tolerations }}
+      {{ toYaml .Values.gpt_oss_120b_imported.tolerations | nindent 6 }}
       {{- end }}
     {{- end }}
     volumes:
@@ -172,12 +179,12 @@ spec:
           path: /etc/pki
           type: Directory
         {{- end }}
-    {{ with .Values.gpt_oss_120b_bf16 }}
+    {{ with .Values.gpt_oss_120b_imported }}
     affinity: {{ .affinity | toYaml | nindent 6 }}
     {{ end }}
     runner:
       name: ome-container
-      image: {{ .Values.gpt_oss_120b_bf16.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.gpt_oss_120b_bf16.image.tag | default .Values.sglang.commonImage.tag }}
+      image: {{ .Values.gpt_oss_120b_imported.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.gpt_oss_120b_imported.image.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}
           name: http1
@@ -188,17 +195,14 @@ spec:
         - --
       args:
         - |
-          python3 -m sglang.launch_server \
+          python3 -m sglang_router.launch_server \
           --host=0.0.0.0 \
-          --port={{ .Values.sglang.port }} \
-          --enable-metrics \
-          --log-requests \
+          --port=8080 \
+          --grpc-mode \
+          --tp-size=2 \
+          --served-model-name=vllm-model \
           --model-path="$MODEL_PATH" \
-          --tp 2 \
-          --log-requests-level=1 \
-          --tool-call-parser=gpt-oss \
-          --reasoning-parser=gpt-oss \
-          --context-length=131072
+          --router-model-path="$MODEL_PATH"
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -214,7 +218,7 @@ spec:
 
       readinessProbe:
         httpGet:
-          path: /health_generate
+          path: /health
           port: 8080
         failureThreshold: 3
         successThreshold: 1
@@ -232,7 +236,7 @@ spec:
 
       startupProbe:
         httpGet:
-          path: /health_generate
+          path: /health
           port: 8080
         failureThreshold: 150
         successThreshold: 1
