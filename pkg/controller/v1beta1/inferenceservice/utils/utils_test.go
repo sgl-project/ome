@@ -1607,7 +1607,8 @@ func TestDetermineEngineDeploymentMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DetermineEngineDeploymentMode(tt.engine)
+			// Pass empty string for globalDeploymentMode to test original behavior
+			result := DetermineEngineDeploymentMode(tt.engine, "")
 			assert.Equal(t, tt.expectedMode, result)
 		})
 	}
