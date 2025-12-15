@@ -56,6 +56,11 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        - name: INSTANCE_TYPE_MAP
+          valueFrom:
+            configMapKeyRef:
+              name: ome-instance-type-map
+              key: instance-type-map
         volumeMounts:
         - name: host-models
           readOnly: false

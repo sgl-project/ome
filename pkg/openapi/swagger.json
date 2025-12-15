@@ -559,6 +559,15 @@
             "default": ""
           }
         },
+        "apiCapabilities": {
+          "description": "API capabilities supported by the model, e.g., \"OPENAI_V1_CHAT_COMPLETIONS\"",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
         "compartmentID": {
           "description": "CompartmentID is the compartment ID of the model",
           "type": "string"
@@ -582,15 +591,6 @@
         },
         "modelCapabilities": {
           "description": "ModelCapabilities of the model, e.g., \"TEXT_GENERATION\", \"TEXT_SUMMARIZATION\", \"TEXT_EMBEDDINGS\"",
-          "type": "array",
-          "items": {
-            "type": "string",
-            "default": ""
-          },
-          "x-kubernetes-list-type": "atomic"
-        },
-        "apiCapabilities": {
-          "description": "API capabilities supported by the model, e.g., \"OPENAI_V1_CHAT_COMPLETIONS\"",
           "type": "array",
           "items": {
             "type": "string",

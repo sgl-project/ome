@@ -1,13 +1,22 @@
 package utils
 
 import (
-	"sort"
+	"encoding/json"
+	"fmt"
+	"os"
+	"sync"
 
 	"github.com/sgl-project/ome/pkg/imds"
 	"github.com/sgl-project/ome/pkg/logging"
 )
 
-var instanceTypeMap = map[string]string{
+const (
+	// InstanceTypeMapEnvVar is the environment variable name for instance type map
+	InstanceTypeMapEnvVar = "INSTANCE_TYPE_MAP"
+)
+
+// defaultInstanceTypeMap is the fallback map when env var is not set
+var defaultInstanceTypeMap = map[string]string{
 	// Oracle Cloud (OCI) shapes
 	"BM.GPU.A10.4":     "A10",
 	"BM.GPU.A100-v2.8": "A100-80G",
@@ -39,40 +48,40 @@ var instanceTypeMap = map[string]string{
 	"gpu-l40s":     "L40S",
 }
 
-// Pre-calculated supported GPU types for O(1) lookup and deterministic ordering.
-// Initialized once at package load time via init().
 var (
-	supportedGPUTypes   []string
-	supportedGPUTypeSet map[string]bool
+	instanceTypeMap     map[string]string
+	instanceTypeMapErr  error
+	instanceTypeMapOnce sync.Once
 )
 
-func init() {
-	// Build set of unique GPU types from instanceTypeMap values
-	supportedGPUTypeSet = make(map[string]bool)
-	for _, gpuType := range instanceTypeMap {
-		supportedGPUTypeSet[gpuType] = true
-	}
-
-	// Build sorted slice for deterministic output
-	supportedGPUTypes = make([]string, 0, len(supportedGPUTypeSet))
-	for gpuType := range supportedGPUTypeSet {
-		supportedGPUTypes = append(supportedGPUTypes, gpuType)
-	}
-	sort.Strings(supportedGPUTypes)
+// getInstanceTypeMap returns the instance type map, loading from env var if available
+func getInstanceTypeMap() (map[string]string, error) {
+	instanceTypeMapOnce.Do(func() {
+		instanceTypeMap, instanceTypeMapErr = loadInstanceTypeMapFromEnv()
+	})
+	return instanceTypeMap, instanceTypeMapErr
 }
 
-// IsSupportedGPUType checks if the given GPU type is in the list of supported GPU types.
-// Supported GPU types are derived from the values in instanceTypeMap.
-// Uses O(1) map lookup for efficiency.
-func IsSupportedGPUType(gpuType string) bool {
-	return supportedGPUTypeSet[gpuType]
-}
+// loadInstanceTypeMapFromEnv loads the instance type map from environment variable
+// Falls back to default map if env var is not set, empty, or parsing fails
+func loadInstanceTypeMapFromEnv() (map[string]string, error) {
+	envValue := os.Getenv(InstanceTypeMapEnvVar)
+	// Check if ConfigMap doesn't exist (env var not set)
+	if envValue == "" {
+		return defaultInstanceTypeMap, nil
+	}
 
-// GetSupportedGPUTypes returns a sorted slice of all unique supported GPU type names.
-// These are derived from the values in instanceTypeMap and pre-calculated at init time
-// for consistent ordering across calls.
-func GetSupportedGPUTypes() []string {
-	return supportedGPUTypes
+	var configMap map[string]string
+	if err := json.Unmarshal([]byte(envValue), &configMap); err != nil {
+		return nil, fmt.Errorf("failed to parse %s: %w", InstanceTypeMapEnvVar, err)
+	}
+
+	// Check if ConfigMap exists but is empty
+	if len(configMap) == 0 {
+		return defaultInstanceTypeMap, nil
+	}
+
+	return configMap, nil
 }
 
 // GetNodeInstanceType retrieves the instance type of the node.
@@ -88,29 +97,13 @@ func GetNodeInstanceType(logger logging.Interface) (string, error) {
 }
 
 func GetInstanceTypeShortName(currentInstanceType string) (string, error) {
-	if shortName, ok := instanceTypeMap[currentInstanceType]; ok {
+	typeMap, err := getInstanceTypeMap()
+	if err != nil {
+		return "", err
+	}
+	if shortName, ok := typeMap[currentInstanceType]; ok {
 		return shortName, nil
 	}
 	// Return the original instance type as a fallback for unknown shapes
 	return currentInstanceType, nil
-}
-
-// GetInstanceTypeShortNameWithOverrides returns the GPU short name for an instance type,
-// checking overrides in priority order: gpuTypeOverride > customMappings > built-in instanceTypeMap.
-// This allows users to configure custom instance-to-GPU mappings without code changes.
-func GetInstanceTypeShortNameWithOverrides(currentInstanceType, gpuTypeOverride string, customMappings map[string]string) (string, error) {
-	// Priority 1: Direct GPU type override (highest priority)
-	if gpuTypeOverride != "" {
-		return gpuTypeOverride, nil
-	}
-
-	// Priority 2: Custom mappings from ConfigMap
-	if customMappings != nil {
-		if shortName, ok := customMappings[currentInstanceType]; ok {
-			return shortName, nil
-		}
-	}
-
-	// Priority 3: Built-in instance type map (fallback)
-	return GetInstanceTypeShortName(currentInstanceType)
 }
