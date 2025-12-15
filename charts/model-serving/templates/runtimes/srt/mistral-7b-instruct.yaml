@@ -190,7 +190,7 @@ spec:
           --port={{ .Values.sglang.port }} \
           --enable-metrics \
           --log-requests \
-          --model="$MODEL_PATH"\
+          --model="$MODEL_PATH" \
           --tp=1 \
           --mem-frac=0.9
       volumeMounts:
