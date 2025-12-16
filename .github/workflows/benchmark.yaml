@@ -1,0 +1,595 @@
+name: Benchmark Job
+
+on:
+  push:
+    branches: [ xinyue/add-benchmark-ci ]
+#  pull_request:
+#  repository_dispatch:
+#    types: [container-pushed]
+#  workflow_dispatch:
+#    inputs:
+#      models:
+#        description: "Comma-separated list of model names to deploy"
+#        required: false
+#        default: "llama-3-3-70b-instruct,llama-4-scout-17b-16e-instruct"
+#        type: string
+
+env:
+  REGISTRY: ord.ocir.io
+  REGISTRY_NAMESPACE: idqj093njucb
+  K8S_NAMESPACE: actions-runner-system
+  CONTAINER_NAME: official-sgl
+  ISVC_MODELS: llama-4-scout-17b-16e-instruct,gpt-oss-120b,deepseek-llm-7b-chat,qwen3-32b
+  BUCKET_NAME: ome-benchmark-results
+  BENCHMARK_CONTAINER: ghcr.io/moirai-internal/genai-bench:0.0.3
+
+jobs:
+  deploy:
+    runs-on: k8s-runner
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    env:
+      IMAGE_NAME: ${{ github.event.client_payload.image_name }}
+      FULL_TAG: ${{ github.event.client_payload.full_tag }}
+      BRANCH_NAME: ${{ github.event.client_payload.branch_name }}
+      VERSION: ${{ github.event.client_payload.version }}
+      COMMIT_HASH: ${{ github.event.client_payload.commit_hash }}
+
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.30.1'
+
+      - name: Prepare model list and sanitize names
+        id: models
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            MODELS="${{ github.event.inputs.models }}"
+          else
+            # Default models for auto-deployment
+            MODELS=${ISVC_MODELS}
+          fi
+
+          # Helper functions for name sanitization
+          sanitize_model_name() {
+            echo "$1" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]'
+          }
+
+          sanitize_namespace() {
+            local namespace="$1"
+            namespace=$(echo "$namespace" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
+            echo "$namespace" | cut -c1-63 | sed 's/-$//'
+          }
+
+          create_runtime_name() {
+            local model_name="$1"
+            local runtime_name="srt-$model_name"
+            runtime_name=$(echo "$runtime_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
+            echo "$runtime_name" | cut -c1-63 | sed 's/-$//'
+          }
+
+          # Process each model and create comprehensive JSON with all sanitized names
+          IFS=',' read -ra MODEL_ARRAY <<< "$MODELS"
+          MODELS_WITH_NAMES="[]"
+
+          for model in "${MODEL_ARRAY[@]}"; do
+            MODEL_NAME=$(sanitize_model_name "$model")
+            NAMESPACE=$(sanitize_namespace "${K8S_NAMESPACE}")
+            RUNTIME_NAME=$(create_runtime_name "$MODEL_NAME")
+
+            # Create JSON object for this model
+            MODEL_OBJECT=$(jq -n \
+              --arg model "$model" \
+              --arg model_name "$MODEL_NAME" \
+              --arg namespace "$NAMESPACE" \
+              --arg runtime_name "$RUNTIME_NAME" \
+              '{
+                original: $model,
+                model_name: $model_name,
+                namespace: $namespace,
+                runtime_name: $runtime_name
+              }')
+
+            # Add to array
+            MODELS_WITH_NAMES=$(echo "$MODELS_WITH_NAMES" | jq --argjson obj "$MODEL_OBJECT" '. += [$obj]')
+          done
+
+          # Output the comprehensive model metadata
+          echo "models_metadata=$(echo "$MODELS_WITH_NAMES" | tr -d '\n')" >> $GITHUB_OUTPUT
+
+          echo "Models to deploy: $MODELS"
+          echo "Models with sanitized names:"
+          echo "$MODELS_WITH_NAMES" | jq .
+
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+      - name: Deploy to Kubernetes using Argo Workflows
+        id: deployment
+        run: |
+          MODELS_METADATA='${{ steps.models.outputs.models_metadata }}'
+          IMAGE="${IMAGE_NAME}:${FULL_TAG}"
+
+          # Initialize status tracking
+          DEPLOYMENT_STATUS="[]"
+          SUBMITTED_WORKFLOWS="[]"
+          HAS_FAILURE=false
+
+          # Process each model and submit Argo Workflow
+          while read -r model_info; do
+            # Extract all names from JSON
+            MODEL=$(echo "$model_info" | jq -r '.original')
+            MODEL_NAME=$(echo "$model_info" | jq -r '.model_name')
+            NAMESPACE=$(echo "$model_info" | jq -r '.namespace')
+            RUNTIME_NAME=$(echo "$model_info" | jq -r '.runtime_name')
+
+            echo "Creating Argo Workflow for model: $MODEL"
+            echo "Namespace: $NAMESPACE"
+            echo "Runtime: $RUNTIME_NAME"
+
+            # Create Argo Workflow manifest for this model
+            cat <<EOF > argo-workflow-$MODEL_NAME.yaml
+          apiVersion: argoproj.io/v1alpha1
+          kind: Workflow
+          metadata:
+            generateName: benchmark-$MODEL_NAME-
+            namespace: $NAMESPACE
+            labels:
+              sglang.version: "$VERSION"
+              model: "$MODEL_NAME"
+          spec:
+            entrypoint: benchmark-pipeline
+            serviceAccountName: argo-workflow
+            onExit: cleanup
+            arguments:
+              parameters:
+              - name: model
+                value: "$MODEL"
+              - name: model-name
+                value: "$MODEL_NAME"
+              - name: namespace
+                value: "$NAMESPACE"
+              - name: runtime-name
+                value: "$RUNTIME_NAME"
+              - name: image
+                value: "$IMAGE"
+              - name: version
+                value: "$VERSION"
+              - name: benchmark-container
+                value: "${BENCHMARK_CONTAINER}"
+              - name: registry-namespace
+                value: "${REGISTRY_NAMESPACE}"
+              - name: bucket-name
+                value: "${BUCKET_NAME}"
+              - name: container-name
+                value: "${CONTAINER_NAME}"
+              - name: full-tag
+                value: "${FULL_TAG}"
+
+            templates:
+            - name: benchmark-pipeline
+              steps:
+              - - name: deploy-inference-service
+                  template: deploy-isvc
+              - - name: wait-for-isvc-ready
+                  template: wait-isvc
+              - - name: run-benchmark
+                  template: run-benchmark-job
+              - - name: wait-for-benchmark
+                  template: wait-benchmark
+
+            - name: deploy-isvc
+              resource:
+                action: apply
+                manifest: |
+                  apiVersion: ome.io/v1beta1
+                  kind: InferenceService
+                  metadata:
+                    name: {{workflow.parameters.model-name}}
+                    namespace: {{workflow.parameters.namespace}}
+                    annotations:
+                      sglang.deployed-by: "github-actions-argo"
+                      sglang.deployment-time: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                  spec:
+                    engine:
+                      minReplicas: 1
+                      maxReplicas: 1
+                    model:
+                      name: {{workflow.parameters.model-name}}
+
+            - name: wait-isvc
+              script:
+                image: bitnami/kubectl:latest
+                command: [bash]
+                source: |
+                  MODEL_NAME="{{workflow.parameters.model-name}}"
+                  NAMESPACE="{{workflow.parameters.namespace}}"
+                  TIMEOUT=1800
+                  ELAPSED=0
+
+                  echo "Waiting for InferenceService \$MODEL_NAME to be ready..."
+                  while [ \$ELAPSED -lt \$TIMEOUT ]; do
+                    READY_STATUS=\$(kubectl get inferenceservice \$MODEL_NAME -n \$NAMESPACE -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "Unknown")
+                    ENGINE_STATUS=\$(kubectl get inferenceservice \$MODEL_NAME -n \$NAMESPACE -o jsonpath='{.status.conditions[?(@.type=="EngineReady")].status}' 2>/dev/null || echo "Unknown")
+
+                    if [ "\$READY_STATUS" = "True" ] && [ "\$ENGINE_STATUS" = "True" ]; then
+                      echo "InferenceService is ready and engine is serving!"
+                      exit 0
+                    fi
+                    echo "InferenceService Ready: \$READY_STATUS, EngineReady: \$ENGINE_STATUS (waiting...)"
+                    sleep 10
+                    ELAPSED=\$((ELAPSED + 10))
+                  done
+                  echo "Timeout waiting for InferenceService"
+                  kubectl get inferenceservice \$MODEL_NAME -n \$NAMESPACE -o yaml
+                  exit 1
+
+            - name: run-benchmark-job
+              resource:
+                action: apply
+                manifest: |
+                  apiVersion: ome.io/v1beta1
+                  kind: BenchmarkJob
+                  metadata:
+                    name: benchmark-{{workflow.parameters.model-name}}
+                    namespace: {{workflow.parameters.namespace}}
+                  spec:
+                    podOverride:
+                      image: {{workflow.parameters.benchmark-container}}
+                      nodeSelector:
+                        kubernetes.io/hostname: "10.0.93.140"
+                    huggingFaceSecretReference:
+                      name: huggingface-secret
+                    endpoint:
+                      inferenceService:
+                        name: {{workflow.parameters.model-name}}
+                        namespace: {{workflow.parameters.namespace}}
+                    task: text-to-text
+                    maxTimePerIteration: 10
+                    maxRequestsPerIteration: 1000
+                    outputLocation:
+                      storageUri: "oci://n/{{workflow.parameters.registry-namespace}}/b/{{workflow.parameters.bucket-name}}/o/{{workflow.parameters.container-name}}/{{workflow.parameters.full-tag}}/{{workflow.parameters.model-name}}"
+                      parameters:
+                        auth: "instance_principal"
+                        region: "eu-frankfurt-1"
+
+            - name: wait-benchmark
+              script:
+                image: bitnami/kubectl:latest
+                command: [bash]
+                source: |
+                  MODEL_NAME="{{workflow.parameters.model-name}}"
+                  NAMESPACE="{{workflow.parameters.namespace}}"
+                  TIMEOUT=18000  # 5 hours
+                  ELAPSED=0
+
+                  echo "Waiting for BenchmarkJob benchmark-\$MODEL_NAME to complete..."
+                  while [ \$ELAPSED -lt \$TIMEOUT ]; do
+                    STATUS=\$(kubectl get benchmarkjob benchmark-\$MODEL_NAME -n \$NAMESPACE -o jsonpath='{.status.state}' 2>/dev/null || echo "Running")
+                    if [ "\$STATUS" = "Succeeded" ] || [ "\$STATUS" = "Completed" ]; then
+                      echo "Benchmark completed successfully!"
+                      exit 0
+                    elif [ "\$STATUS" = "Failed" ]; then
+                      echo "Benchmark failed!"
+                      kubectl get benchmarkjob benchmark-\$MODEL_NAME -n \$NAMESPACE -o yaml
+                      exit 1
+                    fi
+                    sleep 30
+                    ELAPSED=\$((ELAPSED + 30))
+                  done
+                  echo "Timeout waiting for benchmark"
+
+            - name: cleanup
+              steps:
+              - - name: delete-benchmark-job
+                  template: delete-benchmark
+              - - name: delete-isvc
+                  template: delete-isvc
+
+            - name: delete-benchmark
+              resource:
+                action: delete
+                flags:
+                  - benchmarkjob
+                  - benchmark-{{workflow.parameters.model-name}}
+                  - -n
+                  - "{{workflow.parameters.namespace}}"
+                  - --ignore-not-found=true
+
+            - name: delete-isvc
+              resource:
+                action: delete
+                flags:
+                  - inferenceservice
+                  - "{{workflow.parameters.model-name}}"
+                  - -n
+                  - "{{workflow.parameters.namespace}}"
+                  - --ignore-not-found=true
+          EOF
+
+            # Submit the Argo Workflow (don't wait yet)
+            echo "Submitting Argo Workflow for model: $MODEL"
+            WORKFLOW_NAME=$(kubectl create -f argo-workflow-$MODEL_NAME.yaml -n $NAMESPACE -o jsonpath='{.metadata.name}' 2>&1 | tee /tmp/argo-output-$MODEL_NAME.log)
+            WORKFLOW_EXIT_CODE=$?
+
+            if [ $WORKFLOW_EXIT_CODE -eq 0 ] && [ -n "$WORKFLOW_NAME" ]; then
+              echo "Workflow $WORKFLOW_NAME created successfully"
+              # Store workflow info for later waiting
+              WORKFLOW_ENTRY=$(jq -n \
+                --arg model "$MODEL" \
+                --arg model_name "$MODEL_NAME" \
+                --arg namespace "$NAMESPACE" \
+                --arg runtime_name "$RUNTIME_NAME" \
+                --arg workflow_name "$WORKFLOW_NAME" \
+                '{
+                  model: $model,
+                  model_name: $model_name,
+                  namespace: $namespace,
+                  runtime_name: $runtime_name,
+                  workflow_name: $workflow_name,
+                  submit_status: "SUCCESS"
+                }')
+            else
+              echo "❌ Failed to submit workflow for model: $MODEL"
+              cat /tmp/argo-output-$MODEL_NAME.log
+              WORKFLOW_ENTRY=$(jq -n \
+                --arg model "$MODEL" \
+                --arg model_name "$MODEL_NAME" \
+                --arg namespace "$NAMESPACE" \
+                --arg runtime_name "$RUNTIME_NAME" \
+                '{
+                  model: $model,
+                  model_name: $model_name,
+                  namespace: $namespace,
+                  runtime_name: $runtime_name,
+                  workflow_name: "N/A",
+                  submit_status: "FAILED"
+                }')
+              HAS_FAILURE=true
+            fi
+
+            # Add to submitted workflows tracking
+            SUBMITTED_WORKFLOWS=$(echo "$SUBMITTED_WORKFLOWS" | jq --argjson entry "$WORKFLOW_ENTRY" '. += [$entry]')
+
+            # Clean up workflow manifest
+            rm -f argo-workflow-$MODEL_NAME.yaml
+
+            echo "---"
+          done < <(echo "$MODELS_METADATA" | jq -c '.[]')
+
+          echo ""
+          echo "=========================================="
+          echo "All workflows submitted. Now waiting for results..."
+          echo "=========================================="
+          echo ""
+
+          # Phase 2: Wait for all submitted workflows to complete
+          while read -r workflow_info; do
+            MODEL=$(echo "$workflow_info" | jq -r '.model')
+            MODEL_NAME=$(echo "$workflow_info" | jq -r '.model_name')
+            NAMESPACE=$(echo "$workflow_info" | jq -r '.namespace')
+            RUNTIME_NAME=$(echo "$workflow_info" | jq -r '.runtime_name')
+            WORKFLOW_NAME=$(echo "$workflow_info" | jq -r '.workflow_name')
+            SUBMIT_STATUS=$(echo "$workflow_info" | jq -r '.submit_status')
+
+            echo "Checking workflow result for model: $MODEL"
+
+            if [ "$SUBMIT_STATUS" = "FAILED" ]; then
+              echo "❌ Workflow submission failed for model: $MODEL (skipping wait)"
+              ISVC_STATUS="FAILED"
+              BENCHMARK_STATUS="SKIPPED"
+            else
+              echo "Waiting for workflow $WORKFLOW_NAME to complete..."
+
+              # Wait for the workflow to complete (timeout: 6 hours)
+              TIMEOUT=21600
+              ELAPSED=0
+              while [ $ELAPSED -lt $TIMEOUT ]; do
+                WORKFLOW_STATUS=$(kubectl get workflow $WORKFLOW_NAME -n $NAMESPACE -o jsonpath='{.status.phase}' 2>/dev/null || echo "Pending")
+
+                if [ "$WORKFLOW_STATUS" = "Succeeded" ]; then
+                  echo "✅ Successfully completed workflow for model: $MODEL"
+                  ISVC_STATUS="SUCCESS"
+                  BENCHMARK_STATUS="SUCCESS"
+                  break
+                elif [ "$WORKFLOW_STATUS" = "Failed" ] || [ "$WORKFLOW_STATUS" = "Error" ]; then
+                  echo "❌ Workflow failed for model: $MODEL (Status: $WORKFLOW_STATUS)"
+                  echo "Workflow details:"
+                  kubectl get workflow $WORKFLOW_NAME -n $NAMESPACE -o yaml
+                  ISVC_STATUS="FAILED"
+                  BENCHMARK_STATUS="FAILED"
+                  HAS_FAILURE=true
+                  break
+                fi
+
+                echo "Workflow status: $WORKFLOW_STATUS (waiting...)"
+                sleep 30
+                ELAPSED=$((ELAPSED + 30))
+              done
+
+              # Check if we timed out
+              if [ $ELAPSED -ge $TIMEOUT ]; then
+                echo "❌ Timeout waiting for workflow: $MODEL"
+                ISVC_STATUS="FAILED"
+                BENCHMARK_STATUS="FAILED"
+                HAS_FAILURE=true
+              fi
+            fi
+
+            # Add status to deployment tracking JSON
+            STATUS_ENTRY=$(jq -n \
+              --arg model "$MODEL" \
+              --arg model_name "$MODEL_NAME" \
+              --arg namespace "$NAMESPACE" \
+              --arg runtime_name "$RUNTIME_NAME" \
+              --arg workflow_name "$WORKFLOW_NAME" \
+              --arg isvc_status "$ISVC_STATUS" \
+              --arg benchmark_status "$BENCHMARK_STATUS" \
+              '{
+                model: $model,
+                model_name: $model_name,
+                namespace: $namespace,
+                runtime_name: $runtime_name,
+                workflow_name: $workflow_name,
+                isvc_status: $isvc_status,
+                benchmark_status: $benchmark_status,
+              }')
+
+            DEPLOYMENT_STATUS=$(echo "$DEPLOYMENT_STATUS" | jq --argjson entry "$STATUS_ENTRY" '. += [$entry]')
+
+            # Clean up logs
+            rm -f /tmp/argo-output-$MODEL_NAME.log
+
+            echo "---"
+          done < <(echo "$SUBMITTED_WORKFLOWS" | jq -c '.[]')
+
+          # Output the deployment status for use in summary
+          echo "deployment_status=$(echo "$DEPLOYMENT_STATUS" | tr -d '\n')" >> $GITHUB_OUTPUT
+          echo "Deployment status saved:"
+          echo "$DEPLOYMENT_STATUS" | jq .
+
+          # Exit with failure if any workflow failed
+          if [ "$HAS_FAILURE" = true ]; then
+            echo "❌ One or more workflows failed"
+            exit 1
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "🧹 Cleaning up resources"
+
+          # Use the same model names that were prepared earlier
+          MODELS_METADATA='${{ steps.models.outputs.models_metadata }}'
+
+          # Clean up any remaining resources using pre-computed names
+          echo "$MODELS_METADATA" | jq -c '.[]' | while read -r model_info; do
+            # Extract all names from JSON
+            MODEL=$(echo "$model_info" | jq -r '.original')
+            MODEL_NAME=$(echo "$model_info" | jq -r '.model_name')
+            NAMESPACE=$(echo "$model_info" | jq -r '.namespace')
+
+            echo "Cleaning up resources for model: $MODEL"
+
+            # Try to delete any running Argo Workflows using kubectl
+            kubectl get workflows -n $NAMESPACE -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | grep "benchmark-$MODEL_NAME-" | while read -r wf; do
+              echo "Deleting Argo Workflow: $wf"
+              kubectl delete workflow "$wf" -n $NAMESPACE --ignore-not-found=true 2>/dev/null || echo "Failed to delete workflow $wf"
+            done
+          
+            # Try to delete BenchmarkJob
+            kubectl delete benchmarkjob benchmark-$MODEL_NAME -n $NAMESPACE 2>/dev/null || echo "No BenchmarkJob benchmark-$MODEL_NAME in $NAMESPACE to cleanup"
+          
+            # Try to delete InferenceService
+            kubectl delete inferenceservice $MODEL_NAME -n $NAMESPACE 2>/dev/null || echo "No InferenceService $MODEL_NAME in $NAMESPACE to cleanup"
+          
+            # Clean up any manifest files
+            rm -f argo-workflow-$MODEL_NAME.yaml /tmp/argo-output-$MODEL_NAME.log
+          done
+
+          echo "Cleanup completed"
+
+      - name: Create deployment summary
+        if: always()
+        run: |
+          DEPLOYMENT_STATUS='${{ steps.deployment.outputs.deployment_status }}'
+
+          echo "## 🚀 SGLang Deployment & Benchmark Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** \`${BRANCH_NAME}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${COMMIT_HASH}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Docker Image:** \`${IMAGE_NAME}:${FULL_TAG}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📋 Deployment Overview" >> $GITHUB_STEP_SUMMARY
+          echo "This workflow uses Argo Workflows on the gh-arc-runner Kubernetes cluster to orchestrate deployment and testing:" >> $GITHUB_STEP_SUMMARY
+          echo "1. **InferenceService Deployment** - Deploy SGLang runtime with the model" >> $GITHUB_STEP_SUMMARY
+          echo "2. **Benchmark Execution** - Run performance benchmarks against the deployed service" >> $GITHUB_STEP_SUMMARY
+          echo "4. **Resource Cleanup** - Clean up InferenceService, BenchmarkJob and Workflow after completion" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Read deployment status from step output
+          if [ -n "$DEPLOYMENT_STATUS" ] && [ "$DEPLOYMENT_STATUS" != "[]" ]; then
+            echo "### 📊 Model Deployment Results" >> $GITHUB_STEP_SUMMARY
+
+            # Count overall statistics
+            TOTAL_MODELS=$(echo "$DEPLOYMENT_STATUS" | jq 'length')
+            SUCCESSFUL_ISVC=$(echo "$DEPLOYMENT_STATUS" | jq '[.[] | select(.isvc_status == "SUCCESS")] | length')
+            SUCCESSFUL_BENCHMARKS=$(echo "$DEPLOYMENT_STATUS" | jq '[.[] | select(.benchmark_status == "SUCCESS")] | length')
+            FAILED_ISVC=$(echo "$DEPLOYMENT_STATUS" | jq '[.[] | select(.isvc_status == "FAILED")] | length')
+            FAILED_BENCHMARKS=$(echo "$DEPLOYMENT_STATUS" | jq '[.[] | select(.benchmark_status == "FAILED")] | length')
+
+            echo "**Overall Status:**" >> $GITHUB_STEP_SUMMARY
+            echo "- 📈 Total Models: $TOTAL_MODELS" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ InferenceServices Deployed: $SUCCESSFUL_ISVC/$TOTAL_MODELS" >> $GITHUB_STEP_SUMMARY
+            echo "- 🏃 Benchmarks Completed: $SUCCESSFUL_BENCHMARKS/$TOTAL_MODELS" >> $GITHUB_STEP_SUMMARY
+            if [ "$FAILED_ISVC" -gt 0 ]; then
+              echo "- ❌ InferenceService Failures: $FAILED_ISVC" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [ "$FAILED_BENCHMARKS" -gt 0 ]; then
+              echo "- ❌ Benchmark Failures: $FAILED_BENCHMARKS" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            # Individual model status
+            echo "$DEPLOYMENT_STATUS" | jq -c '.[]' | while read -r status_info; do
+              MODEL=$(echo "$status_info" | jq -r '.model')
+              MODEL_NAME=$(echo "$status_info" | jq -r '.model_name')
+              NAMESPACE=$(echo "$status_info" | jq -r '.namespace')
+              RUNTIME_NAME=$(echo "$status_info" | jq -r '.runtime_name')
+              WORKFLOW_NAME=$(echo "$status_info" | jq -r '.workflow_name')
+              ISVC_STATUS=$(echo "$status_info" | jq -r '.isvc_status')
+              BENCHMARK_STATUS=$(echo "$status_info" | jq -r '.benchmark_status')
+
+              # Status emojis
+              case "$ISVC_STATUS" in
+                "SUCCESS") ISVC_EMOJI="✅" ;;
+                "FAILED") ISVC_EMOJI="❌" ;;
+                *) ISVC_EMOJI="❓" ;;
+              esac
+
+              case "$BENCHMARK_STATUS" in
+                "SUCCESS") BENCHMARK_EMOJI="✅" ;;
+                "FAILED") BENCHMARK_EMOJI="❌" ;;
+                "SKIPPED") BENCHMARK_EMOJI="⏭️" ;;
+                *) BENCHMARK_EMOJI="❓" ;;
+              esac
+
+              echo "#### 🤖 $MODEL" >> $GITHUB_STEP_SUMMARY
+              echo "- **Namespace:** \`$NAMESPACE\`" >> $GITHUB_STEP_SUMMARY
+              echo "- **Argo Workflow:** \`$WORKFLOW_NAME\`" >> $GITHUB_STEP_SUMMARY
+              echo "- **InferenceService:** \`$MODEL_NAME\` $ISVC_EMOJI \`$ISVC_STATUS\`" >> $GITHUB_STEP_SUMMARY
+              echo "- **Runtime:** \`$RUNTIME_NAME\`" >> $GITHUB_STEP_SUMMARY
+              echo "- **Benchmark:** $BENCHMARK_EMOJI \`$BENCHMARK_STATUS\`" >> $GITHUB_STEP_SUMMARY
+
+              if [ "$BENCHMARK_STATUS" = "SUCCESS" ]; then
+                echo "- **Results:** \`oci://n/${REGISTRY_NAMESPACE}/b/${BUCKET_NAME}/o/${CONTAINER_NAME}/${FULL_TAG}/${MODEL_NAME}\`" >> $GITHUB_STEP_SUMMARY
+              fi
+              echo "" >> $GITHUB_STEP_SUMMARY
+            done
+          else
+            echo "### ❗ No deployment status available" >> $GITHUB_STEP_SUMMARY
+            echo "The deployment status was not found. This may indicate the workflow was interrupted before completion." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "### ⚙️ Benchmark Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Engine:** SGLang" >> $GITHUB_STEP_SUMMARY
+          echo "- **GPU Type:** H100" >> $GITHUB_STEP_SUMMARY
+          echo "- **Task:** text-to-text" >> $GITHUB_STEP_SUMMARY
+          echo "- **Benchmark Image:** \`${BENCHMARK_CONTAINER}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📈 Results Location" >> $GITHUB_STEP_SUMMARY
+          echo "All benchmark results are stored in OCI Object Storage:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bucket:** \`${BUCKET_NAME}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Path Pattern:** \`${CONTAINER_NAME}/${FULL_TAG}/${MODEL_NAME}/\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Note: All resources (InferenceServices and BenchmarkJobs) were cleaned up after completion._" >> $GITHUB_STEP_SUMMARY
