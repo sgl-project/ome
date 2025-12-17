@@ -266,6 +266,7 @@ type FailureInfo struct {
 // Component-specific ready conditions (PredictorReady, EngineReady, DecoderReady) are managed separately
 var conditionSet = apis.NewLivingConditionSet(
 	IngressReady,
+	EngineReady,
 )
 
 var _ apis.ConditionsAccessor = (*InferenceServiceStatus)(nil)
