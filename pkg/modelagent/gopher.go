@@ -650,7 +650,7 @@ func (s *Gopher) getHuggingFaceToken(task *GopherTask, baseModelSpec v1beta1.Bas
 	return hfToken
 }
 
-func getDestPath(baseModel *v1beta1.BaseModelSpec, modelRootDir string) string { // /mnt/models
+func getDestPath(baseModel *v1beta1.BaseModelSpec, modelRootDir string) string {
 
 	storagePath := *baseModel.Storage.StorageUri
 	destPath := *baseModel.Storage.Path
@@ -965,16 +965,10 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 	destPath := getDestPath(&baseModelSpec, s.modelRootDir)
 
 	// fetch sha value based on model ID from Huggingface model API
-	sha, err := FetchAttributeFromHfModelMetaData(ctx, hfComponents.ModelID, Sha)
-	if err != nil {
-		s.logger.Errorf("Failed to retrieve sha from Hugging Face for model %s: %s", hfComponents.ModelID, err)
-	}
-	shaStr := sha.(string)
+	shaStr, isShaAvailable := s.fetchSha(ctx, hfComponents.ModelID)
+	isEligible, matchedModelTypeAndModeName, parentPath := s.isEligibleForOptimization(ctx, task, baseModelSpec, modelType, namespace, isShaAvailable, shaStr, hfComponents.ModelID)
 
-	currentModelTypeAndNodeName := s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel)
-	matchedModelTypeAndModeName, parentPath := s.handelReuseArtifactIfNecessary(ctx, baseModelSpec, modelType, hfComponents.ModelID, namespace, shaStr)
-	s.logger.Infof("found matched matchedModelTypeAndModeName %s for model %s", matchedModelTypeAndModeName, hfComponents.ModelID)
-	if matchedModelTypeAndModeName != "" && strings.ToLower(currentModelTypeAndNodeName) != strings.ToLower(matchedModelTypeAndModeName) {
+	if isEligible {
 		// create symbolic link
 		err := utils.CreateSymbolicLink(destPath, parentPath)
 		if err != nil {
@@ -1195,4 +1189,50 @@ func (s *Gopher) processLocalStorageModel(ctx context.Context, task *GopherTask,
 
 	s.logger.Infof("Successfully processed local model %s at path %s", modelInfo, modelPath)
 	return nil
+}
+
+// for unit test
+var fetchAttributeFromHfModelMetaData = FetchAttributeFromHfModelMetaData
+
+// fetchSha retrieves the git commit SHA associated with a Hugging Face model ID.
+// It queries the Hugging Face model metadata API for the "sha" attribute and returns:
+// - the SHA string if available, along with true
+// - an empty string and false if the API call fails, or the attribute is missing/non-string/empty.
+func (s *Gopher) fetchSha(ctx context.Context, modelId string) (string, bool) {
+	var isShaAvailable = true
+	sha, err := fetchAttributeFromHfModelMetaData(ctx, modelId, Sha)
+	if err != nil {
+		s.logger.Errorf("Failed to retrieve sha from Hugging Face endpoint for model %s: %s", modelId, err)
+		isShaAvailable = false
+	}
+	shaStr, ok := sha.(string)
+	if !ok || shaStr == "" {
+		s.logger.Warnf("Could not get a valid sha string for model %s, proceeding with download without artifact reuse.", modelId)
+		isShaAvailable = false
+	}
+	if isShaAvailable {
+		s.logger.Infof("fetched sha of model %s is %s", modelId, shaStr)
+	}
+	return shaStr, isShaAvailable
+}
+
+/*
+isEligibleForOptimization determines whether a Hugging Face model can reuse an existing artifact.
+
+Returns:
+  - eligible: true if reuse is possible; false otherwise
+  - matchedModelTypeAndModeName: ConfigMap key of the matched entry (empty if no match)
+  - parentPath: artifact parent path from the matched entry (empty if no match)
+*/
+func (s *Gopher) isEligibleForOptimization(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec,
+	modelType string, namespace string, isShaAvailable bool, shaStr, modelId string) (bool, string, string) {
+	if !isShaAvailable {
+		return false, "", ""
+	}
+
+	currentModelTypeAndNodeName := s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel)
+	matchedModelTypeAndModeName, parentPath := s.handelReuseArtifactIfNecessary(ctx, baseModelSpec, modelType, modelId, namespace, shaStr)
+	isEligible := matchedModelTypeAndModeName != "" && strings.ToLower(currentModelTypeAndNodeName) != strings.ToLower(matchedModelTypeAndModeName)
+	s.logger.Infof("found matched matchedModelTypeAndModeName %s for model %s, parentPath is %s, isEligible %t", matchedModelTypeAndModeName, modelId, parentPath, isEligible)
+	return isEligible, matchedModelTypeAndModeName, parentPath
 }

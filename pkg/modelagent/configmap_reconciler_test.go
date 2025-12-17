@@ -97,14 +97,12 @@ func TestGetModelConfigMapKey(t *testing.T) {
 	baseModel := createTestBaseModelCM()
 	key := reconciler.getModelConfigMapKey(baseModel, nil)
 	expectedKey := constants.GetModelConfigMapKey(baseModel.Namespace, baseModel.Name, false)
-	println(expectedKey)
 	assert.Equal(t, expectedKey, key)
 
 	// Test with ClusterBaseModel
 	clusterBaseModel := createTestClusterBaseModelCM()
 	key = reconciler.getModelConfigMapKey(nil, clusterBaseModel)
 	expectedKey = constants.GetModelConfigMapKey("", clusterBaseModel.Name, true)
-	println(expectedKey)
 	assert.Equal(t, expectedKey, key)
 }
 
@@ -888,6 +886,36 @@ func TestFindMatchedModelFromConfigMap_PrefixFilterApplies(t *testing.T) {
 	}
 
 	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "abc123", "namespace.basemodel")
+	assert.Empty(t, modelKey)
+	assert.Empty(t, parent)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestFindMatchedModelFromConfigMap_ParentPathConversionFailed(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+
+	t.Parallel()
+	obj := map[string]interface{}{
+		ConfigAttr: map[string]interface{}{
+			ArtifactAttr: map[string]interface{}{
+				ShaAttr:    "abc123",
+				ParentPath: 123,
+			},
+		},
+	}
+	b, _ := json.Marshal(obj)
+	// matched but the parent path cannot be converted to string
+	cm := &corev1.ConfigMap{
+		Data: map[string]string{
+			"clusterbasemodel.model1":    string(b),
+			"namespace.basemodel.model1": buildJSONWith("zzz", "/other"),
+		},
+	}
+
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "abc123", "clusterbasemodel")
 	assert.Empty(t, modelKey)
 	assert.Empty(t, parent)
 

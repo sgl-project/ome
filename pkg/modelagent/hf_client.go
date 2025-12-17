@@ -87,11 +87,11 @@ func FetchAttributeFromHfModelMetaData(ctx context.Context, modelId string, attr
 		var data map[string]interface{}
 		if resp.StatusCode == http.StatusOK {
 			if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-				return "", fmt.Errorf("failed to decode response: %s", err)
+				return nil, fmt.Errorf("failed to decode response: %s", err)
 			}
 			val, exists := data[attribute]
 			if !exists {
-				return "", fmt.Errorf("attribute %s not found in JSON of the response", attribute)
+				return nil, fmt.Errorf("attribute %s not found in JSON of the response", attribute)
 			}
 
 			return val, nil
@@ -128,7 +128,7 @@ func FetchAttributeFromHfModelMetaData(ctx context.Context, modelId string, attr
 		}
 
 		// Handle non-retryable error responses
-		return nil, fmt.Errorf("failed to invoke HuggingFace endpoint %s: response status code %d and response %s", modelMetaDataUrl, resp.StatusCode, resp.Body)
+		return nil, fmt.Errorf("failed to invoke HuggingFace endpoint %s: response status code %d", modelMetaDataUrl, resp.StatusCode)
 	}
 
 	// Should not reach here

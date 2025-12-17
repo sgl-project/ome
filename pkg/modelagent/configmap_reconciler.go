@@ -981,7 +981,10 @@ func (c *ConfigMapReconciler) FindMatchedModelFromConfigMap(configMap *corev1.Co
 		}
 
 		if sha == targetSha {
-			parentPath := artifact[ParentPath].(string)
+			parentPath, ok := artifact[ParentPath].(string)
+			if !ok {
+				continue
+			}
 			return modelTypeAndModelName, parentPath, nil
 		}
 	}

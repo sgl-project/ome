@@ -102,7 +102,7 @@ type ModelEntry struct {
 
 // ConvertMetadataToModelConfig converts internal ModelMetadata to a client-facing ModelConfig
 // This transforms the internal representation to the structured format stored in ConfigMaps
-func ConvertMetadataToModelConfig(metadata ModelMetadata) *ModelConfig { // need add artifact
+func ConvertMetadataToModelConfig(metadata ModelMetadata) *ModelConfig {
 	// Convert ModelFramework to map
 	var modelFramework map[string]string
 	if metadata.ModelFramework != nil {
