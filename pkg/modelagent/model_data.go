@@ -38,6 +38,7 @@ type ModelMetadata struct {
 	ModelConfiguration        []byte
 	DecodedModelConfiguration map[string]interface{} `json:"DecodedModelConfiguration,omitempty"`
 	Quantization              v1beta1.ModelQuantization
+	Artifact                  Artifact `json:"Artifact,omitempty"`
 }
 
 // ModelConfig represents the configuration of a model
@@ -60,6 +61,15 @@ type ModelConfig struct {
 	// Advanced information
 	DecodedModelConfiguration map[string]interface{} `json:"decodedModelConfiguration,omitempty"` // Detailed configuration
 	Quantization              string                 `json:"quantization,omitempty"`              // Quantization type if applicable
+	// Artifact downloading info
+	Artifact Artifact `json:"artifact,omitempty"` // artifact's commit sha and paths
+}
+
+// Artifact records the information of model artifact, including version (Sha) and storage paths
+type Artifact struct {
+	Sha           string   `json:"sha"`
+	ParentPath    string   `json:"parentPath"`
+	ChildrenPaths []string `json:"childrenPaths"`
 }
 
 // DownloadProgress tracks the progress of a model download
@@ -138,6 +148,17 @@ func ConvertMetadataToModelConfig(metadata ModelMetadata) *ModelConfig {
 		}
 	}
 
+	// convert artifact
+	var artifact Artifact
+	if metadata.Artifact.Sha != "" || metadata.Artifact.ParentPath != "" || len(metadata.Artifact.ChildrenPaths) > 0 {
+		currentArtifact := metadata.Artifact
+		artifact = Artifact{
+			Sha:           currentArtifact.Sha,
+			ParentPath:    currentArtifact.ParentPath,
+			ChildrenPaths: append([]string(nil), currentArtifact.ChildrenPaths...),
+		}
+	}
+
 	return &ModelConfig{
 		ModelType:                 metadata.ModelType,
 		ModelArchitecture:         metadata.ModelArchitecture,
@@ -149,5 +170,6 @@ func ConvertMetadataToModelConfig(metadata ModelMetadata) *ModelConfig {
 		ApiCapabilities:           apiCapabilities,
 		DecodedModelConfiguration: decodedConfig,
 		Quantization:              quantization,
+		Artifact:                  artifact,
 	}
 }

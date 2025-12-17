@@ -73,6 +73,11 @@ spec:
                 type: string
               storage:
                 properties:
+                  downloadPolicy:
+                    enum:
+                    - AlwaysDownload
+                    - ReuseIfExists
+                    type: string
                   key:
                     type: string
                   nodeAffinity:

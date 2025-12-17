@@ -1,7 +1,9 @@
 package modelagent
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	omev1beta1lister "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
@@ -615,4 +618,356 @@ func TestIsReservingModelArtifact_NilTaskReturnsFalse(t *testing.T) {
 
 	s := &Gopher{logger: sugaredLogger}
 	assert.False(t, s.isReservingModelArtifact(nil), "nil task should not reserve artifact")
+}
+
+func makeConfigMap(nodeName string, data map[string]string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nodeName,
+			Namespace: "ome",
+		},
+		Data: data,
+	}
+}
+
+func newGopherWithConfigMap(cm *corev1.ConfigMap) *Gopher {
+	client := k8sfake.NewSimpleClientset(cm)
+	logger := zap.NewNop().Sugar()
+	cmr := NewConfigMapReconciler(cm.Name, cm.Namespace, client, logger)
+	return &Gopher{
+		configMapReconciler: cmr,
+		logger:              logger,
+	}
+}
+
+func entryJSON(sha, parentPath string) string {
+	return fmt.Sprintf(`{"config":{"artifact":{"sha":"%s","parentPath":"%s","childrenPaths":[]}}}`, sha, parentPath)
+}
+
+func dp(v v1beta1.DownloadPolicy) *v1beta1.DownloadPolicy {
+	return &v
+}
+
+func TestHandelReuseArtifactIfNecessary_NoReusePolicy(t *testing.T) {
+	nodeName := "node-1"
+	// Even if CM has content, when policy is AlwaysDownload we should not reuse.
+	cm := makeConfigMap(nodeName, map[string]string{
+		"clusterbasemodel.model1": entryJSON("abc123", "/models/parent1"),
+	})
+	g := newGopherWithConfigMap(cm)
+
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: dp(v1beta1.AlwaysDownload),
+		},
+	}
+
+	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "ClusterBaseModel", "foo", "", "abc123")
+	assert.Empty(t, key)
+	assert.Empty(t, parent)
+}
+
+func TestHandelReuseArtifactIfNecessary_HasMatchedEntry(t *testing.T) {
+	nodeName := "node-1"
+	expectedKey := "clusterbasemodel.model1"
+	expectedParent := "/models/parent1"
+	expectedSha := "abc123"
+	cm := makeConfigMap(nodeName, map[string]string{
+		expectedKey: entryJSON(expectedSha, expectedParent),
+	})
+	g := newGopherWithConfigMap(cm)
+
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: dp(v1beta1.ReuseIfExists),
+		},
+	}
+
+	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "ClusterBaseModel", "model1", "", expectedSha)
+	assert.Equal(t, expectedKey, key)
+	assert.Equal(t, expectedParent, parent)
+}
+
+func TestHandelReuseArtifactIfNecessary_BaseModelPrefersClusterBaseModelWhenBothMatch(t *testing.T) {
+	nodeName := "node-1"
+	sha := "samesha"
+	clusterBaseModelKey := "clusterbasemodel.model1"
+	baseModelKey := "namespace.basemodel.model2"
+	clusterParent := "/models/parent1"
+	baseParent := "/base/parent2"
+	cm := makeConfigMap(nodeName, map[string]string{
+		clusterBaseModelKey: entryJSON(sha, clusterParent),
+		baseModelKey:        entryJSON(sha, baseParent),
+	})
+	g := newGopherWithConfigMap(cm)
+
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: dp(v1beta1.ReuseIfExists),
+		},
+	}
+
+	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "BaseModel", "newModel", "namespace", sha)
+	assert.Equal(t, clusterBaseModelKey, key)
+	assert.Equal(t, clusterParent, parent)
+}
+
+func TestHandelReuseArtifactIfNecessary_BaseModelFallbackToNamespaceScoped(t *testing.T) {
+	nodeName := "node-1"
+	sha := "target-sha"
+	// Cluster entry exists but with different sha, so it shouldn't match.
+	clusterBaseModelKey := "clusterbasemodel.model1"
+	baseModelKey := "namespace.basemodel.model2"
+	baseModelParent := "/models/parent2"
+	cm := makeConfigMap(nodeName, map[string]string{
+		clusterBaseModelKey: entryJSON("different-sha", "/models/parent1"),
+		baseModelKey:        entryJSON(sha, baseModelParent),
+	})
+	g := newGopherWithConfigMap(cm)
+
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: dp(v1beta1.ReuseIfExists),
+		},
+	}
+
+	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "BaseModel", "name", "namespace", sha)
+	assert.Equal(t, baseModelKey, key)
+	assert.Equal(t, baseModelParent, parent)
+}
+
+func TestHandelReuseArtifactIfNecessary_NoMatchReturnsEmpty(t *testing.T) {
+	nodeName := "node-1"
+	cm := makeConfigMap(nodeName, map[string]string{
+		"clusterbasemodel.model1":    entryJSON("sha-1", "/models/parent1"),
+		"namespace.basemodel.model2": entryJSON("sha-2", "/base/parent2"),
+	})
+	g := newGopherWithConfigMap(cm)
+
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: dp(v1beta1.ReuseIfExists),
+		},
+	}
+
+	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "BaseModel", "name", "namespace", "non-existent-sha")
+	assert.Empty(t, key)
+	assert.Empty(t, parent)
+}
+
+func TestFetchSha_Success(t *testing.T) {
+	orig := fetchAttributeFromHfModelMetaData
+	defer func() { fetchAttributeFromHfModelMetaData = orig }()
+
+	fetchAttributeFromHfModelMetaData = func(ctx context.Context, modelId string, attribute string) (interface{}, error) {
+		assert.Equal(t, Sha, attribute)
+		return "abc123def", nil
+	}
+
+	g := &Gopher{logger: zap.NewNop().Sugar()}
+	sha, ok := g.fetchSha(context.Background(), "org/model")
+	assert.True(t, ok)
+	assert.Equal(t, "abc123def", sha)
+}
+
+func TestFetchSha_ErrorFromAPI(t *testing.T) {
+	orig := fetchAttributeFromHfModelMetaData
+	defer func() { fetchAttributeFromHfModelMetaData = orig }()
+
+	fetchAttributeFromHfModelMetaData = func(ctx context.Context, modelId string, attribute string) (interface{}, error) {
+		return nil, fmt.Errorf("api error")
+	}
+
+	g := &Gopher{logger: zap.NewNop().Sugar()}
+	sha, ok := g.fetchSha(context.Background(), "org/model")
+	assert.False(t, ok)
+	assert.Equal(t, "", sha)
+}
+
+func TestFetchSha_NonStringSha(t *testing.T) {
+	orig := fetchAttributeFromHfModelMetaData
+	defer func() { fetchAttributeFromHfModelMetaData = orig }()
+
+	fetchAttributeFromHfModelMetaData = func(ctx context.Context, modelId string, attribute string) (interface{}, error) {
+		return 12345, nil // non-string
+	}
+
+	g := &Gopher{logger: zap.NewNop().Sugar()}
+	sha, ok := g.fetchSha(context.Background(), "org/model")
+	assert.False(t, ok)
+	assert.Equal(t, "", sha)
+}
+
+func TestFetchSha_EmptyStringSha(t *testing.T) {
+	orig := fetchAttributeFromHfModelMetaData
+	defer func() { fetchAttributeFromHfModelMetaData = orig }()
+
+	fetchAttributeFromHfModelMetaData = func(ctx context.Context, modelId string, attribute string) (interface{}, error) {
+		return "", nil // empty string
+	}
+
+	g := &Gopher{logger: zap.NewNop().Sugar()}
+	sha, ok := g.fetchSha(context.Background(), "org/model")
+	assert.False(t, ok)
+	assert.Equal(t, "", sha)
+}
+
+func TestIsEligibleForOptimization_NoShaAvailable(t *testing.T) {
+	// Gopher with empty CM is sufficient for this case
+	nodeName := "node-1"
+	cm := makeConfigMap(nodeName, map[string]string{})
+	g := newGopherWithConfigMap(cm)
+
+	task := &GopherTask{
+		TaskType: Download,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns",
+				Name:      "bm",
+			},
+		},
+	}
+
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: dp(v1beta1.ReuseIfExists),
+		},
+	}
+
+	eligible, key, parent := g.isEligibleForOptimization(context.Background(), task, spec, "BaseModel", "ns", false, "", "org/model")
+	assert.False(t, eligible)
+	assert.Empty(t, key)
+	assert.Empty(t, parent)
+}
+
+func TestIsEligibleForOptimization_MatchedDifferentKeyEligible(t *testing.T) {
+	nodeName := "node-1"
+	sha := "123abc"
+	expectedKey := "clusterbasemodel.modelX"
+	expectedParent := "/models/parentX"
+
+	// CM has a ClusterBaseModel entry with matching sha
+	cm := makeConfigMap(nodeName, map[string]string{
+		expectedKey: entryJSON(sha, expectedParent),
+	})
+	g := newGopherWithConfigMap(cm)
+
+	// Current model is a BaseModel with a different key than the matched one
+	task := &GopherTask{
+		TaskType: Download,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns",
+				Name:      "bm",
+			},
+		},
+	}
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: dp(v1beta1.ReuseIfExists),
+		},
+	}
+
+	eligible, key, parent := g.isEligibleForOptimization(context.Background(), task, spec, "BaseModel", "ns", true, "123abc", "org/model")
+	assert.True(t, eligible)
+	assert.Equal(t, expectedKey, key)
+	assert.Equal(t, expectedParent, parent)
+}
+
+func TestIsEligibleForOptimization_MatchedSameKeyNotEligible(t *testing.T) {
+	nodeName := "node-1"
+	sha := "123abc"
+	expectedKey := "clusterbasemodel.model1"
+	parent := "/models/p1"
+
+	// CM has a ClusterBaseModel entry with matching sha
+	cm := makeConfigMap(nodeName, map[string]string{
+		expectedKey: entryJSON(sha, parent),
+	})
+	g := newGopherWithConfigMap(cm)
+
+	// Current model is the same ClusterBaseModel key as the matched one
+	task := &GopherTask{
+		TaskType: Download,
+		ClusterBaseModel: &v1beta1.ClusterBaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "model1",
+			},
+		},
+	}
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: dp(v1beta1.ReuseIfExists),
+		},
+	}
+
+	eligible, key, parentPath := g.isEligibleForOptimization(context.Background(), task, spec, "ClusterBaseModel", "", true, "123abc", "org/model")
+	assert.False(t, eligible, "same key should not be eligible for reuse")
+	assert.Equal(t, expectedKey, key)
+	assert.Equal(t, parent, parentPath)
+}
+
+func TestIsEligibleForOptimization_NoMatch(t *testing.T) {
+	nodeName := "node-1"
+	targetSha := "sha-target"
+
+	// CM entries with different sha values
+	cm := makeConfigMap(nodeName, map[string]string{
+		"clusterbasemodel.other": entryJSON("sha-other", "/models/p2"),
+	})
+	g := newGopherWithConfigMap(cm)
+
+	task := &GopherTask{
+		TaskType: Download,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns",
+				Name:      "bm",
+			},
+		},
+	}
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: dp(v1beta1.ReuseIfExists),
+		},
+	}
+
+	eligible, key, parent := g.isEligibleForOptimization(context.Background(), task, spec, "BaseModel", "ns", true, targetSha, "org/model")
+	assert.False(t, eligible)
+	assert.Empty(t, key)
+	assert.Empty(t, parent)
+}
+
+func TestIsEligibleForOptimization_AlwaysDownloadNotEligible(t *testing.T) {
+	nodeName := "node-1"
+	sha := "123abc"
+	expectedKey := "clusterbasemodel.modelX"
+	expectedParent := "/models/parentX"
+
+	// CM has a ClusterBaseModel entry with matching sha
+	cm := makeConfigMap(nodeName, map[string]string{
+		expectedKey: entryJSON(sha, expectedParent),
+	})
+	g := newGopherWithConfigMap(cm)
+
+	// Current model is a BaseModel with a different key than the matched one
+	task := &GopherTask{
+		TaskType: Download,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns",
+				Name:      "bm",
+			},
+		},
+	}
+	spec := v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			DownloadPolicy: dp(v1beta1.AlwaysDownload),
+		},
+	}
+
+	eligible, key, parent := g.isEligibleForOptimization(context.Background(), task, spec, "BaseModel", "ns", true, "123abc", "org/model")
+	assert.False(t, eligible)
+	assert.Empty(t, key)
+	assert.Empty(t, parent)
 }

@@ -93,7 +93,22 @@ type StorageSpec struct {
 	// are eligible to download and store this model, based on advanced scheduling policies.
 	// +optional
 	NodeAffinity *v1.NodeAffinity `json:"nodeAffinity,omitempty" protobuf:"bytes,1,opt,name=nodeAffinity"`
+
+	// DownloadPolicy describes the policy of downloading model artifacts
+	// Supported policies:
+	// - AlwaysDownload: always download a copy of model artifact in destination path
+	// - ReuseIfExists: if the identical model artifact has been downloaded in the node, such artifact will be reused
+	// +optional
+	DownloadPolicy *DownloadPolicy `json:"downloadPolicy,omitempty"`
 }
+
+// +kubebuilder:validation:Enum=AlwaysDownload;ReuseIfExists
+type DownloadPolicy string
+
+const (
+	AlwaysDownload DownloadPolicy = "AlwaysDownload"
+	ReuseIfExists  DownloadPolicy = "ReuseIfExists"
+)
 
 // BaseModelSpec defines the desired state of BaseModel
 type BaseModelSpec struct {

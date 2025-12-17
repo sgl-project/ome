@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,8 +12,10 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
 	ktesting "k8s.io/client-go/testing"
 
@@ -746,4 +749,604 @@ func TestReconcileConfigMaps(t *testing.T) {
 		assert.Contains(t, finalCM.Data, clusterModelID)
 		assert.Contains(t, finalCM.Data, baseModelID)
 	}
+}
+
+func buildJSONWith(sha, parent string) string {
+	obj := map[string]interface{}{
+		ConfigAttr: map[string]interface{}{
+			ArtifactAttr: map[string]interface{}{
+				ShaAttr:    sha,
+				ParentPath: parent,
+			},
+		},
+	}
+	b, _ := json.Marshal(obj)
+	return string(b)
+}
+
+func TestFindMatchedModelFromConfigMap_FindsMatch(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+	t.Parallel()
+	cm := &corev1.ConfigMap{
+		Data: map[string]string{
+			"clusterbasemodel.model1":    buildJSONWith("zzz999", "/models/model1"),
+			"namespace.basemodel.model2": buildJSONWith("abc123", "/models/model2"),
+			// Include an invalid JSON that should be ignored
+			"clusterbasemodel.invalid-model": "{not-json",
+		},
+	}
+
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "abc123", "namespace.basemodel")
+
+	assert.Equal(t, "namespace.basemodel.model2", modelKey)
+	assert.Equal(t, "/models/model2", parent)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestFindMatchedModelFromConfigMap_NotFound_NoError(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+	t.Parallel()
+	cm := &corev1.ConfigMap{
+		Data: map[string]string{
+			"clusterbasemodel.model1":    buildJSONWith("zzz999", "/models/model1"),
+			"namespace.basemodel.model2": buildJSONWith("abc123", "/models/model2"),
+			// Key with different prefix should be ignored
+			"invalid-model": buildJSONWith("abc456", "/models/model3"),
+		},
+	}
+
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "missing-sha", "clusterbasemodel")
+	assert.Empty(t, modelKey)
+	assert.Empty(t, parent)
+
+	if err != nil {
+		t.Fatalf("expected nil error when not found and no JSON errors, got %v", err)
+	}
+}
+
+func TestFindMatchedModelFromConfigMap_NotFound_WithInvalidJSON_ReturnsError(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+
+	t.Parallel()
+	cm := &corev1.ConfigMap{
+		Data: map[string]string{
+			"clusterbasemodel.model1":    "{",       // invalid JSON
+			"namespace.basemodel.model2": "{\"x\":", // invalid JSON
+			// Key with different prefix should be ignored
+			"invalid-model": buildJSONWith("other", "/models/model3"),
+		},
+	}
+
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "nope", "namespace.basemodel")
+	assert.Empty(t, modelKey)
+	assert.Empty(t, parent)
+	if err == nil {
+		t.Fatalf("expected non-nil error due to invalid JSON entries, got nil")
+	}
+	// Error should be related to JSON unmarshalling
+	if !strings.Contains(err.Error(), "fail to Unmarshal") {
+		t.Fatalf("expected JSON error, got %v", err)
+	}
+}
+
+func TestFindMatchedModelFromConfigMap_SkipsIncompleteEntries(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+
+	t.Parallel()
+	// Entries missing required nesting/fields should be skipped
+	incompleteConfig := func(obj map[string]interface{}) string {
+		b, _ := json.Marshal(obj)
+		return string(b)
+	}
+
+	cm := &corev1.ConfigMap{
+		Data: map[string]string{
+			"clusterbasemodel.model1": incompleteConfig(map[string]interface{}{}),
+			"namespace.basemodel.model2": incompleteConfig(map[string]interface{}{
+				ConfigAttr: map[string]interface{}{},
+			}),
+			"clusterbasemodel.missing-sha": incompleteConfig(map[string]interface{}{
+				ConfigAttr: map[string]interface{}{
+					ArtifactAttr: map[string]interface{}{}, // no sha
+				},
+			}),
+			"clusterbasemodel.invalid-sha": incompleteConfig(map[string]interface{}{
+				ConfigAttr: map[string]interface{}{
+					ArtifactAttr: map[string]interface{}{
+						ShaAttr: 123, // wrong type
+					},
+				},
+			}),
+			"clusterbasemodel.valid-but-different-sha": buildJSONWith("some-other-sha", "/models/x"),
+		},
+	}
+
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "target-sha", "namespace.basemodel")
+	assert.Empty(t, modelKey)
+	assert.Empty(t, parent)
+
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+}
+
+func TestFindMatchedModelFromConfigMap_PrefixFilterApplies(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+
+	t.Parallel()
+	// Even if SHA matches, if the key doesn't start with the target modelType prefix, it should be ignored
+	cm := &corev1.ConfigMap{
+		Data: map[string]string{
+			"clusterbasemodel.model1":    buildJSONWith("abc123", "/ignored"),
+			"namespace.basemodel.model1": buildJSONWith("zzz", "/other"),
+		},
+	}
+
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "abc123", "namespace.basemodel")
+	assert.Empty(t, modelKey)
+	assert.Empty(t, parent)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestFindMatchedModelFromConfigMap_ParentPathConversionFailed(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+
+	t.Parallel()
+	obj := map[string]interface{}{
+		ConfigAttr: map[string]interface{}{
+			ArtifactAttr: map[string]interface{}{
+				ShaAttr:    "abc123",
+				ParentPath: 123,
+			},
+		},
+	}
+	b, _ := json.Marshal(obj)
+	// matched but the parent path cannot be converted to string
+	cm := &corev1.ConfigMap{
+		Data: map[string]string{
+			"clusterbasemodel.model1":    string(b),
+			"namespace.basemodel.model1": buildJSONWith("zzz", "/other"),
+		},
+	}
+
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "abc123", "clusterbasemodel")
+	assert.Empty(t, modelKey)
+	assert.Empty(t, parent)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAddPathToChildrenPaths_AppendsExisting(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+
+	modelKey := "namespace.basemodel.sample"
+	original := `{"config":{"artifact":{"childrenPaths":["/a","/b"]}}}`
+
+	updated, err := reconciler.addPathToChildrenPaths(modelKey, "/c", original)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assert.Equal(t, `{"config":{"artifact":{"childrenPaths":["/a","/b","/c"]}}}`, updated)
+
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(updated), &obj); err != nil {
+		t.Fatalf("updated JSON invalid: %v", err)
+	}
+}
+
+func TestAddPathToChildrenPaths_CreatesWhenMissing(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+
+	modelKey := "namespace.basemodel.sample"
+	original := `{"config":{"artifact":{}}}`
+
+	updated, err := reconciler.addPathToChildrenPaths(modelKey, "/a", original)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assert.Equal(t, `{"config":{"artifact":{"childrenPaths":["/a"]}}}`, updated)
+
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(updated), &obj); err != nil {
+		t.Fatalf("updated JSON invalid: %v", err)
+	}
+}
+
+func TestAddPathToChildrenPaths_CreatesConfigArtifactIfMissing(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+
+	modelKey := "namespace.basemodel.sample"
+	original := `{}`
+
+	updated, err := reconciler.addPathToChildrenPaths(modelKey, "/a", original)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assert.Equal(t, `{"config":{"artifact":{"childrenPaths":["/a"]}}}`, updated)
+
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(updated), &obj); err != nil {
+		t.Fatalf("updated JSON invalid: %v", err)
+	}
+
+	cfg, ok := obj[ConfigAttr].(map[string]interface{})
+	if !ok {
+		t.Fatalf("config missing or wrong type")
+	}
+	artifact, ok := cfg[ArtifactAttr].(map[string]interface{})
+	if !ok {
+		t.Fatalf("artifact missing or wrong type")
+	}
+	children, ok := artifact[ChildrenPathsAttr].([]interface{})
+	if !ok {
+		t.Fatalf("childrenPaths missing or wrong type")
+	}
+	if len(children) != 1 || children[0].(string) != "/a" {
+		t.Fatalf("unexpected childrenPaths: %#v", children)
+	}
+}
+
+func TestAddPathToChildrenPaths_ChildrenPathsNotArray(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+
+	modelKey := "namespace.basemodel.sample"
+	original := `{"config":{"artifact":{"childrenPaths":"oops"}}}`
+
+	updated, err := reconciler.addPathToChildrenPaths(modelKey, "/x", original)
+	assert.Equal(t, updated, `{"config":{"artifact":{"childrenPaths":["/x"]}}}`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAddPathToChildrenPaths_InvalidJSON(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+
+	modelKey := "namespace.basemodel.sample"
+	original := `{`
+
+	updated, err := reconciler.addPathToChildrenPaths(modelKey, "/a", original)
+	assert.Equal(t, updated, "")
+	if err == nil {
+		t.Fatalf("expected error for invalid JSON, got nil")
+	}
+	assert.True(t, strings.Contains(err.Error(), "invalid JSON for key"))
+}
+
+func TestAddPathToChildrenPaths_AvoidDuplicate(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+
+	modelKey := "namespace.basemodel.sample"
+	original := `{"config":{"artifact":{"childrenPaths":["/existing/path"]}}}`
+
+	updated, err := reconciler.addPathToChildrenPaths(modelKey, "/existing/path", original)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assert.Equal(t, `{"config":{"artifact":{"childrenPaths":["/existing/path"]}}}`, updated)
+
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(updated), &obj); err != nil {
+		t.Fatalf("updated JSON invalid: %v", err)
+	}
+}
+
+func TestUpdateConfigMapWithUpdatedChildrenPaths_Success(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+
+	key := "namespace.basemodel.sample"
+	existing := `{"config":{"artifact":{"childrenPaths":["/a"]}}}`
+
+	// Seed configmap with existing entry
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      reconciler.nodeName,
+			Namespace: reconciler.namespace,
+		},
+		Data: map[string]string{
+			key: existing,
+		},
+	}
+	_, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Create(ctx, cm, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	// Perform update
+	err = reconciler.updateConfigMapWithUpdatedChildrenPaths(ctx, key, "/b")
+	assert.NoError(t, err)
+
+	// Verify
+	updated, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+
+	var obj map[string]interface{}
+	err = json.Unmarshal([]byte(updated.Data[key]), &obj)
+	assert.NoError(t, err)
+
+	cfg, ok := obj[ConfigAttr].(map[string]interface{})
+	assert.True(t, ok, "config missing or wrong type")
+
+	artifact, ok := cfg[ArtifactAttr].(map[string]interface{})
+	assert.True(t, ok, "artifact missing or wrong type")
+
+	children, ok := artifact[ChildrenPathsAttr].([]interface{})
+	assert.True(t, ok, "childrenPaths missing or wrong type")
+
+	assert.Len(t, children, 2)
+	assert.Equal(t, "/a", children[0].(string))
+	assert.Equal(t, "/b", children[1].(string))
+}
+
+func TestUpdateConfigMapWithUpdatedChildrenPaths_MissingKey_NoOp(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+
+	key := "namespace.basemodel.sample"
+	existing := `{"config":{"artifact":{"childrenPaths":["/a"]}}}`
+
+	// Seed configmap without the target key
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      reconciler.nodeName,
+			Namespace: reconciler.namespace,
+		},
+		Data: map[string]string{
+			"namespace2.basemodel.sample2": existing,
+		},
+	}
+	_, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Create(ctx, cm, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	// no op and error to tell key not found
+	err = reconciler.updateConfigMapWithUpdatedChildrenPaths(ctx, key, "/b")
+	assert.NotNil(t, err)
+	assert.True(t, strings.Contains(err.Error(), "key namespace.basemodel.sample not found in ConfigMap"))
+
+	updated, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	_, exists := updated.Data[key]
+	assert.False(t, exists, "expected no new key inserted for missing target")
+}
+
+func TestUpdateConfigMapWithUpdatedChildrenPaths_InvalidExistingJSON(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+
+	key := "namespace.basemodel.sample"
+	// used to compute update value (valid)
+	//currentDataEntry := `{invalid-json`
+	//
+	// seed with invalid JSON at target key
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      reconciler.nodeName,
+			Namespace: reconciler.namespace,
+		},
+		Data: map[string]string{
+			key: "{invalid-json",
+		},
+	}
+	_, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Create(ctx, cm, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	err = reconciler.updateConfigMapWithUpdatedChildrenPaths(ctx, key, "/b")
+	assert.Error(t, err, "expected error due to invalid existing JSON")
+
+	// Ensure no change applied
+	updated, err2 := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err2)
+	assert.Equal(t, "{invalid-json", updated.Data[key])
+}
+
+func TestUpdateConfigMapWithUpdatedChildrenPaths_AddPathWithChildrenPathInvalidFormat(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+
+	key := "namespace.basemodel.sample"
+	currentDataEntry := `{"config":{"artifact":{"childrenPaths":"oops"}}}`
+
+	// Seed configmap with a valid existing value
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      reconciler.nodeName,
+			Namespace: reconciler.namespace,
+		},
+		Data: map[string]string{
+			key: currentDataEntry,
+		},
+	}
+	_, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Create(ctx, cm, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	err = reconciler.updateConfigMapWithUpdatedChildrenPaths(ctx, key, "/b")
+	assert.NoError(t, err)
+
+	updated, err2 := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err2)
+
+	var obj map[string]interface{}
+	err = json.Unmarshal([]byte(updated.Data[key]), &obj)
+	assert.NoError(t, err)
+
+	cfg, ok := obj[ConfigAttr].(map[string]interface{})
+	assert.True(t, ok, "config missing or wrong type")
+
+	artifact, ok := cfg[ArtifactAttr].(map[string]interface{})
+	assert.True(t, ok, "artifact missing or wrong type")
+
+	children, ok := artifact[ChildrenPathsAttr].([]interface{})
+	assert.True(t, ok, "childrenPaths missing or wrong type")
+	assert.Len(t, children, 1)
+	assert.Equal(t, "/b", children[0].(string))
+}
+
+func TestUpdateConfigMapWithRetry_Success(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+
+	// Seed a ConfigMap
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      reconciler.nodeName,
+			Namespace: reconciler.namespace,
+		},
+		Data: map[string]string{"k": "v1"},
+	}
+	_, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Create(ctx, cm, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	// Apply update via retry helper
+	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+		if latest.Data == nil {
+			latest.Data = make(map[string]string)
+		}
+		latest.Data["k"] = "v2"
+		return latest, nil
+	})
+	assert.NoError(t, err)
+
+	// Verify persisted
+	got, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	assert.Equal(t, "v2", got.Data["k"])
+}
+
+func TestUpdateConfigMapWithRetry_UpdateFuncError(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+
+	// Seed a ConfigMap
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      reconciler.nodeName,
+			Namespace: reconciler.namespace,
+		},
+		Data: map[string]string{"k": "v1"},
+	}
+	_, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Create(ctx, cm, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	// Mutator returns error; no update should be attempted
+	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+		return latest, errors.New("mutator failure")
+	})
+	assert.Error(t, err)
+	got, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	assert.Equal(t, "v1", got.Data["k"])
+}
+
+func TestUpdateConfigMapWithRetry_GetError(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+
+	// Seed CM
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      reconciler.nodeName,
+			Namespace: reconciler.namespace,
+		},
+		Data: map[string]string{},
+	}
+	_, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Create(ctx, cm, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	// Force GET error
+	kubeClient.PrependReactor("get", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("get failed")
+	})
+
+	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+		return latest, nil
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "get failed")
+}
+
+func TestUpdateConfigMapWithRetry_UpdateConflict_RetrySucceeds(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+
+	// Seed CM
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      reconciler.nodeName,
+			Namespace: reconciler.namespace,
+		},
+		Data: map[string]string{"k": "v1"},
+	}
+	_, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Create(ctx, cm, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	// First update returns Conflict, subsequent updates succeed
+	var calls int
+	kubeClient.PrependReactor("update", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
+		if calls == 0 {
+			calls++
+			return true, nil, apierrors.NewConflict(
+				schema.GroupResource{Group: "", Resource: "configmaps"},
+				reconciler.nodeName,
+				errors.New("conflict"),
+			)
+		}
+		return false, nil, nil
+	})
+
+	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+		if latest.Data == nil {
+			latest.Data = make(map[string]string)
+		}
+		latest.Data["k"] = "v2"
+		return latest, nil
+	})
+	assert.NoError(t, err)
+
+	got, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	assert.Equal(t, "v2", got.Data["k"])
+	assert.GreaterOrEqual(t, calls, 1)
+}
+
+func TestUpdateConfigMapWithRetry_UpdateError(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+
+	// Seed CM
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      reconciler.nodeName,
+			Namespace: reconciler.namespace,
+		},
+		Data: map[string]string{"k": "v1"},
+	}
+	_, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Create(ctx, cm, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	// Force persistent update error
+	kubeClient.PrependReactor("update", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("update failed")
+	})
+
+	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+		if latest.Data == nil {
+			latest.Data = make(map[string]string)
+		}
+		latest.Data["k"] = "v2"
+		return latest, nil
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "update failed")
+
+	got, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	assert.Equal(t, "v1", got.Data["k"])
 }

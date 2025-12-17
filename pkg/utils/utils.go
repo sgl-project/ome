@@ -2,6 +2,8 @@ package utils
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -248,4 +250,81 @@ func Retry(attempts int, sleep time.Duration, f func() error) (err error) {
 	}
 
 	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
+}
+
+// CreateSymbolicLink ensures that childPath is a symbolic link pointing to parentPath,
+// using a relative link target computed from the directory of childPath to parentPath.
+//
+// Behavior:
+// - Ensures the parent directory of childPath exists (creates it if necessary).
+// - If childPath is an existing symlink with the same target, it is a no-op.
+// - If childPath is an existing symlink with a different target, it is replaced.
+// - If a non-symlink already exists at childPath, an error is returned.
+//
+// Note: The link target stored in the symlink is always a relative path.
+func CreateSymbolicLink(childPath string, parentPath string) error {
+	// Ensure the parent directory of childPath exists
+	childDir := filepath.Dir(childPath)
+	if err := os.MkdirAll(childDir, 0755); err != nil {
+		return fmt.Errorf("failed to create child directory %s: %w", childDir, err)
+	}
+
+	// Compute relative path from childPath to parentPath
+	relTarget, err := filepath.Rel(childDir, parentPath)
+	if err != nil {
+		return fmt.Errorf("failed to compute relative path: %w", err)
+	}
+
+	// Check if symlink already exists
+	fileInfo, err := os.Lstat(childPath)
+	if err == nil {
+		if fileInfo.Mode()&os.ModeSymlink != 0 {
+			// It's a symlink, read its target
+			currentTarget, err := os.Readlink(childPath)
+			if err != nil {
+				return fmt.Errorf("failed to read existing symlink: %w", err)
+			}
+
+			if currentTarget == relTarget {
+				// Already points to the desired target, no-op
+				return nil
+			}
+
+			// Remove existing symlink
+			if err := os.Remove(childPath); err != nil {
+				return fmt.Errorf("failed to remove existing symlink: %w", err)
+			}
+		} else {
+			return fmt.Errorf("file exists and is not a symlink: %s", childPath)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to stat childPath: %w", err)
+	}
+
+	// Create the symlink
+	if err := os.Symlink(relTarget, childPath); err != nil {
+		return fmt.Errorf("failed to create symlink: %w", err)
+	}
+
+	return nil
+}
+
+// ContainsString reports whether values contains target.
+// If isCaseSensitive is true, comparison is case-sensitive; otherwise it is case-insensitive.
+// Non-string elements in values are ignored.
+func ContainsString(values []interface{}, target string, isCaseSensitive bool) bool {
+	for _, v := range values {
+		if s, ok := v.(string); ok {
+			var result bool
+			if isCaseSensitive {
+				result = s == target
+			} else {
+				result = strings.ToLower(s) == strings.ToLower(target)
+			}
+			if result {
+				return result
+			}
+		}
+	}
+	return false
 }

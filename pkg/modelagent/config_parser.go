@@ -419,3 +419,26 @@ func (p *ModelConfigParser) determineModelCapabilitiesFromHF(hfModel modelconfig
 	// Default to text-to-text capability
 	return append(capabilities, string(v1beta1.ModelCapabilityTextToText))
 }
+
+// populateArtifactAttribute returns a pointer to an updated copy of currentModelMetadata
+// where the Artifact field is set to the provided sha and parentPath, and
+// ChildrenPaths is initialized as an empty slice. The original currentModelMetadata
+// value passed in is not mutated (the update happens on a copy).
+//
+// Parameters:
+//   - sha: artifact content hash
+//   - parentPath: absolute or logical parent directory path where the artifact resides
+//   - currentModelMetadata: existing model metadata to base the update on (passed by value)
+//
+// Returns:
+//   - *ModelMetadata: pointer to the updated metadata with Artifact populated
+func (p *ModelConfigParser) populateArtifactAttribute(sha string, parentPath string, currentModelMetadata ModelMetadata) *ModelMetadata {
+	artifact := Artifact{
+		Sha:           sha,
+		ParentPath:    parentPath,
+		ChildrenPaths: make([]string, 0),
+	}
+	currentModelMetadata.Artifact = artifact
+	p.logger.Infof("current artifact is :%s", currentModelMetadata.Artifact)
+	return &currentModelMetadata
+}
