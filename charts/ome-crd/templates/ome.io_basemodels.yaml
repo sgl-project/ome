@@ -146,6 +146,11 @@ spec:
                 x-kubernetes-list-type: atomic
               storage:
                 properties:
+                  downloadPolicy:
+                    enum:
+                    - AlwaysDownload
+                    - ReuseIfExists
+                    type: string
                   key:
                     type: string
                   nodeAffinity:

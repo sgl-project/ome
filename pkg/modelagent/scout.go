@@ -358,7 +358,7 @@ func (w *Scout) updateBaseModel(old, new interface{}) {
 		hasChanges = hasChanges || (result != "")
 	}
 
-	if hasChanges && w.shouldDownloadModel(newBaseModel.Spec.Storage) {
+	if hasChanges && w.shouldDownloadModel(newBaseModel.Spec.Storage) { // mainly deal with download model artifact due to node selector and node affinity
 		w.logger.Infof("BaseModel %s needs refresh in namespace %s", newBaseModel.GetName(), newBaseModel.GetNamespace())
 
 		IsTensorrtLLMModel := newBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM

@@ -185,7 +185,7 @@ func TestModelEntryMarshaling(t *testing.T) {
 		t.Errorf("Status mismatch: got %s, want %s", unmarshaled.Status, modelEntry.Status)
 	}
 	if !reflect.DeepEqual(unmarshaled.Config, modelEntry.Config) {
-		t.Errorf("Config mismatch: got %+v, want %+v", unmarshaled.Config, modelEntry.Config)
+		t.Errorf("ConfigAttr mismatch: got %+v, want %+v", unmarshaled.Config, modelEntry.Config)
 	}
 }
 
