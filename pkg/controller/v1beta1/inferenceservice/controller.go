@@ -475,8 +475,10 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
-	r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta1.RoutesReady)
-	r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta1.LatestDeploymentReady)
+	if deploymentMode == constants.Serverless {
+		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta1.RoutesReady)
+		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta1.LatestDeploymentReady)
+	}
 
 	if err = r.updateStatus(isvc, deploymentMode); err != nil {
 		r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
