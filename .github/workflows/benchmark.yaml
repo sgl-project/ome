@@ -1,8 +1,9 @@
 name: Benchmark Job
 
 on:
-  push:
-    branches: [ xinyue/add-benchmark-ci ]
+  schedule:
+    # Run every Saturday at 10 PM UTC (Saturday night)
+    - cron: '0 22 * * 6'
   workflow_dispatch:
     inputs:
       models:
@@ -29,6 +30,22 @@ jobs:
       id-token: write
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set image tag variables
+        id: vars
+        run: |
+          # Use client_payload values if available (from repository_dispatch), otherwise compute defaults
+          if [ -n "${{ github.event.client_payload.full_tag }}" ]; then
+            echo "FULL_TAG=${{ github.event.client_payload.full_tag }}" >> $GITHUB_ENV
+          else
+            # Defaults
+            BRANCH_NAME="${GITHUB_REF_NAME//\//-}"
+            COMMIT_HASH="${GITHUB_SHA:0:7}"
+            VERSION="${BRANCH_NAME}-${COMMIT_HASH}"
+            echo "FULL_TAG=${VERSION}" >> $GITHUB_ENV
+          fi
       - name: Set up kubectl
         uses: azure/setup-kubectl@v3
         with:
@@ -154,6 +171,8 @@ jobs:
                 value: "${BUCKET_NAME}"
               - name: container-name
                 value: "${CONTAINER_NAME}"
+              - name: full-tag
+                value: "${FULL_TAG}"
 
             templates:
             - name: benchmark-pipeline
@@ -548,7 +567,7 @@ jobs:
               echo "- **Benchmark:** $BENCHMARK_EMOJI \`$BENCHMARK_STATUS\`" >> $GITHUB_STEP_SUMMARY
 
               if [ "$BENCHMARK_STATUS" = "SUCCESS" ]; then
-                echo "- **Results:** \`oci://n/${REGISTRY_NAMESPACE}/b/${BUCKET_NAME}/o/${CONTAINER_NAME}/${MODEL_NAME}\`" >> $GITHUB_STEP_SUMMARY
+                echo "- **Results:** \`oci://n/${REGISTRY_NAMESPACE}/b/${BUCKET_NAME}/o/${CONTAINER_NAME}/${FULL_TAG}/${MODEL_NAME}\`" >> $GITHUB_STEP_SUMMARY
               fi
               echo "" >> $GITHUB_STEP_SUMMARY
             done
@@ -568,6 +587,6 @@ jobs:
           echo "### 📈 Results Location" >> $GITHUB_STEP_SUMMARY
           echo "All benchmark results are stored in OCI Object Storage:" >> $GITHUB_STEP_SUMMARY
           echo "- **Bucket:** \`${BUCKET_NAME}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Path Pattern:** \`${CONTAINER_NAME}/${MODEL_NAME}/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Path Pattern:** \`${CONTAINER_NAME}/${FULL_TAG}/${MODEL_NAME}/\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "_Note: All resources (InferenceServices and BenchmarkJobs) were cleaned up after completion._" >> $GITHUB_STEP_SUMMARY
