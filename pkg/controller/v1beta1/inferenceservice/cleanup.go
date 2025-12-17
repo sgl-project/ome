@@ -237,17 +237,21 @@ func (r *InferenceServiceReconciler) cleanupOldPredictorDeployment(
 
 	// Check if old predictor deployment exists (uses the inference service name)
 	// If it doesn't exist, cleanup is already done, return early
-	deployment := &appsv1.Deployment{}
-	deploymentName := isvc.Name
-	err := r.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: isvc.Namespace}, deployment)
+	predictorDeploymentList := &appsv1.DeploymentList{}
+	err := r.List(ctx, predictorDeploymentList,
+		client.InNamespace(isvc.Namespace),
+		client.MatchingLabels{"component": "predictor"})
 
-	if apierrors.IsNotFound(err) {
-		// Old deployment doesn't exist, cleanup already complete
-		return true, nil
-	} else if err != nil {
+	if err != nil {
 		// Error checking for deployment
 		return false, fmt.Errorf("failed to check for old predictor deployment: %w", err)
 	}
+
+	if len(predictorDeploymentList.Items) == 0 {
+		// Old predictor deployment doesn't exist, cleanup already done
+		return true, nil
+	}
+	predictorDeployment := &predictorDeploymentList.Items[0]
 
 	// Only run if new architecture is being used (Engine/Decoder/Router specs exist)
 	if isvc.Spec.Engine == nil && isvc.Spec.Decoder == nil && isvc.Spec.Router == nil {
@@ -301,15 +305,15 @@ func (r *InferenceServiceReconciler) cleanupOldPredictorDeployment(
 	// Delete old predictor deployment (uses the inference service name)
 
 	log.Info("Deleting old predictor deployment after successful migration",
-		"deployment", deploymentName,
+		"predictorDeployment", predictorDeployment.Name,
 		"namespace", isvc.Namespace)
 
-	if err := r.Delete(ctx, deployment); err != nil {
-		return false, fmt.Errorf("failed to delete old predictor deployment: %w", err)
+	if err := r.Delete(ctx, predictorDeployment); err != nil {
+		return false, fmt.Errorf("failed to delete old predictor Deployment: %w", err)
 	}
 
 	log.Info("Successfully deleted old predictor deployment",
-		"deployment", deploymentName,
+		"predictorDeployment", predictorDeployment.Name,
 		"namespace", isvc.Namespace)
 
 	return true, nil

@@ -355,6 +355,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 						Namespace: "default",
 						Labels: map[string]string{
 							constants.InferenceServicePodLabelKey: "test-legacy",
+							constants.OMEComponentLabel:           "predictor",
 						},
 					},
 					Spec: appsv1.DeploymentSpec{
