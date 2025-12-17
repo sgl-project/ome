@@ -3,39 +3,30 @@ name: Benchmark Job
 on:
   push:
     branches: [ xinyue/add-benchmark-ci ]
-#  pull_request:
-#  repository_dispatch:
-#    types: [container-pushed]
-#  workflow_dispatch:
-#    inputs:
-#      models:
-#        description: "Comma-separated list of model names to deploy"
-#        required: false
-#        default: "llama-3-3-70b-instruct,llama-4-scout-17b-16e-instruct"
-#        type: string
+  workflow_dispatch:
+    inputs:
+      models:
+        description: "Comma-separated list of model names to deploy"
+        required: false
+        default: "llama-4-scout-17b-16e-instruct,deepseek-v2-lite-chat,qwen3-32b"
+        type: string
 
 env:
   REGISTRY: ord.ocir.io
   REGISTRY_NAMESPACE: idqj093njucb
   K8S_NAMESPACE: actions-runner-system
   CONTAINER_NAME: official-sgl
-  ISVC_MODELS: llama-4-scout-17b-16e-instruct,gpt-oss-120b,deepseek-llm-7b-chat,qwen3-32b
+  ISVC_MODELS: llama-4-scout-17b-16e-instruct,deepseek-v2-lite-chat,qwen3-32b
   BUCKET_NAME: ome-benchmark-results
   BENCHMARK_CONTAINER: ghcr.io/moirai-internal/genai-bench:0.0.3
 
 jobs:
-  deploy:
+  run-benchmark-job:
     runs-on: k8s-runner
     permissions:
       contents: read
       packages: write
       id-token: write
-    env:
-      IMAGE_NAME: ${{ github.event.client_payload.image_name }}
-      FULL_TAG: ${{ github.event.client_payload.full_tag }}
-      BRANCH_NAME: ${{ github.event.client_payload.branch_name }}
-      VERSION: ${{ github.event.client_payload.version }}
-      COMMIT_HASH: ${{ github.event.client_payload.commit_hash }}
 
     steps:
       - name: Set up kubectl
@@ -114,7 +105,6 @@ jobs:
         id: deployment
         run: |
           MODELS_METADATA='${{ steps.models.outputs.models_metadata }}'
-          IMAGE="${IMAGE_NAME}:${FULL_TAG}"
 
           # Initialize status tracking
           DEPLOYMENT_STATUS="[]"
@@ -141,7 +131,6 @@ jobs:
             generateName: benchmark-$MODEL_NAME-
             namespace: $NAMESPACE
             labels:
-              sglang.version: "$VERSION"
               model: "$MODEL_NAME"
           spec:
             entrypoint: benchmark-pipeline
@@ -157,10 +146,6 @@ jobs:
                 value: "$NAMESPACE"
               - name: runtime-name
                 value: "$RUNTIME_NAME"
-              - name: image
-                value: "$IMAGE"
-              - name: version
-                value: "$VERSION"
               - name: benchmark-container
                 value: "${BENCHMARK_CONTAINER}"
               - name: registry-namespace
@@ -169,8 +154,6 @@ jobs:
                 value: "${BUCKET_NAME}"
               - name: container-name
                 value: "${CONTAINER_NAME}"
-              - name: full-tag
-                value: "${FULL_TAG}"
 
             templates:
             - name: benchmark-pipeline
@@ -502,11 +485,6 @@ jobs:
 
           echo "## 🚀 SGLang Deployment & Benchmark Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** \`${BRANCH_NAME}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** \`${VERSION}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** \`${COMMIT_HASH}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Docker Image:** \`${IMAGE_NAME}:${FULL_TAG}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
 
           echo "### 📋 Deployment Overview" >> $GITHUB_STEP_SUMMARY
           echo "This workflow uses Argo Workflows on the gh-arc-runner Kubernetes cluster to orchestrate deployment and testing:" >> $GITHUB_STEP_SUMMARY
@@ -570,7 +548,7 @@ jobs:
               echo "- **Benchmark:** $BENCHMARK_EMOJI \`$BENCHMARK_STATUS\`" >> $GITHUB_STEP_SUMMARY
 
               if [ "$BENCHMARK_STATUS" = "SUCCESS" ]; then
-                echo "- **Results:** \`oci://n/${REGISTRY_NAMESPACE}/b/${BUCKET_NAME}/o/${CONTAINER_NAME}/${FULL_TAG}/${MODEL_NAME}\`" >> $GITHUB_STEP_SUMMARY
+                echo "- **Results:** \`oci://n/${REGISTRY_NAMESPACE}/b/${BUCKET_NAME}/o/${CONTAINER_NAME}/${MODEL_NAME}\`" >> $GITHUB_STEP_SUMMARY
               fi
               echo "" >> $GITHUB_STEP_SUMMARY
             done
@@ -590,6 +568,6 @@ jobs:
           echo "### 📈 Results Location" >> $GITHUB_STEP_SUMMARY
           echo "All benchmark results are stored in OCI Object Storage:" >> $GITHUB_STEP_SUMMARY
           echo "- **Bucket:** \`${BUCKET_NAME}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Path Pattern:** \`${CONTAINER_NAME}/${FULL_TAG}/${MODEL_NAME}/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Path Pattern:** \`${CONTAINER_NAME}/${MODEL_NAME}/\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "_Note: All resources (InferenceServices and BenchmarkJobs) were cleaned up after completion._" >> $GITHUB_STEP_SUMMARY
