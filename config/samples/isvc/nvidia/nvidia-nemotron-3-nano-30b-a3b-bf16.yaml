@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: nvidia-nemotron-3-nano-30b-a3b-bf16
+  namespace: nvidia-nemotron-3-nano-30b-a3b-bf16
+spec:
+  model:
+    name: nvidia-nemotron-3-nano-30b-a3b-bf16
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-nvidia-nemotron-3-nano-30b-a3b-bf16
+  router:
+    minReplicas: 1
+    maxReplicas: 1
