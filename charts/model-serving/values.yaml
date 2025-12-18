@@ -1318,6 +1318,11 @@ grok_4_self_hosted:
           -H "Content-Type: application/json" \
           -d '{"model":"grok-4","messages":[{"role":"user","content":"hi"}],"max_tokens":10}' \
           --max-time 25
+    failureThreshold: 5
+    successThreshold: 1
+    periodSeconds: 10
+    timeoutSeconds: 30
+    initialDelaySeconds: 100
 
 gemma_2_2b_it:
   enabled: false
