@@ -71,6 +71,8 @@ spec:
         - /bin/bash
         - '-lc'
         - --
+      {{- $gpus := 4 }}
+      {{- if eq .Values.oci.region "me-dubai-1" }}{{- $gpus = 8 }}{{- end }}
       args:
         - |
           python3 -m sglang.launch_server \
@@ -79,8 +81,10 @@ spec:
           --enable-metrics \
           --log-requests \
           --model-path="$MODEL_PATH" \
-          --tp-size=4 \
+          --tp-size={{ $gpus }} \
+          {{- if ne .Values.oci.region "me-dubai-1" }}
           --mem-frac=0.9 \
+          {{- end }}
           --tool-call-parser=llama3 \
           --chat-template /sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama3.1_json.jinja
       volumeMounts:
@@ -90,11 +94,11 @@ spec:
         requests:
           cpu: 10
           memory: 160Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: {{ $gpus }}
         limits:
           cpu: 10
           memory: 160Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: {{ $gpus }}
 
       readinessProbe:
         httpGet:
@@ -184,8 +188,10 @@ spec:
           --enable-metrics \
           --log-requests \
           --model-path="$MODEL_PATH" \
-          --tp-size=4 \
+          --tp-size={{ $gpus }} \
+          {{- if ne .Values.oci.region "me-dubai-1" }}
           --mem-frac=0.9 \
+          {{- end }}
           --tool-call-parser=llama3 \
           --chat-template /sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama3.1_json.jinja
       volumeMounts:
@@ -195,11 +201,11 @@ spec:
         requests:
           cpu: 10
           memory: 160Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: {{ $gpus }}
         limits:
           cpu: 10
           memory: 160Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: {{ $gpus }}
 
       readinessProbe:
         httpGet:
