@@ -200,13 +200,9 @@ func TestExternalServiceReconciler_determineTargetSelector(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1beta1.InferenceServiceSpec{
-					Router: &v1beta1.RouterSpec{},
-					Engine: &v1beta1.EngineSpec{},
-					Predictor: v1beta1.PredictorSpec{
-						Model: &v1beta1.ModelSpec{
-							BaseModel: stringPtr("test-model"),
-						},
-					},
+					Router:    &v1beta1.RouterSpec{},
+					Engine:    &v1beta1.EngineSpec{},
+					Predictor: v1beta1.PredictorSpec{},
 				},
 			},
 			expectedSelector: map[string]string{
@@ -223,6 +219,24 @@ func TestExternalServiceReconciler_determineTargetSelector(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1beta1.InferenceServiceSpec{
+					Engine:    &v1beta1.EngineSpec{},
+					Predictor: v1beta1.PredictorSpec{},
+				},
+			},
+			expectedSelector: map[string]string{
+				constants.InferenceServicePodLabelKey: "test-service",
+				constants.OMEComponentLabel:           string(v1beta1.EngineComponent),
+			},
+			description: "engine component should be selected when router doesn't exist",
+		},
+		{
+			name: "predictor exists, no component label added",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
 					Engine: &v1beta1.EngineSpec{},
 					Predictor: v1beta1.PredictorSpec{
 						Model: &v1beta1.ModelSpec{
@@ -233,28 +247,6 @@ func TestExternalServiceReconciler_determineTargetSelector(t *testing.T) {
 			},
 			expectedSelector: map[string]string{
 				constants.InferenceServicePodLabelKey: "test-service",
-				constants.OMEComponentLabel:           string(v1beta1.EngineComponent),
-			},
-			description: "engine component should be selected when router doesn't exist",
-		},
-		{
-			name: "predictor component fallback",
-			isvc: &v1beta1.InferenceService{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-service",
-					Namespace: "default",
-				},
-				Spec: v1beta1.InferenceServiceSpec{
-					Predictor: v1beta1.PredictorSpec{
-						Model: &v1beta1.ModelSpec{
-							BaseModel: stringPtr("test-model"),
-						},
-					},
-				},
-			},
-			expectedSelector: map[string]string{
-				constants.InferenceServicePodLabelKey: "test-service",
-				constants.OMEComponentLabel:           string(constants.Predictor),
 			},
 			description: "predictor component should be selected as fallback",
 		},

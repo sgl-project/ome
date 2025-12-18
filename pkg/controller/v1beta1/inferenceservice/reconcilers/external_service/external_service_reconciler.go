@@ -116,19 +116,20 @@ func (r *ExternalServiceReconciler) determineTargetSelector(isvc *v1beta1.Infere
 		constants.InferenceServicePodLabelKey: isvc.Name,
 	}
 
-	// Priority: Router > Engine > Predictor
-	if isvc.Spec.Router != nil {
-		baseSelector[constants.OMEComponentLabel] = string(v1beta1.RouterComponent)
-		return baseSelector
+	if !isvcutils.IsPredictorUsed(isvc) {
+		// Priority: Router > Engine
+		if isvc.Spec.Router != nil {
+			baseSelector[constants.OMEComponentLabel] = string(v1beta1.RouterComponent)
+			return baseSelector
+		}
+
+		if isvc.Spec.Engine != nil {
+			baseSelector[constants.OMEComponentLabel] = string(v1beta1.EngineComponent)
+			return baseSelector
+		}
 	}
 
-	if isvc.Spec.Engine != nil {
-		baseSelector[constants.OMEComponentLabel] = string(v1beta1.EngineComponent)
-		return baseSelector
-	}
-
-	// Fallback to predictor
-	baseSelector[constants.OMEComponentLabel] = string(constants.Predictor)
+	// When predictor is still used, not attach component label to service selector to make sure no downtime during migration
 	return baseSelector
 }
 
