@@ -18,7 +18,7 @@ Read the [documentation](https://sgl-project.github.io/ome/docs/) to learn more 
 
 ## Features Overview
 
-- **Model Management:** Models are first-class citizen custom resources in OME. Sophisticated model parsing extracts architecture, parameter count, and capabilities directly from model files. Supports distributed storage with automated repair, double encryption, namespace scoping, and multiple formats (SafeTensors, PyTorch, TensorRT, ONNX).
+- **Model Management:** Models are first-class citizen custom resources in OME. Sophisticated model parsing extracts architecture, parameter count, and capabilities directly from model files. Supports distributed storage with automated repair, double encryption, namespace scoping, and multiple formats (SafeTensors, PyTorch, TensorRT, ONNX). See the [supported models reference](config/models/SUPPORTED_MODELS.md) for a comprehensive list of pre-configured models including Llama, Qwen, DeepSeek, Gemma, Phi, and 80+ other model families.
 
 - **Intelligent Runtime Selection:** Automatic matching of models to optimal runtime configurations through weighted scoring based on architecture, format, quantization, parameter size, and framework compatibility.
 
@@ -26,7 +26,11 @@ Read the [documentation](https://sgl-project.github.io/ome/docs/) to learn more 
 
 - **Resource Optimization:** Specialized GPU bin-packing scheduling with dynamic re-optimization to maximize cluster efficiency while ensuring high availability.
 
-- **Runtime Integrations:** First-class support for [**SGLang**](https://github.com/sgl-project/sglang) - the most advanced inference engine with cache-aware load balancing, multi-node deployment, prefill-decode disaggregated serving, multi-LoRA adapter serving, and much more. Also supports Triton for general model inference.
+- **Runtime Integrations:** First-class support for [**SGLang**](https://github.com/sgl-project/sglang) - the most advanced inference engine with cache-aware load balancing, multi-node deployment, prefill-decode disaggregated serving, multi-LoRA adapter serving, and much more. Also supports [**vLLM**](https://github.com/vllm-project/vllm) for high-throughput inference and Triton for general model inference.
+
+- **Accelerator Management:** Hardware-aware scheduling through AcceleratorClass resources that define GPU capabilities, discovery patterns, and cost information. Enables intelligent accelerator selection with policies like BestFit, Cheapest, or MostCapable.
+
+- **Web Console:** Modern web interface for managing models, serving runtimes, and inference services with real-time updates and HuggingFace model search integration.
 
 - **Kubernetes Ecosystem Integration:** Deep integration with modern Kubernetes components including [Kueue](https://kueue.sigs.k8s.io/) for gang scheduling of multi-pod workloads, [LeaderWorkerSet](https://github.com/kubernetes-sigs/lws) for resilient multi-node deployments, [KEDA](https://keda.sh/) for advanced custom metrics-based autoscaling, [K8s Gateway API](https://gateway-api.sigs.k8s.io/) for sophisticated traffic routing, and [Gateway API Inference Extension](https://gateway-api-inference-extension.sigs.k8s.io/) for standardized inference endpoints.
 
@@ -98,16 +102,19 @@ Learn more about:
 
 OME uses a component-based architecture built on Kubernetes custom resources:
 
-- **BaseModel/ClusterBaseModel:** Define model sources and metadata
-- **ServingRuntime/ClusterServingRuntime:** Define how models are served
-- **InferenceService:** Connects models to runtimes for deployment
-- **BenchmarkJob:** Measures model performance under different workloads
+- **BaseModel/ClusterBaseModel:** Define model sources and metadata with automatic parsing of architecture, parameters, and capabilities
+- **FineTunedWeight:** Define LoRA adapters and fine-tuned weights that extend base models
+- **ServingRuntime/ClusterServingRuntime:** Define how models are served with runtime-specific configurations
+- **InferenceService:** Connects models to runtimes for deployment with support for prefill-decode disaggregation and multi-node inference
+- **AcceleratorClass:** Define GPU hardware classes with capabilities, discovery patterns, and cost information for intelligent scheduling
+- **BenchmarkJob:** Measures model performance under different workloads with configurable traffic patterns
 
 OME's controller automatically:
 1. Downloads and parses models to understand their characteristics
 2. Selects the optimal runtime configuration for each model
-3. Generates Kubernetes resources for efficient deployment
-4. Continuously optimizes resource utilization across the cluster
+3. Matches models to appropriate accelerators based on requirements
+4. Generates Kubernetes resources for efficient deployment
+5. Continuously optimizes resource utilization across the cluster
 
 ## Roadmap
 
