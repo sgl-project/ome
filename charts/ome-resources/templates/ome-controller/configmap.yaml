@@ -19,15 +19,21 @@ data:
     }
   ingress: |-
     {
-        "ingressGateway" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.gateway }}",
-        "ingressService" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.gatewayService }}",
-        "localGateway" : "{{ .Values.ome.controller.ingressGateway.localGateway.gateway }}",
-        "localGatewayService" : "{{ .Values.ome.controller.ingressGateway.localGateway.gatewayService }}",
-        "ingressClassName" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.className }}",
-        "ingressDomain"  : "{{ .Values.ome.controller.ingressGateway.domain }}",
-        "domainTemplate": "{{ .Values.ome.controller.ingressGateway.domainTemplate }}",
-        "urlScheme": "{{ .Values.ome.controller.ingressGateway.urlScheme }}",
-        "disableIstioVirtualHost": {{ .Values.ome.controller.ingressGateway.disableIstioVirtualHost }}
+        "ingressGateway" : "{{ .Values.ome.opensourceController.ingressGateway.ingressGateway.gateway }}",
+        "ingressService" : "{{ .Values.ome.opensourceController.ingressGateway.ingressGateway.gatewayService }}",
+        "localGateway" : "{{ .Values.ome.opensourceController.ingressGateway.localGateway.gateway }}",
+        "localGatewayService" : "{{ .Values.ome.opensourceController.ingressGateway.localGateway.gatewayService }}",
+        "ingressClassName" : "{{ .Values.ome.opensourceController.ingressGateway.ingressGateway.className }}",
+        "ingressDomain"  : "{{ .Values.ome.opensourceController.ingressGateway.domain }}",
+        "domainTemplate": "{{ .Values.ome.opensourceController.ingressGateway.domainTemplate }}",
+        "urlScheme": "{{ .Values.ome.opensourceController.ingressGateway.urlScheme }}",
+        "disableIstioVirtualHost": {{ .Values.ome.opensourceController.ingressGateway.disableIstioVirtualHost }},
+        "knativeLocalGatewayService" : "{{ .Values.ome.opensourceController.ingressGateway.localGateway.gatewayService }}",
+        "omeIngressGateway" : "{{ .Values.ome.opensourceController.ingressGateway.omeIngressGateway | default "" }}",
+        "additionalIngressDomains" : {{ .Values.ome.opensourceController.ingressGateway.additionalIngressDomains | default "null" }},
+        "pathTemplate": "{{ .Values.ome.opensourceController.ingressGateway.pathTemplate | default "" }}",
+        "disableIngressCreation": {{ .Values.ome.opensourceController.ingressGateway.disableIngressCreation | default false }},
+        "enableGatewayAPI": {{ .Values.ome.opensourceController.ingressGateway.enableGatewayAPI | default false }}
     }
 
   ociEtc: |-

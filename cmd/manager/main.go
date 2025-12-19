@@ -14,8 +14,6 @@ import (
 
 	v1beta1ocipostgrescontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/ocipostgres"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	v1beta1projectcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/aip/project"
@@ -25,26 +23,22 @@ import (
 	v1beta1capacityreservationcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/capacityreservation"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 	v1beta1dacccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac"
-	v1beta1isvccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice"
 	v1beta1replicationjobcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/replicationjob"
 	v1beta1trainingcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training"
 	trainingruntimecore "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/core"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/benchmark"
 	capacityreservation "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/capacityreservation"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/isvc"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/pod"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/servingruntime"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/training"
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	v1beta1basemodelcontroller "github.com/sgl-project/ome/pkg/controller/v1beta1/basemodel"
 	zaplog "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	istionetworking "istio.io/api/networking/v1beta1"
-	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -62,6 +56,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	_ "sigs.k8s.io/gateway-api/apis/v1" // Required for controller-gen to analyze opensource module
 	jobsetv1alpha2 "sigs.k8s.io/jobset/api/jobset/v1alpha2"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
@@ -71,7 +66,7 @@ import (
 )
 
 const (
-	LeaderLockName          = "ome-controller-manager-leader-lock"
+	LeaderLockName          = "service-ome-controller-manager-leader-lock"
 	LeaderElectionNamespace = "ome"
 )
 
@@ -101,27 +96,30 @@ func init() {
 	istionetworking.VirtualServiceUnmarshaler.AllowUnknownFields = true
 	istionetworking.GatewayUnmarshaler.AllowUnknownFields = true
 
-	// Register ALL internal types EXCEPT model types (BaseModel, FineTunedWeight, ClusterBaseModel)
-	// Model types are excluded in pkg/apis/ome/v1beta1/model.go init() to avoid double registration
 	utilruntime.Must(v1beta1.AddToScheme(scheme))
+	utilruntime.Must(schedulerpluginsv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
+	utilruntime.Must(jobsetv1alpha2.AddToScheme(scheme))
 
-	// Register ONLY model types from opensource (BaseModel, FineTunedWeight, ClusterBaseModel)
-	// These are used by the opensource model controller.
+	// Register inference from opensource which required by dac
+	// These are used by the dac, training, capacityReservation controller.
 	scheme.AddKnownTypes(opensourcev1beta1.SchemeGroupVersion,
+		&opensourcev1beta1.InferenceService{},
+		&opensourcev1beta1.InferenceServiceList{},
 		&opensourcev1beta1.BaseModel{},
 		&opensourcev1beta1.BaseModelList{},
 		&opensourcev1beta1.FineTunedWeight{},
 		&opensourcev1beta1.FineTunedWeightList{},
 		&opensourcev1beta1.ClusterBaseModel{},
 		&opensourcev1beta1.ClusterBaseModelList{},
+		&opensourcev1beta1.ClusterServingRuntime{},
+		&opensourcev1beta1.ClusterServingRuntimeList{},
+		&opensourcev1beta1.ServingRuntime{},
+		&opensourcev1beta1.ServingRuntimeList{},
 	)
 	// Register metadata types for the opensource model types
 	metav1.AddToGroupVersion(scheme, opensourcev1beta1.SchemeGroupVersion)
-
-	utilruntime.Must(schedulerpluginsv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
-	utilruntime.Must(jobsetv1alpha2.AddToScheme(scheme))
 }
 
 // Options defines the program-configurable options that may be passed on the command line.
@@ -232,17 +230,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	deployConfig, err := controllerconfig.NewDeployConfig(clientSet)
-	if err != nil {
-		setupLog.Error(err, "Failed to initialize deployment configuration")
-		os.Exit(1)
-	}
-	ingressConfig, err := controllerconfig.NewIngressConfig(clientSet)
-	if err != nil {
-		setupLog.Error(err, "Failed to initialize ingress configuration")
-		os.Exit(1)
-	}
-
 	dacReconcilePolicyConfig, err := controllerconfig.NewDacReconcilePolicyConfig(clientSet)
 	if err != nil {
 		setupLog.Error(err, "Failed to initialize DAC reconciliation policy configuration")
@@ -277,29 +264,6 @@ func main() {
 				"kind", s.kind)
 			os.Exit(1)
 		}
-	}
-
-	if !ingressConfig.DisableIstioVirtualHost {
-		if err := registerOptionalScheme(cfg, mgr.GetScheme(), istioclientv1beta1.SchemeGroupVersion, constants.IstioVirtualServiceKind, istioclientv1beta1.AddToScheme); err != nil {
-			setupLog.Error(err, "Failed to register Istio scheme")
-			os.Exit(1)
-		}
-	}
-
-	// Setup Event Broadcaster
-	setupLog.Info("Configuring event broadcaster")
-	eventBroadcaster := record.NewBroadcaster()
-	setupLog.Info("Setting up InferenceService controller")
-	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
-	if err = (&v1beta1isvccontroller.InferenceServiceReconciler{
-		Client:    mgr.GetClient(),
-		Clientset: clientSet,
-		Log:       ctrl.Log.WithName("InferenceService"),
-		Scheme:    mgr.GetScheme(),
-		Recorder:  eventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-	}).SetupWithManager(mgr, deployConfig, ingressConfig); err != nil {
-		setupLog.Error(err, "Failed to create InferenceService controller")
-		os.Exit(1)
 	}
 
 	dedicatedAIClusterEventBroadcaster := record.NewBroadcaster()
@@ -424,33 +388,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup BaseModel and ClusterBaseModel controllers with the manager
-	baseModelEventBroadcaster := record.NewBroadcaster()
-	setupLog.Info("Setting up BaseModel controller")
-	baseModelEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
-	if err = (&v1beta1basemodelcontroller.BaseModelReconciler{
-		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("BaseModel"),
-		Scheme:   mgr.GetScheme(),
-		Recorder: baseModelEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create BaseModel controller")
-		os.Exit(1)
-	}
-
-	clusterBaseModelEventBroadcaster := record.NewBroadcaster()
-	setupLog.Info("Setting up ClusterBaseModel controller")
-	clusterBaseModelEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
-	if err = (&v1beta1basemodelcontroller.ClusterBaseModelReconciler{
-		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("ClusterBaseModel"),
-		Scheme:   mgr.GetScheme(),
-		Recorder: clusterBaseModelEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create ClusterBaseModel controller")
-		os.Exit(1)
-	}
-
 	postgresEventBroadcaster := record.NewBroadcaster()
 	setupLog.Info("Setting up postgres controller")
 	postgresEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
@@ -494,7 +431,7 @@ func main() {
 		setupLog.Info("Configuring webhook server", "port", options.webhookPort)
 		hookServer := mgr.GetWebhookServer()
 
-		setupLog.Info("Registering InferenceService webhook to the webhook server")
+		setupLog.Info("Registering Pod level webhook to the webhook server")
 		hookServer.Register("/mutate-pods", &webhook.Admission{
 			Handler: &pod.Mutator{Client: mgr.GetClient(), Clientset: clientSet, Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
@@ -502,16 +439,6 @@ func main() {
 		setupLog.Info("Registering TrainingJob webhook to the webhook server")
 		hookServer.Register("/mutate-training-pods", &webhook.Admission{
 			Handler: &pod.Mutator{Client: mgr.GetClient(), Clientset: clientSet, Decoder: admission.NewDecoder(mgr.GetScheme())},
-		})
-
-		setupLog.Info("Registering cluster serving runtime validator webhook to the webhook server")
-		hookServer.Register("/validate-ome-io-v1beta1-clusterservingruntime", &webhook.Admission{
-			Handler: &servingruntime.ClusterServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
-		})
-
-		setupLog.Info("Registering serving runtime validator webhook to the webhook server")
-		hookServer.Register("/validate-ome-io-v1beta1-servingruntime", &webhook.Admission{
-			Handler: &servingruntime.ServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
 		setupLog.Info("Registering benchmark job validator webhook to the webhook server")
@@ -523,15 +450,6 @@ func main() {
 		hookServer.Register("/validate-ome-io-v1beta1-capacityreservation", &webhook.Admission{
 			Handler: &capacityreservation.CapacityReservationValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
-
-		if err = ctrl.NewWebhookManagedBy(mgr).
-			For(&v1beta1.InferenceService{}).
-			WithDefaulter(&isvc.InferenceServiceDefaulter{}).
-			WithValidator(&isvc.InferenceServiceValidator{Client: mgr.GetClient()}).
-			Complete(); err != nil {
-			setupLog.Error(err, "Failed to create InferenceService webhook", "webhook", "v1beta1")
-			os.Exit(1)
-		}
 
 		if err = ctrl.NewWebhookManagedBy(mgr).
 			For(&v1beta1.TrainingJob{}).

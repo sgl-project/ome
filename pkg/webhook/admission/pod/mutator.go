@@ -73,28 +73,12 @@ func (mutator *Mutator) Handle(ctx context.Context, req admission.Request) admis
 }
 
 func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
-
-	metricsAggregator, err := newMetricsAggregator(configMap)
-	if err != nil {
-		return err
-	}
-
 	dedicatedAIClusterSchedulingInjector := NewDedicatedAIClusterSchedulingInjector(mutator.Client)
-
-	modelInitInjector := newModelInitInjector(configMap)
-
-	fineTunedAdapterInjector := newFineTunedAdapterInjector(configMap, mutator.Client)
-
-	servingSidecarInjector := newServingSidecarInjector(configMap)
 
 	trainingSidecarInjector := newTrainingSidecarInjector(configMap)
 
 	mutators := []func(pod *v1.Pod) error{
-		metricsAggregator.InjectMetricsAggregator,
 		dedicatedAIClusterSchedulingInjector.InjectAffinity,
-		modelInitInjector.InjectModelInit,
-		fineTunedAdapterInjector.InjectFineTunedAdapter,
-		servingSidecarInjector.InjectServingSidecar,
 		trainingSidecarInjector.InjectTrainingSidecar,
 	}
 

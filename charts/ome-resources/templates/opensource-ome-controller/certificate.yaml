@@ -1,0 +1,22 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: opensource-serving-cert
+  namespace: {{ .Release.Namespace }}
+spec:
+  commonName: opensource-ome-webhook-server-service.{{ .Release.Namespace }}.svc
+  dnsNames:
+    - opensource-ome-webhook-server-service.{{ .Release.Namespace }}.svc
+  issuerRef:
+    kind: Issuer
+    name: opensource-selfsigned-issuer
+  secretName: opensource-ome-webhook-server-cert
+
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: opensource-selfsigned-issuer
+  namespace: {{ .Release.Namespace }}
+spec:
+  selfSigned: {}

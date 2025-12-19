@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	//nolint:unused
 	fineTunedAdapterConfigMapKeyName = "fineTunedAdapter"
 )
 
@@ -33,7 +34,7 @@ type FineTunedAdapterInjector struct {
 }
 
 // newFineTunedAdapterInjector initializes a FineTunedAdapterInjector from a ConfigMap.
-func newFineTunedAdapterInjector(configMap *v1.ConfigMap, client client.Client) *FineTunedAdapterInjector {
+func newFineTunedAdapterInjector(configMap *v1.ConfigMap, client client.Client) *FineTunedAdapterInjector { //nolint:unused
 	fineTunedAdapterInjector := &FineTunedAdapterInjector{}
 	if fineTunedAdapterConfigVal, ok := configMap.Data[fineTunedAdapterConfigMapKeyName]; ok {
 		if err := json.Unmarshal([]byte(fineTunedAdapterConfigVal), fineTunedAdapterInjector); err != nil {

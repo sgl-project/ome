@@ -10,6 +10,7 @@ import (
 
 	v1beta2 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/utils"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
@@ -629,7 +630,7 @@ func (r *DedicatedAIClusterReconciler) GetDesiredReservationReplicaCount(dac *v1
 		baseCount = 1
 	}
 
-	isvcList := &v1beta2.InferenceServiceList{}
+	isvcList := &opensourcev1beta1.InferenceServiceList{}
 	if err := r.List(context.TODO(), isvcList, client.InNamespace(dac.Name)); err != nil {
 		return reservationCount, err
 	}
@@ -663,7 +664,8 @@ func (r *DedicatedAIClusterReconciler) GetDesiredReservationReplicaCount(dac *v1
 
 	var totalIsvcOccupation int = 0
 	for _, isvc := range isvcList.Items {
-		totalIsvcOccupation += (isvc.Spec.Predictor.ComponentExtensionSpec.MaxReplicas * baseCount)
+		// TODO: The resource mapping between the DAC and the engine/decoder/router is still unclear; update this function once it’s defined.
+		totalIsvcOccupation += (isvc.Spec.Engine.MaxReplicas * baseCount)
 	}
 
 	if reservationCount-totalIsvcOccupation < 0 {
@@ -734,7 +736,7 @@ func (r *DedicatedAIClusterReconciler) SetupWithManager(mgr ctrl.Manager, dacRec
 		Owns(&kueuev1beta1.LocalQueue{}).
 		Owns(&appsv1.Deployment{}).
 		Watches(
-			&v1beta2.InferenceService{},
+			&opensourcev1beta1.InferenceService{},
 			eventHandler,
 			builder.WithPredicates(predicates)).
 		Watches(

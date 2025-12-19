@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	//nolint:unused
 	servingSidecarConfigMapKeyName = "servingSidecar"
 )
 
@@ -29,7 +30,7 @@ type ServingSidecarInjector struct {
 }
 
 // newServingSidecarInjector initializes a ServingSidecarInjector from a ConfigMap.
-func newServingSidecarInjector(configMap *v1.ConfigMap) *ServingSidecarInjector {
+func newServingSidecarInjector(configMap *v1.ConfigMap) *ServingSidecarInjector { //nolint:unused
 	servingSidecarInjector := &ServingSidecarInjector{}
 	if servingSidecarConfigVal, ok := configMap.Data[servingSidecarConfigMapKeyName]; ok {
 		if err := json.Unmarshal([]byte(servingSidecarConfigVal), servingSidecarInjector); err != nil {

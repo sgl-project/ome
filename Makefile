@@ -122,6 +122,7 @@ manifests: controller-gen yq ## 📄 Generate WebhookConfiguration, ClusterRole 
 
 	@echo "\n🔑 Step 2: Generating RBAC manifests..."
 	@$(CONTROLLER_GEN) rbac:roleName=ome-manager-role paths=./pkg/controller/... output:rbac:artifacts:config=config/rbac
+	@$(CONTROLLER_GEN) rbac:roleName=opensource-ome-manager-role paths=github.com/sgl-project/ome/pkg/controller/... output:rbac:artifacts:config=config/opensource-rbac
 	@echo "✅ RBAC manifests generated"
 
 	@echo "\n📝 Step 3: Generating object boilerplate..."
@@ -157,7 +158,9 @@ manifests: controller-gen yq ## 📄 Generate WebhookConfiguration, ClusterRole 
 	@echo "✅ Minimal CRDs generated"
 
 	@echo "\n📁 Step 6: Copying manifests to Helm charts..."
-	@cp config/crd/full/ome* charts/ome-crd/templates/ && cp config/rbac/role.yaml charts/ome-resources/templates/ome-controller/rbac/role.yaml
+	@cp config/crd/full/ome* charts/ome-crd/templates/ 
+	@cp config/rbac/role.yaml charts/ome-resources/templates/ome-controller/rbac/role.yaml
+	@cp config/opensource-rbac/role.yaml charts/ome-resources/templates/opensource-ome-controller/rbac/role.yaml
 	@echo "✅ Manifests copied to Helm charts"
 
 	@echo "\n🎉 Manifest generation completed successfully!\n"
