@@ -58,17 +58,23 @@ func FetchAttributeFromHfModelMetaData(ctx context.Context, modelId string, attr
 	maxRetries := 3                   // default
 	retryInterval := 10 * time.Second // default
 
+	// Use the shared HTTP client for connection pooling
+	client := GetHTTPClient()
+
 	for attempt := 0; attempt <= maxRetries; attempt++ {
+		// Create a context with timeout for this specific request
+		reqCtx, cancel := context.WithTimeout(ctx, DefaultRequestTimeout)
+
 		// build request
-		req, err := http.NewRequestWithContext(ctx, "GET", modelMetaDataUrl, nil)
+		req, err := http.NewRequestWithContext(reqCtx, "GET", modelMetaDataUrl, nil)
 		if err != nil {
+			cancel()
 			return nil, fmt.Errorf("failed to create request: %s", err)
 		}
 
-		client := NewHTTPClientWithTimeout(DefaultRequestTimeout)
-
 		resp, err := client.Do(req)
 		if err != nil {
+			cancel() // Clean up request context
 			// Network errors are retryable
 			if attempt < maxRetries {
 				delay := exponentialBackoffWithJitter(attempt+1, retryInterval, 60*time.Second)
@@ -81,12 +87,14 @@ func FetchAttributeFromHfModelMetaData(ctx context.Context, modelId string, attr
 			}
 			return nil, fmt.Errorf("failed to perform request: %s", err)
 		}
-		defer resp.Body.Close()
 
 		// Handle successful response
 		var data map[string]interface{}
 		if resp.StatusCode == http.StatusOK {
-			if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			err := json.NewDecoder(resp.Body).Decode(&data)
+			resp.Body.Close()
+			cancel()
+			if err != nil {
 				return nil, fmt.Errorf("failed to decode response: %s", err)
 			}
 			val, exists := data[attribute]
@@ -100,6 +108,8 @@ func FetchAttributeFromHfModelMetaData(ctx context.Context, modelId string, attr
 		// Handle rate limiting
 		if resp.StatusCode == http.StatusTooManyRequests {
 			retryAfter := parseRetryAfter(resp)
+			resp.Body.Close()
+			cancel()
 			if retryAfter == 0 {
 				// Use exponential backoff with jitter if no Retry-After header
 				retryAfter = exponentialBackoffWithJitter(attempt+1, retryInterval, 300*time.Second) // Max 5 minutes
@@ -118,6 +128,8 @@ func FetchAttributeFromHfModelMetaData(ctx context.Context, modelId string, attr
 
 		// Handle other HTTP errors with retry for server errors
 		if resp.StatusCode >= 500 && attempt < maxRetries {
+			resp.Body.Close()
+			cancel()
 			delay := exponentialBackoffWithJitter(attempt+1, retryInterval, 60*time.Second)
 			select {
 			case <-time.After(delay):
@@ -128,6 +140,8 @@ func FetchAttributeFromHfModelMetaData(ctx context.Context, modelId string, attr
 		}
 
 		// Handle non-retryable error responses
+		resp.Body.Close()
+		cancel()
 		return nil, fmt.Errorf("failed to invoke HuggingFace endpoint %s: response status code %d", modelMetaDataUrl, resp.StatusCode)
 	}
 
