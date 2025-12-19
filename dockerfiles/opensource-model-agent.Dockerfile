@@ -3,9 +3,24 @@ ENV GOPROXY="https://artifactory-builds.oci.oraclecorp.com/api/go/go-proxy"
 ENV GOPATH=/gopath GOROOT=/usr/local/go
 
 # Use commit hash artifact for testing; can switch to released version by clearing COMMIT_HASH and setting OME_VERSION
-ARG COMMIT_HASH=57808a0f57c63d9acb6d7ebc3238fa25536a858c
+ARG COMMIT_HASH=f9f913bd454ea35bc789c7b17f43ba8695230cdc
 ARG OME_VERSION=0.1.3
-ARG BUILD_CGO_ENABLED=0
+ARG BUILD_CGO_ENABLED=1
+
+# Install Rust build dependencies
+RUN microdnf install -y \
+    gcc \
+    gcc-c++ \
+    make \
+    cmake \
+    pkgconfig \
+    openssl3-devel \
+    curl \
+    && microdnf clean all
+
+# Install Rust toolchain
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Fetch open-source OME code from Artifactory-proxied GitHub
 RUN if [ -n "$COMMIT_HASH" ]; then \
@@ -18,7 +33,25 @@ RUN if [ -n "$COMMIT_HASH" ]; then \
 
 WORKDIR /ome
 
-# Build model-agent binary
+# Downgrade go.mod directive
+ENV GOTOOLCHAIN=local
+RUN go mod edit -go=1.24
+RUN go mod tidy
+
+# Set env so Rust picks up OpenSSL 3
+ENV OPENSSL_DIR=/usr \
+    OPENSSL_LIB_DIR=/usr/lib64/openssl3 \
+    OPENSSL_INCLUDE_DIR=/usr/include/openssl3
+
+# Build the Rust xet library first (required for Go CGO linking)
+RUN cd pkg/xet && \
+    cargo build --release
+
+# Copy the static lib for CGO
+RUN cp pkg/xet/target/release/libxet.a /usr/local/lib/
+ENV CGO_LDFLAGS="-L/usr/local/lib -L/usr/lib64/openssl3 -lxet -lssl -lcrypto -ldl -lpthread"
+
+# Build model-agent binary with CGO enabled for xet integration
 RUN GOFIPS140=latest CGO_ENABLED=${BUILD_CGO_ENABLED} GOOS=linux \
     go build -a -o model-agent ./cmd/model-agent
 

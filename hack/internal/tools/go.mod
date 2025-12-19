@@ -1,6 +1,6 @@
 module bitbucket.oci.oraclecorp.com/genaicore/ome/hack/internal/tools
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/gohugoio/hugo v0.142.0
