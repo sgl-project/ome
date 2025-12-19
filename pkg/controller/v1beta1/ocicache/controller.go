@@ -1,4 +1,4 @@
-package ocirediscluster
+package ocicache
 
 import (
 	"context"
@@ -23,9 +23,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// +kubebuilder:rbac:groups=ome.io,resources=ociredisclusters,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=ome.io,resources=ociredisclusters/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=ome.io,resources=ociredisclusters/finalizers,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=ocicaches,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ome.io,resources=ocicaches/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=ocicaches/finalizers,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;create;update;patch;watch
 
 var (
@@ -36,16 +36,16 @@ var (
 
 const redisClusterFinalizerName = "rediscluster/finalizer"
 
-type RedisClusterReconciler struct {
+type CacheReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 	Log      logr.Logger
 }
 
-func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *CacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("RedisCluster", req.NamespacedName)
-	ociRedisCluster := &v1beta1.OciRedisCluster{}
+	ociRedisCluster := &v1beta1.OciCache{}
 	if err := r.Get(ctx, req.NamespacedName, ociRedisCluster); err != nil {
 		// IgnoreNotFound tells controller-runtime not to requeue for deleted CRs
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -60,7 +60,7 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("failed to create ociredisConfig config: %w", err)
 	}
 
-	ociRedisConfig.AuthType = Ptr(principals.AuthenticationType(ociRedisCluster.Spec.AuthType))
+	ociRedisConfig.AuthType = Ptr(principals.AuthenticationType(ociRedisCluster.Spec.ClusterSpec.AuthType))
 	redisClient, err := newRedisClient(ociRedisConfig)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create redis client: %w", err)
@@ -80,7 +80,7 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{Requeue: true}, nil
 	}
 	// If we don't have a Redis cluster yet, create it
-	if ociRedisCluster.Status.RedisClusterId == "" {
+	if ociRedisCluster.Status.CacheClusterId == "" {
 		log.Info("Creating new Redis cluster", "dbName", ociRedisCluster.Name)
 		newID, cerr := r.createRedisCluster(ctx, ociRedisCluster, log, redisClient, string(ociRedisCluster.UID))
 
@@ -91,7 +91,7 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		log.Info("Created redis cluster", "cluterId", newID, "clusterName", ociRedisCluster.Name)
 
 		// Update status with the new ID
-		ociRedisCluster.Status.RedisClusterId = newID
+		ociRedisCluster.Status.CacheClusterId = newID
 		ociRedisCluster.Status.LifecycleState = "CREATING"
 		if uerr := r.Status().Update(ctx, ociRedisCluster); uerr != nil {
 			log.Error(uerr, "Failed to update status", "name", ociRedisCluster.Name)
@@ -103,15 +103,15 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Redis cluster exists — poll its lifecycle and fetch connection details
-	log.Info("Checking available Redis Cluster", "clusterId", ociRedisCluster.Status.RedisClusterId)
+	log.Info("Checking available Redis Cluster", "clusterId", ociRedisCluster.Status.CacheClusterId)
 
 	getResponse, gerr := redisClient.GetRedisCluster(ctx, redis.GetRedisClusterRequest{
-		RedisClusterId: common.String(ociRedisCluster.Status.RedisClusterId),
+		RedisClusterId: common.String(ociRedisCluster.Status.CacheClusterId),
 	})
 	if gerr != nil {
 		if apierr.IsNotFound(gerr) {
-			log.Info("Redis cluster not found by ID; will recreate", "redisClusterId", ociRedisCluster.Status.RedisClusterId)
-			ociRedisCluster.Status.RedisClusterId = ""
+			log.Info("Redis cluster not found by ID; will recreate", "redisClusterId", ociRedisCluster.Status.CacheClusterId)
+			ociRedisCluster.Status.CacheClusterId = ""
 			if uerr := r.Status().Update(ctx, ociRedisCluster); uerr != nil {
 				return ctrl.Result{}, uerr
 			}
@@ -123,7 +123,7 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	state := getResponse.LifecycleState
-	log.Info("RedisCluster lifecycle", "redisClusterId", ociRedisCluster.Status.RedisClusterId, "state", state)
+	log.Info("RedisCluster lifecycle", "redisClusterId", ociRedisCluster.Status.CacheClusterId, "state", state)
 
 	switch state {
 	case redis.RedisClusterLifecycleStateActive:
@@ -131,7 +131,7 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if uerr := r.Status().Update(ctx, ociRedisCluster); uerr != nil {
 			return ctrl.Result{}, uerr
 		}
-		log.Info("DB ociRedisCluster is ready")
+		log.Info("OciRedisCluster is ready")
 		return ctrl.Result{}, nil
 
 	case redis.RedisClusterLifecycleStateCreating:
@@ -155,21 +155,21 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 }
 
-func (r *RedisClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).For(&v1beta1.OciRedisCluster{}).Complete(r)
+func (r *CacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).For(&v1beta1.OciCache{}).Complete(r)
 }
 
-func (r *RedisClusterReconciler) createRedisCluster(
+func (r *CacheReconciler) createRedisCluster(
 	ctx context.Context,
-	OciRedisCluster *v1beta1.OciRedisCluster,
+	OciRedisCluster *v1beta1.OciCache,
 	log logr.Logger,
 	redisClient *ocirediscluster.OciRedisClient,
 	crUID string) (string, error) {
-	compartmentID := OciRedisCluster.Spec.CompartmentId
+	compartmentID := OciRedisCluster.Spec.ClusterSpec.CompartmentId
 	if compartmentID == "" {
 		return "", fmt.Errorf("spec.compartmentId is required")
 	}
-	subnetId := OciRedisCluster.Spec.SubnetId
+	subnetId := OciRedisCluster.Spec.ClusterSpec.SubnetId
 	if subnetId == "" {
 		return "", fmt.Errorf("TargetSubnetOCID must be set")
 	}
@@ -182,7 +182,7 @@ func (r *RedisClusterReconciler) createRedisCluster(
 	}
 
 	// parse CRD NodeMemoryInGBs string to float due to using floats in CRDs is discouraged
-	v, err := strconv.ParseFloat(OciRedisCluster.Spec.NodeMemoryInGBs, 32)
+	v, err := strconv.ParseFloat(OciRedisCluster.Spec.ClusterSpec.NodeMemoryInGBs, 32)
 	if err != nil {
 		return "", fmt.Errorf("invalid spec.nodeMemoryInGBs: %w", err)
 	}
@@ -192,8 +192,8 @@ func (r *RedisClusterReconciler) createRedisCluster(
 		DisplayName:     common.String(displayName),
 		CompartmentId:   common.String(compartmentID),
 		SubnetId:        common.String(subnetId),
-		NodeCount:       common.Int(OciRedisCluster.Spec.NodeCount),
-		SoftwareVersion: redis.RedisClusterSoftwareVersionEnum(OciRedisCluster.Spec.SoftwareVersion),
+		NodeCount:       common.Int(OciRedisCluster.Spec.ClusterSpec.NodeCount),
+		SoftwareVersion: redis.RedisClusterSoftwareVersionEnum(OciRedisCluster.Spec.ClusterSpec.SoftwareVersion),
 		NodeMemoryInGBs: common.Float32(nodeMemoryInGBs),
 		FreeformTags:    tags,
 	}
@@ -225,7 +225,7 @@ func hashRedisCreateDetails(d redis.CreateRedisClusterDetails) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func addRedisFinalizerIfNeeded(cr *v1beta1.OciRedisCluster) bool {
+func addRedisFinalizerIfNeeded(cr *v1beta1.OciCache) bool {
 	for _, f := range cr.Finalizers {
 		if f == redisClusterFinalizerName {
 			return false
@@ -235,10 +235,10 @@ func addRedisFinalizerIfNeeded(cr *v1beta1.OciRedisCluster) bool {
 	return true
 }
 
-func (r *RedisClusterReconciler) reconcileDelete(
+func (r *CacheReconciler) reconcileDelete(
 	ctx context.Context,
 	log logr.Logger,
-	cluster *v1beta1.OciRedisCluster,
+	cluster *v1beta1.OciCache,
 	redisClient *ocirediscluster.OciRedisClient,
 ) (ctrl.Result, error) {
 	// We only act if our finalizer is present
@@ -255,7 +255,7 @@ func (r *RedisClusterReconciler) reconcileDelete(
 	}
 
 	// delete OCI Redis Cluster if exists
-	if id := cluster.Status.RedisClusterId; id != "" {
+	if id := cluster.Status.CacheClusterId; id != "" {
 		log.Info("Deleting OCI Redis Cluster", "redisClusterId", id)
 
 		_, err := redisClient.DeleteRedisCluster(ctx, redis.DeleteRedisClusterRequest{
@@ -277,7 +277,7 @@ func (r *RedisClusterReconciler) reconcileDelete(
 	return ctrl.Result{}, nil
 }
 
-func removeRedisFinalizer(cr *v1beta1.OciRedisCluster) {
+func removeRedisFinalizer(cr *v1beta1.OciCache) {
 	fs := make([]string, 0, len(cr.Finalizers))
 	for _, f := range cr.Finalizers {
 		if f != redisClusterFinalizerName {

@@ -1,4 +1,4 @@
-package ocirediscluster
+package ocicache
 
 import (
 	"context"
@@ -48,7 +48,7 @@ func TestHashRedisCreateDetails_DeterministicAndSensitiveToFields(t *testing.T) 
 }
 
 func TestAddRedisFinalizerIfNeeded_AddsWhenMissing(t *testing.T) {
-	cr := &v1beta1.OciRedisCluster{
+	cr := &v1beta1.OciCache{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test",
 			Namespace:  "ns",
@@ -62,7 +62,7 @@ func TestAddRedisFinalizerIfNeeded_AddsWhenMissing(t *testing.T) {
 }
 
 func TestAddRedisFinalizerIfNeeded_NoChangeIfAlreadyPresent(t *testing.T) {
-	cr := &v1beta1.OciRedisCluster{
+	cr := &v1beta1.OciCache{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "ns",
@@ -79,7 +79,7 @@ func TestAddRedisFinalizerIfNeeded_NoChangeIfAlreadyPresent(t *testing.T) {
 }
 
 func TestRemoveRedisFinalizer_RemovesOnlyOurFinalizer(t *testing.T) {
-	cr := &v1beta1.OciRedisCluster{
+	cr := &v1beta1.OciCache{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "ns",
@@ -103,7 +103,7 @@ func TestRedisCluster_ReconcileDelete_RemovesFinalizer_WhenClusterIdEmpty(t *tes
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, v1beta1.AddToScheme(scheme)) // register CRD types
 
-	cluster := &v1beta1.OciRedisCluster{
+	cluster := &v1beta1.OciCache{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "redis-cluster",
 			Namespace: "ignored-ns", // namespace doesn't matter for delete logic
@@ -112,9 +112,9 @@ func TestRedisCluster_ReconcileDelete_RemovesFinalizer_WhenClusterIdEmpty(t *tes
 				"other/finalizer",
 			},
 		},
-		Status: v1beta1.OciRedisClusterStatus{
-			// Empty RedisClusterId means DeleteRedisCluster is NOT called
-			RedisClusterId: "",
+		Status: v1beta1.OciCacheStatus{
+			// Empty CacheClusterId means DeleteRedisCluster is NOT called
+			CacheClusterId: "",
 		},
 	}
 
@@ -123,13 +123,13 @@ func TestRedisCluster_ReconcileDelete_RemovesFinalizer_WhenClusterIdEmpty(t *tes
 		WithObjects(cluster).
 		Build()
 
-	r := &RedisClusterReconciler{
+	r := &CacheReconciler{
 		Client: fc,
 		Scheme: scheme,
 		Log:    ctrl.Log.WithName("test"),
 	}
 
-	// redisClient won't be used because RedisClusterId == ""
+	// redisClient won't be used because CacheClusterId == ""
 	var redisClientStub *ocirediscluster.OciRedisClient = nil
 
 	res, err := r.reconcileDelete(ctx, r.Log, cluster, redisClientStub)
@@ -139,7 +139,7 @@ func TestRedisCluster_ReconcileDelete_RemovesFinalizer_WhenClusterIdEmpty(t *tes
 	assert.Equal(t, ctrl.Result{}, res)
 
 	// Finalizer should be removed from stored cluster object
-	updated := &v1beta1.OciRedisCluster{}
+	updated := &v1beta1.OciCache{}
 	err = fc.Get(ctx, ktypes.NamespacedName{
 		Namespace: cluster.Namespace,
 		Name:      cluster.Name,

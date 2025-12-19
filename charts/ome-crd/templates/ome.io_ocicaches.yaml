@@ -1,0 +1,170 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.2
+  name: ocicaches.ome.io
+spec:
+  group: ome.io
+  names:
+    kind: OciCache
+    listKind: OciCacheList
+    plural: ocicaches
+    singular: ocicache
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.lifecycleState
+      name: Lifecycle_State
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              cacheUserSpec:
+                properties:
+                  cacheUsers:
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                required:
+                - cacheUsers
+                type: object
+              clusterSpec:
+                properties:
+                  authType:
+                    default: InstancePrincipal
+                    enum:
+                    - InstancePrincipal
+                    - UserPrincipal
+                    type: string
+                  compartmentId:
+                    type: string
+                  displayName:
+                    type: string
+                  nodeCount:
+                    default: 3
+                    type: integer
+                  nodeMemoryInGBs:
+                    default: "16"
+                    type: string
+                  nsgIds:
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  softwareVersion:
+                    default: V7_0_5
+                    enum:
+                    - V7_0_5
+                    - REDIS_7_0
+                    type: string
+                  subnetId:
+                    type: string
+                required:
+                - compartmentId
+                - subnetId
+                type: object
+            required:
+            - cacheUserSpec
+            - clusterSpec
+            type: object
+          status:
+            properties:
+              cacheClusterId:
+                type: string
+              cacheUsers:
+                items:
+                  properties:
+                    cacheUserId:
+                      type: string
+                    cacheUserName:
+                      type: string
+                    isUserAttached:
+                      type: boolean
+                    userSecretName:
+                      type: string
+                    userSecretNamespace:
+                      type: string
+                  required:
+                  - cacheUserName
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - cacheUserName
+                x-kubernetes-list-type: map
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              lifecycleState:
+                enum:
+                - READY
+                - CREATING
+                - DELETING
+                - DELETED
+                - FAILED
+                - UPDATING
+                type: string
+              primaryEndpointIpAddress:
+                type: string
+              primaryFqdn:
+                type: string
+              secretName:
+                type: string
+              secretNamespace:
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

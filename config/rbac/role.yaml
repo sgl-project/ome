@@ -290,9 +290,9 @@ rules:
   - finetunedweights/finalizers
   - inferenceservices
   - inferenceservices/finalizers
+  - ocicaches
   - ocipostgres
   - ocipostgresdbinstances
-  - ociredisclusters
   - projects
   - ratelimits
   - replicationjobs
@@ -321,10 +321,10 @@ rules:
   - dedicatedaiclusters/status
   - finetunedweights/status
   - inferenceservices/status
+  - ocicaches/finalizers
+  - ocicaches/status
   - ocipostgres/status
   - ocipostgresdbinstances/status
-  - ociredisclusters/finalizers
-  - ociredisclusters/status
   - projects/finalizers
   - projects/status
   - ratelimits/finalizers

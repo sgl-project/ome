@@ -372,6 +372,92 @@
         }
       }
     },
+    "v1beta1.CacheClusterSpec": {
+      "type": "object",
+      "required": [
+        "compartmentId",
+        "subnetId"
+      ],
+      "properties": {
+        "authType": {
+          "description": "AuthType selects how we authenticate to OCI.",
+          "type": "string"
+        },
+        "compartmentId": {
+          "type": "string",
+          "default": ""
+        },
+        "displayName": {
+          "type": "string",
+          "default": ""
+        },
+        "nodeCount": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "nodeMemoryInGBs": {
+          "type": "string"
+        },
+        "nsgIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "softwareVersion": {
+          "type": "string"
+        },
+        "subnetId": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.CacheUserSpec": {
+      "type": "object",
+      "required": [
+        "cacheUsers"
+      ],
+      "properties": {
+        "cacheUsers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "set"
+        }
+      }
+    },
+    "v1beta1.CacheUserStatus": {
+      "type": "object",
+      "required": [
+        "cacheUserName"
+      ],
+      "properties": {
+        "cacheUserId": {
+          "description": "CacheUserID is the identifier of the user in the underlying OCI Cache service,",
+          "type": "string"
+        },
+        "cacheUserName": {
+          "type": "string"
+        },
+        "isUserAttached": {
+          "description": "IsUserAttached indicates whether the user has been successfully attached to the configured Redis cluster at least once.",
+          "type": "boolean"
+        },
+        "userSecretName": {
+          "description": "UserSecretName is the name of the Secret that stores this user's credentials.",
+          "type": "string"
+        },
+        "userSecretNamespace": {
+          "description": "UserSecretNamespace is the namespace where the credentials Secret is stored.",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.CapacityReservation": {
       "description": "CapacityReservation is the Schema for the capacityReservations API",
       "type": "object",
@@ -3389,6 +3475,124 @@
         }
       }
     },
+    "v1beta1.OciCache": {
+      "description": "OCICache is the Schema for the RedisCluster API",
+      "type": "object",
+      "required": [
+        "spec"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.OciCacheSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.OciCacheStatus"
+        }
+      }
+    },
+    "v1beta1.OciCacheList": {
+      "description": "OCIRedisList contains a list of Redis Cluster",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.OciCache"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.OciCacheSpec": {
+      "type": "object",
+      "required": [
+        "clusterSpec",
+        "cacheUserSpec"
+      ],
+      "properties": {
+        "cacheUserSpec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.CacheUserSpec"
+        },
+        "clusterSpec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.CacheClusterSpec"
+        }
+      }
+    },
+    "v1beta1.OciCacheStatus": {
+      "type": "object",
+      "properties": {
+        "cacheClusterId": {
+          "type": "string"
+        },
+        "cacheUsers": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.CacheUserStatus"
+          },
+          "x-kubernetes-list-map-keys": [
+            "cacheUserName"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "conditions": {
+          "description": "Conditions represent the latest available observations of an object's state",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "lifecycleState": {
+          "description": "LifecycleState represents the current lifecycle state of the oci_redis_cluster (e.g., READY, CREATING)",
+          "type": "string"
+        },
+        "primaryEndpointIpAddress": {
+          "type": "string"
+        },
+        "primaryFqdn": {
+          "type": "string"
+        },
+        "secretName": {
+          "type": "string"
+        },
+        "secretNamespace": {
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.OciPostgres": {
       "description": "OciPostgres is the Schema for the PostgresDB API",
       "type": "object",
@@ -3672,133 +3876,6 @@
         },
         "lifecycleState": {
           "description": "LifecycleState represents the current lifecycle state of the ocipostgres_cluster (e.g., READY, CREATING)",
-          "type": "string"
-        }
-      }
-    },
-    "v1beta1.OciRedisCluster": {
-      "description": "OCIRedisCluster is the Schema for the RedisCluster API",
-      "type": "object",
-      "required": [
-        "spec"
-      ],
-      "properties": {
-        "apiVersion": {
-          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
-          "type": "string"
-        },
-        "kind": {
-          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-          "type": "string"
-        },
-        "metadata": {
-          "default": {},
-          "$ref": "#/definitions/v1.ObjectMeta"
-        },
-        "spec": {
-          "default": {},
-          "$ref": "#/definitions/v1beta1.OciRedisClusterSpec"
-        },
-        "status": {
-          "default": {},
-          "$ref": "#/definitions/v1beta1.OciRedisClusterStatus"
-        }
-      }
-    },
-    "v1beta1.OciRedisClusterList": {
-      "description": "OCIRedisClusterList contains a list of Redis Cluster",
-      "type": "object",
-      "required": [
-        "items"
-      ],
-      "properties": {
-        "apiVersion": {
-          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
-          "type": "string"
-        },
-        "items": {
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/v1beta1.OciRedisCluster"
-          }
-        },
-        "kind": {
-          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-          "type": "string"
-        },
-        "metadata": {
-          "default": {},
-          "$ref": "#/definitions/v1.ListMeta"
-        }
-      }
-    },
-    "v1beta1.OciRedisClusterSpec": {
-      "type": "object",
-      "required": [
-        "compartmentId",
-        "subnetId"
-      ],
-      "properties": {
-        "authType": {
-          "description": "AuthType selects how we authenticate to OCI.",
-          "type": "string"
-        },
-        "compartmentId": {
-          "type": "string",
-          "default": ""
-        },
-        "displayName": {
-          "type": "string",
-          "default": ""
-        },
-        "nodeCount": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "nodeMemoryInGBs": {
-          "type": "string"
-        },
-        "nsgIds": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "default": ""
-          },
-          "x-kubernetes-list-type": "atomic"
-        },
-        "softwareVersion": {
-          "type": "string"
-        },
-        "subnetId": {
-          "type": "string",
-          "default": ""
-        }
-      }
-    },
-    "v1beta1.OciRedisClusterStatus": {
-      "type": "object",
-      "properties": {
-        "conditions": {
-          "description": "Conditions represent the latest available observations of an object's state",
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/v1.Condition"
-          },
-          "x-kubernetes-list-type": "atomic"
-        },
-        "lifecycleState": {
-          "description": "LifecycleState represents the current lifecycle state of the oci_redis_cluster (e.g., READY, CREATING)",
-          "type": "string"
-        },
-        "redisClusterId": {
-          "type": "string"
-        },
-        "secretName": {
-          "type": "string"
-        },
-        "secretNamespace": {
           "type": "string"
         }
       }

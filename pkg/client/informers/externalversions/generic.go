@@ -61,12 +61,12 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().InferenceGraphs().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("inferenceservices"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().InferenceServices().Informer()}, nil
+	case v1beta1.SchemeGroupVersion.WithResource("ocicaches"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().OciCaches().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("ocipostgreses"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().OciPostgreses().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("ocipostgresdbinstances"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().OciPostgresDBInstances().Informer()}, nil
-	case v1beta1.SchemeGroupVersion.WithResource("ociredisclusters"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().OciRedisClusters().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("organizations"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().Organizations().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("projects"):

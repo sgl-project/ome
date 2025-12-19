@@ -60,16 +60,16 @@ func (c *FakeOmeV1beta1) InferenceServices(namespace string) v1beta1.InferenceSe
 	return &FakeInferenceServices{c, namespace}
 }
 
+func (c *FakeOmeV1beta1) OciCaches(namespace string) v1beta1.OciCacheInterface {
+	return &FakeOciCaches{c, namespace}
+}
+
 func (c *FakeOmeV1beta1) OciPostgreses(namespace string) v1beta1.OciPostgresInterface {
 	return &FakeOciPostgreses{c, namespace}
 }
 
 func (c *FakeOmeV1beta1) OciPostgresDBInstances() v1beta1.OciPostgresDBInstanceInterface {
 	return &FakeOciPostgresDBInstances{c}
-}
-
-func (c *FakeOmeV1beta1) OciRedisClusters(namespace string) v1beta1.OciRedisClusterInterface {
-	return &FakeOciRedisClusters{c, namespace}
 }
 
 func (c *FakeOmeV1beta1) Organizations() v1beta1.OrganizationInterface {

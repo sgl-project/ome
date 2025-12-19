@@ -32,12 +32,12 @@ type Interface interface {
 	InferenceGraphs() InferenceGraphInformer
 	// InferenceServices returns a InferenceServiceInformer.
 	InferenceServices() InferenceServiceInformer
+	// OciCaches returns a OciCacheInformer.
+	OciCaches() OciCacheInformer
 	// OciPostgreses returns a OciPostgresInformer.
 	OciPostgreses() OciPostgresInformer
 	// OciPostgresDBInstances returns a OciPostgresDBInstanceInformer.
 	OciPostgresDBInstances() OciPostgresDBInstanceInformer
-	// OciRedisClusters returns a OciRedisClusterInformer.
-	OciRedisClusters() OciRedisClusterInformer
 	// Organizations returns a OrganizationInformer.
 	Organizations() OrganizationInformer
 	// Projects returns a ProjectInformer.
@@ -129,6 +129,11 @@ func (v *version) InferenceServices() InferenceServiceInformer {
 	return &inferenceServiceInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
+// OciCaches returns a OciCacheInformer.
+func (v *version) OciCaches() OciCacheInformer {
+	return &ociCacheInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
 // OciPostgreses returns a OciPostgresInformer.
 func (v *version) OciPostgreses() OciPostgresInformer {
 	return &ociPostgresInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
@@ -137,11 +142,6 @@ func (v *version) OciPostgreses() OciPostgresInformer {
 // OciPostgresDBInstances returns a OciPostgresDBInstanceInformer.
 func (v *version) OciPostgresDBInstances() OciPostgresDBInstanceInformer {
 	return &ociPostgresDBInstanceInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
-}
-
-// OciRedisClusters returns a OciRedisClusterInformer.
-func (v *version) OciRedisClusters() OciRedisClusterInformer {
-	return &ociRedisClusterInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // Organizations returns a OrganizationInformer.

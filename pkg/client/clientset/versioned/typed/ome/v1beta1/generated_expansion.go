@@ -26,11 +26,11 @@ type InferenceGraphExpansion interface{}
 
 type InferenceServiceExpansion interface{}
 
+type OciCacheExpansion interface{}
+
 type OciPostgresExpansion interface{}
 
 type OciPostgresDBInstanceExpansion interface{}
-
-type OciRedisClusterExpansion interface{}
 
 type OrganizationExpansion interface{}
 
