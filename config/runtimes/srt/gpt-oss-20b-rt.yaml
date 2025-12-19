@@ -137,7 +137,7 @@ spec:
         effect: "NoSchedule"
     runner:
       name: router
-      image: fra.ocir.io/idqj093njucb/smg:v0.2.3.post1-dev
+      image: fra.ocir.io/idqj093njucb/smg:v0.2.4.post1-dev
       resources:
         limits:
           cpu: "1"

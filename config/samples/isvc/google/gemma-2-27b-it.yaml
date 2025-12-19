@@ -5,7 +5,7 @@ metadata:
   namespace: gemma-2-27b-it
 spec:
   model:
-    name: gemma-2-27b
+    name: gemma-2-27b-it
   engine:
     minReplicas: 1
     maxReplicas: 1

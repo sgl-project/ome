@@ -5,7 +5,7 @@
 # Defaults for sglang runtime
 defaults:
   image: docker.io/lmsysorg/sglang:v0.5.5.post3-cu129-amd64
-  routerImage: fra.ocir.io/idqj093njucb/smg:v0.2.3.post1-dev
+  routerImage: fra.ocir.io/idqj093njucb/smg:v0.2.4.post1-dev
   memFrac: "0.9"
   minReplicas: 1
   maxReplicas: 1

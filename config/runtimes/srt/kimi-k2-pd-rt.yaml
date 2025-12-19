@@ -421,7 +421,7 @@ spec:
   routerConfig:
     runner:
       name: router
-      image: ghcr.io/moirai-internal/sgl-router:dev
+      image: fra.ocir.io/idqj093njucb/smg:v0.2.4.post1-dev
       resources:
         limits:
           cpu: "10"

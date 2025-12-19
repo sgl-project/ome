@@ -15,7 +15,7 @@ spec:
     version: "1.0.0"
   modelFramework:
     name: transformers
-    version: "4.41.2"
+    version: "4.37.0"
   modelParameterSize: 72B
   storage:
     storageUri: hf://Qwen/Qwen1.5-72B-Chat
