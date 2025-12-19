@@ -3,7 +3,7 @@
 [![Go Report](https://goreportcard.com/badge/github.com/sgl-project/ome)](https://goreportcard.com/report/github.com/sgl-project/ome)
 [![Latest Release](https://img.shields.io/github/v/release/sgl-project/ome?include_prereleases)](https://github.com/sgl-project/ome/releases/latest)
 [![API Reference](https://img.shields.io/badge/API-v1beta1-blue)](https://sgl-project.github.io/ome/docs/reference/ome.v1beta1/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/sgl-project/ome)
 
 <div align="center">
@@ -131,4 +131,4 @@ High-level overview of the main priorities:
 
 ## License
 
-OME is licensed under the [MIT License](LICENSE).
+OME is licensed under the [Apache License 2.0](LICENSE).
