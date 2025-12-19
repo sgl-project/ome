@@ -3,10 +3,13 @@ kind: InferenceService
 metadata:
   name: olmo-2-1124-7b-instruct
 spec:
+  runtime:
+    name: srt-olmo-2-1124-7b-instruct
   model:
-    modelId: allenai/OLMo-2-1124-7B-Instruct
-    modelFormat: safetensors
-    modelFramework: transformers
-    resources:
-      limits:
-        nvidia.com/gpu: "1"
+    name: olmo-2-1124-7b-instruct
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
