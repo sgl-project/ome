@@ -128,34 +128,25 @@ func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int) {
 }
 
 func (s *Gopher) runWorker() {
-	for {
-		select {
-		case task, ok := <-s.gopherChan:
-			if ok {
-				// Process delete tasks immediately by checking active downloads
-				if task.TaskType == Delete {
-					modelUID := getModelUID(task)
-					s.activeDownloadsMutex.RLock()
-					_, isDownloading := s.activeDownloads[modelUID]
-					s.activeDownloadsMutex.RUnlock()
+	for task := range s.gopherChan {
+		// Process delete tasks immediately by checking active downloads
+		if task.TaskType == Delete {
+			modelUID := getModelUID(task)
+			s.activeDownloadsMutex.RLock()
+			_, isDownloading := s.activeDownloads[modelUID]
+			s.activeDownloadsMutex.RUnlock()
 
-					if isDownloading {
-						s.logger.Infof("Model %s is currently downloading, will cancel it", getModelInfoForLogging(task))
-					}
-				}
-
-				err := s.processTask(task)
-				if err != nil {
-					s.logger.Errorf("Gopher task failed with error: %s", err.Error())
-				}
-			} else {
-				s.logger.Info("gopher channel closed, worker exits.")
-				return
+			if isDownloading {
+				s.logger.Infof("Model %s is currently downloading, will cancel it", getModelInfoForLogging(task))
 			}
-		default:
-			time.Sleep(500 * time.Millisecond)
+		}
+
+		err := s.processTask(task)
+		if err != nil {
+			s.logger.Errorf("Gopher task failed with error: %s", err.Error())
 		}
 	}
+	s.logger.Info("gopher channel closed, worker exits.")
 }
 
 // safeNodeLabelReconciliation executes the NodeLabelReconciler's ReconcileNodeLabels method with mutex protection

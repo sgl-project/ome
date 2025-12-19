@@ -48,7 +48,7 @@ type ConfigMapReconciler struct {
 	modelCache        map[string]*CacheEntry // In-memory cache of model information
 	cacheMutex        sync.RWMutex           // Mutex to protect concurrent access to the cache
 	reconcileInterval time.Duration          // Interval for periodic reconciliation
-	isReconciling     bool                   // Flag to prevent concurrent reconciliations
+	reconcileMutex    sync.Mutex             // Mutex to prevent concurrent reconciliations
 	stopCh            chan struct{}          // Channel to signal reconciliation goroutine to stop
 }
 
@@ -152,14 +152,13 @@ func (c *ConfigMapReconciler) StopReconciliation() {
 func (c *ConfigMapReconciler) reconcileConfigMaps() {
 	// Create a new context for this reconciliation
 	ctx := context.Background()
-	// Prevent concurrent reconciliations
-	if c.isReconciling {
+
+	// Use TryLock to prevent concurrent reconciliations without blocking
+	if !c.reconcileMutex.TryLock() {
 		c.logger.Debug("Reconciliation already in progress, skipping")
 		return
 	}
-
-	c.isReconciling = true
-	defer func() { c.isReconciling = false }()
+	defer c.reconcileMutex.Unlock()
 
 	c.logger.Debug("Starting ConfigMap reconciliation")
 
@@ -222,31 +221,8 @@ func (c *ConfigMapReconciler) recreateConfigMap(ctx context.Context) {
 
 	// Add all models from cache to the ConfigMap
 	for modelID, cacheEntry := range c.modelCache {
-		// Create model entry from cache data
-		modelEntry := &ModelEntry{
-			Name:   cacheEntry.ModelName,
-			Status: cacheEntry.ModelStatus,
-		}
-
-		// Convert metadata to ModelConfig if available
-		if cacheEntry.ModelMetadata != nil {
-			config := &ModelConfig{}
-			// Copy metadata fields to config
-			config.ModelType = cacheEntry.ModelMetadata.ModelType
-			config.ModelArchitecture = cacheEntry.ModelMetadata.ModelArchitecture
-			config.ModelCapabilities = cacheEntry.ModelMetadata.ModelCapabilities
-			config.ModelParameterSize = cacheEntry.ModelMetadata.ModelParameterSize
-			config.MaxTokens = cacheEntry.ModelMetadata.MaxTokens
-			config.Quantization = string(cacheEntry.ModelMetadata.Quantization)
-			if len(cacheEntry.ModelMetadata.ApiCapabilities) > 0 {
-				config.ApiCapabilities = make([]string, len(cacheEntry.ModelMetadata.ApiCapabilities))
-				for i, capability := range cacheEntry.ModelMetadata.ApiCapabilities {
-					config.ApiCapabilities[i] = string(capability)
-				}
-			}
-			config.Artifact = cacheEntry.ModelMetadata.Artifact
-			modelEntry.Config = config
-		}
+		// Create model entry from cache data using helper function
+		modelEntry := buildModelEntryFromCache(cacheEntry)
 
 		// Serialize the model entry to JSON
 		modelEntryJSON, err := json.Marshal(modelEntry)
@@ -281,31 +257,8 @@ func (c *ConfigMapReconciler) recreateConfigMap(ctx context.Context) {
 //
 // If the ConfigMap is missing entirely, this will trigger a fallback to recreateConfigMap.
 func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry *CacheEntry) {
-	// Construct model entry from cache data
-	modelEntry := &ModelEntry{
-		Name:   cacheEntry.ModelName,
-		Status: cacheEntry.ModelStatus,
-	}
-
-	// Convert metadata to ModelConfig if available
-	if cacheEntry.ModelMetadata != nil {
-		config := &ModelConfig{}
-		// Copy metadata fields to config
-		config.ModelType = cacheEntry.ModelMetadata.ModelType
-		config.ModelArchitecture = cacheEntry.ModelMetadata.ModelArchitecture
-		config.ModelCapabilities = cacheEntry.ModelMetadata.ModelCapabilities
-		config.ModelParameterSize = cacheEntry.ModelMetadata.ModelParameterSize
-		config.MaxTokens = cacheEntry.ModelMetadata.MaxTokens
-		config.Quantization = string(cacheEntry.ModelMetadata.Quantization)
-		if len(cacheEntry.ModelMetadata.ApiCapabilities) > 0 {
-			config.ApiCapabilities = make([]string, len(cacheEntry.ModelMetadata.ApiCapabilities))
-			for i, capability := range cacheEntry.ModelMetadata.ApiCapabilities {
-				config.ApiCapabilities[i] = string(capability)
-			}
-		}
-
-		modelEntry.Config = config
-	}
+	// Construct model entry from cache data using helper function
+	modelEntry := buildModelEntryFromCache(cacheEntry)
 
 	// Serialize the model entry to JSON
 	modelEntryJSON, err := json.Marshal(modelEntry)
@@ -940,6 +893,37 @@ func getConfigMapModelInfo(baseModel *v1beta1.BaseModel, clusterBaseModel *v1bet
 		return fmt.Sprintf("ClusterBaseModel %s", clusterBaseModel.Name)
 	}
 	return "unknown model"
+}
+
+// buildModelEntryFromCache creates a ModelEntry from a CacheEntry.
+// This helper function centralizes the conversion logic used during ConfigMap recreation.
+func buildModelEntryFromCache(cacheEntry *CacheEntry) *ModelEntry {
+	modelEntry := &ModelEntry{
+		Name:   cacheEntry.ModelName,
+		Status: cacheEntry.ModelStatus,
+	}
+
+	// Convert metadata to ModelConfig if available
+	if cacheEntry.ModelMetadata != nil {
+		config := &ModelConfig{
+			ModelType:          cacheEntry.ModelMetadata.ModelType,
+			ModelArchitecture:  cacheEntry.ModelMetadata.ModelArchitecture,
+			ModelCapabilities:  cacheEntry.ModelMetadata.ModelCapabilities,
+			ModelParameterSize: cacheEntry.ModelMetadata.ModelParameterSize,
+			MaxTokens:          cacheEntry.ModelMetadata.MaxTokens,
+			Quantization:       string(cacheEntry.ModelMetadata.Quantization),
+			Artifact:           cacheEntry.ModelMetadata.Artifact,
+		}
+		if len(cacheEntry.ModelMetadata.ApiCapabilities) > 0 {
+			config.ApiCapabilities = make([]string, len(cacheEntry.ModelMetadata.ApiCapabilities))
+			for i, capability := range cacheEntry.ModelMetadata.ApiCapabilities {
+				config.ApiCapabilities[i] = string(capability)
+			}
+		}
+		modelEntry.Config = config
+	}
+
+	return modelEntry
 }
 
 /*
