@@ -56,7 +56,7 @@ spec:
         - --tp-size
         - "2"
         - --mem-frac
-        - "0.85"
+        - "0.8"
         - --served-model-name
         - google/gemma-3-12b-it
       volumeMounts:
@@ -102,7 +102,7 @@ spec:
   routerConfig:
     runner:
       name: router
-      image: fra.ocir.io/idqj093njucb/smg:v0.2.3.post1-dev
+      image: fra.ocir.io/idqj093njucb/smg:v0.2.4.post1-dev
       resources:
         limits:
           cpu: "1"

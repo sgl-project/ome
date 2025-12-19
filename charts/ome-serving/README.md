@@ -330,7 +330,7 @@ The chart includes a built-in registry of **165 models**. Model names in values.
 `gme-qwen2-vl-2b-instruct`, `qwen2-vl-7b-instruct`
 
 ### Qwen2/Qwen1.5
-`deepseek-r1-distill-qwen-1-5b`, `deepseek-r1-distill-qwen-14b`, `deepseek-r1-distill-qwen-32b`, `deepseek-r1-distill-qwen-7b`, `gte-qwen2-7b-instruct`, `qwen-7b-chat`, `qwen1-5-110b-chat`, `qwen1-5-32b-chat`, `qwen1-5-72b-chat`, `qwen1-5-7b-chat`, `qwen2-5-1-5b`, `qwen2-5-14b`, `qwen2-5-32b-instruct`, `qwen2-5-3b`, `qwen2-5-72b-instruct`, `qwen2-5-7b`, `qwen2-5-coder-32b-instruct`, `qwen2-5-coder-7b-instruct`, `qwen2-72b-instruct`, `qwen2-7b-instruct`, `skywork-or1-7b-preview`
+`deepseek-r1-distill-qwen-1-5b`, `deepseek-r1-distill-qwen-14b`, `deepseek-r1-distill-qwen-32b`, `deepseek-r1-distill-qwen-7b`, `gte-qwen2-7b-instruct`, `qwen-7b-chat`, `qwen1-5-110b-chat`, `qwen1-5-32b-chat`, `qwen1-5-72b-chat`, `qwen1-5-7b-chat`, `qwen2-5-1-5b`, `qwen2-5-14b`, `qwen2-5-32b-instruct`, `qwen2-5-3b`, `qwen2-5-72b-instruct`, `qwen2-5-7b`, `qwen2-5-coder-32b-instruct`, `qwen2-5-coder-7b-instruct`, `qwen2-72b-instruct`, `qwen2-7b-instruct`, `skywork-or1-7b-preview`, `qwen2-5-14b-instruct`, `qwen2-5-3b-instruct`
 
 ### Meta Llama 4
 `llama-4-maverick-17b-128e-instruct`, `llama-4-maverick-17b-128e-instruct-fp8`, `llama-4-maverick-17b-128e-instruct-fp8-grpc`, `llama-4-scout-17b-16e-instruct`

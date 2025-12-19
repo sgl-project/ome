@@ -17,7 +17,7 @@ spec:
     minReplicas: 1
     maxReplicas: 1
   runtime:
-    name: srt-llama-3-3-70b-instruct-pd
+    name: srt-llama-3-3-70b-instruct
   decoder:
     minReplicas: 1
     maxReplicas: 1
