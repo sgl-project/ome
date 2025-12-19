@@ -67,7 +67,7 @@ qwen3-embedding-0-6b:
   transformersVersion: "4.51.3"
   autoSelect: true
   priority: 1
-  sizeRange: ["0.5B", "1B"]
+  sizeRange: ["500M", "700M"]
   servedName: Qwen/Qwen3-Embedding-0.6B
 qwen3-embedding-4b:
   architecture: Qwen3ForCausalLM
@@ -197,6 +197,13 @@ qwen2-5-14b:
   priority: 1
   sizeRange: ["10B", "16B"]
   servedName: Qwen/Qwen2.5-14B
+qwen2-5-14b-instruct:
+  architecture: Qwen2ForCausalLM
+  transformersVersion: "4.43.1"
+  autoSelect: true
+  priority: 1
+  sizeRange: ["12B", "16B"]
+  servedName: Qwen/Qwen2.5-14B-Instruct
 qwen2-5-32b-instruct:
   architecture: Qwen2ForCausalLM
   transformersVersion: "4.43.1"
@@ -211,6 +218,13 @@ qwen2-5-3b:
   priority: 1
   sizeRange: ["2B", "5B"]
   servedName: Qwen/Qwen2.5-3B
+qwen2-5-3b-instruct:
+  architecture: Qwen2ForCausalLM
+  transformersVersion: "4.43.1"
+  autoSelect: true
+  priority: 1
+  sizeRange: ["2B", "4B"]
+  servedName: Qwen/Qwen2.5-3B-Instruct
 qwen2-5-72b-instruct:
   architecture: Qwen2ForCausalLM
   transformersVersion: "4.43.1"
@@ -364,7 +378,7 @@ llama-2-13b:
   servedName: meta-llama/Llama-2-13b-hf
 llama-2-13b-chat-hf:
   architecture: LlamaForCausalLM
-  transformersVersion: "4.32.0.dev0"
+  transformersVersion: "4.31.0.dev0"
   autoSelect: true
   priority: 1
   sizeRange: ["10B", "15B"]
