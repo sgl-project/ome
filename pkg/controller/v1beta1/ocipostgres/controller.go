@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"strings"
 	"time"
 
@@ -56,9 +58,9 @@ var (
 	}
 )
 
-// +kubebuilder:rbac:groups=ome.io,resources=ocipostgress,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=ome.io,resources=ocipostgress/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=ome.io,resources=ocipostgress/finalizers,verbs=update
+// +kubebuilder:rbac:groups=ome.io,resources=ocipostgres,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ome.io,resources=ocipostgres/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=ocipostgres/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;create;update;patch;watch
 
 type PostgresReconciler struct {
@@ -106,18 +108,17 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		// requeue to continue normal flow
 		return ctrl.Result{Requeue: true}, nil
 	}
+	admin, err := r.getOrCreateAdminCred(ctx, req.Namespace, defaultAdminSecretName)
+	if err != nil {
+		log.Error(err, "Failed to get or create admin credentials", "namespace", req.Namespace)
+		r.Recorder.Event(ociPostgres, corev1.EventTypeWarning, "AdminSecretError", err.Error())
+		return ctrl.Result{}, fmt.Errorf("get or create admin credentials: %w", err)
+	}
 
 	// If we don't have a DB System yet, create it
 	if strings.TrimSpace(ociPostgres.Status.DbSystemId) == "" {
-		creds, err := r.getOrCreateAdminCred(ctx, req.Namespace, defaultAdminSecretName)
-		if err != nil {
-			log.Error(err, "Failed to get or create admin credentials", "namespace", req.Namespace)
-			r.Recorder.Event(ociPostgres, corev1.EventTypeWarning, "AdminSecretError", err.Error())
-			return ctrl.Result{}, fmt.Errorf("get or create admin credentials: %w", err)
-		}
-
 		log.Info("Creating new DB system", "dbName", ociPostgres.Name)
-		newID, cerr := r.createDbSystem(ctx, ociPostgres, creds, log, pgClient, string(ociPostgres.UID))
+		newID, cerr := r.createDbSystem(ctx, ociPostgres, admin, log, pgClient, string(ociPostgres.UID))
 		if cerr != nil {
 			log.Error(cerr, "Failed to create dbsystem", "name", ociPostgres.Name)
 			return ctrl.Result{}, cerr
@@ -161,18 +162,67 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	switch state {
 	case psql.DbSystemLifecycleStateActive:
+		log.Info("DB ociPostgresCluster is ready")
+		deepCopyOfOciPostgres := ociPostgres.DeepCopy()
 		ociPostgres.Status.AdminSecretNamespace = req.Namespace
 		ociPostgres.Status.AdminSecretName = defaultAdminSecretName
-		ociPostgres.Status.LifecycleState = "READY"
-
-		if uerr := r.Status().Update(ctx, ociPostgres); uerr != nil {
-			return ctrl.Result{}, uerr
+		allReady, _, err := r.reconcileLogicalDatabases(ctx, log, ociPostgres, pgClient, admin)
+		if err != nil {
+			log.Error(err, "failed to reconcile logical databases")
+			ociPostgres.Status.LifecycleState = v1beta1.LifecycleStateFailed
+			setCondition(
+				&ociPostgres.Status,
+				"Ready",
+				metav1.ConditionFalse,
+				"LogicalDatabasesReconciling",
+				"LogicalDatabasesReconcileFailed",
+				ociPostgres.Generation,
+			)
+			if perr := r.Status().Patch(ctx, ociPostgres, client.MergeFrom(deepCopyOfOciPostgres)); perr != nil {
+				return ctrl.Result{}, perr
+			}
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		log.Info("DB ociPostgres is ready")
-		return ctrl.Result{}, nil
+		if allReady {
+			ociPostgres.Status.LifecycleState = v1beta1.LifecycleStateReady
+			log.Info("DB logical databases reconciled")
+			setCondition(
+				&ociPostgres.Status,
+				"Ready",
+				metav1.ConditionTrue,
+				"AllLogicalDatabasesReady",
+				"Postgres DB system and all required logical databases are ready",
+				ociPostgres.Generation,
+			)
+		} else {
+			ociPostgres.Status.LifecycleState = v1beta1.LifecycleStateUpdating
+			setCondition(
+				&ociPostgres.Status,
+				"Ready",
+				metav1.ConditionFalse,
+				"AllLogicalDatabasesUpdating",
+				"Postgres DB system and all required logical databases are in updating stage",
+				ociPostgres.Generation,
+			)
+		}
+		if perr := r.Status().Patch(ctx, ociPostgres, client.MergeFrom(deepCopyOfOciPostgres)); perr != nil {
+			return ctrl.Result{}, perr
+		}
+		if allReady {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 
 	case psql.DbSystemLifecycleStateCreating:
 		ociPostgres.Status.LifecycleState = "CREATING"
+		setCondition(
+			&ociPostgres.Status,
+			"Ready",
+			metav1.ConditionFalse,
+			"PostgresClusterCreating",
+			"Postgres DB system is in creating stage",
+			ociPostgres.Generation,
+		)
 		// Keep polling
 		if uerr := r.Status().Update(ctx, ociPostgres); uerr != nil {
 			return ctrl.Result{}, uerr
@@ -180,6 +230,14 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	case psql.DbSystemLifecycleStateUpdating:
 		ociPostgres.Status.LifecycleState = "UPDATING"
+		setCondition(
+			&ociPostgres.Status,
+			"Ready",
+			metav1.ConditionFalse,
+			"PostgresClusterUpdating",
+			"Postgres DB system is in updating stage",
+			ociPostgres.Generation,
+		)
 		// Keep polling
 		if uerr := r.Status().Update(ctx, ociPostgres); uerr != nil {
 			return ctrl.Result{}, uerr
@@ -187,6 +245,14 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	default:
 		ociPostgres.Status.LifecycleState = "FAILED"
+		setCondition(
+			&ociPostgres.Status,
+			"Ready",
+			metav1.ConditionFalse,
+			"PostgresClusterFailed",
+			"Postgres DB system creation faled",
+			ociPostgres.Generation,
+		)
 		_ = r.Status().Update(ctx, ociPostgres)
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
@@ -382,8 +448,29 @@ func (r *PostgresReconciler) reconcileDelete(
 		}
 	}
 
+	// delete all per-DB app secrets
+	for _, inst := range cluster.Status.DbInstances {
+		ns := inst.AppUserSecretNamespace
+		name := inst.AppUserSecretName
+		if ns == "" || name == "" {
+			continue
+		}
+		sec := &corev1.Secret{}
+		sec.Namespace = ns
+		sec.Name = name
+
+		log.Info("Deleting app DB credentials secret during cluster delete",
+			"namespace", ns, "name", name, "databaseName", inst.DatabaseName)
+
+		if err := r.Delete(ctx, sec); err != nil && !apierr.IsNotFound(err) {
+			log.Error(err, "delete app secret failed; requeue",
+				"ns", ns, "name", name, "databaseName", inst.DatabaseName)
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+	}
+
 	// delete admin secret (ignore NotFound)
-	if ns := cluster.Name; ns != "" {
+	if ns := cluster.Namespace; ns != "" {
 		sec := &corev1.Secret{}
 		sec.Namespace = ns
 		sec.Name = defaultAdminSecretName
@@ -410,4 +497,248 @@ func removeFinalizer(cr *v1beta1.OciPostgres) {
 		}
 	}
 	cr.Finalizers = fs
+}
+
+func (r *PostgresReconciler) reconcileLogicalDatabases(
+	ctx context.Context,
+	log logr.Logger,
+	cluster *v1beta1.OciPostgres,
+	pgClient *ocipostgresdbsystem.OciPostgresClient,
+	admin *adminCreds,
+) (bool, bool, error) {
+	// optimistic default: everything is ready unless we see otherwise
+	allReady := true
+	updated := false
+
+	var aggErr error
+
+	// helper: aggregate errors for desired DB failures
+	addDesiredErr := func(dbName, step string, err error) {
+		if err == nil {
+			return
+		}
+		aggErr = errors.Join(aggErr, fmt.Errorf("logical db %q: %s: %w", dbName, step, err))
+	}
+
+	// Get connection details for this DbSystem
+	host, port, ca, fqdn, err := PostgreSQLUtil.GetPrimaryEndpoint(ctx, cluster.Status.DbSystemId, pgClient)
+	if err != nil || host == "" || port == 0 {
+		r.Recorder.Event(cluster, corev1.EventTypeWarning, "EndpointLookupFailed", "Failed to get primary endpoint")
+		return false, false, fmt.Errorf("primary endpoint not ready for dbSystem %s: %w", cluster.Status.DbSystemId, err)
+	}
+
+	// Build desired set from spec.logicalDatabases
+	desired := make(map[string]struct{}, len(cluster.Spec.DbInstanceSpec.LogicalDatabases))
+	for _, dbName := range cluster.Spec.DbInstanceSpec.LogicalDatabases {
+		if dbName == "" {
+			continue
+		}
+		desired[dbName] = struct{}{}
+	}
+
+	// Build existing map from status.dbInstances
+	existing := make(map[string]*v1beta1.DbInstanceStatus, len(cluster.Status.DbInstances))
+	for i := range cluster.Status.DbInstances {
+		db := &cluster.Status.DbInstances[i]
+		if db.DatabaseName != "" {
+			existing[db.DatabaseName] = db
+		}
+	}
+	for dbName := range desired {
+		// Already READY -> nothing to do
+		if db, ok := existing[dbName]; ok && db.LifecycleState == v1beta1.LifecycleStateReady {
+			continue
+		}
+		// if any desired db isn't READY yet, the cluster isn't "fully ready"
+		allReady = false
+		log.Info("Reconciling logical database",
+			"dbSystemId", cluster.Status.DbSystemId,
+			"databaseName", dbName)
+
+		// Decide app secret name & namespace
+		appSecretName := fmt.Sprintf("%s-db-credentials", dbName)
+		appSecretNS := cluster.Namespace
+
+		// Ensure per-app secret
+		app, err := PostgreSQLUtil.EnsureAppUserAndSecret(ctx, r.Client, appSecretNS, appSecretName, dbName)
+		if err != nil {
+			log.Error(err, "ensure app secret failed", "databaseName", dbName)
+			addDesiredErr(dbName, "ensure app secret", err)
+			// Update status for this DB as FAILED
+			if db, ok := existing[dbName]; ok {
+				db.LifecycleState = v1beta1.LifecycleStateFailed
+				db.AppUserSecretName = appSecretName
+				db.AppUserSecretNamespace = appSecretNS
+			} else {
+				cluster.Status.DbInstances = append(cluster.Status.DbInstances, v1beta1.DbInstanceStatus{
+					DatabaseName:           dbName,
+					AppUserSecretName:      appSecretName,
+					AppUserSecretNamespace: appSecretNS,
+					LifecycleState:         v1beta1.LifecycleStateFailed,
+				})
+			}
+			updated = true
+			continue
+		}
+		log.Info("Reconciling logical database", "created secret per app", dbName)
+
+		// Create DB if missing
+		if err := PostgreSQLUtil.CreateDBIfMissing(ctx,
+			host, port,
+			admin.Username, admin.Password,
+			ca, fqdn,
+			dbName,
+			log,
+		); err != nil {
+			log.Error(err, "create DB failed", "databaseName", dbName)
+			addDesiredErr(dbName, "create DB", err)
+			if db, ok := existing[dbName]; ok {
+				db.LifecycleState = v1beta1.LifecycleStateFailed
+			} else {
+				cluster.Status.DbInstances = append(cluster.Status.DbInstances, v1beta1.DbInstanceStatus{
+					DatabaseName:           dbName,
+					AppUserSecretName:      app.SecretName,
+					AppUserSecretNamespace: appSecretNS,
+					LifecycleState:         v1beta1.LifecycleStateFailed,
+				})
+			}
+			updated = true
+			continue
+		}
+		log.Info("Reconciling logical database", "created logical db per app", dbName)
+
+		// Ensure role & grants on that DB
+		appUser := fmt.Sprintf("app_%s_owner", dbName)
+		if err := PostgreSQLUtil.EnsureRoleAndGrants(
+			ctx,
+			host, port,
+			admin.Username, admin.Password,
+			ca, fqdn,
+			dbName,
+			appUser, app.Password,
+			log,
+		); err != nil {
+			log.Error(err, "ensure role/grants failed", "databaseName", dbName)
+			addDesiredErr(dbName, "ensure role/grants", err)
+			if db, ok := existing[dbName]; ok {
+				db.LifecycleState = v1beta1.LifecycleStateFailed
+				db.AppUserSecretName = app.SecretName
+				db.AppUserSecretNamespace = appSecretNS
+			} else {
+				cluster.Status.DbInstances = append(cluster.Status.DbInstances, v1beta1.DbInstanceStatus{
+					DatabaseName:           dbName,
+					AppUserSecretName:      app.SecretName,
+					AppUserSecretNamespace: appSecretNS,
+					LifecycleState:         v1beta1.LifecycleStateFailed,
+				})
+			}
+			updated = true
+			continue
+		}
+		log.Info("Reconciling logical database", "ensured role and grants per app", dbName)
+
+		// Success → mark DbInstanceStatus READY
+		if db, ok := existing[dbName]; ok {
+			db.LifecycleState = v1beta1.LifecycleStateReady
+			db.AppUserSecretName = app.SecretName
+			db.AppUserSecretNamespace = appSecretNS
+		} else {
+			cluster.Status.DbInstances = append(cluster.Status.DbInstances, v1beta1.DbInstanceStatus{
+				DatabaseName:           dbName,
+				AppUserSecretName:      app.SecretName,
+				AppUserSecretNamespace: appSecretNS,
+				LifecycleState:         v1beta1.LifecycleStateReady,
+			})
+		}
+		updated = true
+		log.Info("Reconciling logical database success")
+	}
+
+	// Deprovision DBs that were removed from Spec
+	if len(existing) > 0 {
+		newList := make([]v1beta1.DbInstanceStatus, 0, len(cluster.Status.DbInstances))
+
+		for i := range cluster.Status.DbInstances {
+			db := cluster.Status.DbInstances[i]
+			if _, stillDesired := desired[db.DatabaseName]; stillDesired {
+				// keep this one
+				newList = append(newList, db)
+				continue
+			}
+
+			// Not desired anymore -> deprovision
+			allReady = false // cluster isn't fully "done" while cleanup is pending
+			log.Info("Deprovisioning logical database removed from spec",
+				"dbSystemId", cluster.Status.DbSystemId,
+				"databaseName", db.DatabaseName)
+
+			appUser := fmt.Sprintf("app_%s_owner", db.DatabaseName)
+
+			if err := PostgreSQLUtil.DropRoleAndDatabase(
+				ctx,
+				host, port,
+				admin.Username, admin.Password,
+				ca, fqdn,
+				db.DatabaseName, appUser,
+				log,
+			); err != nil {
+				log.Error(err, "drop role/database failed (will retry)", "databaseName", db.DatabaseName)
+				// keep it in the list so we retry next reconcile
+				newList = append(newList, db)
+				continue
+			}
+			log.Info("Deprovisioning logical database", "dropped role and database", db)
+
+			// delete app secret (ignore NotFound)
+			if db.AppUserSecretNamespace != "" && db.AppUserSecretName != "" {
+				sec := &corev1.Secret{}
+				sec.Namespace = db.AppUserSecretNamespace
+				sec.Name = db.AppUserSecretName
+				if err := r.Delete(ctx, sec); err != nil && !apierr.IsNotFound(err) {
+					log.Error(err, "delete app secret failed; keeping dbInstance for retry",
+						"ns", db.AppUserSecretNamespace, "name", db.AppUserSecretName)
+					newList = append(newList, db)
+					continue
+				}
+			}
+			log.Info("Deprovisioning logical database", "delete secret per db", db)
+
+			// Successfully deprovisioned
+			updated = true
+		}
+		cluster.Status.DbInstances = newList
+	}
+
+	// re-evaluate: if any desired db isn't READY in status, treat not ready
+	existing = make(map[string]*v1beta1.DbInstanceStatus, len(cluster.Status.DbInstances))
+	for i := range cluster.Status.DbInstances {
+		db := &cluster.Status.DbInstances[i]
+		if db.DatabaseName != "" {
+			existing[db.DatabaseName] = db
+		}
+	}
+
+	for dbName := range desired {
+		if st, ok := existing[dbName]; !ok || st.LifecycleState != v1beta1.LifecycleStateReady {
+			allReady = false
+			break
+		}
+	}
+	return allReady, updated, aggErr
+}
+
+func setCondition(
+	status *v1beta1.OciPostgresStatus,
+	condType string,
+	condStatus metav1.ConditionStatus,
+	reason, message string,
+	gen int64,
+) {
+	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+		Type:               condType,
+		Status:             condStatus,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: gen,
+	})
 }

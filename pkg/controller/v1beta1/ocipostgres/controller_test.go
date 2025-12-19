@@ -189,15 +189,14 @@ func TestReconcileDelete_RemovesSecretAndFinalizer_WhenDbSystemIdEmpty(t *testin
 
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, v1beta1.AddToScheme(scheme)) // IMPORTANT: register CRD
+	require.NoError(t, v1beta1.AddToScheme(scheme)) // register CRD
 
-	// Cluster name is used as the namespace for the secret in reconcileDelete
-	clusterName := "cluster-ns"
+	ns := "db-namespace"
 
 	cluster := &v1beta1.OciPostgres{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusterName,
-			Namespace: "ignored-ns",
+			Name:      "cluster-name",
+			Namespace: ns,
 			Finalizers: []string{
 				finalizerName,
 				"other/finalizer",
@@ -208,10 +207,11 @@ func TestReconcileDelete_RemovesSecretAndFinalizer_WhenDbSystemIdEmpty(t *testin
 		},
 	}
 
+	// Admin secret lives in cluster.Namespace
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      defaultAdminSecretName,
-			Namespace: clusterName,
+			Namespace: ns,
 		},
 	}
 
@@ -237,12 +237,105 @@ func TestReconcileDelete_RemovesSecretAndFinalizer_WhenDbSystemIdEmpty(t *testin
 	// Secret should be deleted
 	s := &corev1.Secret{}
 	err = fc.Get(ctx, ktypes.NamespacedName{
-		Namespace: clusterName,
+		Namespace: ns,
 		Name:      defaultAdminSecretName,
 	}, s)
 	assert.Error(t, err, "expected secret to be deleted")
 
 	// Finalizer should be removed from stored cluster object
+	updated := &v1beta1.OciPostgres{}
+	err = fc.Get(ctx, ktypes.NamespacedName{
+		Namespace: cluster.Namespace,
+		Name:      cluster.Name,
+	}, updated)
+	require.NoError(t, err)
+
+	for _, f := range updated.Finalizers {
+		assert.NotEqual(t, finalizerName, f, "our finalizer should have been removed")
+	}
+}
+
+// verify per-DB app secrets are deleted on cluster delete
+func TestReconcileDelete_DeletesAppUserSecrets(t *testing.T) {
+	ctx := context.Background()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, v1beta1.AddToScheme(scheme))
+
+	ns := "db-namespace"
+
+	appSecretName := "app1-db-credentials"
+
+	cluster := &v1beta1.OciPostgres{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster-name",
+			Namespace: ns,
+			Finalizers: []string{
+				finalizerName,
+			},
+		},
+		Status: v1beta1.OciPostgresStatus{
+			DbSystemId: "",
+			DbInstances: []v1beta1.DbInstanceStatus{
+				{
+					DatabaseName:           "app1",
+					AppUserSecretName:      appSecretName,
+					AppUserSecretNamespace: ns,
+					LifecycleState:         v1beta1.LifecycleStateReady,
+				},
+			},
+		},
+	}
+
+	adminSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      defaultAdminSecretName,
+			Namespace: ns,
+		},
+	}
+
+	appSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      appSecretName,
+			Namespace: ns,
+		},
+	}
+
+	fc := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster, adminSecret, appSecret).
+		Build()
+
+	r := &PostgresReconciler{
+		Client: fc,
+		Scheme: scheme,
+		Log:    ctrl.Log.WithName("test"),
+	}
+
+	var pgClientStub ocipostgresdbsystem.OciPostgresClient
+
+	res, err := r.reconcileDelete(ctx, r.Log, cluster, &pgClientStub)
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{}, res)
+
+	// Admin secret should be gone
+	s1 := &corev1.Secret{}
+	err = fc.Get(ctx, ktypes.NamespacedName{
+		Namespace: ns,
+		Name:      defaultAdminSecretName,
+	}, s1)
+	assert.Error(t, err, "expected admin secret to be deleted")
+
+	// App user secret should also be gone
+	s2 := &corev1.Secret{}
+	err = fc.Get(ctx, ktypes.NamespacedName{
+		Namespace: ns,
+		Name:      appSecretName,
+	}, s2)
+	assert.Error(t, err, "expected app user secret to be deleted")
+
+	// Finalizer removed
 	updated := &v1beta1.OciPostgres{}
 	err = fc.Get(ctx, ktypes.NamespacedName{
 		Namespace: cluster.Namespace,
