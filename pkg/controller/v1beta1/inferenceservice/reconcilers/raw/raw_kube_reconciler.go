@@ -1,6 +1,7 @@
 package raw
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"fmt"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
@@ -19,6 +20,7 @@ import (
 	deployment "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/deployment"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
 	service "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
+	utils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 )
 
 // RawKubeReconciler reconciles the Native K8S Resources
@@ -50,11 +52,17 @@ func NewRawKubeReconciler(client client.Client,
 	}
 
 	componentExt := &inferenceServiceSepc.Predictor.ComponentExtensionSpec
+
+	var selector map[string]string
+	if utils.IsEngineOrRouterEnabled(inferenceServiceSepc) {
+		selector = map[string]string{constants.InferenceServiceLabel: componentMeta.Name}
+	}
+	
 	return &RawKubeReconciler{
 		client:     client,
 		scheme:     scheme,
 		Deployment: deployment.NewDeploymentReconciler(client, scheme, componentMeta, componentExt, podSpec),
-		Service:    service.NewServiceReconciler(client, scheme, componentMeta, componentExt, podSpec, nil),
+		Service:    service.NewServiceReconciler(client, scheme, componentMeta, componentExt, podSpec, selector),
 		Scaler:     as,
 		URL:        url,
 	}, nil

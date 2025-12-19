@@ -393,3 +393,7 @@ func GetValueFromRawExtension(raw runtime.RawExtension, key string) (interface{}
 
 	return val, nil
 }
+
+func IsEngineOrRouterEnabled(isvcSpec *v1beta1.InferenceServiceSpec) bool {
+	return isvcSpec.Engine != nil || isvcSpec.Router != nil
+}

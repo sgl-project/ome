@@ -6,6 +6,7 @@ import (
 
 	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
@@ -493,6 +494,58 @@ func TestUpdateEnvVars(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			UpdateEnvVars(tt.container, tt.envVar)
 			assert.Equal(t, tt.expectedEnv, tt.container.Env, "Test case: %s", tt.name)
+		})
+	}
+}
+
+func TestIsEngineOrRouterEnabled(t *testing.T) {
+	tests := []struct {
+		name        string
+		isvcSpec    *v1beta1.InferenceServiceSpec
+		expected    bool
+	}{
+		{
+			name: "both Engine and Router are nil",
+			isvcSpec: &v1beta1.InferenceServiceSpec{
+				Predictor: v1beta1.PredictorSpec{},
+				Engine:    nil,
+				Router:    nil,
+			},
+			expected: false,
+		},
+		{
+			name: "only Engine is not nil",
+			isvcSpec: &v1beta1.InferenceServiceSpec{
+				Predictor: v1beta1.PredictorSpec{},
+				Engine:    &v1beta1.EngineSpec{},
+				Router:    nil,
+			},
+			expected: true,
+		},
+		{
+			name: "only Router is not nil",
+			isvcSpec: &v1beta1.InferenceServiceSpec{
+				Predictor: v1beta1.PredictorSpec{},
+				Engine:    nil,
+				Router:    &v1beta1.RouterSpec{},
+			},
+			expected: true,
+		},
+		{
+			name: "both Engine and Router are not nil",
+			isvcSpec: &v1beta1.InferenceServiceSpec{
+				Predictor: v1beta1.PredictorSpec{},
+				Engine:    &v1beta1.EngineSpec{},
+				Router:    &v1beta1.RouterSpec{},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsEngineOrRouterEnabled(tt.isvcSpec)
+			assert.Equal(t, tt.expected, result, "Test case: %s", tt.name)
 		})
 	}
 }
