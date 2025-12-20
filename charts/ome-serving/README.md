@@ -402,7 +402,7 @@ The chart includes a built-in registry of **165 models**. Model names in values.
 `starcoder2-15b`, `starcoder2-7b`
 
 ### NVIDIA Nemotron
-`jet-nemotron-2b`, `llama-3-3-nemotron-super-49b-v1`, `nvidia-nemotron-nano-12b-v2-vl-bf16`, `nvidia-nemotron-nano-9b-v2`
+`jet-nemotron-2b`, `llama-3-3-nemotron-super-49b-v1`, `nvidia-nemotron-nano-12b-v2-vl-bf16`, `nvidia-nemotron-nano-9b-v2`, `nvidia-nemotron-3-nano-30b-a3b-base-bf16`, `nvidia-nemotron-3-nano-30b-a3b-bf16`, `nvidia-nemotron-3-nano-30b-a3b-fp8`, `nvidia-nemotron-nano-12b-v2-vl-fp8`
 
 ### Moonshot Kimi
 `kimi-vl-a3b-instruct`
