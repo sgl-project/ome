@@ -1,0 +1,23 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: nvidia-nemotron-nano-12b-v2-vl-fp8
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+    - IMAGE_TO_TEXT
+  vendor: nvidia
+  disabled: false
+  version: "1.0.0"
+  displayName: nvidia.NVIDIA-Nemotron-Nano-12B-v2-VL-FP8
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.51.3"
+  modelArchitecture: NemotronH_Nano_VL_V2
+  storage:
+    storageUri: hf://nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8
+    path: /raid/models/nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8
+    key: "hf-token"
