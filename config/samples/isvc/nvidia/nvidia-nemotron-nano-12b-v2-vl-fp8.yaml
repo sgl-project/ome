@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: nvidia-nemotron-nano-12b-v2-vl-fp8
+  namespace: actions-runner-system
+spec:
+  model:
+    name: nvidia-nemotron-nano-12b-v2-vl-fp8
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-nvidia-nemotron-nano-12b-v2-vl-fp8
+  router:
+    minReplicas: 1
+    maxReplicas: 1

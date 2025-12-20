@@ -1020,6 +1020,47 @@ models:
     runtime:
       gpus: 1
 
+  nvidia-nemotron-3-nano-30b-a3b-base-bf16:
+    enabled: false
+    createRuntime: true
+    vendor: nvidia
+    capabilities: [TEXT_TO_TEXT]
+    hfModelId: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-Base-BF16
+    runtime:
+      gpus: 2
+      extraArgs: ["--trust-remote-code", "--reasoning-parser", "nano_v3", "--tool-call-parser", "qwen3_coder"]
+
+  nvidia-nemotron-3-nano-30b-a3b-bf16:
+    enabled: false
+    createRuntime: true
+    vendor: nvidia
+    capabilities: [TEXT_TO_TEXT]
+    hfModelId: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
+    runtime:
+      gpus: 2
+      extraArgs: ["--trust-remote-code", "--reasoning-parser", "nano_v3", "--tool-call-parser", "qwen3_coder"]
+
+  nvidia-nemotron-3-nano-30b-a3b-fp8:
+    enabled: false
+    createRuntime: true
+    vendor: nvidia
+    capabilities: [TEXT_TO_TEXT]
+    hfModelId: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+    runtime:
+      gpus: 2
+      extraArgs: ["--trust-remote-code", "--reasoning-parser", "nano_v3", "--tool-call-parser", "qwen3_coder"]
+
+  nvidia-nemotron-nano-12b-v2-vl-fp8:
+    enabled: false
+    createRuntime: true
+    vendor: nvidia
+    capabilities: [IMAGE_TEXT_TO_TEXT]
+    hfModelId: nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8
+    runtime:
+      gpus: 1
+      memory: "60Gi"
+      extraArgs: ["--trust-remote-code"]
+
   nvila-8b:
     enabled: false
     createRuntime: true

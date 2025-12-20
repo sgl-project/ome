@@ -10,15 +10,16 @@
 
 # .github
 /.github/ @slin1237
+/.github/workflows/ @slin1237 @XinyueZhang369
 
 # charts
-/charts/ @slin1237
+/charts/ @slin1237 @XinyueZhang369
 
 # cmd
 /cmd/ @slin1237 @pallasathena92 @beiguo218
 
 # config
-/config/ @slin1237 @CatherineSue
+/config/ @slin1237 @CatherineSue @XinyueZhang369
 
 # dockerfiles
 /dockerfiles/ @slin1237 @pallasathena92 @beiguo218
