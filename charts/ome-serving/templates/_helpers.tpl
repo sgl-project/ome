@@ -1196,6 +1196,34 @@ nvidia-nemotron-nano-9b-v2:
   priority: 1
   sizeRange: ["8B", "10B"]
   servedName: nvidia/NVIDIA-Nemotron-Nano-9B-v2
+nvidia-nemotron-3-nano-30b-a3b-base-bf16:
+  architecture: NemotronHForCausalLM
+  transformersVersion: "4.57.1"
+  autoSelect: false
+  priority: 1
+  sizeRange: ["28B", "32B"]
+  servedName: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-Base-BF16
+nvidia-nemotron-3-nano-30b-a3b-bf16:
+  architecture: NemotronHForCausalLM
+  transformersVersion: "4.55.4"
+  autoSelect: false
+  priority: 1
+  sizeRange: ["28B", "32B"]
+  servedName: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
+nvidia-nemotron-3-nano-30b-a3b-fp8:
+  architecture: NemotronHForCausalLM
+  transformersVersion: "4.53.2"
+  autoSelect: false
+  priority: 1
+  sizeRange: ["28B", "32B"]
+  servedName: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+nvidia-nemotron-nano-12b-v2-vl-fp8:
+  architecture: NemotronH_Nano_VL_V2
+  transformersVersion: "4.51.3"
+  autoSelect: false
+  priority: 1
+  sizeRange: ["11B", "13B"]
+  servedName: nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8
 orion-14b-base:
   architecture: OrionForCausalLM
   transformersVersion: "4.34.0"
