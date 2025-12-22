@@ -7,9 +7,19 @@ import (
 	"github.com/sgl-project/ome/pkg/constants"
 )
 
+// shouldInferServerless checks if minReplicas=0 should trigger Serverless mode.
+// Returns false if globalDeploymentMode explicitly blocks it (e.g., RawDeployment).
+func shouldInferServerless(minReplicas *int, globalDeploymentMode constants.DeploymentModeType) bool {
+	if globalDeploymentMode == constants.RawDeployment {
+		return false
+	}
+	return minReplicas != nil && *minReplicas == 0
+}
+
 // DetermineEngineDeploymentMode determines the deployment mode for the engine based on its configuration
-// and constraints from other components (e.g., decoder presence)
-func DetermineEngineDeploymentMode(engine *v1beta1.EngineSpec) constants.DeploymentModeType {
+// and constraints from other components (e.g., decoder presence).
+// If globalDeploymentMode is explicitly set to RawDeployment, minReplicas=0 will not trigger Serverless.
+func DetermineEngineDeploymentMode(engine *v1beta1.EngineSpec, globalDeploymentMode constants.DeploymentModeType) constants.DeploymentModeType {
 	if engine == nil {
 		return constants.RawDeployment
 	}
@@ -24,8 +34,8 @@ func DetermineEngineDeploymentMode(engine *v1beta1.EngineSpec) constants.Deploym
 		return constants.MultiNode
 	}
 
-	// Serverless if min replicas is 0
-	if engine.MinReplicas != nil && *engine.MinReplicas == 0 {
+	// Serverless if min replicas is 0 (respects globalDeploymentMode)
+	if shouldInferServerless(engine.MinReplicas, globalDeploymentMode) {
 		return constants.Serverless
 	}
 
@@ -35,9 +45,11 @@ func DetermineEngineDeploymentMode(engine *v1beta1.EngineSpec) constants.Deploym
 
 // DetermineDeploymentModes determines the deployment modes for all components based on their specs
 // and enforces compatibility constraints (e.g., decoder present → engine can't be serverless)
-func DetermineDeploymentModes(engine *v1beta1.EngineSpec, decoder *v1beta1.DecoderSpec, router *v1beta1.RouterSpec, runtime *v1beta1.ServingRuntimeSpec) (engineMode, decoderMode, routerMode constants.DeploymentModeType, err error) {
+// The globalDeploymentMode parameter allows the caller to specify an explicit deployment mode
+// that takes precedence over component-level inference (e.g., minReplicas=0 implying Serverless).
+func DetermineDeploymentModes(engine *v1beta1.EngineSpec, decoder *v1beta1.DecoderSpec, router *v1beta1.RouterSpec, runtime *v1beta1.ServingRuntimeSpec, globalDeploymentMode constants.DeploymentModeType) (engineMode, decoderMode, routerMode constants.DeploymentModeType, err error) {
 	// Determine base modes for each component
-	engineMode = determineComponentDeploymentMode(engine, runtime)
+	engineMode = determineComponentDeploymentMode(engine, runtime, globalDeploymentMode)
 	decoderMode = constants.RawDeployment // Decoder only supports RawDeployment or MultiNode
 	routerMode = constants.RawDeployment  // Default for router
 
@@ -56,7 +68,7 @@ func DetermineDeploymentModes(engine *v1beta1.EngineSpec, decoder *v1beta1.Decod
 
 	// Determine router mode if present
 	if router != nil {
-		routerMode = determineComponentDeploymentMode(router, runtime)
+		routerMode = determineComponentDeploymentMode(router, runtime, globalDeploymentMode)
 	}
 
 	// Validate compatibility
@@ -67,12 +79,15 @@ func DetermineDeploymentModes(engine *v1beta1.EngineSpec, decoder *v1beta1.Decod
 	return engineMode, decoderMode, routerMode, nil
 }
 
-// determineComponentDeploymentMode determines deployment mode for a generic component
-func determineComponentDeploymentMode(spec interface{}, runtime *v1beta1.ServingRuntimeSpec) constants.DeploymentModeType {
+// determineComponentDeploymentMode determines deployment mode for a generic component.
+// If globalDeploymentMode is explicitly set (not empty), it takes precedence over
+// component-level inference like minReplicas=0 implying Serverless.
+func determineComponentDeploymentMode(spec interface{}, runtime *v1beta1.ServingRuntimeSpec, globalDeploymentMode constants.DeploymentModeType) constants.DeploymentModeType {
 	switch s := spec.(type) {
 	case *v1beta1.EngineSpec:
 		// Delegate to the existing working function
-		return DetermineEngineDeploymentMode(s)
+		return DetermineEngineDeploymentMode(s, globalDeploymentMode)
+
 	case *v1beta1.DecoderSpec:
 		if s == nil {
 			return constants.RawDeployment
@@ -83,12 +98,14 @@ func determineComponentDeploymentMode(spec interface{}, runtime *v1beta1.Serving
 		}
 		// Decoder never supports serverless, so default to raw deployment
 		return constants.RawDeployment
+
 	case *v1beta1.RouterSpec:
 		if s == nil {
 			return constants.RawDeployment
 		}
-		// Router doesn't have Leader/Worker, check MinReplicas for serverless
-		if s.MinReplicas != nil && *s.MinReplicas == 0 {
+
+		// Serverless if min replicas is 0 (respects globalDeploymentMode)
+		if shouldInferServerless(s.MinReplicas, globalDeploymentMode) {
 			return constants.Serverless
 		}
 		return constants.RawDeployment

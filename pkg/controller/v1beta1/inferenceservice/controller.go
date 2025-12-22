@@ -267,7 +267,8 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Step 4: Determine deployment modes based on merged specs
-	engineDeploymentMode, decoderDeploymentMode, routerDeploymentMode, err := isvcutils.DetermineDeploymentModes(mergedEngine, mergedDecoder, mergedRouter, rt)
+	// Pass the global deploymentMode so component-level inference respects it
+	engineDeploymentMode, decoderDeploymentMode, routerDeploymentMode, err := isvcutils.DetermineDeploymentModes(mergedEngine, mergedDecoder, mergedRouter, rt, deploymentMode)
 	if err != nil {
 		r.Log.Error(err, "Failed to determine deployment modes", "Name", isvc.Name)
 		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "DeploymentModeError", err.Error())

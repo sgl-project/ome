@@ -268,7 +268,8 @@ func (e *Engine) determineEngineName(isvc *v1beta1.InferenceService) (string, er
 // reconcilePodSpec creates the pod spec for the engine component
 func (e *Engine) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *metav1.ObjectMeta) (*v1.PodSpec, error) {
 	// Get the appropriate pod spec and runner based on deployment mode
-	deploymentMode := isvcutils.DetermineEngineDeploymentMode(e.engineSpec)
+	// Pass empty globalDeploymentMode since this is for pod spec selection (multinode vs single node)
+	deploymentMode := isvcutils.DetermineEngineDeploymentMode(e.engineSpec, "")
 
 	var basePodSpec v1beta1.PodSpec
 	var runnerSpec *v1beta1.RunnerSpec
