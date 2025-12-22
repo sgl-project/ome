@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -19,6 +20,7 @@ import (
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/status"
 	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"github.com/sgl-project/ome/pkg/utils"
+	"github.com/sgl-project/ome/pkg/utils/storage"
 )
 
 // BaseComponentFields contains common fields for all components
@@ -43,6 +45,112 @@ type BaseComponentFields struct {
 }
 
 // Common methods as functions that operate on BaseComponentFields
+
+// PVCVolumeInfo contains parsed PVC volume information for mounting
+// PVCName is the name of the PVC to mount
+// Namespace is the namespace where the PVC exists (required for cross-namespace validation)
+// SubPath is the path within the PVC to mount (from the URI)
+// MountPath is where to mount the volume in the container
+type PVCVolumeInfo struct {
+	PVCName   string
+	Namespace string
+	SubPath   string
+	MountPath string
+}
+
+// GetPVCVolumeInfo extracts PVC volume information from a storage spec
+// Returns nil if the storage is not PVC-based or if parsing fails
+func GetPVCVolumeInfo(storageSpec *v1beta1.StorageSpec, defaultNamespace string) *PVCVolumeInfo {
+	if storageSpec == nil || storageSpec.StorageUri == nil {
+		return nil
+	}
+
+	uri := *storageSpec.StorageUri
+	if !strings.HasPrefix(uri, storage.PVCStoragePrefix) {
+		return nil
+	}
+
+	pvcComponents, err := storage.ParsePVCStorageURI(uri)
+	if err != nil {
+		// Log the error for debugging - invalid URI format
+		// Callers should validate URIs before reaching this point
+		return nil
+	}
+
+	// Use the namespace from URI if specified, otherwise use the default namespace
+	namespace := pvcComponents.Namespace
+	if namespace == "" {
+		namespace = defaultNamespace
+	}
+
+	// Determine mount path: use explicit Path if provided, otherwise use default
+	mountPath := constants.DefaultModelLocalMountPath
+	if storageSpec.Path != nil && *storageSpec.Path != "" {
+		mountPath = *storageSpec.Path
+	}
+
+	return &PVCVolumeInfo{
+		PVCName:   pvcComponents.PVCName,
+		Namespace: namespace,
+		SubPath:   pvcComponents.SubPath,
+		MountPath: mountPath,
+	}
+}
+
+// ValidatePVCNamespace validates that the PVC namespace matches the expected namespace
+// Returns an error if there is a namespace mismatch
+// Note: Kubernetes PVCs can only be mounted by pods in the same namespace,
+// so the InferenceService namespace must match the PVC namespace
+func ValidatePVCNamespace(pvcInfo *PVCVolumeInfo, podNamespace string) error {
+	if pvcInfo == nil {
+		return nil
+	}
+	if pvcInfo.Namespace != "" && pvcInfo.Namespace != podNamespace {
+		return fmt.Errorf("PVC namespace mismatch: PVC is in namespace %q but InferenceService is in namespace %q; Kubernetes requires PVCs to be in the same namespace as the pod",
+			pvcInfo.Namespace, podNamespace)
+	}
+	return nil
+}
+
+// sanitizeVolumeName ensures the volume name is valid for Kubernetes (max 63 chars, DNS label format)
+func sanitizeVolumeName(name string) string {
+	const maxLen = 63
+	if len(name) <= maxLen {
+		return name
+	}
+	// Truncate and add a suffix to indicate truncation
+	// Use first 55 chars + "-" + last 7 chars to maintain uniqueness
+	return name[:55] + "-" + name[len(name)-7:]
+}
+
+// GetModelMountPath returns the mount path for the model storage
+// It checks both explicit Path and PVC storage URI
+func GetModelMountPath(storageSpec *v1beta1.StorageSpec, defaultNamespace string) string {
+	if storageSpec == nil {
+		return ""
+	}
+
+	// If explicit path is provided, use it
+	if storageSpec.Path != nil && *storageSpec.Path != "" {
+		return *storageSpec.Path
+	}
+
+	// Check if this is a PVC storage URI
+	pvcInfo := GetPVCVolumeInfo(storageSpec, defaultNamespace)
+	if pvcInfo != nil {
+		return pvcInfo.MountPath
+	}
+
+	return ""
+}
+
+// IsPVCStorage checks if the storage spec uses PVC storage
+func IsPVCStorage(storageSpec *v1beta1.StorageSpec) bool {
+	if storageSpec == nil || storageSpec.StorageUri == nil {
+		return false
+	}
+	return strings.HasPrefix(*storageSpec.StorageUri, storage.PVCStoragePrefix)
+}
 
 // ReconcileFineTunedWeights reconciles fine-tuned weights for any component
 func ReconcileFineTunedWeights(b *BaseComponentFields, isvc *v1beta1.InferenceService) error {
@@ -89,14 +197,43 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 	}
 
 	// Add model volume mount if base model is specified and it's necessary
-	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil && b.BaseModelMeta != nil {
+	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModelMeta != nil {
 		if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
-			vm := corev1.VolumeMount{
-				Name:      b.BaseModelMeta.Name,
-				MountPath: *b.BaseModel.Storage.Path,
-				ReadOnly:  true,
+			defaultNamespace := isvc.Namespace
+			// Use sanitized volume name to match the volume created in UpdatePodSpecVolumes
+			volumeName := sanitizeVolumeName(b.BaseModelMeta.Name)
+
+			// Check if this is PVC storage
+			if IsPVCStorage(b.BaseModel.Storage) {
+				pvcInfo := GetPVCVolumeInfo(b.BaseModel.Storage, defaultNamespace)
+				if pvcInfo != nil {
+					// Skip if PVC namespace doesn't match (volume wasn't created)
+					if err := ValidatePVCNamespace(pvcInfo, isvc.Namespace); err != nil {
+						return
+					}
+
+					vm := corev1.VolumeMount{
+						Name:      volumeName,
+						MountPath: pvcInfo.MountPath,
+						SubPath:   pvcInfo.SubPath,
+						ReadOnly:  true,
+					}
+					isvcutils.AppendVolumeMount(container, &vm)
+					b.Log.Info("Added PVC volume mount for model",
+						"mountPath", pvcInfo.MountPath,
+						"subPath", pvcInfo.SubPath,
+						"volumeName", volumeName,
+						"modelName", b.BaseModelMeta.Name)
+				}
+			} else if b.BaseModel.Storage.Path != nil {
+				// Use explicit path for non-PVC storage
+				vm := corev1.VolumeMount{
+					Name:      volumeName,
+					MountPath: *b.BaseModel.Storage.Path,
+					ReadOnly:  true,
+				}
+				isvcutils.AppendVolumeMount(container, &vm)
 			}
-			isvcutils.AppendVolumeMount(container, &vm)
 		}
 	}
 
@@ -157,11 +294,18 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 	if !b.FineTunedServing {
 		// Base model serving - add MODEL_PATH env variable if necessary
 		if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
-			if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil {
-				b.Log.Info("Base model serving - adding MODEL_PATH env variable if not provided", "inference service", isvc.Name, "namespace", isvc.Namespace)
-				isvcutils.AppendEnvVarsIfNotExist(container, &[]corev1.EnvVar{
-					{Name: constants.ModelPathEnvVarKey, Value: *b.BaseModel.Storage.Path},
-				})
+			if b.BaseModel != nil && b.BaseModel.Storage != nil {
+				defaultNamespace := isvc.Namespace
+				modelPath := GetModelMountPath(b.BaseModel.Storage, defaultNamespace)
+				if modelPath != "" {
+					b.Log.Info("Base model serving - adding MODEL_PATH env variable if not provided",
+						"inference service", isvc.Name,
+						"namespace", isvc.Namespace,
+						"modelPath", modelPath)
+					isvcutils.AppendEnvVarsIfNotExist(container, &[]corev1.EnvVar{
+						{Name: constants.ModelPathEnvVarKey, Value: modelPath},
+					})
+				}
 			}
 		}
 	} else {
@@ -247,16 +391,60 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 // UpdatePodSpecVolumes updates pod spec with common volumes
 func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, objectMeta *metav1.ObjectMeta) {
 	// Add model volume if base model is specified
-	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil && b.BaseModelMeta != nil {
-		modelVolume := corev1.Volume{
-			Name: b.BaseModelMeta.Name,
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{
-					Path: *b.BaseModel.Storage.Path,
+	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModelMeta != nil {
+		// Determine the namespace for PVC (use isvc namespace for namespaced resources)
+		defaultNamespace := isvc.Namespace
+
+		// Sanitize volume name to ensure it's valid for Kubernetes (max 63 chars)
+		volumeName := sanitizeVolumeName(b.BaseModelMeta.Name)
+
+		// Check if this is PVC storage
+		if IsPVCStorage(b.BaseModel.Storage) {
+			pvcInfo := GetPVCVolumeInfo(b.BaseModel.Storage, defaultNamespace)
+			if pvcInfo != nil {
+				// Validate that PVC namespace matches the pod namespace
+				// Kubernetes requires PVCs to be in the same namespace as the pod
+				if err := ValidatePVCNamespace(pvcInfo, isvc.Namespace); err != nil {
+					b.Log.Error(err, "PVC namespace validation failed",
+						"pvcName", pvcInfo.PVCName,
+						"pvcNamespace", pvcInfo.Namespace,
+						"isvcNamespace", isvc.Namespace,
+						"modelName", b.BaseModelMeta.Name)
+					// Skip adding this volume - the pod would fail to start anyway
+					// A status condition should be added by the caller
+					return
+				}
+
+				modelVolume := corev1.Volume{
+					Name: volumeName,
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: pvcInfo.PVCName,
+							ReadOnly:  true,
+						},
+					},
+				}
+				podSpec.Volumes = append(podSpec.Volumes, modelVolume)
+				b.Log.Info("Added PVC volume for model",
+					"pvcName", pvcInfo.PVCName,
+					"pvcNamespace", pvcInfo.Namespace,
+					"subPath", pvcInfo.SubPath,
+					"mountPath", pvcInfo.MountPath,
+					"volumeName", volumeName,
+					"modelName", b.BaseModelMeta.Name)
+			}
+		} else if b.BaseModel.Storage.Path != nil {
+			// Use HostPath for non-PVC storage with explicit path
+			modelVolume := corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: *b.BaseModel.Storage.Path,
+					},
 				},
-			},
+			}
+			podSpec.Volumes = append(podSpec.Volumes, modelVolume)
 		}
-		podSpec.Volumes = append(podSpec.Volumes, modelVolume)
 	}
 
 	// Add empty model directory volume if required for fine-tuned serving

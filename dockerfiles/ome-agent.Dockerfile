@@ -33,17 +33,27 @@ COPY go.sum go.sum
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
-# Copy source code
+# Copy only xet Rust files first (for better caching - Rust build is slow)
+COPY pkg/xet/Cargo.toml pkg/xet/Cargo.lock pkg/xet/
+COPY pkg/xet/src/ pkg/xet/src/
+
+# Build the XET Rust library only (cached unless Rust files change)
+# Save libxet.a to /tmp so it survives the COPY pkg/ overwrite
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/workspace/pkg/xet/target \
+    cd pkg/xet && cargo build --release && \
+    cp target/release/libxet.a /tmp/libxet.a
+
+# Copy remaining source code
 COPY cmd/ cmd/
 COPY pkg/ pkg/
 COPY internal/ internal/
 
-# Build the XET library first
-RUN cd pkg/xet && make build
-
-# Verify static library exists and remove dynamic library to force static linking
-RUN ls -lh /workspace/pkg/xet/target/release/libxet.* && \
-    rm -f /workspace/pkg/xet/target/release/libxet.so
+# Restore libxet.a after COPY pkg/ overwrites it (to both locations for compatibility)
+RUN mkdir -p /workspace/pkg/xet/target/release && \
+    cp /tmp/libxet.a /workspace/pkg/xet/libxet.a && \
+    cp /tmp/libxet.a /workspace/pkg/xet/target/release/libxet.a && \
+    ls -lh /workspace/pkg/xet/libxet.a /workspace/pkg/xet/target/release/libxet.a
 
 # Build arguments for version info
 ARG VERSION
