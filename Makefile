@@ -700,3 +700,9 @@ site-server: hugo ## 🌐 Start Hugo development server
 	@echo "🌐 Starting Hugo development server..."
 	@cd site && $(HUGO) server
 	@echo "✅ Hugo server started"
+
+.PHONY: site-server
+site-server: hugo ## 🌐 Start Hugo development server
+	@echo "🌐 Starting Hugo development server..."
+	@cd site && $(HUGO) server
+	@echo "✅ Hugo server started"
