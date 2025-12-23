@@ -219,7 +219,8 @@ func MergeNodeSelector(runtime *v1beta1.ServingRuntimeSpec, acceleratorClass *v1
 }
 
 // MergeResource merges resource requests and limits from runtime, accelerator class, and container spec.
-// Take the maximum value for each resource type to ensure sufficient allocation.
+// It only merges resources from the runtime and accelerator class when the user has not explicitly specified resources in the InferenceService spec.
+// The acceleratorClass takes precedence and overrides the runtime resource, if it existed.
 func MergeResource(container *v1.Container, acceleratorClass *v1beta1.AcceleratorClassSpec, runtime *v1beta1.ServingRuntimeSpec) {
 	if container == nil {
 		return
@@ -229,12 +230,12 @@ func MergeResource(container *v1.Container, acceleratorClass *v1beta1.Accelerato
 	if container.Resources.Requests == nil {
 		container.Resources.Requests = v1.ResourceList{}
 	}
-	// Merge resource requests from runtime with the same container name.
+	// Merge resource requests from runtime with the same container name if it does not already exist.
 	if runtime != nil && &runtime.ServingRuntimePodSpec != nil && runtime.ServingRuntimePodSpec.Containers != nil {
 		for _, rtContainer := range runtime.ServingRuntimePodSpec.Containers {
 			if rtContainer.Name == container.Name {
 				for resourceName, quantity := range rtContainer.Resources.Requests {
-					if existingQty, exists := container.Resources.Requests[resourceName]; !exists || quantity.Cmp(existingQty) > 0 {
+					if _, exists := container.Resources.Requests[resourceName]; !exists {
 						container.Resources.Requests[resourceName] = quantity.DeepCopy()
 					}
 				}
@@ -242,27 +243,26 @@ func MergeResource(container *v1.Container, acceleratorClass *v1beta1.Accelerato
 			}
 		}
 	}
-	// Merge resource requests from accelerator class when this resource is required in container.
+	// Merge resource requests from accelerator class.
+	// AcceleratorClass takes precedence and overrides runtime resources.
 	if acceleratorClass != nil && acceleratorClass.Resources != nil {
 		for _, resource := range acceleratorClass.Resources {
 			resourceName := v1.ResourceName(resource.Name)
 			quantity := resource.Quantity
-			if existingQty, exists := container.Resources.Requests[resourceName]; !exists || quantity.Cmp(existingQty) > 0 {
-				container.Resources.Requests[resourceName] = quantity.DeepCopy()
-			}
+			container.Resources.Requests[resourceName] = quantity.DeepCopy()
 		}
-
 	}
 
 	// Merge resource limits
 	if container.Resources.Limits == nil {
 		container.Resources.Limits = v1.ResourceList{}
 	}
+	// Merge resource limits from runtime with the same container name if it does not already exist.
 	if runtime != nil && &runtime.ServingRuntimePodSpec != nil && runtime.ServingRuntimePodSpec.Containers != nil {
 		for _, rtContainer := range runtime.ServingRuntimePodSpec.Containers {
 			if rtContainer.Name == container.Name {
 				for resourceName, quantity := range rtContainer.Resources.Limits {
-					if existingQty, exists := container.Resources.Limits[resourceName]; !exists || quantity.Cmp(existingQty) > 0 {
+					if _, exists := container.Resources.Limits[resourceName]; !exists {
 						container.Resources.Limits[resourceName] = quantity.DeepCopy()
 					}
 				}
@@ -270,15 +270,13 @@ func MergeResource(container *v1.Container, acceleratorClass *v1beta1.Accelerato
 			}
 		}
 	}
+	// AcceleratorClass takes precedence and overrides runtime resource limits.
 	if acceleratorClass != nil && acceleratorClass.Resources != nil {
 		for _, resource := range acceleratorClass.Resources {
 			resourceName := v1.ResourceName(resource.Name)
 			quantity := resource.Quantity
-			if existingQty, exists := container.Resources.Limits[resourceName]; !exists || quantity.Cmp(existingQty) > 0 {
-				container.Resources.Limits[resourceName] = quantity.DeepCopy()
-			}
+			container.Resources.Limits[resourceName] = quantity.DeepCopy()
 		}
-
 	}
 }
 
