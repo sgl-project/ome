@@ -285,6 +285,10 @@ func loadGenericConfig(configPath string) (*GenericModelConfig, error) {
 		return nil, fmt.Errorf("failed to read config file '%s': %w", configPath, err)
 	}
 
+	// Sanitize JSON to handle non-standard values like Infinity, -Infinity, NaN
+	// which are valid in Python but not in standard JSON
+	data = SanitizeJSONBytes(data)
+
 	var config GenericModelConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config JSON from '%s': %w", configPath, err)
