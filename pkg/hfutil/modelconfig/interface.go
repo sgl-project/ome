@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 )
@@ -284,6 +285,10 @@ func loadGenericConfig(configPath string) (*GenericModelConfig, error) {
 		return nil, fmt.Errorf("failed to read config file '%s': %w", configPath, err)
 	}
 
+	// Sanitize JSON to handle non-standard values like Infinity, -Infinity, NaN
+	// which are valid in Python but not in standard JSON
+	data = SanitizeJSONBytes(data)
+
 	var config GenericModelConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config JSON from '%s': %w", configPath, err)
@@ -319,6 +324,35 @@ func GetSupportedModelTypes() []string {
 	return types
 }
 
+// Regex patterns for sanitizing non-standard JSON values
+var (
+	// Match Infinity in JSON contexts (after colon, comma, or opening bracket)
+	infinityRegex = regexp.MustCompile(`([:,\[]\s*)Infinity(\s*[,\]\}])`)
+	// Match -Infinity
+	negInfinityRegex = regexp.MustCompile(`([:,\[]\s*)-Infinity(\s*[,\]\}])`)
+	// Match NaN in JSON contexts
+	nanRegex = regexp.MustCompile(`([:,\[]\s*)NaN(\s*[,\]\}])`)
+)
+
+// SanitizeJSONBytes sanitizes JSON data by replacing JavaScript/Python-style
+// special float values (Infinity, -Infinity, NaN) with JSON-compatible values.
+// This is necessary because some model configs (e.g., NVIDIA Nemotron) contain
+// these non-standard JSON values that Python's json module accepts but Go's doesn't.
+func SanitizeJSONBytes(data []byte) []byte {
+	s := string(data)
+
+	// Replace Infinity with a very large number (close to float64 max)
+	s = infinityRegex.ReplaceAllString(s, "${1}1e308${2}")
+
+	// Replace -Infinity with a very small number
+	s = negInfinityRegex.ReplaceAllString(s, "${1}-1e308${2}")
+
+	// Replace NaN with null (NaN is not a valid JSON value)
+	s = nanRegex.ReplaceAllString(s, "${1}null${2}")
+
+	return []byte(s)
+}
+
 // LoadModelConfig loads a model configuration from a config.json file
 // and returns the appropriate model implementation based on the "model_type" field.
 // This is the main entry point for users who want to load any supported model
@@ -346,6 +380,10 @@ func LoadModelConfig(configPath string) (HuggingFaceModel, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read model config file '%s': %w", configPath, err)
 	}
+
+	// Sanitize JSON to handle non-standard values like Infinity, -Infinity, NaN
+	// which are valid in Python but not in standard JSON
+	data = SanitizeJSONBytes(data)
 
 	// Extract the model_type field
 	var baseConfig struct {
