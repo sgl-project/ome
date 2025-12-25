@@ -1,4 +1,4 @@
-# OME
+# OME (Open Model Engine) — Kubernetes Operator for LLM Serving
 
 [![Go Report](https://goreportcard.com/badge/github.com/sgl-project/ome)](https://goreportcard.com/report/github.com/sgl-project/ome)
 [![Latest Release](https://img.shields.io/github/v/release/sgl-project/ome?include_prereleases)](https://github.com/sgl-project/ome/releases/latest)
@@ -12,7 +12,8 @@
   </a>
 </div>
 
-OME is a Kubernetes operator for enterprise-grade management and serving of Large Language Models (LLMs). It optimizes the deployment and operation of LLMs by automating model management, intelligent runtime selection, efficient resource utilization, and sophisticated deployment patterns.
+## What is OME?
+OME (Open Model Engine) is a Kubernetes operator for enterprise-grade management and serving of Large Language Models (LLMs). It optimizes the deployment and operation of LLMs by automating model management, intelligent runtime selection, efficient resource utilization, and sophisticated deployment patterns.
 
 Read the [documentation](https://sgl-project.github.io/ome/docs/) to learn more about OME capabilities and features.
 
