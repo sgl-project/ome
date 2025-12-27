@@ -39,7 +39,7 @@ require (
 	go.uber.org/fx v1.22.2
 	go.uber.org/zap v1.27.0
 	golang.org/x/oauth2 v0.29.0
-	golang.org/x/sys v0.34.0
+	golang.org/x/sys v0.39.0
 	golang.org/x/term v0.33.0
 	gomodules.xyz/jsonpatch/v2 v2.4.0
 	google.golang.org/api v0.231.0
