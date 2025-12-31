@@ -1,15 +1,15 @@
 package distributor
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	"go.uber.org/zap"
 )
@@ -82,95 +82,52 @@ func (s *MetainfoServer) handleMetainfo(w http.ResponseWriter, r *http.Request) 
 
 	s.logger.Debugf("Metainfo request for model: %s", modelHash)
 
-	// First check if we're actively seeding this model (has metainfo cached)
+	// First check if we're actively seeding this model (has metainfo in memory)
 	if s.distributor != nil {
 		mi, found := s.distributor.GetMetainfo(modelHash)
 		if found {
 			s.serveMetainfo(w, mi, modelHash)
 			return
 		}
+
+		// Check for cached .torrent file on disk
+		// This is much faster than regenerating (file read vs. hashing entire model)
+		mi, err := s.distributor.LoadMetainfoFromFile(modelHash)
+		if err != nil {
+			s.logger.Warnf("Failed to load cached metainfo for %s: %v", modelHash, err)
+		} else if mi != nil {
+			s.serveMetainfo(w, mi, modelHash)
+			return
+		}
 	}
 
-	// Fall back to generating metainfo from the file system
-	// Validate path to prevent directory traversal attacks
-	absBase, err := filepath.Abs(s.dataDir)
-	if err != nil {
-		s.logger.Errorf("Failed to resolve data directory: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	modelPath, err := filepath.Abs(filepath.Join(absBase, modelHash))
-	if err != nil {
-		s.logger.Errorf("Failed to resolve model path for %s: %v", modelHash, err)
-		http.Error(w, "Invalid model path", http.StatusBadRequest)
-		return
-	}
-
-	// Ensure the resolved path is within the data directory to prevent path traversal
-	// Use filepath.Rel to get the relative path and verify it doesn't escape
-	relPath, err := filepath.Rel(absBase, modelPath)
-	if err != nil || strings.HasPrefix(relPath, "..") || relPath == "." {
-		s.logger.Warnf("Rejected metainfo request with path traversal attempt: %s", modelHash)
-		http.Error(w, "Invalid model path", http.StatusBadRequest)
-		return
-	}
-
-	// Construct safe path from validated components
-	// This breaks the taint tracking chain by using only the validated relative path
-	safePath := filepath.Join(absBase, relPath)
-
-	// Check if the model exists
-	if _, err := os.Stat(safePath); err != nil {
-		s.logger.Debugf("Model not found at %s", safePath)
-		http.NotFound(w, r)
-		return
-	}
-
-	// Build metainfo from the safe path
-	mi, err := s.buildMetainfo(safePath, modelHash)
-	if err != nil {
-		s.logger.Errorf("Failed to build metainfo for %s: %v", modelHash, err)
-		http.Error(w, "Failed to build metainfo", http.StatusInternalServerError)
-		return
-	}
-
-	s.serveMetainfo(w, mi, modelHash)
-}
-
-// buildMetainfo creates torrent metainfo from a file path.
-func (s *MetainfoServer) buildMetainfo(path, name string) (*metainfo.MetaInfo, error) {
-	info := metainfo.Info{
-		PieceLength: 4 * 1024 * 1024, // 4MB pieces
-	}
-
-	if err := info.BuildFromFilePath(path); err != nil {
-		return nil, fmt.Errorf("failed to build info from path: %w", err)
-	}
-
-	// Set Name after BuildFromFilePath because it overwrites Name with filepath.Base(path)
-	info.Name = name
-
-	infoBytes, err := bencode.Marshal(info)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal info: %w", err)
-	}
-
-	return &metainfo.MetaInfo{
-		InfoBytes: infoBytes,
-	}, nil
+	// Don't try to regenerate metainfo - it's too slow for large models (minutes for 600GB+)
+	// Only pods that are actively seeding (and have the metainfo cached) should serve it
+	s.logger.Debugf("Metainfo not available for %s (not seeding and no cache)", modelHash)
+	http.NotFound(w, r)
 }
 
 // serveMetainfo writes the metainfo to the response.
+// It serializes to a buffer first to set Content-Length for reliable transfer of large metainfo files.
 func (s *MetainfoServer) serveMetainfo(w http.ResponseWriter, mi *metainfo.MetaInfo, modelHash string) {
+	// Serialize to buffer first to know the exact size
+	// This is important for large models (e.g., 1TB model = ~5MB metainfo)
+	var buf bytes.Buffer
+	if err := mi.Write(&buf); err != nil {
+		s.logger.Errorf("Failed to serialize metainfo: %v", err)
+		http.Error(w, "Failed to serialize metainfo", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/x-bittorrent")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.torrent\"", modelHash))
+	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
 
-	if err := mi.Write(w); err != nil {
+	if _, err := w.Write(buf.Bytes()); err != nil {
 		s.logger.Errorf("Failed to write metainfo response: %v", err)
 		// Can't change status code after Write started
 	} else {
-		s.logger.Debugf("Served metainfo for model %s", modelHash)
+		s.logger.Debugf("Served metainfo for model %s (%d bytes)", modelHash, buf.Len())
 	}
 }
 

@@ -1,11 +1,14 @@
 package distributor
 
 import (
+	"bytes"
+	"crypto/rand"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -134,8 +137,9 @@ func TestConfigWithDefaults(t *testing.T) {
 	assert.Equal(t, "ome", result.Namespace)
 	assert.Equal(t, 6881, result.TorrentPort)
 	assert.Equal(t, 8081, result.MetainfoPort)
-	assert.Equal(t, int64(500*1024*1024), result.MaxDownloadRate)
-	assert.Equal(t, int64(500*1024*1024), result.MaxUploadRate)
+	// MaxDownloadRate and MaxUploadRate are not set by WithDefaults (0 means unlimited)
+	assert.Equal(t, int64(0), result.MaxDownloadRate)
+	assert.Equal(t, int64(0), result.MaxUploadRate)
 }
 
 func TestMetrics(t *testing.T) {
@@ -219,4 +223,187 @@ func createTestConfig(dataDir string) Config {
 		P2PTimeoutSeconds:         10,
 		EnableP2P:                 true,
 	}
+}
+
+// TestParallelHashingMatchesStandardLibrary verifies that our parallel piece hashing
+// produces identical results to the standard library's sequential BuildFromFilePath.
+// This is critical because any difference would cause "piece count and file lengths are at odds" errors.
+func TestParallelHashingMatchesStandardLibrary(t *testing.T) {
+	const pieceLength int64 = 256 * 1024 // 256KB pieces for faster testing
+
+	tests := []struct {
+		name  string
+		files map[string]int // filename -> size in bytes
+	}{
+		{
+			name: "single small file",
+			files: map[string]int{
+				"small.bin": 1024, // 1KB, smaller than piece size
+			},
+		},
+		{
+			name: "single large file",
+			files: map[string]int{
+				"large.bin": 1024 * 1024, // 1MB, spans multiple pieces
+			},
+		},
+		{
+			name: "multiple files aligned to piece boundaries",
+			files: map[string]int{
+				"a.bin": 256 * 1024, // exactly 1 piece
+				"b.bin": 512 * 1024, // exactly 2 pieces
+				"c.bin": 256 * 1024, // exactly 1 piece
+			},
+		},
+		{
+			name: "multiple files NOT aligned to piece boundaries",
+			files: map[string]int{
+				"a.bin": 100 * 1024, // partial piece
+				"b.bin": 300 * 1024, // spans piece boundary
+				"c.bin": 50 * 1024,  // partial piece
+				"d.bin": 400 * 1024, // spans piece boundary
+				"e.bin": 150 * 1024, // partial piece
+			},
+		},
+		{
+			name: "files in subdirectories",
+			files: map[string]int{
+				"dir1/file1.bin":    100 * 1024,
+				"dir1/file2.bin":    200 * 1024,
+				"dir2/subdir/a.bin": 150 * 1024,
+				"dir2/subdir/b.bin": 250 * 1024,
+			},
+		},
+		{
+			name: "many small files spanning pieces",
+			files: map[string]int{
+				"01.bin": 50 * 1024,
+				"02.bin": 50 * 1024,
+				"03.bin": 50 * 1024,
+				"04.bin": 50 * 1024,
+				"05.bin": 50 * 1024,
+				"06.bin": 50 * 1024,
+				"07.bin": 50 * 1024,
+				"08.bin": 50 * 1024,
+				"09.bin": 50 * 1024,
+				"10.bin": 50 * 1024,
+			},
+		},
+		{
+			name: "empty file mixed with others",
+			files: map[string]int{
+				"a.bin":     100 * 1024,
+				"empty.bin": 0, // empty file
+				"b.bin":     200 * 1024,
+			},
+		},
+		{
+			name: "file sizes that create tricky boundaries",
+			files: map[string]int{
+				"a.bin": 256*1024 - 1, // one byte short of piece
+				"b.bin": 1,            // just one byte (completes previous piece)
+				"c.bin": 256*1024 + 1, // one byte over piece
+				"d.bin": 256*1024 - 1, // one byte short (combined with c's extra = full piece)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp directory
+			tempDir, err := os.MkdirTemp("", "parallel-hash-test")
+			require.NoError(t, err)
+			defer os.RemoveAll(tempDir)
+
+			// Create test files with random content
+			for filename, size := range tt.files {
+				filePath := filepath.Join(tempDir, filename)
+				err := os.MkdirAll(filepath.Dir(filePath), 0755)
+				require.NoError(t, err)
+
+				data := make([]byte, size)
+				if size > 0 {
+					_, err = rand.Read(data)
+					require.NoError(t, err)
+				}
+				err = os.WriteFile(filePath, data, 0644)
+				require.NoError(t, err)
+			}
+
+			// Generate using standard library
+			stdInfo := metainfo.Info{PieceLength: pieceLength}
+			err = stdInfo.BuildFromFilePath(tempDir)
+			require.NoError(t, err)
+
+			// Generate using our parallel implementation
+			logger := zaptest.NewLogger(t).Sugar()
+			d := &ModelDistributor{logger: logger}
+			parallelInfo, err := d.buildInfoParallel(tempDir, filepath.Base(tempDir), pieceLength)
+			require.NoError(t, err)
+
+			// Compare results
+			assert.Equal(t, stdInfo.PieceLength, parallelInfo.PieceLength, "piece length mismatch")
+			assert.Equal(t, stdInfo.TotalLength(), parallelInfo.TotalLength(), "total length mismatch")
+			assert.Equal(t, len(stdInfo.Files), len(parallelInfo.Files), "file count mismatch")
+
+			// Compare file list (order matters!)
+			for i := range stdInfo.Files {
+				assert.Equal(t, stdInfo.Files[i].Length, parallelInfo.Files[i].Length,
+					"file %d length mismatch", i)
+				assert.Equal(t, stdInfo.Files[i].Path, parallelInfo.Files[i].Path,
+					"file %d path mismatch", i)
+			}
+
+			// The critical comparison: piece hashes must match exactly
+			if !bytes.Equal(stdInfo.Pieces, parallelInfo.Pieces) {
+				t.Errorf("PIECE HASH MISMATCH!\n"+
+					"Standard library pieces: %d bytes (%d pieces)\n"+
+					"Parallel impl pieces:    %d bytes (%d pieces)",
+					len(stdInfo.Pieces), len(stdInfo.Pieces)/20,
+					len(parallelInfo.Pieces), len(parallelInfo.Pieces)/20)
+
+				// Find first differing piece for debugging
+				for i := 0; i < len(stdInfo.Pieces) && i < len(parallelInfo.Pieces); i += 20 {
+					pieceNum := i / 20
+					stdPiece := stdInfo.Pieces[i : i+20]
+					parallelPiece := parallelInfo.Pieces[i : i+20]
+					if !bytes.Equal(stdPiece, parallelPiece) {
+						t.Errorf("First difference at piece %d:\n  std: %x\n  par: %x",
+							pieceNum, stdPiece, parallelPiece)
+						break
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestParallelHashingSingleFile tests the edge case of a single file (not a directory).
+func TestParallelHashingSingleFile(t *testing.T) {
+	const pieceLength int64 = 256 * 1024
+
+	tempDir, err := os.MkdirTemp("", "parallel-hash-single")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	// Create a single file
+	filePath := filepath.Join(tempDir, "model.bin")
+	data := make([]byte, 500*1024) // 500KB
+	_, err = rand.Read(data)
+	require.NoError(t, err)
+	err = os.WriteFile(filePath, data, 0644)
+	require.NoError(t, err)
+
+	// Test with directory containing single file
+	stdInfo := metainfo.Info{PieceLength: pieceLength}
+	err = stdInfo.BuildFromFilePath(tempDir)
+	require.NoError(t, err)
+
+	logger := zaptest.NewLogger(t).Sugar()
+	d := &ModelDistributor{logger: logger}
+	parallelInfo, err := d.buildInfoParallel(tempDir, filepath.Base(tempDir), pieceLength)
+	require.NoError(t, err)
+
+	assert.True(t, bytes.Equal(stdInfo.Pieces, parallelInfo.Pieces),
+		"piece hashes don't match for single file case")
 }

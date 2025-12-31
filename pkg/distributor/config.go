@@ -2,7 +2,6 @@ package distributor
 
 import (
 	"fmt"
-	"os"
 )
 
 // Config holds the configuration for the P2P model distributor.
@@ -65,8 +64,8 @@ func DefaultConfig() Config {
 		Namespace:                 "ome",
 		TorrentPort:               6881,
 		MetainfoPort:              8081,
-		MaxDownloadRate:           500 * 1024 * 1024, // 500 MB/s
-		MaxUploadRate:             500 * 1024 * 1024, // 500 MB/s
+		MaxDownloadRate:           2 * 1024 * 1024 * 1024, // 2 GB/s
+		MaxUploadRate:             2 * 1024 * 1024 * 1024, // 2 GB/s
 		EnableEncryption:          false,
 		RequireEncryption:         false,
 		LeaseDurationSeconds:      120, // 2 minutes
@@ -74,38 +73,6 @@ func DefaultConfig() Config {
 		P2PTimeoutSeconds:         30,
 		EnableP2P:                 true,
 	}
-}
-
-// ConfigFromEnv creates a Config from environment variables with defaults.
-func ConfigFromEnv() Config {
-	cfg := DefaultConfig()
-
-	if v := os.Getenv("MODEL_DIR"); v != "" {
-		cfg.DataDir = v
-	}
-	if v := os.Getenv("POD_NAMESPACE"); v != "" {
-		cfg.Namespace = v
-	}
-	if v := os.Getenv("POD_NAME"); v != "" {
-		cfg.PodName = v
-	}
-	if v := os.Getenv("POD_IP"); v != "" {
-		cfg.PodIP = v
-	}
-	if v := os.Getenv("PEERS_SERVICE"); v != "" {
-		cfg.PeersService = v
-	}
-	if v := os.Getenv("P2P_ENABLED"); v == "false" {
-		cfg.EnableP2P = false
-	}
-	if v := os.Getenv("P2P_ENCRYPTION_ENABLED"); v == "true" {
-		cfg.EnableEncryption = true
-	}
-	if v := os.Getenv("P2P_ENCRYPTION_REQUIRED"); v == "true" {
-		cfg.RequireEncryption = true
-	}
-
-	return cfg
 }
 
 // Validate checks if the configuration is valid.
@@ -145,6 +112,8 @@ func (c *Config) Validate() error {
 }
 
 // WithDefaults returns a copy of the config with missing values filled in from defaults.
+// Note: MaxDownloadRate and MaxUploadRate are NOT set here because 0 means "unlimited".
+// Callers should explicitly set rate limits if they want non-unlimited rates.
 func (c Config) WithDefaults() Config {
 	defaults := DefaultConfig()
 
@@ -160,12 +129,8 @@ func (c Config) WithDefaults() Config {
 	if c.MetainfoPort == 0 {
 		c.MetainfoPort = defaults.MetainfoPort
 	}
-	if c.MaxDownloadRate == 0 {
-		c.MaxDownloadRate = defaults.MaxDownloadRate
-	}
-	if c.MaxUploadRate == 0 {
-		c.MaxUploadRate = defaults.MaxUploadRate
-	}
+	// Do not set default for MaxDownloadRate and MaxUploadRate if they are 0,
+	// as 0 is a valid value indicating "unlimited".
 	if c.LeaseDurationSeconds == 0 {
 		c.LeaseDurationSeconds = defaults.LeaseDurationSeconds
 	}

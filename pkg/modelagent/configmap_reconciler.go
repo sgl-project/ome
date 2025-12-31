@@ -387,7 +387,7 @@ func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry
 //   - error: nil if both ConfigMap and cache updates succeed, error otherwise
 func (c *ConfigMapReconciler) ReconcileModelStatus(ctx context.Context, statusOp *ConfigMapStatusOp) error {
 	modelInfo := getConfigMapModelInfo(statusOp.BaseModel, statusOp.ClusterBaseModel)
-	c.logger.Infof("Reconciling model status in ConfigMap for %s with status: %s", modelInfo, statusOp.ModelStatus)
+	c.logger.Debugf("Reconciling model status in ConfigMap for %s with status: %s", modelInfo, statusOp.ModelStatus)
 
 	// Get or create the ConfigMap
 	configMap, needCreate, err := c.getOrCreateConfigMap(ctx)
@@ -433,8 +433,33 @@ func (c *ConfigMapReconciler) ReconcileModelStatus(ctx context.Context, statusOp
 	}
 	c.cacheMutex.Unlock()
 
-	c.logger.Infof("Successfully updated ConfigMap and cache for %s with status: %s", modelInfo, statusOp.ModelStatus)
+	c.logger.Debugf("Successfully updated ConfigMap and cache for %s with status: %s", modelInfo, statusOp.ModelStatus)
 	return nil
+}
+
+// IsModelReady checks if a model is marked as Ready in the cache.
+// This is used to determine if a model download can be skipped after pod restart.
+// The cache is populated from ConfigMap on startup and updated as models are downloaded.
+//
+// Parameters:
+//   - baseModel: A namespace-scoped BaseModel object (nil if using ClusterBaseModel)
+//   - clusterBaseModel: A cluster-scoped ClusterBaseModel object (nil if using BaseModel)
+//
+// Returns:
+//   - true if the model exists in cache with Ready status, false otherwise
+func (c *ConfigMapReconciler) IsModelReady(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) bool {
+	modelID := getModelID(baseModel, clusterBaseModel)
+	if modelID == "" {
+		return false
+	}
+
+	c.cacheMutex.RLock()
+	defer c.cacheMutex.RUnlock()
+
+	if cacheEntry, exists := c.modelCache[modelID]; exists {
+		return cacheEntry.ModelStatus == ModelStatusReady
+	}
+	return false
 }
 
 // getModelID generates a unique deterministic identifier string for a model.
@@ -474,7 +499,7 @@ func getModelID(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterB
 // ReconcileModelMetadata updates the ConfigMap with model metadata
 func (c *ConfigMapReconciler) ReconcileModelMetadata(ctx context.Context, op *ConfigMapMetadataOp) error {
 	modelInfo := getConfigMapModelInfo(op.BaseModel, op.ClusterBaseModel)
-	c.logger.Infof("Reconciling model metadata in ConfigMap for %s", modelInfo)
+	c.logger.Debugf("Reconciling model metadata in ConfigMap for %s", modelInfo)
 
 	// Get or create the ConfigMap
 	configMap, needCreate, err := c.getOrCreateConfigMap(ctx)
@@ -518,7 +543,7 @@ func (c *ConfigMapReconciler) ReconcileModelMetadata(ctx context.Context, op *Co
 	}
 	c.cacheMutex.Unlock()
 
-	c.logger.Infof("Successfully updated ConfigMap and cache for %s with metadata", modelInfo)
+	c.logger.Debugf("Successfully updated ConfigMap and cache for %s with metadata", modelInfo)
 	return nil
 }
 
@@ -619,7 +644,7 @@ func (c *ConfigMapReconciler) updateModelProgressInConfigMap(ctx context.Context
 //   - error: nil if deletion succeeds or model doesn't exist, error otherwise
 func (c *ConfigMapReconciler) DeleteModelFromConfigMap(ctx context.Context, baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) error {
 	modelInfo := getConfigMapModelInfo(baseModel, clusterBaseModel)
-	c.logger.Infof("Deleting model from ConfigMap: %s", modelInfo)
+	c.logger.Debugf("Deleting model from ConfigMap: %s", modelInfo)
 
 	// Get ConfigMap
 	configMap, err := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Get(ctx, c.nodeName, metav1.GetOptions{})
@@ -855,15 +880,15 @@ func (c *ConfigMapReconciler) updateModelMetadataInConfigMap(ctx context.Context
 func (c *ConfigMapReconciler) saveConfigMap(ctx context.Context, configMap *corev1.ConfigMap, modelInfo string, needCreate bool) error {
 	// Create or update the ConfigMap
 	if needCreate {
-		c.logger.Infof("Creating new ConfigMap '%s' in namespace '%s' for %s", c.nodeName, c.namespace, modelInfo)
+		c.logger.Debugf("Creating new ConfigMap '%s' in namespace '%s' for %s", c.nodeName, c.namespace, modelInfo)
 		_, err := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Create(ctx, configMap, metav1.CreateOptions{})
 		if err != nil {
 			c.logger.Errorf("Failed to create ConfigMap '%s' in namespace '%s' for %s: %v", c.nodeName, c.namespace, modelInfo, err)
 			return err
 		}
-		c.logger.Infof("Successfully created ConfigMap '%s' in namespace '%s' for %s", c.nodeName, c.namespace, modelInfo)
+		c.logger.Debugf("Successfully created ConfigMap '%s' in namespace '%s' for %s", c.nodeName, c.namespace, modelInfo)
 	} else {
-		c.logger.Infof("Updating ConfigMap '%s' in namespace '%s' for %s", c.nodeName, c.namespace, modelInfo)
+		c.logger.Debugf("Updating ConfigMap '%s' in namespace '%s' for %s", c.nodeName, c.namespace, modelInfo)
 		// Store the data we want to apply - this is the caller's intended changes
 		dataToApply := configMap.Data
 
@@ -882,7 +907,7 @@ func (c *ConfigMapReconciler) saveConfigMap(ctx context.Context, configMap *core
 			c.logger.Errorf("Failed to update ConfigMap '%s' in namespace '%s' for %s: %v", c.nodeName, c.namespace, modelInfo, err)
 			return err
 		}
-		c.logger.Infof("Successfully updated ConfigMap '%s' in namespace '%s' for %s", c.nodeName, c.namespace, modelInfo)
+		c.logger.Debugf("Successfully updated ConfigMap '%s' in namespace '%s' for %s", c.nodeName, c.namespace, modelInfo)
 	}
 	return nil
 }
@@ -1018,7 +1043,7 @@ func (c *ConfigMapReconciler) addPathToChildrenPaths(modelTypeAndModelName strin
 	if err := json.Unmarshal([]byte(dataEntry), &obj); err != nil {
 		return "", fmt.Errorf("invalid JSON for key %s: %w", modelTypeAndModelName, err)
 	}
-	c.logger.Infof("current data: modelTypeAndModelName: %s, dataEntry: %s", modelTypeAndModelName, dataEntry)
+	c.logger.Debugf("current data: modelTypeAndModelName: %s, dataEntry: %s", modelTypeAndModelName, dataEntry)
 	// Navigate or create nested structure: config → artifact
 	config, ok := obj[ConfigAttr].(map[string]interface{})
 	if !ok {
@@ -1046,7 +1071,7 @@ func (c *ConfigMapReconciler) addPathToChildrenPaths(modelTypeAndModelName strin
 	if err != nil {
 		return "", err
 	}
-	c.logger.Infof("will update: modelTypeAndModelName: %s, dataEntry: %s", modelTypeAndModelName, string(updated))
+	c.logger.Debugf("will update: modelTypeAndModelName: %s, dataEntry: %s", modelTypeAndModelName, string(updated))
 	return string(updated), nil
 }
 

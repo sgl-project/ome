@@ -75,7 +75,7 @@ func (m *P2PLeaseManager) TryAcquire(ctx context.Context, name string) (bool, er
 	// Try to create the lease
 	_, err := m.k8s.CoordinationV1().Leases(m.namespace).Create(ctx, lease, metav1.CreateOptions{})
 	if err == nil {
-		m.logger.Infof("Acquired P2P lease %s", name)
+		m.logger.Debugf("Acquired P2P lease %s", name)
 		return true, nil
 	}
 
@@ -97,7 +97,7 @@ func (m *P2PLeaseManager) TryAcquire(ctx context.Context, name string) (bool, er
 
 	// If expired, try to take over
 	if m.IsExpired(existing) {
-		m.logger.Infof("Lease %s expired, attempting takeover", name)
+		m.logger.Debugf("Lease %s expired, attempting takeover", name)
 		existing.Spec.HolderIdentity = &m.holderIdentity
 		existing.Spec.AcquireTime = &now
 		existing.Spec.RenewTime = &now
@@ -105,7 +105,7 @@ func (m *P2PLeaseManager) TryAcquire(ctx context.Context, name string) (bool, er
 
 		_, updateErr := m.k8s.CoordinationV1().Leases(m.namespace).Update(ctx, existing, metav1.UpdateOptions{})
 		if updateErr == nil {
-			m.logger.Infof("Took over expired lease %s", name)
+			m.logger.Debugf("Took over expired lease %s", name)
 			return true, nil
 		}
 
@@ -161,7 +161,7 @@ func (m *P2PLeaseManager) MarkComplete(ctx context.Context, name string) error {
 		return fmt.Errorf("failed to mark complete: %w", err)
 	}
 
-	m.logger.Infof("Marked lease %s complete", name)
+	m.logger.Debugf("Marked lease %s complete", name)
 	return nil
 }
 
@@ -171,7 +171,7 @@ func (m *P2PLeaseManager) Release(ctx context.Context, name string) error {
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to delete lease: %w", err)
 	}
-	m.logger.Infof("Released lease %s", name)
+	m.logger.Debugf("Released lease %s", name)
 	return nil
 }
 

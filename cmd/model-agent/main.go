@@ -85,6 +85,17 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfg.namespace, "namespace", "ome", "Kubernetes namespace to use")
 	rootCmd.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 
+	// P2P distribution flags
+	rootCmd.PersistentFlags().BoolVar(&cfg.p2pEnabled, "p2p-enabled", false, "Enable P2P model distribution")
+	rootCmd.PersistentFlags().StringVar(&cfg.p2pPeersService, "p2p-peers-service", "ome-peers.ome.svc.cluster.local", "Headless service DNS for P2P peer discovery")
+	rootCmd.PersistentFlags().IntVar(&cfg.p2pTorrentPort, "p2p-torrent-port", 6881, "BitTorrent peer port")
+	rootCmd.PersistentFlags().IntVar(&cfg.p2pMetainfoPort, "p2p-metainfo-port", 8081, "HTTP port for metainfo sharing")
+	rootCmd.PersistentFlags().Int64Var(&cfg.p2pMaxDownloadRate, "p2p-max-download-rate", 2147483648, "Max P2P download rate in bytes/s (default 2 GB/s)")
+	rootCmd.PersistentFlags().Int64Var(&cfg.p2pMaxUploadRate, "p2p-max-upload-rate", 2147483648, "Max P2P upload rate in bytes/s (default 2 GB/s)")
+	rootCmd.PersistentFlags().BoolVar(&cfg.p2pEnableEncryption, "p2p-enable-encryption", false, "Enable BitTorrent header obfuscation")
+	rootCmd.PersistentFlags().BoolVar(&cfg.p2pRequireEncryption, "p2p-require-encryption", false, "Require encryption for all P2P peers")
+	rootCmd.PersistentFlags().DurationVar(&cfg.p2pDownloadTimeout, "p2p-download-timeout", time.Hour, "Timeout for P2P downloads")
+
 	_ = v.BindPFlags(rootCmd.PersistentFlags())
 	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	v.AutomaticEnv()
@@ -92,6 +103,7 @@ func init() {
 
 // initConfig validates required environment variables
 func initConfig(_ *cobra.Command, _ []string) {
+	// NODE_NAME comes from Kubernetes downward API, must be set as env var
 	nodeName, ok := os.LookupEnv("NODE_NAME")
 	if !ok {
 		panic("NODE_NAME environment variable is not set for model-agent")
@@ -100,40 +112,6 @@ func initConfig(_ *cobra.Command, _ []string) {
 		panic("NODE_NAME environment variable is empty")
 	}
 	cfg.nodeName = nodeName
-
-	// P2P configuration from environment variables
-	cfg.p2pEnabled = os.Getenv("P2P_ENABLED") == "true"
-	cfg.p2pPeersService = os.Getenv("PEERS_SERVICE")
-	if cfg.p2pPeersService == "" {
-		cfg.p2pPeersService = "ome-peers.ome.svc.cluster.local"
-	}
-	cfg.p2pTorrentPort = getEnvInt("P2P_TORRENT_PORT", 6881)
-	cfg.p2pMetainfoPort = getEnvInt("P2P_METAINFO_PORT", 8081)
-	cfg.p2pMaxDownloadRate = getEnvInt64("P2P_MAX_DOWNLOAD_RATE", 524288000) // 500 MB/s
-	cfg.p2pMaxUploadRate = getEnvInt64("P2P_MAX_UPLOAD_RATE", 524288000)     // 500 MB/s
-	cfg.p2pEnableEncryption = os.Getenv("P2P_ENCRYPTION_ENABLED") == "true"
-	cfg.p2pRequireEncryption = os.Getenv("P2P_ENCRYPTION_REQUIRED") == "true"
-	cfg.p2pDownloadTimeout = time.Duration(getEnvInt("P2P_DOWNLOAD_TIMEOUT", 3600)) * time.Second // 1 hour default
-}
-
-// getEnvInt reads an integer from environment variable with a default value
-func getEnvInt(key string, defaultVal int) int {
-	if val := os.Getenv(key); val != "" {
-		if i, err := fmt.Sscanf(val, "%d", &defaultVal); err == nil && i == 1 {
-			return defaultVal
-		}
-	}
-	return defaultVal
-}
-
-// getEnvInt64 reads an int64 from environment variable with a default value
-func getEnvInt64(key string, defaultVal int64) int64 {
-	if val := os.Getenv(key); val != "" {
-		if i, err := fmt.Sscanf(val, "%d", &defaultVal); err == nil && i == 1 {
-			return defaultVal
-		}
-	}
-	return defaultVal
 }
 
 // initializeLogger creates and configures a zap logger with the specified settings

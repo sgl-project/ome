@@ -375,9 +375,9 @@ const (
 	// Default P2P configuration values
 	P2PDefaultTorrentPort          = 6881
 	P2PDefaultMetainfoPort         = 8081
-	P2PDefaultMaxDownloadRateMBps  = 500 // 500 MB/s
-	P2PDefaultMaxUploadRateMBps    = 500 // 500 MB/s
-	P2PDefaultLeaseDurationSeconds = 120 // 2 minutes
+	P2PDefaultMaxDownloadRateMBps  = 2048 // 2 GB/s
+	P2PDefaultMaxUploadRateMBps    = 2048 // 2 GB/s
+	P2PDefaultLeaseDurationSeconds = 120  // 2 minutes
 	P2PDefaultLeaseRenewSeconds    = 30
 	P2PDefaultP2PTimeoutSeconds    = 30
 	P2PDefaultPieceLength          = 4 * 1024 * 1024 // 4MB pieces
@@ -388,18 +388,6 @@ const (
 	P2PDefaultWaitMaxDelayMs     = 30000 // Deprecated: kept for compatibility
 	P2PDefaultWaitBackoffDivisor = 10    // Deprecated: kept for compatibility
 	P2PMaxWaitTimeMinutes        = 240   // Maximum absolute wait time (4 hours) for very large models
-)
-
-// P2P environment variable keys
-var (
-	P2PEnabledEnvVar            = "P2P_ENABLED"
-	P2PPeersServiceEnvVar       = "PEERS_SERVICE"
-	P2PTorrentPortEnvVar        = "P2P_TORRENT_PORT"
-	P2PMetainfoPortEnvVar       = "P2P_METAINFO_PORT"
-	P2PMaxDownloadRateEnvVar    = "P2P_MAX_DOWNLOAD_RATE"
-	P2PMaxUploadRateEnvVar      = "P2P_MAX_UPLOAD_RATE"
-	P2PEncryptionEnabledEnvVar  = "P2P_ENCRYPTION_ENABLED"
-	P2PEncryptionRequiredEnvVar = "P2P_ENCRYPTION_REQUIRED"
 )
 
 // Serving Container Block Lists

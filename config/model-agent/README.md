@@ -56,18 +56,27 @@ kubectl apply -f model-agent-daemonset.yaml
 
 ## Configuration
 
-Environment variables for P2P configuration:
+CLI flags for P2P configuration (passed via `args` in the DaemonSet):
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `P2P_ENABLED` | `true` | Enable/disable P2P distribution |
-| `PEERS_SERVICE` | `ome-peers.ome.svc.cluster.local` | Headless service DNS for peer discovery |
-| `P2P_TORRENT_PORT` | `6881` | BitTorrent peer port |
-| `P2P_METAINFO_PORT` | `8081` | HTTP port for metainfo sharing |
-| `P2P_MAX_DOWNLOAD_RATE` | `524288000` | Max download rate (bytes/s) |
-| `P2P_MAX_UPLOAD_RATE` | `524288000` | Max upload rate (bytes/s) |
-| `P2P_ENCRYPTION_ENABLED` | `false` | Enable BitTorrent encryption |
-| `P2P_ENCRYPTION_REQUIRED` | `false` | Require encryption for all peers |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--p2p-enabled` | `false` | Enable/disable P2P distribution |
+| `--p2p-peers-service` | `ome-peers.ome.svc.cluster.local` | Headless service DNS for peer discovery |
+| `--p2p-torrent-port` | `6881` | BitTorrent peer port |
+| `--p2p-metainfo-port` | `8081` | HTTP port for metainfo sharing |
+| `--p2p-max-download-rate` | `2147483648` | Max download rate (bytes/s, default 2 GB/s) |
+| `--p2p-max-upload-rate` | `2147483648` | Max upload rate (bytes/s, default 2 GB/s) |
+| `--p2p-enable-encryption` | `false` | Enable BitTorrent header obfuscation |
+| `--p2p-require-encryption` | `false` | Require encryption for all peers |
+| `--p2p-download-timeout` | `1h` | Timeout for P2P downloads |
+
+Environment variables (from Kubernetes downward API, required):
+
+| Variable | Description |
+|----------|-------------|
+| `NODE_NAME` | Node name from `spec.nodeName` |
+| `POD_NAME` | Pod name from `metadata.name` |
+| `POD_IP` | Pod IP from `status.podIP` |
 
 ## How It Works
 
