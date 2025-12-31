@@ -2,6 +2,8 @@ package modelagent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +21,7 @@ import (
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	omev1beta1lister "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/distributor"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/sgl-project/ome/pkg/principals"
@@ -52,6 +55,7 @@ type Gopher struct {
 	xetConfig              *xet.Config
 	kubeClient             kubernetes.Interface
 	gopherChan             <-chan *GopherTask
+	deleteChan             <-chan *GopherTask // Dedicated channel for delete tasks
 	nodeLabelReconciler    *NodeLabelReconciler
 	metrics                *Metrics
 	logger                 *zap.SugaredLogger
@@ -62,6 +66,12 @@ type Gopher struct {
 	// Track active downloads for cancellation
 	activeDownloads      map[string]context.CancelFunc // key: model UID
 	activeDownloadsMutex sync.RWMutex
+
+	// P2P distribution components
+	p2pEnabled      bool
+	p2pDistributor  *distributor.ModelDistributor
+	p2pLeaseManager *P2PLeaseManager
+	p2pTimeout      time.Duration
 }
 
 const (
@@ -78,6 +88,7 @@ func NewGopher(
 	downloadRetry int,
 	modelRootDir string,
 	gopherChan <-chan *GopherTask,
+	deleteChan <-chan *GopherTask,
 	nodeLabelReconciler *NodeLabelReconciler,
 	metrics *Metrics,
 	logger *zap.SugaredLogger,
@@ -98,13 +109,40 @@ func NewGopher(
 		xetConfig:              xetConfig,
 		kubeClient:             kubeClient,
 		gopherChan:             gopherChan,
+		deleteChan:             deleteChan,
 		nodeLabelReconciler:    nodeLabelReconciler,
 		metrics:                metrics,
 		logger:                 logger,
 		activeDownloads:        make(map[string]context.CancelFunc),
 		baseModelLister:        baseModelLister,
 		clusterBaseModelLister: clusterBaseModelLister,
+		p2pTimeout:             time.Duration(constants.P2PDefaultP2PTimeoutSeconds) * time.Second,
 	}, nil
+}
+
+// EnableP2P configures P2P distribution for the Gopher.
+// This must be called before Run() if P2P is desired.
+func (s *Gopher) EnableP2P(dist *distributor.ModelDistributor, leaseManager *P2PLeaseManager) {
+	s.p2pEnabled = true
+	s.p2pDistributor = dist
+	s.p2pLeaseManager = leaseManager
+	s.logger.Info("P2P distribution enabled")
+}
+
+// SetP2PTimeout sets the timeout for P2P download attempts.
+func (s *Gopher) SetP2PTimeout(timeout time.Duration) {
+	s.p2pTimeout = timeout
+}
+
+// computeModelHash generates a hash for the model to use in P2P coordination.
+// The hash is based on the HuggingFace model ID and revision.
+func computeModelHash(modelID, revision string) string {
+	input := modelID
+	if revision != "" {
+		input = modelID + "@" + revision
+	}
+	hash := sha256.Sum256([]byte(input))
+	return hex.EncodeToString(hash[:])
 }
 
 func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int) {
@@ -112,7 +150,12 @@ func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int) {
 	s.configMapReconciler.StartReconciliation()
 	s.logger.Info("Started ConfigMap reconciliation service")
 
-	// Start worker goroutines
+	// Start dedicated delete worker - runs separately from download workers
+	// to ensure deletions are never blocked by downloads
+	go s.runDeleteWorker()
+	s.logger.Info("Started dedicated delete worker")
+
+	// Start download worker goroutines
 	for i := 0; i < numWorker; i++ {
 		go s.runWorker()
 	}
@@ -132,18 +175,6 @@ func (s *Gopher) runWorker() {
 		select {
 		case task, ok := <-s.gopherChan:
 			if ok {
-				// Process delete tasks immediately by checking active downloads
-				if task.TaskType == Delete {
-					modelUID := getModelUID(task)
-					s.activeDownloadsMutex.RLock()
-					_, isDownloading := s.activeDownloads[modelUID]
-					s.activeDownloadsMutex.RUnlock()
-
-					if isDownloading {
-						s.logger.Infof("Model %s is currently downloading, will cancel it", getModelInfoForLogging(task))
-					}
-				}
-
 				err := s.processTask(task)
 				if err != nil {
 					s.logger.Errorf("Gopher task failed with error: %s", err.Error())
@@ -158,10 +189,36 @@ func (s *Gopher) runWorker() {
 	}
 }
 
+// runDeleteWorker is a dedicated worker for processing delete tasks.
+// This worker runs separately from download workers to ensure deletions
+// are never blocked by downloads (even with 100 concurrent downloads).
+// Cancellation of active downloads is handled inside processTask.
+func (s *Gopher) runDeleteWorker() {
+	for {
+		select {
+		case task, ok := <-s.deleteChan:
+			if ok {
+				err := s.processTask(task)
+				if err != nil {
+					s.logger.Errorf("Delete task failed with error: %s", err.Error())
+				}
+			} else {
+				s.logger.Info("delete channel closed, delete worker exits.")
+				return
+			}
+		default:
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+}
+
 // safeNodeLabelReconciliation executes the NodeLabelReconciler's ReconcileNodeLabels method with mutex protection
 // to ensure thread-safe ConfigMap updates
 func (s *Gopher) safeNodeLabelReconciliation(op *NodeLabelOp) error {
-	ctx := context.Background()
+	// Use timeout context to prevent indefinite blocking on K8s API calls
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	s.configMapMutex.Lock()
 	defer s.configMapMutex.Unlock()
 
@@ -204,7 +261,10 @@ func (s *Gopher) safeNodeLabelReconciliation(op *NodeLabelOp) error {
 // safeParseAndUpdateModelConfig executes the ModelConfigParser's ParseAndUpdateModelConfig method with mutex protection
 // to ensure thread-safe ConfigMap updates
 func (s *Gopher) safeParseAndUpdateModelConfig(modelPath string, baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel, sha string) error {
-	ctx := context.Background()
+	// Use timeout context to prevent indefinite blocking on K8s API calls
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
 	s.configMapMutex.Lock()
 	defer s.configMapMutex.Unlock()
 
@@ -277,8 +337,21 @@ func (s *Gopher) processTask(task *GopherTask) error {
 		// Create a cancellable context for this download
 		ctx, cancel = context.WithCancel(context.Background())
 
-		// Register the cancel function
+		// Check if there's already an active download for this model
 		s.activeDownloadsMutex.Lock()
+		if existingCancel, exists := s.activeDownloads[modelUID]; exists {
+			// For DownloadOverride, don't cancel an existing download - let it finish
+			// This prevents the cancel-restart cycle when seeder marks model Ready
+			if task.TaskType == DownloadOverride {
+				s.activeDownloadsMutex.Unlock()
+				s.logger.Infof("Download already in progress for model %s, skipping DownloadOverride", modelInfo)
+				cancel() // Clean up the context we just created
+				return nil
+			}
+			// For regular Download tasks, cancel the existing one
+			s.logger.Infof("Cancelling previous download for model %s due to new download task", modelInfo)
+			existingCancel()
+		}
 		s.activeDownloads[modelUID] = cancel
 		s.activeDownloadsMutex.Unlock()
 
@@ -349,6 +422,13 @@ func (s *Gopher) processTask(task *GopherTask) error {
 				s.markModelOnNodeFailed(task)
 				return err
 			}
+
+			// Check if context was cancelled (delete requested) - abort before config parsing
+			if ctx.Err() != nil {
+				s.logger.Infof("Download cancelled for OCI model %s before config parsing: %v", modelInfo, ctx.Err())
+				return ctx.Err()
+			}
+
 			// Parse model config and update ConfigMap
 			// We can pass either BaseModel or ClusterBaseModel based on the task's model type
 			var baseModel *v1beta1.BaseModel
@@ -394,6 +474,19 @@ func (s *Gopher) processTask(task *GopherTask) error {
 		}
 		// Calculate download duration
 		downloadDuration := time.Since(downloadStartTime)
+
+		// Check if context was cancelled (delete requested) - abort before marking as Ready
+		// This is critical to prevent racing with the delete handler
+		if ctx.Err() != nil {
+			s.logger.Infof("Download cancelled for model %s after download completed: %v", modelInfo, ctx.Err())
+			return ctx.Err()
+		}
+
+		// Also check if model is being deleted - additional safety check
+		if s.isModelBeingDeleted(task) {
+			s.logger.Infof("Model %s is being deleted, aborting post-download processing", modelInfo)
+			return fmt.Errorf("model %s is being deleted", modelInfo)
+		}
 
 		// Record successful download in metrics
 		s.metrics.RecordSuccessfulDownload(modelType, namespace, name)
@@ -984,91 +1077,19 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 		}
 		s.logger.Infof("successfully add the new path to childrenPath for model: %s", modelInfo)
 	} else {
-		// Get Hugging Face token from storage key or parameters
-		hfToken := s.getHuggingFaceToken(task, baseModelSpec, modelInfo)
+		// Compute model hash for P2P coordination
+		modelHash := computeModelHash(hfComponents.ModelID, hfComponents.Branch)
 
-		s.logger.Infof("Downloading HuggingFace model %s (revision: %s) to %s",
-			hfComponents.ModelID, hfComponents.Branch, destPath)
-
-		// Init xet HF download config
-		config := s.xetConfig.ToDownloadConfig()
-		config.LocalDir = destPath
-		config.RepoID = hfComponents.ModelID
-
-		// Set revision if specified
-		if hfComponents.Branch != "" {
-			config.Revision = hfComponents.Branch
-		}
-
-		// If we have a token, pass it as a download option
-		if hfToken != "" {
-			s.logger.Infof("Using authentication token for HuggingFace model %s", modelInfo)
-			config.Token = hfToken
-		}
-
-		// Create progress handler for tracking download progress
-		var lastBytes uint64
-		var lastTime = time.Now()
-		progressThrottle := 30 * time.Second // Update ConfigMap every 30 seconds
-
-		progressHandler := func(update xet.ProgressUpdate) {
-			now := time.Now()
-
-			// Calculate speed (bytes per second)
-			var speedBytesPerSec float64
-			elapsed := now.Sub(lastTime).Seconds()
-			if elapsed > 0 && update.CompletedBytes > lastBytes {
-				speedBytesPerSec = float64(update.CompletedBytes-lastBytes) / elapsed
-			}
-			lastBytes = update.CompletedBytes
-			lastTime = now
-
-			// Create progress object
-			progress := &DownloadProgress{
-				Phase:            update.Phase.String(),
-				TotalBytes:       update.TotalBytes,
-				CompletedBytes:   update.CompletedBytes,
-				TotalFiles:       update.TotalFiles,
-				CompletedFiles:   update.CompletedFiles,
-				SpeedBytesPerSec: speedBytesPerSec,
-				LastUpdated:      now.Format(time.RFC3339),
-			}
-
-			// Update ConfigMap with progress (non-blocking)
-			go func() {
-				progressOp := &ConfigMapProgressOp{
-					Progress:         progress,
-					BaseModel:        task.BaseModel,
-					ClusterBaseModel: task.ClusterBaseModel,
-				}
-				if err := s.configMapReconciler.ReconcileModelProgress(ctx, progressOp); err != nil {
-					s.logger.Warnf("Failed to update download progress for %s: %v", modelInfo, err)
-				}
-			}()
-		}
-
-		// Perform snapshot download with progress tracking
-		// Note: Progress is cleared atomically with status update in ReconcileModelStatus
-		// when status becomes Ready/Failed, ensuring the controller sees the final progress
-		downloadPath, err := xet.SnapshotDownloadWithProgress(ctx, config, progressHandler, progressThrottle)
-
-		if err != nil {
-			// Check error type for better handling
-			if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "rate limit") {
-				s.logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", modelInfo, err)
-				s.metrics.RecordRateLimit(modelType, namespace, name, 30*time.Second) // Estimate
-				s.metrics.RecordFailedDownload(modelType, namespace, name, "rate_limit_error")
-			} else {
-				s.logger.Errorf("Failed to download HuggingFace model %s: %v", modelInfo, err)
-				s.metrics.RecordFailedDownload(modelType, namespace, name, "hf_download_error")
-			}
-
-			s.markModelOnNodeFailed(task)
+		// Try P2P-aware download if enabled, otherwise fallback to direct HF download
+		if err := s.downloadWithP2P(ctx, task, baseModelSpec, hfComponents, destPath, modelHash, modelInfo, modelType, namespace, name); err != nil {
 			return err
 		}
+	}
 
-		s.logger.Infof("Successfully downloaded HuggingFace model %s to %s",
-			modelInfo, downloadPath)
+	// Check if context was cancelled (delete requested) - abort before config parsing
+	if ctx.Err() != nil {
+		s.logger.Infof("Download cancelled for model %s before config parsing: %v", modelInfo, ctx.Err())
+		return ctx.Err()
 	}
 
 	// Parse model config and update ConfigMap
@@ -1087,6 +1108,373 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 		s.logger.Errorf("Failed to parse and update model config: %v", err)
 	}
 	return nil
+}
+
+// downloadFromHuggingFace performs the actual download from HuggingFace Hub.
+// This is extracted to allow P2P integration to share the download logic.
+func (s *Gopher) downloadFromHuggingFace(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec,
+	hfComponents *storage.HuggingFaceStorageComponents, destPath, modelInfo, modelType, namespace, name string) error {
+
+	// Get Hugging Face token from storage key or parameters
+	hfToken := s.getHuggingFaceToken(task, baseModelSpec, modelInfo)
+
+	s.logger.Infof("Downloading HuggingFace model %s (revision: %s) to %s",
+		hfComponents.ModelID, hfComponents.Branch, destPath)
+
+	// Init xet HF download config
+	config := s.xetConfig.ToDownloadConfig()
+	config.LocalDir = destPath
+	config.RepoID = hfComponents.ModelID
+
+	// Set revision if specified
+	if hfComponents.Branch != "" {
+		config.Revision = hfComponents.Branch
+	}
+
+	// If we have a token, pass it as a download option
+	if hfToken != "" {
+		s.logger.Infof("Using authentication token for HuggingFace model %s", modelInfo)
+		config.Token = hfToken
+	}
+
+	// Create progress handler for tracking download progress
+	var lastBytes uint64
+	var lastTime = time.Now()
+	progressThrottle := 30 * time.Second // Update ConfigMap every 30 seconds
+
+	progressHandler := func(update xet.ProgressUpdate) {
+		now := time.Now()
+
+		// Calculate speed (bytes per second)
+		var speedBytesPerSec float64
+		elapsed := now.Sub(lastTime).Seconds()
+		if elapsed > 0 && update.CompletedBytes > lastBytes {
+			speedBytesPerSec = float64(update.CompletedBytes-lastBytes) / elapsed
+		}
+		lastBytes = update.CompletedBytes
+		lastTime = now
+
+		// Create progress object
+		progress := &DownloadProgress{
+			Phase:            update.Phase.String(),
+			TotalBytes:       update.TotalBytes,
+			CompletedBytes:   update.CompletedBytes,
+			TotalFiles:       update.TotalFiles,
+			CompletedFiles:   update.CompletedFiles,
+			SpeedBytesPerSec: speedBytesPerSec,
+			LastUpdated:      now.Format(time.RFC3339),
+		}
+
+		// Update ConfigMap with progress (non-blocking)
+		// Skip if context is cancelled to avoid unnecessary work
+		if ctx.Err() == nil {
+			go func() {
+				progressOp := &ConfigMapProgressOp{
+					Progress:         progress,
+					BaseModel:        task.BaseModel,
+					ClusterBaseModel: task.ClusterBaseModel,
+				}
+				if err := s.configMapReconciler.ReconcileModelProgress(ctx, progressOp); err != nil {
+					// Only log if not cancelled - cancelled is expected during delete
+					if ctx.Err() == nil {
+						s.logger.Warnf("Failed to update download progress for %s: %v", modelInfo, err)
+					}
+				}
+			}()
+		}
+	}
+
+	// Perform snapshot download with progress tracking
+	downloadPath, err := xet.SnapshotDownloadWithProgress(ctx, config, progressHandler, progressThrottle)
+
+	// Check if context was cancelled (delete requested) - abort early
+	if ctx.Err() != nil {
+		s.logger.Infof("Download cancelled for HuggingFace model %s: %v", modelInfo, ctx.Err())
+		return ctx.Err()
+	}
+
+	if err != nil {
+		// Check error type for better handling
+		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "rate limit") {
+			s.logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", modelInfo, err)
+			s.metrics.RecordRateLimit(modelType, namespace, name, 30*time.Second)
+			s.metrics.RecordFailedDownload(modelType, namespace, name, "rate_limit_error")
+		} else {
+			s.logger.Errorf("Failed to download HuggingFace model %s: %v", modelInfo, err)
+			s.metrics.RecordFailedDownload(modelType, namespace, name, "hf_download_error")
+		}
+
+		s.markModelOnNodeFailed(task)
+		return err
+	}
+
+	s.logger.Infof("Successfully downloaded HuggingFace model %s to %s", modelInfo, downloadPath)
+	return nil
+}
+
+// waitForP2PAvailability waits for the model to become available via P2P.
+// This is used when another node holds the download lease.
+// It checks the lease status to determine whether to keep waiting:
+// - If lease is complete: P2P should be available, try download
+// - If lease exists and not expired: keep waiting (lease holder still downloading)
+// - If lease expired or not found: give up (lease holder crashed)
+// - If model is being deleted: abort early
+func (s *Gopher) waitForP2PAvailability(ctx context.Context, task *GopherTask, modelHash, modelInfo, leaseName, destPath string) error {
+	if s.p2pDistributor == nil {
+		return fmt.Errorf("P2P distributor not configured")
+	}
+
+	// Use constants for configurable wait behavior
+	checkInterval := time.Duration(constants.P2PDefaultWaitBaseDelayMs) * time.Millisecond
+	maxWaitTime := time.Duration(constants.P2PMaxWaitTimeMinutes) * time.Minute
+	startTime := time.Now()
+
+	for {
+		elapsed := time.Since(startTime)
+
+		// Check context cancellation first
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		// Check absolute maximum wait time
+		if elapsed > maxWaitTime {
+			return fmt.Errorf("absolute timeout waiting for P2P availability for model %s after %v", modelInfo, elapsed)
+		}
+
+		// Check if the model is being deleted - abort early to allow cleanup
+		if s.isModelBeingDeleted(task) {
+			s.logger.Infof("Model %s is being deleted, aborting P2P wait", modelInfo)
+			return fmt.Errorf("model %s is being deleted, aborting P2P wait", modelInfo)
+		}
+
+		// Check lease status to decide whether to keep waiting
+		lease, err := s.p2pLeaseManager.Get(ctx, leaseName)
+		if err != nil {
+			s.logger.Debugf("Failed to get lease %s: %v, will retry", leaseName, err)
+		} else if lease != nil {
+			// Check if lease is complete (download finished, seeding started)
+			if s.p2pLeaseManager.IsComplete(lease) {
+				s.logger.Infof("Lease %s is complete, P2P should be available for model %s", leaseName, modelInfo)
+				// Give a short delay for seeding to fully start
+				time.Sleep(2 * time.Second)
+			} else if s.p2pLeaseManager.IsExpired(lease) {
+				// Lease expired - holder might have crashed
+				s.logger.Warnf("Lease %s expired for model %s, giving up on P2P wait", leaseName, modelInfo)
+				return fmt.Errorf("lease expired while waiting for P2P availability for model %s", modelInfo)
+			} else {
+				// Lease is active but not complete - holder still downloading
+				s.logger.Debugf("Lease %s still active (holder: %s) for model %s, waiting... (elapsed: %v)",
+					leaseName, *lease.Spec.HolderIdentity, modelInfo, elapsed.Round(time.Second))
+			}
+		}
+
+		// Check if model is available via P2P
+		if s.p2pDistributor.HasPeers(ctx, modelHash) {
+			s.logger.Infof("P2P peers now available for model %s, attempting download", modelInfo)
+			if err := s.p2pDistributor.TryP2PDownload(ctx, modelHash, destPath, s.p2pTimeout); err == nil {
+				s.logger.Infof("Successfully downloaded model %s via P2P after waiting %v", modelInfo, elapsed.Round(time.Second))
+				return nil
+			} else {
+				s.logger.Warnf("P2P download attempt failed for model %s: %v", modelInfo, err)
+			}
+		}
+
+		// Log progress periodically (every 30 seconds)
+		if int(elapsed.Seconds())%30 == 0 && elapsed.Seconds() > 0 {
+			s.logger.Infof("Still waiting for P2P availability for model %s (elapsed: %v)", modelInfo, elapsed.Round(time.Second))
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(checkInterval):
+		}
+	}
+}
+
+// downloadWithP2P orchestrates the model download with P2P support.
+// It tries P2P first, then falls back to HuggingFace with lease coordination.
+// This method encapsulates the P2P download flow with proper resource cleanup.
+func (s *Gopher) downloadWithP2P(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec,
+	hfComponents *storage.HuggingFaceStorageComponents, destPath, modelHash, modelInfo, modelType, namespace, name string) error {
+
+	// If P2P is not enabled, go directly to HuggingFace
+	if !s.p2pEnabled || s.p2pDistributor == nil {
+		return s.downloadFromHuggingFace(ctx, task, baseModelSpec, hfComponents, destPath, modelInfo, modelType, namespace, name)
+	}
+
+	// Check if we're already seeding this model - means we already have it locally
+	// This prevents re-downloading a model we just downloaded (e.g., from update events)
+	if s.p2pDistributor.IsSeeding(modelHash) {
+		s.logger.Infof("Already seeding model %s (hash: %s), skipping download", modelInfo, modelHash[:16])
+		return nil
+	}
+
+	s.logger.Infof("P2P enabled, attempting peer download for model %s (hash: %s)", modelInfo, modelHash[:16])
+
+	// Step 1: Check if peers already have the model
+	if s.p2pDistributor.HasPeers(ctx, modelHash) {
+		s.logger.Infof("Peers found for model %s, attempting P2P download", modelInfo)
+		if err := s.p2pDistributor.TryP2PDownload(ctx, modelHash, destPath, s.p2pTimeout); err == nil {
+			// Check if context was cancelled during P2P download
+			if ctx.Err() != nil {
+				s.logger.Infof("P2P download cancelled for model %s: %v", modelInfo, ctx.Err())
+				return ctx.Err()
+			}
+			s.logger.Infof("Successfully downloaded model %s via P2P", modelInfo)
+			return nil
+		} else {
+			s.logger.Warnf("P2P download failed for model %s: %v, falling back to HuggingFace", modelInfo, err)
+		}
+	} else {
+		s.logger.Infof("No peers available for model %s, will attempt HuggingFace download", modelInfo)
+	}
+
+	// Check context before proceeding with fallback download
+	if ctx.Err() != nil {
+		s.logger.Infof("Download cancelled for model %s before fallback: %v", modelInfo, ctx.Err())
+		return ctx.Err()
+	}
+
+	// Step 2: Try to acquire lease for HuggingFace download
+	if s.p2pLeaseManager == nil {
+		// No lease manager, just download directly
+		if err := s.downloadFromHuggingFace(ctx, task, baseModelSpec, hfComponents, destPath, modelInfo, modelType, namespace, name); err != nil {
+			return err
+		}
+		// Check if context was cancelled before starting seeding
+		if ctx.Err() != nil {
+			s.logger.Infof("Download cancelled for model %s before seeding (no lease): %v", modelInfo, ctx.Err())
+			return ctx.Err()
+		}
+		// Start seeding after successful download
+		s.startSeeding(destPath, modelHash, modelInfo)
+		return nil
+	}
+
+	leaseName := s.p2pLeaseManager.GetLeaseName(modelHash)
+	acquired, err := s.p2pLeaseManager.TryAcquire(ctx, leaseName)
+	if err != nil {
+		s.logger.Warnf("Failed to acquire P2P lease for model %s: %v, proceeding with direct download", modelInfo, err)
+		// Fall through to direct download
+	}
+
+	if acquired {
+		// We have the lease - download from HuggingFace and seed to others
+		return s.downloadWithLeaseHeld(ctx, task, baseModelSpec, hfComponents, destPath, modelHash, modelInfo, modelType, namespace, name, leaseName)
+	}
+
+	// Lease held by another node - wait for P2P availability
+	s.logger.Infof("Lease held by another node for model %s, waiting for P2P availability", modelInfo)
+	if err := s.waitForP2PAvailability(ctx, task, modelHash, modelInfo, leaseName, destPath); err == nil {
+		// Check if context was cancelled during P2P wait
+		if ctx.Err() != nil {
+			s.logger.Infof("P2P wait cancelled for model %s: %v", modelInfo, ctx.Err())
+			return ctx.Err()
+		}
+		s.logger.Infof("Model %s now available via P2P", modelInfo)
+		return nil
+	} else {
+		s.logger.Warnf("Wait for P2P failed for model %s: %v, proceeding with HuggingFace download", modelInfo, err)
+	}
+
+	// Check context before final fallback
+	if ctx.Err() != nil {
+		s.logger.Infof("Download cancelled for model %s before final fallback: %v", modelInfo, ctx.Err())
+		return ctx.Err()
+	}
+
+	// Final fallback: direct HuggingFace download
+	if err := s.downloadFromHuggingFace(ctx, task, baseModelSpec, hfComponents, destPath, modelInfo, modelType, namespace, name); err != nil {
+		return err
+	}
+
+	// Check context before starting seeding
+	if ctx.Err() != nil {
+		s.logger.Infof("Download cancelled for model %s before seeding: %v", modelInfo, ctx.Err())
+		return ctx.Err()
+	}
+
+	s.startSeeding(destPath, modelHash, modelInfo)
+	return nil
+}
+
+// downloadWithLeaseHeld downloads from HuggingFace while holding a lease.
+// It ensures proper cleanup of lease resources regardless of success or failure.
+func (s *Gopher) downloadWithLeaseHeld(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec,
+	hfComponents *storage.HuggingFaceStorageComponents, destPath, modelHash, modelInfo, modelType, namespace, name, leaseName string) error {
+
+	s.logger.Infof("Acquired lease for model %s, downloading from HuggingFace", modelInfo)
+
+	// Start lease renewal in background
+	cancelRenewal := s.p2pLeaseManager.StartRenewal(ctx, leaseName)
+	defer cancelRenewal()
+
+	// Download from HuggingFace
+	if err := s.downloadFromHuggingFace(ctx, task, baseModelSpec, hfComponents, destPath, modelInfo, modelType, namespace, name); err != nil {
+		// Release lease on failure so another node can try
+		if releaseErr := s.p2pLeaseManager.Release(ctx, leaseName); releaseErr != nil {
+			s.logger.Warnf("Failed to release lease after download failure for model %s: %v", modelInfo, releaseErr)
+		}
+		return err
+	}
+
+	// Check if context was cancelled (delete requested) - release lease and abort
+	if ctx.Err() != nil {
+		s.logger.Infof("Download cancelled for model %s with lease, releasing lease: %v", modelInfo, ctx.Err())
+		if releaseErr := s.p2pLeaseManager.Release(ctx, leaseName); releaseErr != nil {
+			s.logger.Warnf("Failed to release lease after cancellation for model %s: %v", modelInfo, releaseErr)
+		}
+		return ctx.Err()
+	}
+
+	// Start seeding the downloaded model
+	s.startSeeding(destPath, modelHash, modelInfo)
+
+	// Mark lease as complete so other nodes know P2P is available
+	if err := s.p2pLeaseManager.MarkComplete(ctx, leaseName); err != nil {
+		s.logger.Warnf("Failed to mark lease complete for model %s: %v", modelInfo, err)
+	}
+
+	return nil
+}
+
+// isModelBeingDeleted checks if the model resource is being deleted (has deletionTimestamp).
+// This is used to abort long-running operations early when the resource is deleted.
+func (s *Gopher) isModelBeingDeleted(task *GopherTask) bool {
+	if task.BaseModel != nil {
+		bm, err := s.baseModelLister.BaseModels(task.BaseModel.Namespace).Get(task.BaseModel.Name)
+		if err != nil {
+			// If we can't get the resource, it might be deleted
+			return true
+		}
+		return !bm.ObjectMeta.DeletionTimestamp.IsZero()
+	}
+	if task.ClusterBaseModel != nil {
+		cbm, err := s.clusterBaseModelLister.Get(task.ClusterBaseModel.Name)
+		if err != nil {
+			// If we can't get the resource, it might be deleted
+			return true
+		}
+		return !cbm.ObjectMeta.DeletionTimestamp.IsZero()
+	}
+	return false
+}
+
+// startSeeding begins seeding the model to peers. Errors are logged but not returned
+// since seeding failure shouldn't fail the overall download operation.
+func (s *Gopher) startSeeding(destPath, modelHash, modelInfo string) {
+	if s.p2pDistributor == nil {
+		return
+	}
+	if err := s.p2pDistributor.SeedModel(destPath, modelHash); err != nil {
+		s.logger.Warnf("Failed to start seeding model %s: %v", modelInfo, err)
+	} else {
+		s.logger.Infof("Started seeding model %s", modelInfo)
+	}
 }
 
 /*
