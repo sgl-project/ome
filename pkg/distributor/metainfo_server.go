@@ -142,12 +142,14 @@ func (s *MetainfoServer) handleMetainfo(w http.ResponseWriter, r *http.Request) 
 func (s *MetainfoServer) buildMetainfo(path, name string) (*metainfo.MetaInfo, error) {
 	info := metainfo.Info{
 		PieceLength: 4 * 1024 * 1024, // 4MB pieces
-		Name:        name,
 	}
 
 	if err := info.BuildFromFilePath(path); err != nil {
 		return nil, fmt.Errorf("failed to build info from path: %w", err)
 	}
+
+	// Set Name after BuildFromFilePath because it overwrites Name with filepath.Base(path)
+	info.Name = name
 
 	infoBytes, err := bencode.Marshal(info)
 	if err != nil {

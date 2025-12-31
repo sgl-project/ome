@@ -33,6 +33,7 @@ type Scout struct {
 	clusterBaseModelSynced cache.InformerSynced
 	informerFactory        omev1beta1informers.SharedInformerFactory
 	gopherChan             chan<- *GopherTask
+	deleteChan             chan<- *GopherTask // Dedicated channel for delete tasks
 	nodeName               string
 	nodeInfo               *v1.Node
 	nodeShapeAlias         string
@@ -51,6 +52,7 @@ func NewScout(ctx context.Context, nodeName string,
 	clusterBaseModelInformer omev1beta1.ClusterBaseModelInformer,
 	informerFactory omev1beta1informers.SharedInformerFactory,
 	gopherChan chan<- *GopherTask,
+	deleteChan chan<- *GopherTask,
 	kubeClient *kubernetes.Clientset,
 	logger *zap.SugaredLogger) (*Scout, error) {
 
@@ -81,6 +83,7 @@ func NewScout(ctx context.Context, nodeName string,
 		clusterBaseModelSynced: clusterBaseModelInformer.Informer().HasSynced,
 		informerFactory:        informerFactory,
 		gopherChan:             gopherChan,
+		deleteChan:             deleteChan,
 		nodeName:               nodeName,
 		kubeClient:             kubeClient,
 		logger:                 logger,
@@ -464,7 +467,8 @@ func (w *Scout) deleteBaseModel(obj interface{}) {
 		BaseModel: baseModel,
 	}
 
-	w.gopherChan <- gopherTask
+	// Use dedicated delete channel for immediate processing
+	w.deleteChan <- gopherTask
 }
 
 func (w *Scout) deleteClusterBaseModel(obj interface{}) {
@@ -480,7 +484,8 @@ func (w *Scout) deleteClusterBaseModel(obj interface{}) {
 		TaskType:         Delete,
 		ClusterBaseModel: clusterBaseModel,
 	}
-	w.gopherChan <- gopherTask
+	// Use dedicated delete channel for immediate processing
+	w.deleteChan <- gopherTask
 }
 
 // reconcilePendingDeletions checks for any resources with deletion timestamps

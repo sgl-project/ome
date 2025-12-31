@@ -238,6 +238,7 @@ func initializeComponents(
 	omeInformerFactory omev1beta1informers.SharedInformerFactory,
 	metrics *modelagent.Metrics,
 	gopherTaskChan chan *modelagent.GopherTask,
+	deleteTaskChan chan *modelagent.GopherTask,
 	logger *Logger,
 ) (*modelagent.Scout, *modelagent.Gopher, error) {
 	// Create node label reconciler for labeling the node based on model status
@@ -263,6 +264,7 @@ func initializeComponents(
 		clusterBaseModelInformer,
 		omeInformerFactory,
 		gopherTaskChan,
+		deleteTaskChan,
 		kubeClient,
 		logger)
 	if err != nil {
@@ -308,6 +310,7 @@ func initializeComponents(
 		cfg.downloadRetry,
 		cfg.modelsRootDir,
 		gopherTaskChan,
+		deleteTaskChan,
 		nodeLabelReconciler,
 		metrics,
 		logger,
@@ -364,6 +367,8 @@ func runCommand(cmd *cobra.Command, args []string) {
 
 	// Create a download task communication channel
 	gopherTaskChan := make(chan *modelagent.GopherTask)
+	// Create a dedicated delete task channel for immediate deletion processing
+	deleteTaskChan := make(chan *modelagent.GopherTask)
 
 	// Initialize components
 	scout, gopher, err := initializeComponents(
@@ -373,6 +378,7 @@ func runCommand(cmd *cobra.Command, args []string) {
 		omeInformerFactory,
 		metrics,
 		gopherTaskChan,
+		deleteTaskChan,
 		logger,
 	)
 	if err != nil {

@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -121,9 +123,15 @@ func (d *ModelDistributor) Close() {
 }
 
 // TryP2PDownload attempts to download a model from peers.
+// destPath is the final destination where the model files should be placed.
 // Returns nil if successful, error if P2P download is not available.
-func (d *ModelDistributor) TryP2PDownload(ctx context.Context, modelHash string, timeout time.Duration) error {
-	peers, err := d.discoverPeers()
+func (d *ModelDistributor) TryP2PDownload(ctx context.Context, modelHash, destPath string, timeout time.Duration) error {
+	// Check context before starting - fail fast if already cancelled
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	peers, err := d.discoverPeers(ctx)
 	if err != nil || len(peers) == 0 {
 		return fmt.Errorf("no peers available: %v", err)
 	}
@@ -142,23 +150,47 @@ func (d *ModelDistributor) TryP2PDownload(ctx context.Context, modelHash string,
 		return fmt.Errorf("failed to add torrent: %w", err)
 	}
 
-	// Add discovered peers
-	peerInfos := make([]torrent.PeerInfo, len(peers))
-	for i, p := range peers {
-		peerInfos[i] = p
-	}
-	t.AddPeers(peerInfos)
-
 	// Wait for download with timeout
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	select {
 	case <-t.GotInfo():
+		// Add peers after torrent info is available (required for proper handshaking)
+		peerInfos := make([]torrent.PeerInfo, len(peers))
+		for i, p := range peers {
+			peerInfos[i] = p
+		}
+		t.AddPeers(peerInfos)
+		d.logger.Infof("Added %d peers for model %s, starting download", len(peers), modelHash)
+
 		t.DownloadAll()
 		if !d.waitForComplete(ctx, t) {
 			t.Drop()
 			return fmt.Errorf("download incomplete within timeout")
+		}
+
+		// Downloaded files are at {dataDir}/{modelHash}
+		// Move them to destPath and create symlink for continued seeding
+		downloadPath := filepath.Join(d.dataDir, modelHash)
+
+		// Ensure parent directory of destPath exists
+		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+			t.Drop()
+			return fmt.Errorf("failed to create parent directory: %w", err)
+		}
+
+		// Move downloaded files to destination
+		if err := os.Rename(downloadPath, destPath); err != nil {
+			t.Drop()
+			return fmt.Errorf("failed to move downloaded files to destination: %w", err)
+		}
+		d.logger.Infof("Moved downloaded model from %s to %s", downloadPath, destPath)
+
+		// Create symlink from hash path to destination for continued seeding
+		if err := os.Symlink(destPath, downloadPath); err != nil {
+			d.logger.Warnf("Failed to create symlink for seeding: %v", err)
+			// Don't fail the download, seeding is optional
 		}
 
 		// Store for seeding
@@ -183,6 +215,20 @@ func (d *ModelDistributor) SeedModel(path, modelHash string) error {
 		d.logger.Debugf("Already seeding model %s", modelHash)
 		return nil
 	}
+
+	// Create symlink from {dataDir}/{modelHash} to actual model path
+	// This allows the torrent client to find files at the expected location
+	symlinkPath := filepath.Join(d.dataDir, modelHash)
+	if _, err := os.Lstat(symlinkPath); err == nil {
+		// Symlink or file already exists, remove it
+		if err := os.Remove(symlinkPath); err != nil {
+			return fmt.Errorf("failed to remove existing symlink: %w", err)
+		}
+	}
+	if err := os.Symlink(path, symlinkPath); err != nil {
+		return fmt.Errorf("failed to create symlink for seeding: %w", err)
+	}
+	d.logger.Debugf("Created symlink %s -> %s for seeding", symlinkPath, path)
 
 	d.logger.Infof("Creating metainfo for model %s at path %s (this may take several minutes for large models)...", modelHash, path)
 	startTime := time.Now()
@@ -223,7 +269,12 @@ func (d *ModelDistributor) StopSeeding(modelHash string) {
 
 // HasPeers checks if there are any peers available for the model.
 func (d *ModelDistributor) HasPeers(ctx context.Context, modelHash string) bool {
-	peers, err := d.discoverPeers()
+	// Check context before starting
+	if ctx.Err() != nil {
+		return false
+	}
+
+	peers, err := d.discoverPeers(ctx)
 	if err != nil || len(peers) == 0 {
 		return false
 	}
@@ -243,17 +294,10 @@ func (d *ModelDistributor) GetMetainfo(modelHash string) (*metainfo.MetaInfo, bo
 		return nil, false
 	}
 
-	info := t.Info()
-	if info == nil {
-		return nil, false
-	}
-
-	infoBytes, err := bencode.Marshal(info)
-	if err != nil {
-		return nil, false
-	}
-
-	return &metainfo.MetaInfo{InfoBytes: infoBytes}, true
+	// Use the torrent's Metainfo() method to get the correct info bytes
+	// Re-marshaling t.Info() would produce different bytes (different info hash)
+	mi := t.Metainfo()
+	return &mi, true
 }
 
 // IsSeeding returns whether the distributor is seeding the given model.
@@ -292,19 +336,25 @@ type Stats struct {
 }
 
 // discoverPeers uses DNS to find other pods in the headless service.
-func (d *ModelDistributor) discoverPeers() ([]torrent.PeerInfo, error) {
+func (d *ModelDistributor) discoverPeers(ctx context.Context) ([]torrent.PeerInfo, error) {
 	if d.peersService == "" {
 		return nil, fmt.Errorf("peers service not configured")
 	}
 
-	ips, err := net.LookupIP(d.peersService)
+	// Use context-aware DNS resolver to support cancellation
+	resolver := net.Resolver{}
+	ips, err := resolver.LookupIPAddr(ctx, d.peersService)
 	if err != nil {
+		// Check if cancelled
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, fmt.Errorf("DNS lookup failed: %w", err)
 	}
 
 	var peers []torrent.PeerInfo
 	for _, ip := range ips {
-		ipStr := ip.String()
+		ipStr := ip.IP.String()
 		if ipStr == d.podIP {
 			continue // skip self
 		}
@@ -324,6 +374,11 @@ func (d *ModelDistributor) discoverPeers() ([]torrent.PeerInfo, error) {
 // fetchMetainfoFromPeer tries each peer until one responds with metainfo.
 func (d *ModelDistributor) fetchMetainfoFromPeer(ctx context.Context, peers []torrent.PeerInfo, modelHash string) (*metainfo.MetaInfo, error) {
 	for _, peer := range peers {
+		// Check context before each peer attempt - fail fast if cancelled
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		// Extract IP from peer address (format: ip:port)
 		addrPort, ok := peer.Addr.(netip.AddrPort)
 		if !ok {
@@ -331,23 +386,30 @@ func (d *ModelDistributor) fetchMetainfoFromPeer(ctx context.Context, peers []to
 		}
 		url := fmt.Sprintf("http://%s:%d/metainfo/%s", addrPort.Addr().String(), d.metainfoPort, modelHash)
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		// Use per-request timeout context (10s per peer)
+		reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
 		if err != nil {
+			cancel()
 			continue
 		}
 
 		resp, err := d.httpClient.Do(req)
 		if err != nil {
+			cancel()
 			d.logger.Debugf("Failed to fetch metainfo from %s: %v", url, err)
 			continue
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			cancel()
 			continue
 		}
 
 		mi, err := metainfo.Load(resp.Body)
+		resp.Body.Close() // Close immediately after reading, not deferred in loop
+		cancel()
 		if err != nil {
 			continue
 		}
@@ -359,20 +421,23 @@ func (d *ModelDistributor) fetchMetainfoFromPeer(ctx context.Context, peers []to
 	return nil, fmt.Errorf("no peer has metainfo for %s", modelHash)
 }
 
-// waitForComplete polls until torrent download is complete.
+// waitForComplete waits until torrent download is complete using event-based waiting.
 func (d *ModelDistributor) waitForComplete(ctx context.Context, t *torrent.Torrent) bool {
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+	// Get completion status - returns a struct with a channel that closes when complete
+	completion := t.Complete()
 
-	for {
-		select {
-		case <-ctx.Done():
-			return false
-		case <-ticker.C:
-			if t.Complete().Bool() {
-				return true
-			}
-		}
+	// If already complete, return immediately
+	if completion.Bool() {
+		return true
+	}
+
+	// Wait for completion or context cancellation using event-based waiting
+	// This is more efficient than polling every second
+	select {
+	case <-ctx.Done():
+		return false
+	case <-completion.On():
+		return true
 	}
 }
 
@@ -380,12 +445,16 @@ func (d *ModelDistributor) waitForComplete(ctx context.Context, t *torrent.Torre
 func (d *ModelDistributor) createMetainfo(path, name string) (*metainfo.MetaInfo, error) {
 	info := metainfo.Info{
 		PieceLength: 4 * 1024 * 1024, // 4MB pieces
-		Name:        name,
 	}
 
 	if err := info.BuildFromFilePath(path); err != nil {
 		return nil, fmt.Errorf("failed to build info: %w", err)
 	}
+
+	// Set Name after BuildFromFilePath because BuildFromFilePath overwrites it
+	// with filepath.Base(path). We need the modelHash as the name so the torrent
+	// client looks for files at {dataDir}/{modelHash}/ where we create the symlink.
+	info.Name = name
 
 	infoBytes, err := bencode.Marshal(info)
 	if err != nil {
