@@ -23,6 +23,7 @@ import (
 
 	omev1beta1client "github.com/sgl-project/ome/pkg/client/clientset/versioned"
 	omev1beta1informers "github.com/sgl-project/ome/pkg/client/informers/externalversions"
+	"github.com/sgl-project/ome/pkg/distributor"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/modelagent"
 	"github.com/sgl-project/ome/pkg/version"
@@ -43,6 +44,16 @@ type config struct {
 	numDownloadWorker    int
 	namespace            string
 	logLevel             string
+	// P2P configuration
+	p2pEnabled           bool
+	p2pPeersService      string
+	p2pTorrentPort       int
+	p2pMetainfoPort      int
+	p2pMaxDownloadRate   int64
+	p2pMaxUploadRate     int64
+	p2pEnableEncryption  bool
+	p2pRequireEncryption bool
+	p2pDownloadTimeout   time.Duration
 }
 
 // Logger type alias for zap.SugaredLogger
@@ -89,6 +100,40 @@ func initConfig(_ *cobra.Command, _ []string) {
 		panic("NODE_NAME environment variable is empty")
 	}
 	cfg.nodeName = nodeName
+
+	// P2P configuration from environment variables
+	cfg.p2pEnabled = os.Getenv("P2P_ENABLED") == "true"
+	cfg.p2pPeersService = os.Getenv("PEERS_SERVICE")
+	if cfg.p2pPeersService == "" {
+		cfg.p2pPeersService = "ome-peers.ome.svc.cluster.local"
+	}
+	cfg.p2pTorrentPort = getEnvInt("P2P_TORRENT_PORT", 6881)
+	cfg.p2pMetainfoPort = getEnvInt("P2P_METAINFO_PORT", 8081)
+	cfg.p2pMaxDownloadRate = getEnvInt64("P2P_MAX_DOWNLOAD_RATE", 524288000) // 500 MB/s
+	cfg.p2pMaxUploadRate = getEnvInt64("P2P_MAX_UPLOAD_RATE", 524288000)     // 500 MB/s
+	cfg.p2pEnableEncryption = os.Getenv("P2P_ENCRYPTION_ENABLED") == "true"
+	cfg.p2pRequireEncryption = os.Getenv("P2P_ENCRYPTION_REQUIRED") == "true"
+	cfg.p2pDownloadTimeout = time.Duration(getEnvInt("P2P_DOWNLOAD_TIMEOUT", 3600)) * time.Second // 1 hour default
+}
+
+// getEnvInt reads an integer from environment variable with a default value
+func getEnvInt(key string, defaultVal int) int {
+	if val := os.Getenv(key); val != "" {
+		if i, err := fmt.Sscanf(val, "%d", &defaultVal); err == nil && i == 1 {
+			return defaultVal
+		}
+	}
+	return defaultVal
+}
+
+// getEnvInt64 reads an int64 from environment variable with a default value
+func getEnvInt64(key string, defaultVal int64) int64 {
+	if val := os.Getenv(key); val != "" {
+		if i, err := fmt.Sscanf(val, "%d", &defaultVal); err == nil && i == 1 {
+			return defaultVal
+		}
+	}
+	return defaultVal
 }
 
 // initializeLogger creates and configures a zap logger with the specified settings
@@ -334,6 +379,75 @@ func runCommand(cmd *cobra.Command, args []string) {
 		logger.Fatalf("Failed to initialize components: %v", err)
 	}
 
+	// Initialize P2P distribution if enabled
+	var p2pDistributor *distributor.ModelDistributor
+	var metainfoServer *distributor.MetainfoServer
+	if cfg.p2pEnabled {
+		logger.Info("P2P model distribution is enabled, initializing...")
+
+		// Get POD_NAME and POD_IP for P2P peer identification
+		podName := os.Getenv("POD_NAME")
+		if podName == "" {
+			logger.Warn("POD_NAME not set, P2P coordination may not work correctly")
+		}
+		podIP := os.Getenv("POD_IP")
+		if podIP == "" {
+			logger.Warn("POD_IP not set, P2P peer discovery may not work correctly")
+		}
+
+		// Create distributor configuration
+		distCfg := distributor.Config{
+			DataDir:                   cfg.modelsRootDir,
+			PodName:                   podName,
+			PodIP:                     podIP,
+			PeersService:              cfg.p2pPeersService,
+			TorrentPort:               cfg.p2pTorrentPort,
+			MetainfoPort:              cfg.p2pMetainfoPort,
+			MaxDownloadRate:           cfg.p2pMaxDownloadRate,
+			MaxUploadRate:             cfg.p2pMaxUploadRate,
+			EnableEncryption:          cfg.p2pEnableEncryption,
+			RequireEncryption:         cfg.p2pRequireEncryption,
+			Namespace:                 cfg.namespace,
+			LeaseDurationSeconds:      120, // 2 minutes
+			LeaseRenewIntervalSeconds: 30,  // renew every 30 seconds
+			P2PTimeoutSeconds:         int(cfg.p2pDownloadTimeout.Seconds()),
+			EnableP2P:                 true,
+		}
+
+		// Create the P2P distributor
+		p2pDistributor, err = distributor.New(distCfg, logger)
+		if err != nil {
+			logger.Errorf("Failed to create P2P distributor: %v", err)
+			logger.Warn("Continuing without P2P support")
+		} else {
+			// Create lease manager for P2P coordination
+			leaseManager := modelagent.NewP2PLeaseManager(kubeClient, cfg.namespace, cfg.nodeName, logger)
+
+			// Enable P2P on the gopher
+			gopher.EnableP2P(p2pDistributor, leaseManager)
+			gopher.SetP2PTimeout(cfg.p2pDownloadTimeout)
+
+			// Create and start metainfo server
+			metainfoServer = distributor.NewMetainfoServer(
+				cfg.modelsRootDir,
+				cfg.p2pMetainfoPort,
+				p2pDistributor,
+				logger,
+			)
+
+			go func() {
+				logger.Infof("Starting P2P metainfo server on port %d", cfg.p2pMetainfoPort)
+				if err := metainfoServer.ServeWithContext(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					logger.Errorf("Metainfo server error: %v", err)
+				}
+			}()
+
+			logger.Info("P2P model distribution initialized successfully")
+		}
+	} else {
+		logger.Info("P2P model distribution is disabled")
+	}
+
 	// Set up a health check server
 	server := setupServer(cfg.port, cfg.modelsRootDir, logger)
 	go func() {
@@ -350,6 +464,13 @@ func runCommand(cmd *cobra.Command, args []string) {
 	if err := scout.Run(stopCh); err != nil {
 		logger.Fatalf("Error running scout: %v", err)
 	}
+
+	// Cleanup P2P resources on shutdown
+	if p2pDistributor != nil {
+		logger.Info("Shutting down P2P distributor...")
+		p2pDistributor.Close()
+	}
+	_ = metainfoServer // Suppress unused warning - shutdown handled via context
 }
 
 // createKubeClient creates a Kubernetes client from the provided config

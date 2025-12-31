@@ -1,0 +1,167 @@
+# P2P-Enabled Model Agent DaemonSet
+# This DaemonSet deploys the model-agent with P2P model distribution capabilities.
+# Each pod can download models from HuggingFace or via BitTorrent from peer pods.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ome-model-agent
+  namespace: ome
+  labels:
+    app.kubernetes.io/name: ome-model-agent
+    app.kubernetes.io/component: model-distribution
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ome-model-agent
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ome-model-agent
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: ome-model-agent
+      priorityClassName: system-node-critical
+      hostNetwork: false
+      containers:
+        - name: model-agent
+          image: ome-model-agent:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+            - containerPort: 6881
+              name: torrent
+              protocol: TCP
+            - containerPort: 8081
+              name: metainfo
+              protocol: TCP
+          env:
+            # Node identification
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            # P2P Configuration
+            - name: P2P_ENABLED
+              value: "true"
+            - name: PEERS_SERVICE
+              value: "ome-peers.ome.svc.cluster.local"
+            - name: P2P_TORRENT_PORT
+              value: "6881"
+            - name: P2P_METAINFO_PORT
+              value: "8081"
+            - name: P2P_MAX_DOWNLOAD_RATE
+              value: "524288000"  # 500 MB/s
+            - name: P2P_MAX_UPLOAD_RATE
+              value: "524288000"  # 500 MB/s
+            # Model storage
+            - name: MODEL_DIR
+              value: "/mnt/models"
+          volumeMounts:
+            - name: models
+              mountPath: /mnt/models
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          securityContext:
+            runAsNonRoot: false  # May need root for hostPath
+            readOnlyRootFilesystem: false
+      volumes:
+        - name: models
+          hostPath:
+            path: /mnt/models
+            type: DirectoryOrCreate
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+        - key: "node-role.kubernetes.io/master"
+          operator: "Exists"
+          effect: "NoSchedule"
+---
+# RBAC for the model-agent
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ome-model-agent
+  namespace: ome
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ome-model-agent
+rules:
+  # Model resources
+  - apiGroups: ["ome.io"]
+    resources: ["basemodels", "clusterbasemodels"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["ome.io"]
+    resources: ["basemodels/status", "clusterbasemodels/status"]
+    verbs: ["get", "update", "patch"]
+  # Node access for labeling
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "patch", "update"]
+  # ConfigMap for model status
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  # Secrets for HuggingFace tokens
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+  # Leases for P2P coordination
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ome-model-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ome-model-agent
+subjects:
+  - kind: ServiceAccount
+    name: ome-model-agent
+    namespace: ome
