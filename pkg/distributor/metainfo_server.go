@@ -46,7 +46,7 @@ func (s *MetainfoServer) Start() error {
 		Addr:         fmt.Sprintf(":%d", s.port),
 		Handler:      mux,
 		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		WriteTimeout: 10 * time.Minute, // Large metainfo files (30+ MB for 1TB models) need more time
 		IdleTimeout:  60 * time.Second,
 	}
 

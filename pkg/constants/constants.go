@@ -383,10 +383,11 @@ const (
 	P2PDefaultPieceLength          = 4 * 1024 * 1024 // 4MB pieces
 
 	// P2P wait configuration for nodes waiting for P2P availability
-	P2PDefaultWaitMaxAttempts    = 60    // Maximum attempts before giving up on P2P
-	P2PDefaultWaitBaseDelayMs    = 2000  // Base delay between attempts (2 seconds)
-	P2PDefaultWaitMaxDelayMs     = 30000 // Maximum delay between attempts (30 seconds)
-	P2PDefaultWaitBackoffDivisor = 10    // Backoff increases every N attempts
+	P2PDefaultWaitMaxAttempts    = 60    // Deprecated: kept for compatibility
+	P2PDefaultWaitBaseDelayMs    = 2000  // Interval between lease/peer checks (2 seconds)
+	P2PDefaultWaitMaxDelayMs     = 30000 // Deprecated: kept for compatibility
+	P2PDefaultWaitBackoffDivisor = 10    // Deprecated: kept for compatibility
+	P2PMaxWaitTimeMinutes        = 240   // Maximum absolute wait time (4 hours) for very large models
 )
 
 // P2P environment variable keys

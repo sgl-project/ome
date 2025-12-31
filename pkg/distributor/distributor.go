@@ -184,10 +184,16 @@ func (d *ModelDistributor) SeedModel(path, modelHash string) error {
 		return nil
 	}
 
+	d.logger.Infof("Creating metainfo for model %s at path %s (this may take several minutes for large models)...", modelHash, path)
+	startTime := time.Now()
+
 	mi, err := d.createMetainfo(path, modelHash)
 	if err != nil {
 		return fmt.Errorf("failed to create metainfo: %w", err)
 	}
+
+	metainfoTime := time.Since(startTime)
+	d.logger.Infof("Metainfo created for model %s in %v", modelHash, metainfoTime.Round(time.Second))
 
 	t, err := d.torrentClient.AddTorrent(mi)
 	if err != nil {
@@ -198,7 +204,8 @@ func (d *ModelDistributor) SeedModel(path, modelHash string) error {
 	d.activeTorrents[modelHash] = t
 	d.metrics.RecordSeeding(modelHash)
 
-	d.logger.Infof("Started seeding model %s", modelHash)
+	totalTime := time.Since(startTime)
+	d.logger.Infof("Started seeding model %s (total setup time: %v)", modelHash, totalTime.Round(time.Second))
 	return nil
 }
 

@@ -1138,19 +1138,24 @@ func (s *Gopher) downloadFromHuggingFace(ctx context.Context, task *GopherTask, 
 
 // waitForP2PAvailability waits for the model to become available via P2P.
 // This is used when another node holds the download lease.
-// It uses exponential backoff to avoid overwhelming the cluster with DNS lookups.
-func (s *Gopher) waitForP2PAvailability(ctx context.Context, modelHash, modelInfo string) error {
+// It checks the lease status to determine whether to keep waiting:
+// - If lease is complete: P2P should be available, try download
+// - If lease exists and not expired: keep waiting (lease holder still downloading)
+// - If lease expired or not found: give up (lease holder crashed)
+// - If model is being deleted: abort early
+func (s *Gopher) waitForP2PAvailability(ctx context.Context, task *GopherTask, modelHash, modelInfo, leaseName string) error {
 	if s.p2pDistributor == nil {
 		return fmt.Errorf("P2P distributor not configured")
 	}
 
 	// Use constants for configurable wait behavior
-	maxAttempts := constants.P2PDefaultWaitMaxAttempts
-	baseDelay := time.Duration(constants.P2PDefaultWaitBaseDelayMs) * time.Millisecond
-	maxDelay := time.Duration(constants.P2PDefaultWaitMaxDelayMs) * time.Millisecond
-	backoffDivisor := constants.P2PDefaultWaitBackoffDivisor
+	checkInterval := time.Duration(constants.P2PDefaultWaitBaseDelayMs) * time.Millisecond
+	maxWaitTime := time.Duration(constants.P2PMaxWaitTimeMinutes) * time.Minute
+	startTime := time.Now()
 
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for {
+		elapsed := time.Since(startTime)
+
 		// Check context cancellation first
 		select {
 		case <-ctx.Done():
@@ -1158,35 +1163,60 @@ func (s *Gopher) waitForP2PAvailability(ctx context.Context, modelHash, modelInf
 		default:
 		}
 
+		// Check absolute maximum wait time
+		if elapsed > maxWaitTime {
+			return fmt.Errorf("absolute timeout waiting for P2P availability for model %s after %v", modelInfo, elapsed)
+		}
+
+		// Check if the model is being deleted - abort early to allow cleanup
+		if s.isModelBeingDeleted(task) {
+			s.logger.Infof("Model %s is being deleted, aborting P2P wait", modelInfo)
+			return fmt.Errorf("model %s is being deleted, aborting P2P wait", modelInfo)
+		}
+
+		// Check lease status to decide whether to keep waiting
+		lease, err := s.p2pLeaseManager.Get(ctx, leaseName)
+		if err != nil {
+			s.logger.Debugf("Failed to get lease %s: %v, will retry", leaseName, err)
+		} else if lease != nil {
+			// Check if lease is complete (download finished, seeding started)
+			if s.p2pLeaseManager.IsComplete(lease) {
+				s.logger.Infof("Lease %s is complete, P2P should be available for model %s", leaseName, modelInfo)
+				// Give a short delay for seeding to fully start
+				time.Sleep(2 * time.Second)
+			} else if s.p2pLeaseManager.IsExpired(lease) {
+				// Lease expired - holder might have crashed
+				s.logger.Warnf("Lease %s expired for model %s, giving up on P2P wait", leaseName, modelInfo)
+				return fmt.Errorf("lease expired while waiting for P2P availability for model %s", modelInfo)
+			} else {
+				// Lease is active but not complete - holder still downloading
+				s.logger.Debugf("Lease %s still active (holder: %s) for model %s, waiting... (elapsed: %v)",
+					leaseName, *lease.Spec.HolderIdentity, modelInfo, elapsed.Round(time.Second))
+			}
+		}
+
 		// Check if model is available via P2P
 		if s.p2pDistributor.HasPeers(ctx, modelHash) {
 			s.logger.Infof("P2P peers now available for model %s, attempting download", modelInfo)
 			if err := s.p2pDistributor.TryP2PDownload(ctx, modelHash, s.p2pTimeout); err == nil {
-				s.logger.Infof("Successfully downloaded model %s via P2P after waiting", modelInfo)
+				s.logger.Infof("Successfully downloaded model %s via P2P after waiting %v", modelInfo, elapsed.Round(time.Second))
 				return nil
 			} else {
 				s.logger.Warnf("P2P download attempt failed for model %s: %v", modelInfo, err)
 			}
 		}
 
-		// Calculate delay with exponential backoff
-		// Backoff increases every backoffDivisor attempts to avoid rapid polling
-		delay := baseDelay * time.Duration(1<<uint(attempt/backoffDivisor))
-		if delay > maxDelay {
-			delay = maxDelay
+		// Log progress periodically (every 30 seconds)
+		if int(elapsed.Seconds())%30 == 0 && elapsed.Seconds() > 0 {
+			s.logger.Infof("Still waiting for P2P availability for model %s (elapsed: %v)", modelInfo, elapsed.Round(time.Second))
 		}
-
-		s.logger.Debugf("Waiting %v before next P2P check for model %s (attempt %d/%d)",
-			delay, modelInfo, attempt+1, maxAttempts)
 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(delay):
+		case <-time.After(checkInterval):
 		}
 	}
-
-	return fmt.Errorf("timeout waiting for P2P availability for model %s after %d attempts", modelInfo, maxAttempts)
 }
 
 // downloadWithP2P orchestrates the model download with P2P support.
@@ -1240,7 +1270,7 @@ func (s *Gopher) downloadWithP2P(ctx context.Context, task *GopherTask, baseMode
 
 	// Lease held by another node - wait for P2P availability
 	s.logger.Infof("Lease held by another node for model %s, waiting for P2P availability", modelInfo)
-	if err := s.waitForP2PAvailability(ctx, modelHash, modelInfo); err == nil {
+	if err := s.waitForP2PAvailability(ctx, task, modelHash, modelInfo, leaseName); err == nil {
 		s.logger.Infof("Model %s now available via P2P", modelInfo)
 		return nil
 	} else {
@@ -1284,6 +1314,28 @@ func (s *Gopher) downloadWithLeaseHeld(ctx context.Context, task *GopherTask, ba
 	}
 
 	return nil
+}
+
+// isModelBeingDeleted checks if the model resource is being deleted (has deletionTimestamp).
+// This is used to abort long-running operations early when the resource is deleted.
+func (s *Gopher) isModelBeingDeleted(task *GopherTask) bool {
+	if task.BaseModel != nil {
+		bm, err := s.baseModelLister.BaseModels(task.BaseModel.Namespace).Get(task.BaseModel.Name)
+		if err != nil {
+			// If we can't get the resource, it might be deleted
+			return true
+		}
+		return !bm.ObjectMeta.DeletionTimestamp.IsZero()
+	}
+	if task.ClusterBaseModel != nil {
+		cbm, err := s.clusterBaseModelLister.Get(task.ClusterBaseModel.Name)
+		if err != nil {
+			// If we can't get the resource, it might be deleted
+			return true
+		}
+		return !cbm.ObjectMeta.DeletionTimestamp.IsZero()
+	}
+	return false
 }
 
 // startSeeding begins seeding the model to peers. Errors are logged but not returned
