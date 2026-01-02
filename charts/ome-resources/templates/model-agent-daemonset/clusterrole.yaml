@@ -20,3 +20,7 @@ rules:
   - apiGroups: [ "ome.io" ]
     resources: [ "clusterbasemodels" ]
     verbs: [ "get", "list", "watch", "patch", "update" ]
+  # Leases for P2P download coordination (acquire only, controller creates/deletes)
+  - apiGroups: [ "coordination.k8s.io" ]
+    resources: [ "leases" ]
+    verbs: [ "get", "list", "update", "patch" ]

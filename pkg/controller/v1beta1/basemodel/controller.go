@@ -8,10 +8,13 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,6 +37,7 @@ import (
 // +kubebuilder:rbac:groups=ome.io,resources=clusterbasemodels/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;update;delete
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 
 // BaseModelReconciler reconciles BaseModel objects
 type BaseModelReconciler struct {
@@ -82,6 +86,13 @@ func (r *BaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
+	// Ensure P2P coordination lease exists for this model.
+	// The lease is created once by the controller and acquired by model-agents.
+	if err := ensureP2PLease(ctx, r.Client, log, baseModel.UID, baseModel.Name, false); err != nil {
+		log.Error(err, "Failed to ensure P2P lease")
+		// Non-fatal: P2P coordination will fall back to direct download
+	}
+
 	// Update status based on ConfigMaps
 	if err := r.updateModelStatus(ctx, baseModel); err != nil {
 		log.Error(err, "Failed to update BaseModel status")
@@ -127,6 +138,13 @@ func (r *ClusterBaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			log.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}
+	}
+
+	// Ensure P2P coordination lease exists for this model.
+	// The lease is created once by the controller and acquired by model-agents.
+	if err := ensureP2PLease(ctx, r.Client, log, clusterBaseModel.UID, clusterBaseModel.Name, true); err != nil {
+		log.Error(err, "Failed to ensure P2P lease")
+		// Non-fatal: P2P coordination will fall back to direct download
 	}
 
 	// Update status based on ConfigMaps
@@ -235,6 +253,12 @@ func handleModelDeletion(ctx context.Context, kubeClient client.Client, obj clie
 		}
 
 		log.Info("All model entries have been cleared or marked as deleted", "model", modelInfo)
+
+		// Clean up P2P coordination lease
+		if err := cleanupP2PLease(ctx, kubeClient, log, obj.GetUID()); err != nil {
+			log.Error(err, "Failed to cleanup P2P lease", "model", modelInfo)
+			// Non-fatal: continue with finalizer removal
+		}
 
 		// All entries are either cleared or marked for deletion, safe to remove finalizer
 		controllerutil.RemoveFinalizer(obj, finalizer)
@@ -818,4 +842,81 @@ func updateSpecWithConfig(spec *v1beta1.BaseModelSpec, config *modelagent.ModelC
 	}
 
 	return updated
+}
+
+// ensureP2PLease creates a P2P coordination lease for the model if it doesn't exist.
+// The lease is used to coordinate which node downloads from HuggingFace while others
+// wait for P2P availability. Using the resource UID ensures a unique, stable lease name.
+func ensureP2PLease(ctx context.Context, kubeClient client.Client, log logr.Logger, uid types.UID, ownerName string, isClusterScope bool) error {
+	leaseName := constants.GetP2PLeaseName(uid)
+	log = log.WithValues("lease", leaseName, "owner", ownerName)
+
+	// Check if lease already exists
+	existingLease := &coordinationv1.Lease{}
+	err := kubeClient.Get(ctx, types.NamespacedName{
+		Namespace: constants.OMENamespace,
+		Name:      leaseName,
+	}, existingLease)
+
+	if err == nil {
+		// Lease already exists, nothing to do
+		log.V(1).Info("P2P lease already exists")
+		return nil
+	}
+
+	if !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check existing lease: %w", err)
+	}
+
+	// Create the lease
+	lease := &coordinationv1.Lease{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      leaseName,
+			Namespace: constants.OMENamespace,
+			Labels: map[string]string{
+				constants.P2PLeaseTypeLabel: constants.P2PLeaseTypeValue,
+			},
+		},
+		Spec: coordinationv1.LeaseSpec{
+			// HolderIdentity is left nil - agents will set this when acquiring
+			LeaseDurationSeconds: ptr.To(int32(constants.P2PDefaultLeaseDurationSeconds)),
+		},
+	}
+
+	if err := kubeClient.Create(ctx, lease); err != nil {
+		if errors.IsAlreadyExists(err) {
+			// Race condition: another controller instance created it
+			log.V(1).Info("P2P lease was created by another instance")
+			return nil
+		}
+		return fmt.Errorf("failed to create P2P lease: %w", err)
+	}
+
+	log.Info("Created P2P lease for model")
+	return nil
+}
+
+// cleanupP2PLease deletes the P2P coordination lease for a model.
+// Called during model deletion to clean up the lease resource.
+func cleanupP2PLease(ctx context.Context, kubeClient client.Client, log logr.Logger, uid types.UID) error {
+	leaseName := constants.GetP2PLeaseName(uid)
+	log = log.WithValues("lease", leaseName)
+
+	lease := &coordinationv1.Lease{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      leaseName,
+			Namespace: constants.OMENamespace,
+		},
+	}
+
+	if err := kubeClient.Delete(ctx, lease); err != nil {
+		if errors.IsNotFound(err) {
+			// Already deleted, nothing to do
+			return nil
+		}
+		return fmt.Errorf("failed to delete P2P lease: %w", err)
+	}
+
+	log.Info("Deleted P2P lease for model")
+	return nil
 }

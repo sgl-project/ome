@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"go.uber.org/zap"
@@ -1367,7 +1368,9 @@ func (s *Gopher) downloadWithP2P(ctx context.Context, task *GopherTask, baseMode
 		return nil
 	}
 
-	leaseName := s.p2pLeaseManager.GetLeaseName(modelHash)
+	// Use resource UID for lease name (matches what controller creates)
+	resourceUID := getModelUID(task)
+	leaseName := constants.GetP2PLeaseName(types.UID(resourceUID))
 	acquired, err := s.p2pLeaseManager.TryAcquire(ctx, leaseName)
 	if err != nil {
 		s.logger.Warnf("Failed to acquire P2P lease for model %s: %v, will try P2P or fallback", modelInfo, err)

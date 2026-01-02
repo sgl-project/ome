@@ -390,6 +390,13 @@ const (
 	P2PMaxWaitTimeMinutes        = 240   // Maximum absolute wait time (4 hours) for very large models
 )
 
+// GetP2PLeaseName returns the P2P lease name for a resource UUID.
+// The lease name is used for coordinating which node downloads from HuggingFace
+// while others wait for P2P availability.
+func GetP2PLeaseName(uid types.UID) string {
+	return P2PLeasePrefix + string(uid)
+}
+
 // Serving Container Block Lists
 const (
 	BlocklistConfigMapVolumeName = "configmap-blocklist-volume"

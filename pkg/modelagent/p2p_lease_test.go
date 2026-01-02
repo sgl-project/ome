@@ -23,12 +23,38 @@ func TestP2PLeaseManager(t *testing.T) {
 
 	lm := NewP2PLeaseManager(fakeClient, "ome", "test-pod", logger)
 
-	t.Run("acquire new lease", func(t *testing.T) {
+	t.Run("acquire lease that does not exist returns false", func(t *testing.T) {
+		// Lease not pre-created by controller, should return false (not error)
+		acquired, err := lm.TryAcquire(ctx, "nonexistent-lease")
+		require.NoError(t, err)
+		assert.False(t, acquired)
+	})
+
+	t.Run("acquire pre-created lease with no holder", func(t *testing.T) {
+		// Controller creates lease with no holder identity
+		now := metav1.NowMicro()
+		preCreatedLease := &coordinationv1.Lease{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-lease-1",
+				Labels: map[string]string{
+					constants.P2PLeaseTypeLabel: constants.P2PLeaseTypeValue,
+				},
+			},
+			Spec: coordinationv1.LeaseSpec{
+				// HolderIdentity is nil - first agent to acquire
+				AcquireTime:          &now,
+				RenewTime:            &now,
+				LeaseDurationSeconds: ptr.To[int32](120),
+			},
+		}
+		_, err := fakeClient.CoordinationV1().Leases("ome").Create(ctx, preCreatedLease, metav1.CreateOptions{})
+		require.NoError(t, err)
+
 		acquired, err := lm.TryAcquire(ctx, "test-lease-1")
 		require.NoError(t, err)
 		assert.True(t, acquired)
 
-		// Verify lease was created
+		// Verify we acquired it
 		lease, err := fakeClient.CoordinationV1().Leases("ome").Get(ctx, "test-lease-1", metav1.GetOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, "test-pod", *lease.Spec.HolderIdentity)
@@ -208,7 +234,25 @@ func TestP2PLeaseManagerRenew(t *testing.T) {
 
 	lm := NewP2PLeaseManager(fakeClient, "ome", "test-pod", logger)
 
-	// Create a lease first
+	// Create a pre-existing lease (as controller would) with no holder
+	now := metav1.NowMicro()
+	preCreatedLease := &coordinationv1.Lease{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "renew-test-lease",
+			Labels: map[string]string{
+				constants.P2PLeaseTypeLabel: constants.P2PLeaseTypeValue,
+			},
+		},
+		Spec: coordinationv1.LeaseSpec{
+			LeaseDurationSeconds: ptr.To[int32](120),
+			AcquireTime:          &now,
+			RenewTime:            &now,
+		},
+	}
+	_, err := fakeClient.CoordinationV1().Leases("ome").Create(ctx, preCreatedLease, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	// Acquire the lease
 	acquired, err := lm.TryAcquire(ctx, "renew-test-lease")
 	require.NoError(t, err)
 	require.True(t, acquired)

@@ -52,41 +52,21 @@ func (m *P2PLeaseManager) GetLeaseName(modelHash string) string {
 	return constants.P2PLeasePrefix + modelHash
 }
 
-// TryAcquire attempts to acquire a lease for the given name.
-// Returns true if the lease was acquired, false if another holder has it.
+// TryAcquire attempts to acquire an existing lease for the given name.
+// The lease must be pre-created by the controller using the resource UUID.
+// Returns true if the lease was acquired, false if another holder has it or lease doesn't exist.
 func (m *P2PLeaseManager) TryAcquire(ctx context.Context, name string) (bool, error) {
 	now := metav1.NowMicro()
 
-	lease := &coordinationv1.Lease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Labels: map[string]string{
-				constants.P2PLeaseTypeLabel: constants.P2PLeaseTypeValue,
-			},
-		},
-		Spec: coordinationv1.LeaseSpec{
-			HolderIdentity:       &m.holderIdentity,
-			AcquireTime:          &now,
-			RenewTime:            &now,
-			LeaseDurationSeconds: ptr.To(m.leaseDurationSeconds),
-		},
-	}
-
-	// Try to create the lease
-	_, err := m.k8s.CoordinationV1().Leases(m.namespace).Create(ctx, lease, metav1.CreateOptions{})
-	if err == nil {
-		m.logger.Debugf("Acquired P2P lease %s", name)
-		return true, nil
-	}
-
-	if !errors.IsAlreadyExists(err) {
-		return false, fmt.Errorf("failed to create lease: %w", err)
-	}
-
-	// Lease exists, check if we can take it over
-	existing, getErr := m.k8s.CoordinationV1().Leases(m.namespace).Get(ctx, name, metav1.GetOptions{})
-	if getErr != nil {
-		return false, fmt.Errorf("failed to get existing lease: %w", getErr)
+	// Get the existing lease (created by controller)
+	existing, err := m.k8s.CoordinationV1().Leases(m.namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Lease not found - controller hasn't created it yet, or P2P not enabled for this model
+			m.logger.Debugf("P2P lease %s not found (not created by controller)", name)
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to get lease: %w", err)
 	}
 
 	// If completed, no need to acquire
@@ -95,30 +75,41 @@ func (m *P2PLeaseManager) TryAcquire(ctx context.Context, name string) (bool, er
 		return false, nil
 	}
 
-	// If expired, try to take over
-	if m.IsExpired(existing) {
+	// Check if lease is unacquired (no holder) or expired
+	canAcquire := false
+	if existing.Spec.HolderIdentity == nil || *existing.Spec.HolderIdentity == "" {
+		// Lease has no holder - first agent to acquire it
+		m.logger.Debugf("Lease %s has no holder, attempting to acquire", name)
+		canAcquire = true
+	} else if m.IsExpired(existing) {
+		// Lease is expired, try to take over
 		m.logger.Debugf("Lease %s expired, attempting takeover", name)
-		existing.Spec.HolderIdentity = &m.holderIdentity
-		existing.Spec.AcquireTime = &now
-		existing.Spec.RenewTime = &now
-		existing.Spec.LeaseDurationSeconds = ptr.To(m.leaseDurationSeconds)
-
-		_, updateErr := m.k8s.CoordinationV1().Leases(m.namespace).Update(ctx, existing, metav1.UpdateOptions{})
-		if updateErr == nil {
-			m.logger.Debugf("Took over expired lease %s", name)
-			return true, nil
-		}
-
-		if errors.IsConflict(updateErr) {
-			m.logger.Debugf("Lease %s taken by another node", name)
-			return false, nil
-		}
-
-		return false, fmt.Errorf("failed to update lease: %w", updateErr)
+		canAcquire = true
 	}
 
-	m.logger.Debugf("Lease %s held by %s", name, *existing.Spec.HolderIdentity)
-	return false, nil
+	if !canAcquire {
+		m.logger.Debugf("Lease %s held by %s", name, *existing.Spec.HolderIdentity)
+		return false, nil
+	}
+
+	// Try to acquire the lease
+	existing.Spec.HolderIdentity = &m.holderIdentity
+	existing.Spec.AcquireTime = &now
+	existing.Spec.RenewTime = &now
+	existing.Spec.LeaseDurationSeconds = ptr.To(m.leaseDurationSeconds)
+
+	_, updateErr := m.k8s.CoordinationV1().Leases(m.namespace).Update(ctx, existing, metav1.UpdateOptions{})
+	if updateErr == nil {
+		m.logger.Debugf("Acquired P2P lease %s", name)
+		return true, nil
+	}
+
+	if errors.IsConflict(updateErr) {
+		m.logger.Debugf("Lease %s taken by another node", name)
+		return false, nil
+	}
+
+	return false, fmt.Errorf("failed to update lease: %w", updateErr)
 }
 
 // Renew renews the lease to extend its duration.
