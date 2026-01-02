@@ -354,6 +354,49 @@ const (
 	AuthtypeOKEWorkloadIdentity = "OkeWorkloadIdentity"
 )
 
+// P2P Model Distribution Constants
+const (
+	// P2PLeasePrefix is the prefix for P2P download coordination leases
+	P2PLeasePrefix = "ome-model-"
+	// P2PLeaseTypeLabel identifies leases used for model download coordination
+	P2PLeaseTypeLabel = "ome.io/type"
+	// P2PLeaseTypeValue is the value for model download leases
+	P2PLeaseTypeValue = "model-download"
+	// P2PLeaseStatusLabel indicates the download status
+	P2PLeaseStatusLabel = "ome.io/status"
+	// P2PLeaseStatusComplete indicates download is complete
+	P2PLeaseStatusComplete = "complete"
+	// P2PLeaseModelHashLabel stores the model hash
+	P2PLeaseModelHashLabel = "ome.io/model-hash"
+
+	// P2PPeersServiceName is the headless service name for peer discovery
+	P2PPeersServiceName = "ome-peers"
+
+	// Default P2P configuration values
+	P2PDefaultTorrentPort          = 6881
+	P2PDefaultMetainfoPort         = 8081
+	P2PDefaultMaxDownloadRateMBps  = 2048 // 2 GB/s
+	P2PDefaultMaxUploadRateMBps    = 2048 // 2 GB/s
+	P2PDefaultLeaseDurationSeconds = 120  // 2 minutes
+	P2PDefaultLeaseRenewSeconds    = 30
+	P2PDefaultP2PTimeoutSeconds    = 30
+	P2PDefaultPieceLength          = 4 * 1024 * 1024 // 4MB pieces
+
+	// P2P wait configuration for nodes waiting for P2P availability
+	P2PDefaultWaitMaxAttempts    = 60    // Deprecated: kept for compatibility
+	P2PDefaultWaitBaseDelayMs    = 2000  // Interval between lease/peer checks (2 seconds)
+	P2PDefaultWaitMaxDelayMs     = 30000 // Deprecated: kept for compatibility
+	P2PDefaultWaitBackoffDivisor = 10    // Deprecated: kept for compatibility
+	P2PMaxWaitTimeMinutes        = 240   // Maximum absolute wait time (4 hours) for very large models
+)
+
+// GetP2PLeaseName returns the P2P lease name for a resource UUID.
+// The lease name is used for coordinating which node downloads from HuggingFace
+// while others wait for P2P availability.
+func GetP2PLeaseName(uid types.UID) string {
+	return P2PLeasePrefix + string(uid)
+}
+
 // Serving Container Block Lists
 const (
 	BlocklistConfigMapVolumeName = "configmap-blocklist-volume"

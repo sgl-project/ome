@@ -7,3 +7,4 @@ resources:
   - daemonset.yaml
   - serviceaccount.yaml
   - configmap.yaml
+  - headless-service.yaml

@@ -1,0 +1,23 @@
+# Headless Service for P2P Peer Discovery
+# Enables DNS-based peer discovery for P2P model distribution.
+# Pods can look up other pods' IPs via DNS to establish BitTorrent connections.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ome-peers
+  namespace: ome
+  labels:
+    app.kubernetes.io/component: "ome-model-agent-daemonset"
+spec:
+  clusterIP: None  # Headless service - enables DNS-based peer discovery
+  selector:
+    app.kubernetes.io/component: "ome-model-agent-daemonset"
+  ports:
+    - port: 6881
+      targetPort: 6881
+      name: torrent
+      protocol: TCP
+    - port: 8081
+      targetPort: 8081
+      name: metainfo
+      protocol: TCP

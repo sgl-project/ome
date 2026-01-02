@@ -47,7 +47,7 @@ func NewModelConfigParser(omeClient versioned.Interface, logger *zap.SugaredLogg
 // ParseModelConfig reads the config.json file from the model directory and extracts metadata
 // without updating any resources. This allows the caller to control when and how updates happen.
 func (p *ModelConfigParser) ParseModelConfig(modelDir string, baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) (*ModelMetadata, error) {
-	p.logger.Infof("Parsing model config at: %s", modelDir)
+	p.logger.Debugf("Parsing model config at: %s", modelDir)
 
 	// Skip if the directory doesn't exist
 	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
@@ -57,7 +57,7 @@ func (p *ModelConfigParser) ParseModelConfig(modelDir string, baseModel *v1beta1
 
 	// Check if model should skip config parsing
 	if shouldSkip := p.shouldSkipConfigParsing(baseModel, clusterBaseModel); shouldSkip {
-		p.logger.Infof("Skipping config parsing due to annotation")
+		p.logger.Debugf("Skipping config parsing due to annotation")
 		return nil, nil
 	}
 
@@ -67,7 +67,7 @@ func (p *ModelConfigParser) ParseModelConfig(modelDir string, baseModel *v1beta1
 		return nil, fmt.Errorf("failed to find config.json file: %w", err)
 	}
 
-	p.logger.Infof("Found config file at: %s", configPath)
+	p.logger.Debugf("Found config file at: %s", configPath)
 
 	// Parse the config.json file using the hfutil.model_config module
 	hfModel, err := p.loadModelConfig(configPath)
@@ -77,7 +77,7 @@ func (p *ModelConfigParser) ParseModelConfig(modelDir string, baseModel *v1beta1
 
 	// Use the HuggingFaceModel interface to extract metadata
 	metadata := p.extractModelMetadataFromHF(hfModel)
-	p.logger.Infof("Extracted metadata: %+v", metadata)
+	p.logger.Debugf("Extracted metadata: %+v", metadata)
 
 	// Update BaseModel or ClusterBaseModel if provided
 	if baseModel != nil {
@@ -160,7 +160,7 @@ func (p *ModelConfigParser) updateModel(model interface{}, metadata ModelMetadat
 		return fmt.Errorf("unsupported model type: %T", model)
 	}
 
-	p.logger.Infof("Updating %s with extracted metadata", modelInfo)
+	p.logger.Debugf("Updating %s with extracted metadata", modelInfo)
 
 	// Update the model in Kubernetes
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -216,7 +216,7 @@ func (p *ModelConfigParser) updateClusterBaseModel(model *v1beta1.ClusterBaseMod
 
 // extractModelMetadataFromHF extracts relevant metadata using the HuggingFaceModel interface
 func (p *ModelConfigParser) extractModelMetadataFromHF(hfModel modelconfig.HuggingFaceModel) ModelMetadata {
-	p.logger.Infof("Extracting metadata from HuggingFace model: type=%s, architecture=%s",
+	p.logger.Debugf("Extracting metadata from HuggingFace model: type=%s, architecture=%s",
 		hfModel.GetModelType(), hfModel.GetArchitecture())
 
 	metadata := ModelMetadata{
@@ -242,27 +242,27 @@ func (p *ModelConfigParser) extractModelMetadataFromHF(hfModel modelconfig.Huggi
 	transformerVersion := hfModel.GetTransformerVersion()
 	if transformerVersion != "" {
 		metadata.ModelFramework.Version = &transformerVersion
-		p.logger.Infof("Setting transformer version: %s", transformerVersion)
+		p.logger.Debugf("Setting transformer version: %s", transformerVersion)
 	}
 
 	// Extract quantization information if available
 	quantType := hfModel.GetQuantizationType()
 	if quantType != "" {
-		p.logger.Infof("Detected quantization type: %s", quantType)
+		p.logger.Debugf("Detected quantization type: %s", quantType)
 		switch {
 		case strings.Contains(strings.ToLower(quantType), "int4"):
 			metadata.Quantization = v1beta1.ModelQuantizationINT4
-			p.logger.Infof("Setting quantization to INT4")
+			p.logger.Debugf("Setting quantization to INT4")
 		case strings.Contains(strings.ToLower(quantType), "fp8"):
 			metadata.Quantization = v1beta1.ModelQuantizationFP8
-			p.logger.Infof("Setting quantization to FP8")
+			p.logger.Debugf("Setting quantization to FP8")
 		}
 	}
 
 	// Get the model size in bytes
 	modelSizeBytes := hfModel.GetModelSizeBytes()
 	if modelSizeBytes > 0 {
-		p.logger.Infof("Model size in bytes: %d (%.2f GB)",
+		p.logger.Debugf("Model size in bytes: %d (%.2f GB)",
 			modelSizeBytes, float64(modelSizeBytes)/1000000000.0)
 	}
 
@@ -292,7 +292,7 @@ func (p *ModelConfigParser) extractModelMetadataFromHF(hfModel modelconfig.Huggi
 		p.logger.Warnf("Failed to marshal model configuration: %v", err)
 	}
 
-	p.logger.Infof("Extracted metadata: type=%s, architecture=%s, size=%s, maxTokens=%d, capabilities=%v",
+	p.logger.Debugf("Extracted metadata: type=%s, architecture=%s, size=%s, maxTokens=%d, capabilities=%v",
 		metadata.ModelType, metadata.ModelArchitecture, metadata.ModelParameterSize,
 		metadata.MaxTokens, metadata.ModelCapabilities)
 
@@ -300,7 +300,7 @@ func (p *ModelConfigParser) extractModelMetadataFromHF(hfModel modelconfig.Huggi
 }
 
 func (p *ModelConfigParser) updateModelSpec(spec *v1beta1.BaseModelSpec, metadata ModelMetadata) {
-	p.logger.Info("Updating model spec with extracted metadata")
+	p.logger.Debug("Updating model spec with extracted metadata")
 
 	// Use a helper function for updating fields
 	updateField := func(current interface{}, new interface{}, fieldName string) bool {
@@ -367,7 +367,7 @@ func (p *ModelConfigParser) updateModelSpec(spec *v1beta1.BaseModelSpec, metadat
 	updateField(&spec.Quantization, metadata.Quantization, "Quantization")
 	updateField(&spec.ModelConfiguration, metadata.ModelConfiguration, "ModelConfiguration")
 
-	p.logger.Info("Model spec update complete")
+	p.logger.Debug("Model spec update complete")
 }
 
 // determineModelCapabilitiesFromHF determines the model capabilities based on the HuggingFaceModel
@@ -377,7 +377,7 @@ func (p *ModelConfigParser) shouldSkipConfigParsing(baseModel *v1beta1.BaseModel
 	if baseModel != nil {
 		if value, exists := baseModel.Annotations[ConfigParsingAnnotation]; exists {
 			if strings.ToLower(value) == "true" {
-				p.logger.Infof("Skipping config parsing for BaseModel %s/%s due to annotation", baseModel.Namespace, baseModel.Name)
+				p.logger.Debugf("Skipping config parsing for BaseModel %s/%s due to annotation", baseModel.Namespace, baseModel.Name)
 				return true
 			}
 		}
@@ -387,7 +387,7 @@ func (p *ModelConfigParser) shouldSkipConfigParsing(baseModel *v1beta1.BaseModel
 	if clusterBaseModel != nil {
 		if value, exists := clusterBaseModel.Annotations[ConfigParsingAnnotation]; exists {
 			if strings.ToLower(value) == "true" {
-				p.logger.Infof("Skipping config parsing for ClusterBaseModel %s due to annotation", clusterBaseModel.Name)
+				p.logger.Debugf("Skipping config parsing for ClusterBaseModel %s due to annotation", clusterBaseModel.Name)
 				return true
 			}
 		}
@@ -439,6 +439,6 @@ func (p *ModelConfigParser) populateArtifactAttribute(sha string, parentPath str
 		ChildrenPaths: make([]string, 0),
 	}
 	currentModelMetadata.Artifact = artifact
-	p.logger.Infof("current artifact is :%s", currentModelMetadata.Artifact)
+	p.logger.Debugf("current artifact is :%s", currentModelMetadata.Artifact)
 	return &currentModelMetadata
 }
