@@ -78,7 +78,7 @@ func (n *NodeLabelReconciler) ReconcileNodeLabels(op *NodeLabelOp) error {
 // applyNodeLabelOperation applies model state changes to the node labels
 func (n *NodeLabelReconciler) applyNodeLabelOperation(op *NodeLabelOp) error {
 	modelInfo := getNodeLabelModelInfo(op)
-	n.logger.Infof("Processing node label %s operation for %s in state: %s", op.ModelStateOnNode, modelInfo, op.ModelStateOnNode)
+	n.logger.Debugf("Processing node label %s operation for %s in state: %s", op.ModelStateOnNode, modelInfo, op.ModelStateOnNode)
 
 	// Get label key for this model
 	labelKey, err := getModelLabelKey(op)
@@ -108,13 +108,13 @@ func (n *NodeLabelReconciler) applyNodeLabelOperation(op *NodeLabelOp) error {
 	case Deleted:
 		// For delete operations, if the label doesn't exist, the operation is already complete
 		if !labelExists {
-			n.logger.Infof("Label %s already removed from node %s for %s - operation is idempotent", labelKey, n.nodeName, modelInfo)
+			n.logger.Debugf("Label %s already removed from node %s for %s - operation is idempotent", labelKey, n.nodeName, modelInfo)
 			return nil
 		}
 	case Ready, Updating, Failed:
 		// For add/update operations, if the label already has the desired value, skip
 		if labelExists && currentValue == string(op.ModelStateOnNode) {
-			n.logger.Infof("Label %s already set to %s on node %s for %s - operation is idempotent",
+			n.logger.Debugf("Label %s already set to %s on node %s for %s - operation is idempotent",
 				labelKey, string(op.ModelStateOnNode), n.nodeName, modelInfo)
 			return nil
 		}
@@ -130,7 +130,7 @@ func (n *NodeLabelReconciler) applyNodeLabelOperation(op *NodeLabelOp) error {
 
 	// Skip empty patch operations
 	if len(payloadBytes) <= 2 { // Just "[]" for empty patch
-		n.logger.Infof("Empty patch payload for %s, skipping operation", modelInfo)
+		n.logger.Debugf("Empty patch payload for %s, skipping operation", modelInfo)
 		return nil
 	}
 
@@ -155,7 +155,7 @@ func (n *NodeLabelReconciler) applyNodeLabelOperation(op *NodeLabelOp) error {
 		} else if errors.IsInvalid(err) || errors.IsBadRequest(err) {
 			// For delete operations that fail with "not found" patch path errors, consider it already done
 			if op.ModelStateOnNode == Deleted && strings.Contains(err.Error(), "not found") {
-				n.logger.Infof("Label %s already removed from node %s for %s - considering delete operation successful",
+				n.logger.Debugf("Label %s already removed from node %s for %s - considering delete operation successful",
 					labelKey, n.nodeName, modelInfo)
 				return nil
 			}
@@ -169,7 +169,7 @@ func (n *NodeLabelReconciler) applyNodeLabelOperation(op *NodeLabelOp) error {
 		n.logger.Errorf("Failed to patch node %s for %s: %v", n.nodeName, modelInfo, err)
 		return err
 	}
-	n.logger.Infof("Successfully patched node %s with %s state for %s", n.nodeName, op.ModelStateOnNode, modelInfo)
+	n.logger.Debugf("Successfully patched node %s with %s state for %s", n.nodeName, op.ModelStateOnNode, modelInfo)
 
 	return nil
 }

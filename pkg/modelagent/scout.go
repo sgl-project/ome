@@ -33,6 +33,7 @@ type Scout struct {
 	clusterBaseModelSynced cache.InformerSynced
 	informerFactory        omev1beta1informers.SharedInformerFactory
 	gopherChan             chan<- *GopherTask
+	deleteChan             chan<- *GopherTask // Dedicated channel for delete tasks
 	nodeName               string
 	nodeInfo               *v1.Node
 	nodeShapeAlias         string
@@ -51,6 +52,7 @@ func NewScout(ctx context.Context, nodeName string,
 	clusterBaseModelInformer omev1beta1.ClusterBaseModelInformer,
 	informerFactory omev1beta1informers.SharedInformerFactory,
 	gopherChan chan<- *GopherTask,
+	deleteChan chan<- *GopherTask,
 	kubeClient *kubernetes.Clientset,
 	logger *zap.SugaredLogger) (*Scout, error) {
 
@@ -81,6 +83,7 @@ func NewScout(ctx context.Context, nodeName string,
 		clusterBaseModelSynced: clusterBaseModelInformer.Informer().HasSynced,
 		informerFactory:        informerFactory,
 		gopherChan:             gopherChan,
+		deleteChan:             deleteChan,
 		nodeName:               nodeName,
 		kubeClient:             kubeClient,
 		logger:                 logger,
@@ -159,7 +162,7 @@ func (w *Scout) Run(stopCh <-chan struct{}) error {
 		default:
 		}
 
-		w.logger.Infof("Attempting to sync caches (attempt %d/%d)", attempt, maxRetries)
+		w.logger.Debugf("Attempting to sync caches (attempt %d/%d)", attempt, maxRetries)
 
 		// Use a separate channel for this sync attempt to distinguish between
 		// timeout and shutdown signal
@@ -235,9 +238,9 @@ func (w *Scout) downloadBaseModel(obj interface{}) {
 		return
 	}
 
-	w.logger.Infof("Processing BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
+	w.logger.Debugf("Processing BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
 	if !baseModel.ObjectMeta.DeletionTimestamp.IsZero() {
-		w.logger.Infof("ignoring because of deleting of BaseModel '%s'", baseModel.Name)
+		w.logger.Debugf("ignoring because of deleting of BaseModel '%s'", baseModel.Name)
 		return
 	}
 
@@ -250,7 +253,7 @@ func (w *Scout) downloadBaseModel(obj interface{}) {
 			return
 		}
 
-		w.logger.Infof("Downloading BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
+		w.logger.Debugf("Downloading BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
 
 		IsTensorrtLLMModel := baseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
 
@@ -280,9 +283,9 @@ func (w *Scout) downloadClusterBaseModel(obj interface{}) {
 		return
 	}
 
-	w.logger.Infof("Processing ClusterBaseModel: %s", clusterBaseModel.Name)
+	w.logger.Debugf("Processing ClusterBaseModel: %s", clusterBaseModel.Name)
 	if !clusterBaseModel.ObjectMeta.DeletionTimestamp.IsZero() {
-		w.logger.Infof("ignoring because of deleting ClusterBaseModel '%s'", clusterBaseModel.Name)
+		w.logger.Debugf("ignoring because of deleting ClusterBaseModel '%s'", clusterBaseModel.Name)
 		return
 	}
 
@@ -295,7 +298,7 @@ func (w *Scout) downloadClusterBaseModel(obj interface{}) {
 			return
 		}
 
-		w.logger.Infof("Downloading ClusterBaseModel: %s", clusterBaseModel.Name)
+		w.logger.Debugf("Downloading ClusterBaseModel: %s", clusterBaseModel.Name)
 
 		IsTensorrtLLMModel := clusterBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
 
@@ -329,13 +332,13 @@ func (w *Scout) updateBaseModel(old, new interface{}) {
 	if w.shouldDownloadModel(oldBaseModel.Spec.Storage) &&
 		!w.shouldDownloadModel(newBaseModel.Spec.Storage) {
 		// shape config changed, delete it from the current node
-		w.logger.Infof("Target shapes excluded BaseModel update: %s in namespace %s, deleting", newBaseModel.GetName(), newBaseModel.GetNamespace())
+		w.logger.Debugf("Target shapes excluded BaseModel update: %s in namespace %s, deleting", newBaseModel.GetName(), newBaseModel.GetNamespace())
 		w.deleteBaseModel(new)
 		return
 	}
 
 	if !newBaseModel.ObjectMeta.DeletionTimestamp.IsZero() {
-		w.logger.Infof("Resource has deletion timestamp: BaseModel '%s', processing delete", newBaseModel.Name)
+		w.logger.Debugf("Resource has deletion timestamp: BaseModel '%s', processing delete", newBaseModel.Name)
 		w.deleteBaseModel(newBaseModel)
 		return
 	}
@@ -359,7 +362,7 @@ func (w *Scout) updateBaseModel(old, new interface{}) {
 	}
 
 	if hasChanges && w.shouldDownloadModel(newBaseModel.Spec.Storage) { // mainly deal with download model artifact due to node selector and node affinity
-		w.logger.Infof("BaseModel %s needs refresh in namespace %s", newBaseModel.GetName(), newBaseModel.GetNamespace())
+		w.logger.Debugf("BaseModel %s needs refresh in namespace %s", newBaseModel.GetName(), newBaseModel.GetNamespace())
 
 		IsTensorrtLLMModel := newBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
 
@@ -397,13 +400,13 @@ func (w *Scout) updateClusterBaseModel(old, new interface{}) {
 	if w.shouldDownloadModel(oldClusterBaseModel.Spec.Storage) &&
 		!w.shouldDownloadModel(newClusterBaseModel.Spec.Storage) {
 		// shape config changed, delete it from the current node
-		w.logger.Infof("Target shapes excluded ClusterBaseModel %s, deleting", newClusterBaseModel.GetName())
+		w.logger.Debugf("Target shapes excluded ClusterBaseModel %s, deleting", newClusterBaseModel.GetName())
 		w.deleteClusterBaseModel(new)
 		return
 	}
 
 	if !newClusterBaseModel.ObjectMeta.DeletionTimestamp.IsZero() {
-		w.logger.Infof("Resource has deletion timestamp: ClusterBaseModel '%s', processing delete", newClusterBaseModel.Name)
+		w.logger.Debugf("Resource has deletion timestamp: ClusterBaseModel '%s', processing delete", newClusterBaseModel.Name)
 		w.deleteClusterBaseModel(newClusterBaseModel)
 		return
 	}
@@ -427,7 +430,7 @@ func (w *Scout) updateClusterBaseModel(old, new interface{}) {
 	}
 
 	if hasChanges && w.shouldDownloadModel(newClusterBaseModel.Spec.Storage) {
-		w.logger.Infof("ClusterBaseModel %s need refresh", newClusterBaseModel.GetName())
+		w.logger.Debugf("ClusterBaseModel %s need refresh", newClusterBaseModel.GetName())
 
 		IsTensorrtLLMModel := newClusterBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
 
@@ -457,14 +460,15 @@ func (w *Scout) deleteBaseModel(obj interface{}) {
 		return
 	}
 
-	w.logger.Infof("Deleting BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
+	w.logger.Debugf("Deleting BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
 
 	gopherTask := &GopherTask{
 		TaskType:  Delete,
 		BaseModel: baseModel,
 	}
 
-	w.gopherChan <- gopherTask
+	// Use dedicated delete channel for immediate processing
+	w.deleteChan <- gopherTask
 }
 
 func (w *Scout) deleteClusterBaseModel(obj interface{}) {
@@ -474,13 +478,14 @@ func (w *Scout) deleteClusterBaseModel(obj interface{}) {
 		return
 	}
 
-	w.logger.Infof("Deleting ClusterBaseModel: %s", clusterBaseModel.Name)
+	w.logger.Debugf("Deleting ClusterBaseModel: %s", clusterBaseModel.Name)
 
 	gopherTask := &GopherTask{
 		TaskType:         Delete,
 		ClusterBaseModel: clusterBaseModel,
 	}
-	w.gopherChan <- gopherTask
+	// Use dedicated delete channel for immediate processing
+	w.deleteChan <- gopherTask
 }
 
 // reconcilePendingDeletions checks for any resources with deletion timestamps
@@ -496,7 +501,7 @@ func (w *Scout) reconcilePendingDeletions() {
 	} else {
 		for _, baseModel := range baseModels {
 			if !baseModel.ObjectMeta.DeletionTimestamp.IsZero() {
-				w.logger.Infof("Found BaseModel with deletion timestamp during startup: %s in namespace %s",
+				w.logger.Debugf("Found BaseModel with deletion timestamp during startup: %s in namespace %s",
 					baseModel.Name, baseModel.Namespace)
 				w.deleteBaseModel(baseModel)
 			}
@@ -510,7 +515,7 @@ func (w *Scout) reconcilePendingDeletions() {
 	} else {
 		for _, clusterBaseModel := range clusterBaseModels {
 			if !clusterBaseModel.ObjectMeta.DeletionTimestamp.IsZero() {
-				w.logger.Infof("Found ClusterBaseModel with deletion timestamp during startup: %s",
+				w.logger.Debugf("Found ClusterBaseModel with deletion timestamp during startup: %s",
 					clusterBaseModel.Name)
 				w.deleteClusterBaseModel(clusterBaseModel)
 			}
