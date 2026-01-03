@@ -325,12 +325,11 @@ func TestInferenceService_AutoscalerValidation(t *testing.T) {
 			errMsg:  "is not a supported metric",
 		},
 		{
-			name: "KEDA autoscaler class",
+			name: "valid KEDA autoscaler class",
 			annotations: map[string]string{
 				constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
 			},
-			wantErr: true, // KEDA is in allowed list but not handled in switch statement
-			errMsg:  "unknown autoscaler class [keda]",
+			wantErr: false,
 		},
 	}
 
