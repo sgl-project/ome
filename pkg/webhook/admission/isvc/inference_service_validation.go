@@ -3,8 +3,10 @@ package isvc
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -145,7 +147,8 @@ func validateInferenceServiceAutoscaler(isvc *v1beta1.InferenceService) error {
 						return nil
 					}
 				case constants.AutoscalerClassKEDA:
-					return nil
+					_, err := validateKEDAConfig(isvc)
+					return err
 				case constants.AutoscalerClassExternal:
 					return nil
 				default:
@@ -167,6 +170,146 @@ func validateHPAMetrics(metric v1beta1.ScaleMetric) error {
 		}
 	}
 	return fmt.Errorf("[%s] is not a supported metric", metric)
+}
+
+// kedaValidScalingOperators defines the valid KEDA scaling operators
+var kedaValidScalingOperators = []string{
+	"GreaterThan",
+	"GreaterThanOrEqual",
+	"LessThan",
+	"LessThanOrEqual",
+}
+
+// kedaValidAuthModes defines the valid KEDA authentication modes
+var kedaValidAuthModes = []string{
+	"basic",
+	"tls",
+	"bearer",
+	"custom",
+}
+
+// validateKEDAConfig validates KEDA-specific configuration in KedaConfig and annotations
+func validateKEDAConfig(isvc *v1beta1.InferenceService) (admission.Warnings, error) {
+	var warnings admission.Warnings
+	kedaConfig := isvc.Spec.KedaConfig
+	annotations := isvc.ObjectMeta.Annotations
+
+	// Validate scaling operator from KedaConfig
+	if kedaConfig != nil && kedaConfig.ScalingOperator != "" {
+		if err := validateKEDAScalingOperator(kedaConfig.ScalingOperator); err != nil {
+			return warnings, err
+		}
+	}
+
+	// Validate scaling operator from annotations (takes precedence)
+	if operatorAnnotation, ok := annotations[constants.KedaScalingOperator]; ok {
+		if err := validateKEDAScalingOperator(operatorAnnotation); err != nil {
+			return warnings, err
+		}
+	}
+
+	// Validate scaling threshold from KedaConfig
+	if kedaConfig != nil && kedaConfig.ScalingThreshold != "" {
+		if err := validateKEDAScalingThreshold(kedaConfig.ScalingThreshold); err != nil {
+			return warnings, err
+		}
+	}
+
+	// Validate scaling threshold from annotations
+	if thresholdAnnotation, ok := annotations[constants.KedaScalingThreshold]; ok {
+		if err := validateKEDAScalingThreshold(thresholdAnnotation); err != nil {
+			return warnings, err
+		}
+	}
+
+	// Validate Prometheus server address from KedaConfig
+	if kedaConfig != nil && kedaConfig.PromServerAddress != "" {
+		if err := validateKEDAPrometheusServerAddress(kedaConfig.PromServerAddress); err != nil {
+			return warnings, err
+		}
+	}
+
+	// Validate Prometheus server address from annotations
+	if promAddrAnnotation, ok := annotations[constants.KedaPrometheusServerAddress]; ok {
+		if err := validateKEDAPrometheusServerAddress(promAddrAnnotation); err != nil {
+			return warnings, err
+		}
+	}
+
+	// Validate authModes if provided
+	if kedaConfig != nil && kedaConfig.AuthModes != "" {
+		if err := validateKEDAAuthModes(kedaConfig.AuthModes); err != nil {
+			return warnings, err
+		}
+
+		// Warn if authModes is set without authenticationRef
+		if kedaConfig.AuthenticationRef == nil {
+			warnings = append(warnings, "KEDA authModes is specified but authenticationRef is not set; authModes will be ignored by KEDA")
+		}
+	}
+
+	return warnings, nil
+}
+
+// validateKEDAScalingOperator validates that the scaling operator is one of the valid KEDA operators
+func validateKEDAScalingOperator(operator string) error {
+	for _, valid := range kedaValidScalingOperators {
+		if operator == valid {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid KEDA scaling operator %q, must be one of: %s", operator, strings.Join(kedaValidScalingOperators, ", "))
+}
+
+// validateKEDAScalingThreshold validates that the scaling threshold is a valid number
+func validateKEDAScalingThreshold(threshold string) error {
+	_, err := strconv.ParseFloat(threshold, 64)
+	if err != nil {
+		return fmt.Errorf("invalid KEDA scaling threshold %q: must be a valid number", threshold)
+	}
+	return nil
+}
+
+// validateKEDAPrometheusServerAddress validates that the Prometheus server address is a valid URL
+func validateKEDAPrometheusServerAddress(address string) error {
+	parsedURL, err := url.Parse(address)
+	if err != nil {
+		return fmt.Errorf("invalid KEDA Prometheus server address %q: %v", address, err)
+	}
+
+	// Check that scheme is http or https
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return fmt.Errorf("invalid KEDA Prometheus server address %q: scheme must be http or https", address)
+	}
+
+	// Check that host is not empty
+	if parsedURL.Host == "" {
+		return fmt.Errorf("invalid KEDA Prometheus server address %q: host is required", address)
+	}
+
+	return nil
+}
+
+// validateKEDAAuthModes validates that all auth modes are valid
+func validateKEDAAuthModes(authModes string) error {
+	modes := strings.Split(authModes, ",")
+	for _, mode := range modes {
+		mode = strings.TrimSpace(mode)
+		if mode == "" {
+			continue
+		}
+		valid := false
+		for _, validMode := range kedaValidAuthModes {
+			if mode == validMode {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return fmt.Errorf("invalid KEDA auth mode %q, must be one of: %s", mode, strings.Join(kedaValidAuthModes, ", "))
+		}
+	}
+	return nil
 }
 
 // Validate of autoscaler targetUtilizationPercentage
