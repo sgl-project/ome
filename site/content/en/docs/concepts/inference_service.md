@@ -285,13 +285,84 @@ All components (Engine, Decoder, Router) share this common configuration structu
 
 ### KEDA Configuration
 
-| Attribute           | Type   | Description                                               |
-|---------------------|--------|-----------------------------------------------------------|
-| `enableKeda`        | bool   | Whether to enable KEDA autoscaling                        |
-| `promServerAddress` | string | Prometheus server URL for metrics                         |
-| `customPromQuery`   | string | Custom Prometheus query for scaling                       |
-| `scalingThreshold`  | string | Threshold value for scaling decisions                     |
-| `scalingOperator`   | string | Comparison operator (GreaterThanOrEqual, LessThanOrEqual) |
+| Attribute           | Type                     | Description                                                        |
+|---------------------|--------------------------|--------------------------------------------------------------------|
+| `enableKeda`        | bool                     | Whether to enable KEDA autoscaling                                 |
+| `promServerAddress` | string                   | Prometheus server URL for metrics                                  |
+| `customPromQuery`   | string                   | Custom Prometheus query for scaling                                |
+| `scalingThreshold`  | string                   | Threshold value for scaling decisions                              |
+| `scalingOperator`   | string                   | Comparison operator (GreaterThanOrEqual, LessThanOrEqual)          |
+| `authenticationRef` | ScalerAuthenticationRef  | Reference to TriggerAuthentication for Prometheus authentication   |
+| `authModes`         | string                   | Authentication mode (basic, tls, bearer, custom)                   |
+
+#### ScalerAuthenticationRef Specification
+
+| Attribute | Type   | Description                                                                    |
+|-----------|--------|--------------------------------------------------------------------------------|
+| `name`    | string | Name of the TriggerAuthentication or ClusterTriggerAuthentication resource     |
+| `kind`    | string | Kind of auth resource (TriggerAuthentication or ClusterTriggerAuthentication)  |
+
+#### Example: KEDA with Grafana Cloud Authentication
+
+When using Grafana Cloud or other authenticated Prometheus endpoints, you need to create a `TriggerAuthentication` resource and reference it in your InferenceService:
+
+```yaml
+# 1. Create a secret with Grafana Cloud credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-cloud-auth
+  namespace: my-namespace
+type: Opaque
+stringData:
+  username: "123456"  # Grafana Cloud instance ID
+  password: "glc_xxx" # Grafana Cloud API token with metrics:read scope
+---
+# 2. Create a TriggerAuthentication resource
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: grafana-cloud-prometheus-auth
+  namespace: my-namespace
+spec:
+  secretTargetRef:
+    - parameter: username
+      name: grafana-cloud-auth
+      key: username
+    - parameter: password
+      name: grafana-cloud-auth
+      key: password
+---
+# 3. Reference it in InferenceService
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: my-model
+  namespace: my-namespace
+  annotations:
+    ome.io/autoscalerClass: keda
+spec:
+  model:
+    name: llama-3-70b-instruct
+  engine:
+    minReplicas: 1
+    maxReplicas: 7
+    kedaConfig:
+      enableKeda: true
+      promServerAddress: "https://prometheus-prod-39-prod-eu-north-0.grafana.net/api/prom"
+      authenticationRef:
+        name: grafana-cloud-prometheus-auth
+        kind: TriggerAuthentication
+      authModes: "basic"
+      customPromQuery: |
+        histogram_quantile(0.5,
+          sum by(le) (
+            rate(sglang_time_per_output_token_seconds_bucket{ome_io_inferenceservice="%s"}[5m])
+          )
+        )
+      scalingThreshold: "0.07"
+      scalingOperator: "GreaterThanOrEqual"
+```
 
 
 ## Status and Monitoring

@@ -110,24 +110,44 @@ func getDeploymentName(metadata metav1.ObjectMeta) string {
 
 // getScaledObjectTriggers constructs the triggers for the ScaledObject
 func getScaledObjectTriggers(metadata metav1.ObjectMeta, inferenceServiceSpec v1beta1.InferenceServiceSpec) []kedav1.ScaleTriggers {
-	threshold := getScalingThreshold(metadata, inferenceServiceSpec.KedaConfig)
-	operator := getScalingOperator(metadata, inferenceServiceSpec.KedaConfig)
-	prometheusServerAddress := getPrometheusServerAddress(metadata, inferenceServiceSpec.KedaConfig)
-	prometheusQuery := getPrometheusQuery(metadata, inferenceServiceSpec.KedaConfig)
-	scaleMetric := getScaleMetric(inferenceServiceSpec) // New helper function
+	kedaConfig := inferenceServiceSpec.KedaConfig
+	threshold := getScalingThreshold(metadata, kedaConfig)
+	operator := getScalingOperator(metadata, kedaConfig)
+	prometheusServerAddress := getPrometheusServerAddress(metadata, kedaConfig)
+	prometheusQuery := getPrometheusQuery(metadata, kedaConfig)
+	scaleMetric := getScaleMetric(inferenceServiceSpec)
 
-	return []kedav1.ScaleTriggers{
-		{
-			Type: "prometheus",
-			Metadata: map[string]string{
-				"serverAddress": prometheusServerAddress,
-				"metricName":    scaleMetric,
-				"query":         prometheusQuery,
-				"threshold":     threshold,
-				"operator":      operator,
-			},
-		},
+	triggerMetadata := map[string]string{
+		"serverAddress": prometheusServerAddress,
+		"metricName":    scaleMetric,
+		"query":         prometheusQuery,
+		"threshold":     threshold,
+		"operator":      operator,
 	}
+
+	trigger := kedav1.ScaleTriggers{
+		Type:     "prometheus",
+		Metadata: triggerMetadata,
+	}
+
+	// Add authenticationRef if configured
+	if kedaConfig != nil && kedaConfig.AuthenticationRef != nil {
+		kind := kedaConfig.AuthenticationRef.Kind
+		if kind == "" {
+			kind = "TriggerAuthentication" // Default kind
+		}
+		trigger.AuthenticationRef = &kedav1.AuthenticationRef{
+			Name: kedaConfig.AuthenticationRef.Name,
+			Kind: kind,
+		}
+		// Add authModes to metadata only when authenticationRef is present
+		// as KEDA requires authenticationRef for authModes to be effective
+		if kedaConfig.AuthModes != "" {
+			trigger.Metadata["authModes"] = kedaConfig.AuthModes
+		}
+	}
+
+	return []kedav1.ScaleTriggers{trigger}
 }
 
 // getScalingThreshold retrieves the scaling threshold
@@ -135,7 +155,7 @@ func getScalingThreshold(metadata metav1.ObjectMeta, kedaConfig *v1beta1.KedaCon
 	if value, ok := metadata.Annotations[constants.KedaScalingThreshold]; ok {
 		return value
 	}
-	if kedaConfig.ScalingThreshold != "" {
+	if kedaConfig != nil && kedaConfig.ScalingThreshold != "" {
 		return kedaConfig.ScalingThreshold
 	}
 	return "10" // Default threshold
@@ -156,7 +176,7 @@ func getScalingOperator(metadata metav1.ObjectMeta, kedaConfig *v1beta1.KedaConf
 	if value, ok := metadata.Annotations[constants.KedaScalingOperator]; ok {
 		return value
 	}
-	if kedaConfig.ScalingOperator != "" {
+	if kedaConfig != nil && kedaConfig.ScalingOperator != "" {
 		return kedaConfig.ScalingOperator
 	}
 	return "LessThanOrEqual" // Default operator
@@ -167,7 +187,7 @@ func getPrometheusServerAddress(metadata metav1.ObjectMeta, kedaConfig *v1beta1.
 	if value, ok := metadata.Annotations[constants.KedaPrometheusServerAddress]; ok {
 		return value
 	}
-	if kedaConfig.PromServerAddress != "" {
+	if kedaConfig != nil && kedaConfig.PromServerAddress != "" {
 		return kedaConfig.PromServerAddress
 	}
 	return "http://prometheus-operated.monitoring.svc.cluster.local:9090" // Default address
@@ -178,7 +198,7 @@ func getPrometheusQuery(metadata metav1.ObjectMeta, kedaConfig *v1beta1.KedaConf
 	if value, ok := metadata.Annotations[constants.KedaPrometheusQuery]; ok {
 		return value
 	}
-	if kedaConfig.CustomPromQuery != "" {
+	if kedaConfig != nil && kedaConfig.CustomPromQuery != "" {
 		return fmt.Sprintf(kedaConfig.CustomPromQuery, metadata.Name)
 	}
 	// Default VLLM Prometheus query
