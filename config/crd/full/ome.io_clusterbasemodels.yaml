@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: clusterbasemodels.ome.io
 spec:
   group: ome.io
@@ -54,37 +54,21 @@ spec:
     name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ClusterBaseModel is the Schema for the basemodels API
         properties:
           apiVersion:
-            description: |-
-              APIVersion defines the versioned schema of this representation of an object.
-              Servers should convert recognized schemas to the latest internal value, and
-              may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: |-
-              Kind is a string value representing the REST resource this object represents.
-              Servers may infer this from the endpoint the client submits requests to.
-              Cannot be updated.
-              In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
           spec:
-            description: BaseModelSpec defines the desired state of BaseModel
             properties:
               additionalMetadata:
                 additionalProperties:
                   type: string
-                description: Additional metadata for the model
                 type: object
               apiCapabilities:
-                description: API capabilities supported by the model, e.g., "OPENAI_V1_CHAT_COMPLETIONS"
                 items:
-                  description: ModelAPICapability enum
                   enum:
                   - OPENAI_V1_CHAT_COMPLETIONS
                   - OPENAI_V1_RESPONSES
@@ -99,112 +83,61 @@ spec:
                 type: array
                 x-kubernetes-list-type: atomic
               compartmentID:
-                description: CompartmentID is the compartment ID of the model
                 type: string
               disabled:
-                description: Whether the model is enabled or not
                 type: boolean
               displayName:
-                description: DisplayName is the user-friendly name of the model
                 type: string
               maxTokens:
-                description: MaxTokens is the maximum number of tokens that can be
-                  processed by the model
                 format: int32
                 type: integer
               modelArchitecture:
-                description: |-
-                  ModelArchitecture specifies the concrete model implementation or head,
-                  such as "LlamaForCausalLM", "GemmaForCausalLM", or "MixtralForCausalLM".
-                  This is often derived from the "architectures" field in Hugging Face config.json.
                 type: string
               modelCapabilities:
-                description: ModelCapabilities of the model, e.g., "TEXT_GENERATION",
-                  "TEXT_SUMMARIZATION", "TEXT_EMBEDDINGS"
                 items:
                   type: string
                 type: array
                 x-kubernetes-list-type: atomic
               modelConfiguration:
-                description: Configuration of the model, stored as generic JSON for
-                  flexibility.
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
               modelFormat:
                 properties:
                   name:
-                    description: Name of the format in which the model is stored,
-                      e.g., "ONNX", "TensorFlow SavedModel", "PyTorch", "SafeTensors"
                     type: string
                   operator:
                     default: Equal
-                    description: |-
-                      Operator for the selector with supported values: "Equal", "GreaterThan"
-                      This is used to select the serving runtime based on the modelFormat version
                     type: string
                   version:
-                    description: |-
-                      Version of the model format.
-                      Used in validating that a runtime supports a predictor.
-                      It Can be "major", "major.minor" or "major.minor.patch".
                     type: string
                   weight:
                     default: 1
-                    description: Weight of the model format in the runtime selector,
-                      used to prioritize modelFormat
                     format: int64
                     type: integer
                 required:
                 - name
                 type: object
               modelFramework:
-                description: |-
-                  ModelFramework specifies the underlying framework used by the model,
-                  such as "ONNX", "TensorFlow", "PyTorch", "Transformer", or "TensorRTLLM".
-                  This value helps determine the appropriate runtime for model serving.
                 properties:
                   name:
-                    description: Name of the library in which the model is stored,
-                      e.g., "ONNXRuntime", "TensorFlow", "PyTorch", "Transformer",
-                      "TensorRTLLM"
                     type: string
                   operator:
                     default: Equal
-                    description: |-
-                      Operator for the selector with supported values: "Equal", "GreaterThan"
-                      This is used to select the serving runtime based on the modelFramework version
                     type: string
                   version:
-                    description: |-
-                      Version of the library.
-                      Used in validating that a runtime supports a predictor.
-                      It Can be "major", "major.minor" or "major.minor.patch".
                     type: string
                   weight:
                     default: 1
-                    description: Weight of the framework in the runtime selector,
-                      used to prioritize modelFramework
                     format: int64
                     type: integer
                 required:
                 - name
                 type: object
               modelParameterSize:
-                description: |-
-                  ModelParameterSize indicates the total number of parameters in the model,
-                  expressed in human-readable form such as "7B", "13B", or "175B".
-                  This can be used for scheduling or runtime selection.
                 type: string
               modelType:
-                description: |-
-                  ModelType defines the architecture family of the model (e.g., "bert", "gpt2", "llama").
-                  This value typically corresponds to the "model_type" field in a Hugging Face model's config.json.
-                  It is used to identify the transformer architecture and inform runtime selection and tokenizer behavior.
                 type: string
               quantization:
-                description: |-
-                  Quantization defines the quantization scheme applied to the model weights,
-                  such as "fp8", "fbgemm_fp8", or "int4". This influences runtime compatibility and performance.
                 type: string
               servingMode:
                 items:
@@ -212,72 +145,29 @@ spec:
                 type: array
                 x-kubernetes-list-type: atomic
               storage:
-                description: Storage configuration for the model
                 properties:
                   downloadPolicy:
-                    description: |-
-                      DownloadPolicy describes the policy of downloading model artifacts
-                      Supported policies:
-                      - AlwaysDownload: always download a copy of model artifact in destination path
-                      - ReuseIfExists: if the identical model artifact has been downloaded in the node, such artifact will be reused
                     enum:
                     - AlwaysDownload
                     - ReuseIfExists
                     type: string
                   key:
-                    description: |-
-                      StorageKey is the name of the key in a Kubernetes Secret used to authenticate access to the model storage.
-                      This key will be used to fetch credentials during model download or access.
                     type: string
                   nodeAffinity:
-                    description: |-
-                      NodeAffinity describes the node affinity rules that further constrain which nodes
-                      are eligible to download and store this model, based on advanced scheduling policies.
                     properties:
                       preferredDuringSchedulingIgnoredDuringExecution:
-                        description: |-
-                          The scheduler will prefer to schedule pods to nodes that satisfy
-                          the affinity expressions specified by this field, but it may choose
-                          a node that violates one or more of the expressions. The node that is
-                          most preferred is the one with the greatest sum of weights, i.e.
-                          for each node that meets all of the scheduling requirements (resource
-                          request, requiredDuringScheduling affinity expressions, etc.),
-                          compute a sum by iterating through the elements of this field and adding
-                          "weight" to the sum if the node matches the corresponding matchExpressions; the
-                          node(s) with the highest sum are the most preferred.
                         items:
-                          description: |-
-                            An empty preferred scheduling term matches all objects with implicit weight 0
-                            (i.e. it's a no-op). A null preferred scheduling term matches no objects (i.e. is also a no-op).
                           properties:
                             preference:
-                              description: A node selector term, associated with the
-                                corresponding weight.
                               properties:
                                 matchExpressions:
-                                  description: A list of node selector requirements
-                                    by node's labels.
                                   items:
-                                    description: |-
-                                      A node selector requirement is a selector that contains values, a key, and an operator
-                                      that relates the key and values.
                                     properties:
                                       key:
-                                        description: The label key that the selector
-                                          applies to.
                                         type: string
                                       operator:
-                                        description: |-
-                                          Represents a key's relationship to a set of values.
-                                          Valid operators are In, NotIn, Exists, DoesNotExist. Gt, and Lt.
                                         type: string
                                       values:
-                                        description: |-
-                                          An array of string values. If the operator is In or NotIn,
-                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
-                                          the values array must be empty. If the operator is Gt or Lt, the values
-                                          array must have a single element, which will be interpreted as an integer.
-                                          This array is replaced during a strategic merge patch.
                                         items:
                                           type: string
                                         type: array
@@ -289,29 +179,13 @@ spec:
                                   type: array
                                   x-kubernetes-list-type: atomic
                                 matchFields:
-                                  description: A list of node selector requirements
-                                    by node's fields.
                                   items:
-                                    description: |-
-                                      A node selector requirement is a selector that contains values, a key, and an operator
-                                      that relates the key and values.
                                     properties:
                                       key:
-                                        description: The label key that the selector
-                                          applies to.
                                         type: string
                                       operator:
-                                        description: |-
-                                          Represents a key's relationship to a set of values.
-                                          Valid operators are In, NotIn, Exists, DoesNotExist. Gt, and Lt.
                                         type: string
                                       values:
-                                        description: |-
-                                          An array of string values. If the operator is In or NotIn,
-                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
-                                          the values array must be empty. If the operator is Gt or Lt, the values
-                                          array must have a single element, which will be interpreted as an integer.
-                                          This array is replaced during a strategic merge patch.
                                         items:
                                           type: string
                                         type: array
@@ -325,8 +199,6 @@ spec:
                               type: object
                               x-kubernetes-map-type: atomic
                             weight:
-                              description: Weight associated with matching the corresponding
-                                nodeSelectorTerm, in the range 1-100.
                               format: int32
                               type: integer
                           required:
@@ -336,46 +208,18 @@ spec:
                         type: array
                         x-kubernetes-list-type: atomic
                       requiredDuringSchedulingIgnoredDuringExecution:
-                        description: |-
-                          If the affinity requirements specified by this field are not met at
-                          scheduling time, the pod will not be scheduled onto the node.
-                          If the affinity requirements specified by this field cease to be met
-                          at some point during pod execution (e.g. due to an update), the system
-                          may or may not try to eventually evict the pod from its node.
                         properties:
                           nodeSelectorTerms:
-                            description: Required. A list of node selector terms.
-                              The terms are ORed.
                             items:
-                              description: |-
-                                A null or empty node selector term matches no objects. The requirements of
-                                them are ANDed.
-                                The TopologySelectorTerm type implements a subset of the NodeSelectorTerm.
                               properties:
                                 matchExpressions:
-                                  description: A list of node selector requirements
-                                    by node's labels.
                                   items:
-                                    description: |-
-                                      A node selector requirement is a selector that contains values, a key, and an operator
-                                      that relates the key and values.
                                     properties:
                                       key:
-                                        description: The label key that the selector
-                                          applies to.
                                         type: string
                                       operator:
-                                        description: |-
-                                          Represents a key's relationship to a set of values.
-                                          Valid operators are In, NotIn, Exists, DoesNotExist. Gt, and Lt.
                                         type: string
                                       values:
-                                        description: |-
-                                          An array of string values. If the operator is In or NotIn,
-                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
-                                          the values array must be empty. If the operator is Gt or Lt, the values
-                                          array must have a single element, which will be interpreted as an integer.
-                                          This array is replaced during a strategic merge patch.
                                         items:
                                           type: string
                                         type: array
@@ -387,29 +231,13 @@ spec:
                                   type: array
                                   x-kubernetes-list-type: atomic
                                 matchFields:
-                                  description: A list of node selector requirements
-                                    by node's fields.
                                   items:
-                                    description: |-
-                                      A node selector requirement is a selector that contains values, a key, and an operator
-                                      that relates the key and values.
                                     properties:
                                       key:
-                                        description: The label key that the selector
-                                          applies to.
                                         type: string
                                       operator:
-                                        description: |-
-                                          Represents a key's relationship to a set of values.
-                                          Valid operators are In, NotIn, Exists, DoesNotExist. Gt, and Lt.
                                         type: string
                                       values:
-                                        description: |-
-                                          An array of string values. If the operator is In or NotIn,
-                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
-                                          the values array must be empty. If the operator is Gt or Lt, the values
-                                          array must have a single element, which will be interpreted as an integer.
-                                          This array is replaced during a strategic merge patch.
                                         items:
                                           type: string
                                         type: array
@@ -432,41 +260,22 @@ spec:
                   nodeSelector:
                     additionalProperties:
                       type: string
-                    description: |-
-                      NodeSelector defines a set of key-value label pairs that must be present on a node
-                      for the model to be scheduled and downloaded onto that node.
                     type: object
                     x-kubernetes-map-type: atomic
                   parameters:
                     additionalProperties:
                       type: string
-                    description: |-
-                      Parameters contain key-value pairs to override default storage credentials or configuration.
-                      These values are typically used to configure access to object storage or mount options.
                     type: object
                   path:
-                    description: Path is the absolute path where the model will be
-                      downloaded and stored on the node.
                     type: string
                   schemaPath:
-                    description: |-
-                      SchemaPath is the path to the model schema or configuration file within the storage system.
-                      This can be used to validate the model or customize how it's loaded.
                     type: string
                   storageUri:
-                    description: |-
-                      StorageUri specifies the source URI of the model in a supported storage backend.
-                      Supported formats:
-                      - OCI Object Storage:   oci://n/{namespace}/b/{bucket}/o/{object_path}
-                      - Persistent Volume:    pvc://{pvc-name}/{sub-path}
-                      - Vendor-specific:      vendor://{vendor-name}/{resource-type}/{resource-path}
-                      This field is required.
                     type: string
                 required:
                 - storageUri
                 type: object
               vendor:
-                description: Vendor of the model, e.g., "NVIDIA", "Meta", "HuggingFace"
                 type: string
               version:
                 type: string
@@ -474,11 +283,8 @@ spec:
             - storage
             type: object
           status:
-            description: ModelStatusSpec defines the observed state of Model weight
             properties:
               lifecycle:
-                description: LifeCycle is an enum of Deprecated, Experiment, Public,
-                  Internal
                 type: string
               nodesFailed:
                 items:
@@ -491,7 +297,6 @@ spec:
                 type: array
                 x-kubernetes-list-type: atomic
               state:
-                description: Status of the model weight
                 enum:
                 - Creating
                 - Importing
