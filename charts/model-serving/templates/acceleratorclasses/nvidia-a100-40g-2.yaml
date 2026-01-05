@@ -1,0 +1,32 @@
+apiVersion: ome.io/v1beta1
+kind: AcceleratorClass
+metadata:
+  name: nvidia-a100-40gb-2
+spec:
+  vendor: nvidia
+  family: ampere
+  model: a100
+  
+  discovery:
+    nodeSelector:
+      nvidia.com/gpu: "true"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: beta.kubernetes.io/instance-type
+                  operator: In
+                  values:
+                    - BM.GPU.B4.8
+                    - BM.GPU4.8
+  
+  capabilities:
+    computeCapability: "2.0"
+  resources:
+    - name: cpu
+      quantity: "16"
+    - name: memory
+      quantity: "448Gi"
+    - name: nvidia.com/gpu
+      quantity: "2"

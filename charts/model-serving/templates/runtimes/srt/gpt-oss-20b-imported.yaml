@@ -74,7 +74,7 @@ spec:
         version: "4.55.0.dev0"
       priority: 1
   modelSizeRange:
-    min: 15B
+    min: 10B
     max: 25B
   protocolVersions:
     - openAI
