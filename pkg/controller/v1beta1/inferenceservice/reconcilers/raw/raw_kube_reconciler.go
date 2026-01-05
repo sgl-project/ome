@@ -1,8 +1,9 @@
 package raw
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"fmt"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 
@@ -57,7 +58,7 @@ func NewRawKubeReconciler(client client.Client,
 	if utils.IsEngineOrRouterEnabled(inferenceServiceSepc) {
 		selector = map[string]string{constants.InferenceServiceLabel: componentMeta.Name}
 	}
-	
+
 	return &RawKubeReconciler{
 		client:     client,
 		scheme:     scheme,

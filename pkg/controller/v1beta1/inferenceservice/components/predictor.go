@@ -18,7 +18,6 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/raw"
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -313,9 +312,9 @@ func (p *Predictor) reconcileObjectMeta(
 	isvc *v1beta1.InferenceService,
 	sRuntime v1beta1.ServingRuntimeSpec,
 	runtimeName string,
-	baseModelSpec opensourcev1beta1.BaseModelSpec,
+	baseModelSpec v1beta1.BaseModelSpec,
 	baseModelMeta metav1.ObjectMeta,
-	fineTunedWeights []*opensourcev1beta1.FineTunedWeight,
+	fineTunedWeights []*v1beta1.FineTunedWeight,
 ) (metav1.ObjectMeta, ctrl.Result, error) {
 
 	annotations, err := p.processAnnotations(isvc, sRuntime, runtimeName, baseModelSpec, baseModelMeta, fineTunedWeights)
@@ -342,9 +341,9 @@ func (p *Predictor) processAnnotations(
 	isvc *v1beta1.InferenceService,
 	sRuntime v1beta1.ServingRuntimeSpec,
 	runtimeName string,
-	baseModelSpec opensourcev1beta1.BaseModelSpec,
+	baseModelSpec v1beta1.BaseModelSpec,
 	baseModelMeta metav1.ObjectMeta,
-	fineTunedWeights []*opensourcev1beta1.FineTunedWeight,
+	fineTunedWeights []*v1beta1.FineTunedWeight,
 ) (map[string]string, error) {
 	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
@@ -368,9 +367,9 @@ func (p *Predictor) processServingAnnotations(
 	isvc *v1beta1.InferenceService,
 	annotations map[string]string,
 	runtimeName string,
-	baseModelSpec opensourcev1beta1.BaseModelSpec,
+	baseModelSpec v1beta1.BaseModelSpec,
 	baseModelMeta metav1.ObjectMeta,
-	fineTunedWeights []*opensourcev1beta1.FineTunedWeight,
+	fineTunedWeights []*v1beta1.FineTunedWeight,
 ) error {
 	if p.fineTunedServing {
 		// TODO: Inject serving sidecar for fine-tuned weights downloading for stacked serving case
@@ -418,9 +417,9 @@ func (p *Predictor) processLabels(
 	isvc *v1beta1.InferenceService,
 	sRuntime v1beta1.ServingRuntimeSpec,
 	runtimeName string,
-	baseModelSpec opensourcev1beta1.BaseModelSpec,
+	baseModelSpec v1beta1.BaseModelSpec,
 	baseModelMeta metav1.ObjectMeta,
-	fineTunedWeights []*opensourcev1beta1.FineTunedWeight,
+	fineTunedWeights []*v1beta1.FineTunedWeight,
 ) (map[string]string, error) {
 	predictorLabels := isvc.Spec.Predictor.Labels
 	sRuntimeLabels := sRuntime.ServingRuntimePodSpec.Labels
@@ -501,7 +500,7 @@ func (p *Predictor) reconcileWorkerPodSpec(
 	isvc *v1beta1.InferenceService,
 	sRuntime v1beta1.ServingRuntimeSpec,
 	objectMeta *metav1.ObjectMeta,
-	baseModel *opensourcev1beta1.BaseModelSpec,
+	baseModel *v1beta1.BaseModelSpec,
 ) (v1.PodSpec, ctrl.Result, error) {
 	// Early return if no worker specs are defined
 	if sRuntime.WorkerPodSpec == nil && isvc.Spec.Predictor.Worker == nil {
@@ -659,7 +658,7 @@ func (p *Predictor) updateVolumeMounts(
 	isvc *v1beta1.InferenceService,
 	container *v1.Container,
 	objectMeta *metav1.ObjectMeta,
-	baseModel *opensourcev1beta1.BaseModelSpec,
+	baseModel *v1beta1.BaseModelSpec,
 ) {
 	p.Log.Info("Update volume mounts", "inference service", isvc.Name, "namespace", isvc.Namespace)
 
@@ -719,7 +718,7 @@ func (p *Predictor) updateVolumeMounts(
 func (p *Predictor) updateEnvVariables(
 	isvc *v1beta1.InferenceService,
 	container *v1.Container,
-	baseModel *opensourcev1beta1.BaseModelSpec,
+	baseModel *v1beta1.BaseModelSpec,
 	objectMeta *metav1.ObjectMeta) {
 	if !p.fineTunedServing {
 		if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
@@ -768,7 +767,7 @@ func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService,
 	container *v1.Container,
 	podSpec *v1.PodSpec,
 	objectMeta *metav1.ObjectMeta,
-	baseModel *opensourcev1beta1.BaseModelSpec,
+	baseModel *v1beta1.BaseModelSpec,
 ) {
 	// Update containers by inserting the custom container and keeping the other runtime containers
 	podSpec.Containers = append([]v1.Container{*container}, sRuntime.Containers[:omeContainerIdx]...)
@@ -819,7 +818,7 @@ func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService,
 }
 
 // updateWorkerPodSpec updates the worker pod spec for the predictor.
-func (p *Predictor) updateWorkerPodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, isvcOmeContainerIdx int, sRuntimeOmeContainerIdx int, container *v1.Container, podSpec *v1.PodSpec, baseModel *opensourcev1beta1.BaseModelSpec) {
+func (p *Predictor) updateWorkerPodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, isvcOmeContainerIdx int, sRuntimeOmeContainerIdx int, container *v1.Container, podSpec *v1.PodSpec, baseModel *v1beta1.BaseModelSpec) {
 	// Update containers by inserting the custom container and keeping the other runtime containers
 	podSpec.Containers = append([]v1.Container{*container}, sRuntime.WorkerPodSpec.Containers[:sRuntimeOmeContainerIdx]...)
 	podSpec.Containers = append(podSpec.Containers, sRuntime.WorkerPodSpec.Containers[sRuntimeOmeContainerIdx+1:]...)
@@ -861,7 +860,7 @@ func (p *Predictor) validateRuntime(isvc *v1beta1.InferenceService, sRuntime v1b
 }
 
 // getRuntime retrieves the serving runtime for the predictor.
-func (p *Predictor) getRuntime(isvc *v1beta1.InferenceService, baseModel opensourcev1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, string, ctrl.Result, error) {
+func (p *Predictor) getRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, string, ctrl.Result, error) {
 	if isvc.Spec.Predictor.Model.Runtime != nil {
 		runtimeSpec, result, err := p.getSpecifiedRuntime(isvc, baseModel)
 		return runtimeSpec, *isvc.Spec.Predictor.Model.Runtime, result, err
@@ -870,7 +869,7 @@ func (p *Predictor) getRuntime(isvc *v1beta1.InferenceService, baseModel opensou
 }
 
 // getSupportingRuntime retrieves the supporting runtime for the predictor.
-func (p *Predictor) getSupportingRuntime(isvc *v1beta1.InferenceService, baseModel opensourcev1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, string, ctrl.Result, error) {
+func (p *Predictor) getSupportingRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, string, ctrl.Result, error) {
 	runtimes, err := isvcutils.GetSupportingRuntimes(isvc.Spec.Predictor.Model, p.client, isvc.Namespace)
 	if err != nil {
 		return v1beta1.ServingRuntimeSpec{}, "", ctrl.Result{}, err
@@ -889,7 +888,7 @@ func (p *Predictor) getSupportingRuntime(isvc *v1beta1.InferenceService, baseMod
 }
 
 // getSpecifiedRuntime retrieves the specified runtime for the predictor.
-func (p *Predictor) getSpecifiedRuntime(isvc *v1beta1.InferenceService, baseModel opensourcev1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, ctrl.Result, error) {
+func (p *Predictor) getSpecifiedRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, ctrl.Result, error) {
 
 	rt, err := isvcutils.GetServingRuntime(p.client, *isvc.Spec.Predictor.Model.Runtime, isvc.Namespace)
 	if err != nil {
@@ -928,26 +927,26 @@ func (p *Predictor) getSpecifiedRuntime(isvc *v1beta1.InferenceService, baseMode
 //}
 
 // reconcileBaseModel reconciles the base model for the predictor.
-func (p *Predictor) reconcileBaseModel(isvc *v1beta1.InferenceService) (opensourcev1beta1.BaseModelSpec, metav1.ObjectMeta, ctrl.Result, error) {
+func (p *Predictor) reconcileBaseModel(isvc *v1beta1.InferenceService) (v1beta1.BaseModelSpec, metav1.ObjectMeta, ctrl.Result, error) {
 	if isvc.Spec.Predictor.Model.BaseModel == nil {
-		return opensourcev1beta1.BaseModelSpec{}, metav1.ObjectMeta{}, ctrl.Result{}, nil
+		return v1beta1.BaseModelSpec{}, metav1.ObjectMeta{}, ctrl.Result{}, nil
 	}
 
 	baseModel, baseModelMeta, err := p.getBaseModelSpec(isvc)
 	if err != nil {
-		return opensourcev1beta1.BaseModelSpec{}, metav1.ObjectMeta{}, ctrl.Result{}, err
+		return v1beta1.BaseModelSpec{}, metav1.ObjectMeta{}, ctrl.Result{}, err
 	}
 
 	if *baseModel.Disabled {
 		p.updateModelTransitionStatus(isvc, v1beta1.BaseModelDisabled, "Specified base model is disabled")
-		return opensourcev1beta1.BaseModelSpec{}, metav1.ObjectMeta{}, ctrl.Result{}, fmt.Errorf("specified base model %s is disabled", *isvc.Spec.Predictor.Model.BaseModel)
+		return v1beta1.BaseModelSpec{}, metav1.ObjectMeta{}, ctrl.Result{}, fmt.Errorf("specified base model %s is disabled", *isvc.Spec.Predictor.Model.BaseModel)
 	}
 
 	return baseModel, baseModelMeta, ctrl.Result{}, nil
 }
 
 // reconcileFineTunedWeights reconciles the fine-tuned weights for the predictor.
-func (p *Predictor) reconcileFineTunedWeights(isvc *v1beta1.InferenceService) ([]*opensourcev1beta1.FineTunedWeight, ctrl.Result, error) {
+func (p *Predictor) reconcileFineTunedWeights(isvc *v1beta1.InferenceService) ([]*v1beta1.FineTunedWeight, ctrl.Result, error) {
 	numOfFineTunedWeights := len(isvc.Spec.Predictor.Model.FineTunedWeights)
 	if numOfFineTunedWeights == 0 {
 		return nil, ctrl.Result{}, nil
@@ -961,12 +960,12 @@ func (p *Predictor) reconcileFineTunedWeights(isvc *v1beta1.InferenceService) ([
 		return nil, ctrl.Result{}, fmt.Errorf("stacked fine-tuned serving is not supported yet")
 	}
 
-	allFineTunedWeights := make([]*opensourcev1beta1.FineTunedWeight, 0)
+	allFineTunedWeights := make([]*v1beta1.FineTunedWeight, 0)
 
 	for _, fineTunedWeightName := range isvc.Spec.Predictor.Model.FineTunedWeights {
 		fineTunedWeight, err := isvcutils.GetFineTunedWeight(p.client, fineTunedWeightName)
 		if err != nil {
-			return make([]*opensourcev1beta1.FineTunedWeight, 0), ctrl.Result{}, err
+			return make([]*v1beta1.FineTunedWeight, 0), ctrl.Result{}, err
 		}
 
 		allFineTunedWeights = append(allFineTunedWeights, fineTunedWeight)
@@ -984,11 +983,11 @@ func (p *Predictor) reconcileFineTunedWeights(isvc *v1beta1.InferenceService) ([
 }
 
 // getBaseModelSpec retrieves the base model spec.
-func (p *Predictor) getBaseModelSpec(isvc *v1beta1.InferenceService) (opensourcev1beta1.BaseModelSpec, metav1.ObjectMeta, error) {
+func (p *Predictor) getBaseModelSpec(isvc *v1beta1.InferenceService) (v1beta1.BaseModelSpec, metav1.ObjectMeta, error) {
 	bm, bmMeta, err := isvcutils.GetBaseModel(p.client, *isvc.Spec.Predictor.Model.BaseModel, isvc.Namespace)
 	if err != nil {
 		p.updateModelTransitionStatus(isvc, v1beta1.BaseModelNotFound, "Waiting for base model to become available")
-		return opensourcev1beta1.BaseModelSpec{}, metav1.ObjectMeta{}, err
+		return v1beta1.BaseModelSpec{}, metav1.ObjectMeta{}, err
 	}
 	return *bm, *bmMeta, nil
 }
@@ -1006,7 +1005,7 @@ func (p *Predictor) reconcilePodSpec(
 	isvc *v1beta1.InferenceService,
 	sRuntime v1beta1.ServingRuntimeSpec,
 	objectMeta *metav1.ObjectMeta,
-	baseModel *opensourcev1beta1.BaseModelSpec,
+	baseModel *v1beta1.BaseModelSpec,
 ) (v1.PodSpec, ctrl.Result, error) {
 	// find the OME container index, the container name must be ome-container; nothing else will be accepted
 	// TODO: this is a temporary solution, we need to find a better way to identify the OME container,

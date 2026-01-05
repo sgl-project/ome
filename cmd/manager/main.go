@@ -33,12 +33,10 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/training"
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	zaplog "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	istionetworking "istio.io/api/networking/v1beta1"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -101,25 +99,6 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
 	utilruntime.Must(jobsetv1alpha2.AddToScheme(scheme))
-
-	// Register inference from opensource which required by dac
-	// These are used by the dac, training, capacityReservation controller.
-	scheme.AddKnownTypes(opensourcev1beta1.SchemeGroupVersion,
-		&opensourcev1beta1.InferenceService{},
-		&opensourcev1beta1.InferenceServiceList{},
-		&opensourcev1beta1.BaseModel{},
-		&opensourcev1beta1.BaseModelList{},
-		&opensourcev1beta1.FineTunedWeight{},
-		&opensourcev1beta1.FineTunedWeightList{},
-		&opensourcev1beta1.ClusterBaseModel{},
-		&opensourcev1beta1.ClusterBaseModelList{},
-		&opensourcev1beta1.ClusterServingRuntime{},
-		&opensourcev1beta1.ClusterServingRuntimeList{},
-		&opensourcev1beta1.ServingRuntime{},
-		&opensourcev1beta1.ServingRuntimeList{},
-	)
-	// Register metadata types for the opensource model types
-	metav1.AddToGroupVersion(scheme, opensourcev1beta1.SchemeGroupVersion)
 }
 
 // Options defines the program-configurable options that may be passed on the command line.

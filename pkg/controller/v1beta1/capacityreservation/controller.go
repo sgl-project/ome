@@ -19,7 +19,6 @@ import (
 	generalutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -442,7 +441,7 @@ func (r *CapacityReservationReconciler) SetupWithManager(mgr ctrl.Manager, capac
 		For(&omev1beta1.ClusterCapacityReservation{}).
 		Owns(&kueuev1beta1.ClusterQueue{}).
 		Watches(
-			&opensourcev1beta1.InferenceService{},
+			&omev1beta1.InferenceService{},
 			eventHandler,
 			builder.WithPredicates(predicates))
 

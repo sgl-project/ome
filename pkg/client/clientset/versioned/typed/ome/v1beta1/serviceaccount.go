@@ -3,9 +3,9 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	scheme "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -21,33 +21,34 @@ type ServiceAccountsGetter interface {
 
 // ServiceAccountInterface has methods to work with ServiceAccount resources.
 type ServiceAccountInterface interface {
-	Create(ctx context.Context, serviceAccount *v1beta1.ServiceAccount, opts v1.CreateOptions) (*v1beta1.ServiceAccount, error)
-	Update(ctx context.Context, serviceAccount *v1beta1.ServiceAccount, opts v1.UpdateOptions) (*v1beta1.ServiceAccount, error)
+	Create(ctx context.Context, serviceAccount *omev1beta1.ServiceAccount, opts v1.CreateOptions) (*omev1beta1.ServiceAccount, error)
+	Update(ctx context.Context, serviceAccount *omev1beta1.ServiceAccount, opts v1.UpdateOptions) (*omev1beta1.ServiceAccount, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, serviceAccount *v1beta1.ServiceAccount, opts v1.UpdateOptions) (*v1beta1.ServiceAccount, error)
+	UpdateStatus(ctx context.Context, serviceAccount *omev1beta1.ServiceAccount, opts v1.UpdateOptions) (*omev1beta1.ServiceAccount, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1beta1.ServiceAccount, error)
-	List(ctx context.Context, opts v1.ListOptions) (*v1beta1.ServiceAccountList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*omev1beta1.ServiceAccount, error)
+	List(ctx context.Context, opts v1.ListOptions) (*omev1beta1.ServiceAccountList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.ServiceAccount, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *omev1beta1.ServiceAccount, err error)
 	ServiceAccountExpansion
 }
 
 // serviceAccounts implements ServiceAccountInterface
 type serviceAccounts struct {
-	*gentype.ClientWithList[*v1beta1.ServiceAccount, *v1beta1.ServiceAccountList]
+	*gentype.ClientWithList[*omev1beta1.ServiceAccount, *omev1beta1.ServiceAccountList]
 }
 
 // newServiceAccounts returns a ServiceAccounts
 func newServiceAccounts(c *OmeV1beta1Client, namespace string) *serviceAccounts {
 	return &serviceAccounts{
-		gentype.NewClientWithList[*v1beta1.ServiceAccount, *v1beta1.ServiceAccountList](
+		gentype.NewClientWithList[*omev1beta1.ServiceAccount, *omev1beta1.ServiceAccountList](
 			"serviceaccounts",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *v1beta1.ServiceAccount { return &v1beta1.ServiceAccount{} },
-			func() *v1beta1.ServiceAccountList { return &v1beta1.ServiceAccountList{} }),
+			func() *omev1beta1.ServiceAccount { return &omev1beta1.ServiceAccount{} },
+			func() *omev1beta1.ServiceAccountList { return &omev1beta1.ServiceAccountList{} },
+		),
 	}
 }

@@ -3,129 +3,32 @@
 package fake
 
 import (
-	"context"
-
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeOciCaches implements OciCacheInterface
-type FakeOciCaches struct {
+// fakeOciCaches implements OciCacheInterface
+type fakeOciCaches struct {
+	*gentype.FakeClientWithList[*v1beta1.OciCache, *v1beta1.OciCacheList]
 	Fake *FakeOmeV1beta1
-	ns   string
 }
 
-var ocicachesResource = v1beta1.SchemeGroupVersion.WithResource("ocicaches")
-
-var ocicachesKind = v1beta1.SchemeGroupVersion.WithKind("OciCache")
-
-// Get takes name of the ociCache, and returns the corresponding ociCache object, and an error if there is any.
-func (c *FakeOciCaches) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.OciCache, err error) {
-	emptyResult := &v1beta1.OciCache{}
-	obj, err := c.Fake.
-		Invokes(testing.NewGetActionWithOptions(ocicachesResource, c.ns, name, options), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
+func newFakeOciCaches(fake *FakeOmeV1beta1, namespace string) omev1beta1.OciCacheInterface {
+	return &fakeOciCaches{
+		gentype.NewFakeClientWithList[*v1beta1.OciCache, *v1beta1.OciCacheList](
+			fake.Fake,
+			namespace,
+			v1beta1.SchemeGroupVersion.WithResource("ocicaches"),
+			v1beta1.SchemeGroupVersion.WithKind("OciCache"),
+			func() *v1beta1.OciCache { return &v1beta1.OciCache{} },
+			func() *v1beta1.OciCacheList { return &v1beta1.OciCacheList{} },
+			func(dst, src *v1beta1.OciCacheList) { dst.ListMeta = src.ListMeta },
+			func(list *v1beta1.OciCacheList) []*v1beta1.OciCache { return gentype.ToPointerSlice(list.Items) },
+			func(list *v1beta1.OciCacheList, items []*v1beta1.OciCache) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1beta1.OciCache), err
-}
-
-// List takes label and field selectors, and returns the list of OciCaches that match those selectors.
-func (c *FakeOciCaches) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.OciCacheList, err error) {
-	emptyResult := &v1beta1.OciCacheList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewListActionWithOptions(ocicachesResource, ocicachesKind, c.ns, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1beta1.OciCacheList{ListMeta: obj.(*v1beta1.OciCacheList).ListMeta}
-	for _, item := range obj.(*v1beta1.OciCacheList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested ociCaches.
-func (c *FakeOciCaches) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchActionWithOptions(ocicachesResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a ociCache and creates it.  Returns the server's representation of the ociCache, and an error, if there is any.
-func (c *FakeOciCaches) Create(ctx context.Context, ociCache *v1beta1.OciCache, opts v1.CreateOptions) (result *v1beta1.OciCache, err error) {
-	emptyResult := &v1beta1.OciCache{}
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateActionWithOptions(ocicachesResource, c.ns, ociCache, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.OciCache), err
-}
-
-// Update takes the representation of a ociCache and updates it. Returns the server's representation of the ociCache, and an error, if there is any.
-func (c *FakeOciCaches) Update(ctx context.Context, ociCache *v1beta1.OciCache, opts v1.UpdateOptions) (result *v1beta1.OciCache, err error) {
-	emptyResult := &v1beta1.OciCache{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateActionWithOptions(ocicachesResource, c.ns, ociCache, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.OciCache), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeOciCaches) UpdateStatus(ctx context.Context, ociCache *v1beta1.OciCache, opts v1.UpdateOptions) (result *v1beta1.OciCache, err error) {
-	emptyResult := &v1beta1.OciCache{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceActionWithOptions(ocicachesResource, "status", c.ns, ociCache, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.OciCache), err
-}
-
-// Delete takes name of the ociCache and deletes it. Returns an error if one occurs.
-func (c *FakeOciCaches) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(ocicachesResource, c.ns, name, opts), &v1beta1.OciCache{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeOciCaches) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionActionWithOptions(ocicachesResource, c.ns, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1beta1.OciCacheList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched ociCache.
-func (c *FakeOciCaches) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.OciCache, err error) {
-	emptyResult := &v1beta1.OciCache{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(ocicachesResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.OciCache), err
 }

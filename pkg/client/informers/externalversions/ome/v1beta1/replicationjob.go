@@ -3,13 +3,13 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	apisomev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	versioned "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	internalinterfaces "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/internalinterfaces"
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/listers/ome/v1beta1"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/listers/ome/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -20,7 +20,7 @@ import (
 // ReplicationJobs.
 type ReplicationJobInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1beta1.ReplicationJobLister
+	Lister() omev1beta1.ReplicationJobLister
 }
 
 type replicationJobInformer struct {
@@ -46,16 +46,28 @@ func NewFilteredReplicationJobInformer(client versioned.Interface, namespace str
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().ReplicationJobs(namespace).List(context.TODO(), options)
+				return client.OmeV1beta1().ReplicationJobs(namespace).List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().ReplicationJobs(namespace).Watch(context.TODO(), options)
+				return client.OmeV1beta1().ReplicationJobs(namespace).Watch(context.Background(), options)
+			},
+			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().ReplicationJobs(namespace).List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().ReplicationJobs(namespace).Watch(ctx, options)
 			},
 		},
-		&omev1beta1.ReplicationJob{},
+		&apisomev1beta1.ReplicationJob{},
 		resyncPeriod,
 		indexers,
 	)
@@ -66,9 +78,9 @@ func (f *replicationJobInformer) defaultInformer(client versioned.Interface, res
 }
 
 func (f *replicationJobInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&omev1beta1.ReplicationJob{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisomev1beta1.ReplicationJob{}, f.defaultInformer)
 }
 
-func (f *replicationJobInformer) Lister() v1beta1.ReplicationJobLister {
-	return v1beta1.NewReplicationJobLister(f.Informer().GetIndexer())
+func (f *replicationJobInformer) Lister() omev1beta1.ReplicationJobLister {
+	return omev1beta1.NewReplicationJobLister(f.Informer().GetIndexer())
 }

@@ -3,120 +3,34 @@
 package fake
 
 import (
-	"context"
-
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeOrganizations implements OrganizationInterface
-type FakeOrganizations struct {
+// fakeOrganizations implements OrganizationInterface
+type fakeOrganizations struct {
+	*gentype.FakeClientWithList[*v1beta1.Organization, *v1beta1.OrganizationList]
 	Fake *FakeOmeV1beta1
 }
 
-var organizationsResource = v1beta1.SchemeGroupVersion.WithResource("organizations")
-
-var organizationsKind = v1beta1.SchemeGroupVersion.WithKind("Organization")
-
-// Get takes name of the organization, and returns the corresponding organization object, and an error if there is any.
-func (c *FakeOrganizations) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.Organization, err error) {
-	emptyResult := &v1beta1.Organization{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootGetActionWithOptions(organizationsResource, name, options), emptyResult)
-	if obj == nil {
-		return emptyResult, err
+func newFakeOrganizations(fake *FakeOmeV1beta1) omev1beta1.OrganizationInterface {
+	return &fakeOrganizations{
+		gentype.NewFakeClientWithList[*v1beta1.Organization, *v1beta1.OrganizationList](
+			fake.Fake,
+			"",
+			v1beta1.SchemeGroupVersion.WithResource("organizations"),
+			v1beta1.SchemeGroupVersion.WithKind("Organization"),
+			func() *v1beta1.Organization { return &v1beta1.Organization{} },
+			func() *v1beta1.OrganizationList { return &v1beta1.OrganizationList{} },
+			func(dst, src *v1beta1.OrganizationList) { dst.ListMeta = src.ListMeta },
+			func(list *v1beta1.OrganizationList) []*v1beta1.Organization {
+				return gentype.ToPointerSlice(list.Items)
+			},
+			func(list *v1beta1.OrganizationList, items []*v1beta1.Organization) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1beta1.Organization), err
-}
-
-// List takes label and field selectors, and returns the list of Organizations that match those selectors.
-func (c *FakeOrganizations) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.OrganizationList, err error) {
-	emptyResult := &v1beta1.OrganizationList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootListActionWithOptions(organizationsResource, organizationsKind, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1beta1.OrganizationList{ListMeta: obj.(*v1beta1.OrganizationList).ListMeta}
-	for _, item := range obj.(*v1beta1.OrganizationList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested organizations.
-func (c *FakeOrganizations) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewRootWatchActionWithOptions(organizationsResource, opts))
-}
-
-// Create takes the representation of a organization and creates it.  Returns the server's representation of the organization, and an error, if there is any.
-func (c *FakeOrganizations) Create(ctx context.Context, organization *v1beta1.Organization, opts v1.CreateOptions) (result *v1beta1.Organization, err error) {
-	emptyResult := &v1beta1.Organization{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateActionWithOptions(organizationsResource, organization, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.Organization), err
-}
-
-// Update takes the representation of a organization and updates it. Returns the server's representation of the organization, and an error, if there is any.
-func (c *FakeOrganizations) Update(ctx context.Context, organization *v1beta1.Organization, opts v1.UpdateOptions) (result *v1beta1.Organization, err error) {
-	emptyResult := &v1beta1.Organization{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateActionWithOptions(organizationsResource, organization, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.Organization), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeOrganizations) UpdateStatus(ctx context.Context, organization *v1beta1.Organization, opts v1.UpdateOptions) (result *v1beta1.Organization, err error) {
-	emptyResult := &v1beta1.Organization{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(organizationsResource, "status", organization, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.Organization), err
-}
-
-// Delete takes name of the organization and deletes it. Returns an error if one occurs.
-func (c *FakeOrganizations) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewRootDeleteActionWithOptions(organizationsResource, name, opts), &v1beta1.Organization{})
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeOrganizations) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionActionWithOptions(organizationsResource, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1beta1.OrganizationList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched organization.
-func (c *FakeOrganizations) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.Organization, err error) {
-	emptyResult := &v1beta1.Organization{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceActionWithOptions(organizationsResource, name, pt, data, opts, subresources...), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.Organization), err
 }

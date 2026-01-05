@@ -15,6 +15,15 @@ type ModelFormat struct {
 	// It Can be "major", "major.minor" or "major.minor.patch".
 	// +optional
 	Version *string `json:"version,omitempty"`
+	// Operator for the selector with supported values: "Equal", "GreaterThan"
+	// This is used to select the serving runtime based on the modelFormat version
+	// +optional
+	// +kubebuilder:default=Equal
+	Operator *RuntimeSelectorOperator `json:"operator,omitempty"`
+	// Weight of the model format in the runtime selector, used to prioritize modelFormat
+	// +optional
+	// +kubebuilder:default=1
+	Weight int64 `json:"weight,omitempty"`
 }
 
 type ModelFrameworkSpec struct {
@@ -26,12 +35,34 @@ type ModelFrameworkSpec struct {
 	// It Can be "major", "major.minor" or "major.minor.patch".
 	// +optional
 	Version *string `json:"version,omitempty"`
+	// Operator for the selector with supported values: "Equal", "GreaterThan"
+	// This is used to select the serving runtime based on the modelFramework version
+	// +optional
+	// +kubebuilder:default=Equal
+	Operator *RuntimeSelectorOperator `json:"operator,omitempty"`
+	// Weight of the framework in the runtime selector, used to prioritize modelFramework
+	// +optional
+	// +kubebuilder:default=1
+	Weight int64 `json:"weight,omitempty"`
 }
+
+type RuntimeSelectorOperator string
+
+const (
+	RuntimeSelectorOpEqual              RuntimeSelectorOperator = "Equal"
+	RuntimeSelectorOpGreaterThan        RuntimeSelectorOperator = "GreaterThan"
+	RuntimeSelectorOpGreaterThanOrEqual RuntimeSelectorOperator = "GreaterThanOrEqual"
+)
 
 type StorageSpec struct {
 	// Path is the absolute path where the model will be downloaded and stored on the node.
 	// +optional
 	Path *string `json:"path,omitempty"`
+
+	// SchemaPath is the path to the model schema or configuration file within the storage system.
+	// This can be used to validate the model or customize how it's loaded.
+	// +optional
+	SchemaPath *string `json:"schemaPath,omitempty"`
 
 	// Parameters contain key-value pairs to override default storage credentials or configuration.
 	// These values are typically used to configure access to object storage or mount options.
@@ -62,7 +93,22 @@ type StorageSpec struct {
 	// are eligible to download and store this model, based on advanced scheduling policies.
 	// +optional
 	NodeAffinity *v1.NodeAffinity `json:"nodeAffinity,omitempty" protobuf:"bytes,1,opt,name=nodeAffinity"`
+
+	// DownloadPolicy describes the policy of downloading model artifacts
+	// Supported policies:
+	// - AlwaysDownload: always download a copy of model artifact in destination path
+	// - ReuseIfExists: if the identical model artifact has been downloaded in the node, such artifact will be reused
+	// +optional
+	DownloadPolicy *DownloadPolicy `json:"downloadPolicy,omitempty"`
 }
+
+// +kubebuilder:validation:Enum=AlwaysDownload;ReuseIfExists
+type DownloadPolicy string
+
+const (
+	AlwaysDownload DownloadPolicy = "AlwaysDownload"
+	ReuseIfExists  DownloadPolicy = "ReuseIfExists"
+)
 
 // BaseModelSpec defines the desired state of BaseModel
 type BaseModelSpec struct {
@@ -102,6 +148,11 @@ type BaseModelSpec struct {
 	// +listType=atomic
 	// +optional
 	ModelCapabilities []string `json:"modelCapabilities,omitempty"`
+
+	// API capabilities supported by the model, e.g., "OPENAI_V1_CHAT_COMPLETIONS"
+	// +listType=atomic
+	// +optional
+	ApiCapabilities []ModelAPICapability `json:"apiCapabilities,omitempty"`
 
 	// Configuration of the model, stored as generic JSON for flexibility.
 	// +optional
@@ -144,7 +195,6 @@ type ModelExtensionSpec struct {
 	Vendor *string `json:"vendor,omitempty"`
 
 	// CompartmentID is the compartment ID of the model
-	// Deprecated: Use metadata.labels["ome.io/oci-compartmentid"] instead
 	// +optional
 	CompartmentID *string `json:"compartmentID,omitempty"`
 }
@@ -168,10 +218,10 @@ const (
 	ModelQuantizationINT4      ModelQuantization = "int4"
 )
 
-// ModelCapability enumerates all legacy and new capabilities supported by generative models.
-// TODO: Remove legacy capabilities after migration is complete.
+// ModelCapability enum
+// TODO: Remove legacy capabilities
 //
-// +kubebuilder:validation:Enum=TEXT_GENERATION;TEXT_SUMMARIZATION;TEXT_EMBEDDINGS;TEXT_RERANK;CHAT;VISION;EMBEDDING;RERANK;TEXT_TO_TEXT;IMAGE_TEXT_TO_TEXT
+// +kubebuilder:validation:Enum=TEXT_GENERATION;TEXT_SUMMARIZATION;TEXT_EMBEDDINGS;TEXT_RERANK;CHAT;VISION;EMBEDDING;RERANK;TEXT_TO_TEXT;IMAGE_TEXT_TO_TEXT;TEXT_TO_IMAGE;IMAGE_TEXT_TO_IMAGE;TEXT_TO_SPEECH;SPEECH_TO_TEXT;AUDIO_TRANSLATION
 type ModelCapability string
 
 const (
@@ -184,12 +234,32 @@ const (
 	ModelCapabilityVision            ModelCapability = "VISION"
 
 	// New capabilities (preferred naming)
-	ModelCapabilityEmbedding       ModelCapability = "EMBEDDING"
-	ModelCapabilityRerank          ModelCapability = "RERANK"
-	ModelCapabilityTextToText      ModelCapability = "TEXT_TO_TEXT"
-	ModelCapabilityImageTextToText ModelCapability = "IMAGE_TEXT_TO_TEXT"
+	ModelCapabilityEmbedding        ModelCapability = "EMBEDDING"
+	ModelCapabilityRerank           ModelCapability = "RERANK"
+	ModelCapabilityTextToText       ModelCapability = "TEXT_TO_TEXT"
+	ModelCapabilityImageTextToText  ModelCapability = "IMAGE_TEXT_TO_TEXT"
+	ModelCapabilityTextToImage      ModelCapability = "TEXT_TO_IMAGE"
+	ModelCapabilityImageTextToImage ModelCapability = "IMAGE_TEXT_TO_IMAGE"
+	ModelCapabilityTextToSpeech     ModelCapability = "TEXT_TO_SPEECH"
+	ModelCapabilitySpeechToText     ModelCapability = "SPEECH_TO_TEXT"
+	ModelCapabilityAudioTranslation ModelCapability = "AUDIO_TRANSLATION"
+	ModelCapabilityUnknown          ModelCapability = ""
+)
 
-	ModelCapabilityUnknown ModelCapability = ""
+// ModelAPICapability enum
+// +kubebuilder:validation:Enum=OPENAI_V1_CHAT_COMPLETIONS;OPENAI_V1_RESPONSES;OPENAI_V1_EMBEDDINGS;OPENAI_V1_IMAGES_GENERATIONS;OPENAI_V1_IMAGES_EDITS;OPENAI_V1_AUDIO_SPEECH;OPENAI_V1_AUDIO_TRANSCRIPTIONS;OPENAI_V1_AUDIO_TRANSLATIONS;OPENAI_V1_REALTIME
+type ModelAPICapability string
+
+const (
+	ModelAPICapabilityOpenAIv1ChatCompletions     ModelAPICapability = "OPENAI_V1_CHAT_COMPLETIONS"
+	ModelAPICapabilityOpenAIv1Responses           ModelAPICapability = "OPENAI_V1_RESPONSES"
+	ModelAPICapabilityOpenAIv1Embeddings          ModelAPICapability = "OPENAI_V1_EMBEDDINGS"
+	ModelAPICapabilityOpenAIv1ImagesGenerations   ModelAPICapability = "OPENAI_V1_IMAGES_GENERATIONS"
+	ModelAPICapabilityOpenAIv1ImagesEdits         ModelAPICapability = "OPENAI_V1_IMAGES_EDITS"
+	ModelAPICapabilityOpenAIv1AudioSpeech         ModelAPICapability = "OPENAI_V1_AUDIO_SPEECH"
+	ModelAPICapabilityOpenAIv1AudioTranscriptions ModelAPICapability = "OPENAI_V1_AUDIO_TRANSCRIPTIONS"
+	ModelAPICapabilityOpenAIv1AudioTranslations   ModelAPICapability = "OPENAI_V1_AUDIO_TRANSLATIONS"
+	ModelAPICapabilityOpenAIv1Realtime            ModelAPICapability = "OPENAI_V1_REALTIME"
 )
 
 // ModelWeightStatus enum
@@ -381,11 +451,7 @@ type FineTunedWeightList struct {
 }
 
 func init() {
-	// Model types are NOT registered here to avoid double registration.
-	// They are registered from github.com/sgl-project/ome/pkg/apis/ome/v1beta1 in cmd/manager/main.go
-	// to use the opensource model controller implementation.
-
-	//SchemeBuilder.Register(&BaseModel{}, &BaseModelList{})
-	//SchemeBuilder.Register(&FineTunedWeight{}, &FineTunedWeightList{})
-	//SchemeBuilder.Register(&ClusterBaseModel{}, &ClusterBaseModelList{})
+	SchemeBuilder.Register(&BaseModel{}, &BaseModelList{})
+	SchemeBuilder.Register(&FineTunedWeight{}, &FineTunedWeightList{})
+	SchemeBuilder.Register(&ClusterBaseModel{}, &ClusterBaseModelList{})
 }

@@ -3,9 +3,9 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	scheme "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -21,31 +21,32 @@ type ClusterTrainingRuntimesGetter interface {
 
 // ClusterTrainingRuntimeInterface has methods to work with ClusterTrainingRuntime resources.
 type ClusterTrainingRuntimeInterface interface {
-	Create(ctx context.Context, clusterTrainingRuntime *v1beta1.ClusterTrainingRuntime, opts v1.CreateOptions) (*v1beta1.ClusterTrainingRuntime, error)
-	Update(ctx context.Context, clusterTrainingRuntime *v1beta1.ClusterTrainingRuntime, opts v1.UpdateOptions) (*v1beta1.ClusterTrainingRuntime, error)
+	Create(ctx context.Context, clusterTrainingRuntime *omev1beta1.ClusterTrainingRuntime, opts v1.CreateOptions) (*omev1beta1.ClusterTrainingRuntime, error)
+	Update(ctx context.Context, clusterTrainingRuntime *omev1beta1.ClusterTrainingRuntime, opts v1.UpdateOptions) (*omev1beta1.ClusterTrainingRuntime, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1beta1.ClusterTrainingRuntime, error)
-	List(ctx context.Context, opts v1.ListOptions) (*v1beta1.ClusterTrainingRuntimeList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*omev1beta1.ClusterTrainingRuntime, error)
+	List(ctx context.Context, opts v1.ListOptions) (*omev1beta1.ClusterTrainingRuntimeList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.ClusterTrainingRuntime, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *omev1beta1.ClusterTrainingRuntime, err error)
 	ClusterTrainingRuntimeExpansion
 }
 
 // clusterTrainingRuntimes implements ClusterTrainingRuntimeInterface
 type clusterTrainingRuntimes struct {
-	*gentype.ClientWithList[*v1beta1.ClusterTrainingRuntime, *v1beta1.ClusterTrainingRuntimeList]
+	*gentype.ClientWithList[*omev1beta1.ClusterTrainingRuntime, *omev1beta1.ClusterTrainingRuntimeList]
 }
 
 // newClusterTrainingRuntimes returns a ClusterTrainingRuntimes
 func newClusterTrainingRuntimes(c *OmeV1beta1Client) *clusterTrainingRuntimes {
 	return &clusterTrainingRuntimes{
-		gentype.NewClientWithList[*v1beta1.ClusterTrainingRuntime, *v1beta1.ClusterTrainingRuntimeList](
+		gentype.NewClientWithList[*omev1beta1.ClusterTrainingRuntime, *omev1beta1.ClusterTrainingRuntimeList](
 			"clustertrainingruntimes",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			"",
-			func() *v1beta1.ClusterTrainingRuntime { return &v1beta1.ClusterTrainingRuntime{} },
-			func() *v1beta1.ClusterTrainingRuntimeList { return &v1beta1.ClusterTrainingRuntimeList{} }),
+			func() *omev1beta1.ClusterTrainingRuntime { return &omev1beta1.ClusterTrainingRuntime{} },
+			func() *omev1beta1.ClusterTrainingRuntimeList { return &omev1beta1.ClusterTrainingRuntimeList{} },
+		),
 	}
 }

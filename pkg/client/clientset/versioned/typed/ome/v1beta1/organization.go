@@ -3,9 +3,9 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	scheme "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -21,33 +21,34 @@ type OrganizationsGetter interface {
 
 // OrganizationInterface has methods to work with Organization resources.
 type OrganizationInterface interface {
-	Create(ctx context.Context, organization *v1beta1.Organization, opts v1.CreateOptions) (*v1beta1.Organization, error)
-	Update(ctx context.Context, organization *v1beta1.Organization, opts v1.UpdateOptions) (*v1beta1.Organization, error)
+	Create(ctx context.Context, organization *omev1beta1.Organization, opts v1.CreateOptions) (*omev1beta1.Organization, error)
+	Update(ctx context.Context, organization *omev1beta1.Organization, opts v1.UpdateOptions) (*omev1beta1.Organization, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, organization *v1beta1.Organization, opts v1.UpdateOptions) (*v1beta1.Organization, error)
+	UpdateStatus(ctx context.Context, organization *omev1beta1.Organization, opts v1.UpdateOptions) (*omev1beta1.Organization, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1beta1.Organization, error)
-	List(ctx context.Context, opts v1.ListOptions) (*v1beta1.OrganizationList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*omev1beta1.Organization, error)
+	List(ctx context.Context, opts v1.ListOptions) (*omev1beta1.OrganizationList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.Organization, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *omev1beta1.Organization, err error)
 	OrganizationExpansion
 }
 
 // organizations implements OrganizationInterface
 type organizations struct {
-	*gentype.ClientWithList[*v1beta1.Organization, *v1beta1.OrganizationList]
+	*gentype.ClientWithList[*omev1beta1.Organization, *omev1beta1.OrganizationList]
 }
 
 // newOrganizations returns a Organizations
 func newOrganizations(c *OmeV1beta1Client) *organizations {
 	return &organizations{
-		gentype.NewClientWithList[*v1beta1.Organization, *v1beta1.OrganizationList](
+		gentype.NewClientWithList[*omev1beta1.Organization, *omev1beta1.OrganizationList](
 			"organizations",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			"",
-			func() *v1beta1.Organization { return &v1beta1.Organization{} },
-			func() *v1beta1.OrganizationList { return &v1beta1.OrganizationList{} }),
+			func() *omev1beta1.Organization { return &omev1beta1.Organization{} },
+			func() *omev1beta1.OrganizationList { return &omev1beta1.OrganizationList{} },
+		),
 	}
 }

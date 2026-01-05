@@ -3,13 +3,13 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	apisomev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	versioned "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	internalinterfaces "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/internalinterfaces"
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/listers/ome/v1beta1"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/listers/ome/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -20,7 +20,7 @@ import (
 // TrainingRuntimes.
 type TrainingRuntimeInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1beta1.TrainingRuntimeLister
+	Lister() omev1beta1.TrainingRuntimeLister
 }
 
 type trainingRuntimeInformer struct {
@@ -46,16 +46,28 @@ func NewFilteredTrainingRuntimeInformer(client versioned.Interface, namespace st
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().TrainingRuntimes(namespace).List(context.TODO(), options)
+				return client.OmeV1beta1().TrainingRuntimes(namespace).List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().TrainingRuntimes(namespace).Watch(context.TODO(), options)
+				return client.OmeV1beta1().TrainingRuntimes(namespace).Watch(context.Background(), options)
+			},
+			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().TrainingRuntimes(namespace).List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().TrainingRuntimes(namespace).Watch(ctx, options)
 			},
 		},
-		&omev1beta1.TrainingRuntime{},
+		&apisomev1beta1.TrainingRuntime{},
 		resyncPeriod,
 		indexers,
 	)
@@ -66,9 +78,9 @@ func (f *trainingRuntimeInformer) defaultInformer(client versioned.Interface, re
 }
 
 func (f *trainingRuntimeInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&omev1beta1.TrainingRuntime{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisomev1beta1.TrainingRuntime{}, f.defaultInformer)
 }
 
-func (f *trainingRuntimeInformer) Lister() v1beta1.TrainingRuntimeLister {
-	return v1beta1.NewTrainingRuntimeLister(f.Informer().GetIndexer())
+func (f *trainingRuntimeInformer) Lister() omev1beta1.TrainingRuntimeLister {
+	return omev1beta1.NewTrainingRuntimeLister(f.Informer().GetIndexer())
 }

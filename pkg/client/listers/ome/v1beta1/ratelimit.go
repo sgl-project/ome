@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // RateLimitLister helps list RateLimits.
@@ -14,7 +14,7 @@ import (
 type RateLimitLister interface {
 	// List lists all RateLimits in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.RateLimit, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.RateLimit, err error)
 	// RateLimits returns an object that can list and get RateLimits.
 	RateLimits(namespace string) RateLimitNamespaceLister
 	RateLimitListerExpansion
@@ -22,17 +22,17 @@ type RateLimitLister interface {
 
 // rateLimitLister implements the RateLimitLister interface.
 type rateLimitLister struct {
-	listers.ResourceIndexer[*v1beta1.RateLimit]
+	listers.ResourceIndexer[*omev1beta1.RateLimit]
 }
 
 // NewRateLimitLister returns a new RateLimitLister.
 func NewRateLimitLister(indexer cache.Indexer) RateLimitLister {
-	return &rateLimitLister{listers.New[*v1beta1.RateLimit](indexer, v1beta1.Resource("ratelimit"))}
+	return &rateLimitLister{listers.New[*omev1beta1.RateLimit](indexer, omev1beta1.Resource("ratelimit"))}
 }
 
 // RateLimits returns an object that can list and get RateLimits.
 func (s *rateLimitLister) RateLimits(namespace string) RateLimitNamespaceLister {
-	return rateLimitNamespaceLister{listers.NewNamespaced[*v1beta1.RateLimit](s.ResourceIndexer, namespace)}
+	return rateLimitNamespaceLister{listers.NewNamespaced[*omev1beta1.RateLimit](s.ResourceIndexer, namespace)}
 }
 
 // RateLimitNamespaceLister helps list and get RateLimits.
@@ -40,15 +40,15 @@ func (s *rateLimitLister) RateLimits(namespace string) RateLimitNamespaceLister 
 type RateLimitNamespaceLister interface {
 	// List lists all RateLimits in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.RateLimit, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.RateLimit, err error)
 	// Get retrieves the RateLimit from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.RateLimit, error)
+	Get(name string) (*omev1beta1.RateLimit, error)
 	RateLimitNamespaceListerExpansion
 }
 
 // rateLimitNamespaceLister implements the RateLimitNamespaceLister
 // interface.
 type rateLimitNamespaceLister struct {
-	listers.ResourceIndexer[*v1beta1.RateLimit]
+	listers.ResourceIndexer[*omev1beta1.RateLimit]
 }

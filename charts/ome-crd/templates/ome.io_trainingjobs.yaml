@@ -34,6 +34,11 @@ spec:
                 type: string
               datasets:
                 properties:
+                  downloadPolicy:
+                    enum:
+                    - AlwaysDownload
+                    - ReuseIfExists
+                    type: string
                   key:
                     type: string
                   nodeAffinity:
@@ -151,6 +156,8 @@ spec:
                     type: object
                   path:
                     type: string
+                  schemaPath:
+                    type: string
                   storageUri:
                     type: string
                 required:
@@ -198,6 +205,11 @@ spec:
                     type: string
                   outputModel:
                     properties:
+                      downloadPolicy:
+                        enum:
+                        - AlwaysDownload
+                        - ReuseIfExists
+                        type: string
                       key:
                         type: string
                       nodeAffinity:
@@ -314,6 +326,8 @@ spec:
                           type: string
                         type: object
                       path:
+                        type: string
+                      schemaPath:
                         type: string
                       storageUri:
                         type: string

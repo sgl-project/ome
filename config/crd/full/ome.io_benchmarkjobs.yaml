@@ -39,6 +39,11 @@ spec:
                 type: object
               dataset:
                 properties:
+                  downloadPolicy:
+                    enum:
+                    - AlwaysDownload
+                    - ReuseIfExists
+                    type: string
                   key:
                     type: string
                   nodeAffinity:
@@ -155,6 +160,8 @@ spec:
                       type: string
                     type: object
                   path:
+                    type: string
+                  schemaPath:
                     type: string
                   storageUri:
                     type: string
@@ -209,6 +216,11 @@ spec:
                 x-kubernetes-list-type: set
               outputLocation:
                 properties:
+                  downloadPolicy:
+                    enum:
+                    - AlwaysDownload
+                    - ReuseIfExists
+                    type: string
                   key:
                     type: string
                   nodeAffinity:
@@ -325,6 +337,8 @@ spec:
                       type: string
                     type: object
                   path:
+                    type: string
+                  schemaPath:
                     type: string
                   storageUri:
                     type: string

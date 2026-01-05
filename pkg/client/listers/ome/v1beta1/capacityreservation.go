@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // CapacityReservationLister helps list CapacityReservations.
@@ -14,7 +14,7 @@ import (
 type CapacityReservationLister interface {
 	// List lists all CapacityReservations in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.CapacityReservation, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.CapacityReservation, err error)
 	// CapacityReservations returns an object that can list and get CapacityReservations.
 	CapacityReservations(namespace string) CapacityReservationNamespaceLister
 	CapacityReservationListerExpansion
@@ -22,17 +22,17 @@ type CapacityReservationLister interface {
 
 // capacityReservationLister implements the CapacityReservationLister interface.
 type capacityReservationLister struct {
-	listers.ResourceIndexer[*v1beta1.CapacityReservation]
+	listers.ResourceIndexer[*omev1beta1.CapacityReservation]
 }
 
 // NewCapacityReservationLister returns a new CapacityReservationLister.
 func NewCapacityReservationLister(indexer cache.Indexer) CapacityReservationLister {
-	return &capacityReservationLister{listers.New[*v1beta1.CapacityReservation](indexer, v1beta1.Resource("capacityreservation"))}
+	return &capacityReservationLister{listers.New[*omev1beta1.CapacityReservation](indexer, omev1beta1.Resource("capacityreservation"))}
 }
 
 // CapacityReservations returns an object that can list and get CapacityReservations.
 func (s *capacityReservationLister) CapacityReservations(namespace string) CapacityReservationNamespaceLister {
-	return capacityReservationNamespaceLister{listers.NewNamespaced[*v1beta1.CapacityReservation](s.ResourceIndexer, namespace)}
+	return capacityReservationNamespaceLister{listers.NewNamespaced[*omev1beta1.CapacityReservation](s.ResourceIndexer, namespace)}
 }
 
 // CapacityReservationNamespaceLister helps list and get CapacityReservations.
@@ -40,15 +40,15 @@ func (s *capacityReservationLister) CapacityReservations(namespace string) Capac
 type CapacityReservationNamespaceLister interface {
 	// List lists all CapacityReservations in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.CapacityReservation, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.CapacityReservation, err error)
 	// Get retrieves the CapacityReservation from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.CapacityReservation, error)
+	Get(name string) (*omev1beta1.CapacityReservation, error)
 	CapacityReservationNamespaceListerExpansion
 }
 
 // capacityReservationNamespaceLister implements the CapacityReservationNamespaceLister
 // interface.
 type capacityReservationNamespaceLister struct {
-	listers.ResourceIndexer[*v1beta1.CapacityReservation]
+	listers.ResourceIndexer[*omev1beta1.CapacityReservation]
 }

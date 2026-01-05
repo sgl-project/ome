@@ -717,6 +717,11 @@ spec:
                 type: object
               destination:
                 properties:
+                  downloadPolicy:
+                    enum:
+                    - AlwaysDownload
+                    - ReuseIfExists
+                    type: string
                   key:
                     type: string
                   nodeAffinity:
@@ -833,6 +838,8 @@ spec:
                       type: string
                     type: object
                   path:
+                    type: string
+                  schemaPath:
                     type: string
                   storageUri:
                     type: string
@@ -841,6 +848,11 @@ spec:
                 type: object
               source:
                 properties:
+                  downloadPolicy:
+                    enum:
+                    - AlwaysDownload
+                    - ReuseIfExists
+                    type: string
                   key:
                     type: string
                   nodeAffinity:
@@ -957,6 +969,8 @@ spec:
                       type: string
                     type: object
                   path:
+                    type: string
+                  schemaPath:
                     type: string
                   storageUri:
                     type: string

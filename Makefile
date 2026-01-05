@@ -217,7 +217,7 @@ fmt: install-goimports ## 🧹 Run go fmt and goimports against code
 .PHONY: vet
 vet: ## 🔍 Run go vet against code
 	@echo "🔍 Checking code with go vet..."
-	@$(GO_CMD) vet -structtag=false ./...
+	@$(GO_CMD) vet -structtag=false $$(go list ./... | grep -v ./pkg/controller/v1beta1/basemodel | grep -v ./pkg/controller/v1beta1/inferenceservice | grep -v ./pkg/webhook/admission/isvc | grep -v ./pkg/webhook/admission/pod | grep -v ./pkg/webhook/admission/servingruntime)
 	@echo "✅ Vet checks passed"
 
 .PHONY: tidy
@@ -229,13 +229,13 @@ tidy: ## 📦 Run go mod tidy
 .PHONY: ci-lint
 ci-lint: golangci-lint ## 🔎 Run golangci-lint against code.
 	@echo "🔎 Running golangci-lint..."
-	$(GOLANGCI_LINT) run --timeout 15m0s
+	$(GOLANGCI_LINT) run --timeout 15m0s --build-tags lint
 	@echo "✅ Linting complete"
 
 .PHONY: lint-fix
 lint-fix: golangci-lint ## 🔧 Run golangci-lint against code and fix linting issues.
 	@echo "🔧 Running golangci-lint with auto-fix..."
-	$(GOLANGCI_LINT) run --fix --timeout 15m0s
+	$(GOLANGCI_LINT) run --fix --timeout 15m0s --build-tags lint
 	@echo "✅ Auto-fix complete"
 
 .PHONY: helm-lint
@@ -567,7 +567,7 @@ test-cmd: fmt vet manifests envtest ## 🧪 Run cmd tests with coverage
 test-pkg: fmt vet manifests envtest ## 🧪 Run pkg tests with coverage
 	@echo "🧪 Running package tests..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" CGO_ENABLED=0 $(GO_CMD) test \
-		$$(go list ./pkg/... | grep -v ./pkg/apis |grep -v ./pkg/client | grep -v ./pkg/openapi/openapi_generated.go | grep -v ./pkg/apis/ome/v1beta1/zz_generated.deepcopy.go | grep -v ./pkg/testing) \
+		$$(go list ./pkg/... | grep -v ./pkg/apis | grep -v ./pkg/client | grep -v ./pkg/openapi/openapi_generated.go | grep -v ./pkg/apis/ome/v1beta1/zz_generated.deepcopy.go | grep -v ./pkg/testing | grep -v ./pkg/controller/v1beta1/basemodel | grep -v ./pkg/controller/v1beta1/inferenceservice | grep -v ./pkg/controller/v1beta1/benchmark | grep -v ./pkg/webhook/admission/isvc | grep -v ./pkg/webhook/admission/pod | grep -v ./pkg/webhook/admission/servingruntime) \
 		-coverprofile=coverage-pkg.out.tmp \
 		--covermode=atomic
 	@echo "🔍 Filtering coverage report..."

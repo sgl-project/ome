@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // DedicatedAIClusterLister helps list DedicatedAIClusters.
@@ -14,19 +14,19 @@ import (
 type DedicatedAIClusterLister interface {
 	// List lists all DedicatedAIClusters in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.DedicatedAICluster, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.DedicatedAICluster, err error)
 	// Get retrieves the DedicatedAICluster from the index for a given name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.DedicatedAICluster, error)
+	Get(name string) (*omev1beta1.DedicatedAICluster, error)
 	DedicatedAIClusterListerExpansion
 }
 
 // dedicatedAIClusterLister implements the DedicatedAIClusterLister interface.
 type dedicatedAIClusterLister struct {
-	listers.ResourceIndexer[*v1beta1.DedicatedAICluster]
+	listers.ResourceIndexer[*omev1beta1.DedicatedAICluster]
 }
 
 // NewDedicatedAIClusterLister returns a new DedicatedAIClusterLister.
 func NewDedicatedAIClusterLister(indexer cache.Indexer) DedicatedAIClusterLister {
-	return &dedicatedAIClusterLister{listers.New[*v1beta1.DedicatedAICluster](indexer, v1beta1.Resource("dedicatedaicluster"))}
+	return &dedicatedAIClusterLister{listers.New[*omev1beta1.DedicatedAICluster](indexer, omev1beta1.Resource("dedicatedaicluster"))}
 }

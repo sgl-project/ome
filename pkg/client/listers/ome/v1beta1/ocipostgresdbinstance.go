@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // OciPostgresDBInstanceLister helps list OciPostgresDBInstances.
@@ -14,19 +14,19 @@ import (
 type OciPostgresDBInstanceLister interface {
 	// List lists all OciPostgresDBInstances in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.OciPostgresDBInstance, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.OciPostgresDBInstance, err error)
 	// Get retrieves the OciPostgresDBInstance from the index for a given name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.OciPostgresDBInstance, error)
+	Get(name string) (*omev1beta1.OciPostgresDBInstance, error)
 	OciPostgresDBInstanceListerExpansion
 }
 
 // ociPostgresDBInstanceLister implements the OciPostgresDBInstanceLister interface.
 type ociPostgresDBInstanceLister struct {
-	listers.ResourceIndexer[*v1beta1.OciPostgresDBInstance]
+	listers.ResourceIndexer[*omev1beta1.OciPostgresDBInstance]
 }
 
 // NewOciPostgresDBInstanceLister returns a new OciPostgresDBInstanceLister.
 func NewOciPostgresDBInstanceLister(indexer cache.Indexer) OciPostgresDBInstanceLister {
-	return &ociPostgresDBInstanceLister{listers.New[*v1beta1.OciPostgresDBInstance](indexer, v1beta1.Resource("ocipostgresdbinstance"))}
+	return &ociPostgresDBInstanceLister{listers.New[*omev1beta1.OciPostgresDBInstance](indexer, omev1beta1.Resource("ocipostgresdbinstance"))}
 }

@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,11 +15,11 @@ import (
 func createFakeClient() client.Client {
 	scheme := runtime.NewScheme()
 	_ = v1beta1.AddToScheme(scheme)
-	scheme.AddKnownTypes(opensourcev1beta1.SchemeGroupVersion,
-		&opensourcev1beta1.ClusterBaseModel{},
-		&opensourcev1beta1.BaseModel{},
+	scheme.AddKnownTypes(v1beta1.SchemeGroupVersion,
+		&v1beta1.ClusterBaseModel{},
+		&v1beta1.BaseModel{},
 	)
-	metav1.AddToGroupVersion(scheme, opensourcev1beta1.SchemeGroupVersion)
+	metav1.AddToGroupVersion(scheme, v1beta1.SchemeGroupVersion)
 
 	return fake.NewClientBuilder().WithScheme(scheme).Build()
 }
@@ -65,24 +63,24 @@ func TestGetBaseModel(t *testing.T) {
 	fakeClient := createFakeClient()
 
 	// Create test base models
-	baseModel := &opensourcev1beta1.BaseModel{
+	baseModel := &v1beta1.BaseModel{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-model",
 			Namespace: "default",
 		},
-		Spec: opensourcev1beta1.BaseModelSpec{
-			ModelFormat: opensourcev1beta1.ModelFormat{
+		Spec: v1beta1.BaseModelSpec{
+			ModelFormat: v1beta1.ModelFormat{
 				Name: "test-format",
 			},
 		},
 	}
 
-	clusterBaseModel := &opensourcev1beta1.ClusterBaseModel{
+	clusterBaseModel := &v1beta1.ClusterBaseModel{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-cluster-model",
 		},
-		Spec: opensourcev1beta1.BaseModelSpec{
-			ModelFormat: opensourcev1beta1.ModelFormat{
+		Spec: v1beta1.BaseModelSpec{
+			ModelFormat: v1beta1.ModelFormat{
 				Name: "test-cluster-format",
 			},
 		},
@@ -140,14 +138,14 @@ func TestGetSupportingRuntimes(t *testing.T) {
 	fakeClient := createFakeClient()
 
 	// Create test base models with different formats and sizes
-	baseModels := []*opensourcev1beta1.BaseModel{
+	baseModels := []*v1beta1.BaseModel{
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "small-model",
 				Namespace: "default",
 			},
-			Spec: opensourcev1beta1.BaseModelSpec{
-				ModelFormat: opensourcev1beta1.ModelFormat{
+			Spec: v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
 					Name: "pytorch",
 				},
 				ModelParameterSize: ptr("7B"),
@@ -158,8 +156,8 @@ func TestGetSupportingRuntimes(t *testing.T) {
 				Name:      "medium-model",
 				Namespace: "default",
 			},
-			Spec: opensourcev1beta1.BaseModelSpec{
-				ModelFormat: opensourcev1beta1.ModelFormat{
+			Spec: v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
 					Name: "onnx",
 				},
 				ModelParameterSize: ptr("13B"),
@@ -170,8 +168,8 @@ func TestGetSupportingRuntimes(t *testing.T) {
 				Name:      "large-model",
 				Namespace: "default",
 			},
-			Spec: opensourcev1beta1.BaseModelSpec{
-				ModelFormat: opensourcev1beta1.ModelFormat{
+			Spec: v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
 					Name: "tensorflow",
 				},
 				ModelParameterSize: ptr("70B"),
@@ -364,7 +362,7 @@ func TestRuntimeSupportsModel(t *testing.T) {
 		name      string
 		modelSpec *v1beta1.ModelSpec
 		runtime   *v1beta1.ServingRuntimeSpec
-		baseModel *opensourcev1beta1.BaseModelSpec
+		baseModel *v1beta1.BaseModelSpec
 		want      bool
 	}{
 		{
@@ -385,8 +383,8 @@ func TestRuntimeSupportsModel(t *testing.T) {
 					Max: ptr("10B"),
 				},
 			},
-			baseModel: &opensourcev1beta1.BaseModelSpec{
-				ModelFormat: opensourcev1beta1.ModelFormat{
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
 					Name: "test-format",
 				},
 				ModelParameterSize: ptr("7B"),
@@ -407,8 +405,8 @@ func TestRuntimeSupportsModel(t *testing.T) {
 		//			},
 		//		},
 		//	},
-		//	baseModel: &opensourcev1beta1.BaseModelSpec{
-		//		ModelFormat: opensourcev1beta1.ModelFormat{
+		//	baseModel: &v1beta1.BaseModelSpec{
+		//		ModelFormat: v1beta1.ModelFormat{
 		//			Name: "test-format",
 		//		},
 		//	},
@@ -432,8 +430,8 @@ func TestRuntimeSupportsModel(t *testing.T) {
 					Max: ptr("10B"),
 				},
 			},
-			baseModel: &opensourcev1beta1.BaseModelSpec{
-				ModelFormat: opensourcev1beta1.ModelFormat{
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
 					Name: "test-format",
 				},
 				ModelParameterSize: ptr("20B"),
@@ -459,8 +457,8 @@ func TestRuntimeSupportsModel(t *testing.T) {
 					},
 				},
 			},
-			baseModel: &opensourcev1beta1.BaseModelSpec{
-				ModelFormat: opensourcev1beta1.ModelFormat{
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
 					Name: "format2",
 				},
 			},
@@ -481,8 +479,8 @@ func TestRuntimeSupportsModel(t *testing.T) {
 					},
 				},
 			},
-			baseModel: &opensourcev1beta1.BaseModelSpec{
-				ModelFormat: opensourcev1beta1.ModelFormat{
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
 					Name: "test-format",
 				},
 				ModelArchitecture: ptr("gpu"),
@@ -504,11 +502,11 @@ func TestRuntimeSupportsModel(t *testing.T) {
 					},
 				},
 			},
-			baseModel: &opensourcev1beta1.BaseModelSpec{
-				ModelFormat: opensourcev1beta1.ModelFormat{
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
 					Name: "test-format",
 				},
-				Quantization: ptr(opensourcev1beta1.ModelQuantizationFP8),
+				Quantization: ptr(v1beta1.ModelQuantizationFP8),
 			},
 			want: true,
 		},
@@ -529,11 +527,11 @@ func TestRuntimeSupportsModel(t *testing.T) {
 					},
 				},
 			},
-			baseModel: &opensourcev1beta1.BaseModelSpec{
-				ModelFormat: opensourcev1beta1.ModelFormat{
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
 					Name: "test-format",
 				},
-				ModelFramework: &opensourcev1beta1.ModelFrameworkSpec{
+				ModelFramework: &v1beta1.ModelFrameworkSpec{
 					Name: "pytorch",
 				},
 			},
@@ -601,7 +599,7 @@ func TestParseModelSize(t *testing.T) {
 }
 
 func TestSortSupportedRuntimeByPriority(t *testing.T) {
-	modelFormat := opensourcev1beta1.ModelFormat{Name: "test-format"}
+	modelFormat := v1beta1.ModelFormat{Name: "test-format"}
 	modelSize := 7.0
 
 	tests := []struct {

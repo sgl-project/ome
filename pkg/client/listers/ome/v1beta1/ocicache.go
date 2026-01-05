@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // OciCacheLister helps list OciCaches.
@@ -14,7 +14,7 @@ import (
 type OciCacheLister interface {
 	// List lists all OciCaches in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.OciCache, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.OciCache, err error)
 	// OciCaches returns an object that can list and get OciCaches.
 	OciCaches(namespace string) OciCacheNamespaceLister
 	OciCacheListerExpansion
@@ -22,17 +22,17 @@ type OciCacheLister interface {
 
 // ociCacheLister implements the OciCacheLister interface.
 type ociCacheLister struct {
-	listers.ResourceIndexer[*v1beta1.OciCache]
+	listers.ResourceIndexer[*omev1beta1.OciCache]
 }
 
 // NewOciCacheLister returns a new OciCacheLister.
 func NewOciCacheLister(indexer cache.Indexer) OciCacheLister {
-	return &ociCacheLister{listers.New[*v1beta1.OciCache](indexer, v1beta1.Resource("ocicache"))}
+	return &ociCacheLister{listers.New[*omev1beta1.OciCache](indexer, omev1beta1.Resource("ocicache"))}
 }
 
 // OciCaches returns an object that can list and get OciCaches.
 func (s *ociCacheLister) OciCaches(namespace string) OciCacheNamespaceLister {
-	return ociCacheNamespaceLister{listers.NewNamespaced[*v1beta1.OciCache](s.ResourceIndexer, namespace)}
+	return ociCacheNamespaceLister{listers.NewNamespaced[*omev1beta1.OciCache](s.ResourceIndexer, namespace)}
 }
 
 // OciCacheNamespaceLister helps list and get OciCaches.
@@ -40,15 +40,15 @@ func (s *ociCacheLister) OciCaches(namespace string) OciCacheNamespaceLister {
 type OciCacheNamespaceLister interface {
 	// List lists all OciCaches in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.OciCache, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.OciCache, err error)
 	// Get retrieves the OciCache from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.OciCache, error)
+	Get(name string) (*omev1beta1.OciCache, error)
 	OciCacheNamespaceListerExpansion
 }
 
 // ociCacheNamespaceLister implements the OciCacheNamespaceLister
 // interface.
 type ociCacheNamespaceLister struct {
-	listers.ResourceIndexer[*v1beta1.OciCache]
+	listers.ResourceIndexer[*omev1beta1.OciCache]
 }

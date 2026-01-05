@@ -3,120 +3,34 @@
 package fake
 
 import (
-	"context"
-
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeOciPostgresDBInstances implements OciPostgresDBInstanceInterface
-type FakeOciPostgresDBInstances struct {
+// fakeOciPostgresDBInstances implements OciPostgresDBInstanceInterface
+type fakeOciPostgresDBInstances struct {
+	*gentype.FakeClientWithList[*v1beta1.OciPostgresDBInstance, *v1beta1.OciPostgresDBInstanceList]
 	Fake *FakeOmeV1beta1
 }
 
-var ocipostgresdbinstancesResource = v1beta1.SchemeGroupVersion.WithResource("ocipostgresdbinstances")
-
-var ocipostgresdbinstancesKind = v1beta1.SchemeGroupVersion.WithKind("OciPostgresDBInstance")
-
-// Get takes name of the ociPostgresDBInstance, and returns the corresponding ociPostgresDBInstance object, and an error if there is any.
-func (c *FakeOciPostgresDBInstances) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.OciPostgresDBInstance, err error) {
-	emptyResult := &v1beta1.OciPostgresDBInstance{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootGetActionWithOptions(ocipostgresdbinstancesResource, name, options), emptyResult)
-	if obj == nil {
-		return emptyResult, err
+func newFakeOciPostgresDBInstances(fake *FakeOmeV1beta1) omev1beta1.OciPostgresDBInstanceInterface {
+	return &fakeOciPostgresDBInstances{
+		gentype.NewFakeClientWithList[*v1beta1.OciPostgresDBInstance, *v1beta1.OciPostgresDBInstanceList](
+			fake.Fake,
+			"",
+			v1beta1.SchemeGroupVersion.WithResource("ocipostgresdbinstances"),
+			v1beta1.SchemeGroupVersion.WithKind("OciPostgresDBInstance"),
+			func() *v1beta1.OciPostgresDBInstance { return &v1beta1.OciPostgresDBInstance{} },
+			func() *v1beta1.OciPostgresDBInstanceList { return &v1beta1.OciPostgresDBInstanceList{} },
+			func(dst, src *v1beta1.OciPostgresDBInstanceList) { dst.ListMeta = src.ListMeta },
+			func(list *v1beta1.OciPostgresDBInstanceList) []*v1beta1.OciPostgresDBInstance {
+				return gentype.ToPointerSlice(list.Items)
+			},
+			func(list *v1beta1.OciPostgresDBInstanceList, items []*v1beta1.OciPostgresDBInstance) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1beta1.OciPostgresDBInstance), err
-}
-
-// List takes label and field selectors, and returns the list of OciPostgresDBInstances that match those selectors.
-func (c *FakeOciPostgresDBInstances) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.OciPostgresDBInstanceList, err error) {
-	emptyResult := &v1beta1.OciPostgresDBInstanceList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootListActionWithOptions(ocipostgresdbinstancesResource, ocipostgresdbinstancesKind, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1beta1.OciPostgresDBInstanceList{ListMeta: obj.(*v1beta1.OciPostgresDBInstanceList).ListMeta}
-	for _, item := range obj.(*v1beta1.OciPostgresDBInstanceList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested ociPostgresDBInstances.
-func (c *FakeOciPostgresDBInstances) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewRootWatchActionWithOptions(ocipostgresdbinstancesResource, opts))
-}
-
-// Create takes the representation of a ociPostgresDBInstance and creates it.  Returns the server's representation of the ociPostgresDBInstance, and an error, if there is any.
-func (c *FakeOciPostgresDBInstances) Create(ctx context.Context, ociPostgresDBInstance *v1beta1.OciPostgresDBInstance, opts v1.CreateOptions) (result *v1beta1.OciPostgresDBInstance, err error) {
-	emptyResult := &v1beta1.OciPostgresDBInstance{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateActionWithOptions(ocipostgresdbinstancesResource, ociPostgresDBInstance, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.OciPostgresDBInstance), err
-}
-
-// Update takes the representation of a ociPostgresDBInstance and updates it. Returns the server's representation of the ociPostgresDBInstance, and an error, if there is any.
-func (c *FakeOciPostgresDBInstances) Update(ctx context.Context, ociPostgresDBInstance *v1beta1.OciPostgresDBInstance, opts v1.UpdateOptions) (result *v1beta1.OciPostgresDBInstance, err error) {
-	emptyResult := &v1beta1.OciPostgresDBInstance{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateActionWithOptions(ocipostgresdbinstancesResource, ociPostgresDBInstance, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.OciPostgresDBInstance), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeOciPostgresDBInstances) UpdateStatus(ctx context.Context, ociPostgresDBInstance *v1beta1.OciPostgresDBInstance, opts v1.UpdateOptions) (result *v1beta1.OciPostgresDBInstance, err error) {
-	emptyResult := &v1beta1.OciPostgresDBInstance{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(ocipostgresdbinstancesResource, "status", ociPostgresDBInstance, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.OciPostgresDBInstance), err
-}
-
-// Delete takes name of the ociPostgresDBInstance and deletes it. Returns an error if one occurs.
-func (c *FakeOciPostgresDBInstances) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewRootDeleteActionWithOptions(ocipostgresdbinstancesResource, name, opts), &v1beta1.OciPostgresDBInstance{})
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeOciPostgresDBInstances) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionActionWithOptions(ocipostgresdbinstancesResource, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1beta1.OciPostgresDBInstanceList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched ociPostgresDBInstance.
-func (c *FakeOciPostgresDBInstances) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.OciPostgresDBInstance, err error) {
-	emptyResult := &v1beta1.OciPostgresDBInstance{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceActionWithOptions(ocipostgresdbinstancesResource, name, pt, data, opts, subresources...), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.OciPostgresDBInstance), err
 }

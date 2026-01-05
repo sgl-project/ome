@@ -13,99 +13,99 @@ type FakeOmeV1beta1 struct {
 }
 
 func (c *FakeOmeV1beta1) BaseModels(namespace string) v1beta1.BaseModelInterface {
-	return &FakeBaseModels{c, namespace}
+	return newFakeBaseModels(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) BenchmarkJobs(namespace string) v1beta1.BenchmarkJobInterface {
-	return &FakeBenchmarkJobs{c, namespace}
+	return newFakeBenchmarkJobs(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) CapacityReservations(namespace string) v1beta1.CapacityReservationInterface {
-	return &FakeCapacityReservations{c, namespace}
+	return newFakeCapacityReservations(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) ClusterBaseModels() v1beta1.ClusterBaseModelInterface {
-	return &FakeClusterBaseModels{c}
+	return newFakeClusterBaseModels(c)
 }
 
 func (c *FakeOmeV1beta1) ClusterCapacityReservations() v1beta1.ClusterCapacityReservationInterface {
-	return &FakeClusterCapacityReservations{c}
+	return newFakeClusterCapacityReservations(c)
 }
 
 func (c *FakeOmeV1beta1) ClusterServingRuntimes() v1beta1.ClusterServingRuntimeInterface {
-	return &FakeClusterServingRuntimes{c}
+	return newFakeClusterServingRuntimes(c)
 }
 
 func (c *FakeOmeV1beta1) ClusterTrainingRuntimes() v1beta1.ClusterTrainingRuntimeInterface {
-	return &FakeClusterTrainingRuntimes{c}
+	return newFakeClusterTrainingRuntimes(c)
 }
 
 func (c *FakeOmeV1beta1) DedicatedAIClusters() v1beta1.DedicatedAIClusterInterface {
-	return &FakeDedicatedAIClusters{c}
+	return newFakeDedicatedAIClusters(c)
 }
 
 func (c *FakeOmeV1beta1) DedicatedAIClusterProfiles() v1beta1.DedicatedAIClusterProfileInterface {
-	return &FakeDedicatedAIClusterProfiles{c}
+	return newFakeDedicatedAIClusterProfiles(c)
 }
 
 func (c *FakeOmeV1beta1) FineTunedWeights() v1beta1.FineTunedWeightInterface {
-	return &FakeFineTunedWeights{c}
+	return newFakeFineTunedWeights(c)
 }
 
 func (c *FakeOmeV1beta1) InferenceGraphs(namespace string) v1beta1.InferenceGraphInterface {
-	return &FakeInferenceGraphs{c, namespace}
+	return newFakeInferenceGraphs(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) InferenceServices(namespace string) v1beta1.InferenceServiceInterface {
-	return &FakeInferenceServices{c, namespace}
+	return newFakeInferenceServices(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) OciCaches(namespace string) v1beta1.OciCacheInterface {
-	return &FakeOciCaches{c, namespace}
+	return newFakeOciCaches(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) OciPostgreses(namespace string) v1beta1.OciPostgresInterface {
-	return &FakeOciPostgreses{c, namespace}
+	return newFakeOciPostgreses(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) OciPostgresDBInstances() v1beta1.OciPostgresDBInstanceInterface {
-	return &FakeOciPostgresDBInstances{c}
+	return newFakeOciPostgresDBInstances(c)
 }
 
 func (c *FakeOmeV1beta1) Organizations() v1beta1.OrganizationInterface {
-	return &FakeOrganizations{c}
+	return newFakeOrganizations(c)
 }
 
 func (c *FakeOmeV1beta1) Projects() v1beta1.ProjectInterface {
-	return &FakeProjects{c}
+	return newFakeProjects(c)
 }
 
 func (c *FakeOmeV1beta1) RateLimits(namespace string) v1beta1.RateLimitInterface {
-	return &FakeRateLimits{c, namespace}
+	return newFakeRateLimits(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) ReplicationJobs(namespace string) v1beta1.ReplicationJobInterface {
-	return &FakeReplicationJobs{c, namespace}
+	return newFakeReplicationJobs(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) ServiceAccounts(namespace string) v1beta1.ServiceAccountInterface {
-	return &FakeServiceAccounts{c, namespace}
+	return newFakeServiceAccounts(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) ServingRuntimes(namespace string) v1beta1.ServingRuntimeInterface {
-	return &FakeServingRuntimes{c, namespace}
+	return newFakeServingRuntimes(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) TrainingJobs(namespace string) v1beta1.TrainingJobInterface {
-	return &FakeTrainingJobs{c, namespace}
+	return newFakeTrainingJobs(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) TrainingRuntimes(namespace string) v1beta1.TrainingRuntimeInterface {
-	return &FakeTrainingRuntimes{c, namespace}
+	return newFakeTrainingRuntimes(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) Users(namespace string) v1beta1.UserInterface {
-	return &FakeUsers{c, namespace}
+	return newFakeUsers(c, namespace)
 }
 
 // RESTClient returns a RESTClient that is used to communicate

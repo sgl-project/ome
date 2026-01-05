@@ -3,9 +3,9 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	scheme "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -21,33 +21,34 @@ type DedicatedAIClustersGetter interface {
 
 // DedicatedAIClusterInterface has methods to work with DedicatedAICluster resources.
 type DedicatedAIClusterInterface interface {
-	Create(ctx context.Context, dedicatedAICluster *v1beta1.DedicatedAICluster, opts v1.CreateOptions) (*v1beta1.DedicatedAICluster, error)
-	Update(ctx context.Context, dedicatedAICluster *v1beta1.DedicatedAICluster, opts v1.UpdateOptions) (*v1beta1.DedicatedAICluster, error)
+	Create(ctx context.Context, dedicatedAICluster *omev1beta1.DedicatedAICluster, opts v1.CreateOptions) (*omev1beta1.DedicatedAICluster, error)
+	Update(ctx context.Context, dedicatedAICluster *omev1beta1.DedicatedAICluster, opts v1.UpdateOptions) (*omev1beta1.DedicatedAICluster, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, dedicatedAICluster *v1beta1.DedicatedAICluster, opts v1.UpdateOptions) (*v1beta1.DedicatedAICluster, error)
+	UpdateStatus(ctx context.Context, dedicatedAICluster *omev1beta1.DedicatedAICluster, opts v1.UpdateOptions) (*omev1beta1.DedicatedAICluster, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1beta1.DedicatedAICluster, error)
-	List(ctx context.Context, opts v1.ListOptions) (*v1beta1.DedicatedAIClusterList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*omev1beta1.DedicatedAICluster, error)
+	List(ctx context.Context, opts v1.ListOptions) (*omev1beta1.DedicatedAIClusterList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.DedicatedAICluster, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *omev1beta1.DedicatedAICluster, err error)
 	DedicatedAIClusterExpansion
 }
 
 // dedicatedAIClusters implements DedicatedAIClusterInterface
 type dedicatedAIClusters struct {
-	*gentype.ClientWithList[*v1beta1.DedicatedAICluster, *v1beta1.DedicatedAIClusterList]
+	*gentype.ClientWithList[*omev1beta1.DedicatedAICluster, *omev1beta1.DedicatedAIClusterList]
 }
 
 // newDedicatedAIClusters returns a DedicatedAIClusters
 func newDedicatedAIClusters(c *OmeV1beta1Client) *dedicatedAIClusters {
 	return &dedicatedAIClusters{
-		gentype.NewClientWithList[*v1beta1.DedicatedAICluster, *v1beta1.DedicatedAIClusterList](
+		gentype.NewClientWithList[*omev1beta1.DedicatedAICluster, *omev1beta1.DedicatedAIClusterList](
 			"dedicatedaiclusters",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			"",
-			func() *v1beta1.DedicatedAICluster { return &v1beta1.DedicatedAICluster{} },
-			func() *v1beta1.DedicatedAIClusterList { return &v1beta1.DedicatedAIClusterList{} }),
+			func() *omev1beta1.DedicatedAICluster { return &omev1beta1.DedicatedAICluster{} },
+			func() *omev1beta1.DedicatedAIClusterList { return &omev1beta1.DedicatedAIClusterList{} },
+		),
 	}
 }

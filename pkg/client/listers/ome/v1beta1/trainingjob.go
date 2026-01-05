@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // TrainingJobLister helps list TrainingJobs.
@@ -14,7 +14,7 @@ import (
 type TrainingJobLister interface {
 	// List lists all TrainingJobs in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.TrainingJob, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.TrainingJob, err error)
 	// TrainingJobs returns an object that can list and get TrainingJobs.
 	TrainingJobs(namespace string) TrainingJobNamespaceLister
 	TrainingJobListerExpansion
@@ -22,17 +22,17 @@ type TrainingJobLister interface {
 
 // trainingJobLister implements the TrainingJobLister interface.
 type trainingJobLister struct {
-	listers.ResourceIndexer[*v1beta1.TrainingJob]
+	listers.ResourceIndexer[*omev1beta1.TrainingJob]
 }
 
 // NewTrainingJobLister returns a new TrainingJobLister.
 func NewTrainingJobLister(indexer cache.Indexer) TrainingJobLister {
-	return &trainingJobLister{listers.New[*v1beta1.TrainingJob](indexer, v1beta1.Resource("trainingjob"))}
+	return &trainingJobLister{listers.New[*omev1beta1.TrainingJob](indexer, omev1beta1.Resource("trainingjob"))}
 }
 
 // TrainingJobs returns an object that can list and get TrainingJobs.
 func (s *trainingJobLister) TrainingJobs(namespace string) TrainingJobNamespaceLister {
-	return trainingJobNamespaceLister{listers.NewNamespaced[*v1beta1.TrainingJob](s.ResourceIndexer, namespace)}
+	return trainingJobNamespaceLister{listers.NewNamespaced[*omev1beta1.TrainingJob](s.ResourceIndexer, namespace)}
 }
 
 // TrainingJobNamespaceLister helps list and get TrainingJobs.
@@ -40,15 +40,15 @@ func (s *trainingJobLister) TrainingJobs(namespace string) TrainingJobNamespaceL
 type TrainingJobNamespaceLister interface {
 	// List lists all TrainingJobs in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.TrainingJob, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.TrainingJob, err error)
 	// Get retrieves the TrainingJob from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.TrainingJob, error)
+	Get(name string) (*omev1beta1.TrainingJob, error)
 	TrainingJobNamespaceListerExpansion
 }
 
 // trainingJobNamespaceLister implements the TrainingJobNamespaceLister
 // interface.
 type trainingJobNamespaceLister struct {
-	listers.ResourceIndexer[*v1beta1.TrainingJob]
+	listers.ResourceIndexer[*omev1beta1.TrainingJob]
 }

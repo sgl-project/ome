@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
@@ -113,7 +111,7 @@ func buildArgsFromEndpoint(endpoint *v1beta1.Endpoint) map[string]string {
 }
 
 // UpdateVolumeMounts updates the volume mounts for the benchmark container if a base model is defined.
-func UpdateVolumeMounts(isvc *v1beta1.InferenceService, container *v1.Container, baseModel *opensourcev1beta1.BaseModelSpec) {
+func UpdateVolumeMounts(isvc *v1beta1.InferenceService, container *v1.Container, baseModel *v1beta1.BaseModelSpec) {
 	if isvc.Spec.Predictor.Model == nil || isvc.Spec.Predictor.Model.BaseModel == nil || baseModel == nil {
 		return
 	}

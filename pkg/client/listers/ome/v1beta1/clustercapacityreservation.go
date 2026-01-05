@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // ClusterCapacityReservationLister helps list ClusterCapacityReservations.
@@ -14,19 +14,19 @@ import (
 type ClusterCapacityReservationLister interface {
 	// List lists all ClusterCapacityReservations in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.ClusterCapacityReservation, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.ClusterCapacityReservation, err error)
 	// Get retrieves the ClusterCapacityReservation from the index for a given name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.ClusterCapacityReservation, error)
+	Get(name string) (*omev1beta1.ClusterCapacityReservation, error)
 	ClusterCapacityReservationListerExpansion
 }
 
 // clusterCapacityReservationLister implements the ClusterCapacityReservationLister interface.
 type clusterCapacityReservationLister struct {
-	listers.ResourceIndexer[*v1beta1.ClusterCapacityReservation]
+	listers.ResourceIndexer[*omev1beta1.ClusterCapacityReservation]
 }
 
 // NewClusterCapacityReservationLister returns a new ClusterCapacityReservationLister.
 func NewClusterCapacityReservationLister(indexer cache.Indexer) ClusterCapacityReservationLister {
-	return &clusterCapacityReservationLister{listers.New[*v1beta1.ClusterCapacityReservation](indexer, v1beta1.Resource("clustercapacityreservation"))}
+	return &clusterCapacityReservationLister{listers.New[*omev1beta1.ClusterCapacityReservation](indexer, omev1beta1.Resource("clustercapacityreservation"))}
 }

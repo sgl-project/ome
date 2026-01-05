@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // OrganizationLister helps list Organizations.
@@ -14,19 +14,19 @@ import (
 type OrganizationLister interface {
 	// List lists all Organizations in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.Organization, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.Organization, err error)
 	// Get retrieves the Organization from the index for a given name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.Organization, error)
+	Get(name string) (*omev1beta1.Organization, error)
 	OrganizationListerExpansion
 }
 
 // organizationLister implements the OrganizationLister interface.
 type organizationLister struct {
-	listers.ResourceIndexer[*v1beta1.Organization]
+	listers.ResourceIndexer[*omev1beta1.Organization]
 }
 
 // NewOrganizationLister returns a new OrganizationLister.
 func NewOrganizationLister(indexer cache.Indexer) OrganizationLister {
-	return &organizationLister{listers.New[*v1beta1.Organization](indexer, v1beta1.Resource("organization"))}
+	return &organizationLister{listers.New[*omev1beta1.Organization](indexer, omev1beta1.Resource("organization"))}
 }

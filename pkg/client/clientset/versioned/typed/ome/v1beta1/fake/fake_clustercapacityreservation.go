@@ -3,120 +3,34 @@
 package fake
 
 import (
-	"context"
-
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeClusterCapacityReservations implements ClusterCapacityReservationInterface
-type FakeClusterCapacityReservations struct {
+// fakeClusterCapacityReservations implements ClusterCapacityReservationInterface
+type fakeClusterCapacityReservations struct {
+	*gentype.FakeClientWithList[*v1beta1.ClusterCapacityReservation, *v1beta1.ClusterCapacityReservationList]
 	Fake *FakeOmeV1beta1
 }
 
-var clustercapacityreservationsResource = v1beta1.SchemeGroupVersion.WithResource("clustercapacityreservations")
-
-var clustercapacityreservationsKind = v1beta1.SchemeGroupVersion.WithKind("ClusterCapacityReservation")
-
-// Get takes name of the clusterCapacityReservation, and returns the corresponding clusterCapacityReservation object, and an error if there is any.
-func (c *FakeClusterCapacityReservations) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.ClusterCapacityReservation, err error) {
-	emptyResult := &v1beta1.ClusterCapacityReservation{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootGetActionWithOptions(clustercapacityreservationsResource, name, options), emptyResult)
-	if obj == nil {
-		return emptyResult, err
+func newFakeClusterCapacityReservations(fake *FakeOmeV1beta1) omev1beta1.ClusterCapacityReservationInterface {
+	return &fakeClusterCapacityReservations{
+		gentype.NewFakeClientWithList[*v1beta1.ClusterCapacityReservation, *v1beta1.ClusterCapacityReservationList](
+			fake.Fake,
+			"",
+			v1beta1.SchemeGroupVersion.WithResource("clustercapacityreservations"),
+			v1beta1.SchemeGroupVersion.WithKind("ClusterCapacityReservation"),
+			func() *v1beta1.ClusterCapacityReservation { return &v1beta1.ClusterCapacityReservation{} },
+			func() *v1beta1.ClusterCapacityReservationList { return &v1beta1.ClusterCapacityReservationList{} },
+			func(dst, src *v1beta1.ClusterCapacityReservationList) { dst.ListMeta = src.ListMeta },
+			func(list *v1beta1.ClusterCapacityReservationList) []*v1beta1.ClusterCapacityReservation {
+				return gentype.ToPointerSlice(list.Items)
+			},
+			func(list *v1beta1.ClusterCapacityReservationList, items []*v1beta1.ClusterCapacityReservation) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1beta1.ClusterCapacityReservation), err
-}
-
-// List takes label and field selectors, and returns the list of ClusterCapacityReservations that match those selectors.
-func (c *FakeClusterCapacityReservations) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.ClusterCapacityReservationList, err error) {
-	emptyResult := &v1beta1.ClusterCapacityReservationList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootListActionWithOptions(clustercapacityreservationsResource, clustercapacityreservationsKind, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1beta1.ClusterCapacityReservationList{ListMeta: obj.(*v1beta1.ClusterCapacityReservationList).ListMeta}
-	for _, item := range obj.(*v1beta1.ClusterCapacityReservationList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested clusterCapacityReservations.
-func (c *FakeClusterCapacityReservations) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewRootWatchActionWithOptions(clustercapacityreservationsResource, opts))
-}
-
-// Create takes the representation of a clusterCapacityReservation and creates it.  Returns the server's representation of the clusterCapacityReservation, and an error, if there is any.
-func (c *FakeClusterCapacityReservations) Create(ctx context.Context, clusterCapacityReservation *v1beta1.ClusterCapacityReservation, opts v1.CreateOptions) (result *v1beta1.ClusterCapacityReservation, err error) {
-	emptyResult := &v1beta1.ClusterCapacityReservation{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateActionWithOptions(clustercapacityreservationsResource, clusterCapacityReservation, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.ClusterCapacityReservation), err
-}
-
-// Update takes the representation of a clusterCapacityReservation and updates it. Returns the server's representation of the clusterCapacityReservation, and an error, if there is any.
-func (c *FakeClusterCapacityReservations) Update(ctx context.Context, clusterCapacityReservation *v1beta1.ClusterCapacityReservation, opts v1.UpdateOptions) (result *v1beta1.ClusterCapacityReservation, err error) {
-	emptyResult := &v1beta1.ClusterCapacityReservation{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateActionWithOptions(clustercapacityreservationsResource, clusterCapacityReservation, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.ClusterCapacityReservation), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeClusterCapacityReservations) UpdateStatus(ctx context.Context, clusterCapacityReservation *v1beta1.ClusterCapacityReservation, opts v1.UpdateOptions) (result *v1beta1.ClusterCapacityReservation, err error) {
-	emptyResult := &v1beta1.ClusterCapacityReservation{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(clustercapacityreservationsResource, "status", clusterCapacityReservation, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.ClusterCapacityReservation), err
-}
-
-// Delete takes name of the clusterCapacityReservation and deletes it. Returns an error if one occurs.
-func (c *FakeClusterCapacityReservations) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewRootDeleteActionWithOptions(clustercapacityreservationsResource, name, opts), &v1beta1.ClusterCapacityReservation{})
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeClusterCapacityReservations) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionActionWithOptions(clustercapacityreservationsResource, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1beta1.ClusterCapacityReservationList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched clusterCapacityReservation.
-func (c *FakeClusterCapacityReservations) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.ClusterCapacityReservation, err error) {
-	emptyResult := &v1beta1.ClusterCapacityReservation{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceActionWithOptions(clustercapacityreservationsResource, name, pt, data, opts, subresources...), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.ClusterCapacityReservation), err
 }

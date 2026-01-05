@@ -10,7 +10,6 @@ import (
 
 	v1beta2 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/utils"
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
@@ -630,7 +629,7 @@ func (r *DedicatedAIClusterReconciler) GetDesiredReservationReplicaCount(dac *v1
 		baseCount = 1
 	}
 
-	isvcList := &opensourcev1beta1.InferenceServiceList{}
+	isvcList := &v1beta2.InferenceServiceList{}
 	if err := r.List(context.TODO(), isvcList, client.InNamespace(dac.Name)); err != nil {
 		return reservationCount, err
 	}
@@ -736,7 +735,7 @@ func (r *DedicatedAIClusterReconciler) SetupWithManager(mgr ctrl.Manager, dacRec
 		Owns(&kueuev1beta1.LocalQueue{}).
 		Owns(&appsv1.Deployment{}).
 		Watches(
-			&opensourcev1beta1.InferenceService{},
+			&v1beta2.InferenceService{},
 			eventHandler,
 			builder.WithPredicates(predicates)).
 		Watches(

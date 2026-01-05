@@ -9,7 +9,8 @@ import (
 type InferenceServiceSpec struct {
 	// Predictor defines the model serving spec
 	// It specifies how the model should be deployed and served, handling inference requests.
-	// +required
+	// Deprecated: Predictor is deprecated and will be removed in a future release. Please use Engine and Model fields instead.
+	// +optional
 	Predictor PredictorSpec `json:"predictor"`
 
 	// Engine defines the serving engine spec
@@ -48,7 +49,76 @@ type InferenceServiceSpec struct {
 	// Provides settings for event-driven autoscaling using KEDA (Kubernetes Event-driven Autoscaling),
 	// allowing the service to scale based on custom metrics or event sources.
 	KedaConfig *KedaConfig `json:"kedaConfig,omitempty"`
+
+	// AcceleratorSelector specifies accelerator selection preferences
+	// +optional
+	AcceleratorSelector *AcceleratorSelector `json:"acceleratorSelector,omitempty"`
 }
+
+// AcceleratorSelector defines how to select accelerators for the InferenceService
+type AcceleratorSelector struct {
+	// AcceleratorClass explicitly selects a specific AcceleratorClass
+	// Takes precedence over other selectors
+	// +optional
+	AcceleratorClass *string `json:"acceleratorClass,omitempty"`
+
+	// Constraints defines requirements that accelerators must meet
+	// +optional
+	Constraints *AcceleratorConstraints `json:"constraints,omitempty"`
+
+	// Policy defines the selection policy when multiple accelerators match
+	// +kubebuilder:validation:Enum=BestFit;Cheapest;MostCapable;FirstAvailable
+	// +optional
+	Policy AcceleratorSelectionPolicy `json:"policy,omitempty"`
+}
+
+// AcceleratorConstraints defines requirements for accelerator selection
+type AcceleratorConstraints struct {
+	// MinMemory in GB
+	// +optional
+	MinMemory *int64 `json:"minMemory,omitempty"`
+
+	// MaxMemory in GB (useful for cost control)
+	// +optional
+	MaxMemory *int64 `json:"maxMemory,omitempty"`
+
+	// MinComputeCapability in TFLOPS
+	// +optional
+	MinComputeCapability *int64 `json:"minComputeCapability,omitempty"`
+
+	// RequiredFeatures that must be present
+	// +optional
+	// +listType=atomic
+	RequiredFeatures []string `json:"requiredFeatures,omitempty"`
+
+	// ExcludedClasses lists AcceleratorClasses to avoid
+	// +optional
+	// +listType=atomic
+	ExcludedClasses []string `json:"excludedClasses,omitempty"`
+
+	// ArchitectureFamilies limits selection to specific families
+	// Examples: ["nvidia-hopper", "nvidia-ampere"]
+	// +optional
+	// +listType=atomic
+	ArchitectureFamilies []string `json:"architectureFamilies,omitempty"`
+}
+
+// AcceleratorSelectionPolicy defines how to select among matching accelerators
+type AcceleratorSelectionPolicy string
+
+const (
+	// BestFit selects the accelerator that best matches model requirements
+	BestFitPolicy AcceleratorSelectionPolicy = "BestFit"
+
+	// Cheapest selects the lowest cost accelerator that meets requirements
+	CheapestPolicy AcceleratorSelectionPolicy = "Cheapest"
+
+	// MostCapable selects the most powerful accelerator available
+	MostCapablePolicy AcceleratorSelectionPolicy = "MostCapable"
+
+	// FirstAvailable selects the first matching accelerator (fastest scheduling)
+	FirstAvailablePolicy AcceleratorSelectionPolicy = "FirstAvailable"
+)
 
 // EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments)
 // Provides a comprehensive specification for deploying model serving containers and pods.
@@ -84,6 +154,10 @@ type EngineSpec struct {
 	// distributed processing tasks as directed by the leader.
 	// +optional
 	Worker *WorkerSpec `json:"worker,omitempty"`
+
+	// AcceleratorOverride allows overriding the global accelerator selection for this component
+	// +optional
+	AcceleratorOverride *AcceleratorSelector `json:"acceleratorOverride,omitempty"`
 }
 
 // DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment)
@@ -119,6 +193,10 @@ type DecoderSpec struct {
 	// distributed token generation tasks as directed by the leader.
 	// +optional
 	Worker *WorkerSpec `json:"worker,omitempty"`
+
+	// AcceleratorOverride allows overriding the global accelerator selection for this component
+	// +optional
+	AcceleratorOverride *AcceleratorSelector `json:"acceleratorOverride,omitempty"`
 }
 
 // LeaderSpec defines the configuration for a leader node in a multi-node component
@@ -236,12 +314,12 @@ type ServingRuntimeRef struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="URL",type="string",JSONPath=".status.url"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
-// +kubebuilder:printcolumn:name="BaseModel",type="string",JSONPath=".spec.predictor.model.baseModel"
-// +kubebuilder:printcolumn:name="Runtime",type="string",JSONPath=".spec.predictor.model.runtime"
-// +kubebuilder:printcolumn:name="Prev",type="integer",JSONPath=".status.components.predictor.traffic[?(@.tag=='prev')].percent"
-// +kubebuilder:printcolumn:name="Latest",type="integer",JSONPath=".status.components.predictor.traffic[?(@.latestRevision==true)].percent"
-// +kubebuilder:printcolumn:name="PrevRolledoutRevision",type="string",JSONPath=".status.components.predictor.traffic[?(@.tag=='prev')].revisionName"
-// +kubebuilder:printcolumn:name="LatestReadyRevision",type="string",JSONPath=".status.components.predictor.traffic[?(@.latestRevision==true)].revisionName"
+// +kubebuilder:printcolumn:name="BaseModel",type="string",JSONPath=".spec.model.name"
+// +kubebuilder:printcolumn:name="Runtime",type="string",JSONPath=".spec.runtime.name"
+// +kubebuilder:printcolumn:name="Prev",type="integer",JSONPath=".status.components.engine.traffic[?(@.tag=='prev')].percent"
+// +kubebuilder:printcolumn:name="Latest",type="integer",JSONPath=".status.components.engine.traffic[?(@.latestRevision==true)].percent"
+// +kubebuilder:printcolumn:name="PrevRolledoutRevision",type="string",JSONPath=".status.components.engine.traffic[?(@.tag=='prev')].revisionName"
+// +kubebuilder:printcolumn:name="LatestReadyRevision",type="string",JSONPath=".status.components.engine.traffic[?(@.latestRevision==true)].revisionName"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:resource:path=inferenceservices,shortName=isvc
 // +kubebuilder:storageversion
@@ -261,15 +339,11 @@ type InferenceService struct {
 type InferenceServiceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	// +listType=set
-	Items []InferenceService `json:"items"`
+	Items           []InferenceService `json:"items"`
 }
 
 func init() {
-	// these types are NOT registered here to avoid double registration.
-	// They are registered from github.com/sgl-project/ome/pkg/apis/ome/v1beta1 in cmd/manager/main.go
-	// to use the opensource inference controller implementation.
-	//SchemeBuilder.Register(&InferenceService{}, &InferenceServiceList{})
-	//SchemeBuilder.Register(&ServingRuntime{}, &ServingRuntimeList{})
-	//SchemeBuilder.Register(&ClusterServingRuntime{}, &ClusterServingRuntimeList{})
+	SchemeBuilder.Register(&InferenceService{}, &InferenceServiceList{})
+	SchemeBuilder.Register(&ServingRuntime{}, &ServingRuntimeList{})
+	SchemeBuilder.Register(&ClusterServingRuntime{}, &ClusterServingRuntimeList{})
 }

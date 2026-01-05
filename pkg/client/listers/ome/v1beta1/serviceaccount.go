@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // ServiceAccountLister helps list ServiceAccounts.
@@ -14,7 +14,7 @@ import (
 type ServiceAccountLister interface {
 	// List lists all ServiceAccounts in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.ServiceAccount, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.ServiceAccount, err error)
 	// ServiceAccounts returns an object that can list and get ServiceAccounts.
 	ServiceAccounts(namespace string) ServiceAccountNamespaceLister
 	ServiceAccountListerExpansion
@@ -22,17 +22,17 @@ type ServiceAccountLister interface {
 
 // serviceAccountLister implements the ServiceAccountLister interface.
 type serviceAccountLister struct {
-	listers.ResourceIndexer[*v1beta1.ServiceAccount]
+	listers.ResourceIndexer[*omev1beta1.ServiceAccount]
 }
 
 // NewServiceAccountLister returns a new ServiceAccountLister.
 func NewServiceAccountLister(indexer cache.Indexer) ServiceAccountLister {
-	return &serviceAccountLister{listers.New[*v1beta1.ServiceAccount](indexer, v1beta1.Resource("serviceaccount"))}
+	return &serviceAccountLister{listers.New[*omev1beta1.ServiceAccount](indexer, omev1beta1.Resource("serviceaccount"))}
 }
 
 // ServiceAccounts returns an object that can list and get ServiceAccounts.
 func (s *serviceAccountLister) ServiceAccounts(namespace string) ServiceAccountNamespaceLister {
-	return serviceAccountNamespaceLister{listers.NewNamespaced[*v1beta1.ServiceAccount](s.ResourceIndexer, namespace)}
+	return serviceAccountNamespaceLister{listers.NewNamespaced[*omev1beta1.ServiceAccount](s.ResourceIndexer, namespace)}
 }
 
 // ServiceAccountNamespaceLister helps list and get ServiceAccounts.
@@ -40,15 +40,15 @@ func (s *serviceAccountLister) ServiceAccounts(namespace string) ServiceAccountN
 type ServiceAccountNamespaceLister interface {
 	// List lists all ServiceAccounts in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.ServiceAccount, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.ServiceAccount, err error)
 	// Get retrieves the ServiceAccount from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.ServiceAccount, error)
+	Get(name string) (*omev1beta1.ServiceAccount, error)
 	ServiceAccountNamespaceListerExpansion
 }
 
 // serviceAccountNamespaceLister implements the ServiceAccountNamespaceLister
 // interface.
 type serviceAccountNamespaceLister struct {
-	listers.ResourceIndexer[*v1beta1.ServiceAccount]
+	listers.ResourceIndexer[*omev1beta1.ServiceAccount]
 }

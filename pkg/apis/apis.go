@@ -5,8 +5,9 @@
 package apis
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 )
 
 // AddToSchemes may be used to add all resources defined in the project to a Scheme

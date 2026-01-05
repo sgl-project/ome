@@ -29,6 +29,489 @@
         }
       }
     },
+    "v1beta1.AcceleratorCapabilities": {
+      "type": "object",
+      "properties": {
+        "clockSpeedMHz": {
+          "description": "Clock speeds",
+          "type": "integer",
+          "format": "int32"
+        },
+        "computeCapability": {
+          "description": "Compute capability (NVIDIA) or equivalent",
+          "type": "string"
+        },
+        "features": {
+          "description": "Features supported by this accelerator",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "levelZeroVersion": {
+          "description": "Level Zero version (for Intel accelerators)",
+          "type": "string"
+        },
+        "memoryBandwidthGBps": {
+          "description": "Memory bandwidth",
+          "$ref": "#/definitions/resource.Quantity"
+        },
+        "memoryGB": {
+          "description": "Memory capacity in GB",
+          "$ref": "#/definitions/resource.Quantity"
+        },
+        "performance": {
+          "description": "Performance metrics",
+          "$ref": "#/definitions/v1beta1.AcceleratorPerformance"
+        }
+      }
+    },
+    "v1beta1.AcceleratorClass": {
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.AcceleratorClassSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.AcceleratorClassStatus"
+        }
+      }
+    },
+    "v1beta1.AcceleratorClassList": {
+      "description": "AcceleratorClassList contains a list of AcceleratorClass",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.AcceleratorClass"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.AcceleratorClassSpec": {
+      "type": "object",
+      "required": [
+        "discovery",
+        "capabilities"
+      ],
+      "properties": {
+        "capabilities": {
+          "description": "Capabilities of this accelerator class",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.AcceleratorCapabilities"
+        },
+        "cost": {
+          "description": "Cost information for optimization decisions",
+          "$ref": "#/definitions/v1beta1.AcceleratorCost"
+        },
+        "discovery": {
+          "description": "Discovery patterns to identify nodes with this accelerator",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.AcceleratorDiscovery"
+        },
+        "family": {
+          "description": "Family of the accelerator (ampere, hopper, cdna2, etc.)",
+          "type": "string"
+        },
+        "integration": {
+          "description": "Integration with external systems",
+          "$ref": "#/definitions/v1beta1.AcceleratorIntegration"
+        },
+        "model": {
+          "description": "Model name (a100, h100, mi250x, etc.)",
+          "type": "string"
+        },
+        "resources": {
+          "description": "Resources exposed by this accelerator",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.AcceleratorResource"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "vendor": {
+          "description": "Vendor of the accelerator (nvidia, amd, intel, etc.)",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.AcceleratorClassStatus": {
+      "type": "object",
+      "properties": {
+        "availableAccelerators": {
+          "description": "Available accelerators (not allocated)",
+          "type": "integer",
+          "format": "int32"
+        },
+        "availableNodes": {
+          "description": "AvailableNodes is the number of nodes that have this accelerator available",
+          "type": "integer",
+          "format": "int32"
+        },
+        "conditions": {
+          "description": "Conditions represent the latest available observations",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "lastUpdated": {
+          "description": "Last update time",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "nodes": {
+          "description": "Nodes that have this accelerator",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "totalAccelerators": {
+          "description": "Total number of accelerators in the cluster",
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1beta1.AcceleratorConstraints": {
+      "description": "AcceleratorConstraints defines requirements for accelerator selection",
+      "type": "object",
+      "properties": {
+        "architectureFamilies": {
+          "description": "ArchitectureFamilies limits selection to specific families Examples: [\"nvidia-hopper\", \"nvidia-ampere\"]",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "excludedClasses": {
+          "description": "ExcludedClasses lists AcceleratorClasses to avoid",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "maxMemory": {
+          "description": "MaxMemory in GB (useful for cost control)",
+          "type": "integer",
+          "format": "int64"
+        },
+        "minComputeCapability": {
+          "description": "MinComputeCapability in TFLOPS",
+          "type": "integer",
+          "format": "int64"
+        },
+        "minMemory": {
+          "description": "MinMemory in GB",
+          "type": "integer",
+          "format": "int64"
+        },
+        "requiredFeatures": {
+          "description": "RequiredFeatures that must be present",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        }
+      }
+    },
+    "v1beta1.AcceleratorCost": {
+      "type": "object",
+      "properties": {
+        "perHour": {
+          "description": "Cost per hour in dollars",
+          "$ref": "#/definitions/resource.Quantity"
+        },
+        "perMillionTokens": {
+          "description": "Cost per million tokens (for usage-based pricing)",
+          "$ref": "#/definitions/resource.Quantity"
+        },
+        "spotPerHour": {
+          "description": "Spot instance pricing if available",
+          "$ref": "#/definitions/resource.Quantity"
+        },
+        "tier": {
+          "description": "Cost tier for simplified selection (low, medium, high)",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.AcceleratorDiscovery": {
+      "type": "object",
+      "properties": {
+        "affinity": {
+          "description": "Affinity for more complex node selection",
+          "$ref": "#/definitions/v1.Affinity"
+        },
+        "deviceIDs": {
+          "description": "DeviceIDs list of PCI device IDs",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "nodeSelector": {
+          "description": "NodeSelector to identify nodes with this accelerator",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "pciVendorID": {
+          "description": "PCIVendorID for device discovery (e.g., \"10de\" for NVIDIA)",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.AcceleratorIntegration": {
+      "type": "object",
+      "properties": {
+        "kueueResourceFlavor": {
+          "description": "KueueResourceFlavor name to sync with",
+          "type": "string"
+        },
+        "volcanoGPUType": {
+          "description": "VolcanoGPUType for Volcano integration",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.AcceleratorLatency": {
+      "type": "object",
+      "properties": {
+        "averageMillis": {
+          "description": "Average latency in milliseconds",
+          "type": "integer",
+          "format": "int64"
+        },
+        "maximumMillis": {
+          "description": "Maximum latency in milliseconds",
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
+    "v1beta1.AcceleratorModelConfig": {
+      "description": "AcceleratorModelConfig provides accelerator-specific overrides for this model format",
+      "type": "object",
+      "properties": {
+        "environmentOverride": {
+          "description": "EnvironmentOverride provides accelerator-specific environment variables",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "minMemoryPerBillionParams": {
+          "description": "MinMemoryPerBillionParams specifies memory required per billion parameters Used to calculate if a model fits on the accelerator",
+          "type": "integer",
+          "format": "int64"
+        },
+        "runtimeArgsOverride": {
+          "description": "RuntimeArgsOverride provides accelerator-specific runtime arguments",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "tensorParallelismOverride": {
+          "description": "TensorParallelismOverride overrides the default tensor parallelism settings",
+          "$ref": "#/definitions/v1beta1.TensorParallelismConfig"
+        }
+      }
+    },
+    "v1beta1.AcceleratorPerformance": {
+      "type": "object",
+      "properties": {
+        "fp16Tflops": {
+          "description": "FP16 performance in TFLOPS",
+          "type": "integer",
+          "format": "int64"
+        },
+        "fp32Tflops": {
+          "description": "FP32 performance in TFLOPS",
+          "type": "integer",
+          "format": "int64"
+        },
+        "int4Tops": {
+          "description": "INT4 performance in TOPS",
+          "type": "integer",
+          "format": "int64"
+        },
+        "int8Tops": {
+          "description": "INT8 performance in TOPS",
+          "type": "integer",
+          "format": "int64"
+        },
+        "latency": {
+          "description": "Latency metrics",
+          "$ref": "#/definitions/v1beta1.AcceleratorLatency"
+        }
+      }
+    },
+    "v1beta1.AcceleratorRequirements": {
+      "description": "AcceleratorRequirements specifies the accelerator requirements for this runtime",
+      "type": "object",
+      "properties": {
+        "acceleratorClasses": {
+          "description": "AcceleratorClasses lists the names of AcceleratorClasses this runtime supports If empty, the runtime supports any accelerator",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "minComputeCapability": {
+          "description": "MinComputeCapability specifies minimum compute capability in TFLOPS",
+          "type": "integer",
+          "format": "int64"
+        },
+        "minMemory": {
+          "description": "MinMemory specifies minimum GPU memory required in GB",
+          "type": "integer",
+          "format": "int64"
+        },
+        "preferredPrecisions": {
+          "description": "PreferredPrecisions lists numeric precisions in order of preference Examples: [\"fp8\", \"fp16\", \"fp32\"]",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "requiredFeatures": {
+          "description": "RequiredFeatures lists hardware features that must be present Examples: [\"tensor-cores\", \"fp8\", \"nvlink\"]",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        }
+      }
+    },
+    "v1beta1.AcceleratorResource": {
+      "type": "object",
+      "properties": {
+        "divisible": {
+          "description": "Divisible indicates if the resource can be subdivided",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "Name of the resource (e.g., nvidia.com/gpu)",
+          "type": "string",
+          "default": ""
+        },
+        "quantity": {
+          "description": "Quantity per accelerator",
+          "$ref": "#/definitions/resource.Quantity"
+        }
+      }
+    },
+    "v1beta1.AcceleratorSelection": {
+      "description": "AcceleratorSelection shows what accelerator was selected and why",
+      "type": "object",
+      "required": [
+        "acceleratorClass"
+      ],
+      "properties": {
+        "acceleratorClass": {
+          "description": "AcceleratorClass that was selected",
+          "type": "string",
+          "default": ""
+        },
+        "nodeSelector": {
+          "description": "NodeSelector that was applied to pods",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "reason": {
+          "description": "Reason explains why this accelerator was selected",
+          "type": "string"
+        },
+        "resourceRequests": {
+          "description": "ResourceRequests that were applied to pods",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        }
+      }
+    },
+    "v1beta1.AcceleratorSelector": {
+      "description": "AcceleratorSelector defines how to select accelerators for the InferenceService",
+      "type": "object",
+      "properties": {
+        "acceleratorClass": {
+          "description": "AcceleratorClass explicitly selects a specific AcceleratorClass Takes precedence over other selectors",
+          "type": "string"
+        },
+        "constraints": {
+          "description": "Constraints defines requirements that accelerators must meet",
+          "$ref": "#/definitions/v1beta1.AcceleratorConstraints"
+        },
+        "policy": {
+          "description": "Policy defines the selection policy when multiple accelerators match",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.AssociationUsage": {
       "description": "AssociationUsage defines the usage of the association.",
       "type": "object",
@@ -125,8 +608,17 @@
             "default": ""
           }
         },
+        "apiCapabilities": {
+          "description": "API capabilities supported by the model, e.g., \"OPENAI_V1_CHAT_COMPLETIONS\"",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
         "compartmentID": {
-          "description": "CompartmentID is the compartment ID of the model Deprecated: Use metadata.labels[\"ome.io/oci-compartmentid\"] instead",
+          "description": "CompartmentID is the compartment ID of the model",
           "type": "string"
         },
         "disabled": {
@@ -864,7 +1356,7 @@
       "type": "object",
       "properties": {
         "annotations": {
-          "description": "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+          "description": "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -889,7 +1381,7 @@
           "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "labels": {
-          "description": "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+          "description": "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -900,6 +1392,14 @@
           "description": "Maximum number of replicas for autoscaling.",
           "type": "integer",
           "format": "int32"
+        },
+        "maxUnavailable": {
+          "description": "MaxUnavailable specifies how many component pods can be unavailable",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
+        },
+        "minAvailable": {
+          "description": "MinAvailable specifies how many component pods must still be available after the eviction",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
           "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
@@ -949,6 +1449,10 @@
         "restURL": {
           "description": "REST endpoint of the component if available.",
           "$ref": "#/definitions/knative.URL"
+        },
+        "selectedAccelerator": {
+          "description": "SelectedAccelerator shows which AcceleratorClass was selected",
+          "$ref": "#/definitions/v1beta1.AcceleratorSelection"
         },
         "traffic": {
           "description": "Traffic holds the configured traffic distribution for latest ready revision and previous rolled out revision.",
@@ -1069,6 +1573,10 @@
       "description": "DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment) Used specifically for prefill-decode disaggregated deployments to handle the token generation phase. Similar to EngineSpec in structure, it allows for detailed pod and container configuration, but is specifically used for the decode phase when separating prefill and decode processes.",
       "type": "object",
       "properties": {
+        "acceleratorOverride": {
+          "description": "AcceleratorOverride allows overriding the global accelerator selection for this component",
+          "$ref": "#/definitions/v1beta1.AcceleratorSelector"
+        },
         "activeDeadlineSeconds": {
           "description": "Optional duration in seconds the pod may be active on the node relative to StartTime before the system will actively try to mark it failed and kill associated containers. Value must be a positive integer.",
           "type": "integer",
@@ -1079,7 +1587,7 @@
           "$ref": "#/definitions/v1.Affinity"
         },
         "annotations": {
-          "description": "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+          "description": "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -1210,7 +1718,7 @@
           "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "labels": {
-          "description": "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+          "description": "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -1225,6 +1733,14 @@
           "description": "Maximum number of replicas for autoscaling.",
           "type": "integer",
           "format": "int32"
+        },
+        "maxUnavailable": {
+          "description": "MaxUnavailable specifies how many component pods can be unavailable",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
+        },
+        "minAvailable": {
+          "description": "MinAvailable specifies how many component pods must still be available after the eviction",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
           "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
@@ -1698,6 +2214,10 @@
       "description": "EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments) Provides a comprehensive specification for deploying model serving containers and pods. It allows for complete Kubernetes pod configuration including main containers, init containers, sidecars, volumes, and other pod-level settings. For distributed deployments, it supports leader-worker architecture configuration.",
       "type": "object",
       "properties": {
+        "acceleratorOverride": {
+          "description": "AcceleratorOverride allows overriding the global accelerator selection for this component",
+          "$ref": "#/definitions/v1beta1.AcceleratorSelector"
+        },
         "activeDeadlineSeconds": {
           "description": "Optional duration in seconds the pod may be active on the node relative to StartTime before the system will actively try to mark it failed and kill associated containers. Value must be a positive integer.",
           "type": "integer",
@@ -1708,7 +2228,7 @@
           "$ref": "#/definitions/v1.Affinity"
         },
         "annotations": {
-          "description": "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+          "description": "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -1839,7 +2359,7 @@
           "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "labels": {
-          "description": "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+          "description": "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -1854,6 +2374,14 @@
           "description": "Maximum number of replicas for autoscaling.",
           "type": "integer",
           "format": "int32"
+        },
+        "maxUnavailable": {
+          "description": "MaxUnavailable specifies how many component pods can be unavailable",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
+        },
+        "minAvailable": {
+          "description": "MinAvailable specifies how many component pods must still be available after the eviction",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
           "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
@@ -2137,7 +2665,7 @@
           "$ref": "#/definitions/v1beta1.ObjectReference"
         },
         "compartmentID": {
-          "description": "CompartmentID is the compartment ID of the model Deprecated: Use metadata.labels[\"ome.io/oci-compartmentid\"] instead",
+          "description": "CompartmentID is the compartment ID of the model",
           "type": "string"
         },
         "configuration": {
@@ -2447,8 +2975,7 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1beta1.InferenceService"
-          },
-          "x-kubernetes-list-type": "set"
+          }
         },
         "kind": {
           "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
@@ -2483,10 +3010,11 @@
     "v1beta1.InferenceServiceSpec": {
       "description": "InferenceServiceSpec is the top level type for this resource",
       "type": "object",
-      "required": [
-        "predictor"
-      ],
       "properties": {
+        "acceleratorSelector": {
+          "description": "AcceleratorSelector specifies accelerator selection preferences",
+          "$ref": "#/definitions/v1beta1.AcceleratorSelector"
+        },
         "decoder": {
           "description": "Decoder defines the decoder spec This is specifically used for PD (Prefill-Decode) disaggregated serving deployments. Similar to Engine in structure, it allows for container and pod specifications, but is only utilized when implementing the disaggregated serving pattern to separate the prefill and decode phases of inference.",
           "$ref": "#/definitions/v1beta1.DecoderSpec"
@@ -2504,7 +3032,7 @@
           "$ref": "#/definitions/v1beta1.ModelRef"
         },
         "predictor": {
-          "description": "Predictor defines the model serving spec It specifies how the model should be deployed and served, handling inference requests.",
+          "description": "Predictor defines the model serving spec It specifies how the model should be deployed and served, handling inference requests. Deprecated: Predictor is deprecated and will be removed in a future release. Please use Engine and Model fields instead.",
           "default": {},
           "$ref": "#/definitions/v1beta1.PredictorSpec"
         },
@@ -3106,7 +3634,7 @@
       "type": "object",
       "properties": {
         "compartmentID": {
-          "description": "CompartmentID is the compartment ID of the model Deprecated: Use metadata.labels[\"ome.io/oci-compartmentid\"] instead",
+          "description": "CompartmentID is the compartment ID of the model",
           "type": "string"
         },
         "disabled": {
@@ -3134,9 +3662,18 @@
           "type": "string",
           "default": ""
         },
+        "operator": {
+          "description": "Operator for the selector with supported values: \"Equal\", \"GreaterThan\" This is used to select the serving runtime based on the modelFormat version",
+          "type": "string"
+        },
         "version": {
           "description": "Version of the model format. Used in validating that a runtime supports a predictor. It Can be \"major\", \"major.minor\" or \"major.minor.patch\".",
           "type": "string"
+        },
+        "weight": {
+          "description": "Weight of the model format in the runtime selector, used to prioritize modelFormat",
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
@@ -3148,9 +3685,18 @@
           "type": "string",
           "default": ""
         },
+        "operator": {
+          "description": "Operator for the selector with supported values: \"Equal\", \"GreaterThan\" This is used to select the serving runtime based on the modelFramework version",
+          "type": "string"
+        },
         "version": {
           "description": "Version of the library. Used in validating that a runtime supports a predictor. It Can be \"major\", \"major.minor\" or \"major.minor.patch\".",
           "type": "string"
+        },
+        "weight": {
+          "description": "Weight of the framework in the runtime selector, used to prioritize modelFramework",
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
@@ -4538,7 +5084,7 @@
           "$ref": "#/definitions/v1.Affinity"
         },
         "annotations": {
-          "description": "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+          "description": "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -4669,7 +5215,7 @@
           "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "labels": {
-          "description": "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+          "description": "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -4680,6 +5226,14 @@
           "description": "Maximum number of replicas for autoscaling.",
           "type": "integer",
           "format": "int32"
+        },
+        "maxUnavailable": {
+          "description": "MaxUnavailable specifies how many component pods can be unavailable",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
+        },
+        "minAvailable": {
+          "description": "MinAvailable specifies how many component pods must still be available after the eviction",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
           "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
@@ -5252,7 +5806,7 @@
           "$ref": "#/definitions/v1.Affinity"
         },
         "annotations": {
-          "description": "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+          "description": "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -5391,7 +5945,7 @@
           "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "labels": {
-          "description": "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+          "description": "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -5402,6 +5956,14 @@
           "description": "Maximum number of replicas for autoscaling.",
           "type": "integer",
           "format": "int32"
+        },
+        "maxUnavailable": {
+          "description": "MaxUnavailable specifies how many component pods can be unavailable",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
+        },
+        "minAvailable": {
+          "description": "MinAvailable specifies how many component pods must still be available after the eviction",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
           "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
@@ -5995,9 +6557,6 @@
     },
     "v1beta1.ServingRuntimePodSpec": {
       "type": "object",
-      "required": [
-        "containers"
-      ],
       "properties": {
         "affinity": {
           "description": "If specified, the pod's scheduling constraints",
@@ -6012,7 +6571,7 @@
           }
         },
         "containers": {
-          "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
+          "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. Cannot be updated.",
           "type": "array",
           "items": {
             "default": {},
@@ -6117,10 +6676,11 @@
     "v1beta1.ServingRuntimeSpec": {
       "description": "ServingRuntimeSpec defines the desired state of ServingRuntime. This spec is currently provisional and are subject to change as details regarding single-model serving and multi-model serving are hammered out.",
       "type": "object",
-      "required": [
-        "containers"
-      ],
       "properties": {
+        "acceleratorRequirements": {
+          "description": "AcceleratorRequirements specifies the accelerator requirements for this runtime",
+          "$ref": "#/definitions/v1beta1.AcceleratorRequirements"
+        },
         "affinity": {
           "description": "If specified, the pod's scheduling constraints",
           "$ref": "#/definitions/v1.Affinity"
@@ -6134,7 +6694,7 @@
           }
         },
         "containers": {
-          "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
+          "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. Cannot be updated.",
           "type": "array",
           "items": {
             "default": {},
@@ -6270,6 +6830,10 @@
         "storageUri"
       ],
       "properties": {
+        "downloadPolicy": {
+          "description": "DownloadPolicy describes the policy of downloading model artifacts Supported policies: - AlwaysDownload: always download a copy of model artifact in destination path - ReuseIfExists: if the identical model artifact has been downloaded in the node, such artifact will be reused",
+          "type": "string"
+        },
         "key": {
           "description": "StorageKey is the name of the key in a Kubernetes Secret used to authenticate access to the model storage. This key will be used to fetch credentials during model download or access.",
           "type": "string"
@@ -6299,6 +6863,10 @@
           "description": "Path is the absolute path where the model will be downloaded and stored on the node.",
           "type": "string"
         },
+        "schemaPath": {
+          "description": "SchemaPath is the path to the model schema or configuration file within the storage system. This can be used to validate the model or customize how it's loaded.",
+          "type": "string"
+        },
         "storageUri": {
           "description": "StorageUri specifies the source URI of the model in a supported storage backend. Supported formats: - OCI Object Storage:   oci://n/{namespace}/b/{bucket}/o/{object_path} - Persistent Volume:    pvc://{pvc-name}/{sub-path} - Vendor-specific:      vendor://{vendor-name}/{resource-type}/{resource-path} This field is required.",
           "type": "string"
@@ -6312,6 +6880,13 @@
         "modelFramework"
       ],
       "properties": {
+        "acceleratorConfig": {
+          "description": "AcceleratorConfig provides accelerator-specific overrides for this model format",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.AcceleratorModelConfig"
+          }
+        },
         "autoSelect": {
           "description": "Set to true to allow the ServingRuntime to be used for automatic model placement if this model format is specified with no explicit runtime.",
           "type": "boolean"
@@ -6367,6 +6942,27 @@
         "Spec": {
           "default": {},
           "$ref": "#/definitions/v1beta1.ServingRuntimeSpec"
+        }
+      }
+    },
+    "v1beta1.TensorParallelismConfig": {
+      "description": "TensorParallelismConfig specifies tensor parallelism settings",
+      "type": "object",
+      "properties": {
+        "dataParallelSize": {
+          "description": "dataParallelSize specifies the size of the data parallelism",
+          "type": "integer",
+          "format": "int64"
+        },
+        "pipelineParallelSize": {
+          "description": "pipelineParallelSize specifies the size of the pipeline parallelism",
+          "type": "integer",
+          "format": "int64"
+        },
+        "tensorParallelSize": {
+          "description": "tensorParallelSize specifies the size of the tensor parallelism",
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
@@ -6827,9 +7423,6 @@
     },
     "v1beta1.WorkerPodSpec": {
       "type": "object",
-      "required": [
-        "containers"
-      ],
       "properties": {
         "affinity": {
           "description": "If specified, the pod's scheduling constraints",
@@ -6844,7 +7437,7 @@
           }
         },
         "containers": {
-          "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
+          "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. Cannot be updated.",
           "type": "array",
           "items": {
             "default": {},

@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // OciPostgresLister helps list OciPostgreses.
@@ -14,7 +14,7 @@ import (
 type OciPostgresLister interface {
 	// List lists all OciPostgreses in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.OciPostgres, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.OciPostgres, err error)
 	// OciPostgreses returns an object that can list and get OciPostgreses.
 	OciPostgreses(namespace string) OciPostgresNamespaceLister
 	OciPostgresListerExpansion
@@ -22,17 +22,17 @@ type OciPostgresLister interface {
 
 // ociPostgresLister implements the OciPostgresLister interface.
 type ociPostgresLister struct {
-	listers.ResourceIndexer[*v1beta1.OciPostgres]
+	listers.ResourceIndexer[*omev1beta1.OciPostgres]
 }
 
 // NewOciPostgresLister returns a new OciPostgresLister.
 func NewOciPostgresLister(indexer cache.Indexer) OciPostgresLister {
-	return &ociPostgresLister{listers.New[*v1beta1.OciPostgres](indexer, v1beta1.Resource("ocipostgres"))}
+	return &ociPostgresLister{listers.New[*omev1beta1.OciPostgres](indexer, omev1beta1.Resource("ocipostgres"))}
 }
 
 // OciPostgreses returns an object that can list and get OciPostgreses.
 func (s *ociPostgresLister) OciPostgreses(namespace string) OciPostgresNamespaceLister {
-	return ociPostgresNamespaceLister{listers.NewNamespaced[*v1beta1.OciPostgres](s.ResourceIndexer, namespace)}
+	return ociPostgresNamespaceLister{listers.NewNamespaced[*omev1beta1.OciPostgres](s.ResourceIndexer, namespace)}
 }
 
 // OciPostgresNamespaceLister helps list and get OciPostgreses.
@@ -40,15 +40,15 @@ func (s *ociPostgresLister) OciPostgreses(namespace string) OciPostgresNamespace
 type OciPostgresNamespaceLister interface {
 	// List lists all OciPostgreses in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.OciPostgres, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.OciPostgres, err error)
 	// Get retrieves the OciPostgres from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.OciPostgres, error)
+	Get(name string) (*omev1beta1.OciPostgres, error)
 	OciPostgresNamespaceListerExpansion
 }
 
 // ociPostgresNamespaceLister implements the OciPostgresNamespaceLister
 // interface.
 type ociPostgresNamespaceLister struct {
-	listers.ResourceIndexer[*v1beta1.OciPostgres]
+	listers.ResourceIndexer[*omev1beta1.OciPostgres]
 }

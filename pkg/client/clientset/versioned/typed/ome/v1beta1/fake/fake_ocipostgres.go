@@ -3,129 +3,32 @@
 package fake
 
 import (
-	"context"
-
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeOciPostgreses implements OciPostgresInterface
-type FakeOciPostgreses struct {
+// fakeOciPostgreses implements OciPostgresInterface
+type fakeOciPostgreses struct {
+	*gentype.FakeClientWithList[*v1beta1.OciPostgres, *v1beta1.OciPostgresList]
 	Fake *FakeOmeV1beta1
-	ns   string
 }
 
-var ocipostgresesResource = v1beta1.SchemeGroupVersion.WithResource("ocipostgreses")
-
-var ocipostgresesKind = v1beta1.SchemeGroupVersion.WithKind("OciPostgres")
-
-// Get takes name of the ociPostgres, and returns the corresponding ociPostgres object, and an error if there is any.
-func (c *FakeOciPostgreses) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.OciPostgres, err error) {
-	emptyResult := &v1beta1.OciPostgres{}
-	obj, err := c.Fake.
-		Invokes(testing.NewGetActionWithOptions(ocipostgresesResource, c.ns, name, options), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
+func newFakeOciPostgreses(fake *FakeOmeV1beta1, namespace string) omev1beta1.OciPostgresInterface {
+	return &fakeOciPostgreses{
+		gentype.NewFakeClientWithList[*v1beta1.OciPostgres, *v1beta1.OciPostgresList](
+			fake.Fake,
+			namespace,
+			v1beta1.SchemeGroupVersion.WithResource("ocipostgreses"),
+			v1beta1.SchemeGroupVersion.WithKind("OciPostgres"),
+			func() *v1beta1.OciPostgres { return &v1beta1.OciPostgres{} },
+			func() *v1beta1.OciPostgresList { return &v1beta1.OciPostgresList{} },
+			func(dst, src *v1beta1.OciPostgresList) { dst.ListMeta = src.ListMeta },
+			func(list *v1beta1.OciPostgresList) []*v1beta1.OciPostgres { return gentype.ToPointerSlice(list.Items) },
+			func(list *v1beta1.OciPostgresList, items []*v1beta1.OciPostgres) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1beta1.OciPostgres), err
-}
-
-// List takes label and field selectors, and returns the list of OciPostgreses that match those selectors.
-func (c *FakeOciPostgreses) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.OciPostgresList, err error) {
-	emptyResult := &v1beta1.OciPostgresList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewListActionWithOptions(ocipostgresesResource, ocipostgresesKind, c.ns, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1beta1.OciPostgresList{ListMeta: obj.(*v1beta1.OciPostgresList).ListMeta}
-	for _, item := range obj.(*v1beta1.OciPostgresList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested ociPostgreses.
-func (c *FakeOciPostgreses) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchActionWithOptions(ocipostgresesResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a ociPostgres and creates it.  Returns the server's representation of the ociPostgres, and an error, if there is any.
-func (c *FakeOciPostgreses) Create(ctx context.Context, ociPostgres *v1beta1.OciPostgres, opts v1.CreateOptions) (result *v1beta1.OciPostgres, err error) {
-	emptyResult := &v1beta1.OciPostgres{}
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateActionWithOptions(ocipostgresesResource, c.ns, ociPostgres, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.OciPostgres), err
-}
-
-// Update takes the representation of a ociPostgres and updates it. Returns the server's representation of the ociPostgres, and an error, if there is any.
-func (c *FakeOciPostgreses) Update(ctx context.Context, ociPostgres *v1beta1.OciPostgres, opts v1.UpdateOptions) (result *v1beta1.OciPostgres, err error) {
-	emptyResult := &v1beta1.OciPostgres{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateActionWithOptions(ocipostgresesResource, c.ns, ociPostgres, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.OciPostgres), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeOciPostgreses) UpdateStatus(ctx context.Context, ociPostgres *v1beta1.OciPostgres, opts v1.UpdateOptions) (result *v1beta1.OciPostgres, err error) {
-	emptyResult := &v1beta1.OciPostgres{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceActionWithOptions(ocipostgresesResource, "status", c.ns, ociPostgres, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.OciPostgres), err
-}
-
-// Delete takes name of the ociPostgres and deletes it. Returns an error if one occurs.
-func (c *FakeOciPostgreses) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(ocipostgresesResource, c.ns, name, opts), &v1beta1.OciPostgres{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeOciPostgreses) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionActionWithOptions(ocipostgresesResource, c.ns, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1beta1.OciPostgresList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched ociPostgres.
-func (c *FakeOciPostgreses) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.OciPostgres, err error) {
-	emptyResult := &v1beta1.OciPostgres{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(ocipostgresesResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.OciPostgres), err
 }

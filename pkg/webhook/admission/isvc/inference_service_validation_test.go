@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -626,66 +624,66 @@ func TestHasFullRunnerConfig(t *testing.T) {
 
 func TestInferenceService_RuntimeResolution(t *testing.T) {
 	// Create test models with different configurations
-	enabledModel := &opensourcev1beta1.ClusterBaseModel{
+	enabledModel := &v1beta1.ClusterBaseModel{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "enabled-model",
 		},
-		Spec: opensourcev1beta1.BaseModelSpec{
+		Spec: v1beta1.BaseModelSpec{
 			ModelArchitecture:  stringPtr("llama"),
 			ModelType:          stringPtr("text-generation"),
 			ModelParameterSize: stringPtr("7B"),
-			ModelFormat: opensourcev1beta1.ModelFormat{
+			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
 				Version: stringPtr("1"),
 			},
 		},
 	}
 
-	disabledModel := &opensourcev1beta1.ClusterBaseModel{
+	disabledModel := &v1beta1.ClusterBaseModel{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "disabled-model",
 		},
-		Spec: opensourcev1beta1.BaseModelSpec{
+		Spec: v1beta1.BaseModelSpec{
 			ModelArchitecture:  stringPtr("llama"),
 			ModelType:          stringPtr("text-generation"),
 			ModelParameterSize: stringPtr("7B"),
-			ModelFormat: opensourcev1beta1.ModelFormat{
+			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
 				Version: stringPtr("1"),
 			},
-			ModelExtensionSpec: opensourcev1beta1.ModelExtensionSpec{
+			ModelExtensionSpec: v1beta1.ModelExtensionSpec{
 				Disabled: boolPtr(true),
 			},
 		},
 	}
 
-	explicitlyEnabledModel := &opensourcev1beta1.ClusterBaseModel{
+	explicitlyEnabledModel := &v1beta1.ClusterBaseModel{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "explicitly-enabled-model",
 		},
-		Spec: opensourcev1beta1.BaseModelSpec{
+		Spec: v1beta1.BaseModelSpec{
 			ModelArchitecture:  stringPtr("llama"),
 			ModelType:          stringPtr("text-generation"),
 			ModelParameterSize: stringPtr("7B"),
-			ModelFormat: opensourcev1beta1.ModelFormat{
+			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
 				Version: stringPtr("1"),
 			},
-			ModelExtensionSpec: opensourcev1beta1.ModelExtensionSpec{
+			ModelExtensionSpec: v1beta1.ModelExtensionSpec{
 				Disabled: boolPtr(false), // Explicitly enabled
 			},
 		},
 	}
 
-	modelWithEmptyFormat := &opensourcev1beta1.ClusterBaseModel{
+	modelWithEmptyFormat := &v1beta1.ClusterBaseModel{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "model-empty-format",
 		},
-		Spec: opensourcev1beta1.BaseModelSpec{
+		Spec: v1beta1.BaseModelSpec{
 			ModelArchitecture:  stringPtr("llama"),
 			ModelType:          stringPtr("text-generation"),
 			ModelParameterSize: stringPtr("7B"),
-			ModelFormat: opensourcev1beta1.ModelFormat{
+			ModelFormat: v1beta1.ModelFormat{
 				Name: "", // Empty name
 			},
 		},
@@ -736,11 +734,11 @@ func TestInferenceService_RuntimeResolution(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 	_ = v1beta1.AddToScheme(scheme)
-	scheme.AddKnownTypes(opensourcev1beta1.SchemeGroupVersion,
-		&opensourcev1beta1.ClusterBaseModel{},
-		&opensourcev1beta1.BaseModel{},
+	scheme.AddKnownTypes(v1beta1.SchemeGroupVersion,
+		&v1beta1.ClusterBaseModel{},
+		&v1beta1.BaseModel{},
 	)
-	metav1.AddToGroupVersion(scheme, opensourcev1beta1.SchemeGroupVersion)
+	metav1.AddToGroupVersion(scheme, v1beta1.SchemeGroupVersion)
 
 	tests := []struct {
 		name    string
@@ -1112,21 +1110,21 @@ func TestValidateInferenceService_ComprehensiveErrorPaths(t *testing.T) {
 func TestResolveModelAndRuntime_Comprehensive(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = v1beta1.AddToScheme(scheme)
-	scheme.AddKnownTypes(opensourcev1beta1.SchemeGroupVersion,
-		&opensourcev1beta1.ClusterBaseModel{},
-		&opensourcev1beta1.BaseModel{},
+	scheme.AddKnownTypes(v1beta1.SchemeGroupVersion,
+		&v1beta1.ClusterBaseModel{},
+		&v1beta1.BaseModel{},
 	)
-	metav1.AddToGroupVersion(scheme, opensourcev1beta1.SchemeGroupVersion)
+	metav1.AddToGroupVersion(scheme, v1beta1.SchemeGroupVersion)
 
 	// Simple model that will generate label "mt:llama:1:llama"
-	simpleModel := &opensourcev1beta1.ClusterBaseModel{
+	simpleModel := &v1beta1.ClusterBaseModel{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "simple-model",
 		},
-		Spec: opensourcev1beta1.BaseModelSpec{
+		Spec: v1beta1.BaseModelSpec{
 			ModelArchitecture:  stringPtr("llama"),
 			ModelParameterSize: stringPtr("7B"),
-			ModelFormat: opensourcev1beta1.ModelFormat{
+			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
 				Version: stringPtr("1"),
 			},
@@ -1134,18 +1132,18 @@ func TestResolveModelAndRuntime_Comprehensive(t *testing.T) {
 	}
 
 	// Disabled model
-	disabledModel := &opensourcev1beta1.ClusterBaseModel{
+	disabledModel := &v1beta1.ClusterBaseModel{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "disabled-model",
 		},
-		Spec: opensourcev1beta1.BaseModelSpec{
+		Spec: v1beta1.BaseModelSpec{
 			ModelArchitecture:  stringPtr("llama"),
 			ModelParameterSize: stringPtr("7B"),
-			ModelFormat: opensourcev1beta1.ModelFormat{
+			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
 				Version: stringPtr("1"),
 			},
-			ModelExtensionSpec: opensourcev1beta1.ModelExtensionSpec{
+			ModelExtensionSpec: v1beta1.ModelExtensionSpec{
 				Disabled: boolPtr(true),
 			},
 		},
@@ -1317,21 +1315,21 @@ func TestResolveModelAndRuntime_Comprehensive(t *testing.T) {
 func TestResolveModelAndRuntime_EdgeCases(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = v1beta1.AddToScheme(scheme)
-	scheme.AddKnownTypes(opensourcev1beta1.SchemeGroupVersion,
-		&opensourcev1beta1.ClusterBaseModel{},
-		&opensourcev1beta1.BaseModel{},
+	scheme.AddKnownTypes(v1beta1.SchemeGroupVersion,
+		&v1beta1.ClusterBaseModel{},
+		&v1beta1.BaseModel{},
 	)
-	metav1.AddToGroupVersion(scheme, opensourcev1beta1.SchemeGroupVersion)
+	metav1.AddToGroupVersion(scheme, v1beta1.SchemeGroupVersion)
 
 	// Model with no disabled field (should be treated as enabled)
-	enabledModel := &opensourcev1beta1.ClusterBaseModel{
+	enabledModel := &v1beta1.ClusterBaseModel{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "enabled-model",
 		},
-		Spec: opensourcev1beta1.BaseModelSpec{
+		Spec: v1beta1.BaseModelSpec{
 			ModelArchitecture:  stringPtr("llama"),
 			ModelParameterSize: stringPtr("7B"),
-			ModelFormat: opensourcev1beta1.ModelFormat{
+			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
 				Version: stringPtr("1"),
 			},
@@ -1340,18 +1338,18 @@ func TestResolveModelAndRuntime_EdgeCases(t *testing.T) {
 	}
 
 	// Model explicitly enabled
-	explicitlyEnabledModel := &opensourcev1beta1.ClusterBaseModel{
+	explicitlyEnabledModel := &v1beta1.ClusterBaseModel{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "explicitly-enabled-model",
 		},
-		Spec: opensourcev1beta1.BaseModelSpec{
+		Spec: v1beta1.BaseModelSpec{
 			ModelArchitecture:  stringPtr("llama"),
 			ModelParameterSize: stringPtr("7B"),
-			ModelFormat: opensourcev1beta1.ModelFormat{
+			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
 				Version: stringPtr("1"),
 			},
-			ModelExtensionSpec: opensourcev1beta1.ModelExtensionSpec{
+			ModelExtensionSpec: v1beta1.ModelExtensionSpec{
 				Disabled: boolPtr(false), // Explicitly enabled
 			},
 		},
@@ -1439,20 +1437,20 @@ func TestResolveModelAndRuntime_EdgeCases(t *testing.T) {
 func TestResolveModelAndRuntime_WarningHandling(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = v1beta1.AddToScheme(scheme)
-	scheme.AddKnownTypes(opensourcev1beta1.SchemeGroupVersion,
-		&opensourcev1beta1.ClusterBaseModel{},
-		&opensourcev1beta1.BaseModel{},
+	scheme.AddKnownTypes(v1beta1.SchemeGroupVersion,
+		&v1beta1.ClusterBaseModel{},
+		&v1beta1.BaseModel{},
 	)
-	metav1.AddToGroupVersion(scheme, opensourcev1beta1.SchemeGroupVersion)
+	metav1.AddToGroupVersion(scheme, v1beta1.SchemeGroupVersion)
 
-	model := &opensourcev1beta1.ClusterBaseModel{
+	model := &v1beta1.ClusterBaseModel{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-model",
 		},
-		Spec: opensourcev1beta1.BaseModelSpec{
+		Spec: v1beta1.BaseModelSpec{
 			ModelArchitecture:  stringPtr("llama"),
 			ModelParameterSize: stringPtr("7B"),
-			ModelFormat: opensourcev1beta1.ModelFormat{
+			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
 				Version: stringPtr("1"),
 			},
@@ -1538,22 +1536,22 @@ func TestResolveModelAndRuntime_WarningHandling(t *testing.T) {
 func TestResolveModelAndRuntime_NamespacePrecedence(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = v1beta1.AddToScheme(scheme)
-	scheme.AddKnownTypes(opensourcev1beta1.SchemeGroupVersion,
-		&opensourcev1beta1.ClusterBaseModel{},
-		&opensourcev1beta1.BaseModel{},
+	scheme.AddKnownTypes(v1beta1.SchemeGroupVersion,
+		&v1beta1.ClusterBaseModel{},
+		&v1beta1.BaseModel{},
 	)
-	metav1.AddToGroupVersion(scheme, opensourcev1beta1.SchemeGroupVersion)
+	metav1.AddToGroupVersion(scheme, v1beta1.SchemeGroupVersion)
 
 	// Namespace-scoped model
-	namespacedModel := &opensourcev1beta1.BaseModel{
+	namespacedModel := &v1beta1.BaseModel{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-model",
 			Namespace: "test-namespace",
 		},
-		Spec: opensourcev1beta1.BaseModelSpec{
+		Spec: v1beta1.BaseModelSpec{
 			ModelArchitecture:  stringPtr("llama"),
 			ModelParameterSize: stringPtr("7B"),
-			ModelFormat: opensourcev1beta1.ModelFormat{
+			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
 				Version: stringPtr("1"),
 			},
@@ -1561,14 +1559,14 @@ func TestResolveModelAndRuntime_NamespacePrecedence(t *testing.T) {
 	}
 
 	// Cluster-scoped model with same name
-	clusterModel := &opensourcev1beta1.ClusterBaseModel{
+	clusterModel := &v1beta1.ClusterBaseModel{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-model",
 		},
-		Spec: opensourcev1beta1.BaseModelSpec{
+		Spec: v1beta1.BaseModelSpec{
 			ModelArchitecture:  stringPtr("different"),
 			ModelParameterSize: stringPtr("7B"),
-			ModelFormat: opensourcev1beta1.ModelFormat{
+			ModelFormat: v1beta1.ModelFormat{
 				Name:    "different",
 				Version: stringPtr("1"),
 			},

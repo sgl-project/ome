@@ -3,13 +3,13 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	apisomev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	versioned "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	internalinterfaces "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/internalinterfaces"
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/listers/ome/v1beta1"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/listers/ome/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -20,7 +20,7 @@ import (
 // ClusterCapacityReservations.
 type ClusterCapacityReservationInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1beta1.ClusterCapacityReservationLister
+	Lister() omev1beta1.ClusterCapacityReservationLister
 }
 
 type clusterCapacityReservationInformer struct {
@@ -45,16 +45,28 @@ func NewFilteredClusterCapacityReservationInformer(client versioned.Interface, r
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().ClusterCapacityReservations().List(context.TODO(), options)
+				return client.OmeV1beta1().ClusterCapacityReservations().List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().ClusterCapacityReservations().Watch(context.TODO(), options)
+				return client.OmeV1beta1().ClusterCapacityReservations().Watch(context.Background(), options)
+			},
+			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().ClusterCapacityReservations().List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().ClusterCapacityReservations().Watch(ctx, options)
 			},
 		},
-		&omev1beta1.ClusterCapacityReservation{},
+		&apisomev1beta1.ClusterCapacityReservation{},
 		resyncPeriod,
 		indexers,
 	)
@@ -65,9 +77,9 @@ func (f *clusterCapacityReservationInformer) defaultInformer(client versioned.In
 }
 
 func (f *clusterCapacityReservationInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&omev1beta1.ClusterCapacityReservation{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisomev1beta1.ClusterCapacityReservation{}, f.defaultInformer)
 }
 
-func (f *clusterCapacityReservationInformer) Lister() v1beta1.ClusterCapacityReservationLister {
-	return v1beta1.NewClusterCapacityReservationLister(f.Informer().GetIndexer())
+func (f *clusterCapacityReservationInformer) Lister() omev1beta1.ClusterCapacityReservationLister {
+	return omev1beta1.NewClusterCapacityReservationLister(f.Informer().GetIndexer())
 }

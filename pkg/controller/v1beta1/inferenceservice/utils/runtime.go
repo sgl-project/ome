@@ -11,7 +11,6 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	goerrors "github.com/pkg/errors"
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,15 +46,15 @@ func (ss stringSet) contains(s string) bool {
 // GetBaseModel retrieves a BaseModel or ClusterBaseModel by name.
 // It first tries to find a namespace-scoped BaseModel, then falls back to a cluster-scoped ClusterBaseModel.
 // Returns the model spec, metadata, and any error encountered.
-func GetBaseModel(cl client.Client, name string, namespace string) (*opensourcev1beta1.BaseModelSpec, *metav1.ObjectMeta, error) {
-	baseModel := &opensourcev1beta1.BaseModel{}
+func GetBaseModel(cl client.Client, name string, namespace string) (*v1beta1.BaseModelSpec, *metav1.ObjectMeta, error) {
+	baseModel := &v1beta1.BaseModel{}
 	err := cl.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, baseModel)
 	if err == nil {
 		return &baseModel.Spec, &baseModel.ObjectMeta, nil
 	} else if !errors.IsNotFound(err) {
 		return nil, nil, err
 	}
-	clusterBaseModel := &opensourcev1beta1.ClusterBaseModel{}
+	clusterBaseModel := &v1beta1.ClusterBaseModel{}
 	err = cl.Get(context.TODO(), client.ObjectKey{Name: name}, clusterBaseModel)
 	if err == nil {
 		return &clusterBaseModel.Spec, &clusterBaseModel.ObjectMeta, nil
@@ -130,7 +129,7 @@ func GetSupportingRuntimes(modelSpec *v1beta1.ModelSpec, cl client.Client, names
 // 1. If the runtime supports the model's format label
 // 2. If the model's size is within the runtime's supported size range
 // 3. If the runtime is auto-selectable when no specific runtime is requested
-func RuntimeSupportsModel(modelSpec *v1beta1.ModelSpec, srSpec *v1beta1.ServingRuntimeSpec, modelSpec2 *opensourcev1beta1.BaseModelSpec) bool {
+func RuntimeSupportsModel(modelSpec *v1beta1.ModelSpec, srSpec *v1beta1.ServingRuntimeSpec, modelSpec2 *v1beta1.BaseModelSpec) bool {
 	// Check if runtime supports the model format
 	runtimeLabelSet := getServingRuntimeSupportedModelFormatLabelSet(modelSpec, srSpec.SupportedModelFormats)
 	modelLabel := getModelFormatLabel(modelSpec2)
@@ -184,16 +183,16 @@ func generateLabel(mt *v1beta1.ModelFormat,
 	return label
 }
 
-// generateLabel creates a standardized label string for model formats using OpenSource types
+// generateLabelForBaseModel creates a standardized label string for model formats using local types
 // The label includes:
 // - Model format name and version
 // - Model architecture
 // - Quantization type
 // - Model framework name and version
-func generateLabelWithOpensourceTypes(mt *opensourcev1beta1.ModelFormat,
+func generateLabelForBaseModel(mt *v1beta1.ModelFormat,
 	modelArchitecture *string,
-	quantization *opensourcev1beta1.ModelQuantization,
-	modelFramework *opensourcev1beta1.ModelFrameworkSpec) string {
+	quantization *v1beta1.ModelQuantization,
+	modelFramework *v1beta1.ModelFrameworkSpec) string {
 
 	label := "mt"
 	// disabled model format temporarily, as we will update format safetensors to 1.0.0 this time. In order to avoid downtime.
@@ -219,8 +218,8 @@ func generateLabelWithOpensourceTypes(mt *opensourcev1beta1.ModelFormat,
 }
 
 // getModelFormatLabel generates a label for a base model spec
-func getModelFormatLabel(modelSpec *opensourcev1beta1.BaseModelSpec) string {
-	return generateLabelWithOpensourceTypes(
+func getModelFormatLabel(modelSpec *v1beta1.BaseModelSpec) string {
+	return generateLabelForBaseModel(
 		&modelSpec.ModelFormat,
 		modelSpec.ModelArchitecture,
 		modelSpec.Quantization,
@@ -278,7 +277,7 @@ func sortClusterServingRuntimeList(runtimes *v1beta1.ClusterServingRuntimeList) 
 // 1. Model size range compatibility
 // 2. Explicit priority values
 // 3. Creation timestamp and name as tiebreakers
-func sortSupportedRuntimeByPriority(runtimes []v1beta1.SupportedRuntime, modelFormat opensourcev1beta1.ModelFormat, modelSize float64) {
+func sortSupportedRuntimeByPriority(runtimes []v1beta1.SupportedRuntime, modelFormat v1beta1.ModelFormat, modelSize float64) {
 	sort.Slice(runtimes, func(i, j int) bool {
 		p1 := runtimes[i].Spec.GetPriority(modelFormat.Name)
 		p2 := runtimes[j].Spec.GetPriority(modelFormat.Name)

@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // ProjectLister helps list Projects.
@@ -14,19 +14,19 @@ import (
 type ProjectLister interface {
 	// List lists all Projects in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.Project, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.Project, err error)
 	// Get retrieves the Project from the index for a given name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.Project, error)
+	Get(name string) (*omev1beta1.Project, error)
 	ProjectListerExpansion
 }
 
 // projectLister implements the ProjectLister interface.
 type projectLister struct {
-	listers.ResourceIndexer[*v1beta1.Project]
+	listers.ResourceIndexer[*omev1beta1.Project]
 }
 
 // NewProjectLister returns a new ProjectLister.
 func NewProjectLister(indexer cache.Indexer) ProjectLister {
-	return &projectLister{listers.New[*v1beta1.Project](indexer, v1beta1.Resource("project"))}
+	return &projectLister{listers.New[*omev1beta1.Project](indexer, omev1beta1.Resource("project"))}
 }

@@ -11,6 +11,8 @@ import (
 // InferenceServiceStatus defines the observed state of InferenceService
 type InferenceServiceStatus struct {
 	// Conditions for the InferenceService <br/>
+	// - EngineRouteReady: engine route readiness condition; <br/>
+	// - DecoderRouteReady: decoder route readiness condition; <br/>
 	// - PredictorReady: predictor readiness condition; <br/>
 	// - RoutesReady (serverless mode only): aggregated routing condition, i.e. endpoint readiness condition; <br/>
 	// - LatestDeploymentReady (serverless mode only): aggregated configuration condition, i.e. latest deployment readiness condition; <br/>
@@ -58,6 +60,27 @@ type ComponentStatusSpec struct {
 	// Addressable endpoint for the InferenceService
 	// +optional
 	Address *duckv1.Addressable `json:"address,omitempty"`
+	// SelectedAccelerator shows which AcceleratorClass was selected
+	// +optional
+	SelectedAccelerator *AcceleratorSelection `json:"selectedAccelerator,omitempty"`
+}
+
+// AcceleratorSelection shows what accelerator was selected and why
+type AcceleratorSelection struct {
+	// AcceleratorClass that was selected
+	AcceleratorClass string `json:"acceleratorClass"`
+
+	// Reason explains why this accelerator was selected
+	// +optional
+	Reason string `json:"reason,omitempty"`
+
+	// NodeSelector that was applied to pods
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// ResourceRequests that were applied to pods
+	// +optional
+	ResourceRequests map[string]string `json:"resourceRequests,omitempty"`
 }
 
 // ComponentType contains the different types of components of the service
@@ -66,14 +89,29 @@ type ComponentType string
 // PredictorComponent ComponentType Enum
 const (
 	PredictorComponent ComponentType = "predictor"
+	RouterComponent    ComponentType = "router"
+	EngineComponent    ComponentType = "engine"
+	DecoderComponent   ComponentType = "decoder"
 )
 
 // ConditionType represents a Service condition value
 const (
+	// EngineRouteReady is set when engine route is ready
+	EngineRouteReady apis.ConditionType = "EngineRouteReady"
+	// DecoderRouteReady is set when decoder route is ready
+	DecoderRouteReady apis.ConditionType = "DecoderRouteReady"
 	// PredictorRouteReady is set when network configuration has completed.
 	PredictorRouteReady apis.ConditionType = "PredictorRouteReady"
+	// EngineConfigurationReady is set when engine pods are ready.
+	EngineConfigurationReady apis.ConditionType = "EngineConfigurationReady"
+	// DecoderConfigurationReady is set when decoder pods are ready.
+	DecoderConfigurationReady apis.ConditionType = "DecoderConfigurationReady"
 	// PredictorConfigurationReady is set when predictor pods are ready.
 	PredictorConfigurationReady apis.ConditionType = "PredictorConfigurationReady"
+	// EngineReady is set when engine pods are ready.
+	EngineReady apis.ConditionType = "EngineReady"
+	// DecoderReady is set when decoder pods are ready.
+	DecoderReady apis.ConditionType = "DecoderReady"
 	// PredictorReady is set when predictor has reported readiness.
 	PredictorReady apis.ConditionType = "PredictorReady"
 	// IngressReady is set when Ingress is created
@@ -82,6 +120,16 @@ const (
 	RoutesReady apis.ConditionType = "RoutesReady"
 	// LatestDeploymentReady is set when underlying configurations for all components have reported readiness.
 	LatestDeploymentReady apis.ConditionType = "LatestDeploymentReady"
+)
+
+// RouterConditionType represents a Router condition value
+const (
+	// RouterRouteReady is set when network configuration has completed.
+	RouterRouteReady apis.ConditionType = "RouterRouteReady"
+	// RouterConfigurationReady is set when router pods are ready.
+	RouterConfigurationReady apis.ConditionType = "RouterConfigurationReady"
+	// RouterReady is set when router has reported readiness.
+	RouterReady apis.ConditionType = "RouterReady"
 )
 
 type ModelStatus struct {
@@ -187,6 +235,9 @@ const (
 	FineTunedWeightsDeprecated FailureReason = "FineTunedWeightsDeprecated"
 	// FineTuneWeightLoadFailed fine-tuned weights load failed
 	FineTuneWeightLoadFailed FailureReason = "FineTuneWeightLoadFailed"
+
+	// RouterInvalidSpec router has invalid spec
+	InvalidRouterSpec FailureReason = "InvalidRouterSpec"
 )
 
 type FailureInfo struct {
@@ -210,10 +261,12 @@ type FailureInfo struct {
 	ExitCode int32 `json:"exitCode,omitempty"`
 }
 
-// InferenceService Ready condition is depending on predictor and route readiness condition
+// InferenceService component conditions
+// The overall Ready condition is managed by the conditionSet which only requires IngressReady
+// Component-specific ready conditions (PredictorReady, EngineReady, DecoderReady) are managed separately
 var conditionSet = apis.NewLivingConditionSet(
-	PredictorReady,
 	IngressReady,
+	EngineReady,
 )
 
 var _ apis.ConditionsAccessor = (*InferenceServiceStatus)(nil)
@@ -257,7 +310,25 @@ func (ss *InferenceServiceStatus) SetCondition(conditionType apis.ConditionType,
 	case condition.Status == v1.ConditionUnknown:
 		conditionSet.Manage(ss).MarkUnknown(conditionType, condition.Reason, condition.Message)
 	case condition.Status == v1.ConditionTrue:
-		conditionSet.Manage(ss).MarkTrue(conditionType)
+		// If reason or message are provided, we need to set them directly since MarkTrue doesn't support them
+		if condition.Reason != "" || condition.Message != "" {
+			// Get the condition manager to access the underlying conditions
+			manager := conditionSet.Manage(ss)
+			// First mark it true to set the basic state
+			manager.MarkTrue(conditionType)
+			// Then directly set the reason and message by finding and updating the condition
+			if ss.Status.Conditions != nil {
+				for i := range ss.Status.Conditions {
+					if ss.Status.Conditions[i].Type == conditionType {
+						ss.Status.Conditions[i].Reason = condition.Reason
+						ss.Status.Conditions[i].Message = condition.Message
+						break
+					}
+				}
+			}
+		} else {
+			conditionSet.Manage(ss).MarkTrue(conditionType)
+		}
 	case condition.Status == v1.ConditionFalse:
 		conditionSet.Manage(ss).MarkFalse(conditionType, condition.Reason, condition.Message)
 	}

@@ -3,9 +3,9 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	scheme "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -21,33 +21,34 @@ type OciPostgresDBInstancesGetter interface {
 
 // OciPostgresDBInstanceInterface has methods to work with OciPostgresDBInstance resources.
 type OciPostgresDBInstanceInterface interface {
-	Create(ctx context.Context, ociPostgresDBInstance *v1beta1.OciPostgresDBInstance, opts v1.CreateOptions) (*v1beta1.OciPostgresDBInstance, error)
-	Update(ctx context.Context, ociPostgresDBInstance *v1beta1.OciPostgresDBInstance, opts v1.UpdateOptions) (*v1beta1.OciPostgresDBInstance, error)
+	Create(ctx context.Context, ociPostgresDBInstance *omev1beta1.OciPostgresDBInstance, opts v1.CreateOptions) (*omev1beta1.OciPostgresDBInstance, error)
+	Update(ctx context.Context, ociPostgresDBInstance *omev1beta1.OciPostgresDBInstance, opts v1.UpdateOptions) (*omev1beta1.OciPostgresDBInstance, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, ociPostgresDBInstance *v1beta1.OciPostgresDBInstance, opts v1.UpdateOptions) (*v1beta1.OciPostgresDBInstance, error)
+	UpdateStatus(ctx context.Context, ociPostgresDBInstance *omev1beta1.OciPostgresDBInstance, opts v1.UpdateOptions) (*omev1beta1.OciPostgresDBInstance, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1beta1.OciPostgresDBInstance, error)
-	List(ctx context.Context, opts v1.ListOptions) (*v1beta1.OciPostgresDBInstanceList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*omev1beta1.OciPostgresDBInstance, error)
+	List(ctx context.Context, opts v1.ListOptions) (*omev1beta1.OciPostgresDBInstanceList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.OciPostgresDBInstance, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *omev1beta1.OciPostgresDBInstance, err error)
 	OciPostgresDBInstanceExpansion
 }
 
 // ociPostgresDBInstances implements OciPostgresDBInstanceInterface
 type ociPostgresDBInstances struct {
-	*gentype.ClientWithList[*v1beta1.OciPostgresDBInstance, *v1beta1.OciPostgresDBInstanceList]
+	*gentype.ClientWithList[*omev1beta1.OciPostgresDBInstance, *omev1beta1.OciPostgresDBInstanceList]
 }
 
 // newOciPostgresDBInstances returns a OciPostgresDBInstances
 func newOciPostgresDBInstances(c *OmeV1beta1Client) *ociPostgresDBInstances {
 	return &ociPostgresDBInstances{
-		gentype.NewClientWithList[*v1beta1.OciPostgresDBInstance, *v1beta1.OciPostgresDBInstanceList](
+		gentype.NewClientWithList[*omev1beta1.OciPostgresDBInstance, *omev1beta1.OciPostgresDBInstanceList](
 			"ocipostgresdbinstances",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			"",
-			func() *v1beta1.OciPostgresDBInstance { return &v1beta1.OciPostgresDBInstance{} },
-			func() *v1beta1.OciPostgresDBInstanceList { return &v1beta1.OciPostgresDBInstanceList{} }),
+			func() *omev1beta1.OciPostgresDBInstance { return &omev1beta1.OciPostgresDBInstance{} },
+			func() *omev1beta1.OciPostgresDBInstanceList { return &omev1beta1.OciPostgresDBInstanceList{} },
+		),
 	}
 }

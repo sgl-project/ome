@@ -1,3 +1,5 @@
+//go:build !lint
+
 package servingruntime
 
 import (

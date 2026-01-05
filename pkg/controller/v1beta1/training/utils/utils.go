@@ -7,8 +7,6 @@ import (
 	"strings"
 	"time"
 
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/metrics"
@@ -22,8 +20,8 @@ import (
 )
 
 // GetClusterBaseModel Get the cluster base model from the given model name.
-func GetClusterBaseModel(cl client.Client, name string) (*opensourcev1beta1.ClusterBaseModel, error) {
-	clusterBaseModel := &opensourcev1beta1.ClusterBaseModel{}
+func GetClusterBaseModel(cl client.Client, name string) (*v1beta1.ClusterBaseModel, error) {
+	clusterBaseModel := &v1beta1.ClusterBaseModel{}
 	err := cl.Get(context.TODO(), client.ObjectKey{Name: name}, clusterBaseModel)
 	if err == nil {
 		return clusterBaseModel, nil
@@ -83,7 +81,7 @@ func GetHyperparameterValueByKey(key string, parameters runtime.RawExtension) (i
 }
 
 // GetTensorParallelSize Get the TensorParallelSize from base model.
-func GetTensorParallelSize(baseModel *opensourcev1beta1.ClusterBaseModel) (string, error) {
+func GetTensorParallelSize(baseModel *v1beta1.ClusterBaseModel) (string, error) {
 	category, ok := baseModel.ObjectMeta.Annotations[constants.ModelCategoryAnnotation]
 	if !ok {
 		return "0", fmt.Errorf("no model category annotation for model: %s", baseModel.Name)

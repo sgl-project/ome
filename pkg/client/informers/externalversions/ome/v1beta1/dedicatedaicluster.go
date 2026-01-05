@@ -3,13 +3,13 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	apisomev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	versioned "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	internalinterfaces "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/internalinterfaces"
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/listers/ome/v1beta1"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/listers/ome/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -20,7 +20,7 @@ import (
 // DedicatedAIClusters.
 type DedicatedAIClusterInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1beta1.DedicatedAIClusterLister
+	Lister() omev1beta1.DedicatedAIClusterLister
 }
 
 type dedicatedAIClusterInformer struct {
@@ -45,16 +45,28 @@ func NewFilteredDedicatedAIClusterInformer(client versioned.Interface, resyncPer
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().DedicatedAIClusters().List(context.TODO(), options)
+				return client.OmeV1beta1().DedicatedAIClusters().List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().DedicatedAIClusters().Watch(context.TODO(), options)
+				return client.OmeV1beta1().DedicatedAIClusters().Watch(context.Background(), options)
+			},
+			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().DedicatedAIClusters().List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().DedicatedAIClusters().Watch(ctx, options)
 			},
 		},
-		&omev1beta1.DedicatedAICluster{},
+		&apisomev1beta1.DedicatedAICluster{},
 		resyncPeriod,
 		indexers,
 	)
@@ -65,9 +77,9 @@ func (f *dedicatedAIClusterInformer) defaultInformer(client versioned.Interface,
 }
 
 func (f *dedicatedAIClusterInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&omev1beta1.DedicatedAICluster{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisomev1beta1.DedicatedAICluster{}, f.defaultInformer)
 }
 
-func (f *dedicatedAIClusterInformer) Lister() v1beta1.DedicatedAIClusterLister {
-	return v1beta1.NewDedicatedAIClusterLister(f.Informer().GetIndexer())
+func (f *dedicatedAIClusterInformer) Lister() omev1beta1.DedicatedAIClusterLister {
+	return omev1beta1.NewDedicatedAIClusterLister(f.Informer().GetIndexer())
 }

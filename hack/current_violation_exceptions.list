@@ -1,5 +1,4 @@
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,InferenceGraphList,Items
-API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,InferenceServiceList,Items
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,OrganizationStatus,Conditions
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,ProjectStatus,Conditions
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,RateLimitSpec,Limits

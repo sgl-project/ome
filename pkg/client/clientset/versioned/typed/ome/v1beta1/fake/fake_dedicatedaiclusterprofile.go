@@ -3,120 +3,34 @@
 package fake
 
 import (
-	"context"
-
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeDedicatedAIClusterProfiles implements DedicatedAIClusterProfileInterface
-type FakeDedicatedAIClusterProfiles struct {
+// fakeDedicatedAIClusterProfiles implements DedicatedAIClusterProfileInterface
+type fakeDedicatedAIClusterProfiles struct {
+	*gentype.FakeClientWithList[*v1beta1.DedicatedAIClusterProfile, *v1beta1.DedicatedAIClusterProfileList]
 	Fake *FakeOmeV1beta1
 }
 
-var dedicatedaiclusterprofilesResource = v1beta1.SchemeGroupVersion.WithResource("dedicatedaiclusterprofiles")
-
-var dedicatedaiclusterprofilesKind = v1beta1.SchemeGroupVersion.WithKind("DedicatedAIClusterProfile")
-
-// Get takes name of the dedicatedAIClusterProfile, and returns the corresponding dedicatedAIClusterProfile object, and an error if there is any.
-func (c *FakeDedicatedAIClusterProfiles) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.DedicatedAIClusterProfile, err error) {
-	emptyResult := &v1beta1.DedicatedAIClusterProfile{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootGetActionWithOptions(dedicatedaiclusterprofilesResource, name, options), emptyResult)
-	if obj == nil {
-		return emptyResult, err
+func newFakeDedicatedAIClusterProfiles(fake *FakeOmeV1beta1) omev1beta1.DedicatedAIClusterProfileInterface {
+	return &fakeDedicatedAIClusterProfiles{
+		gentype.NewFakeClientWithList[*v1beta1.DedicatedAIClusterProfile, *v1beta1.DedicatedAIClusterProfileList](
+			fake.Fake,
+			"",
+			v1beta1.SchemeGroupVersion.WithResource("dedicatedaiclusterprofiles"),
+			v1beta1.SchemeGroupVersion.WithKind("DedicatedAIClusterProfile"),
+			func() *v1beta1.DedicatedAIClusterProfile { return &v1beta1.DedicatedAIClusterProfile{} },
+			func() *v1beta1.DedicatedAIClusterProfileList { return &v1beta1.DedicatedAIClusterProfileList{} },
+			func(dst, src *v1beta1.DedicatedAIClusterProfileList) { dst.ListMeta = src.ListMeta },
+			func(list *v1beta1.DedicatedAIClusterProfileList) []*v1beta1.DedicatedAIClusterProfile {
+				return gentype.ToPointerSlice(list.Items)
+			},
+			func(list *v1beta1.DedicatedAIClusterProfileList, items []*v1beta1.DedicatedAIClusterProfile) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1beta1.DedicatedAIClusterProfile), err
-}
-
-// List takes label and field selectors, and returns the list of DedicatedAIClusterProfiles that match those selectors.
-func (c *FakeDedicatedAIClusterProfiles) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.DedicatedAIClusterProfileList, err error) {
-	emptyResult := &v1beta1.DedicatedAIClusterProfileList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootListActionWithOptions(dedicatedaiclusterprofilesResource, dedicatedaiclusterprofilesKind, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1beta1.DedicatedAIClusterProfileList{ListMeta: obj.(*v1beta1.DedicatedAIClusterProfileList).ListMeta}
-	for _, item := range obj.(*v1beta1.DedicatedAIClusterProfileList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested dedicatedAIClusterProfiles.
-func (c *FakeDedicatedAIClusterProfiles) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewRootWatchActionWithOptions(dedicatedaiclusterprofilesResource, opts))
-}
-
-// Create takes the representation of a dedicatedAIClusterProfile and creates it.  Returns the server's representation of the dedicatedAIClusterProfile, and an error, if there is any.
-func (c *FakeDedicatedAIClusterProfiles) Create(ctx context.Context, dedicatedAIClusterProfile *v1beta1.DedicatedAIClusterProfile, opts v1.CreateOptions) (result *v1beta1.DedicatedAIClusterProfile, err error) {
-	emptyResult := &v1beta1.DedicatedAIClusterProfile{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateActionWithOptions(dedicatedaiclusterprofilesResource, dedicatedAIClusterProfile, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.DedicatedAIClusterProfile), err
-}
-
-// Update takes the representation of a dedicatedAIClusterProfile and updates it. Returns the server's representation of the dedicatedAIClusterProfile, and an error, if there is any.
-func (c *FakeDedicatedAIClusterProfiles) Update(ctx context.Context, dedicatedAIClusterProfile *v1beta1.DedicatedAIClusterProfile, opts v1.UpdateOptions) (result *v1beta1.DedicatedAIClusterProfile, err error) {
-	emptyResult := &v1beta1.DedicatedAIClusterProfile{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateActionWithOptions(dedicatedaiclusterprofilesResource, dedicatedAIClusterProfile, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.DedicatedAIClusterProfile), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeDedicatedAIClusterProfiles) UpdateStatus(ctx context.Context, dedicatedAIClusterProfile *v1beta1.DedicatedAIClusterProfile, opts v1.UpdateOptions) (result *v1beta1.DedicatedAIClusterProfile, err error) {
-	emptyResult := &v1beta1.DedicatedAIClusterProfile{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(dedicatedaiclusterprofilesResource, "status", dedicatedAIClusterProfile, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.DedicatedAIClusterProfile), err
-}
-
-// Delete takes name of the dedicatedAIClusterProfile and deletes it. Returns an error if one occurs.
-func (c *FakeDedicatedAIClusterProfiles) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewRootDeleteActionWithOptions(dedicatedaiclusterprofilesResource, name, opts), &v1beta1.DedicatedAIClusterProfile{})
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeDedicatedAIClusterProfiles) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionActionWithOptions(dedicatedaiclusterprofilesResource, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1beta1.DedicatedAIClusterProfileList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched dedicatedAIClusterProfile.
-func (c *FakeDedicatedAIClusterProfiles) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.DedicatedAIClusterProfile, err error) {
-	emptyResult := &v1beta1.DedicatedAIClusterProfile{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceActionWithOptions(dedicatedaiclusterprofilesResource, name, pt, data, opts, subresources...), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.DedicatedAIClusterProfile), err
 }

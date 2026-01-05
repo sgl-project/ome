@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // ReplicationJobLister helps list ReplicationJobs.
@@ -14,7 +14,7 @@ import (
 type ReplicationJobLister interface {
 	// List lists all ReplicationJobs in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.ReplicationJob, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.ReplicationJob, err error)
 	// ReplicationJobs returns an object that can list and get ReplicationJobs.
 	ReplicationJobs(namespace string) ReplicationJobNamespaceLister
 	ReplicationJobListerExpansion
@@ -22,17 +22,17 @@ type ReplicationJobLister interface {
 
 // replicationJobLister implements the ReplicationJobLister interface.
 type replicationJobLister struct {
-	listers.ResourceIndexer[*v1beta1.ReplicationJob]
+	listers.ResourceIndexer[*omev1beta1.ReplicationJob]
 }
 
 // NewReplicationJobLister returns a new ReplicationJobLister.
 func NewReplicationJobLister(indexer cache.Indexer) ReplicationJobLister {
-	return &replicationJobLister{listers.New[*v1beta1.ReplicationJob](indexer, v1beta1.Resource("replicationjob"))}
+	return &replicationJobLister{listers.New[*omev1beta1.ReplicationJob](indexer, omev1beta1.Resource("replicationjob"))}
 }
 
 // ReplicationJobs returns an object that can list and get ReplicationJobs.
 func (s *replicationJobLister) ReplicationJobs(namespace string) ReplicationJobNamespaceLister {
-	return replicationJobNamespaceLister{listers.NewNamespaced[*v1beta1.ReplicationJob](s.ResourceIndexer, namespace)}
+	return replicationJobNamespaceLister{listers.NewNamespaced[*omev1beta1.ReplicationJob](s.ResourceIndexer, namespace)}
 }
 
 // ReplicationJobNamespaceLister helps list and get ReplicationJobs.
@@ -40,15 +40,15 @@ func (s *replicationJobLister) ReplicationJobs(namespace string) ReplicationJobN
 type ReplicationJobNamespaceLister interface {
 	// List lists all ReplicationJobs in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.ReplicationJob, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.ReplicationJob, err error)
 	// Get retrieves the ReplicationJob from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.ReplicationJob, error)
+	Get(name string) (*omev1beta1.ReplicationJob, error)
 	ReplicationJobNamespaceListerExpansion
 }
 
 // replicationJobNamespaceLister implements the ReplicationJobNamespaceLister
 // interface.
 type replicationJobNamespaceLister struct {
-	listers.ResourceIndexer[*v1beta1.ReplicationJob]
+	listers.ResourceIndexer[*omev1beta1.ReplicationJob]
 }
