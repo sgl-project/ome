@@ -36,7 +36,7 @@ spec:
     - "TEXT_CLASSIFICATION"
   maxTokens: 131072
   additionalMetadata:
-    {{- $shape := index .Values "llama-3-1-8b-instruct" "compatibleDACShapes" }}
+    {{- $shape := default "SMALL_GENERIC_V1" (index .Values "llama-3-1-8b-instruct" "compatibleDACShapes") }}
     {{- if $shape }}
     dacShapeConfigs: |-
       compatibleDACShapes:

@@ -39,7 +39,7 @@ spec:
   maxTokens: 256000
   additionalMetadata:
     {{/* this model will use SMALL_COHERE_4 in DXB, LARGE_COHERE_V2_2 in other regions*/}}
-    {{- $cfg := index .Values "command-a-reasoning" "compatibleDACShapes" -}}
+    {{- $cfg := default "LARGE_COHERE_V2_2" (index .Values "command-a-reasoning" "compatibleDACShapes") }}
     {{- if $cfg }}
     dacShapeConfigs: |-
       compatibleDACShapes:

@@ -36,7 +36,7 @@ spec:
   maxTokens: 32768
   additionalMetadata:
     {{/* this model will use LARGE_COHERE in PHX, SMALL_GENERIC_V2 in other regions*/}}
-    {{- $cfg := index .Values "phi-3-vision-128k-instruct-chat" "compatibleDACShapes" -}}
+    {{- $cfg := default "SMALL_GENERIC_V2" (index .Values "phi-3-vision-128k-instruct-chat" "compatibleDACShapes") }}
     {{- if $cfg }}
     dacShapeConfigs: |-
       compatibleDACShapes:

@@ -35,7 +35,7 @@ spec:
     - "CHAT"
   maxTokens: 131072
   additionalMetadata:
-    {{- $shape := index .Values "nl2sql-llama-3-1-8b-ft" "compatibleDACShapes" }}
+    {{- $shape := default "SMALL_GENERIC_V2" (index .Values "nl2sql-llama-3-1-8b-ft" "compatibleDACShapes") }}
     {{- if $shape }}
     dacShapeConfigs: |-
       compatibleDACShapes:

@@ -35,7 +35,7 @@ spec:
   maxTokens: 4096
   additionalMetadata:
     {{/* this model will use large_cohere in ord, large_cohere_v2 in other regions*/}}
-    {{- $cfg := index .Values "cohere-command-1-v16-0-0-trt" "compatibleDACShapes" -}}
+    {{- $cfg := default "LARGE_COHERE_V2" (index .Values "cohere-command-1-v16-0-0-trt" "compatibleDACShapes") }}
     {{- if $cfg }}
     dacShapeConfigs: |-
       compatibleDACShapes:

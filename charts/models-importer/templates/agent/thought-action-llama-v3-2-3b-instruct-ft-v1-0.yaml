@@ -35,7 +35,7 @@ spec:
     - "CHAT"
   maxTokens: 131072
   additionalMetadata:
-    {{- $shape := index .Values "thought-action-llama-v3-2-3b-instruct-ft-v1-0" "compatibleDACShapes" }}
+    {{- $shape := default "SMALL_GENERIC_V2" (index .Values "thought-action-llama-v3-2-3b-instruct-ft-v1-0" "compatibleDACShapes") }}
     {{- if $shape }}
     dacShapeConfigs: |-
       compatibleDACShapes:

@@ -33,7 +33,7 @@ spec:
   maxTokens: 65536
   additionalMetadata:
     {{/* this model will use LARGE_COHERE in PHX, SMALL_GENERIC_V2 in other regions*/}}
-    {{- $cfg := index .Values "nl2rqs-7b-v3" "compatibleDACShapes" -}}
+    {{- $cfg := default "SMALL_GENERIC_V2" (index .Values "nl2rqs-7b-v3" "compatibleDACShapes") }}
     {{- if $cfg }}
     dacShapeConfigs: |-
       compatibleDACShapes:

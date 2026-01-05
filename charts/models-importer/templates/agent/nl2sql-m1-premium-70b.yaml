@@ -48,12 +48,12 @@ spec:
   maxTokens: 8192
   additionalMetadata:
     {{/* this model will use LARGE_COHERE in PHX, LARGE_GENERIC_V2 in other regions*/}}
-    {{- $cfg := index .Values "nl2sql-m1-premium-70b" "compatibleDACShapes" -}}
+    {{- $cfg := default "LARGE_GENERIC_V2" (index .Values "nl2sql-m1-premium-70b" "compatibleDACShapes") }}
     {{- if $cfg }}
     dacShapeConfigs: |-
       compatibleDACShapes:
         - name: {{ $cfg }}
-          quotaUnit: 1
+          quotaUnit: 1 
           default: true
     {{ end }}
     internalName: "nl2sql-m1-premium-70b"
