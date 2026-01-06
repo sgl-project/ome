@@ -358,7 +358,7 @@ func (w *Scout) updateBaseModel(old, new interface{}) {
 		hasChanges = hasChanges || (result != "")
 	}
 
-	if hasChanges && w.shouldDownloadModel(newBaseModel.Spec.Storage) { // mainly deal with download model artifact due to node selector and node affinity
+	if hasChanges && w.shouldDownloadModelInUpdateEvent(newBaseModel.Spec.Storage) {
 		w.logger.Infof("BaseModel %s needs refresh in namespace %s", newBaseModel.GetName(), newBaseModel.GetNamespace())
 
 		IsTensorrtLLMModel := newBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
@@ -426,7 +426,7 @@ func (w *Scout) updateClusterBaseModel(old, new interface{}) {
 		hasChanges = hasChanges || (result != "")
 	}
 
-	if hasChanges && w.shouldDownloadModel(newClusterBaseModel.Spec.Storage) {
+	if hasChanges && w.shouldDownloadModelInUpdateEvent(newClusterBaseModel.Spec.Storage) {
 		w.logger.Infof("ClusterBaseModel %s need refresh", newClusterBaseModel.GetName())
 
 		IsTensorrtLLMModel := newClusterBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
@@ -520,8 +520,10 @@ func (w *Scout) reconcilePendingDeletions() {
 	w.logger.Info("Finished checking for pending deletions")
 }
 
-// shouldDownloadModel checks if a model should be downloaded to this node based on node selector and node affinity
-func (w *Scout) shouldDownloadModel(storageSpec *v1beta1.StorageSpec) bool {
+// shouldDownloadModelCommon encapsulates the shared logic for determining
+// whether a model should be downloaded on this node. The defaultDecision
+// controls the final return value when no other conditions cause an early return.
+func (w *Scout) shouldDownloadModelCommon(storageSpec *v1beta1.StorageSpec, defaultDecision bool) bool {
 	if storageSpec == nil {
 		// If storage is nil, default to true (backward compatibility)
 		return true
@@ -563,8 +565,19 @@ func (w *Scout) shouldDownloadModel(storageSpec *v1beta1.StorageSpec) bool {
 		}
 	}
 
-	// Default to true if no other conditions are specified
-	return true
+	// Return the caller-provided default when no other condition rejected it
+	return defaultDecision
+}
+
+// shouldDownloadModel checks if a model should be downloaded to this node based on node selector and node affinity
+func (w *Scout) shouldDownloadModel(storageSpec *v1beta1.StorageSpec) bool {
+	return w.shouldDownloadModelCommon(storageSpec, true)
+}
+
+// shouldDownloadModelInUpdateEvent mirrors shouldDownloadModel logic but uses a default false decision,
+// allowing callers to opt-in specific cases for updates if needed.
+func (w *Scout) shouldDownloadModelInUpdateEvent(storageSpec *v1beta1.StorageSpec) bool {
+	return w.shouldDownloadModelCommon(storageSpec, false)
 }
 
 func (w *Scout) nodeMatchesSelectorTerm(term v1.NodeSelectorTerm) bool {

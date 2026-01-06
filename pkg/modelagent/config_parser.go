@@ -421,24 +421,37 @@ func (p *ModelConfigParser) determineModelCapabilitiesFromHF(hfModel modelconfig
 }
 
 // populateArtifactAttribute returns a pointer to an updated copy of currentModelMetadata
-// where the Artifact field is set to the provided sha and parentPath, and
-// ChildrenPaths is initialized as an empty slice. The original currentModelMetadata
-// value passed in is not mutated (the update happens on a copy).
+// where the Artifact field is set to the provided artifact pointer
 //
 // Parameters:
-//   - sha: artifact content hash
-//   - parentPath: absolute or logical parent directory path where the artifact resides
-//   - currentModelMetadata: existing model metadata to base the update on (passed by value)
+//   - artifact: pointer to built artifact based on reusability
+//   - currentModelMetadata: pointer of current model metadata
 //
 // Returns:
 //   - *ModelMetadata: pointer to the updated metadata with Artifact populated
-func (p *ModelConfigParser) populateArtifactAttribute(sha string, parentPath string, currentModelMetadata ModelMetadata) *ModelMetadata {
+func (p *ModelConfigParser) populateArtifactAttribute(artifact *Artifact, currentModelMetadata *ModelMetadata) *ModelMetadata {
+	if artifact != nil {
+		currentModelMetadata.Artifact = *artifact
+		p.logger.Infof("current artifact is :%s", currentModelMetadata.Artifact)
+	}
+	return currentModelMetadata
+}
+
+/*
+buildArtifactAttribute constructs an Artifact instance from the provided SHA and parent information.
+
+Fields set:
+  - Sha: set to the provided commit SHA identifying the artifact version
+  - ParentPath: a single-entry map {matchedParentName: parentPath} pointing to the parent artifact location
+  - ChildrenPaths: initialized to an empty (non-nil) slice so it can be safely appended to later
+
+Returns a pointer to the created Artifact.
+*/
+func (p *ModelConfigParser) buildArtifactAttribute(sha string, matchedParentName string, parentPath string) *Artifact {
 	artifact := Artifact{
 		Sha:           sha,
-		ParentPath:    parentPath,
+		ParentPath:    map[string]string{matchedParentName: parentPath},
 		ChildrenPaths: make([]string, 0),
 	}
-	currentModelMetadata.Artifact = artifact
-	p.logger.Infof("current artifact is :%s", currentModelMetadata.Artifact)
-	return &currentModelMetadata
+	return &artifact
 }
