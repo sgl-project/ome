@@ -28,7 +28,11 @@ type Selector interface {
 	// Returns the runtime spec and whether it's cluster-scoped.
 	GetRuntime(ctx context.Context, name string, namespace string) (*v1beta1.ServingRuntimeSpec, bool, error)
 
-	GetSupportedModelFormat(ctx context.Context, runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec) *v1beta1.SupportedModelFormat
+	// GetSupportedModelFormat fetches a supportedModelFormat in runtime
+	// userSpecifiedRuntime indicates whether the runtime is a user-selected runtime or an automatically selected runtime
+	// if userSpecifiedRuntime is true, the function will consider all supportedModelFormats in the runtime
+	// if userSpecifiedRuntime is false, the function will only consider supportedModelFormats with autoSelect enabled
+	GetSupportedModelFormat(ctx context.Context, runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, userSpecifiedRuntime bool) *v1beta1.SupportedModelFormat
 }
 
 // RuntimeSelection represents the selected runtime with metadata.
