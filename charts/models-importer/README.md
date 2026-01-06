@@ -186,6 +186,8 @@ A Helm chart for importing ome base models
 | gpt-5-2-pro-2025-12-11.lifecyclePhase                               | string | `"ACTIVE"`                                   |             |
 | gpt-5-2-chat-latest.enabled                                         | bool   | `false`                                      |             |
 | gpt-5-2-chat-latest.lifecyclePhase                                  | string | `"ACTIVE"`                                   |             |
+| gpt-audio.enabled                                                   | bool   | `false`                                      |             |
+| gpt-audio.lifecyclePhase                                            | string | `"ACTIVE"`                                   |             |
 | grok-3-0404.enabled                                                 | bool   | `false`                                      |             |
 | grok-3-0404.lifecyclePhase                                          | string | `"ACTIVE"`                                   |             |
 | grok-3-fast.enabled                                                 | bool   | `false`                                      |             |

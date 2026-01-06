@@ -465,6 +465,11 @@ gpt-5:
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
+gpt-audio:
+  enabled: false
+  enableImageInput: false
+  lifecyclePhase: "ACTIVE"
+
 gpt-5-codex:
   enabled: false
   enableImageInput: true
