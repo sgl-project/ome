@@ -951,6 +951,129 @@ func TestValidateRuntime_DisabledAndNoAutoSelect(t *testing.T) {
 	assert.NoError(t, selector.ValidateRuntime(ctx, "rt-no-auto", model, isvc))
 }
 
+func TestGetSupportedModelFormat_CustomRuntime(t *testing.T) {
+	fakeClient := createFakeClient()
+	selector := New(fakeClient).(*defaultSelector)
+	ctx := context.Background()
+
+	tests := []struct {
+		name                 string
+		runtime              *v1beta1.ServingRuntimeSpec
+		model                *v1beta1.BaseModelSpec
+		userSpecifiedRuntime bool
+		expectFormat         bool
+		expectedName         string
+	}{
+		{
+			name: "auto-selection mode skips non-autoselect formats",
+			runtime: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Weight: 10},
+						AutoSelect:  ptr(false),
+					},
+				},
+			},
+			model:                &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}},
+			userSpecifiedRuntime: false,
+			expectFormat:         false,
+		},
+		{
+			name: "auto-selection mode includes autoselect formats",
+			runtime: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Weight: 10},
+						AutoSelect:  ptr(true),
+					},
+				},
+			},
+			model:                &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}},
+			userSpecifiedRuntime: false,
+			expectFormat:         true,
+			expectedName:         "pytorch",
+		},
+		{
+			name: "user-selected runtime considers non-autoselect formats",
+			runtime: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Weight: 10},
+						AutoSelect:  ptr(false),
+					},
+				},
+			},
+			model:                &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}},
+			userSpecifiedRuntime: true,
+			expectFormat:         true,
+			expectedName:         "pytorch",
+		},
+		{
+			name: "user-selected runtime considers nil autoselect formats",
+			runtime: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						ModelFormat: &v1beta1.ModelFormat{Name: "onnx", Weight: 8},
+						// AutoSelect is nil
+					},
+				},
+			},
+			model:                &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "onnx"}},
+			userSpecifiedRuntime: true,
+			expectFormat:         true,
+			expectedName:         "onnx",
+		},
+		{
+			name: "auto-selection mode skips nil autoselect formats",
+			runtime: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						ModelFormat: &v1beta1.ModelFormat{Name: "onnx", Weight: 8},
+						// AutoSelect is nil
+					},
+				},
+			},
+			model:                &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "onnx"}},
+			userSpecifiedRuntime: false,
+			expectFormat:         false,
+		},
+		{
+			name: "user-selected runtime picks best matching format among multiple",
+			runtime: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Weight: 5},
+						AutoSelect:  ptr(false),
+					},
+					{
+						ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Weight: 15},
+						AutoSelect:  ptr(false),
+					},
+				},
+			},
+			model:                &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}},
+			userSpecifiedRuntime: true,
+			expectFormat:         true,
+			expectedName:         "pytorch",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := selector.GetSupportedModelFormat(ctx, tt.runtime, tt.model, tt.userSpecifiedRuntime)
+			if tt.expectFormat {
+				assert.NotNil(t, result, "expected a supported model format to be returned")
+				assert.Equal(t, tt.expectedName, result.ModelFormat.Name)
+			} else {
+				// When no format matches, result should have zero score (empty format)
+				if result != nil && result.ModelFormat != nil {
+					assert.Fail(t, "expected no matching format, but got one", "format: %v", result.ModelFormat.Name)
+				}
+			}
+		})
+	}
+}
+
 func TestSupportedRuntimeWithAC(t *testing.T) {
 	// Create a fake fakeClient with our custom types registered
 	fakeClient := createFakeClient()

@@ -317,14 +317,18 @@ func getModelName(model *v1beta1.BaseModelSpec) string {
 	return "unknown"
 }
 
-func (s *defaultSelector) GetSupportedModelFormat(ctx context.Context, runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec) *v1beta1.SupportedModelFormat {
+// GetSupportedModelFormat fetches a supportedModelFormat in runtime
+// userSpecifiedRuntime indicates whether the runtime is a user-selected runtime or an automatically selected runtime
+// if userSpecifiedRuntime is true, the function will consider all supportedModelFormats in the runtime
+// if userSpecifiedRuntime is false, the function will only consider supportedModelFormats with autoSelect enabled
+func (s *defaultSelector) GetSupportedModelFormat(ctx context.Context, runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, userSpecifiedRuntime bool) *v1beta1.SupportedModelFormat {
 	if runtime.SupportedModelFormats == nil {
 		return nil
 	}
 	maxScore := int64(0)
 	bestSupportedFormat := v1beta1.SupportedModelFormat{}
 	for _, supportedFormat := range runtime.SupportedModelFormats {
-		if supportedFormat.AutoSelect == nil || !*supportedFormat.AutoSelect {
+		if !userSpecifiedRuntime && (supportedFormat.AutoSelect == nil || !*supportedFormat.AutoSelect) {
 			continue
 		}
 		score := s.scorer.CalculateFormatScore(model, supportedFormat, int64(s.config.DefaultPriority))

@@ -225,10 +225,12 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// Step 2: Get runtime spec (either specified or auto-selected based on model)
 	var rt *v1beta1.ServingRuntimeSpec
 	var rtName string
+	userSpecifiedRuntime := false
 
 	if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" {
 		// Validate specified runtime
 		rtName = isvc.Spec.Runtime.Name
+		userSpecifiedRuntime = true
 		if err := r.RuntimeSelector.ValidateRuntime(ctx, rtName, baseModel, isvc); err != nil {
 			r.Log.Error(err, "Runtime validation failed", "runtime", rtName, "model", isvc.Spec.Model.Name)
 			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeValidationError",
@@ -287,7 +289,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "AcceleratorClassError", "Failed to get accelerator class for engine: %v", err)
 			return reconcile.Result{}, err
 		}
-		engineSupportedModelFormats := r.RuntimeSelector.GetSupportedModelFormat(ctx, rt, baseModel)
+		engineSupportedModelFormats := r.RuntimeSelector.GetSupportedModelFormat(ctx, rt, baseModel, userSpecifiedRuntime)
 		r.Log.Info("Creating engine reconciler",
 			"deploymentMode", engineDeploymentMode,
 			"namespace", isvc.Namespace,
@@ -315,7 +317,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "AcceleratorClassError", "Failed to get accelerator class for decoder: %v", err)
 			return reconcile.Result{}, err
 		}
-		decoderSupportedModelFormats := r.RuntimeSelector.GetSupportedModelFormat(ctx, rt, baseModel)
+		decoderSupportedModelFormats := r.RuntimeSelector.GetSupportedModelFormat(ctx, rt, baseModel, userSpecifiedRuntime)
 		r.Log.Info("Creating decoder reconciler",
 			"deploymentMode", decoderDeploymentMode,
 			"namespace", isvc.Namespace,
