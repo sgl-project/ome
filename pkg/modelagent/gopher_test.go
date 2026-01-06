@@ -2,9 +2,12 @@ package modelagent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
+
+	"go.uber.org/zap/zaptest"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -640,8 +643,22 @@ func newGopherWithConfigMap(cm *corev1.ConfigMap) *Gopher {
 	}
 }
 
-func entryJSON(sha, parentPath string) string {
-	return fmt.Sprintf(`{"config":{"artifact":{"sha":"%s","parentPath":"%s","childrenPaths":[]}}}`, sha, parentPath)
+func entryJSON(sha, parentName string, parentPath string) string {
+	entry := struct {
+		Config struct {
+			Artifact Artifact `json:"artifact"`
+		} `json:"config"`
+	}{}
+	entry.Config.Artifact = Artifact{
+		Sha:           sha,
+		ParentPath:    map[string]string{parentName: parentPath},
+		ChildrenPaths: []string{},
+	}
+	b, err := json.Marshal(entry)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 func dp(v v1beta1.DownloadPolicy) *v1beta1.DownloadPolicy {
@@ -652,7 +669,7 @@ func TestHandelReuseArtifactIfNecessary_NoReusePolicy(t *testing.T) {
 	nodeName := "node-1"
 	// Even if CM has content, when policy is AlwaysDownload we should not reuse.
 	cm := makeConfigMap(nodeName, map[string]string{
-		"clusterbasemodel.model1": entryJSON("abc123", "/models/parent1"),
+		"clusterbasemodel.model1": entryJSON("abc123", "parentName", "/models/parent1"),
 	})
 	g := newGopherWithConfigMap(cm)
 
@@ -669,11 +686,12 @@ func TestHandelReuseArtifactIfNecessary_NoReusePolicy(t *testing.T) {
 
 func TestHandelReuseArtifactIfNecessary_HasMatchedEntry(t *testing.T) {
 	nodeName := "node-1"
-	expectedKey := "clusterbasemodel.model1"
-	expectedParent := "/models/parent1"
+	existingKey := "clusterbasemodel.existingModel"
+	expectParentName := "clusterbasemodel.existingModelParent"
+	expectedParentPath := "/models/parent1"
 	expectedSha := "abc123"
 	cm := makeConfigMap(nodeName, map[string]string{
-		expectedKey: entryJSON(expectedSha, expectedParent),
+		existingKey: entryJSON(expectedSha, expectParentName, expectedParentPath),
 	})
 	g := newGopherWithConfigMap(cm)
 
@@ -683,9 +701,9 @@ func TestHandelReuseArtifactIfNecessary_HasMatchedEntry(t *testing.T) {
 		},
 	}
 
-	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "ClusterBaseModel", "model1", "", expectedSha)
-	assert.Equal(t, expectedKey, key)
-	assert.Equal(t, expectedParent, parent)
+	matchedKey, matchedParentPath := g.handelReuseArtifactIfNecessary(context.Background(), spec, "ClusterBaseModel", "model1", "", "abc123")
+	assert.Equal(t, expectParentName, matchedKey)
+	assert.Equal(t, expectedParentPath, matchedParentPath)
 }
 
 func TestHandelReuseArtifactIfNecessary_BaseModelPrefersClusterBaseModelWhenBothMatch(t *testing.T) {
@@ -693,11 +711,13 @@ func TestHandelReuseArtifactIfNecessary_BaseModelPrefersClusterBaseModelWhenBoth
 	sha := "samesha"
 	clusterBaseModelKey := "clusterbasemodel.model1"
 	baseModelKey := "namespace.basemodel.model2"
-	clusterParent := "/models/parent1"
-	baseParent := "/base/parent2"
+	clusterParentPath := "/models/parent1"
+	clusterParentName := "clusterbasemodel.clusterParent"
+	baseParentPath := "/base/parent2"
+	baseParentName := "namespace.basemodel.baseParent"
 	cm := makeConfigMap(nodeName, map[string]string{
-		clusterBaseModelKey: entryJSON(sha, clusterParent),
-		baseModelKey:        entryJSON(sha, baseParent),
+		clusterBaseModelKey: entryJSON(sha, clusterParentName, clusterParentPath),
+		baseModelKey:        entryJSON(sha, baseParentName, baseParentPath),
 	})
 	g := newGopherWithConfigMap(cm)
 
@@ -708,8 +728,8 @@ func TestHandelReuseArtifactIfNecessary_BaseModelPrefersClusterBaseModelWhenBoth
 	}
 
 	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "BaseModel", "newModel", "namespace", sha)
-	assert.Equal(t, clusterBaseModelKey, key)
-	assert.Equal(t, clusterParent, parent)
+	assert.Equal(t, clusterParentName, key)
+	assert.Equal(t, clusterParentPath, parent)
 }
 
 func TestHandelReuseArtifactIfNecessary_BaseModelFallbackToNamespaceScoped(t *testing.T) {
@@ -718,10 +738,10 @@ func TestHandelReuseArtifactIfNecessary_BaseModelFallbackToNamespaceScoped(t *te
 	// Cluster entry exists but with different sha, so it shouldn't match.
 	clusterBaseModelKey := "clusterbasemodel.model1"
 	baseModelKey := "namespace.basemodel.model2"
-	baseModelParent := "/models/parent2"
+	baseModelParentPath := "/models/parent2"
 	cm := makeConfigMap(nodeName, map[string]string{
-		clusterBaseModelKey: entryJSON("different-sha", "/models/parent1"),
-		baseModelKey:        entryJSON(sha, baseModelParent),
+		clusterBaseModelKey: entryJSON("different-sha", clusterBaseModelKey, "/models/parent1"),
+		baseModelKey:        entryJSON(sha, "namespace.basemodel.Parent", baseModelParentPath),
 	})
 	g := newGopherWithConfigMap(cm)
 
@@ -732,15 +752,15 @@ func TestHandelReuseArtifactIfNecessary_BaseModelFallbackToNamespaceScoped(t *te
 	}
 
 	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "BaseModel", "name", "namespace", sha)
-	assert.Equal(t, baseModelKey, key)
-	assert.Equal(t, baseModelParent, parent)
+	assert.Equal(t, "namespace.basemodel.Parent", key)
+	assert.Equal(t, baseModelParentPath, parent)
 }
 
 func TestHandelReuseArtifactIfNecessary_NoMatchReturnsEmpty(t *testing.T) {
 	nodeName := "node-1"
 	cm := makeConfigMap(nodeName, map[string]string{
-		"clusterbasemodel.model1":    entryJSON("sha-1", "/models/parent1"),
-		"namespace.basemodel.model2": entryJSON("sha-2", "/base/parent2"),
+		"clusterbasemodel.model1":    entryJSON("sha-1", "clusterbasemodel.model1", "/models/parent1"),
+		"namespace.basemodel.model2": entryJSON("sha-2", "namespace.basemodel.model2", "/base/parent2"),
 	})
 	g := newGopherWithConfigMap(cm)
 
@@ -765,7 +785,7 @@ func TestFetchSha_Success(t *testing.T) {
 	}
 
 	g := &Gopher{logger: zap.NewNop().Sugar()}
-	sha, ok := g.fetchSha(context.Background(), "org/model")
+	sha, ok := g.fetchSha(context.Background(), "org/model", "modelName")
 	assert.True(t, ok)
 	assert.Equal(t, "abc123def", sha)
 }
@@ -779,7 +799,7 @@ func TestFetchSha_ErrorFromAPI(t *testing.T) {
 	}
 
 	g := &Gopher{logger: zap.NewNop().Sugar()}
-	sha, ok := g.fetchSha(context.Background(), "org/model")
+	sha, ok := g.fetchSha(context.Background(), "org/model", "modelName")
 	assert.False(t, ok)
 	assert.Equal(t, "", sha)
 }
@@ -793,7 +813,7 @@ func TestFetchSha_NonStringSha(t *testing.T) {
 	}
 
 	g := &Gopher{logger: zap.NewNop().Sugar()}
-	sha, ok := g.fetchSha(context.Background(), "org/model")
+	sha, ok := g.fetchSha(context.Background(), "org/model", "modelName")
 	assert.False(t, ok)
 	assert.Equal(t, "", sha)
 }
@@ -807,7 +827,7 @@ func TestFetchSha_EmptyStringSha(t *testing.T) {
 	}
 
 	g := &Gopher{logger: zap.NewNop().Sugar()}
-	sha, ok := g.fetchSha(context.Background(), "org/model")
+	sha, ok := g.fetchSha(context.Background(), "org/model", "modelName")
 	assert.False(t, ok)
 	assert.Equal(t, "", sha)
 }
@@ -834,7 +854,7 @@ func TestIsEligibleForOptimization_NoShaAvailable(t *testing.T) {
 		},
 	}
 
-	eligible, key, parent := g.isEligibleForOptimization(context.Background(), task, spec, "BaseModel", "ns", false, "", "org/model")
+	eligible, key, parent := g.isEligibleForOptimization(context.Background(), task, spec, "BaseModel", "ns", false, "", "modelName")
 	assert.False(t, eligible)
 	assert.Empty(t, key)
 	assert.Empty(t, parent)
@@ -844,11 +864,11 @@ func TestIsEligibleForOptimization_MatchedDifferentKeyEligible(t *testing.T) {
 	nodeName := "node-1"
 	sha := "123abc"
 	expectedKey := "clusterbasemodel.modelX"
-	expectedParent := "/models/parentX"
+	expectedParentPath := "/models/parentX"
 
 	// CM has a ClusterBaseModel entry with matching sha
 	cm := makeConfigMap(nodeName, map[string]string{
-		expectedKey: entryJSON(sha, expectedParent),
+		expectedKey: entryJSON(sha, "clusterbasemodel.modelX", expectedParentPath),
 	})
 	g := newGopherWithConfigMap(cm)
 
@@ -868,21 +888,21 @@ func TestIsEligibleForOptimization_MatchedDifferentKeyEligible(t *testing.T) {
 		},
 	}
 
-	eligible, key, parent := g.isEligibleForOptimization(context.Background(), task, spec, "BaseModel", "ns", true, "123abc", "org/model")
+	eligible, key, parent := g.isEligibleForOptimization(context.Background(), task, spec, "BaseModel", "ns", true, "123abc", "modelName")
 	assert.True(t, eligible)
 	assert.Equal(t, expectedKey, key)
-	assert.Equal(t, expectedParent, parent)
+	assert.Equal(t, expectedParentPath, parent)
 }
 
 func TestIsEligibleForOptimization_MatchedSameKeyNotEligible(t *testing.T) {
 	nodeName := "node-1"
 	sha := "123abc"
 	expectedKey := "clusterbasemodel.model1"
-	parent := "/models/p1"
+	parentPath := "/models/p1"
 
 	// CM has a ClusterBaseModel entry with matching sha
 	cm := makeConfigMap(nodeName, map[string]string{
-		expectedKey: entryJSON(sha, parent),
+		expectedKey: entryJSON(sha, "clusterbasemodel.model1", parentPath),
 	})
 	g := newGopherWithConfigMap(cm)
 
@@ -901,10 +921,10 @@ func TestIsEligibleForOptimization_MatchedSameKeyNotEligible(t *testing.T) {
 		},
 	}
 
-	eligible, key, parentPath := g.isEligibleForOptimization(context.Background(), task, spec, "ClusterBaseModel", "", true, "123abc", "org/model")
+	eligible, key, parentPath := g.isEligibleForOptimization(context.Background(), task, spec, "ClusterBaseModel", "", true, "123abc", "modelName")
 	assert.False(t, eligible, "same key should not be eligible for reuse")
 	assert.Equal(t, expectedKey, key)
-	assert.Equal(t, parent, parentPath)
+	assert.Equal(t, parentPath, parentPath)
 }
 
 func TestIsEligibleForOptimization_NoMatch(t *testing.T) {
@@ -913,7 +933,7 @@ func TestIsEligibleForOptimization_NoMatch(t *testing.T) {
 
 	// CM entries with different sha values
 	cm := makeConfigMap(nodeName, map[string]string{
-		"clusterbasemodel.other": entryJSON("sha-other", "/models/p2"),
+		"clusterbasemodel.other": entryJSON("sha-other", "clusterbasemodel.other", "/models/p2"),
 	})
 	g := newGopherWithConfigMap(cm)
 
@@ -932,7 +952,7 @@ func TestIsEligibleForOptimization_NoMatch(t *testing.T) {
 		},
 	}
 
-	eligible, key, parent := g.isEligibleForOptimization(context.Background(), task, spec, "BaseModel", "ns", true, targetSha, "org/model")
+	eligible, key, parent := g.isEligibleForOptimization(context.Background(), task, spec, "BaseModel", "ns", true, targetSha, "modelName")
 	assert.False(t, eligible)
 	assert.Empty(t, key)
 	assert.Empty(t, parent)
@@ -946,7 +966,7 @@ func TestIsEligibleForOptimization_AlwaysDownloadNotEligible(t *testing.T) {
 
 	// CM has a ClusterBaseModel entry with matching sha
 	cm := makeConfigMap(nodeName, map[string]string{
-		expectedKey: entryJSON(sha, expectedParent),
+		expectedKey: entryJSON(sha, "clusterbasemodel.modelX", expectedParent),
 	})
 	g := newGopherWithConfigMap(cm)
 
@@ -966,8 +986,379 @@ func TestIsEligibleForOptimization_AlwaysDownloadNotEligible(t *testing.T) {
 		},
 	}
 
-	eligible, key, parent := g.isEligibleForOptimization(context.Background(), task, spec, "BaseModel", "ns", true, "123abc", "org/model")
+	eligible, key, parent := g.isEligibleForOptimization(context.Background(), task, spec, "BaseModel", "ns", true, "123abc", "modelName")
 	assert.False(t, eligible)
 	assert.Empty(t, key)
 	assert.Empty(t, parent)
+}
+
+func newGopherWithEmptyClient(nodeName, namespace string, t *testing.T) (*Gopher, *k8sfake.Clientset) {
+	client := k8sfake.NewSimpleClientset()
+	logger := zaptest.NewLogger(t).Sugar()
+	cmr := NewConfigMapReconciler(nodeName, namespace, client, logger)
+	return &Gopher{
+		configMapReconciler: cmr,
+		logger:              logger,
+	}, client
+}
+
+func newGopherAndClientWithConfigMap(cm *corev1.ConfigMap, t *testing.T) (*Gopher, *k8sfake.Clientset) {
+	client := k8sfake.NewSimpleClientset(cm)
+	logger := zaptest.NewLogger(t).Sugar()
+	cmr := NewConfigMapReconciler(cm.Name, cm.Namespace, client, logger)
+	return &Gopher{
+		configMapReconciler: cmr,
+		logger:              logger,
+	}, client
+}
+
+func countConfigMapUpdates(client *k8sfake.Clientset) int {
+	n := 0
+	for _, a := range client.Fake.Actions() {
+		if a.Matches("update", "configmaps") {
+			n++
+		}
+	}
+	return n
+}
+
+func getChildrenPaths(entry string) []string {
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(entry), &obj); err != nil {
+		return nil
+	}
+	cfg, _ := obj["config"].(map[string]interface{})
+	art, _ := cfg["artifact"].(map[string]interface{})
+	raw, _ := art["childrenPaths"].([]interface{})
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if s, ok := v.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func TestHasChildrenPaths_NoChildren_HasMatchedParent_RemovesChildAndReturnsFalse(t *testing.T) {
+	// Keys and paths
+	parentKey := "clusterbasemodel.parentModel"
+	childKey := "clusterbasemodel.childModel"
+	parentPath := "/models/parent"
+	childPath := "/models/childA"
+
+	// Parent entry contains the child path
+	parentEntry := entryJSON("sha", parentKey, parentPath)
+	// Replace its childrenPaths with [childPath]
+	var obj map[string]interface{}
+	_ = json.Unmarshal([]byte(parentEntry), &obj)
+	cfg := obj["config"].(map[string]interface{})
+	art := cfg["artifact"].(map[string]interface{})
+	art["childrenPaths"] = []interface{}{childPath}
+	parentEntryWithChild, _ := json.Marshal(obj)
+
+	// Child entry has empty childrenPaths and points to the parent
+	childEntry := entryJSON("sha", parentKey, parentPath)
+
+	cm := makeConfigMap("node-1", map[string]string{
+		parentKey: string(parentEntryWithChild),
+		childKey:  childEntry,
+	})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+
+	got := g.hasChildrenPaths(context.Background(), childKey, childPath)
+	assert.False(t, got, "no children implies cleanup and return false")
+
+	// should have updated CM at least once
+	assert.GreaterOrEqual(t, countConfigMapUpdates(client), 1, "expected a ConfigMap update for parent removal")
+
+	// Verify parent childrenPaths is now empty
+	latest, _ := client.CoreV1().ConfigMaps("ome").Get(context.Background(), "node-1", metav1.GetOptions{})
+	children := getChildrenPaths(latest.Data[parentKey])
+	assert.ElementsMatch(t, []string{}, children, "parent childrenPaths should be empty after removal")
+}
+
+func TestHasChildrenPaths_NoChildren_NoMatchedParentRemovesChildAndReturnsFalse(t *testing.T) {
+	// Keys and paths
+	childKey := "clusterbasemodel.childModel"
+	childPath := "/models/childA"
+
+	// Child entry has empty childrenPaths and parent points to itself
+	childEntry := entryJSON("sha", "clusterbasemodel.childModel", "/models/childA")
+
+	cm := makeConfigMap("node-1", map[string]string{
+		childKey: childEntry,
+	})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+	got := g.hasChildrenPaths(context.Background(), childKey, childPath)
+	assert.False(t, got, "no children implies cleanup and return false")
+
+	// should not invoke client to update CM
+	assert.Equal(t, 0, countConfigMapUpdates(client), "expected no ConfigMap update for parent removal")
+}
+
+func TestHasChildrenPaths_GetConfigMapError_ReturnsTrue_NoUpdate(t *testing.T) {
+	// No ConfigMap created for this node
+	g, client := newGopherWithEmptyClient("missing-node", "ome", t)
+
+	got := g.hasChildrenPaths(context.Background(), "clusterbasemodel.child", "/models/child")
+
+	assert.True(t, got, "should conservatively return true when getConfigMap fails")
+	assert.Equal(t, 0, countConfigMapUpdates(client), "should not attempt to update parent when CM retrieval fails")
+}
+
+func TestHasChildrenPaths_ParentParseError_ReturnsTrue_NoUpdate(t *testing.T) {
+	// Prepare parent with a child path and a malformed child entry to cause parsing error
+	parentKey := "clusterbasemodel.parent"
+	childKey := "clusterbasemodel.child"
+	parentPath := "/models/p"
+	childPath := "/models/c"
+
+	parentEntry := entryJSON("shaP", parentKey, parentPath)
+	// Make parent contain the child path
+	var pobj map[string]interface{}
+	_ = json.Unmarshal([]byte(parentEntry), &pobj)
+	pcfg := pobj["config"].(map[string]interface{})
+	part := pcfg["artifact"].(map[string]interface{})
+	part["childrenPaths"] = []interface{}{childPath}
+	parentEntryWithChild, _ := json.Marshal(pobj)
+
+	// Malformed child entry to trigger error in getParentPathAndChildrenPaths (missing config/artifact)
+	childEntry := "{}"
+
+	cm := makeConfigMap("node-x", map[string]string{
+		parentKey: string(parentEntryWithChild),
+		childKey:  childEntry,
+	})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+
+	got := g.hasChildrenPaths(context.Background(), childKey, childPath)
+	assert.True(t, got, "error parsing parent/children should conservatively return true")
+
+	// No CM update should have been attempted
+	assert.Equal(t, 0, countConfigMapUpdates(client), "no parent update expected when parse fails")
+
+	// Verify parent childrenPaths unchanged (still contains childPath)
+	latest, _ := client.CoreV1().ConfigMaps("ome").Get(context.Background(), "node-x", metav1.GetOptions{})
+	children := getChildrenPaths(latest.Data[parentKey])
+	assert.ElementsMatch(t, []string{childPath}, children)
+}
+
+func TestHasChildrenPaths_WithChildren_ReturnsTrue_NoUpdate(t *testing.T) {
+	key := "clusterbasemodel.entry"
+	parentPath := "/models/p"
+	childPath := "/models/c"
+
+	// Entry with children means we treat it as parent and do not clean up
+	entry := entryJSON("sha", key, parentPath)
+	var obj map[string]interface{}
+	_ = json.Unmarshal([]byte(entry), &obj)
+	cfg := obj["config"].(map[string]interface{})
+	art := cfg["artifact"].(map[string]interface{})
+	art["childrenPaths"] = []interface{}{childPath}
+	entryWithChild, _ := json.Marshal(obj)
+
+	cm := makeConfigMap("node-y", map[string]string{key: string(entryWithChild)})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+
+	got := g.hasChildrenPaths(context.Background(), key, "/unused")
+	assert.True(t, got, "non-empty children should return true")
+	assert.Equal(t, 0, countConfigMapUpdates(client), "no update expected when entry already has children")
+}
+
+func TestIsSkippingArtifactDeletion_ReferencedByOthers_Skip(t *testing.T) {
+	node := "node-r1"
+	destPath := "/models/shared"
+
+	// CM not used by the reference check path
+	cm := makeConfigMap(node, map[string]string{})
+	g := newGopherWithConfigMap(cm)
+	// Mock listers to report a referencing BaseModel different from the task model
+	mockBM := &mockBaseModelLister{
+		models: []*v1beta1.BaseModel{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "ns",
+					Name:      "other",
+				},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{Path: &destPath},
+				},
+			},
+		},
+	}
+	g.baseModelLister = mockBM
+	g.clusterBaseModelLister = &mockClusterBaseModelLister{}
+
+	// Task model to be deleted
+	task := &GopherTask{
+		TaskType: Download,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns",
+				Name:      "bm",
+			},
+			Spec: v1beta1.BaseModelSpec{
+				Storage: &v1beta1.StorageSpec{},
+			},
+		},
+	}
+
+	got := g.isSkippingArtifactDeletion(context.Background(), task, destPath, false)
+	assert.True(t, got, "referenced by others should skip deletion")
+}
+
+func TestIsSkippingArtifactDeletion_ReserveLabel_Skip(t *testing.T) {
+	node := "node-r2"
+	destPath := "/models/x"
+
+	cm := makeConfigMap(node, map[string]string{})
+	g := newGopherWithConfigMap(cm)
+	// No references
+	g.baseModelLister = &mockBaseModelLister{}
+	g.clusterBaseModelLister = &mockClusterBaseModelLister{}
+
+	// Reserve label on BaseModel
+	task := &GopherTask{
+		TaskType: Download,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns",
+				Name:      "bm",
+				Labels: map[string]string{
+					"models.ome/reserve-model-artifact": "true",
+				},
+			},
+			Spec: v1beta1.BaseModelSpec{
+				Storage: &v1beta1.StorageSpec{},
+			},
+		},
+	}
+
+	got := g.isSkippingArtifactDeletion(context.Background(), task, destPath, false)
+	assert.True(t, got, "reserve label should skip deletion")
+}
+
+func TestIsSkippingArtifactDeletion_ChildrenPresent_Skip(t *testing.T) {
+	node := "node-r3"
+	ns, name := "ns", "child"
+	childKey := ns + ".basemodel." + name
+	parentPath := "/models/parent"
+	// Child entry has childrenPaths non-empty
+	entry := entryJSON("sha", childKey, parentPath)
+	var obj map[string]interface{}
+	_ = json.Unmarshal([]byte(entry), &obj)
+	cfg := obj["config"].(map[string]interface{})
+	art := cfg["artifact"].(map[string]interface{})
+	art["childrenPaths"] = []interface{}{"/some/child"}
+	entryWithChild, _ := json.Marshal(obj)
+
+	cm := makeConfigMap(node, map[string]string{
+		childKey: string(entryWithChild),
+	})
+	g, _ := newGopherAndClientWithConfigMap(cm, t)
+	// No references
+	g.baseModelLister = &mockBaseModelLister{}
+	g.clusterBaseModelLister = &mockClusterBaseModelLister{}
+
+	destPath := "/models/child"
+	task := &GopherTask{
+		TaskType: Download,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: ns,
+				Name:      name,
+			},
+			Spec: v1beta1.BaseModelSpec{
+				Storage: &v1beta1.StorageSpec{},
+			},
+		},
+	}
+
+	got := g.isSkippingArtifactDeletion(context.Background(), task, destPath, true)
+	assert.True(t, got, "non-empty childrenPaths should skip deletion")
+}
+
+func TestIsSkippingArtifactDeletion_NoChildren_ProceedsAndUpdatesParent(t *testing.T) {
+	node := "node-r4"
+	ns, name := "ns", "child"
+	childKey := ns + ".basemodel." + name
+	parentKey := "clusterbasemodel.parent"
+	parentDir := "/models/parent"
+	destPath := "/models/child"
+
+	// Child entry has empty childrenPaths and points to parent
+	childEntry := entryJSON("sha-child", parentKey, parentDir)
+	// Ensure childrenPaths empty for child
+	var ch map[string]interface{}
+	_ = json.Unmarshal([]byte(childEntry), &ch)
+	chcfg := ch["config"].(map[string]interface{})
+	chart := chcfg["artifact"].(map[string]interface{})
+	chart["childrenPaths"] = []interface{}{}
+	childEntryNoChild, _ := json.Marshal(ch)
+
+	// Parent entry includes the child's destPath
+	parentEntry := entryJSON("sha-parent", parentKey, parentDir)
+	var pobj map[string]interface{}
+	_ = json.Unmarshal([]byte(parentEntry), &pobj)
+	pcfg := pobj["config"].(map[string]interface{})
+	part := pcfg["artifact"].(map[string]interface{})
+	part["childrenPaths"] = []interface{}{destPath}
+	parentEntryWithChild, _ := json.Marshal(pobj)
+
+	cm := makeConfigMap(node, map[string]string{
+		childKey:  string(childEntryNoChild),
+		parentKey: string(parentEntryWithChild),
+	})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+	// No references, no reserve
+	g.baseModelLister = &mockBaseModelLister{}
+	g.clusterBaseModelLister = &mockClusterBaseModelLister{}
+
+	task := &GopherTask{
+		TaskType: Download,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: ns,
+				Name:      name,
+			},
+			Spec: v1beta1.BaseModelSpec{
+				Storage: &v1beta1.StorageSpec{},
+			},
+		},
+	}
+
+	got := g.isSkippingArtifactDeletion(context.Background(), task, destPath, true)
+	assert.False(t, got, "no children implies deletion should proceed and parent cleaned")
+
+	// Verify parent childrenPaths is now empty
+	latest, _ := client.CoreV1().ConfigMaps("ome").Get(context.Background(), node, metav1.GetOptions{})
+	children := getChildrenPaths(latest.Data[parentKey])
+	assert.ElementsMatch(t, []string{}, children, "parent childrenPaths should be empty after removal")
+}
+
+func TestIsSkippingArtifactDeletion_ReferenceCheckError_Skip(t *testing.T) {
+	node := "node-r5"
+	destPath := "/models/x"
+
+	cm := makeConfigMap(node, map[string]string{})
+	g := newGopherWithConfigMap(cm)
+	// Simulate lister error path
+	g.baseModelLister = &mockBaseModelLister{err: errors.New("lister failed")}
+	g.clusterBaseModelLister = &mockClusterBaseModelLister{}
+
+	task := &GopherTask{
+		TaskType: Download,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns",
+				Name:      "bm",
+			},
+			Spec: v1beta1.BaseModelSpec{
+				Storage: &v1beta1.StorageSpec{},
+			},
+		},
+	}
+
+	got := g.isSkippingArtifactDeletion(context.Background(), task, destPath, false)
+	assert.True(t, got, "on reference check error deletion should be skipped")
 }

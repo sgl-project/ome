@@ -574,49 +574,53 @@ func TestPopulateArtifactAttribute_SetsFields(t *testing.T) {
 	logger := zap.NewNop().Sugar()
 	parser := &ModelConfigParser{logger: logger}
 
-	orig := ModelMetadata{} // empty input metadata
+	orig := &ModelMetadata{} // empty input metadata
 	sha := "abc123"
 	parent := "/models/model1"
+	artifact := &Artifact{
+		Sha:        sha,
+		ParentPath: map[string]string{"parentModel": parent},
+	}
 
-	out := parser.populateArtifactAttribute(sha, parent, orig)
+	out := parser.populateArtifactAttribute(artifact, orig)
 	assert.NotNil(t, out, "returned metadata should not be nil")
 
 	// Verify Artifact fields
 	assert.Equal(t, sha, out.Artifact.Sha)
-	assert.Equal(t, parent, out.Artifact.ParentPath)
-	assert.NotNil(t, out.Artifact.ChildrenPaths, "ChildrenPaths should be initialized to an empty slice")
-	assert.Len(t, out.Artifact.ChildrenPaths, 0, "ChildrenPaths should be empty")
+	assert.Equal(t, map[string]string{"parentModel": "/models/model1"}, out.Artifact.ParentPath)
+	assert.Nil(t, out.Artifact.ChildrenPaths)
 }
 
-func TestPopulateArtifactAttribute_DoesNotMutateInput(t *testing.T) {
+func TestPopulateArtifactAttribute_NilInput(t *testing.T) {
 	logger := zap.NewNop().Sugar()
 	parser := &ModelConfigParser{logger: logger}
 
 	// Prepare input with pre-filled artifact to ensure immutability of the input value
-	original := ModelMetadata{
-		Artifact: Artifact{
-			Sha:           "old",
-			ParentPath:    "/models/old",
-			ChildrenPaths: []string{"/models/child1"},
-		},
+	original := &ModelMetadata{
+		ModelType: "ClusterBaseModel",
 	}
-	sha := "newsha"
-	parent := "/models/new"
 
-	out := parser.populateArtifactAttribute(sha, parent, original)
+	out := parser.populateArtifactAttribute(nil, original)
+	assert.Empty(t, out.Artifact.Sha)
+	assert.Nil(t, out.Artifact.ParentPath)
+	assert.Nil(t, out.Artifact.ChildrenPaths)
+	assert.Equal(t, original, out, "no update should happen to original model moetadata")
+}
 
-	// Verify output is updated
-	assert.Equal(t, sha, out.Artifact.Sha)
-	assert.Equal(t, parent, out.Artifact.ParentPath)
-	assert.NotNil(t, out.Artifact.ChildrenPaths)
-	assert.Len(t, out.Artifact.ChildrenPaths, 0)
+func TestBuildArtifactAttribute_Basic(t *testing.T) {
+	logger := zap.NewNop().Sugar()
+	parser := &ModelConfigParser{logger: logger}
 
-	// Verify original was NOT mutated (function receives value and updates a copy)
-	assert.Equal(t, "old", original.Artifact.Sha)
-	assert.Equal(t, "/models/old", original.Artifact.ParentPath)
-	assert.Equal(t, []string{"/models/child1"}, original.Artifact.ChildrenPaths)
+	sha := "commit-sha-123"
+	parentName := "clusterbasemodel.parentModel"
+	parentPath := "/models/parent1"
 
-	// Mutating the returned ChildrenPaths should not affect the original
-	out.Artifact.ChildrenPaths = append(out.Artifact.ChildrenPaths, "/child")
-	assert.Equal(t, []string{"/models/child1"}, original.Artifact.ChildrenPaths)
+	artifact := parser.buildArtifactAttribute(sha, parentName, parentPath)
+	if assert.NotNil(t, artifact, "artifact should not be nil") {
+		assert.Equal(t, sha, artifact.Sha, "sha should match input")
+		assert.Equal(t, map[string]string{parentName: parentPath}, artifact.ParentPath, "parentPath should be a single-entry map with provided key/value")
+		// ChildrenPaths should be a non-nil empty slice to allow safe appends
+		assert.NotNil(t, artifact.ChildrenPaths, "childrenPaths should be non-nil")
+		assert.Equal(t, 0, len(artifact.ChildrenPaths), "childrenPaths should be initialized empty")
+	}
 }

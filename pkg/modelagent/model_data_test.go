@@ -36,6 +36,11 @@ func TestConvertMetadataToModelConfig(t *testing.T) {
 					"num_hidden_layers":   32,
 					"num_attention_heads": 32,
 				},
+				Artifact: Artifact{
+					Sha:           "123abc",
+					ParentPath:    map[string]string{"parentModelName": "/path1"},
+					ChildrenPaths: []string{"/path2", "/path3"},
+				},
 			},
 			expected: &ModelConfig{
 				ModelType:          "llama",
@@ -51,6 +56,11 @@ func TestConvertMetadataToModelConfig(t *testing.T) {
 					"hidden_size":         4096,
 					"num_hidden_layers":   32,
 					"num_attention_heads": 32,
+				},
+				Artifact: Artifact{
+					Sha:           "123abc",
+					ParentPath:    map[string]string{"parentModelName": "/path1"},
+					ChildrenPaths: []string{"/path2", "/path3"},
 				},
 			},
 		},
@@ -131,6 +141,67 @@ func TestConvertMetadataToModelConfig(t *testing.T) {
 				ModelArchitecture:  "MixtralModel",
 				ModelParameterSize: "8x7B",
 				Quantization:       "QINT8",
+			},
+		},
+		{
+			name: "Metadata with minimum Artifact",
+			metadata: ModelMetadata{
+				ModelType:          "mixtral",
+				ModelArchitecture:  "MixtralModel",
+				ModelParameterSize: "8x7B",
+				Artifact: Artifact{
+					Sha: "123abc",
+				},
+			},
+			expected: &ModelConfig{
+				ModelType:          "mixtral",
+				ModelArchitecture:  "MixtralModel",
+				ModelParameterSize: "8x7B",
+				Artifact: Artifact{
+					Sha: "123abc",
+				},
+			},
+		},
+		{
+			name: "Metadata with minimum Artifact2",
+			metadata: ModelMetadata{
+				ModelType:          "mixtral",
+				ModelArchitecture:  "MixtralModel",
+				ModelParameterSize: "8x7B",
+				Artifact: Artifact{
+					Sha:        "123abc",
+					ParentPath: make(map[string]string),
+				},
+			},
+			expected: &ModelConfig{
+				ModelType:          "mixtral",
+				ModelArchitecture:  "MixtralModel",
+				ModelParameterSize: "8x7B",
+				Artifact: Artifact{
+					Sha:        "123abc",
+					ParentPath: map[string]string{},
+				},
+			},
+		},
+		{
+			name: "Metadata with minimum Artifact3",
+			metadata: ModelMetadata{
+				ModelType:          "mixtral",
+				ModelArchitecture:  "MixtralModel",
+				ModelParameterSize: "8x7B",
+				Artifact: Artifact{
+					Sha:           "123abc",
+					ChildrenPaths: []string{},
+				},
+			},
+			expected: &ModelConfig{
+				ModelType:          "mixtral",
+				ModelArchitecture:  "MixtralModel",
+				ModelParameterSize: "8x7B",
+				Artifact: Artifact{
+					Sha:           "123abc",
+					ChildrenPaths: []string{},
+				},
 			},
 		},
 	}
