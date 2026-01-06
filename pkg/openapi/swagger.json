@@ -572,6 +572,10 @@
           "description": "CompartmentID is the compartment ID of the model",
           "type": "string"
         },
+        "diffusionPipeline": {
+          "description": "DiffusionPipeline captures pipeline-specific metadata for diffusion models (from model_index.json).",
+          "$ref": "#/definitions/v1beta1.DiffusionPipelineSpec"
+        },
         "disabled": {
           "description": "Whether the model is enabled or not",
           "type": "boolean"
@@ -1393,6 +1397,59 @@
         "worker": {
           "description": "Worker nodes configuration (only used for MultiNode deployment) Defines the pod and container spec for worker nodes that perform distributed token generation tasks as directed by the leader.",
           "$ref": "#/definitions/v1beta1.WorkerSpec"
+        }
+      }
+    },
+    "v1beta1.DiffusionComponentSpec": {
+      "description": "DiffusionComponentSpec captures an individual component used by a diffusion pipeline. The fields map directly to entries in a diffusers model_index.json file.",
+      "type": "object",
+      "properties": {
+        "library": {
+          "description": "Library providing the component implementation, e.g., \"diffusers\" or \"transformers\".",
+          "type": "string"
+        },
+        "type": {
+          "description": "Type is the fully qualified class name for the component, e.g., \"FlowMatchEulerDiscreteScheduler\".",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.DiffusionPipelineSpec": {
+      "description": "DiffusionPipelineSpec describes a diffusers pipeline so that runtimes can validate compatibility. When set, these fields should mirror the content of the model's model_index.json file.",
+      "type": "object",
+      "properties": {
+        "additionalComponents": {
+          "description": "AdditionalComponents captures any other pipeline parts keyed by their model_index.json entry.",
+          "type": "object",
+          "additionalProperties": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.DiffusionComponentSpec"
+          },
+          "x-kubernetes-map-type": "atomic"
+        },
+        "className": {
+          "description": "ClassName is the pipeline implementation, e.g., \"StableDiffusionXLPipeline\" or \"QwenImagePipeline\".",
+          "type": "string"
+        },
+        "scheduler": {
+          "description": "Scheduler component used by the pipeline.",
+          "$ref": "#/definitions/v1beta1.DiffusionComponentSpec"
+        },
+        "textEncoder": {
+          "description": "TextEncoder component used by the pipeline.",
+          "$ref": "#/definitions/v1beta1.DiffusionComponentSpec"
+        },
+        "tokenizer": {
+          "description": "Tokenizer component used by the pipeline.",
+          "$ref": "#/definitions/v1beta1.DiffusionComponentSpec"
+        },
+        "transformer": {
+          "description": "Transformer (UNet/DiT) component used by the pipeline.",
+          "$ref": "#/definitions/v1beta1.DiffusionComponentSpec"
+        },
+        "vae": {
+          "description": "VAE component used by the pipeline.",
+          "$ref": "#/definitions/v1beta1.DiffusionComponentSpec"
         }
       }
     },
@@ -4573,6 +4630,10 @@
         "storageUri"
       ],
       "properties": {
+        "downloadPolicy": {
+          "description": "DownloadPolicy describes the policy of downloading model artifacts Supported policies: - AlwaysDownload: always download a copy of model artifact in destination path - ReuseIfExists: if the identical model artifact has been downloaded in the node, such artifact will be reused",
+          "type": "string"
+        },
         "key": {
           "description": "StorageKey is the name of the key in a Kubernetes Secret used to authenticate access to the model storage. This key will be used to fetch credentials during model download or access.",
           "type": "string"
@@ -4629,6 +4690,10 @@
         "autoSelect": {
           "description": "Set to true to allow the ServingRuntime to be used for automatic model placement if this model format is specified with no explicit runtime.",
           "type": "boolean"
+        },
+        "diffusionPipeline": {
+          "description": "DiffusionPipeline supported by this runtime (used for diffusion models).",
+          "$ref": "#/definitions/v1beta1.DiffusionPipelineSpec"
         },
         "modelArchitecture": {
           "description": "ModelArchitecture of the model, e.g., \"LlamaForCausalLM\", \"GemmaForCausalLM\", \"MixtralForCausalLM\"",
