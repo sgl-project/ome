@@ -9,6 +9,7 @@ import (
 	"os"
 
 	v1beta1ocicachecontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/ocicache"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/isvc"
 
 	v1beta1ocipostgresdbinstancecontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/ocipostgresdbinstance"
 
@@ -428,6 +429,11 @@ func main() {
 		setupLog.Info("Registering capacity reservation validator webhook to the webhook server")
 		hookServer.Register("/validate-ome-io-v1beta1-capacityreservation", &webhook.Admission{
 			Handler: &capacityreservation.CapacityReservationValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
+
+		setupLog.Info("Registering inference service mutator webhook for ac updating")
+		hookServer.Register("/inferenceservice-ac-mutator", &webhook.Admission{
+			Handler: &isvc.InferenceServiceACMutator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
 		if err = ctrl.NewWebhookManagedBy(mgr).
