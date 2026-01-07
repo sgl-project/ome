@@ -126,25 +126,6 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 			isvcutils.AppendVolumeMount(container, &tfewFineTunedWeightVolumeMount)
 		}
 	}
-
-	// Add blocklist volume mounts if enabled
-	if isvcutils.IsBlockListInjectionDisabled(objectMeta.Annotations) {
-		inputBlocklistVolumeMount := corev1.VolumeMount{
-			Name:      constants.BlocklistConfigMapVolumeName,
-			MountPath: constants.InputBlocklistMountPath,
-			ReadOnly:  true,
-			SubPath:   constants.InputBlocklistSubPath,
-		}
-		isvcutils.AppendVolumeMount(container, &inputBlocklistVolumeMount)
-
-		outputBlocklistVolumeMount := corev1.VolumeMount{
-			Name:      constants.BlocklistConfigMapVolumeName,
-			MountPath: constants.OutputBlocklistMountPath,
-			ReadOnly:  true,
-			SubPath:   constants.OutputBlocklistSubPath,
-		}
-		isvcutils.AppendVolumeMount(container, &outputBlocklistVolumeMount)
-	}
 }
 
 // UpdateEnvVariables updates environment variables for the container
@@ -270,21 +251,6 @@ func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService
 			},
 		}
 		podSpec.Volumes = utils.AppendVolumeIfNotExists(podSpec.Volumes, emptyModelDirVolume)
-	}
-
-	// Add blocklist configmap volume if enabled
-	if isvcutils.IsBlockListInjectionDisabled(objectMeta.Annotations) {
-		blockListConfigMapVolume := corev1.Volume{
-			Name: constants.BlocklistConfigMapVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: constants.ModelConfigName(isvc.Name),
-					},
-				},
-			},
-		}
-		podSpec.Volumes = append(podSpec.Volumes, blockListConfigMapVolume)
 	}
 }
 

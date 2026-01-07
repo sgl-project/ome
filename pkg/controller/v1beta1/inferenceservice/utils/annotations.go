@@ -38,11 +38,6 @@ func GetDeploymentMode(annotations map[string]string, deployConfig *controllerco
 	return constants.DeploymentModeType(deployConfig.DefaultDeploymentMode)
 }
 
-func IsBlockListInjectionDisabled(annotations map[string]string) bool {
-	inject, ok := annotations[constants.BlockListDisableInjection]
-	return ok && inject == "true"
-}
-
 func IsOriginalModelVolumeMountNecessary(annotations map[string]string) bool {
 	return annotations[constants.ModelInitInjectionKey] != "true" &&
 		annotations[constants.FTServingWithMergedWeightsAnnotationKey] != "true"
