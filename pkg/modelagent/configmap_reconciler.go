@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -605,6 +606,7 @@ func (c *ConfigMapReconciler) updateModelProgressInConfigMap(ctx context.Context
 	// Store the model entry in the ConfigMap
 	configMap.Data[key] = string(entryJSON)
 
+	c.logger.Infof("will update model profress in configmap for key %s", key)
 	return c.saveConfigMap(ctx, configMap, modelInfo, needCreate)
 }
 
@@ -808,6 +810,7 @@ func (c *ConfigMapReconciler) updateModelStatusInConfigMap(ctx context.Context, 
 		configMap.Data[key] = string(entryJSON)
 	}
 
+	c.logger.Infof("will update model status in configmap for key %s", key)
 	return c.saveConfigMap(ctx, configMap, modelInfo, needCreate)
 }
 
@@ -932,6 +935,11 @@ func (c *ConfigMapReconciler) updateConfigMapWithRetry(ctx context.Context, upda
 		if err != nil {
 			c.logger.Errorf("failed to compute updated ConfigMap: %s", err)
 			return err
+		}
+
+		if reflect.DeepEqual(latestCM, updatedConfigmap) {
+			c.logger.Debugf("No changes detected for ConfigMap %s/%s; skipping update", c.namespace, c.nodeName)
+			return nil
 		}
 
 		// Update with the merged data

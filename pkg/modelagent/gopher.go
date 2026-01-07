@@ -1025,14 +1025,16 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 				LastUpdated:      now.Format(time.RFC3339),
 			}
 
-			// Update ConfigMap with progress (non-blocking)
+			// Progress update with new context so it isn't canceled if main context is canceled or expires
 			go func() {
+				progressCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
 				progressOp := &ConfigMapProgressOp{
 					Progress:         progress,
 					BaseModel:        task.BaseModel,
 					ClusterBaseModel: task.ClusterBaseModel,
 				}
-				if err := s.configMapReconciler.ReconcileModelProgress(ctx, progressOp); err != nil {
+				if err := s.configMapReconciler.ReconcileModelProgress(progressCtx, progressOp); err != nil {
 					s.logger.Warnf("Failed to update download progress for %s: %v", modelInfo, err)
 				}
 			}()
