@@ -101,7 +101,6 @@ var (
 	SetPrometheusAnnotation                  = OMEAPIGroupName + "/enable-prometheus-scraping"
 	DedicatedAICluster                       = OMEAPIGroupName + "/dedicated-ai-cluster"
 	VolcanoQueue                             = OMEAPIGroupName + "/volcano-queue"
-	BlockListDisableInjection                = OMEAPIGroupName + "/disable-blocklist"
 	ModelInitInjectionKey                    = OMEAPIGroupName + "/inject-model-init"
 	FineTunedAdapterInjectionKey             = OMEAPIGroupName + "/inject-fine-tuned-adapter"
 	ServingSidecarInjectionKey               = OMEAPIGroupName + "/inject-serving-sidecar"
