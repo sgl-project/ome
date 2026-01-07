@@ -49,6 +49,14 @@ func (m *MockRedisClusterClientInterface) AttachOciCacheUsers(
 	return args.Get(0).(redis.AttachOciCacheUsersResponse), args.Error(1)
 }
 
+func (m *MockRedisClusterClientInterface) DetachOciCacheUsers(
+	ctx context.Context,
+	request redis.DetachOciCacheUsersRequest,
+) (redis.DetachOciCacheUsersResponse, error) {
+	args := m.Called(ctx, request)
+	return args.Get(0).(redis.DetachOciCacheUsersResponse), args.Error(1)
+}
+
 type MockRedisUserClientInterface struct {
 	mock.Mock
 }
@@ -656,6 +664,102 @@ func TestRedis_DeleteOciCacheUser(t *testing.T) {
 			tt.setupMocks(mockClient, mockLogger, req)
 
 			resp, err := mockClient.DeleteOciCacheUser(context.Background(), req)
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, resp)
+			}
+
+			mockClient.AssertExpectations(t)
+			mockLogger.AssertExpectations(t)
+		})
+	}
+}
+
+func TestRedis_DetachCacheUserFromCluster(t *testing.T) {
+	tests := []struct {
+		name        string
+		userOCIDs   []string
+		clusterID   string
+		setupMocks  func(*MockRedisClusterClientInterface, *testingPkg.MockLogger, redis.DetachOciCacheUsersRequest)
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:      "successful detach users",
+			userOCIDs: []string{"ocid1.ocicacheuser.oc1..user1", "ocid1.ocicacheuser.oc1..user2"},
+			clusterID: "ocid1.rediscachecluster.oc1..cluster1",
+			setupMocks: func(mockClient *MockRedisClusterClientInterface, mockLogger *testingPkg.MockLogger, req redis.DetachOciCacheUsersRequest) {
+				resp := redis.DetachOciCacheUsersResponse{}
+
+				mockClient.
+					On("DetachOciCacheUsers", mock.Anything, mock.MatchedBy(func(r redis.DetachOciCacheUsersRequest) bool {
+						if r.RedisClusterId == nil || *r.RedisClusterId != *req.RedisClusterId {
+							return false
+						}
+						// details is a value type in SDK; compare the slice content
+						return assert.ObjectsAreEqual(r.DetachOciCacheUsersDetails.OciCacheUsers, req.DetachOciCacheUsersDetails.OciCacheUsers)
+					})).
+					Return(resp, nil)
+
+				mockLogger.On("Infof", mock.AnythingOfType("string"), mock.Anything).Maybe()
+			},
+			expectError: false,
+		},
+		{
+			name:      "detach failure",
+			userOCIDs: []string{"ocid1.ocicacheuser.oc1..user1"},
+			clusterID: "ocid1.rediscachecluster.oc1..cluster1",
+			setupMocks: func(mockClient *MockRedisClusterClientInterface, mockLogger *testingPkg.MockLogger, req redis.DetachOciCacheUsersRequest) {
+				mockClient.
+					On("DetachOciCacheUsers", mock.Anything, mock.Anything).
+					Return(redis.DetachOciCacheUsersResponse{}, fmt.Errorf("failed to detach cache users: OCI error"))
+
+				mockLogger.On("Errorf", mock.AnythingOfType("string"), mock.Anything).Maybe()
+			},
+			expectError: true,
+			errorMsg:    "failed to detach cache users",
+		},
+		{
+			name:      "empty user list still calls API",
+			userOCIDs: []string{},
+			clusterID: "ocid1.rediscachecluster.oc1..cluster1",
+			setupMocks: func(mockClient *MockRedisClusterClientInterface, mockLogger *testingPkg.MockLogger, req redis.DetachOciCacheUsersRequest) {
+				resp := redis.DetachOciCacheUsersResponse{}
+
+				mockClient.
+					On("DetachOciCacheUsers", mock.Anything, mock.MatchedBy(func(r redis.DetachOciCacheUsersRequest) bool {
+						if r.RedisClusterId == nil || *r.RedisClusterId != *req.RedisClusterId {
+							return false
+						}
+						return len(r.DetachOciCacheUsersDetails.OciCacheUsers) == 0
+					})).
+					Return(resp, nil)
+
+				mockLogger.On("Infof", mock.AnythingOfType("string"), mock.Anything).Maybe()
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockLogger := testingPkg.SetupMockLogger()
+			mockClient := &MockRedisClusterClientInterface{}
+
+			req := redis.DetachOciCacheUsersRequest{
+				RedisClusterId: common.String(tt.clusterID),
+				DetachOciCacheUsersDetails: redis.DetachOciCacheUsersDetails{
+					OciCacheUsers: tt.userOCIDs,
+				},
+			}
+
+			tt.setupMocks(mockClient, mockLogger, req)
+
+			resp, err := mockClient.DetachOciCacheUsers(context.Background(), req)
+
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errorMsg)

@@ -218,3 +218,18 @@ func (c *OciRedisClient) DeleteOciCacheUser(
 	}
 	return c.userClient.DeleteOciCacheUser(ctx, req)
 }
+
+func (c *OciRedisClient) DetachCacheUserFromCluster(
+	ctx context.Context,
+	userOCIDs []string,
+	clusterID string,
+) (redis.DetachOciCacheUsersResponse, error) {
+	details := redis.DetachOciCacheUsersDetails{
+		OciCacheUsers: userOCIDs,
+	}
+	req := redis.DetachOciCacheUsersRequest{
+		RedisClusterId:             &clusterID,
+		DetachOciCacheUsersDetails: details,
+	}
+	return c.clusterClient.DetachOciCacheUsers(ctx, req)
+}

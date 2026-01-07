@@ -2,13 +2,15 @@ package utils
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"math/big"
 )
 
 const (
 	upperAlphabets = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	lowerAlphabets = "abcdefghijklmnopqrstuvwxyz"
-	specialChars   = "!@#$%&{}~+="
+	specialChars   = "-_."
 	numbers        = "0123456789"
 )
 
@@ -55,4 +57,9 @@ func secureShuffle(slice []byte) {
 		j := jBig.Int64()
 		slice[i], slice[j] = slice[j], slice[i]
 	}
+}
+
+func HashPasswordSHA256Hex(pw string) string {
+	sum := sha256.Sum256([]byte(pw))
+	return hex.EncodeToString(sum[:])
 }

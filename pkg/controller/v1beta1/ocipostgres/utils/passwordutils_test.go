@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -52,4 +54,43 @@ func TestGenerateRandomPassword_RandomnessBasic(t *testing.T) {
 
 func containsAny(s, charset string) bool {
 	return strings.ContainsAny(s, charset)
+}
+
+func TestHashPasswordSHA256Hex(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "normal password",
+			input:    "password123",
+			expected: sha256Hex("password123"),
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: sha256Hex(""),
+		},
+		{
+			name:     "unicode string",
+			input:    "密码🔐",
+			expected: sha256Hex("密码🔐"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := HashPasswordSHA256Hex(tt.input)
+			if got != tt.expected {
+				t.Fatalf("HashPasswordSHA256Hex(%q) = %s, want %s",
+					tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
 }
