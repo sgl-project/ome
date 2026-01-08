@@ -117,6 +117,8 @@ A Helm chart for importing ome base models
 | gemini-2-5-pro.lifecyclePhase                                       | string | `"ACTIVE"`                                   |             |
 | gemini-3-pro-preview.enabled                                        | bool   | `false`                                      |             |
 | gemini-3-pro-preview.lifecyclePhase                                 | string | `"ACTIVE"`                                   |             |
+| gemini-3-flash-preview.enabled                                      | bool   | `false`                                      |             |
+| gemini-3-flash-preview.lifecyclePhase                               | string | `"ACTIVE"`                                   |             |
 | gliner-large-v2-1.enabled                                           | bool   | `false`                                      |             |
 | gpt-4-1-2025-04-14.enabled                                          | bool   | `false`                                      |             |
 | gpt-4-1-2025-04-14.lifecyclePhase                                   | string | `"ACTIVE"`                                   |             |
