@@ -1,0 +1,18 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen-image
+  namespace: qwen-image
+spec:
+  model:
+    # References the ClusterBaseModel defined in config/models/Qwen/Qwen-Image.yaml
+    name: qwen-image
+    # Kind/APIGroup default to ClusterBaseModel/ome.io; override here only if you create a namespaced BaseModel.
+  runtime:
+    name: srt-qwen-image
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1

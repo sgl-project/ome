@@ -84,6 +84,56 @@ spec:
                 x-kubernetes-list-type: atomic
               compartmentID:
                 type: string
+              diffusionPipeline:
+                properties:
+                  additionalComponents:
+                    additionalProperties:
+                      properties:
+                        library:
+                          type: string
+                        type:
+                          type: string
+                      type: object
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  className:
+                    type: string
+                  scheduler:
+                    properties:
+                      library:
+                        type: string
+                      type:
+                        type: string
+                    type: object
+                  textEncoder:
+                    properties:
+                      library:
+                        type: string
+                      type:
+                        type: string
+                    type: object
+                  tokenizer:
+                    properties:
+                      library:
+                        type: string
+                      type:
+                        type: string
+                    type: object
+                  transformer:
+                    properties:
+                      library:
+                        type: string
+                      type:
+                        type: string
+                    type: object
+                  vae:
+                    properties:
+                      library:
+                        type: string
+                      type:
+                        type: string
+                    type: object
+                type: object
               disabled:
                 type: boolean
               displayName:

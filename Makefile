@@ -548,144 +548,79 @@ artifacts: kustomize ## Generate artifacts for release.
 
 ##@ 🧪 Testing
 
-# Define test packages with proper exclusions
-TEST_PACKAGES := $(shell go list ./... | grep -v -E '(pkg/apis|pkg/testing|pkg/openapi|pkg/client)')
-CMD_PACKAGES := $(shell go list ./cmd/...)
+# --- Configuration ---
+GOTOOLCHAIN      ?= go1.25.0+auto # https://github.com/golang/go/issues/75031
+XET_LIB_PATH     := $(shell pwd)/pkg/xet/target/release
+EXCLUDE_PATTERNS := "pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/|pkg/hfutil/modelconfig/examples/|pkg/hfutil/hub/samples/"
+
+# Define test packages
+TEST_PACKAGES     := $(shell go list ./... | grep -v -E '(pkg/apis|pkg/testing|pkg/openapi|pkg/client)')
+CMD_PACKAGES      := $(shell go list ./cmd/...)
 CMD_PACKAGES_NO_XET := $(shell go list ./cmd/... | grep -v './cmd/ome-agent')
-PKG_PACKAGES := $(shell go list ./pkg/... | grep -v -E '(pkg/testing|pkg/openapi|pkg/client|pkg/xet)')
+PKG_PACKAGES      := $(shell go list ./pkg/... | grep -v -E '(pkg/testing|pkg/openapi|pkg/client|pkg/xet)')
 INTERNAL_PACKAGES := $(shell go list ./internal/...)
 
+# Centralized Environment
+TEST_ENV = \
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" \
+	LD_LIBRARY_PATH="$(XET_LIB_PATH):$$LD_LIBRARY_PATH" \
+	DYLD_LIBRARY_PATH="$(XET_LIB_PATH):$$DYLD_LIBRARY_PATH" \
+	GOTOOLCHAIN=$(GOTOOLCHAIN)
+
+# --- Reusable Test Macro ---
+# $(1): Package list variable
+# $(2): Output suffix (e.g., cmd, pkg, internal)
+# $(3): Optional suffix for filename (e.g., -no-xet)
+define run_go_test
+	@echo "🧪 Running $(2) tests $(3)..."
+	@$(TEST_ENV) $(GO_CMD) test $(1) \
+		-coverprofile=coverage-$(2)$(3).out.tmp \
+		--covermode=atomic
+	@grep -v -E $(EXCLUDE_PATTERNS) coverage-$(2)$(3).out.tmp > coverage-$(2)$(3).out
+	@rm coverage-$(2)$(3).out.tmp
+	@echo "✅ $(2) tests passed $(3)"
+endef
+
 .PHONY: xet-build
-xet-build: ## 🔧 Build XET library for ome-agent dependency
+xet-build: ## 🔧 Build XET library
 	@echo "🔧 Building XET library..."
 	@cd pkg/xet && $(MAKE) build
 	@echo "✅ XET library built"
 
 .PHONY: test
-test: fmt vet manifests envtest xet-build ## 🧪 Run all tests with coverage (optimized - runs dependencies once)
-	@echo "\n🧪 Running comprehensive test suite..."
-	@echo "📋 Test scope:"
-	@echo "  • CMD packages: $(words $(CMD_PACKAGES)) packages"
-	@echo "  • PKG packages: $(words $(PKG_PACKAGES)) packages" 
-	@echo "  • Internal packages: $(words $(INTERNAL_PACKAGES)) packages"
-	@echo "  • Excluded: pkg/apis, pkg/testing, pkg/openapi, pkg/client, pkg/xet"
-	@echo ""
-	
-	@echo "🧪 Running command tests..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" \
-    	LD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$LD_LIBRARY_PATH" \
-    	DYLD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$DYLD_LIBRARY_PATH" \
-    	$(GO_CMD) test \
-		$(CMD_PACKAGES) \
-		-coverprofile=coverage-cmd.out.tmp \
-		--covermode=atomic
-	@echo "🔍 Filtering CMD coverage report..."
-	@cat coverage-cmd.out.tmp | grep -v -E "(pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/)" > coverage-cmd.out
-	@rm coverage-cmd.out.tmp
-	@echo "✅ Command tests passed"
-	
-	@echo "\n🧪 Running package tests..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" \
-		LD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$LD_LIBRARY_PATH" \
-		DYLD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$DYLD_LIBRARY_PATH" \
-		$(GO_CMD) test \
-		$(PKG_PACKAGES) \
-		-coverprofile=coverage-pkg.out.tmp \
-		--covermode=atomic
-	@echo "🔍 Filtering PKG coverage report..."
-	@cat coverage-pkg.out.tmp | grep -v -E "(pkg/hfutil/modelconfig/examples/|pkg/hfutil/hub/samples/|pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/openapi/|pkg/client/)" > coverage-pkg.out
-	@rm coverage-pkg.out.tmp
-	@echo "✅ Package tests passed"
-	
-	@echo "\n🧪 Running internal tests..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" \
-		LD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$LD_LIBRARY_PATH" \
-		DYLD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$DYLD_LIBRARY_PATH" \
-		$(GO_CMD) test \
-		$(INTERNAL_PACKAGES) \
-		-coverprofile=coverage-internal.out.tmp \
-		--covermode=atomic
-	@echo "🔍 Filtering Internal coverage report..."
-	@cat coverage-internal.out.tmp | grep -v -E "(pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/)" > coverage-internal.out
-	@rm coverage-internal.out.tmp
-	@echo "✅ Internal tests passed"
-	
+test: fmt vet manifests envtest xet-build ## 🧪 Run all tests with coverage
+	@echo "\n🧪 Running comprehensive test suite (Toolchain: $(GOTOOLCHAIN))..."
+	$(call run_go_test,$(CMD_PACKAGES),cmd)
+	$(call run_go_test,$(PKG_PACKAGES),pkg)
+	$(call run_go_test,$(INTERNAL_PACKAGES),internal)
 	@echo "\n🎉 All tests completed successfully!"
 
 .PHONY: test-no-xet
-test-no-xet: fmt vet manifests envtest ## 🧪 Run tests excluding ome-agent (for environments without Rust)
-	@echo "\n🧪 Running test suite (excluding ome-agent)..."
-	@echo "📋 Test scope:"
-	@echo "  • CMD packages (no ome-agent): $(words $(CMD_PACKAGES_NO_XET)) packages"
-	@echo "  • PKG packages: $(words $(PKG_PACKAGES)) packages"
-	@echo "  • Internal packages: $(words $(INTERNAL_PACKAGES)) packages"
-	@echo "  • Excluded: pkg/apis, pkg/testing, pkg/openapi, pkg/client, pkg/xet, cmd/ome-agent"
-	@echo ""
-
-	@echo "🧪 Running command tests (excluding ome-agent)..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" \
-	LD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$LD_LIBRARY_PATH" \
-	DYLD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$DYLD_LIBRARY_PATH" \
-	$(GO_CMD) test \
-		$(CMD_PACKAGES_NO_XET) \
-		-coverprofile=coverage-cmd-no-xet.out.tmp \
-		--covermode=atomic
-	@echo "🔍 Filtering CMD coverage report..."
-	@cat coverage-cmd-no-xet.out.tmp | grep -v -E "(pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/)" > coverage-cmd-no-xet.out
-	@rm coverage-cmd-no-xet.out.tmp
-	@echo "✅ Command tests passed (excluding ome-agent)"
-
-	@echo "\n🧪 Running package tests..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" \
-	LD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$LD_LIBRARY_PATH" \
-	DYLD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$DYLD_LIBRARY_PATH" \
-	$(GO_CMD) test \
-		$(PKG_PACKAGES) \
-		-coverprofile=coverage-pkg-no-xet.out.tmp \
-		--covermode=atomic
-	@echo "🔍 Filtering PKG coverage report..."
-	@cat coverage-pkg-no-xet.out.tmp | grep -v -E "(pkg/hfutil/modelconfig/examples/|pkg/hfutil/hub/samples/|pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/openapi/|pkg/client/)" > coverage-pkg-no-xet.out
-	@rm coverage-pkg-no-xet.out.tmp
-	@echo "✅ Package tests passed"
-
-	@echo "\n🧪 Running internal tests..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" \
-	LD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$LD_LIBRARY_PATH" \
-	DYLD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$DYLD_LIBRARY_PATH" \
-	$(GO_CMD) test \
-		$(INTERNAL_PACKAGES) \
-		-coverprofile=coverage-internal-no-xet.out.tmp \
-		--covermode=atomic
-	@echo "🔍 Filtering Internal coverage report..."
-	@cat coverage-internal-no-xet.out.tmp | grep -v -E "(pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/)" > coverage-internal-no-xet.out
-	@rm coverage-internal-no-xet.out.tmp
-	@echo "✅ Internal tests passed"
-
+test-no-xet: fmt vet manifests envtest ## 🧪 Run tests excluding ome-agent
+	@echo "\n🧪 Running test suite (excluding ome-agent, Toolchain: $(GOTOOLCHAIN))..."
+	$(call run_go_test,$(CMD_PACKAGES_NO_XET),cmd,-no-xet)
+	$(call run_go_test,$(PKG_PACKAGES),pkg,-no-xet)
+	$(call run_go_test,$(INTERNAL_PACKAGES),internal,-no-xet)
 	@echo "\n🎉 All tests completed successfully (excluding ome-agent)!"
 
 .PHONY: coverage
-coverage: ## Show coverage for all packages
+coverage: ## Show coverage summary and enforce threshold
 	@echo "\n---------- Coverage Summary ----------"
-	@echo "CMD Coverage:"
-	@go tool cover -func=coverage-cmd.out | grep -v "100.0%"
-	@echo "\nPKG Coverage:"
-	@go tool cover -func=coverage-pkg.out | grep -v "100.0%"
-	@echo "\nInternal Coverage:"
-	@go tool cover -func=coverage-internal.out | grep -v "100.0%"
+	@for part in cmd pkg internal; do \
+		echo "\n$$part Coverage:"; \
+		go tool cover -func=coverage-$$part.out | grep -v "100.0%"; \
+	done
 	@echo "\nTotal Coverage:"
 	@cmd_cov=$$(go tool cover -func=coverage-cmd.out | grep total | awk '{sub(/%/,"",$$3); print $$3}'); \
 	pkg_cov=$$(go tool cover -func=coverage-pkg.out | grep total | awk '{sub(/%/,"",$$3); print $$3}'); \
 	int_cov=$$(go tool cover -func=coverage-internal.out | grep total | awk '{sub(/%/,"",$$3); print $$3}'); \
-	echo "CMD: $$cmd_cov%"; \
-	echo "PKG: $$pkg_cov%"; \
-	echo "Internal: $$int_cov%"; \
+	echo "CMD: $$cmd_cov%"; echo "PKG: $$pkg_cov%"; echo "Internal: $$int_cov%"; \
 	avg_cov=$$(awk "BEGIN {printf \"%.2f\", ($$cmd_cov + $$pkg_cov + $$int_cov) / 3}"); \
 	echo "\nAverage Coverage: $$avg_cov%"; \
 	if awk "BEGIN {exit !($$avg_cov < 48)}"; then \
-		echo "Average coverage $$avg_cov% is below minimum threshold of 48%"; \
+		echo "❌ Average coverage $$avg_cov% is below threshold of 48%"; \
 		exit 1; \
 	fi
-
 .PHONY: integration-test
 integration-test: fmt vet manifests envtest ## 🧪 Run integration tests
 	@echo "🧪 Running integration tests..."

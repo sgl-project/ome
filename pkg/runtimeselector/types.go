@@ -73,6 +73,9 @@ type MatchDetails struct {
 	// ArchitectureMatch indicates if the model architecture is compatible
 	ArchitectureMatch bool
 
+	// DiffusionPipelineMatch indicates if the diffusion pipeline metadata is compatible
+	DiffusionPipelineMatch bool
+
 	// QuantizationMatch indicates if the model quantization is compatible
 	QuantizationMatch bool
 

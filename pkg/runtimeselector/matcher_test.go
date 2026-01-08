@@ -269,6 +269,143 @@ func TestRuntimeSupportsModel(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "diffusion pipeline match",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "diffusers",
+					Version: strPtr("1.0.0"),
+				},
+				DiffusionPipeline: &v1beta1.DiffusionPipelineSpec{
+					ClassName: strPtr("QwenImagePipeline"),
+					Scheduler: &v1beta1.DiffusionComponentSpec{
+						Library: "diffusers",
+						Type:    "FlowMatchEulerDiscreteScheduler",
+					},
+				},
+			},
+			srSpec: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						Name: "diffusers",
+						ModelFormat: &v1beta1.ModelFormat{
+							Name:    "diffusers",
+							Version: strPtr("1.0.0"),
+						},
+						DiffusionPipeline: &v1beta1.DiffusionPipelineSpec{
+							ClassName: strPtr("QwenImagePipeline"),
+							Scheduler: &v1beta1.DiffusionComponentSpec{
+								Library: "diffusers",
+								Type:    "FlowMatchEulerDiscreteScheduler",
+							},
+						},
+					},
+				},
+			},
+			runtimeName: "diffusion-runtime",
+			expectError: false,
+		},
+		{
+			name: "diffusion pipeline runtime wildcard requirements",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "diffusers",
+					Version: strPtr("1.0.0"),
+				},
+				DiffusionPipeline: &v1beta1.DiffusionPipelineSpec{
+					ClassName: strPtr("QwenImagePipeline"),
+					Scheduler: &v1beta1.DiffusionComponentSpec{
+						Library: "diffusers",
+						Type:    "FlowMatchEulerDiscreteScheduler",
+					},
+				},
+			},
+			srSpec: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						Name: "diffusers",
+						ModelFormat: &v1beta1.ModelFormat{
+							Name:    "diffusers",
+							Version: strPtr("1.0.0"),
+						},
+						DiffusionPipeline: &v1beta1.DiffusionPipelineSpec{
+							Scheduler: &v1beta1.DiffusionComponentSpec{
+								Library: "diffusers",
+							},
+						},
+					},
+				},
+			},
+			runtimeName: "diffusion-runtime",
+			expectError: false,
+		},
+		{
+			name: "diffusion pipeline runtime with no requirements",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "diffusers",
+					Version: strPtr("1.0.0"),
+				},
+				DiffusionPipeline: &v1beta1.DiffusionPipelineSpec{
+					ClassName: strPtr("QwenImagePipeline"),
+					Scheduler: &v1beta1.DiffusionComponentSpec{
+						Library: "diffusers",
+						Type:    "FlowMatchEulerDiscreteScheduler",
+					},
+				},
+			},
+			srSpec: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						Name: "diffusers",
+						ModelFormat: &v1beta1.ModelFormat{
+							Name:    "diffusers",
+							Version: strPtr("1.0.0"),
+						},
+						DiffusionPipeline: &v1beta1.DiffusionPipelineSpec{},
+					},
+				},
+			},
+			runtimeName: "diffusion-runtime",
+			expectError: false,
+		},
+		{
+			name: "diffusion pipeline mismatch",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "diffusers",
+					Version: strPtr("1.0.0"),
+				},
+				DiffusionPipeline: &v1beta1.DiffusionPipelineSpec{
+					ClassName: strPtr("QwenImagePipeline"),
+					Scheduler: &v1beta1.DiffusionComponentSpec{
+						Library: "diffusers",
+						Type:    "FlowMatchEulerDiscreteScheduler",
+					},
+				},
+			},
+			srSpec: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						Name: "diffusers",
+						ModelFormat: &v1beta1.ModelFormat{
+							Name:    "diffusers",
+							Version: strPtr("1.0.0"),
+						},
+						DiffusionPipeline: &v1beta1.DiffusionPipelineSpec{
+							ClassName: strPtr("StableDiffusionPipeline"),
+							Scheduler: &v1beta1.DiffusionComponentSpec{
+								Library: "diffusers",
+								Type:    "DPMSolverMultistepScheduler",
+							},
+						},
+					},
+				},
+			},
+			runtimeName:   "diffusion-runtime",
+			expectError:   true,
+			errorContains: "pipeline class mismatch",
+		},
+		{
 			name: "empty supported formats",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
