@@ -1038,7 +1038,6 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 					s.logger.Warnf("Failed to update download progress for %s: %v", modelInfo, err)
 				}
 			}()
-			artifact = s.modelConfigParser.buildArtifactAttribute(shaStr, s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel), destPath)
 		}
 
 		// Perform snapshot download with progress tracking
@@ -1063,6 +1062,7 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 
 		s.logger.Infof("Successfully downloaded HuggingFace model %s to %s",
 			modelInfo, downloadPath)
+		artifact = s.modelConfigParser.buildArtifactAttribute(shaStr, s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel), destPath)
 	}
 
 	// Parse model config and update ConfigMap
@@ -1097,7 +1097,7 @@ Returns:
   - matchedParentPath: the value of config.artifact.parentPath extracted from the matched entry
 */
 func (s *Gopher) handelReuseArtifactIfNecessary(ctx context.Context, baseModelSpec v1beta1.BaseModelSpec,
-	modelType string, modelName string, namespace string, shaStr string) (string, string) {
+	modelType string, modelName string, namespace string, shaStr string, currentModelTypeAndNodeName string) (string, string) {
 	// check whether identical artifact is already existing if model specified with ReuseIfExists
 	if baseModelSpec.Storage.DownloadPolicy != nil && *baseModelSpec.Storage.DownloadPolicy == v1beta1.ReuseIfExists {
 		var matchedModelTypeAndModelName string
@@ -1106,7 +1106,7 @@ func (s *Gopher) handelReuseArtifactIfNecessary(ctx context.Context, baseModelSp
 		// prioritize searching parent path in ClusterBaseModel
 		// with hoping different basemodel in different namespaces could be linked to the same parent path to lower the chance of downloading artifact
 		if strings.ToLower(modelType) == strings.ToLower(constants.ClusterBaseModel) || strings.ToLower(modelType) == strings.ToLower(constants.BaseModel) {
-			matchedModelTypeAndModelName, matchedParentPath, err = s.configMapReconciler.getModelDataByArtifactSha(ctx, shaStr, constants.LowerCaseClusterBaseModel)
+			matchedModelTypeAndModelName, matchedParentPath, err = s.configMapReconciler.getModelDataByArtifactSha(ctx, shaStr, constants.LowerCaseClusterBaseModel, currentModelTypeAndNodeName)
 			if err != nil {
 				s.logger.Warnf("get error when finding matched model in configmap for model : %s: %s", modelName, err)
 			}
@@ -1114,7 +1114,7 @@ func (s *Gopher) handelReuseArtifactIfNecessary(ctx context.Context, baseModelSp
 		if strings.ToLower(modelType) == strings.ToLower(constants.BaseModel) && matchedModelTypeAndModelName == "" {
 			// build namespaced model type
 			namespacedModelType := fmt.Sprintf("%s.%s", namespace, constants.LowerCaseBaseModel)
-			matchedModelTypeAndModelName, matchedParentPath, err = s.configMapReconciler.getModelDataByArtifactSha(ctx, shaStr, namespacedModelType)
+			matchedModelTypeAndModelName, matchedParentPath, err = s.configMapReconciler.getModelDataByArtifactSha(ctx, shaStr, namespacedModelType, currentModelTypeAndNodeName)
 			if err != nil {
 				s.logger.Warnf("get error when finding matched model in configmap for model : %s: %s", modelName, err)
 			}
@@ -1225,8 +1225,8 @@ func (s *Gopher) isEligibleForOptimization(ctx context.Context, task *GopherTask
 	}
 
 	currentModelTypeAndNodeName := s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel)
-	matchedModelTypeAndModeName, parentPath := s.handelReuseArtifactIfNecessary(ctx, baseModelSpec, modelType, modelName, namespace, shaStr)
-	isEligible := matchedModelTypeAndModeName != "" && strings.ToLower(currentModelTypeAndNodeName) != strings.ToLower(matchedModelTypeAndModeName)
+	matchedModelTypeAndModeName, parentPath := s.handelReuseArtifactIfNecessary(ctx, baseModelSpec, modelType, modelName, namespace, shaStr, currentModelTypeAndNodeName)
+	isEligible := matchedModelTypeAndModeName != ""
 	s.logger.Infof("found matched matchedModelTypeAndModeName %s for model %s, parentPath is %s, isEligible %t", matchedModelTypeAndModeName, modelName, parentPath, isEligible)
 	return isEligible, matchedModelTypeAndModeName, parentPath
 }

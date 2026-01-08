@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -937,11 +936,6 @@ func (c *ConfigMapReconciler) updateConfigMapWithRetry(ctx context.Context, upda
 			return err
 		}
 
-		if reflect.DeepEqual(latestCM, updatedConfigmap) {
-			c.logger.Debugf("No changes detected for ConfigMap %s/%s; skipping update", c.namespace, c.nodeName)
-			return nil
-		}
-
 		// Update with the merged data
 		_, updateErr := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Update(ctx, updatedConfigmap, metav1.UpdateOptions{})
 		if updateErr != nil {
@@ -975,18 +969,20 @@ func getConfigMapModelInfo(baseModel *v1beta1.BaseModel, clusterBaseModel *v1bet
 
 /*
 FindMatchedModelFromConfigMap scans the provided ConfigMap Data for the first entry
-whose key has the provided modelType and whose JSON value contains config.artifact.sha equal to targetSha.
+whose key has the provided namespaced modelType and whose JSON value contains config.artifact.sha equal to targetSha and has the most children paths(Exclude self).
 
 Returns:
-  - modelKey:   The matched ConfigMap Data key (modelType + model identifier).
+  - modelKey:   The parent of the matched ConfigMap Data key (modelType + model identifier).
   - parentPath: The value of config.artifact.parentPath for the matched entry.
   - err:        The last JSON parsing error encountered during scanning; nil if none.
 */
-// TODO: Further Potential optimization could be to retrieve the matched model with the most children paths hoping concentrating on several parent paths
-func (c *ConfigMapReconciler) FindMatchedModelFromConfigMap(configMap *corev1.ConfigMap, targetSha string, modelType string) (string, string, error) {
+func (c *ConfigMapReconciler) FindMatchedModelFromConfigMap(configMap *corev1.ConfigMap, targetSha string, modelType string, currentModelTypeAndNodeName string) (string, string, error) {
 	var searchingError error // the last
-	for modelTypeAndModelName, jsonStr := range configMap.Data {
-		if !strings.HasPrefix(strings.ToLower(modelTypeAndModelName), strings.ToLower(modelType)) {
+
+	var matchedParentName, matchedParentPath string
+	var matchedParentChildrenNum = -1
+	for modelKey, jsonStr := range configMap.Data {
+		if !strings.HasPrefix(strings.ToLower(modelKey), strings.ToLower(modelType)) {
 			continue
 		}
 		// parsed JSON for this entry
@@ -1026,20 +1022,44 @@ func (c *ConfigMapReconciler) FindMatchedModelFromConfigMap(configMap *corev1.Co
 			continue
 		}
 
-		var matchedParentName, matchedParentPath string
 		for k, v := range rawParent {
 			path, ok := v.(string)
 			if !ok {
 				searchingError = fmt.Errorf("parentPath value for %q is not a string", k)
 				continue
 			}
-			matchedParentName = k
-			matchedParentPath = path
-		}
+			if strings.ToLower(k) == strings.ToLower(currentModelTypeAndNodeName) {
+				continue
+			}
 
-		return matchedParentName, matchedParentPath, nil
+			childrenNum := len(extractChildrenPaths(artifact))
+			if childrenNum > matchedParentChildrenNum {
+				matchedParentChildrenNum = childrenNum
+				matchedParentName = k
+				matchedParentPath = path
+			}
+		}
 	}
-	return "", "", searchingError
+	c.logger.Infof("matchedParentName: %s, matchedParentPath: %s", matchedParentName, matchedParentPath)
+	return matchedParentName, matchedParentPath, searchingError
+}
+
+func extractChildrenPaths(artifact map[string]interface{}) []string {
+	// Read childrenPaths leniently and convert to []string
+	children := make([]string, 0)
+	if rawChildren, exists := artifact[ChildrenPathsAttr]; exists {
+		switch vv := rawChildren.(type) {
+		case []interface{}:
+			for _, v := range vv {
+				if s, ok := v.(string); ok {
+					children = append(children, s)
+				}
+			}
+		case []string:
+			children = append(children, vv...)
+		}
+	}
+	return children
 }
 
 // getModelDataByArtifactSha fetches the node-scoped ConfigMap (namespace "ome", name c.nodeName) and searches it for a model entry whose artifact SHA equals
@@ -1048,7 +1068,7 @@ func (c *ConfigMapReconciler) FindMatchedModelFromConfigMap(configMap *corev1.Co
 // - modelKey:   The matched ConfigMap Data key (modelType + model identifier).
 // - parentPath: The value of config.artifact.parentPath for the matched entry.
 // - err:        The last JSON parsing error encountered during scanning; nil if none.
-func (c *ConfigMapReconciler) getModelDataByArtifactSha(ctx context.Context, targetSha string, modelType string) (string, string, error) {
+func (c *ConfigMapReconciler) getModelDataByArtifactSha(ctx context.Context, targetSha string, modelType string, currentModelTypeAndNodeName string) (string, string, error) {
 	cm, err := c.kubeClient.CoreV1().ConfigMaps("ome").Get(ctx, c.nodeName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -1059,7 +1079,7 @@ func (c *ConfigMapReconciler) getModelDataByArtifactSha(ctx context.Context, tar
 		c.logger.Errorf("Failed to get ConfigMap %s: %v", c.nodeName, err)
 		return "", "", fmt.Errorf("failed to get ConfigMap %s: %v", c.nodeName, err)
 	}
-	return c.FindMatchedModelFromConfigMap(cm, targetSha, modelType)
+	return c.FindMatchedModelFromConfigMap(cm, targetSha, modelType, currentModelTypeAndNodeName)
 }
 
 // addPathToChildrenPaths appends newPath to the config.artifact.childrenPaths array if the newPath is not contained in the children paths
@@ -1134,20 +1154,7 @@ func (c *ConfigMapReconciler) getParentPathAndChildrenPaths(modelTypeAndModelNam
 		return make(map[string]string), []string{}, fmt.Errorf("invalid artifact conversion")
 	}
 
-	// Read childrenPaths leniently and convert to []string
-	children := make([]string, 0)
-	if rawChildren, exists := artifact[ChildrenPathsAttr]; exists {
-		switch vv := rawChildren.(type) {
-		case []interface{}:
-			for _, v := range vv {
-				if s, ok := v.(string); ok {
-					children = append(children, s)
-				}
-			}
-		case []string:
-			children = append(children, vv...)
-		}
-	}
+	children := extractChildrenPaths(artifact)
 
 	// Read childrenPaths leniently and convert to []string
 	parentPath := make(map[string]string)

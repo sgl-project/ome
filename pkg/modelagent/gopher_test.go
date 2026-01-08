@@ -679,7 +679,7 @@ func TestHandelReuseArtifactIfNecessary_NoReusePolicy(t *testing.T) {
 		},
 	}
 
-	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "ClusterBaseModel", "foo", "", "abc123")
+	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "ClusterBaseModel", "foo", "", "abc123", "ClusterBaseModel.foo")
 	assert.Empty(t, key)
 	assert.Empty(t, parent)
 }
@@ -701,7 +701,7 @@ func TestHandelReuseArtifactIfNecessary_HasMatchedEntry(t *testing.T) {
 		},
 	}
 
-	matchedKey, matchedParentPath := g.handelReuseArtifactIfNecessary(context.Background(), spec, "ClusterBaseModel", "model1", "", "abc123")
+	matchedKey, matchedParentPath := g.handelReuseArtifactIfNecessary(context.Background(), spec, "ClusterBaseModel", "model1", "", "abc123", "ClusterBaseModel.model1")
 	assert.Equal(t, expectParentName, matchedKey)
 	assert.Equal(t, expectedParentPath, matchedParentPath)
 }
@@ -727,7 +727,7 @@ func TestHandelReuseArtifactIfNecessary_BaseModelPrefersClusterBaseModelWhenBoth
 		},
 	}
 
-	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "BaseModel", "newModel", "namespace", sha)
+	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "BaseModel", "newModel", "namespace", sha, "namespace.BaseModel.newModel")
 	assert.Equal(t, clusterParentName, key)
 	assert.Equal(t, clusterParentPath, parent)
 }
@@ -751,7 +751,7 @@ func TestHandelReuseArtifactIfNecessary_BaseModelFallbackToNamespaceScoped(t *te
 		},
 	}
 
-	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "BaseModel", "name", "namespace", sha)
+	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "BaseModel", "name", "namespace", sha, "namespace.BaseModel.name")
 	assert.Equal(t, "namespace.basemodel.Parent", key)
 	assert.Equal(t, baseModelParentPath, parent)
 }
@@ -770,7 +770,7 @@ func TestHandelReuseArtifactIfNecessary_NoMatchReturnsEmpty(t *testing.T) {
 		},
 	}
 
-	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "BaseModel", "name", "namespace", "non-existent-sha")
+	key, parent := g.handelReuseArtifactIfNecessary(context.Background(), spec, "BaseModel", "name", "namespace", "non-existent-sha", "namespace.BaseModel.name")
 	assert.Empty(t, key)
 	assert.Empty(t, parent)
 }
@@ -921,10 +921,10 @@ func TestIsEligibleForOptimization_MatchedSameKeyNotEligible(t *testing.T) {
 		},
 	}
 
-	eligible, key, parentPath := g.isEligibleForOptimization(context.Background(), task, spec, "ClusterBaseModel", "", true, "123abc", "modelName")
+	eligible, key, actualParentPath := g.isEligibleForOptimization(context.Background(), task, spec, "ClusterBaseModel", "", true, "123abc", "model1")
 	assert.False(t, eligible, "same key should not be eligible for reuse")
-	assert.Equal(t, expectedKey, key)
-	assert.Equal(t, parentPath, parentPath)
+	assert.Empty(t, key)
+	assert.Empty(t, actualParentPath)
 }
 
 func TestIsEligibleForOptimization_NoMatch(t *testing.T) {

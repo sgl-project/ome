@@ -751,19 +751,6 @@ func TestReconcileConfigMaps(t *testing.T) {
 	}
 }
 
-func buildJSONWith(sha, parentName string, parentPath string) string {
-	obj := map[string]interface{}{
-		ConfigAttr: map[string]interface{}{
-			ArtifactAttr: map[string]interface{}{
-				ShaAttr:        sha,
-				ParentPathAttr: map[string]string{parentName: parentPath},
-			},
-		},
-	}
-	b, _ := json.Marshal(obj)
-	return string(b)
-}
-
 func TestFindMatchedModelFromConfigMap_FindsMatch_Self(t *testing.T) {
 	reconciler, _, _ := setupConfigMapTest(t)
 	t.Parallel()
@@ -776,10 +763,10 @@ func TestFindMatchedModelFromConfigMap_FindsMatch_Self(t *testing.T) {
 		},
 	}
 
-	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "abc123", "namespace.basemodel")
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "abc123", "namespace.basemodel", "namespace.basemodel.model2")
 
-	assert.Equal(t, "namespace.basemodel.model2", modelKey)
-	assert.Equal(t, "/models/model2", parent)
+	assert.Empty(t, modelKey)
+	assert.Empty(t, parent)
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -798,10 +785,46 @@ func TestFindMatchedModelFromConfigMap_FindsMatch_Other_Parent(t *testing.T) {
 		},
 	}
 
-	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "abc123", "namespace.basemodel")
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "abc123", "namespace.basemodel", "namespace.basemodel.modelZ")
 
 	assert.Equal(t, "namespace.basemodel.modelY", modelKey)
 	assert.Equal(t, "/models/modelY", parent)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestFindMatchedModelFromConfigMap_FindsSeveralMatch_DifferentChildrenNum(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+	t.Parallel()
+
+	obj := map[string]interface{}{
+		ConfigAttr: map[string]interface{}{
+			ArtifactAttr: map[string]interface{}{
+				ShaAttr:           "abc123",
+				ParentPathAttr:    map[string]string{"namespace.basemodel.modelM": "/models/modelM"},
+				ChildrenPathsAttr: []string{"/child1", "/child2"},
+			},
+		},
+	}
+	modelByte, _ := json.Marshal(obj)
+	modelStr := string(modelByte)
+
+	cm := &corev1.ConfigMap{
+		Data: map[string]string{
+			"clusterbasemodel.model1":    buildJSONWith("zzz999", "clusterbasemodel.modelX", "/models/modelX"),
+			"namespace.basemodel.model2": buildJSONWith("abc123", "namespace.basemodel.modelY", "/models/modelY"),
+			// Include an invalid JSON that should be ignored
+			"clusterbasemodel.invalid-model": "{not-json",
+			"namespace.basemodel.model3":     modelStr,
+		},
+	}
+
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "abc123", "namespace.basemodel", "namespace.basemodel.model0")
+
+	assert.Equal(t, "namespace.basemodel.modelM", modelKey)
+	assert.Equal(t, "/models/modelM", parent)
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -820,7 +843,7 @@ func TestFindMatchedModelFromConfigMap_NotFound_NoError(t *testing.T) {
 		},
 	}
 
-	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "missing-sha", "clusterbasemodel")
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "missing-sha", "clusterbasemodel", "namespace.basemodel.modelZ")
 	assert.Empty(t, modelKey)
 	assert.Empty(t, parent)
 
@@ -842,7 +865,7 @@ func TestFindMatchedModelFromConfigMap_NotFound_WithInvalidJSON_ReturnsError(t *
 		},
 	}
 
-	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "nope", "namespace.basemodel")
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "nope", "namespace.basemodel", "namespace.basemodel.modelZ")
 	assert.Empty(t, modelKey)
 	assert.Empty(t, parent)
 	if err == nil {
@@ -886,7 +909,7 @@ func TestFindMatchedModelFromConfigMap_SkipsIncompleteEntries(t *testing.T) {
 		},
 	}
 
-	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "target-sha", "namespace.basemodel")
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "target-sha", "namespace.basemodel", "namespace.basemodel.modelZ")
 	assert.Empty(t, modelKey)
 	assert.Empty(t, parent)
 
@@ -907,7 +930,7 @@ func TestFindMatchedModelFromConfigMap_PrefixFilterApplies(t *testing.T) {
 		},
 	}
 
-	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "abc123", "namespace.basemodel")
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "abc123", "namespace.basemodel", "namespace.basemodel.modelZ")
 	assert.Empty(t, modelKey)
 	assert.Empty(t, parent)
 
@@ -937,7 +960,7 @@ func TestFindMatchedModelFromConfigMap_ParentPathConversionFailed(t *testing.T) 
 		},
 	}
 
-	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "abc123", "clusterbasemodel")
+	modelKey, parent, err := reconciler.FindMatchedModelFromConfigMap(cm, "abc123", "clusterbasemodel", "namespace.basemodel.modelZ")
 	assert.Empty(t, modelKey)
 	assert.Empty(t, parent)
 
@@ -1769,4 +1792,17 @@ func TestUpdateConfigMapWithRetry_UpdateError(t *testing.T) {
 	got, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
 	assert.NoError(t, err)
 	assert.Equal(t, "v1", got.Data["k"])
+}
+
+func buildJSONWith(sha, parentName string, parentPath string) string {
+	obj := map[string]interface{}{
+		ConfigAttr: map[string]interface{}{
+			ArtifactAttr: map[string]interface{}{
+				ShaAttr:        sha,
+				ParentPathAttr: map[string]string{parentName: parentPath},
+			},
+		},
+	}
+	b, _ := json.Marshal(obj)
+	return string(b)
 }
