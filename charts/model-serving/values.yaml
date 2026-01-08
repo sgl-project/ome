@@ -105,10 +105,39 @@ cohere:
     prometheus.io/scrape: 'true'
     ome.io/disable-blocklist: 'true'
     ome.io/inject-model-init: 'true'
-  
+
   commonLabels:
     logging-forward: enabled
     sidecar.istio.io/inject: 'true'
+
+  blocklistOverride:
+    enabled: true
+    annotations:
+      ome.io/blocklist-input: ''
+      ome.io/blocklist-output: ''
+    volumes:
+      - name: blocklist
+        projected:
+          sources:
+            - downwardAPI:
+                items:
+                  - fieldRef:
+                      apiVersion: v1
+                      fieldPath: metadata.annotations['ome.io/blocklist-input']
+                    path: input.txt
+                  - fieldRef:
+                      apiVersion: v1
+                      fieldPath: metadata.annotations['ome.io/blocklist-output']
+                    path: output.txt
+    volumeMounts:
+      - name: blocklist
+        readOnly: true
+        mountPath: /usr/bin/input.txt
+        subPath: input.txt
+      - name: blocklist
+        readOnly: true
+        mountPath: /usr/bin/output.txt
+        subPath: output.txt
 
   port: 8080
   commandRv3Image:

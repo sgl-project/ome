@@ -81,9 +81,14 @@ spec:
       startupProbe:
         {{- toYaml .Values.cohere.startupProbe | nindent 8 }}
   engineConfig:
-    {{- with .Values.cohere.commonAnnotations }}
+    {{- if or .Values.cohere.commonAnnotations .Values.cohere.blocklistOverride.enabled }}
     annotations:
+      {{- with .Values.cohere.commonAnnotations }}
       {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- if .Values.cohere.blocklistOverride.enabled }}
+      {{- toYaml .Values.cohere.blocklistOverride.annotations | nindent 6 }}
+      {{- end }}
     {{- end }}
     {{- with .Values.cohere.commonLabels }}
     labels:
@@ -119,6 +124,9 @@ spec:
           path: /etc/pki
           type: Directory
       {{- end }}
+      {{- if .Values.cohere.blocklistOverride.enabled }}
+      {{- toYaml .Values.cohere.blocklistOverride.volumes | nindent 6 }}
+      {{- end }}
     runner:
       name: ome-container
       image: "{{ .Values.cohere.commandRvNextImage.repository }}:{{ .Values.cohere.commandRvNextImage.tag }}"
@@ -137,6 +145,9 @@ spec:
           name: shared-memory
         - mountPath: /opt/ml/model
           name: model-empty-dir
+        {{- if .Values.cohere.blocklistOverride.enabled }}
+        {{- toYaml .Values.cohere.blocklistOverride.volumeMounts | nindent 8 }}
+        {{- end }}
       readinessProbe:
         {{- toYaml .Values.cohere.readinessProbe | nindent 8 }}
       livenessProbe:

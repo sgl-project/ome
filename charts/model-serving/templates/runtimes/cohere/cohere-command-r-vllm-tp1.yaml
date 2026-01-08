@@ -89,6 +89,9 @@ spec:
       prometheus.io/scrape: 'true'
       ome.io/disable-blocklist: 'true'
       ome.io/inject-model-init: 'true'
+      {{- if .Values.cohere.blocklistOverride.enabled }}
+      {{- toYaml .Values.cohere.blocklistOverride.annotations | nindent 6 }}
+      {{- end }}
     {{- with .Values.cohere.commonLabels }}
     labels:
       {{- toYaml . | nindent 6 }}
@@ -125,6 +128,9 @@ spec:
           path: /etc/pki
           type: Directory
       {{- end }}
+      {{- if .Values.cohere.blocklistOverride.enabled }}
+      {{- toYaml .Values.cohere.blocklistOverride.volumes | nindent 6 }}
+      {{- end }}
     runner:
       name: ome-container
       image: "{{ .Values.cohere.commandRvllmImage.repository }}:{{ .Values.cohere.commandRvllmImage.tag }}"
@@ -143,6 +149,9 @@ spec:
           name: shared-memory
         - mountPath: /opt/ml/model
           name: model-empty-dir
+        {{- if .Values.cohere.blocklistOverride.enabled }}
+        {{- toYaml .Values.cohere.blocklistOverride.volumeMounts | nindent 8 }}
+        {{- end }}
       readinessProbe:
         {{- toYaml .Values.cohere.readinessProbe | nindent 8 }}
       livenessProbe:
