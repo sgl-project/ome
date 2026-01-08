@@ -347,6 +347,24 @@ type ModelStatusSpec struct {
 
 	// +listType=atomic
 	NodesFailed []string `json:"nodesFailed,omitempty"`
+
+	// StorageValidation contains the result of storage URI validation (e.g., HuggingFace model existence check)
+	// +optional
+	StorageValidation *StorageValidationStatus `json:"storageValidation,omitempty"`
+}
+
+// StorageValidationStatus contains validation results for the storage URI
+type StorageValidationStatus struct {
+	// Valid indicates whether the storage URI passed validation
+	Valid bool `json:"valid"`
+
+	// Message provides details about the validation result
+	// +optional
+	Message string `json:"message,omitempty"`
+
+	// LastChecked is the timestamp of the last validation check
+	// +optional
+	LastChecked *metav1.Time `json:"lastChecked,omitempty"`
 }
 
 // BaseModel is the Schema for the basemodels API

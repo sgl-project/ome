@@ -333,12 +333,12 @@ func main() {
 
 		setupLog.Info("Registering BaseModel validator webhook to the webhook server")
 		hookServer.Register("/validate-ome-io-v1beta1-basemodel", &webhook.Admission{
-			Handler: &basemodel.BaseModelValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
+			Handler: &basemodel.BaseModelValidator{Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
 		setupLog.Info("Registering ClusterBaseModel validator webhook to the webhook server")
 		hookServer.Register("/validate-ome-io-v1beta1-clusterbasemodel", &webhook.Admission{
-			Handler: &basemodel.ClusterBaseModelValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
+			Handler: &basemodel.ClusterBaseModelValidator{Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
 		if err = ctrl.NewWebhookManagedBy(mgr).

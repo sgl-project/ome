@@ -196,3 +196,39 @@ func ValidateHuggingFaceStorageURI(ctx context.Context, storageURI string, token
 func IsHuggingFaceURI(storageURI string) bool {
 	return strings.HasPrefix(storageURI, storage.HuggingFaceStoragePrefix)
 }
+
+// ValidateModelIDFormat validates only the format of a HuggingFace model ID in a storage URI
+// This is used for admission webhook validation (fast, no network calls)
+func ValidateModelIDFormat(storageURI string) HuggingFaceValidationResult {
+	result := HuggingFaceValidationResult{
+		Valid:  true,
+		Exists: true, // Assume exists, will be validated later by reconciler
+	}
+
+	// Parse the HuggingFace storage URI
+	components, err := storage.ParseHuggingFaceStorageURI(storageURI)
+	if err != nil {
+		result.Valid = false
+		result.Exists = false
+		result.ErrorMessage = fmt.Sprintf("invalid HuggingFace storage URI: %v", err)
+		return result
+	}
+
+	// Validate model ID format
+	modelID := strings.TrimSpace(components.ModelID)
+	if modelID == "" {
+		result.Valid = false
+		result.Exists = false
+		result.ErrorMessage = "model ID cannot be empty"
+		return result
+	}
+
+	if !modelIdPattern.MatchString(modelID) {
+		result.Valid = false
+		result.Exists = false
+		result.ErrorMessage = fmt.Sprintf("invalid model ID format %q: expected format <organization>/<model>", modelID)
+		return result
+	}
+
+	return result
+}
