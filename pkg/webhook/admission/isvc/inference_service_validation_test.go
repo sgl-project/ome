@@ -325,12 +325,11 @@ func TestInferenceService_AutoscalerValidation(t *testing.T) {
 			errMsg:  "is not a supported metric",
 		},
 		{
-			name: "KEDA autoscaler class",
+			name: "valid KEDA autoscaler class",
 			annotations: map[string]string{
 				constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
 			},
-			wantErr: true, // KEDA is in allowed list but not handled in switch statement
-			errMsg:  "unknown autoscaler class [keda]",
+			wantErr: false,
 		},
 	}
 
@@ -1955,6 +1954,534 @@ func TestValidateInferenceService_ModelExistsIntegration(t *testing.T) {
 			}
 
 			_, err := validator.validateInferenceService(context.Background(), tt.isvc)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// KEDA VALIDATION TESTS
+// =============================================================================
+
+func TestValidateKEDAConfig(t *testing.T) {
+	tests := []struct {
+		name         string
+		isvc         *v1beta1.InferenceService
+		wantErr      bool
+		errMsg       string
+		wantWarnings int
+	}{
+		{
+			name: "no KEDA config - should pass",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid KEDA config with all fields",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					KedaConfig: &v1beta1.KedaConfig{
+						PromServerAddress: "http://prometheus.monitoring.svc:9090",
+						ScalingThreshold:  "10",
+						ScalingOperator:   "GreaterThanOrEqual",
+						AuthModes:         "basic",
+						AuthenticationRef: &v1beta1.ScalerAuthenticationRef{
+							Name: "my-auth",
+							Kind: "TriggerAuthentication",
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid KEDA config with HTTPS Prometheus address",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					KedaConfig: &v1beta1.KedaConfig{
+						PromServerAddress: "https://grafana-cloud.example.com",
+						ScalingThreshold:  "5.5",
+						ScalingOperator:   "LessThan",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid scaling operator in KedaConfig",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					KedaConfig: &v1beta1.KedaConfig{
+						ScalingOperator: "InvalidOperator",
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "invalid KEDA scaling operator",
+		},
+		{
+			name: "invalid scaling operator in annotation",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						constants.AutoscalerClass:     string(constants.AutoscalerClassKEDA),
+						constants.KedaScalingOperator: "BadOperator",
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{},
+			},
+			wantErr: true,
+			errMsg:  "invalid KEDA scaling operator",
+		},
+		{
+			name: "invalid scaling threshold in KedaConfig",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					KedaConfig: &v1beta1.KedaConfig{
+						ScalingThreshold: "not-a-number",
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "invalid KEDA scaling threshold",
+		},
+		{
+			name: "invalid scaling threshold in annotation",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						constants.AutoscalerClass:      string(constants.AutoscalerClassKEDA),
+						constants.KedaScalingThreshold: "abc",
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{},
+			},
+			wantErr: true,
+			errMsg:  "invalid KEDA scaling threshold",
+		},
+		{
+			name: "invalid Prometheus address - no scheme",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					KedaConfig: &v1beta1.KedaConfig{
+						PromServerAddress: "prometheus.monitoring.svc:9090",
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "scheme must be http or https",
+		},
+		{
+			name: "invalid Prometheus address - invalid scheme",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					KedaConfig: &v1beta1.KedaConfig{
+						PromServerAddress: "ftp://prometheus.monitoring.svc:9090",
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "scheme must be http or https",
+		},
+		{
+			name: "invalid Prometheus address in annotation",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						constants.AutoscalerClass:             string(constants.AutoscalerClassKEDA),
+						constants.KedaPrometheusServerAddress: "not-a-valid-url",
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{},
+			},
+			wantErr: true,
+			errMsg:  "invalid KEDA Prometheus server address",
+		},
+		{
+			name: "invalid auth mode",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					KedaConfig: &v1beta1.KedaConfig{
+						AuthModes: "invalid-auth-mode",
+						AuthenticationRef: &v1beta1.ScalerAuthenticationRef{
+							Name: "my-auth",
+						},
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "invalid KEDA auth mode",
+		},
+		{
+			name: "authModes without authenticationRef - should warn",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					KedaConfig: &v1beta1.KedaConfig{
+						AuthModes: "basic",
+						// No AuthenticationRef
+					},
+				},
+			},
+			wantErr:      false,
+			wantWarnings: 1,
+		},
+		{
+			name: "multiple auth modes - valid",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					KedaConfig: &v1beta1.KedaConfig{
+						AuthModes: "tls,basic",
+						AuthenticationRef: &v1beta1.ScalerAuthenticationRef{
+							Name: "my-auth",
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "multiple auth modes with one invalid",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
+					},
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					KedaConfig: &v1beta1.KedaConfig{
+						AuthModes: "basic,invalid",
+						AuthenticationRef: &v1beta1.ScalerAuthenticationRef{
+							Name: "my-auth",
+						},
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "invalid KEDA auth mode",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			warnings, err := validateKEDAConfig(tt.isvc)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+				if tt.wantWarnings > 0 {
+					assert.Len(t, warnings, tt.wantWarnings)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateKEDAScalingOperator(t *testing.T) {
+	validOperators := []string{
+		"GreaterThan",
+		"GreaterThanOrEqual",
+		"LessThan",
+		"LessThanOrEqual",
+	}
+
+	for _, op := range validOperators {
+		t.Run("valid_"+op, func(t *testing.T) {
+			err := validateKEDAScalingOperator(op)
+			assert.NoError(t, err)
+		})
+	}
+
+	invalidOperators := []string{
+		"greaterthan",
+		"GREATERTHAN",
+		"GreaterThanOrEquals",
+		"Equal",
+		"NotEqual",
+		"",
+		">=",
+		"<=",
+	}
+
+	for _, op := range invalidOperators {
+		t.Run("invalid_"+op, func(t *testing.T) {
+			err := validateKEDAScalingOperator(op)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid KEDA scaling operator")
+		})
+	}
+}
+
+func TestValidateKEDAScalingThreshold(t *testing.T) {
+	validThresholds := []string{
+		"10",
+		"0",
+		"-5",
+		"3.14",
+		"0.5",
+		"100.0",
+		"1e10",
+	}
+
+	for _, threshold := range validThresholds {
+		t.Run("valid_"+threshold, func(t *testing.T) {
+			err := validateKEDAScalingThreshold(threshold)
+			assert.NoError(t, err)
+		})
+	}
+
+	invalidThresholds := []string{
+		"not-a-number",
+		"abc",
+		"10abc",
+		"",
+		"10,5",
+	}
+
+	for _, threshold := range invalidThresholds {
+		t.Run("invalid_"+threshold, func(t *testing.T) {
+			err := validateKEDAScalingThreshold(threshold)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid KEDA scaling threshold")
+		})
+	}
+}
+
+func TestValidateKEDAPrometheusServerAddress(t *testing.T) {
+	validAddresses := []string{
+		"http://prometheus.monitoring.svc:9090",
+		"https://grafana-cloud.example.com",
+		"http://localhost:9090",
+		"https://prometheus.example.com:443/api/v1",
+		"http://10.0.0.1:9090",
+	}
+
+	for _, addr := range validAddresses {
+		t.Run("valid_"+addr, func(t *testing.T) {
+			err := validateKEDAPrometheusServerAddress(addr)
+			assert.NoError(t, err)
+		})
+	}
+
+	invalidAddresses := []struct {
+		addr   string
+		errMsg string
+	}{
+		{"prometheus.monitoring.svc:9090", "scheme must be http or https"},
+		{"ftp://prometheus.monitoring.svc:9090", "scheme must be http or https"},
+		{"://prometheus.monitoring.svc:9090", "invalid KEDA Prometheus server address"},
+		{"http://", "host is required"},
+	}
+
+	for _, tc := range invalidAddresses {
+		t.Run("invalid_"+tc.addr, func(t *testing.T) {
+			err := validateKEDAPrometheusServerAddress(tc.addr)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tc.errMsg)
+		})
+	}
+}
+
+func TestValidateKEDAAuthModes(t *testing.T) {
+	validAuthModes := []string{
+		"basic",
+		"tls",
+		"bearer",
+		"custom",
+		"basic,tls",
+		"tls, bearer",
+		"basic, tls, bearer, custom",
+	}
+
+	for _, mode := range validAuthModes {
+		t.Run("valid_"+mode, func(t *testing.T) {
+			err := validateKEDAAuthModes(mode)
+			assert.NoError(t, err)
+		})
+	}
+
+	invalidAuthModes := []string{
+		"invalid",
+		"Basic",
+		"BASIC",
+		"oauth",
+		"basic,invalid",
+		"api-key",
+	}
+
+	for _, mode := range invalidAuthModes {
+		t.Run("invalid_"+mode, func(t *testing.T) {
+			err := validateKEDAAuthModes(mode)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid KEDA auth mode")
+		})
+	}
+
+	// Empty auth modes should pass (empty string, only whitespace)
+	t.Run("empty auth modes", func(t *testing.T) {
+		err := validateKEDAAuthModes("")
+		assert.NoError(t, err)
+	})
+}
+
+func TestInferenceService_KEDAAutoscalerIntegration(t *testing.T) {
+	tests := []struct {
+		name         string
+		annotations  map[string]string
+		kedaConfig   *v1beta1.KedaConfig
+		wantErr      bool
+		errMsg       string
+		wantWarnings int
+	}{
+		{
+			name: "KEDA autoscaler with valid config",
+			annotations: map[string]string{
+				constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
+			},
+			kedaConfig: &v1beta1.KedaConfig{
+				PromServerAddress: "http://prometheus:9090",
+				ScalingThreshold:  "10",
+				ScalingOperator:   "GreaterThanOrEqual",
+			},
+			wantErr: false,
+		},
+		{
+			name: "KEDA autoscaler with invalid operator",
+			annotations: map[string]string{
+				constants.AutoscalerClass: string(constants.AutoscalerClassKEDA),
+			},
+			kedaConfig: &v1beta1.KedaConfig{
+				ScalingOperator: "Invalid",
+			},
+			wantErr: true,
+			errMsg:  "invalid KEDA scaling operator",
+		},
+		{
+			name: "KEDA autoscaler with annotation override",
+			annotations: map[string]string{
+				constants.AutoscalerClass:     string(constants.AutoscalerClassKEDA),
+				constants.KedaScalingOperator: "GreaterThan",
+			},
+			kedaConfig: nil,
+			wantErr:    false,
+		},
+		{
+			name: "KEDA autoscaler with annotation invalid threshold",
+			annotations: map[string]string{
+				constants.AutoscalerClass:      string(constants.AutoscalerClassKEDA),
+				constants.KedaScalingThreshold: "invalid",
+			},
+			kedaConfig: nil,
+			wantErr:    true,
+			errMsg:     "invalid KEDA scaling threshold",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isvc := &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-isvc",
+					Namespace:   "default",
+					Annotations: tt.annotations,
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					KedaConfig: tt.kedaConfig,
+				},
+			}
+
+			err := validateInferenceServiceAutoscaler(isvc)
 
 			if tt.wantErr {
 				assert.Error(t, err)

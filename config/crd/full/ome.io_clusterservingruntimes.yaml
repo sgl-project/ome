@@ -3846,6 +3846,22 @@ spec:
                       x-kubernetes-list-type: map
                     kedaConfig:
                       properties:
+                        authModes:
+                          type: string
+                        authenticationRef:
+                          properties:
+                            kind:
+                              default: TriggerAuthentication
+                              enum:
+                                - TriggerAuthentication
+                                - ClusterTriggerAuthentication
+                              type: string
+                            name:
+                              minLength: 1
+                              type: string
+                          required:
+                            - name
+                          type: object
                         customPromQuery:
                           type: string
                         enableKeda:
@@ -16784,6 +16800,22 @@ spec:
                       x-kubernetes-list-type: map
                     kedaConfig:
                       properties:
+                        authModes:
+                          type: string
+                        authenticationRef:
+                          properties:
+                            kind:
+                              default: TriggerAuthentication
+                              enum:
+                                - TriggerAuthentication
+                                - ClusterTriggerAuthentication
+                              type: string
+                            name:
+                              minLength: 1
+                              type: string
+                          required:
+                            - name
+                          type: object
                         customPromQuery:
                           type: string
                         enableKeda:
@@ -29719,6 +29751,22 @@ spec:
                       x-kubernetes-list-type: map
                     kedaConfig:
                       properties:
+                        authModes:
+                          type: string
+                        authenticationRef:
+                          properties:
+                            kind:
+                              default: TriggerAuthentication
+                              enum:
+                                - TriggerAuthentication
+                                - ClusterTriggerAuthentication
+                              type: string
+                            name:
+                              minLength: 1
+                              type: string
+                          required:
+                            - name
+                          type: object
                         customPromQuery:
                           type: string
                         enableKeda:

@@ -43,4 +43,39 @@ type KedaConfig struct {
 	// Example:
 	//   "GreaterThanOrEqual"
 	ScalingOperator string `json:"scalingOperator,omitempty"`
+
+	// AuthenticationRef references a TriggerAuthentication or ClusterTriggerAuthentication
+	// resource that contains the authentication configuration for the Prometheus server.
+	// This is required when the Prometheus server requires authentication (e.g., Grafana Cloud).
+	//
+	// Example:
+	//   authenticationRef:
+	//     name: grafana-cloud-auth
+	//     kind: TriggerAuthentication
+	// +optional
+	AuthenticationRef *ScalerAuthenticationRef `json:"authenticationRef,omitempty"`
+
+	// AuthModes specifies the authentication mode(s) for the Prometheus scaler.
+	// Common values include: "basic", "tls", "bearer", "custom".
+	// Multiple modes can be specified comma-separated (e.g., "tls,basic").
+	//
+	// Example:
+	//   "basic" - Use basic authentication with username/password from TriggerAuthentication
+	// +optional
+	AuthModes string `json:"authModes,omitempty"`
+}
+
+// ScalerAuthenticationRef points to a KEDA TriggerAuthentication or ClusterTriggerAuthentication resource
+// that contains the credentials for authenticating with the scaler's target (e.g., Prometheus server).
+type ScalerAuthenticationRef struct {
+	// Name of the TriggerAuthentication or ClusterTriggerAuthentication resource.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Kind of the authentication resource being referenced.
+	// Valid values are "TriggerAuthentication" (namespace-scoped) or "ClusterTriggerAuthentication" (cluster-scoped).
+	// +kubebuilder:default="TriggerAuthentication"
+	// +kubebuilder:validation:Enum=TriggerAuthentication;ClusterTriggerAuthentication
+	// +optional
+	Kind string `json:"kind,omitempty"`
 }
