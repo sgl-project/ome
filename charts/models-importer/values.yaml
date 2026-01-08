@@ -475,7 +475,7 @@ gpt-image-1:
   enableImageInput: false
   lifecyclePhase: "ACTIVE"
 
-gpt-image-1.5:
+gpt-image-1-5:
   enabled: false
   enableImageInput: false
   lifecyclePhase: "ACTIVE"

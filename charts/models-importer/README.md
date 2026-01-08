@@ -190,8 +190,8 @@ A Helm chart for importing ome base models
 | gpt-audio.lifecyclePhase                                            | string | `"ACTIVE"`                                   |             |
 | gpt-image-1.enabled                                                 | bool   | `false`                                      |             |
 | gpt-image-1.lifecyclePhase                                          | string | `"ACTIVE"`                                   |             |
-| gpt-image-1.5.enabled                                               | bool   | `false`                                      |             |
-| gpt-image-1.5.lifecyclePhase                                        | string | `"ACTIVE"`                                   |             |
+| gpt-image-1-5.enabled                                               | bool   | `false`                                      |             |
+| gpt-image-1-5.lifecyclePhase                                        | string | `"ACTIVE"`                                   |             |
 | grok-3-0404.enabled                                                 | bool   | `false`                                      |             |
 | grok-3-0404.lifecyclePhase                                          | string | `"ACTIVE"`                                   |             |
 | grok-3-fast.enabled                                                 | bool   | `false`                                      |             |
