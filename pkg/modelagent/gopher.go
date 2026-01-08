@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"k8s.io/apimachinery/pkg/labels"
@@ -1007,24 +1008,80 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 		}
 
 		// Create progress handler for tracking download progress
-		var lastBytes uint64
-		var lastTime = time.Now()
+		// Uses single worker with atomic pointer to avoid fire-and-forget goroutines
+		// that can cause race conditions and "context canceled" errors
+		var lastBytes atomic.Uint64
+		var lastTimeNano atomic.Int64
+		lastTimeNano.Store(time.Now().UnixNano())
 		progressThrottle := 30 * time.Second // Update ConfigMap every 30 seconds
+		const progressFlushTimeout = 5 * time.Second
+
+		// Atomic pointer to store latest progress - lock-free, instant updates
+		var latestProgress atomic.Pointer[DownloadProgress]
+		stopWorker := make(chan struct{})
+		workerDone := make(chan struct{})
+
+		// flushProgress is a helper to flush progress to ConfigMap
+		flushProgress := func(p *DownloadProgress, timeout time.Duration) {
+			if p == nil {
+				return
+			}
+			progressOp := &ConfigMapProgressOp{
+				Progress:         p,
+				BaseModel:        task.BaseModel,
+				ClusterBaseModel: task.ClusterBaseModel,
+			}
+			flushCtx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			if err := s.configMapReconciler.ReconcileModelProgress(flushCtx, progressOp); err != nil {
+				s.logger.Warnf("Failed to update download progress for %s: %v", modelInfo, err)
+			}
+		}
+
+		// Single background worker - updates ConfigMap periodically
+		// This eliminates fire-and-forget goroutines that caused race conditions
+		go func() {
+			defer close(workerDone)
+			ticker := time.NewTicker(progressThrottle)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ticker.C:
+					flushProgress(latestProgress.Swap(nil), progressThrottle)
+				case <-stopWorker:
+					// Final flush before exit
+					flushProgress(latestProgress.Swap(nil), progressFlushTimeout)
+					return
+				}
+			}
+		}()
+
+		// Ensure worker stops before we set Ready status
+		// This guarantees no race condition between progress updates and status updates
+		defer func() {
+			close(stopWorker) // Signal worker to stop
+			<-workerDone      // Wait for worker to finish
+			s.logger.Debugf("Progress worker stopped for %s", modelInfo)
+		}()
 
 		progressHandler := func(update xet.ProgressUpdate) {
 			now := time.Now()
 
-			// Calculate speed (bytes per second)
+			// Calculate speed (bytes per second) using atomic variables for thread safety
+			prevBytes := lastBytes.Load()
+			prevTimeNano := lastTimeNano.Load()
 			var speedBytesPerSec float64
-			elapsed := now.Sub(lastTime).Seconds()
-			if elapsed > 0 && update.CompletedBytes > lastBytes {
-				speedBytesPerSec = float64(update.CompletedBytes-lastBytes) / elapsed
+			elapsed := float64(now.UnixNano()-prevTimeNano) / float64(time.Second)
+			if elapsed > 0 && update.CompletedBytes > prevBytes {
+				speedBytesPerSec = float64(update.CompletedBytes-prevBytes) / elapsed
 			}
-			lastBytes = update.CompletedBytes
-			lastTime = now
+			lastBytes.Store(update.CompletedBytes)
+			lastTimeNano.Store(now.UnixNano())
 
-			// Create progress object
-			progress := &DownloadProgress{
+			// Store latest progress atomically (non-blocking, lock-free)
+			// Worker will periodically flush this to ConfigMap
+			latestProgress.Store(&DownloadProgress{
 				Phase:            update.Phase.String(),
 				TotalBytes:       update.TotalBytes,
 				CompletedBytes:   update.CompletedBytes,
@@ -1032,19 +1089,7 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 				CompletedFiles:   update.CompletedFiles,
 				SpeedBytesPerSec: speedBytesPerSec,
 				LastUpdated:      now.Format(time.RFC3339),
-			}
-
-			// Update ConfigMap with progress (non-blocking)
-			go func() {
-				progressOp := &ConfigMapProgressOp{
-					Progress:         progress,
-					BaseModel:        task.BaseModel,
-					ClusterBaseModel: task.ClusterBaseModel,
-				}
-				if err := s.configMapReconciler.ReconcileModelProgress(ctx, progressOp); err != nil {
-					s.logger.Warnf("Failed to update download progress for %s: %v", modelInfo, err)
-				}
-			}()
+			})
 		}
 
 		// Perform snapshot download with progress tracking
