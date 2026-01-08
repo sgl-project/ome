@@ -130,6 +130,53 @@ kubectl get pods -n ome -l control-plane=ome-model-controller
 kubectl get pods -n ome -l control-plane=ome-model-agent-daemonset
 ```
 
+### Deploy OME on a Kind GPU Cluster (nvkind)
+
+Use [nvkind](https://github.com/NVIDIA/nvkind/tree/main?tab=readme-ov-file#setup) to spin up a GPU-capable kind cluster, then deploy OME with Helm.
+
+#### Steps:
+
+1. Create the nvkind cluster following the nvkind setup guide.
+2. Install cert-manager (required by OME):
+   ```bash
+   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+   
+   ```
+3. Deploy OME via Helm:
+   ```bash
+   make deploy-helm
+   ```
+
+#### Common issues and fixes with nvkind:
+
+- Auto device discovery fails — explicitly use NVML:
+  ```bash
+  helm upgrade -i nvidia-device-plugin nvdp/nvidia-device-plugin \
+    --kube-context=kind- \
+    -n nvidia --create-namespace \
+    --set deviceDiscoveryStrategy=nvml \
+    --set affinity=null
+  ```
+- NVML init fails because devices are not injected (error includes `nvml init failed: ERROR_LIBRARY_NOT_FOUND`). Force the daemonset to use nvidia container runtime:
+  ```bash
+  kubectl -n nvidia patch ds nvidia-device-plugin \
+    -p '{"spec":{"template":{"spec":{"runtimeClassName":"nvidia"}}}}'
+  ```
+
+#### Common workarounds:
+
+- Single GPU host: label the node so scheduling prefers it. e.g.:
+  ```bash
+  kubectl label node <worker-node> \
+    beta.kubernetes.io/instance-type=BM.GPU.H100.8
+  ```
+- Model agent downloads all the models: edit `config/models/kustomization.yaml` to include only the models you want.
+- Load a local image into the kind cluster when testing e.g.:
+  ```bash
+  kind load docker-image model-agent:e68c6e0-dirty \
+    --name <KIND_CLUSTER_NAME>
+  ```
+
 ## IDE Configuration
 
 ### VS Code / Cursor Setup
