@@ -47,6 +47,7 @@ import (
 	"github.com/sgl-project/ome/pkg/runtimeselector"
 	"github.com/sgl-project/ome/pkg/utils"
 	"github.com/sgl-project/ome/pkg/version"
+	"github.com/sgl-project/ome/pkg/webhook/admission/basemodel"
 	"github.com/sgl-project/ome/pkg/webhook/admission/benchmark"
 	"github.com/sgl-project/ome/pkg/webhook/admission/isvc"
 	"github.com/sgl-project/ome/pkg/webhook/admission/pod"
@@ -328,6 +329,16 @@ func main() {
 		setupLog.Info("Registering benchmark job validator webhook to the webhook server")
 		hookServer.Register("/validate-ome-io-v1beta1-benchmarkjob", &webhook.Admission{
 			Handler: &benchmark.BenchmarkJobValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
+
+		setupLog.Info("Registering BaseModel validator webhook to the webhook server")
+		hookServer.Register("/validate-ome-io-v1beta1-basemodel", &webhook.Admission{
+			Handler: &basemodel.BaseModelValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
+
+		setupLog.Info("Registering ClusterBaseModel validator webhook to the webhook server")
+		hookServer.Register("/validate-ome-io-v1beta1-clusterbasemodel", &webhook.Admission{
+			Handler: &basemodel.ClusterBaseModelValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
 		if err = ctrl.NewWebhookManagedBy(mgr).

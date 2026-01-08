@@ -189,3 +189,57 @@ webhooks:
           - UPDATE
         resources:
           - benchmarkjobs
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: basemodel.ome.io
+webhooks:
+  - clientConfig:
+      caBundle: Cg==
+      service:
+        name: $(webhookServiceName)
+        namespace: $(omeNamespace)
+        path: /validate-ome-io-v1beta1-basemodel
+    failurePolicy: Fail
+    name: basemodel.ome-webhook-server.validator
+    sideEffects: None
+    admissionReviewVersions: ["v1beta1"]
+    rules:
+      - apiGroups:
+          - ome.io
+        apiVersions:
+          - v1beta1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - basemodels
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: clusterbasemodel.ome.io
+webhooks:
+  - clientConfig:
+      caBundle: Cg==
+      service:
+        name: $(webhookServiceName)
+        namespace: $(omeNamespace)
+        path: /validate-ome-io-v1beta1-clusterbasemodel
+    failurePolicy: Fail
+    name: clusterbasemodel.ome-webhook-server.validator
+    sideEffects: None
+    admissionReviewVersions: ["v1beta1"]
+    rules:
+      - apiGroups:
+          - ome.io
+        apiVersions:
+          - v1beta1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - clusterbasemodels
