@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
@@ -22,7 +23,7 @@ type RBACReconciler struct {
 	scheme           *runtime.Scheme
 	objectMeta       metav1.ObjectMeta
 	componentType    v1beta1.ComponentType
-	inferenceService string
+	inferenceService *v1beta1.InferenceService
 	Log              logr.Logger
 }
 
@@ -32,7 +33,7 @@ func NewRBACReconciler(
 	scheme *runtime.Scheme,
 	objectMeta metav1.ObjectMeta,
 	componentType v1beta1.ComponentType,
-	inferenceService string,
+	inferenceService *v1beta1.InferenceService,
 ) *RBACReconciler {
 	return &RBACReconciler{
 		client:           client,
@@ -62,6 +63,8 @@ func (r *RBACReconciler) Reconcile() error {
 	// Set owner reference
 	if len(r.objectMeta.OwnerReferences) > 0 {
 		sa.OwnerReferences = r.objectMeta.OwnerReferences
+	} else if err := controllerutil.SetControllerReference(r.inferenceService, sa, r.scheme); err != nil {
+		return fmt.Errorf("failed to set owner reference for ServiceAccount: %w", err)
 	}
 
 	// Create or update ServiceAccount
@@ -91,6 +94,8 @@ func (r *RBACReconciler) Reconcile() error {
 		// Set owner reference
 		if len(r.objectMeta.OwnerReferences) > 0 {
 			role.OwnerReferences = r.objectMeta.OwnerReferences
+		} else if err := controllerutil.SetControllerReference(r.inferenceService, role, r.scheme); err != nil {
+			return fmt.Errorf("failed to set owner reference for Role: %w", err)
 		}
 
 		// Create or update Role
@@ -122,6 +127,8 @@ func (r *RBACReconciler) Reconcile() error {
 		// Set owner reference
 		if len(r.objectMeta.OwnerReferences) > 0 {
 			roleBinding.OwnerReferences = r.objectMeta.OwnerReferences
+		} else if err := controllerutil.SetControllerReference(r.inferenceService, roleBinding, r.scheme); err != nil {
+			return fmt.Errorf("failed to set owner reference for RoleBinding: %w", err)
 		}
 
 		// Create or update RoleBinding
@@ -136,7 +143,7 @@ func (r *RBACReconciler) Reconcile() error {
 
 // GetServiceAccountName returns the name of the ServiceAccount using inference service name + component name
 func (r *RBACReconciler) GetServiceAccountName() string {
-	return fmt.Sprintf("%s-%s", r.inferenceService, string(r.componentType))
+	return fmt.Sprintf("%s-%s", r.inferenceService.Name, string(r.componentType))
 }
 
 // createOrUpdate creates or updates a Kubernetes resource
