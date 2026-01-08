@@ -82,6 +82,12 @@ func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 		trainingSidecarInjector.InjectTrainingSidecar,
 	}
 
+	// Only inject model init for training pods here; model init injection for inference pods is handled in opensource OME pod webhook
+	if isTrainingPod(pod) {
+		modelInitInjector := newModelInitInjector(configMap)
+		mutators = append(mutators, modelInitInjector.InjectModelInit)
+	}
+
 	for _, mutator := range mutators {
 		if err := mutator(pod); err != nil {
 			return err
@@ -119,4 +125,9 @@ func needMutate(pod *v1.Pod) bool {
 	_, inferencePodLabel := pod.Labels[constants.InferenceServicePodLabelKey]
 	_, trainingPodLabel := pod.Labels[constants.TrainingJobPodLabelKey]
 	return inferencePodLabel || trainingPodLabel
+}
+
+func isTrainingPod(pod *v1.Pod) bool {
+	_, ok := pod.Labels[constants.TrainingJobPodLabelKey]
+	return ok
 }

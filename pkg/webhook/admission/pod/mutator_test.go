@@ -330,6 +330,103 @@ func TestMutator_Handle(t *testing.T) {
 				},
 			}),
 		},
+		"should inject model init for training pods": {
+			configMap: v1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      constants.InferenceServiceConfigMapName,
+					Namespace: constants.OMENamespace,
+				},
+				Immutable: nil,
+				Data: map[string]string{
+					constants.AgentConfigMapKeyName: `{
+        				"image" : "ome/agent:latest",
+        				"memoryRequest": "100Mi",
+        				"memoryLimit": "1Gi",
+        				"cpuRequest": "100m",
+        				"cpuLimit": "1"
+    				}`,
+					"modelInit": `{
+        				"image": "model-init:latest",
+        				"compartmentId": "test-compartment",
+        				"authType": "test-auth",
+        				"vaultId": "test-vault",
+        				"cpuRequest": "100m",
+        				"cpuLimit": "1",
+        				"memoryRequest": "100Mi",
+        				"memoryLimit": "1Gi"
+    				}`,
+				},
+				BinaryData: nil,
+			},
+			request: admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					UID: types.UID(uuid.NewString()),
+					Kind: metav1.GroupVersionKind{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+					Resource: metav1.GroupVersionResource{
+						Group:    "",
+						Version:  "v1",
+						Resource: "pods",
+					},
+					SubResource: "",
+					RequestKind: &metav1.GroupVersionKind{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+					RequestResource: &metav1.GroupVersionResource{
+						Group:    "",
+						Version:  "v1",
+						Resource: "pods",
+					},
+					RequestSubResource: "",
+					Name:               "",
+					Namespace:          "default",
+					Operation:          admissionv1.Create,
+					Object:             runtime.RawExtension{},
+					OldObject:          runtime.RawExtension{},
+					DryRun:             nil,
+					Options:            runtime.RawExtension{},
+				},
+			},
+			pod: v1.Pod{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Pod",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						constants.TrainingJobPodLabelKey: "ft-amaaaadadecb",
+					},
+					Annotations: map[string]string{
+						constants.ModelInitInjectionKey: "true",
+						constants.BaseModelName:         "test-base-model",
+					},
+				},
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: constants.TrainingMainContainerName,
+						},
+					},
+				},
+			},
+			matcher: gomega.And(
+				gomega.WithTransform(func(res admission.Response) bool {
+					return res.Allowed
+				}, gomega.BeTrue()),
+				gomega.WithTransform(func(res admission.Response) bool {
+					return len(res.Patches) > 0
+				}, gomega.BeTrue()),
+			),
+		},
 	}
 
 	for name, tc := range cases {
