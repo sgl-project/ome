@@ -47,7 +47,10 @@ func NewMultiNodeReconciler(client client.Client,
 	if ok && istioSidecarInjection == "true" {
 		enabled = true
 	}
-	selector := map[string]string{"ray.io/node-type": "head"}
+	selector := map[string]string{
+		"ray.io/node-type": "head",
+		"app":              constants.GetRawServiceLabel(componentMeta.Name),
+	}
 
 	return &MultiNodeReconciler{
 		client:       client,
