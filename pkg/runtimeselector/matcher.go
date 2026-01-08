@@ -160,14 +160,15 @@ func (m *DefaultRuntimeMatcher) GetCompatibilityDetails(runtime *v1beta1.Serving
 // evaluateFormatMatch evaluates how well a supported format matches a model.
 func (m *DefaultRuntimeMatcher) evaluateFormatMatch(model *v1beta1.BaseModelSpec, format v1beta1.SupportedModelFormat) MatchDetails {
 	match := MatchDetails{
-		FormatMatch:       false,
-		FrameworkMatch:    false,
-		ArchitectureMatch: true, // Default to true if not specified
-		QuantizationMatch: true, // Default to true if not specified
-		SizeMatch:         true, // Will be checked separately
-		Priority:          m.config.DefaultPriority,
-		Weight:            0,
-		Reasons:           []string{},
+		FormatMatch:            false,
+		FrameworkMatch:         false,
+		ArchitectureMatch:      true, // Default to true if not specified
+		DiffusionPipelineMatch: true, // Default to true if not specified
+		QuantizationMatch:      true, // Default to true if not specified
+		SizeMatch:              true, // Will be checked separately
+		Priority:               m.config.DefaultPriority,
+		Weight:                 0,
+		Reasons:                []string{},
 	}
 
 	// Set priority
@@ -178,6 +179,12 @@ func (m *DefaultRuntimeMatcher) evaluateFormatMatch(model *v1beta1.BaseModelSpec
 	// Set auto-select
 	if format.AutoSelect != nil {
 		match.AutoSelectEnabled = *format.AutoSelect
+	}
+
+	pipelineMatch, pipelineReason := m.compareDiffusionPipeline(model.DiffusionPipeline, format.DiffusionPipeline)
+	match.DiffusionPipelineMatch = pipelineMatch
+	if !pipelineMatch && pipelineReason != "" {
+		match.Reasons = append(match.Reasons, pipelineReason)
 	}
 
 	// Check architecture
@@ -293,6 +300,10 @@ func (m *DefaultRuntimeMatcher) compareAcceleratorClass(runtime *v1beta1.Serving
 
 // compareSupportedModelFormats checks if a model matches a supported format.
 func (m *DefaultRuntimeMatcher) compareSupportedModelFormats(model *v1beta1.BaseModelSpec, format v1beta1.SupportedModelFormat) bool {
+	if ok, _ := m.compareDiffusionPipeline(model.DiffusionPipeline, format.DiffusionPipeline); !ok {
+		return false
+	}
+
 	// Check architecture
 	if model.ModelArchitecture != nil && format.ModelArchitecture != nil {
 		if *model.ModelArchitecture != *format.ModelArchitecture {
@@ -353,6 +364,14 @@ func (m *DefaultRuntimeMatcher) compareSupportedModelFormats(model *v1beta1.Base
 //   - "format name mismatch (model=pytorch, runtime=safetensors), quantization mismatch (model=fp8, runtime=int4)"
 func (m *DefaultRuntimeMatcher) getFormatMismatchReason(model *v1beta1.BaseModelSpec, format v1beta1.SupportedModelFormat) string {
 	var reasons []string
+
+	if ok, reason := m.compareDiffusionPipeline(model.DiffusionPipeline, format.DiffusionPipeline); !ok {
+		if reason != "" {
+			reasons = append(reasons, reason)
+		} else {
+			reasons = append(reasons, "diffusion pipeline mismatch")
+		}
+	}
 
 	// Check architecture mismatch
 	if model.ModelArchitecture != nil && format.ModelArchitecture != nil {
@@ -439,6 +458,85 @@ func (m *DefaultRuntimeMatcher) getFormatMismatchReason(model *v1beta1.BaseModel
 		return "unknown mismatch"
 	}
 	return strings.Join(reasons, ", ")
+}
+
+func (m *DefaultRuntimeMatcher) compareDiffusionPipeline(model *v1beta1.DiffusionPipelineSpec, format *v1beta1.DiffusionPipelineSpec) (bool, string) {
+	if format == nil {
+		return true, ""
+	}
+
+	if model == nil {
+		return false, "diffusion pipeline required by runtime but not specified in model"
+	}
+
+	// At this point both are non-nil
+	if format.ClassName != nil {
+		if model.ClassName == nil || *format.ClassName != *model.ClassName {
+			modelClassName := "<nil>"
+			if model.ClassName != nil {
+				modelClassName = *model.ClassName
+			}
+			return false, fmt.Sprintf("pipeline class mismatch (model=%s, runtime=%s)",
+				modelClassName, *format.ClassName)
+		}
+	}
+
+	componentChecks := []struct {
+		name          string
+		model, format *v1beta1.DiffusionComponentSpec
+	}{
+		{name: "scheduler", model: model.Scheduler, format: format.Scheduler},
+		{name: "textEncoder", model: model.TextEncoder, format: format.TextEncoder},
+		{name: "tokenizer", model: model.Tokenizer, format: format.Tokenizer},
+		{name: "transformer", model: model.Transformer, format: format.Transformer},
+		{name: "vae", model: model.VAE, format: format.VAE},
+	}
+
+	for _, check := range componentChecks {
+		if ok, reason := compareDiffusionComponent(check.name, check.model, check.format); !ok {
+			return false, reason
+		}
+	}
+
+	if len(format.AdditionalComponents) > 0 {
+		if len(model.AdditionalComponents) == 0 {
+			return false, "diffusion pipeline missing required additional components"
+		}
+		for key, formatComponent := range format.AdditionalComponents {
+			modelComponent, exists := model.AdditionalComponents[key]
+			if !exists {
+				return false, fmt.Sprintf("diffusion component %s missing in model", key)
+			}
+			runtimeComponent := formatComponent
+			if ok, reason := compareDiffusionComponent(key, &modelComponent, &runtimeComponent); !ok {
+				return false, reason
+			}
+		}
+	}
+
+	return true, ""
+}
+
+func compareDiffusionComponent(name string, model *v1beta1.DiffusionComponentSpec, runtime *v1beta1.DiffusionComponentSpec) (bool, string) {
+	if runtime == nil {
+		return true, ""
+	}
+
+	if model == nil {
+		return false, fmt.Sprintf("component %s required by runtime but not specified in model", name)
+	}
+
+	if runtime.Library != "" && runtime.Library != model.Library {
+		return false, fmt.Sprintf("%s library mismatch (model=%s, runtime=%s)",
+			name, model.Library, runtime.Library)
+	}
+
+	if runtime.Type != "" && runtime.Type != model.Type {
+		return false, fmt.Sprintf("%s type mismatch (model=%s, runtime=%s)",
+			name, model.Type, runtime.Type)
+	}
+
+	return true, ""
 }
 
 // compareModelFormatVersions compares model format versions based on operator.

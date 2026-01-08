@@ -42,6 +42,8 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComponentExtensionSpec":     schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":        schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DecoderSpec":                schema_pkg_apis_ome_v1beta1_DecoderSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec":     schema_pkg_apis_ome_v1beta1_DiffusionComponentSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DiffusionPipelineSpec":      schema_pkg_apis_ome_v1beta1_DiffusionPipelineSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.Endpoint":                   schema_pkg_apis_ome_v1beta1_Endpoint(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.EndpointSpec":               schema_pkg_apis_ome_v1beta1_EndpointSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.EngineSpec":                 schema_pkg_apis_ome_v1beta1_EngineSpec(ref),
@@ -1252,6 +1254,12 @@ func schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref common.ReferenceCallback) com
 							Format:      "int32",
 						},
 					},
+					"diffusionPipeline": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DiffusionPipeline captures pipeline-specific metadata for diffusion models (from model_index.json).",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DiffusionPipelineSpec"),
+						},
+					},
 					"additionalMetadata": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Additional metadata for the model",
@@ -1273,7 +1281,7 @@ func schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref common.ReferenceCallback) com
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFormat", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageSpec", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DiffusionPipelineSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFormat", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageSpec", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -2572,6 +2580,105 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 		},
 		Dependencies: []string{
 			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LeaderSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RunnerSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_DiffusionComponentSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DiffusionComponentSpec captures an individual component used by a diffusion pipeline. The fields map directly to entries in a diffusers model_index.json file.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"library": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Library providing the component implementation, e.g., \"diffusers\" or \"transformers\".",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type is the fully qualified class name for the component, e.g., \"FlowMatchEulerDiscreteScheduler\".",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_DiffusionPipelineSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DiffusionPipelineSpec describes a diffusers pipeline so that runtimes can validate compatibility. When set, these fields should mirror the content of the model's model_index.json file.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"className": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ClassName is the pipeline implementation, e.g., \"StableDiffusionXLPipeline\" or \"QwenImagePipeline\".",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"scheduler": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Scheduler component used by the pipeline.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec"),
+						},
+					},
+					"textEncoder": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TextEncoder component used by the pipeline.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec"),
+						},
+					},
+					"tokenizer": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Tokenizer component used by the pipeline.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec"),
+						},
+					},
+					"transformer": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Transformer (UNet/DiT) component used by the pipeline.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec"),
+						},
+					},
+					"vae": {
+						SchemaProps: spec.SchemaProps{
+							Description: "VAE component used by the pipeline.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec"),
+						},
+					},
+					"additionalComponents": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-map-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "AdditionalComponents captures any other pipeline parts keyed by their model_index.json entry.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec"},
 	}
 }
 
@@ -8265,6 +8372,13 @@ func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) commo
 							Ref:         ref("k8s.io/api/core/v1.NodeAffinity"),
 						},
 					},
+					"downloadPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DownloadPolicy describes the policy of downloading model artifacts Supported policies: - AlwaysDownload: always download a copy of model artifact in destination path - ReuseIfExists: if the identical model artifact has been downloaded in the node, such artifact will be reused",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"storageUri"},
 			},
@@ -8328,6 +8442,12 @@ func schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref common.ReferenceCallba
 							Format:      "",
 						},
 					},
+					"diffusionPipeline": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DiffusionPipeline supported by this runtime (used for diffusion models).",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DiffusionPipelineSpec"),
+						},
+					},
 					"autoSelect": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Set to true to allow the ServingRuntime to be used for automatic model placement if this model format is specified with no explicit runtime.",
@@ -8361,7 +8481,7 @@ func schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref common.ReferenceCallba
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorModelConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFormat", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorModelConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DiffusionPipelineSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFormat", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec"},
 	}
 }
 

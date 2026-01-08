@@ -137,13 +137,16 @@ The matcher evaluates compatibility across multiple dimensions:
    - Version comparison using semantic versioning
    - Special handling for unofficial versions (forces equality)
 
-3. **Model Architecture**
+3. **Diffusion Pipelines**
+   - Pipeline class and components must match when specified (e.g., scheduler, transformer, VAE)
+
+4. **Model Architecture**
    - Must match if both specify architecture
 
-4. **Quantization**
+5. **Quantization**
    - Must match if both specify quantization
 
-5. **Model Size**
+6. **Model Size**
    - Must be within runtime's min/max range
 
 ### Scoring Formula

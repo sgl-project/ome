@@ -36,6 +36,10 @@ type SupportedModelFormat struct {
 	// +optional
 	Quantization *ModelQuantization `json:"quantization,omitempty"`
 
+	// DiffusionPipeline supported by this runtime (used for diffusion models).
+	// +optional
+	DiffusionPipeline *DiffusionPipelineSpec `json:"diffusionPipeline,omitempty"`
+
 	// Set to true to allow the ServingRuntime to be used for automatic model placement if
 	// this model format is specified with no explicit runtime.
 	// +optional

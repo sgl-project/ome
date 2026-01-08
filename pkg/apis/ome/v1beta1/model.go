@@ -46,6 +46,51 @@ type ModelFrameworkSpec struct {
 	Weight int64 `json:"weight,omitempty"`
 }
 
+// DiffusionComponentSpec captures an individual component used by a diffusion pipeline.
+// The fields map directly to entries in a diffusers model_index.json file.
+type DiffusionComponentSpec struct {
+	// Library providing the component implementation, e.g., "diffusers" or "transformers".
+	// +optional
+	Library string `json:"library,omitempty"`
+
+	// Type is the fully qualified class name for the component, e.g., "FlowMatchEulerDiscreteScheduler".
+	// +optional
+	Type string `json:"type,omitempty"`
+}
+
+// DiffusionPipelineSpec describes a diffusers pipeline so that runtimes can validate compatibility.
+// When set, these fields should mirror the content of the model's model_index.json file.
+type DiffusionPipelineSpec struct {
+	// ClassName is the pipeline implementation, e.g., "StableDiffusionXLPipeline" or "QwenImagePipeline".
+	// +optional
+	ClassName *string `json:"className,omitempty"`
+
+	// Scheduler component used by the pipeline.
+	// +optional
+	Scheduler *DiffusionComponentSpec `json:"scheduler,omitempty"`
+
+	// TextEncoder component used by the pipeline.
+	// +optional
+	TextEncoder *DiffusionComponentSpec `json:"textEncoder,omitempty"`
+
+	// Tokenizer component used by the pipeline.
+	// +optional
+	Tokenizer *DiffusionComponentSpec `json:"tokenizer,omitempty"`
+
+	// Transformer (UNet/DiT) component used by the pipeline.
+	// +optional
+	Transformer *DiffusionComponentSpec `json:"transformer,omitempty"`
+
+	// VAE component used by the pipeline.
+	// +optional
+	VAE *DiffusionComponentSpec `json:"vae,omitempty"`
+
+	// AdditionalComponents captures any other pipeline parts keyed by their model_index.json entry.
+	// +optional
+	// +mapType=atomic
+	AdditionalComponents map[string]DiffusionComponentSpec `json:"additionalComponents,omitempty" protobuf:"bytes,8,rep,name=additionalComponents"`
+}
+
 type RuntimeSelectorOperator string
 
 const (
@@ -172,6 +217,10 @@ type BaseModelSpec struct {
 	// +optional
 	// MaxTokens is the maximum number of tokens that can be processed by the model
 	MaxTokens *int32 `json:"maxTokens,omitempty"`
+
+	// DiffusionPipeline captures pipeline-specific metadata for diffusion models (from model_index.json).
+	// +optional
+	DiffusionPipeline *DiffusionPipelineSpec `json:"diffusionPipeline,omitempty"`
 
 	// Additional metadata for the model
 	// +optional
