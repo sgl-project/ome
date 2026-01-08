@@ -40,13 +40,21 @@ func TestNewRBACReconciler(t *testing.T) {
 		},
 	}
 
+	inferenceService := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testInferenceService,
+			Namespace: testNamespace,
+			UID:       "test-uid",
+		},
+	}
+
 	tests := []struct {
 		name             string
 		client           client.Client
 		scheme           *runtime.Scheme
 		objectMeta       metav1.ObjectMeta
 		componentType    v1beta1.ComponentType
-		inferenceService string
+		inferenceService *v1beta1.InferenceService
 		expectError      bool
 	}{
 		{
@@ -55,7 +63,7 @@ func TestNewRBACReconciler(t *testing.T) {
 			scheme:           scheme,
 			objectMeta:       objectMeta,
 			componentType:    v1beta1.RouterComponent,
-			inferenceService: testInferenceService,
+			inferenceService: inferenceService,
 			expectError:      false,
 		},
 		{
@@ -64,7 +72,7 @@ func TestNewRBACReconciler(t *testing.T) {
 			scheme:           scheme,
 			objectMeta:       objectMeta,
 			componentType:    v1beta1.PredictorComponent,
-			inferenceService: testInferenceService,
+			inferenceService: inferenceService,
 			expectError:      false,
 		},
 	}
@@ -93,33 +101,41 @@ func TestNewRBACReconciler(t *testing.T) {
 func TestRBACReconciler_GetServiceAccountName(t *testing.T) {
 	tests := []struct {
 		name             string
-		inferenceService string
+		inferenceService *v1beta1.InferenceService
 		componentType    v1beta1.ComponentType
 		expected         string
 	}{
 		{
-			name:             "router component",
-			inferenceService: "my-service",
-			componentType:    v1beta1.RouterComponent,
-			expected:         "my-service-router",
+			name: "router component",
+			inferenceService: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "my-service"},
+			},
+			componentType: v1beta1.RouterComponent,
+			expected:      "my-service-router",
 		},
 		{
-			name:             "predictor component",
-			inferenceService: "inference-svc",
-			componentType:    v1beta1.PredictorComponent,
-			expected:         "inference-svc-predictor",
+			name: "predictor component",
+			inferenceService: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "inference-svc"},
+			},
+			componentType: v1beta1.PredictorComponent,
+			expected:      "inference-svc-predictor",
 		},
 		{
-			name:             "decoder component",
-			inferenceService: "test-svc",
-			componentType:    v1beta1.DecoderComponent,
-			expected:         "test-svc-decoder",
+			name: "decoder component",
+			inferenceService: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-svc"},
+			},
+			componentType: v1beta1.DecoderComponent,
+			expected:      "test-svc-decoder",
 		},
 		{
-			name:             "engine component",
-			inferenceService: "engine-svc",
-			componentType:    v1beta1.EngineComponent,
-			expected:         "engine-svc-engine",
+			name: "engine component",
+			inferenceService: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "engine-svc"},
+			},
+			componentType: v1beta1.EngineComponent,
+			expected:      "engine-svc-engine",
 		},
 	}
 
@@ -142,98 +158,144 @@ func TestRBACReconciler_Reconcile_RouterComponent(t *testing.T) {
 	require.NoError(t, v1beta1.AddToScheme(scheme))
 
 	ownerRef := metav1.OwnerReference{
-		APIVersion: "ome.sgl-project.io/v1beta1",
+		APIVersion: "ome.io/v1beta1",
 		Kind:       "InferenceService",
 		Name:       testInferenceService,
 		UID:        "test-uid",
 	}
 
-	objectMeta := metav1.ObjectMeta{
-		Name:      testServiceName,
-		Namespace: testNamespace,
-		Labels: map[string]string{
-			"app": "test-app",
-		},
-		OwnerReferences: []metav1.OwnerReference{ownerRef},
-	}
-
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	reconciler := NewRBACReconciler(
-		fakeClient,
-		scheme,
-		objectMeta,
-		v1beta1.RouterComponent,
-		testInferenceService,
-	)
-
-	// Test successful reconciliation
-	err := reconciler.Reconcile()
-	require.NoError(t, err)
-
-	expectedServiceAccountName := "test-inference-service-router"
-
-	// Verify ServiceAccount was created
-	sa := &corev1.ServiceAccount{}
-	err = fakeClient.Get(context.Background(), types.NamespacedName{
-		Name:      expectedServiceAccountName,
-		Namespace: testNamespace,
-	}, sa)
-	require.NoError(t, err)
-	assert.Equal(t, expectedServiceAccountName, sa.Name)
-	assert.Equal(t, testNamespace, sa.Namespace)
-	assert.Equal(t, objectMeta.Labels, sa.Labels)
-	assert.Equal(t, []metav1.OwnerReference{ownerRef}, sa.OwnerReferences)
-
-	// Verify Role was created
-	role := &rbacv1.Role{}
-	err = fakeClient.Get(context.Background(), types.NamespacedName{
-		Name:      expectedServiceAccountName,
-		Namespace: testNamespace,
-	}, role)
-	require.NoError(t, err)
-	assert.Equal(t, expectedServiceAccountName, role.Name)
-	assert.Equal(t, testNamespace, role.Namespace)
-	assert.Equal(t, objectMeta.Labels, role.Labels)
-	assert.Equal(t, []metav1.OwnerReference{ownerRef}, role.OwnerReferences)
-
-	// Verify Role rules
-	expectedRules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{""},
-			Resources: []string{"pods"},
-			Verbs:     []string{"get", "list", "watch"},
-		},
-	}
-	assert.Equal(t, expectedRules, role.Rules)
-
-	// Verify RoleBinding was created
-	rb := &rbacv1.RoleBinding{}
-	err = fakeClient.Get(context.Background(), types.NamespacedName{
-		Name:      expectedServiceAccountName,
-		Namespace: testNamespace,
-	}, rb)
-	require.NoError(t, err)
-	assert.Equal(t, expectedServiceAccountName, rb.Name)
-	assert.Equal(t, testNamespace, rb.Namespace)
-	assert.Equal(t, objectMeta.Labels, rb.Labels)
-	assert.Equal(t, []metav1.OwnerReference{ownerRef}, rb.OwnerReferences)
-
-	// Verify RoleBinding subjects and roleRef
-	expectedSubjects := []rbacv1.Subject{
-		{
-			Kind:      "ServiceAccount",
-			Name:      expectedServiceAccountName,
+	inferenceService := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testInferenceService,
 			Namespace: testNamespace,
+			UID:       "test-uid",
+		},
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "ome.io/v1beta1",
+			Kind:       "InferenceService",
 		},
 	}
-	assert.Equal(t, expectedSubjects, rb.Subjects)
 
-	expectedRoleRef := rbacv1.RoleRef{
-		APIGroup: rbacv1.GroupName,
-		Kind:     "Role",
-		Name:     expectedServiceAccountName,
+	tests := []struct {
+		name            string
+		ownerReferences []metav1.OwnerReference
+	}{
+		{
+			name:            "with existing owner references",
+			ownerReferences: []metav1.OwnerReference{ownerRef},
+		},
+		{
+			name:            "without owner references - use inferenceService as owner",
+			ownerReferences: nil,
+		},
 	}
-	assert.Equal(t, expectedRoleRef, rb.RoleRef)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objectMeta := metav1.ObjectMeta{
+				Name:            testServiceName,
+				Namespace:       testNamespace,
+				Labels:          map[string]string{"app": "test-app"},
+				OwnerReferences: tt.ownerReferences,
+			}
+
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+			reconciler := NewRBACReconciler(
+				fakeClient,
+				scheme,
+				objectMeta,
+				v1beta1.RouterComponent,
+				inferenceService,
+			)
+
+			// Test successful reconciliation
+			err := reconciler.Reconcile()
+			require.NoError(t, err)
+
+			expectedServiceAccountName := "test-inference-service-router"
+
+			// Verify ServiceAccount was created
+			sa := &corev1.ServiceAccount{}
+			err = fakeClient.Get(context.Background(), types.NamespacedName{
+				Name:      expectedServiceAccountName,
+				Namespace: testNamespace,
+			}, sa)
+			require.NoError(t, err)
+			assert.Equal(t, expectedServiceAccountName, sa.Name)
+			assert.Equal(t, testNamespace, sa.Namespace)
+			assert.Equal(t, objectMeta.Labels, sa.Labels)
+
+			// Verify OwnerReference was set correctly (either from objectMeta or from inferenceService)
+			require.Len(t, sa.OwnerReferences, 1)
+			assert.Equal(t, "ome.io/v1beta1", sa.OwnerReferences[0].APIVersion)
+			assert.Equal(t, "InferenceService", sa.OwnerReferences[0].Kind)
+			assert.Equal(t, testInferenceService, sa.OwnerReferences[0].Name)
+			assert.Equal(t, types.UID("test-uid"), sa.OwnerReferences[0].UID)
+
+			// Verify Role was created
+			role := &rbacv1.Role{}
+			err = fakeClient.Get(context.Background(), types.NamespacedName{
+				Name:      expectedServiceAccountName,
+				Namespace: testNamespace,
+			}, role)
+			require.NoError(t, err)
+			assert.Equal(t, expectedServiceAccountName, role.Name)
+			assert.Equal(t, testNamespace, role.Namespace)
+			assert.Equal(t, objectMeta.Labels, role.Labels)
+
+			// Verify Role OwnerReference
+			require.Len(t, role.OwnerReferences, 1)
+			assert.Equal(t, "ome.io/v1beta1", role.OwnerReferences[0].APIVersion)
+			assert.Equal(t, "InferenceService", role.OwnerReferences[0].Kind)
+			assert.Equal(t, testInferenceService, role.OwnerReferences[0].Name)
+			assert.Equal(t, types.UID("test-uid"), role.OwnerReferences[0].UID)
+
+			// Verify Role rules
+			expectedRules := []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			}
+			assert.Equal(t, expectedRules, role.Rules)
+
+			// Verify RoleBinding was created
+			rb := &rbacv1.RoleBinding{}
+			err = fakeClient.Get(context.Background(), types.NamespacedName{
+				Name:      expectedServiceAccountName,
+				Namespace: testNamespace,
+			}, rb)
+			require.NoError(t, err)
+			assert.Equal(t, expectedServiceAccountName, rb.Name)
+			assert.Equal(t, testNamespace, rb.Namespace)
+			assert.Equal(t, objectMeta.Labels, rb.Labels)
+
+			// Verify RoleBinding OwnerReference
+			require.Len(t, rb.OwnerReferences, 1)
+			assert.Equal(t, "ome.io/v1beta1", rb.OwnerReferences[0].APIVersion)
+			assert.Equal(t, "InferenceService", rb.OwnerReferences[0].Kind)
+			assert.Equal(t, testInferenceService, rb.OwnerReferences[0].Name)
+			assert.Equal(t, types.UID("test-uid"), rb.OwnerReferences[0].UID)
+
+			// Verify RoleBinding subjects and roleRef
+			expectedSubjects := []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      expectedServiceAccountName,
+					Namespace: testNamespace,
+				},
+			}
+			assert.Equal(t, expectedSubjects, rb.Subjects)
+
+			expectedRoleRef := rbacv1.RoleRef{
+				APIGroup: rbacv1.GroupName,
+				Kind:     "Role",
+				Name:     expectedServiceAccountName,
+			}
+			assert.Equal(t, expectedRoleRef, rb.RoleRef)
+		})
+	}
 }
 
 func TestRBACReconciler_Reconcile_NonRouterComponent(t *testing.T) {
@@ -249,13 +311,21 @@ func TestRBACReconciler_Reconcile_NonRouterComponent(t *testing.T) {
 		},
 	}
 
+	inferenceService := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testInferenceService,
+			Namespace: testNamespace,
+			UID:       "test-uid",
+		},
+	}
+
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 	reconciler := NewRBACReconciler(
 		fakeClient,
 		scheme,
 		objectMeta,
 		v1beta1.PredictorComponent, // Non-router component
-		testInferenceService,
+		inferenceService,
 	)
 
 	// Test successful reconciliation
@@ -302,6 +372,14 @@ func TestRBACReconciler_Reconcile_Update(t *testing.T) {
 		},
 	}
 
+	inferenceService := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testInferenceService,
+			Namespace: testNamespace,
+			UID:       "test-uid",
+		},
+	}
+
 	expectedServiceAccountName := "test-inference-service-router"
 
 	// Pre-create resources with different labels
@@ -325,7 +403,7 @@ func TestRBACReconciler_Reconcile_Update(t *testing.T) {
 		scheme,
 		objectMeta,
 		v1beta1.RouterComponent,
-		testInferenceService,
+		inferenceService,
 	)
 
 	// Test reconciliation updates existing resources
@@ -423,13 +501,21 @@ func BenchmarkRBACReconciler_Reconcile(b *testing.B) {
 		},
 	}
 
+	inferenceService := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testInferenceService,
+			Namespace: testNamespace,
+			UID:       "test-uid",
+		},
+	}
+
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 	reconciler := NewRBACReconciler(
 		fakeClient,
 		scheme,
 		objectMeta,
 		v1beta1.RouterComponent,
-		testInferenceService,
+		inferenceService,
 	)
 
 	b.ResetTimer()

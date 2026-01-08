@@ -98,7 +98,7 @@ func (r *Router) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 		r.Scheme,
 		objectMeta,
 		v1beta1.RouterComponent,
-		isvc.Name,
+		isvc,
 	)
 	if err := r.rbacReconciler.Reconcile(); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile RBAC resources")
