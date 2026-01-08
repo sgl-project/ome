@@ -470,6 +470,16 @@ gpt-audio:
   enableImageInput: false
   lifecyclePhase: "ACTIVE"
 
+gpt-image-1:
+  enabled: false
+  enableImageInput: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-image-1.5:
+  enabled: false
+  enableImageInput: false
+  lifecyclePhase: "ACTIVE"
+
 gpt-5-codex:
   enabled: false
   enableImageInput: true
