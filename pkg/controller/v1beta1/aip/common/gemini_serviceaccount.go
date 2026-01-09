@@ -6,6 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
@@ -151,11 +154,16 @@ func (sa *GeminiServiceAccount) Create(ctx context.Context) error {
 
 	svc, err := iamClient.CreateServiceAccount(ctx, createReq)
 	if err != nil {
-		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusInitError,
-			fmt.Errorf("failed to create service account:%s", err))
+		if status.Code(err) == codes.AlreadyExists {
+			sa.Log.Info("GCP service account already created.", "name", serviceAccountId, "project", projectId)
+		} else {
+			return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusInitError,
+				fmt.Errorf("failed to create service account:%s", err))
+		}
+	} else {
+		sa.Log.Info("GCP service account created", "displayName", svc.DisplayName, "serviceAccountId", serviceAccountId)
 	}
 
-	sa.Log.Info("GCP service account created", "displayName", svc.DisplayName, "serviceAccountId", serviceAccountId)
 	saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", serviceAccountId, projectId)
 
 	retry := 3
@@ -165,7 +173,7 @@ func (sa *GeminiServiceAccount) Create(ctx context.Context) error {
 			Name: fmt.Sprintf("projects/%s/serviceAccounts/%s", projectId, saEmail),
 		})
 
-		if err != nil {
+		if err != nil && status.Code(err) != codes.AlreadyExists {
 			retry--
 			fmt.Println(fmt.Errorf("failed to create service account key:%s, retry remaining: %d", err, retry))
 			if retry > 0 {

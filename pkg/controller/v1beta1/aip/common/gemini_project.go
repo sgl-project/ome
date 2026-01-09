@@ -79,6 +79,7 @@ func (p *GeminiProject) Create(ctx context.Context) error {
 
 	createdProject, err := gcpClient.CreateProject(ctx, req)
 	if err != nil {
+		p.Log.Error(err, "Failed to create project", "projectId", projectId)
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError,
 			fmt.Errorf("failed to create gcp project with projectId:%s:%w", projectId, err))
 	}
@@ -97,6 +98,7 @@ func (p *GeminiProject) Create(ctx context.Context) error {
 	// Enable Vertex API for the project
 	err = p.EnableVertexAiAPI(ctx, createdProject.ProjectId)
 	if err != nil {
+		p.Log.Error(err, "Failed to EnableVertexAiAPI for project", "projectId", createdProject.ProjectId)
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
 	}
 
@@ -108,18 +110,21 @@ func (p *GeminiProject) Create(ctx context.Context) error {
 
 	err = p.LinkToBillingAccount(ctx, createdProject.ProjectId, googleConfig.BillingAccount)
 	if err != nil {
+		p.Log.Error(err, "Failed to link to billing account for project", "projectId", createdProject.ProjectId)
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
 	}
 
 	if googleConfig.EnableBudget {
 		err = p.SetProjectBillingBudget(ctx, createdProject.ProjectId, googleConfig.BillingAccount)
 		if err != nil {
+			p.Log.Error(err, "Failed to set project billing budget for project", "projectId", createdProject.ProjectId)
 			return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
 		}
 	}
 
 	err = p.DisableCacheConfig(ctx, createdProject.ProjectId)
 	if err != nil {
+		p.Log.Error(err, "Failed to disable cache config for project", "projectId", createdProject.ProjectId)
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
 	}
 
@@ -189,6 +194,7 @@ func (p *GeminiProject) updateInternal(ctx context.Context) error {
 
 	updatedProject, err := gcpClient.UpdateProject(ctx, updateReq)
 	if err != nil {
+		p.Log.Error(err, "Failed to update for project", "projectId", p.Resource.Status.ProjectId)
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
 	}
 
@@ -250,6 +256,7 @@ func (p *GeminiProject) Delete(ctx context.Context) error {
 
 	deletedProject, err := gcpClient.DeleteProject(ctx, req)
 	if err != nil {
+		p.Log.Error(err, "Failed to delete for project", "projectId", projectId)
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
 	}
 
