@@ -2,6 +2,7 @@ package pod
 
 import (
 	"context"
+	"regexp"
 
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
@@ -10,6 +11,13 @@ import (
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+var (
+	// Supported DAC profile patterns for AcceleratorClass mapping
+	// Format: GPU_TYPE[-MEMORY]-x<count>
+	// Examples: a10-x1, a100-40g-x2, H100-x4
+	acSupportedDACProfilePattern = regexp.MustCompile(`^(a10|a100-40g|a100-80g|h100|h200)-x([1248])$`)
 )
 
 type DedicatedAIClusterSchedulingInjector struct {
@@ -40,6 +48,7 @@ func (d *DedicatedAIClusterSchedulingInjector) InjectAffinity(pod *v1.Pod) error
 
 	// Get DAC spec by merging with the profile if specified
 	dacSpec := dac.Spec.DeepCopy()
+	isAcSupport := false
 	// If a profile is specified, fetch the corresponding DedicatedAIClusterProfile
 	if dac.Spec.Profile != "" {
 		profile := &omev1beta1.DedicatedAIClusterProfile{}
@@ -50,7 +59,13 @@ func (d *DedicatedAIClusterSchedulingInjector) InjectAffinity(pod *v1.Pod) error
 			log.Error(err, "Non-blocking error: failed to get DAC profile in DAC scheduling injector", "DAC profile name", dac.Spec.Profile)
 		} else {
 			dacSpec = dacctrl.MergeSpecs(&profile.Spec, dacSpec)
+			isAcSupport = checkAcSupport(profile.Name)
 		}
+	}
+
+	if isAcSupport {
+		log.Info("Have AC support with this DAC, skip dac inject to pod", "DAC profile", dac.Spec.Profile)
+		return nil
 	}
 
 	if dacSpec.Affinity != nil {
@@ -59,7 +74,12 @@ func (d *DedicatedAIClusterSchedulingInjector) InjectAffinity(pod *v1.Pod) error
 		}
 		pod.Spec.Affinity = dacSpec.Affinity
 	}
-
+	if dacSpec.Resources != nil {
+		if pod.Spec.Resources == nil {
+			pod.Spec.Resources = &v1.ResourceRequirements{}
+		}
+		pod.Spec.Resources = dacSpec.Resources
+	}
 	if dacSpec.Tolerations != nil {
 		if pod.Spec.Tolerations == nil {
 			pod.Spec.Tolerations = []v1.Toleration{}
@@ -88,4 +108,12 @@ func (d *DedicatedAIClusterSchedulingInjector) InjectAffinity(pod *v1.Pod) error
 	}
 
 	return nil
+}
+
+// During another inference-ac-mutator webhook, it will add ac in inference service with corresponding dac profile.
+// ac will override affinity and other components.
+// when ac supported , pod mutator webhook will skip dac spec inject to pod.
+func checkAcSupport(profileName string) bool {
+	matches := acSupportedDACProfilePattern.FindStringSubmatch(profileName)
+	return matches != nil
 }
