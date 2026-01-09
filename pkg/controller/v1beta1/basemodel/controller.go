@@ -34,6 +34,7 @@ import (
 // +kubebuilder:rbac:groups=ome.io,resources=clusterbasemodels/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;update;delete
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 // BaseModelReconciler reconciles BaseModel objects
 type BaseModelReconciler struct {
