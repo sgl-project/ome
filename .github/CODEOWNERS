@@ -56,7 +56,7 @@
 /pkg/hfutil/ @slin1237 @pallasathena92 @beiguo218
 /pkg/imds/ @slin1237
 /pkg/logging/ @slin1237
-/pkg/modelagent/ @slin1237 @pallasathena92 @beiguo218
+/pkg/modelagent/ @slin1237 @pallasathena92 @beiguo218 @truddy0
 /pkg/modelver/ @slin1237 @pallasathena92 @beiguo218
 /pkg/ociobjectstore/ @slin1237 @pallasathena92 @speedmancs @chengjieyao @davidsnahm @heymrbox @frankzhouhr @beiguo218
 /pkg/principals/ @slin1237 @pallasathena92 @speedmancs @chengjieyao @davidsnahm @heymrbox @frankzhouhr @beiguo218
