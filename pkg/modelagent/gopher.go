@@ -468,6 +468,8 @@ func (s *Gopher) processTask(task *GopherTask) error {
 					return err
 				}
 				s.logger.Infof("Successfully deleted Hugging Face model %s", modelInfo)
+			} else {
+				s.logger.Infof("model %s artifact deletion will be skipped", modelInfo)
 			}
 			if isRemoveParent && parentName != "" && parentDir != "" {
 				err = s.deleteModel(parentDir, nil)
@@ -475,6 +477,8 @@ func (s *Gopher) processTask(task *GopherTask) error {
 					s.logger.Errorf("fail to delete parent model artifact directory %s: %s", parentName, parentDir)
 				}
 				s.logger.Infof("Successfully delete parent model artifact directory %s: %s", parentName, parentDir)
+			} else {
+				s.logger.Infof("no need to delete parent model artifact directory %s: %s", parentName, parentDir)
 			}
 		case storage.StorageTypeLocal:
 			s.logger.Infof("Skipping deletion for local storage model %s (local files should not be deleted)", modelInfo)
@@ -920,25 +924,25 @@ func (s *Gopher) deleteModel(destPath string, task *GopherTask) error {
 func (s *Gopher) isReservingModelArtifact(task *GopherTask) bool {
 	// Guard against nil task or BaseModel; reserve logic applies only to BaseModel labels
 	if task == nil {
-		s.logger.Infof("Model artifact will be deleted")
+		s.logger.Infof("task is nil and will regard no reserved label")
 		return false
 	}
 	// for clusterBaseModel
 	if task.ClusterBaseModel != nil && task.ClusterBaseModel.Labels != nil {
 		if val, exists := task.ClusterBaseModel.Labels[constants.ReserveModelArtifact]; exists && strings.EqualFold(val, "true") {
-			s.logger.Infof("Model artifact will be reserved as ClusterBaseModel has matched label")
+			s.logger.Infof("ClusterBaseModel has reserved label")
 			return true
 		}
 	}
 	// for baseModel
 	if task.BaseModel != nil && task.BaseModel.Labels != nil {
 		if val, exists := task.BaseModel.Labels[constants.ReserveModelArtifact]; exists && strings.EqualFold(val, "true") {
-			s.logger.Infof("Model artifact will be reserved as BaseModel has matched label")
+			s.logger.Infof("BaseModel has reserved label")
 			return true
 		}
 	}
 
-	s.logger.Infof("Model artifact will be deleted")
+	s.logger.Infof("task is nil and will regard no reserved label")
 	return false
 }
 
@@ -1362,7 +1366,10 @@ func (s *Gopher) isRemoveParentArtifactDirectory(ctx context.Context, hasChildre
 
 	if strings.EqualFold(modelType, constants.ClusterBaseModel) {
 		modelCR, getErr := s.clusterBaseModelLister.Get(name)
-		if errors.IsNotFound(getErr) {
+		if getErr != nil {
+			s.logger.Errorf("fail to get cluster base model cr %s: %v", name, err)
+		}
+		if errors.IsNotFound(getErr) || strings.Contains(err.Error(), "not found") {
 			return true
 		}
 		if getErr != nil {
@@ -1375,7 +1382,10 @@ func (s *Gopher) isRemoveParentArtifactDirectory(ctx context.Context, hasChildre
 
 	if strings.EqualFold(modelType, constants.BaseModel) {
 		modelCR, getErr := s.baseModelLister.BaseModels(namespace).Get(name)
-		if errors.IsNotFound(getErr) {
+		if getErr != nil {
+			s.logger.Errorf("fail to get base model cr %s.%s: %v", namespace, name, err)
+		}
+		if errors.IsNotFound(getErr) || strings.Contains(err.Error(), "not found") {
 			return true
 		}
 		if getErr != nil {
