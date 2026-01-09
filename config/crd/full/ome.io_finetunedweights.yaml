@@ -244,6 +244,18 @@ spec:
                 - Ready
                 - Failed
                 type: string
+              storageValidation:
+                properties:
+                  lastChecked:
+                    format: date-time
+                    type: string
+                  message:
+                    type: string
+                  valid:
+                    type: boolean
+                required:
+                - valid
+                type: object
             required:
             - state
             type: object

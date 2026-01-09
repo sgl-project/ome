@@ -34,6 +34,7 @@ import (
 // +kubebuilder:rbac:groups=ome.io,resources=clusterbasemodels/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;update;delete
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 // BaseModelReconciler reconciles BaseModel objects
 type BaseModelReconciler struct {
@@ -88,6 +89,12 @@ func (r *BaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{RequeueAfter: time.Minute}, err
 	}
 
+	// Validate HuggingFace storage URI and update status
+	if err := r.updateStorageValidationStatus(ctx, baseModel); err != nil {
+		log.Error(err, "Failed to update storage validation status")
+		// Don't fail reconciliation for validation errors, just log
+	}
+
 	// Requeue while downloading to ensure status is updated regularly
 	if baseModel.Status.State == v1beta1.LifeCycleStateImporting || baseModel.Status.State == v1beta1.LifeCycleStateInTransit {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
@@ -133,6 +140,12 @@ func (r *ClusterBaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if err := r.updateModelStatus(ctx, clusterBaseModel); err != nil {
 		log.Error(err, "Failed to update ClusterBaseModel status")
 		return ctrl.Result{RequeueAfter: time.Minute}, err
+	}
+
+	// Validate HuggingFace storage URI and update status
+	if err := r.updateStorageValidationStatus(ctx, clusterBaseModel); err != nil {
+		log.Error(err, "Failed to update storage validation status")
+		// Don't fail reconciliation for validation errors, just log
 	}
 
 	// Requeue while downloading to ensure status is updated regularly
@@ -267,6 +280,72 @@ func (r *ClusterBaseModelReconciler) updateModelStatus(ctx context.Context, clus
 		func(ctx context.Context, nodesReady, nodesFailed []string) error {
 			return r.updateStatusWithRetry(ctx, clusterBaseModel, nodesReady, nodesFailed)
 		})
+}
+
+// updateStorageValidationStatus validates the storage URI and updates the status for BaseModel
+func (r *BaseModelReconciler) updateStorageValidationStatus(ctx context.Context, baseModel *v1beta1.BaseModel) error {
+	validationStatus := ValidateAndUpdateStorageStatus(
+		ctx,
+		r.Client,
+		baseModel.Spec.Storage,
+		baseModel.Status.StorageValidation,
+		baseModel.Namespace,
+		r.Log,
+	)
+
+	// If validation status hasn't changed, skip update
+	if validationStatus == nil && baseModel.Status.StorageValidation == nil {
+		return nil
+	}
+	if validationStatus != nil && baseModel.Status.StorageValidation != nil &&
+		validationStatus.Valid == baseModel.Status.StorageValidation.Valid &&
+		validationStatus.Message == baseModel.Status.StorageValidation.Message {
+		return nil
+	}
+
+	// Re-fetch the object to avoid "object has been modified" conflicts
+	// since updateModelStatus may have already updated the status
+	latestModel := &v1beta1.BaseModel{}
+	if err := r.Get(ctx, types.NamespacedName{Name: baseModel.Name, Namespace: baseModel.Namespace}, latestModel); err != nil {
+		return err
+	}
+
+	// Update the status on the latest object
+	latestModel.Status.StorageValidation = validationStatus
+	return r.Client.Status().Update(ctx, latestModel)
+}
+
+// updateStorageValidationStatus validates the storage URI and updates the status for ClusterBaseModel
+func (r *ClusterBaseModelReconciler) updateStorageValidationStatus(ctx context.Context, clusterBaseModel *v1beta1.ClusterBaseModel) error {
+	validationStatus := ValidateAndUpdateStorageStatus(
+		ctx,
+		r.Client,
+		clusterBaseModel.Spec.Storage,
+		clusterBaseModel.Status.StorageValidation,
+		constants.OMENamespace, // ClusterBaseModel uses OME namespace for secrets
+		r.Log,
+	)
+
+	// If validation status hasn't changed, skip update
+	if validationStatus == nil && clusterBaseModel.Status.StorageValidation == nil {
+		return nil
+	}
+	if validationStatus != nil && clusterBaseModel.Status.StorageValidation != nil &&
+		validationStatus.Valid == clusterBaseModel.Status.StorageValidation.Valid &&
+		validationStatus.Message == clusterBaseModel.Status.StorageValidation.Message {
+		return nil
+	}
+
+	// Re-fetch the object to avoid "object has been modified" conflicts
+	// since updateModelStatus may have already updated the status
+	latestModel := &v1beta1.ClusterBaseModel{}
+	if err := r.Get(ctx, types.NamespacedName{Name: clusterBaseModel.Name}, latestModel); err != nil {
+		return err
+	}
+
+	// Update the status on the latest object
+	latestModel.Status.StorageValidation = validationStatus
+	return r.Client.Status().Update(ctx, latestModel)
 }
 
 // processModelStatus is a shared utility function for processing ConfigMaps and updating model status
