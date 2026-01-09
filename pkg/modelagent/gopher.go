@@ -9,8 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/errors"
-
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
@@ -1280,7 +1278,7 @@ func (s *Gopher) isSkippingArtifactDeletion(ctx context.Context, task *GopherTas
 		modelTypeAndModelName := s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel)
 		hasChildren, parentName, parentDir := s.hasChildrenPaths(ctx, modelTypeAndModelName)
 		s.removeChildPathFromParentConfigMapIfNecessary(ctx, hasChildren, parentName, modelTypeAndModelName, destPath)
-		isRemoveParent := s.isRemoveParentArtifactDirectory(ctx, hasChildren, parentName, task)
+		isRemoveParent := s.isRemoveParentArtifactDirectory(ctx, hasChildren, parentName)
 		return hasChildren, isRemoveParent, parentName, parentDir
 	} else {
 		return hasReserveLabel, false, "", ""
@@ -1345,7 +1343,11 @@ func (s *Gopher) removeChildPathFromParentConfigMapIfNecessary(ctx context.Conte
 }
 
 // isRemoveParentArtifactDirectory - if the parent entry does not have any child, check whether to remove the parent artifact directory
-func (s *Gopher) isRemoveParentArtifactDirectory(ctx context.Context, hasChildren bool, parentName string, task *GopherTask) bool {
+// lenient way to determine whether the parent model cr is deleted or not. if more strictly, need to check the model cr existence
+// after checking the existence of parent entry in the configmap
+// However, due to the model key of configmap could be truncated, there is no way to retrieve the exact original parent model CR name and namespace
+// based on the current design
+func (s *Gopher) isRemoveParentArtifactDirectory(ctx context.Context, hasChildren bool, parentName string) bool {
 	// If there are still children, never remove the parent artifact directory.
 	if hasChildren {
 		return false
@@ -1357,50 +1359,5 @@ func (s *Gopher) isRemoveParentArtifactDirectory(ctx context.Context, hasChildre
 		s.logger.Infof("cannot retrieve node configmap and cannot determine parent entry existence, will not remove artifact")
 		return false
 	}
-	if exists {
-		return false
-	}
-
-	// Remove only when the corresponding model CR is definitively not found.
-	modelType, namespace, name := GetModelTypeNamespaceAndName(task)
-
-	if strings.EqualFold(modelType, constants.ClusterBaseModel) {
-		modelCR, getErr := s.clusterBaseModelLister.Get(name)
-		if getErr != nil {
-			s.logger.Errorf("fail to get cluster base model cr %s: %v", name, err)
-		}
-		if modelCR != nil {
-			s.logger.Infof("retrieved cluster base model %s: %s", name, modelCR)
-		}
-		if errors.IsNotFound(getErr) {
-			return true
-		}
-		if getErr != nil {
-			// Be conservative on unexpected errors.
-			return false
-		}
-		// If no error, remove only when CR is nil (shouldn't happen with listers, but preserves prior behavior).
-		return modelCR == nil
-	}
-
-	if strings.EqualFold(modelType, constants.BaseModel) {
-		modelCR, getErr := s.baseModelLister.BaseModels(namespace).Get(name)
-		if getErr != nil {
-			s.logger.Errorf("fail to get base model cr %s.%s: %v", namespace, name, err)
-		}
-		if modelCR != nil {
-			s.logger.Infof("retrieved base model cr %s.%s: %s", namespace, name, modelCR)
-		}
-		if errors.IsNotFound(getErr) {
-			return true
-		}
-		if getErr != nil {
-			// Be conservative on unexpected errors.
-			return false
-		}
-		return modelCR == nil
-	}
-
-	// Unknown type: be conservative and do not remove.
-	return false
+	return !exists
 }

@@ -1345,16 +1345,8 @@ func (l testClusterBaseModelLister) Get(name string) (*v1beta1.ClusterBaseModel,
 func TestIsRemoveParentArtifactDirectory_HasChildren_False(t *testing.T) {
 	cm := makeConfigMap("node-1", map[string]string{})
 	g, client := newGopherAndClientWithConfigMap(cm, t)
-	g.clusterBaseModelLister = testClusterBaseModelLister{models: map[string]*v1beta1.ClusterBaseModel{}}
-	g.baseModelLister = testBaseModelLister{byNS: map[string]testBaseModelNamespaceLister{}}
 
-	task := &GopherTask{
-		TaskType: Delete,
-		ClusterBaseModel: &v1beta1.ClusterBaseModel{
-			ObjectMeta: metav1.ObjectMeta{Name: "cbm"},
-		},
-	}
-	got := g.isRemoveParentArtifactDirectory(context.Background(), true, "clusterbasemodel.parent", task)
+	got := g.isRemoveParentArtifactDirectory(context.Background(), true, "clusterbasemodel.parent")
 	assert.False(t, got, "should not remove when hasChildren is true")
 	assert.Equal(t, 0, countConfigMapGets(client), "expected a single ConfigMap update")
 
@@ -1366,62 +1358,8 @@ func TestIsRemoveParentArtifactDirectory_ParentEntryExists_False(t *testing.T) {
 		parentKey: entryJSON("sha", parentKey, "/models/p"),
 	})
 	g, client := newGopherAndClientWithConfigMap(cm, t)
-	g.clusterBaseModelLister = testClusterBaseModelLister{models: map[string]*v1beta1.ClusterBaseModel{}}
-	g.baseModelLister = testBaseModelLister{byNS: map[string]testBaseModelNamespaceLister{}}
-
-	task := &GopherTask{
-		TaskType: Delete,
-		ClusterBaseModel: &v1beta1.ClusterBaseModel{
-			ObjectMeta: metav1.ObjectMeta{Name: "cbm"},
-		},
-	}
-	got := g.isRemoveParentArtifactDirectory(context.Background(), false, parentKey, task)
+	got := g.isRemoveParentArtifactDirectory(context.Background(), false, parentKey)
 	assert.False(t, got, "should not remove when parent entry exists in ConfigMap")
-	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap update")
-
-}
-
-func TestIsRemoveParentArtifactDirectory_ClusterModelExists_False(t *testing.T) {
-	cm := makeConfigMap("node-1", map[string]string{})
-	g, client := newGopherAndClientWithConfigMap(cm, t)
-	path := "/a/b"
-	g.clusterBaseModelLister = testClusterBaseModelLister{models: map[string]*v1beta1.ClusterBaseModel{
-		"cbm": &v1beta1.ClusterBaseModel{
-			Spec: v1beta1.BaseModelSpec{
-				Storage: &v1beta1.StorageSpec{
-					Path: &path,
-				},
-			},
-		},
-	}}
-
-	g.baseModelLister = testBaseModelLister{byNS: map[string]testBaseModelNamespaceLister{}}
-
-	task := &GopherTask{
-		TaskType: Delete,
-		ClusterBaseModel: &v1beta1.ClusterBaseModel{
-			ObjectMeta: metav1.ObjectMeta{Name: "cbm"},
-		},
-	}
-	got := g.isRemoveParentArtifactDirectory(context.Background(), false, "clusterbasemodel.parent", task)
-	assert.False(t, got, "should not remove when parent missing and ClusterBaseModel CR exists")
-	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap update")
-}
-
-func TestIsRemoveParentArtifactDirectory_ClusterModelNotFound_True(t *testing.T) {
-	cm := makeConfigMap("node-1", map[string]string{})
-	g, client := newGopherAndClientWithConfigMap(cm, t)
-	g.clusterBaseModelLister = testClusterBaseModelLister{models: map[string]*v1beta1.ClusterBaseModel{}}
-	g.baseModelLister = testBaseModelLister{byNS: map[string]testBaseModelNamespaceLister{}}
-
-	task := &GopherTask{
-		TaskType: Delete,
-		ClusterBaseModel: &v1beta1.ClusterBaseModel{
-			ObjectMeta: metav1.ObjectMeta{Name: "cbm-notfound"},
-		},
-	}
-	got := g.isRemoveParentArtifactDirectory(context.Background(), false, "clusterbasemodel.parent", task)
-	assert.True(t, got, "should remove when parent missing and ClusterBaseModel CR is NotFound")
 	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap update")
 
 }
@@ -1429,79 +1367,9 @@ func TestIsRemoveParentArtifactDirectory_ClusterModelNotFound_True(t *testing.T)
 func TestIsRemoveParentArtifactDirectory_CannotRetrieveConfigMap_False(t *testing.T) {
 	// No ConfigMap exists for this node, getDataEntryBasedOnModelKey returns error with "cannot retrieve node configmap"
 	g, client := newGopherWithEmptyClient("missing-node", "ome", t)
-	g.clusterBaseModelLister = testClusterBaseModelLister{models: map[string]*v1beta1.ClusterBaseModel{}}
-	g.baseModelLister = testBaseModelLister{byNS: map[string]testBaseModelNamespaceLister{}}
 
-	task := &GopherTask{
-		TaskType: Delete,
-		ClusterBaseModel: &v1beta1.ClusterBaseModel{
-			ObjectMeta: metav1.ObjectMeta{Name: "cbm"},
-		},
-	}
-	got := g.isRemoveParentArtifactDirectory(context.Background(), false, "clusterbasemodel.parent", task)
+	got := g.isRemoveParentArtifactDirectory(context.Background(), false, "clusterbasemodel.parent")
 	assert.False(t, got, "should not remove when cannot retrieve node configmap")
-	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap update")
-}
-
-func TestIsRemoveParentArtifactDirectory_BaseModelExists_False(t *testing.T) {
-	// No parent entry in ConfigMap, BaseModel exists -> should not remove (returns false)
-	cm := makeConfigMap("node-1", map[string]string{})
-	g, client := newGopherAndClientWithConfigMap(cm, t)
-
-	// BaseModel "ns/bm" exists
-	g.baseModelLister = testBaseModelLister{
-		byNS: map[string]testBaseModelNamespaceLister{
-			"ns": {
-				models: map[string]*v1beta1.BaseModel{
-					"bm": {ObjectMeta: metav1.ObjectMeta{Name: "bm", Namespace: "ns"}},
-				},
-			},
-		},
-	}
-	// No ClusterBaseModels needed for this path
-	g.clusterBaseModelLister = testClusterBaseModelLister{models: map[string]*v1beta1.ClusterBaseModel{}}
-
-	task := &GopherTask{
-		TaskType: Delete,
-		BaseModel: &v1beta1.BaseModel{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "bm",
-				Namespace: "ns",
-			},
-		},
-	}
-	// parentName key doesn't exist in CM
-	got := g.isRemoveParentArtifactDirectory(context.Background(), false, "ns.basemodel.parent", task)
-	assert.False(t, got, "should not remove when BaseModel CR exists")
-	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap update")
-}
-
-func TestIsRemoveParentArtifactDirectory_BaseModelNotFound_True(t *testing.T) {
-	// No parent entry in ConfigMap, BaseModel NotFound -> should remove (returns true)
-	cm := makeConfigMap("node-1", map[string]string{})
-	g, client := newGopherAndClientWithConfigMap(cm, t)
-
-	// BaseModel "ns/bm" NOT found in lister
-	g.baseModelLister = testBaseModelLister{
-		byNS: map[string]testBaseModelNamespaceLister{
-			"ns": {models: map[string]*v1beta1.BaseModel{}},
-		},
-	}
-	// No ClusterBaseModels needed for this path
-	g.clusterBaseModelLister = testClusterBaseModelLister{models: map[string]*v1beta1.ClusterBaseModel{}}
-
-	task := &GopherTask{
-		TaskType: Delete,
-		BaseModel: &v1beta1.BaseModel{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "bm",
-				Namespace: "ns",
-			},
-		},
-	}
-	// parentName key doesn't exist in CM
-	got := g.isRemoveParentArtifactDirectory(context.Background(), false, "ns.basemodel.parent", task)
-	assert.True(t, got, "should remove when BaseModel CR is NotFound")
 	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap update")
 }
 
