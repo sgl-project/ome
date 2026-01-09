@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"go.uber.org/zap/zaptest"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
@@ -1022,6 +1025,16 @@ func countConfigMapUpdates(client *k8sfake.Clientset) int {
 	return n
 }
 
+func countConfigMapGets(client *k8sfake.Clientset) int {
+	n := 0
+	for _, a := range client.Fake.Actions() {
+		if a.Matches("get", "configmaps") {
+			n++
+		}
+	}
+	return n
+}
+
 func getChildrenPaths(entry string) []string {
 	var obj map[string]interface{}
 	if err := json.Unmarshal([]byte(entry), &obj); err != nil {
@@ -1039,7 +1052,7 @@ func getChildrenPaths(entry string) []string {
 	return out
 }
 
-func TestHasChildrenPaths_NoChildren_HasMatchedParent_RemovesChildAndReturnsFalse(t *testing.T) {
+func TestHasChildrenPaths_NoChildren_HasMatchedParent(t *testing.T) {
 	// Keys and paths
 	parentKey := "clusterbasemodel.parentModel"
 	childKey := "clusterbasemodel.childModel"
@@ -1065,22 +1078,19 @@ func TestHasChildrenPaths_NoChildren_HasMatchedParent_RemovesChildAndReturnsFals
 	})
 	g, client := newGopherAndClientWithConfigMap(cm, t)
 
-	got := g.hasChildrenPaths(context.Background(), childKey, childPath)
+	got, parentName, parentDir := g.hasChildrenPaths(context.Background(), childKey)
 	assert.False(t, got, "no children implies cleanup and return false")
 
-	// should have updated CM at least once
-	assert.GreaterOrEqual(t, countConfigMapUpdates(client), 1, "expected a ConfigMap update for parent removal")
+	// should have get CM once
+	assert.Equal(t, countConfigMapGets(client), 1, "expected a ConfigMap get to retrieve configmap")
+	assert.Equal(t, "clusterbasemodel.parentModel", parentName)
+	assert.Equal(t, "/models/parent", parentDir)
 
-	// Verify parent childrenPaths is now empty
-	latest, _ := client.CoreV1().ConfigMaps("ome").Get(context.Background(), "node-1", metav1.GetOptions{})
-	children := getChildrenPaths(latest.Data[parentKey])
-	assert.ElementsMatch(t, []string{}, children, "parent childrenPaths should be empty after removal")
 }
 
-func TestHasChildrenPaths_NoChildren_NoMatchedParentRemovesChildAndReturnsFalse(t *testing.T) {
+func TestHasChildrenPaths_NoChildren_ParentItself(t *testing.T) {
 	// Keys and paths
 	childKey := "clusterbasemodel.childModel"
-	childPath := "/models/childA"
 
 	// Child entry has empty childrenPaths and parent points to itself
 	childEntry := entryJSON("sha", "clusterbasemodel.childModel", "/models/childA")
@@ -1089,24 +1099,55 @@ func TestHasChildrenPaths_NoChildren_NoMatchedParentRemovesChildAndReturnsFalse(
 		childKey: childEntry,
 	})
 	g, client := newGopherAndClientWithConfigMap(cm, t)
-	got := g.hasChildrenPaths(context.Background(), childKey, childPath)
-	assert.False(t, got, "no children implies cleanup and return false")
+	got, parentName, parentDir := g.hasChildrenPaths(context.Background(), childKey)
+	assert.False(t, got, "no children")
 
-	// should not invoke client to update CM
-	assert.Equal(t, 0, countConfigMapUpdates(client), "expected no ConfigMap update for parent removal")
+	// should have get CM once
+	assert.Equal(t, countConfigMapGets(client), 1, "expected a ConfigMap get to retrieve configmap")
+	assert.Equal(t, "clusterbasemodel.childModel", parentName)
+	assert.Equal(t, "/models/childA", parentDir)
 }
 
-func TestHasChildrenPaths_GetConfigMapError_ReturnsTrue_NoUpdate(t *testing.T) {
+func TestHasChildrenPaths_WithChildren_ParentItself(t *testing.T) {
+	modelKey := "clusterbasemodel.model"
+	parentName := "clusterbasemodel.entry"
+	parentPath := "/models/p"
+	childPath := "/models/c"
+
+	// Entry with children means we treat it as parent and do not clean up
+	entry := entryJSON("sha", parentName, parentPath)
+	var obj map[string]interface{}
+	_ = json.Unmarshal([]byte(entry), &obj)
+	cfg := obj["config"].(map[string]interface{})
+	art := cfg["artifact"].(map[string]interface{})
+	art["childrenPaths"] = []interface{}{childPath}
+	entryWithChild, _ := json.Marshal(obj)
+
+	cm := makeConfigMap("node-y", map[string]string{modelKey: string(entryWithChild)})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+
+	got, parentName, parentDir := g.hasChildrenPaths(context.Background(), modelKey)
+	assert.True(t, got, "non-empty children should return true")
+	//assert.Equal(t, 0, countConfigMapUpdates(client), "no update expected when entry already has children")
+	// 1 CM get should have been attempted
+	assert.Equal(t, countConfigMapGets(client), 1, "expected a ConfigMap get to retrieve configmap")
+	assert.Equal(t, "clusterbasemodel.entry", parentName)
+	assert.Equal(t, "/models/p", parentDir)
+}
+
+func TestHasChildrenPaths_GetConfigMapError(t *testing.T) {
 	// No ConfigMap created for this node
 	g, client := newGopherWithEmptyClient("missing-node", "ome", t)
 
-	got := g.hasChildrenPaths(context.Background(), "clusterbasemodel.child", "/models/child")
+	got, parentName, parentDir := g.hasChildrenPaths(context.Background(), "clusterbasemodel.child")
 
 	assert.True(t, got, "should conservatively return true when getConfigMap fails")
-	assert.Equal(t, 0, countConfigMapUpdates(client), "should not attempt to update parent when CM retrieval fails")
+	assert.Equal(t, countConfigMapGets(client), 1, "expected a ConfigMap get to retrieve configmap")
+	assert.Empty(t, parentName)
+	assert.Empty(t, parentDir)
 }
 
-func TestHasChildrenPaths_ParentParseError_ReturnsTrue_NoUpdate(t *testing.T) {
+func TestHasChildrenPaths_ParentParseError(t *testing.T) {
 	// Prepare parent with a child path and a malformed child entry to cause parsing error
 	parentKey := "clusterbasemodel.parent"
 	childKey := "clusterbasemodel.child"
@@ -1131,38 +1172,371 @@ func TestHasChildrenPaths_ParentParseError_ReturnsTrue_NoUpdate(t *testing.T) {
 	})
 	g, client := newGopherAndClientWithConfigMap(cm, t)
 
-	got := g.hasChildrenPaths(context.Background(), childKey, childPath)
+	got, parentName, parentDir := g.hasChildrenPaths(context.Background(), childKey)
 	assert.True(t, got, "error parsing parent/children should conservatively return true")
 
-	// No CM update should have been attempted
-	assert.Equal(t, 0, countConfigMapUpdates(client), "no parent update expected when parse fails")
-
-	// Verify parent childrenPaths unchanged (still contains childPath)
-	latest, _ := client.CoreV1().ConfigMaps("ome").Get(context.Background(), "node-x", metav1.GetOptions{})
-	children := getChildrenPaths(latest.Data[parentKey])
-	assert.ElementsMatch(t, []string{childPath}, children)
+	// 1 CM get should have been attempted
+	assert.Equal(t, countConfigMapGets(client), 1, "expected a ConfigMap get to retrieve configmap")
+	assert.Empty(t, parentName)
+	assert.Empty(t, parentDir)
 }
 
-func TestHasChildrenPaths_WithChildren_ReturnsTrue_NoUpdate(t *testing.T) {
-	key := "clusterbasemodel.entry"
-	parentPath := "/models/p"
-	childPath := "/models/c"
+func TestRemoveChildPathFromParentConfigMapIfNecessary_RemovesWhenEligible(t *testing.T) {
+	parentKey := "clusterbasemodel.parentModel"
+	childKey := "clusterbasemodel.childModel"
+	parentDir := "/models/parent"
+	childPath := "/models/childA"
 
-	// Entry with children means we treat it as parent and do not clean up
-	entry := entryJSON("sha", key, parentPath)
+	// Parent entry contains the child path
+	parentEntry := entryJSON("sha", parentKey, parentDir)
 	var obj map[string]interface{}
-	_ = json.Unmarshal([]byte(entry), &obj)
+	_ = json.Unmarshal([]byte(parentEntry), &obj)
 	cfg := obj["config"].(map[string]interface{})
 	art := cfg["artifact"].(map[string]interface{})
 	art["childrenPaths"] = []interface{}{childPath}
-	entryWithChild, _ := json.Marshal(obj)
+	parentEntryWithChild, _ := json.Marshal(obj)
 
-	cm := makeConfigMap("node-y", map[string]string{key: string(entryWithChild)})
+	// Child entry (content does not affect this method, but keep realistic)
+	childEntry := entryJSON("sha", parentKey, parentDir)
+
+	cm := makeConfigMap("node-1", map[string]string{
+		parentKey: string(parentEntryWithChild),
+		childKey:  childEntry,
+	})
 	g, client := newGopherAndClientWithConfigMap(cm, t)
 
-	got := g.hasChildrenPaths(context.Background(), key, "/unused")
-	assert.True(t, got, "non-empty children should return true")
-	assert.Equal(t, 0, countConfigMapUpdates(client), "no update expected when entry already has children")
+	g.removeChildPathFromParentConfigMapIfNecessary(context.Background(), false, parentKey, childKey, childPath)
+
+	latest, _ := client.CoreV1().ConfigMaps("ome").Get(context.Background(), "node-1", metav1.GetOptions{})
+	children := getChildrenPaths(latest.Data[parentKey])
+	assert.ElementsMatch(t, []string{}, children, "parent childrenPaths should be empty after removal")
+	assert.Equal(t, 1, countConfigMapUpdates(client), "expected a single ConfigMap update")
+}
+
+func TestRemoveChildPathFromParentConfigMapIfNecessary_NoOpWhenHasChildren(t *testing.T) {
+	parentKey := "clusterbasemodel.parentModel"
+	childKey := "clusterbasemodel.childModel"
+	parentDir := "/models/parent"
+	childPath := "/models/childA"
+
+	// Parent entry contains the child path
+	parentEntry := entryJSON("sha", parentKey, parentDir)
+	var obj map[string]interface{}
+	_ = json.Unmarshal([]byte(parentEntry), &obj)
+	cfg := obj["config"].(map[string]interface{})
+	art := cfg["artifact"].(map[string]interface{})
+	art["childrenPaths"] = []interface{}{childPath}
+	parentEntryWithChild, _ := json.Marshal(obj)
+
+	cm := makeConfigMap("node-1", map[string]string{
+		parentKey: string(parentEntryWithChild),
+	})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+
+	// hasChildren = true -> should be no-op
+	g.removeChildPathFromParentConfigMapIfNecessary(context.Background(), true, parentKey, childKey, childPath)
+
+	latest, _ := client.CoreV1().ConfigMaps("ome").Get(context.Background(), "node-1", metav1.GetOptions{})
+	children := getChildrenPaths(latest.Data[parentKey])
+	assert.ElementsMatch(t, []string{childPath}, children, "childrenPaths should remain unchanged when hasChildren is true")
+	assert.Equal(t, 0, countConfigMapUpdates(client), "no ConfigMap update expected")
+}
+
+func TestRemoveChildPathFromParentConfigMapIfNecessary_NoOpWhenParentIsSelf(t *testing.T) {
+	childKey := "namespace.basemodel.child"
+	// different case to validate case-insensitive equality
+	parentName := "NAMESPACE.BASEMODEL.CHILD"
+	parentDir := "/models/child"
+	childPath := "/models/child"
+
+	// Entry with children containing the child's path
+	parentEntry := entryJSON("sha", parentName, parentDir)
+	var obj map[string]interface{}
+	_ = json.Unmarshal([]byte(parentEntry), &obj)
+	cfg := obj["config"].(map[string]interface{})
+	art := cfg["artifact"].(map[string]interface{})
+	art["childrenPaths"] = []interface{}{childPath}
+	parentEntryWithChild, _ := json.Marshal(obj)
+
+	cm := makeConfigMap("node-1", map[string]string{
+		parentName: string(parentEntryWithChild),
+	})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+
+	g.removeChildPathFromParentConfigMapIfNecessary(context.Background(), false, parentName, childKey, childPath)
+
+	latest, _ := client.CoreV1().ConfigMaps("ome").Get(context.Background(), "node-1", metav1.GetOptions{})
+	children := getChildrenPaths(latest.Data[parentName])
+	assert.ElementsMatch(t, []string{childPath}, children, "no removal when parent equals self (case-insensitive)")
+	assert.Equal(t, 0, countConfigMapUpdates(client), "no ConfigMap update expected when parent equals self")
+}
+
+func TestRemoveChildPathFromParentConfigMapIfNecessary_ErrorWhenParentMissing_NoPanic(t *testing.T) {
+	// Only child entry, parent key missing
+	childKey := "clusterbasemodel.child"
+	childEntry := entryJSON("sha", "clusterbasemodel.parent", "/models/p")
+
+	cm := makeConfigMap("node-1", map[string]string{
+		childKey: childEntry,
+	})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+
+	assert.NotPanics(t, func() {
+		g.removeChildPathFromParentConfigMapIfNecessary(context.Background(), false, "clusterbasemodel.missing", childKey, "/models/child")
+	}, "method should not panic when reconciler returns error")
+
+	assert.Equal(t, 0, countConfigMapUpdates(client), "no ConfigMap update should occur when parent key missing")
+}
+
+// Mocks specialized for isRemoveParentArtifactDirectory tests
+type testBaseModelNamespaceLister struct {
+	models map[string]*v1beta1.BaseModel
+}
+
+func (l testBaseModelNamespaceLister) List(selector labels.Selector) ([]*v1beta1.BaseModel, error) {
+	out := make([]*v1beta1.BaseModel, 0, len(l.models))
+	for _, m := range l.models {
+		out = append(out, m)
+	}
+	return out, nil
+}
+
+func (l testBaseModelNamespaceLister) Get(name string) (*v1beta1.BaseModel, error) {
+	if m, ok := l.models[name]; ok {
+		return m, nil
+	}
+	return nil, apierrors.NewNotFound(schema.GroupResource{Group: "ome.io", Resource: "basemodels"}, name)
+}
+
+type testBaseModelLister struct {
+	byNS map[string]testBaseModelNamespaceLister
+}
+
+func (l testBaseModelLister) List(selector labels.Selector) ([]*v1beta1.BaseModel, error) {
+	return nil, nil
+}
+
+func (l testBaseModelLister) BaseModels(namespace string) omev1beta1lister.BaseModelNamespaceLister {
+	if ns, ok := l.byNS[namespace]; ok {
+		return ns
+	}
+	return testBaseModelNamespaceLister{models: map[string]*v1beta1.BaseModel{}}
+}
+
+type testClusterBaseModelLister struct {
+	models map[string]*v1beta1.ClusterBaseModel
+}
+
+func (l testClusterBaseModelLister) List(selector labels.Selector) ([]*v1beta1.ClusterBaseModel, error) {
+	out := make([]*v1beta1.ClusterBaseModel, 0, len(l.models))
+	for _, m := range l.models {
+		out = append(out, m)
+	}
+	return out, nil
+}
+
+func (l testClusterBaseModelLister) Get(name string) (*v1beta1.ClusterBaseModel, error) {
+	if m, ok := l.models[name]; ok {
+		return m, nil
+	}
+	return nil, apierrors.NewNotFound(schema.GroupResource{Group: "ome.io", Resource: "clusterbasemodels"}, name)
+}
+
+func TestIsRemoveParentArtifactDirectory_HasChildren_False(t *testing.T) {
+	cm := makeConfigMap("node-1", map[string]string{})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+	g.clusterBaseModelLister = testClusterBaseModelLister{models: map[string]*v1beta1.ClusterBaseModel{}}
+	g.baseModelLister = testBaseModelLister{byNS: map[string]testBaseModelNamespaceLister{}}
+
+	task := &GopherTask{
+		TaskType: Delete,
+		ClusterBaseModel: &v1beta1.ClusterBaseModel{
+			ObjectMeta: metav1.ObjectMeta{Name: "cbm"},
+		},
+	}
+	got := g.isRemoveParentArtifactDirectory(context.Background(), true, "clusterbasemodel.parent", task)
+	assert.False(t, got, "should not remove when hasChildren is true")
+	assert.Equal(t, 0, countConfigMapGets(client), "expected a single ConfigMap update")
+
+}
+
+func TestIsRemoveParentArtifactDirectory_ParentEntryExists_False(t *testing.T) {
+	parentKey := "clusterbasemodel.parent"
+	cm := makeConfigMap("node-1", map[string]string{
+		parentKey: entryJSON("sha", parentKey, "/models/p"),
+	})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+	g.clusterBaseModelLister = testClusterBaseModelLister{models: map[string]*v1beta1.ClusterBaseModel{}}
+	g.baseModelLister = testBaseModelLister{byNS: map[string]testBaseModelNamespaceLister{}}
+
+	task := &GopherTask{
+		TaskType: Delete,
+		ClusterBaseModel: &v1beta1.ClusterBaseModel{
+			ObjectMeta: metav1.ObjectMeta{Name: "cbm"},
+		},
+	}
+	got := g.isRemoveParentArtifactDirectory(context.Background(), false, parentKey, task)
+	assert.False(t, got, "should not remove when parent entry exists in ConfigMap")
+	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap update")
+
+}
+
+func TestIsRemoveParentArtifactDirectory_ClusterModelExists_False(t *testing.T) {
+	cm := makeConfigMap("node-1", map[string]string{})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+	path := "/a/b"
+	g.clusterBaseModelLister = testClusterBaseModelLister{models: map[string]*v1beta1.ClusterBaseModel{
+		"cbm": &v1beta1.ClusterBaseModel{
+			Spec: v1beta1.BaseModelSpec{
+				Storage: &v1beta1.StorageSpec{
+					Path: &path,
+				},
+			},
+		},
+	}}
+
+	g.baseModelLister = testBaseModelLister{byNS: map[string]testBaseModelNamespaceLister{}}
+
+	task := &GopherTask{
+		TaskType: Delete,
+		ClusterBaseModel: &v1beta1.ClusterBaseModel{
+			ObjectMeta: metav1.ObjectMeta{Name: "cbm"},
+		},
+	}
+	got := g.isRemoveParentArtifactDirectory(context.Background(), false, "clusterbasemodel.parent", task)
+	assert.False(t, got, "should not remove when parent missing and ClusterBaseModel CR exists")
+	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap update")
+}
+
+func TestIsRemoveParentArtifactDirectory_ClusterModelNotFound_True(t *testing.T) {
+	cm := makeConfigMap("node-1", map[string]string{})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+	g.clusterBaseModelLister = testClusterBaseModelLister{models: map[string]*v1beta1.ClusterBaseModel{}}
+	g.baseModelLister = testBaseModelLister{byNS: map[string]testBaseModelNamespaceLister{}}
+
+	task := &GopherTask{
+		TaskType: Delete,
+		ClusterBaseModel: &v1beta1.ClusterBaseModel{
+			ObjectMeta: metav1.ObjectMeta{Name: "cbm-notfound"},
+		},
+	}
+	got := g.isRemoveParentArtifactDirectory(context.Background(), false, "clusterbasemodel.parent", task)
+	assert.True(t, got, "should remove when parent missing and ClusterBaseModel CR is NotFound")
+	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap update")
+
+}
+
+func TestIsRemoveParentArtifactDirectory_CannotRetrieveConfigMap_False(t *testing.T) {
+	// No ConfigMap exists for this node, getDataEntryBasedOnModelKey returns error with "cannot retrieve node configmap"
+	g, client := newGopherWithEmptyClient("missing-node", "ome", t)
+	g.clusterBaseModelLister = testClusterBaseModelLister{models: map[string]*v1beta1.ClusterBaseModel{}}
+	g.baseModelLister = testBaseModelLister{byNS: map[string]testBaseModelNamespaceLister{}}
+
+	task := &GopherTask{
+		TaskType: Delete,
+		ClusterBaseModel: &v1beta1.ClusterBaseModel{
+			ObjectMeta: metav1.ObjectMeta{Name: "cbm"},
+		},
+	}
+	got := g.isRemoveParentArtifactDirectory(context.Background(), false, "clusterbasemodel.parent", task)
+	assert.False(t, got, "should not remove when cannot retrieve node configmap")
+	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap update")
+}
+
+func TestIsRemoveParentArtifactDirectory_BaseModelExists_False(t *testing.T) {
+	// No parent entry in ConfigMap, BaseModel exists -> should not remove (returns false)
+	cm := makeConfigMap("node-1", map[string]string{})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+
+	// BaseModel "ns/bm" exists
+	g.baseModelLister = testBaseModelLister{
+		byNS: map[string]testBaseModelNamespaceLister{
+			"ns": {
+				models: map[string]*v1beta1.BaseModel{
+					"bm": {ObjectMeta: metav1.ObjectMeta{Name: "bm", Namespace: "ns"}},
+				},
+			},
+		},
+	}
+	// No ClusterBaseModels needed for this path
+	g.clusterBaseModelLister = testClusterBaseModelLister{models: map[string]*v1beta1.ClusterBaseModel{}}
+
+	task := &GopherTask{
+		TaskType: Delete,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "bm",
+				Namespace: "ns",
+			},
+		},
+	}
+	// parentName key doesn't exist in CM
+	got := g.isRemoveParentArtifactDirectory(context.Background(), false, "ns.basemodel.parent", task)
+	assert.False(t, got, "should not remove when BaseModel CR exists")
+	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap update")
+}
+
+func TestIsRemoveParentArtifactDirectory_BaseModelNotFound_True(t *testing.T) {
+	// No parent entry in ConfigMap, BaseModel NotFound -> should remove (returns true)
+	cm := makeConfigMap("node-1", map[string]string{})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+
+	// BaseModel "ns/bm" NOT found in lister
+	g.baseModelLister = testBaseModelLister{
+		byNS: map[string]testBaseModelNamespaceLister{
+			"ns": {models: map[string]*v1beta1.BaseModel{}},
+		},
+	}
+	// No ClusterBaseModels needed for this path
+	g.clusterBaseModelLister = testClusterBaseModelLister{models: map[string]*v1beta1.ClusterBaseModel{}}
+
+	task := &GopherTask{
+		TaskType: Delete,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "bm",
+				Namespace: "ns",
+			},
+		},
+	}
+	// parentName key doesn't exist in CM
+	got := g.isRemoveParentArtifactDirectory(context.Background(), false, "ns.basemodel.parent", task)
+	assert.True(t, got, "should remove when BaseModel CR is NotFound")
+	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap update")
+}
+
+func TestIsSkippingArtifactDeletion_ReserveLabel_Skip(t *testing.T) {
+	node := "node-r2"
+	destPath := "/models/x"
+
+	cm := makeConfigMap(node, map[string]string{})
+	g := newGopherWithConfigMap(cm)
+	// No references
+	g.baseModelLister = &mockBaseModelLister{}
+	g.clusterBaseModelLister = &mockClusterBaseModelLister{}
+
+	// Reserve label on BaseModel
+	task := &GopherTask{
+		TaskType: Download,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns",
+				Name:      "bm",
+				Labels: map[string]string{
+					"models.ome/reserve-model-artifact": "true",
+				},
+			},
+			Spec: v1beta1.BaseModelSpec{
+				Storage: &v1beta1.StorageSpec{},
+			},
+		},
+	}
+
+	got, isRemoveParent, parentName, parentDir := g.isSkippingArtifactDeletion(context.Background(), task, destPath, false)
+	assert.True(t, got, "reserve label should skip deletion")
+	assert.False(t, isRemoveParent)
+	assert.Empty(t, parentName)
+	assert.Empty(t, parentDir)
 }
 
 func TestIsSkippingArtifactDeletion_ReferencedByOthers_Skip(t *testing.T) {
@@ -1203,30 +1577,29 @@ func TestIsSkippingArtifactDeletion_ReferencedByOthers_Skip(t *testing.T) {
 		},
 	}
 
-	got := g.isSkippingArtifactDeletion(context.Background(), task, destPath, false)
+	got, isRemoveParent, parentName, parentDir := g.isSkippingArtifactDeletion(context.Background(), task, destPath, false)
 	assert.True(t, got, "referenced by others should skip deletion")
+	assert.False(t, isRemoveParent)
+	assert.Empty(t, parentName)
+	assert.Empty(t, parentDir)
 }
 
-func TestIsSkippingArtifactDeletion_ReserveLabel_Skip(t *testing.T) {
-	node := "node-r2"
+func TestIsSkippingArtifactDeletion_ReferenceCheckError_Skip(t *testing.T) {
+	node := "node-r5"
 	destPath := "/models/x"
 
 	cm := makeConfigMap(node, map[string]string{})
 	g := newGopherWithConfigMap(cm)
-	// No references
-	g.baseModelLister = &mockBaseModelLister{}
+	// Simulate lister error path
+	g.baseModelLister = &mockBaseModelLister{err: errors.New("lister failed")}
 	g.clusterBaseModelLister = &mockClusterBaseModelLister{}
 
-	// Reserve label on BaseModel
 	task := &GopherTask{
 		TaskType: Download,
 		BaseModel: &v1beta1.BaseModel{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "ns",
 				Name:      "bm",
-				Labels: map[string]string{
-					"models.ome/reserve-model-artifact": "true",
-				},
 			},
 			Spec: v1beta1.BaseModelSpec{
 				Storage: &v1beta1.StorageSpec{},
@@ -1234,8 +1607,11 @@ func TestIsSkippingArtifactDeletion_ReserveLabel_Skip(t *testing.T) {
 		},
 	}
 
-	got := g.isSkippingArtifactDeletion(context.Background(), task, destPath, false)
-	assert.True(t, got, "reserve label should skip deletion")
+	got, isRemoveParent, actualParentName, actualParentDir := g.isSkippingArtifactDeletion(context.Background(), task, destPath, false)
+	assert.True(t, got, "on reference check error deletion should be skipped")
+	assert.False(t, isRemoveParent)
+	assert.Empty(t, actualParentName)
+	assert.Empty(t, actualParentDir)
 }
 
 func TestIsSkippingArtifactDeletion_ChildrenPresent_Skip(t *testing.T) {
@@ -1274,8 +1650,11 @@ func TestIsSkippingArtifactDeletion_ChildrenPresent_Skip(t *testing.T) {
 		},
 	}
 
-	got := g.isSkippingArtifactDeletion(context.Background(), task, destPath, true)
+	got, isRemoveParent, parentName, parentDir := g.isSkippingArtifactDeletion(context.Background(), task, destPath, true)
 	assert.True(t, got, "non-empty childrenPaths should skip deletion")
+	assert.False(t, isRemoveParent)
+	assert.Equal(t, "ns.basemodel.child", parentName)
+	assert.Equal(t, "/models/parent", parentDir)
 }
 
 func TestIsSkippingArtifactDeletion_NoChildren_ProceedsAndUpdatesParent(t *testing.T) {
@@ -1327,38 +1706,15 @@ func TestIsSkippingArtifactDeletion_NoChildren_ProceedsAndUpdatesParent(t *testi
 		},
 	}
 
-	got := g.isSkippingArtifactDeletion(context.Background(), task, destPath, true)
+	got, isRemoveParent, actualParentName, actualParentDir := g.isSkippingArtifactDeletion(context.Background(), task, destPath, true)
 	assert.False(t, got, "no children implies deletion should proceed and parent cleaned")
 
 	// Verify parent childrenPaths is now empty
 	latest, _ := client.CoreV1().ConfigMaps("ome").Get(context.Background(), node, metav1.GetOptions{})
 	children := getChildrenPaths(latest.Data[parentKey])
 	assert.ElementsMatch(t, []string{}, children, "parent childrenPaths should be empty after removal")
-}
 
-func TestIsSkippingArtifactDeletion_ReferenceCheckError_Skip(t *testing.T) {
-	node := "node-r5"
-	destPath := "/models/x"
-
-	cm := makeConfigMap(node, map[string]string{})
-	g := newGopherWithConfigMap(cm)
-	// Simulate lister error path
-	g.baseModelLister = &mockBaseModelLister{err: errors.New("lister failed")}
-	g.clusterBaseModelLister = &mockClusterBaseModelLister{}
-
-	task := &GopherTask{
-		TaskType: Download,
-		BaseModel: &v1beta1.BaseModel{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: "ns",
-				Name:      "bm",
-			},
-			Spec: v1beta1.BaseModelSpec{
-				Storage: &v1beta1.StorageSpec{},
-			},
-		},
-	}
-
-	got := g.isSkippingArtifactDeletion(context.Background(), task, destPath, false)
-	assert.True(t, got, "on reference check error deletion should be skipped")
+	assert.False(t, isRemoveParent)
+	assert.Equal(t, parentKey, actualParentName)
+	assert.Equal(t, parentDir, actualParentDir)
 }

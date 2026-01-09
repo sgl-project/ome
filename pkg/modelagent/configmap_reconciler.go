@@ -1312,3 +1312,15 @@ func (c *ConfigMapReconciler) updateConfigMapWithRemovedChildPath(ctx context.Co
 	}
 	return err
 }
+
+func (c *ConfigMapReconciler) getDataEntryBasedOnModelKey(ctx context.Context, modelKey string) (bool, string, error) {
+	// get cm
+	existingConfigMap, err := c.getConfigMap(ctx)
+	if err != nil {
+		c.logger.Errorf("cannot retrieve node configmap: %v", err)
+		return false, "", fmt.Errorf("cannot retrieve node configmap: %v", err)
+	}
+	dataEntry, exists := existingConfigMap.Data[modelKey]
+	c.logger.Infof("modelKey %s exists: %v", modelKey, exists)
+	return exists, dataEntry, nil
+}
