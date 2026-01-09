@@ -1154,8 +1154,7 @@ func TestUpdateConfigMapWithUpdatedChildrenPaths_MissingKey_NoOp(t *testing.T) {
 
 	// no op and error to tell key not found
 	err = reconciler.updateConfigMapWithUpdatedChildrenPaths(ctx, key, "/b")
-	assert.NotNil(t, err)
-	assert.True(t, strings.Contains(err.Error(), "key namespace.basemodel.sample not found in ConfigMap"))
+	assert.Nil(t, err)
 
 	updated, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
 	assert.NoError(t, err)
@@ -1251,12 +1250,12 @@ func TestUpdateConfigMapWithRetry_Success(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Apply update via retry helper
-	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
 		if latest.Data == nil {
 			latest.Data = make(map[string]string)
 		}
 		latest.Data["k"] = "v2"
-		return latest, nil
+		return true, latest, nil
 	})
 	assert.NoError(t, err)
 
@@ -1282,8 +1281,8 @@ func TestUpdateConfigMapWithRetry_UpdateFuncError(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Mutator returns error; no update should be attempted
-	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (*corev1.ConfigMap, error) {
-		return latest, errors.New("mutator failure")
+	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
+		return false, latest, errors.New("mutator failure")
 	})
 	assert.Error(t, err)
 	got, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
@@ -1359,8 +1358,12 @@ func TestUpdateConfigMapWithRemovedChildPath_MissingParentKey_ReturnsError(t *te
 
 	childPath := "/child"
 	err = reconciler.updateConfigMapWithRemovedChildPath(ctx, parentKey, childPath)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "key "+parentKey+" not found in ConfigMap")
+	assert.Nil(t, err)
+	// no op
+	cm, err1 := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err1)
+	_, exists := cm.Data[parentKey]
+	assert.False(t, exists)
 }
 
 func TestRemoveChildPathFromParent_RemovesExisting(t *testing.T) {
@@ -1708,8 +1711,8 @@ func TestUpdateConfigMapWithRetry_GetError(t *testing.T) {
 		return true, nil, errors.New("get failed")
 	})
 
-	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (*corev1.ConfigMap, error) {
-		return latest, nil
+	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
+		return true, latest, nil
 	})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "get failed")
@@ -1744,12 +1747,12 @@ func TestUpdateConfigMapWithRetry_UpdateConflict_RetrySucceeds(t *testing.T) {
 		return false, nil, nil
 	})
 
-	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
 		if latest.Data == nil {
 			latest.Data = make(map[string]string)
 		}
 		latest.Data["k"] = "v2"
-		return latest, nil
+		return true, latest, nil
 	})
 	assert.NoError(t, err)
 
@@ -1779,12 +1782,12 @@ func TestUpdateConfigMapWithRetry_UpdateError(t *testing.T) {
 		return true, nil, errors.New("update failed")
 	})
 
-	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+	err = reconciler.updateConfigMapWithRetry(ctx, func(latest *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
 		if latest.Data == nil {
 			latest.Data = make(map[string]string)
 		}
 		latest.Data["k"] = "v2"
-		return latest, nil
+		return true, latest, nil
 	})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "update failed")

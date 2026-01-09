@@ -1369,7 +1369,10 @@ func (s *Gopher) isRemoveParentArtifactDirectory(ctx context.Context, hasChildre
 		if getErr != nil {
 			s.logger.Errorf("fail to get cluster base model cr %s: %v", name, err)
 		}
-		if errors.IsNotFound(getErr) || strings.Contains(err.Error(), "not found") {
+		if modelCR != nil {
+			s.logger.Infof("retrieved cluster base model %s: %s", name, modelCR)
+		}
+		if errors.IsNotFound(getErr) {
 			return true
 		}
 		if getErr != nil {
@@ -1385,7 +1388,10 @@ func (s *Gopher) isRemoveParentArtifactDirectory(ctx context.Context, hasChildre
 		if getErr != nil {
 			s.logger.Errorf("fail to get base model cr %s.%s: %v", namespace, name, err)
 		}
-		if errors.IsNotFound(getErr) || strings.Contains(err.Error(), "not found") {
+		if modelCR != nil {
+			s.logger.Infof("retrieved base model cr %s.%s: %s", namespace, name, modelCR)
+		}
+		if errors.IsNotFound(getErr) {
 			return true
 		}
 		if getErr != nil {

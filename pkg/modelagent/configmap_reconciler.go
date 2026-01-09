@@ -892,14 +892,14 @@ func (c *ConfigMapReconciler) saveConfigMap(ctx context.Context, configMap *core
 		// Store the data we want to apply - this is the caller's intended changes
 		dataToApply := configMap.Data
 
-		updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+		updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
 			if currentConfigMap.Data == nil {
 				currentConfigMap.Data = make(map[string]string)
 			}
 			for key, value := range dataToApply {
 				currentConfigMap.Data[key] = value
 			}
-			return currentConfigMap, nil
+			return true, currentConfigMap, nil
 		}
 		err := c.updateConfigMapWithRetry(ctx, updateConfigMap)
 
@@ -921,7 +921,7 @@ func (c *ConfigMapReconciler) saveConfigMap(ctx context.Context, configMap *core
 //
 // Returns:
 //   - error: Any error of updateConfigmap function, operation error of Kube, or final retry exhaustion.
-func (c *ConfigMapReconciler) updateConfigMapWithRetry(ctx context.Context, updateConfigmap func(currentConfigMap *corev1.ConfigMap) (*corev1.ConfigMap, error)) error {
+func (c *ConfigMapReconciler) updateConfigMapWithRetry(ctx context.Context, updateConfigmap func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error)) error {
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// Re-fetch the latest ConfigMap to get current ResourceVersion
 		latestCM, err := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Get(ctx, c.nodeName, metav1.GetOptions{})
@@ -930,10 +930,14 @@ func (c *ConfigMapReconciler) updateConfigMapWithRetry(ctx context.Context, upda
 			return err
 		}
 
-		updatedConfigmap, err := updateConfigmap(latestCM)
+		needUpdate, updatedConfigmap, err := updateConfigmap(latestCM)
 		if err != nil {
 			c.logger.Errorf("failed to compute updated ConfigMap: %s", err)
 			return err
+		}
+		if !needUpdate {
+			c.logger.Infof("no need to update ConfigMap to Kube API server")
+			return nil
 		}
 
 		// Update with the merged data
@@ -1263,17 +1267,18 @@ func (c *ConfigMapReconciler) removeChildPathFromParent(childPath string, parent
 func (c *ConfigMapReconciler) updateConfigMapWithUpdatedChildrenPaths(ctx context.Context, modelTypeAndModelName string, newPath string) error {
 	// Recompute the merged JSON inside the retry closure using the freshest data to avoid
 	// stomping concurrent updates and to reduce conflict retries.
-	updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+	updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
 		existingDataEntry, exists := currentConfigMap.Data[modelTypeAndModelName]
 		if !exists {
-			return currentConfigMap, fmt.Errorf("key %s not found in ConfigMap", modelTypeAndModelName)
+			c.logger.Infof("key %s not found in ConfigMap", modelTypeAndModelName)
+			return false, currentConfigMap, nil
 		}
 		mergedEntry, err := c.addPathToChildrenPaths(modelTypeAndModelName, newPath, existingDataEntry)
 		if err != nil {
-			return currentConfigMap, err
+			return false, currentConfigMap, err
 		}
 		currentConfigMap.Data[modelTypeAndModelName] = mergedEntry
-		return currentConfigMap, nil
+		return true, currentConfigMap, nil
 	}
 	err := c.updateConfigMapWithRetry(ctx, updateConfigMap)
 	if err != nil {
@@ -1294,17 +1299,18 @@ Parameters:
   - childPath:  The absolute path of the child model to remove from the parent's childrenPaths.
 */
 func (c *ConfigMapReconciler) updateConfigMapWithRemovedChildPath(ctx context.Context, parentName string, childPath string) error {
-	updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+	updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
 		existingDataEntry, exists := currentConfigMap.Data[parentName]
 		if !exists {
-			return currentConfigMap, fmt.Errorf("key %s not found in ConfigMap", parentName)
+			c.logger.Infof("key %s not found in ConfigMap", parentName)
+			return false, currentConfigMap, nil
 		}
 		removedEntry, err := c.removeChildPathFromParent(childPath, parentName, existingDataEntry)
 		if err != nil {
-			return currentConfigMap, err
+			return false, currentConfigMap, err
 		}
 		currentConfigMap.Data[parentName] = removedEntry
-		return currentConfigMap, nil
+		return true, currentConfigMap, nil
 	}
 	err := c.updateConfigMapWithRetry(ctx, updateConfigMap)
 	if err != nil {
