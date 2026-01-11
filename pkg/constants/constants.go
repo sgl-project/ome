@@ -248,11 +248,11 @@ var (
 
 // Webhook Constants
 var (
-	PodMutatorWebhookName                   = OMEName + "-pod-mutator-webhook"
-	ServingRuntimeValidatorWebhookName      = OMEName + "-servingRuntime-validator-webhook"
-	BenchmarkJobValidatorWebhookName        = OMEName + "-benchmark-job-validator-webhook"
-	BaseModelValidatorWebhookName           = OMEName + "-baseModel-validator-webhook"
-	ClusterBaseModelValidatorWebhookName    = OMEName + "-clusterBaseModel-validator-webhook"
+	PodMutatorWebhookName                = OMEName + "-pod-mutator-webhook"
+	ServingRuntimeValidatorWebhookName   = OMEName + "-servingRuntime-validator-webhook"
+	BenchmarkJobValidatorWebhookName     = OMEName + "-benchmark-job-validator-webhook"
+	BaseModelValidatorWebhookName        = OMEName + "-baseModel-validator-webhook"
+	ClusterBaseModelValidatorWebhookName = OMEName + "-clusterBaseModel-validator-webhook"
 )
 
 // GPU/CPU resource constants

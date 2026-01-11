@@ -16,9 +16,9 @@ import (
 
 const (
 	// HuggingFace API constants
-	DefaultHFEndpoint  = "https://huggingface.co"
-	HFAPIPath          = "api/models"
-	ValidationTimeout  = 10 * time.Second
+	DefaultHFEndpoint = "https://huggingface.co"
+	HFAPIPath         = "api/models"
+	ValidationTimeout = 10 * time.Second
 )
 
 var (
@@ -30,8 +30,8 @@ var (
 	modelIdPattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,96}/[a-zA-Z0-9_.-]{1,96}$`)
 
 	// HTTP client with connection pooling for HF API calls
-	hfHTTPClient     *http.Client
-	hfClientOnce     sync.Once
+	hfHTTPClient *http.Client
+	hfClientOnce sync.Once
 )
 
 // HuggingFaceValidationResult represents the result of validating a HuggingFace model

@@ -61,40 +61,40 @@ func TestIsHuggingFaceURI(t *testing.T) {
 
 func TestValidateModelIDFormat(t *testing.T) {
 	tests := []struct {
-		name           string
-		storageURI     string
-		expectedValid  bool
-		hasError       bool
+		name          string
+		storageURI    string
+		expectedValid bool
+		hasError      bool
 	}{
 		{
-			name:           "Valid model ID format",
-			storageURI:     "hf://meta-llama/Llama-2-7b",
-			expectedValid:  true,
-			hasError:       false,
+			name:          "Valid model ID format",
+			storageURI:    "hf://meta-llama/Llama-2-7b",
+			expectedValid: true,
+			hasError:      false,
 		},
 		{
-			name:           "Valid model ID with branch",
-			storageURI:     "hf://meta-llama/Llama-2-7b@main",
-			expectedValid:  true,
-			hasError:       false,
+			name:          "Valid model ID with branch",
+			storageURI:    "hf://meta-llama/Llama-2-7b@main",
+			expectedValid: true,
+			hasError:      false,
 		},
 		{
-			name:           "Valid model ID with underscores and dots",
-			storageURI:     "hf://org_name/model.name-v1",
-			expectedValid:  true,
-			hasError:       false,
+			name:          "Valid model ID with underscores and dots",
+			storageURI:    "hf://org_name/model.name-v1",
+			expectedValid: true,
+			hasError:      false,
 		},
 		{
-			name:           "Invalid model ID format - missing org",
-			storageURI:     "hf://just-model-name",
-			expectedValid:  false,
-			hasError:       true,
+			name:          "Invalid model ID format - missing org",
+			storageURI:    "hf://just-model-name",
+			expectedValid: false,
+			hasError:      true,
 		},
 		{
-			name:           "Invalid HuggingFace URI format",
-			storageURI:     "hf://",
-			expectedValid:  false,
-			hasError:       true,
+			name:          "Invalid HuggingFace URI format",
+			storageURI:    "hf://",
+			expectedValid: false,
+			hasError:      true,
 		},
 	}
 
@@ -193,9 +193,9 @@ func TestValidateHuggingFaceModel_Integration(t *testing.T) {
 			name:           "Non-existent model (returns 401 from HF API)",
 			modelID:        "nonexistent-org-12345/nonexistent-model-67890",
 			token:          "",
-			expectedValid:  true,  // Fail open - allow resource creation
-			expectedExists: true,  // We assume exists since we got 401 not 404
-			expectWarning:  true,  // Should have warning about auth
+			expectedValid:  true, // Fail open - allow resource creation
+			expectedExists: true, // We assume exists since we got 401 not 404
+			expectWarning:  true, // Should have warning about auth
 		},
 	}
 

@@ -281,4 +281,3 @@ func getTokenFromSecret(ctx context.Context, k8sClient client.Client, secretName
 
 	return string(tokenBytes), nil
 }
-
