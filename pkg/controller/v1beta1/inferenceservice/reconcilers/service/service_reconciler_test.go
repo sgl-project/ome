@@ -54,6 +54,26 @@ func TestBuildServiceFiltersAnnotations(t *testing.T) {
 				"loki.grafana.com/log-format",
 			},
 		},
+		"FilterPrometheusAnnotations": {
+			componentMeta: metav1.ObjectMeta{
+				Name:      "test-service",
+				Namespace: "default",
+				Annotations: map[string]string{
+					"prometheus.io/scrape":   "true",
+					"prometheus.io/port":     "8080",
+					"prometheus.io/path":     "/metrics",
+					"ome.io/serving-runtime": "test-runtime",
+				},
+			},
+			expectedAnnotations: map[string]string{
+				"ome.io/serving-runtime": "test-runtime",
+			},
+			unexpectedAnnotations: []string{
+				"prometheus.io/scrape",
+				"prometheus.io/port",
+				"prometheus.io/path",
+			},
+		},
 		"FilterNetworkingGKEAnnotations": {
 			componentMeta: metav1.ObjectMeta{
 				Name:      "test-service",

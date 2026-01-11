@@ -407,12 +407,10 @@ var (
 	// - Exact annotation keys (e.g., ModelInitInjectionKey) - matches only that specific annotation
 	//
 	// Both styles work correctly because IsPrefixSupported uses strings.HasPrefix for matching.
-	//
-	// Note: prometheus.io/* annotations are intentionally NOT included here because they are
-	// legitimately used on Services for Prometheus service discovery.
 	PodOnlyAnnotationPrefixes = []string{
 		"k8s.grafana.com/",           // Grafana scraping annotations (k8s.grafana.com/scrape, k8s.grafana.com/port)
 		"loki.grafana.com/",          // Loki log collection annotations (loki.grafana.com/scrape, loki.grafana.com/log-format)
+		"prometheus.io/",             // Prometheus scraping annotations (prometheus.io/scrape, prometheus.io/port, prometheus.io/path)
 		"networking.gke.io/",         // GKE multi-NIC and RDMA network annotations (networking.gke.io/interfaces, etc.)
 		"rdma.ome.io/",               // OME RDMA injection annotations (RDMAAutoInjectAnnotationKey, RDMAProfileAnnotationKey, etc.)
 		ModelInitInjectionKey,        // ome.io/inject-model-init - triggers model init container injection via webhook

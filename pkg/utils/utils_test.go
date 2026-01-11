@@ -534,6 +534,17 @@ func TestFilterPodOnlyAnnotations(t *testing.T) {
 				"meta.helm.sh/release-name": "test",
 			},
 		},
+		"FilterPrometheusAnnotations": {
+			annotations: map[string]string{
+				"prometheus.io/scrape":       "true",
+				"prometheus.io/port":         "8080",
+				"prometheus.io/path":         "/metrics",
+				"meta.helm.sh/release-name":  "test",
+			},
+			expected: map[string]string{
+				"meta.helm.sh/release-name": "test",
+			},
+		},
 		"FilterNetworkingGKEAnnotations": {
 			annotations: map[string]string{
 				"networking.gke.io/default-interface": "eth0",
