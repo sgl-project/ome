@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -1346,9 +1348,9 @@ func TestIsRemoveParentArtifactDirectory_HasChildren_False(t *testing.T) {
 	cm := makeConfigMap("node-1", map[string]string{})
 	g, client := newGopherAndClientWithConfigMap(cm, t)
 
-	got := g.isRemoveParentArtifactDirectory(context.Background(), true, "clusterbasemodel.parent")
+	got := g.isRemoveParentArtifactDirectory(context.Background(), true, "clusterbasemodel.parent", "/parent")
 	assert.False(t, got, "should not remove when hasChildren is true")
-	assert.Equal(t, 0, countConfigMapGets(client), "expected a single ConfigMap update")
+	assert.Equal(t, 0, countConfigMapGets(client), "expected no ConfigMap get")
 
 }
 
@@ -1358,9 +1360,9 @@ func TestIsRemoveParentArtifactDirectory_ParentEntryExists_False(t *testing.T) {
 		parentKey: entryJSON("sha", parentKey, "/models/p"),
 	})
 	g, client := newGopherAndClientWithConfigMap(cm, t)
-	got := g.isRemoveParentArtifactDirectory(context.Background(), false, parentKey)
+	got := g.isRemoveParentArtifactDirectory(context.Background(), false, parentKey, "/parent")
 	assert.False(t, got, "should not remove when parent entry exists in ConfigMap")
-	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap update")
+	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap get")
 
 }
 
@@ -1368,9 +1370,91 @@ func TestIsRemoveParentArtifactDirectory_CannotRetrieveConfigMap_False(t *testin
 	// No ConfigMap exists for this node, getDataEntryBasedOnModelKey returns error with "cannot retrieve node configmap"
 	g, client := newGopherWithEmptyClient("missing-node", "ome", t)
 
-	got := g.isRemoveParentArtifactDirectory(context.Background(), false, "clusterbasemodel.parent")
+	got := g.isRemoveParentArtifactDirectory(context.Background(), false, "clusterbasemodel.parent", "/parent")
 	assert.False(t, got, "should not remove when cannot retrieve node configmap")
-	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap update")
+	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap get")
+}
+
+func TestIsRemoveParentArtifactDirectory_NosChildren_NoParentCM_HasSymbolicLink(t *testing.T) {
+	parentKey := "clusterbasemodel.parent"
+	cm := makeConfigMap("node-1", map[string]string{
+		"clusterbasemodel.otherparent": entryJSON("sha", parentKey, "/models/p"),
+	})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+	rootDir := t.TempDir()
+	g = &Gopher{
+		configMapReconciler: g.configMapReconciler,
+		logger:              g.logger,
+		modelRootDir:        rootDir,
+	}
+
+	tmpDir := rootDir
+	modelsDir := filepath.Join(tmpDir, "models")
+	metaLlama := filepath.Join(modelsDir, "meta-llama")
+
+	// Create directories
+	targetDir := filepath.Join(metaLlama, "llama-3.2-1b-instruct-parent")
+	kidDir := filepath.Join(metaLlama, "llama-3.2-1b-instruct-kid3")
+
+	dirs := []string{modelsDir, metaLlama, targetDir}
+	for _, d := range dirs {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("failed to create directory %s: %v", d, err)
+		}
+	}
+
+	// Create symlink: kid3 -> parent
+	relTarget, _ := filepath.Rel(metaLlama, targetDir) // relative path
+	if err := os.Symlink(relTarget, kidDir); err != nil {
+		t.Fatalf("failed to create symlink %s -> %s: %v", kidDir, targetDir, err)
+	}
+
+	got := g.isRemoveParentArtifactDirectory(context.Background(), false, parentKey, targetDir)
+
+	assert.False(t, got, "should not remove when hasChildren is true")
+	assert.Equal(t, 1, countConfigMapGets(client), "expected 1 ConfigMap get")
+
+}
+
+func TestIsRemoveParentArtifactDirectory_NosChildren_NoParentCM_NoSymbolicLink(t *testing.T) {
+	parentKey := "clusterbasemodel.kid3"
+	cm := makeConfigMap("node-1", map[string]string{
+		"clusterbasemodel.otherparent": entryJSON("sha", parentKey, "/models/p"),
+	})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+	rootDir := t.TempDir()
+	g = &Gopher{
+		configMapReconciler: g.configMapReconciler,
+		logger:              g.logger,
+		modelRootDir:        rootDir,
+	}
+
+	tmpDir := rootDir
+	modelsDir := filepath.Join(tmpDir, "models")
+	metaLlama := filepath.Join(modelsDir, "meta-llama")
+
+	// Create directories
+	targetDir := filepath.Join(metaLlama, "llama-3.2-1b-instruct-parent")
+	kidDir := filepath.Join(metaLlama, "llama-3.2-1b-instruct-kid3")
+
+	dirs := []string{modelsDir, metaLlama, targetDir}
+	for _, d := range dirs {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("failed to create directory %s: %v", d, err)
+		}
+	}
+
+	// Create symlink: kid3 -> parent
+	relTarget, _ := filepath.Rel(metaLlama, targetDir) // relative path
+	if err := os.Symlink(relTarget, kidDir); err != nil {
+		t.Fatalf("failed to create symlink %s -> %s: %v", kidDir, targetDir, err)
+	}
+
+	got := g.isRemoveParentArtifactDirectory(context.Background(), false, parentKey, kidDir)
+
+	assert.True(t, got, "should not remove when hasChildren is true")
+	assert.Equal(t, 1, countConfigMapGets(client), "expected 1 ConfigMap get")
+
 }
 
 func TestIsSkippingArtifactDeletion_ReserveLabel_Skip(t *testing.T) {

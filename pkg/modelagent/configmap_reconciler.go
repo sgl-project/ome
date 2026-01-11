@@ -303,6 +303,7 @@ func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry
 				config.ApiCapabilities[i] = string(capability)
 			}
 		}
+		config.Artifact = cacheEntry.ModelMetadata.Artifact
 
 		modelEntry.Config = config
 	}

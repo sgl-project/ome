@@ -1278,7 +1278,7 @@ func (s *Gopher) isSkippingArtifactDeletion(ctx context.Context, task *GopherTas
 		modelTypeAndModelName := s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel)
 		hasChildren, parentName, parentDir := s.hasChildrenPaths(ctx, modelTypeAndModelName)
 		s.removeChildPathFromParentConfigMapIfNecessary(ctx, hasChildren, parentName, modelTypeAndModelName, destPath)
-		isRemoveParent := s.isRemoveParentArtifactDirectory(ctx, hasChildren, parentName)
+		isRemoveParent := s.isRemoveParentArtifactDirectory(ctx, hasChildren, parentName, parentDir)
 		return hasChildren, isRemoveParent, parentName, parentDir
 	} else {
 		return hasReserveLabel, false, "", ""
@@ -1342,12 +1342,12 @@ func (s *Gopher) removeChildPathFromParentConfigMapIfNecessary(ctx context.Conte
 	}
 }
 
-// isRemoveParentArtifactDirectory - if the parent entry does not have any child, check whether to remove the parent artifact directory
+// isRemoveParentArtifactDirectory - return whether the parent artifact directory is eligible to be deleted
 // lenient way to determine whether the parent model cr is deleted or not. if more strictly, need to check the model cr existence
 // after checking the existence of parent entry in the configmap
 // However, due to the model key of configmap could be truncated, there is no way to retrieve the exact original parent model CR name and namespace
 // based on the current design
-func (s *Gopher) isRemoveParentArtifactDirectory(ctx context.Context, hasChildren bool, parentName string) bool {
+func (s *Gopher) isRemoveParentArtifactDirectory(ctx context.Context, hasChildren bool, parentName string, parentDir string) bool {
 	// If there are still children, never remove the parent artifact directory.
 	if hasChildren {
 		return false
@@ -1359,5 +1359,16 @@ func (s *Gopher) isRemoveParentArtifactDirectory(ctx context.Context, hasChildre
 		s.logger.Infof("cannot retrieve node configmap and cannot determine parent entry existence, will not remove artifact")
 		return false
 	}
-	return !exists
+	s.logger.Infof("parent entry %s:%s exists on node configmap: %v", parentName, parentDir, exists)
+	if exists {
+		return false
+	}
+
+	// check whether the parent directory still has other directory points to it using symbolic link
+	isParentHasSymbolicLinkPointedTo, symbolicLinkSearchErr := utils.HasSymlinkPointingToDir(s.modelRootDir, parentDir)
+	if symbolicLinkSearchErr != nil {
+		s.logger.Infof("fails to search for the SymbolicLink pointing to parent Dir %s: %v", parentDir, symbolicLinkSearchErr)
+	}
+	s.logger.Infof("parent %s:%s has other directory points to: %v", parentName, parentDir, isParentHasSymbolicLinkPointedTo)
+	return !isParentHasSymbolicLinkPointedTo
 }

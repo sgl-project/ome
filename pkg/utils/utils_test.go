@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
@@ -785,6 +787,193 @@ func TestContainsString(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := ContainsString(scenario.values, scenario.target, scenario.isCaseSensitive)
 			g.Expect(got).To(gomega.Equal(scenario.expected))
+		})
+	}
+}
+
+func TestHasSymlinkPointingToDir(t *testing.T) {
+	tests := []struct {
+		name      string
+		setupFunc func(root string) (targetDir string, cleanup func())
+		wantFound bool
+		wantErr   bool
+	}{
+		{
+			name: "symlink exists in child directory",
+			/*
+				Directory structure:
+				/parent
+				├── childA
+				│   └── targetDir           (real directory)
+				└── childB
+				    └── grandchild1
+				        └── link -> ../../childA/targetDir   (symlink)
+			*/
+			setupFunc: func(root string) (string, func()) {
+				parent := filepath.Join(root, "parent")
+				childA := filepath.Join(parent, "childA")
+				targetDir := filepath.Join(childA, "targetDir")
+				childB := filepath.Join(parent, "childB")
+				grandchild := filepath.Join(childB, "grandchild1")
+
+				dirs := []string{parent, childA, targetDir, childB, grandchild}
+				for _, dir := range dirs {
+					if err := os.MkdirAll(dir, 0o755); err != nil {
+						t.Fatalf("failed to mkdir %s: %v", dir, err)
+					}
+				}
+
+				linkPath := filepath.Join(grandchild, "link")
+				relTarget, _ := filepath.Rel(grandchild, targetDir)
+				if err := os.Symlink(relTarget, linkPath); err != nil {
+					t.Fatalf("failed to create symlink: %v", err)
+				}
+
+				return targetDir, func() {}
+			},
+			wantFound: true,
+			wantErr:   false,
+		},
+		{
+			name: "symlink exists in sibling directory",
+			/*
+				Directory structure:
+				/parent
+				├── childA
+				│   └── link -> ../childB   (symlink)
+				└── childB                 (real directory)
+			*/
+			setupFunc: func(root string) (string, func()) {
+				parent := filepath.Join(root, "parent")
+				childA := filepath.Join(parent, "childA")
+				childB := filepath.Join(parent, "childB")
+
+				dirs := []string{parent, childA, childB}
+				for _, dir := range dirs {
+					if err := os.MkdirAll(dir, 0o755); err != nil {
+						t.Fatalf("failed to mkdir %s: %v", dir, err)
+					}
+				}
+
+				targetDir := childB
+
+				linkPath := filepath.Join(childA, "link")
+				relTarget, _ := filepath.Rel(childA, targetDir)
+				if err := os.Symlink(relTarget, linkPath); err != nil {
+					t.Fatalf("failed to create symlink: %v", err)
+				}
+
+				return targetDir, func() {}
+			},
+			wantFound: true,
+			wantErr:   false,
+		},
+		{
+			name: "no symlink exists",
+			/*
+				Directory structure:
+				/parent
+				├── childA   (real directory)
+				└── childB   (real directory)
+				// No symlinks anywhere
+			*/
+			setupFunc: func(root string) (string, func()) {
+				parent := filepath.Join(root, "parent")
+				childA := filepath.Join(parent, "childA")
+				childB := filepath.Join(parent, "childB")
+
+				dirs := []string{parent, childA, childB}
+				for _, dir := range dirs {
+					if err := os.MkdirAll(dir, 0o755); err != nil {
+						t.Fatalf("failed to mkdir %s: %v", dir, err)
+					}
+				}
+
+				targetDir := childA
+				return targetDir, func() {}
+			},
+			wantFound: false,
+			wantErr:   false,
+		},
+		{
+			name: "symlink inside targetDir itself",
+			/*
+				Directory structure:
+				/parent
+				└── childA  (targetDir)
+				    └── grandchild
+				        └── link -> ../childA  (symlink inside targetDir)
+			*/
+			setupFunc: func(root string) (string, func()) {
+				parent := filepath.Join(root, "parent")
+				targetDir := filepath.Join(parent, "childA")
+				child := filepath.Join(targetDir, "grandchild")
+
+				if err := os.MkdirAll(child, 0o755); err != nil {
+					t.Fatalf("failed to mkdir %s: %v", child, err)
+				}
+
+				linkPath := filepath.Join(child, "link")
+				relTarget, _ := filepath.Rel(child, targetDir)
+				if err := os.Symlink(relTarget, linkPath); err != nil {
+					t.Fatalf("failed to create symlink: %v", err)
+				}
+
+				return targetDir, func() {}
+			},
+			wantFound: true,
+			wantErr:   false,
+		},
+		{
+			name: "a possible case from production",
+			/*
+				Directory structure:
+				/models
+				└── meta-llama
+				    ├── llama-3.2-1b-instruct-parent   (real directory)
+				    └── llama-3.2-1b-instruct-kid3 -> ../llama-3.2-1b-instruct-parent  (symlink)
+			*/
+			setupFunc: func(root string) (string, func()) {
+				modelsDir := filepath.Join(root, "models")
+				metaLlama := filepath.Join(modelsDir, "meta-llama")
+
+				// Create directories
+				targetDir := filepath.Join(metaLlama, "llama-3.2-1b-instruct-parent")
+				kidDir := filepath.Join(metaLlama, "llama-3.2-1b-instruct-kid3")
+
+				dirs := []string{modelsDir, metaLlama, targetDir}
+				for _, d := range dirs {
+					if err := os.MkdirAll(d, 0o755); err != nil {
+						t.Fatalf("failed to create directory %s: %v", d, err)
+					}
+				}
+
+				// Create symlink: kid3 -> parent
+				relTarget, _ := filepath.Rel(metaLlama, targetDir) // relative path
+				if err := os.Symlink(relTarget, kidDir); err != nil {
+					t.Fatalf("failed to create symlink %s -> %s: %v", kidDir, targetDir, err)
+				}
+				return targetDir, func() {}
+			},
+			wantFound: true,
+			wantErr:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			targetDir, cleanup := tt.setupFunc(tmpDir)
+			defer cleanup()
+
+			found, err := HasSymlinkPointingToDir(tmpDir, targetDir)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.wantFound, found)
+			}
 		})
 	}
 }
