@@ -153,7 +153,7 @@ func TestBuildServiceFiltersAnnotations(t *testing.T) {
 
 	for name, scenario := range scenarios {
 		t.Run(name, func(t *testing.T) {
-			service := buildService(scenario.componentMeta, nil, podSpec, nil)
+			service := buildService(scenario.componentMeta, podSpec, nil)
 
 			// Check that expected annotations are present
 			for key, expectedValue := range scenario.expectedAnnotations {
@@ -198,7 +198,7 @@ func TestBuildServicePreservesOtherMetadata(t *testing.T) {
 		}},
 	}
 
-	service := buildService(componentMeta, nil, podSpec, nil)
+	service := buildService(componentMeta, podSpec, nil)
 
 	// Name and Namespace should be preserved
 	if service.Name != "test-service" {
@@ -245,7 +245,7 @@ func TestBuildServiceWithNilAnnotations(t *testing.T) {
 	}
 
 	// Should not panic with nil annotations
-	service := buildService(componentMeta, nil, podSpec, nil)
+	service := buildService(componentMeta, podSpec, nil)
 
 	if service == nil {
 		t.Error("Expected service to be created, got nil")
@@ -268,7 +268,7 @@ func TestBuildServiceWithEmptyAnnotations(t *testing.T) {
 		}},
 	}
 
-	service := buildService(componentMeta, nil, podSpec, nil)
+	service := buildService(componentMeta, podSpec, nil)
 
 	if service == nil {
 		t.Error("Expected service to be created, got nil")

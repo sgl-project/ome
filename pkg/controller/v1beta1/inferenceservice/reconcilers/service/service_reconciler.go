@@ -40,7 +40,7 @@ func NewServiceReconciler(client client.Client,
 	return &ServiceReconciler{
 		client:       client,
 		scheme:       scheme,
-		Service:      buildService(componentMeta, componentExt, podSpec, Selector),
+		Service:      buildService(componentMeta, podSpec, Selector),
 		componentExt: componentExt,
 	}
 }
@@ -97,7 +97,7 @@ func buildServiceWithLoadBalancer(
 // It filters out pod-only annotations (e.g., Grafana scraping, GKE networking, container injection)
 // that should not be applied to Services. These annotations are defined in component specs
 // (like engineConfig.annotations) for pod-level configurations but have no effect on Services.
-func buildService(componentMeta metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec,
+func buildService(componentMeta metav1.ObjectMeta,
 	podSpec *corev1.PodSpec,
 	selector map[string]string,
 ) *corev1.Service {
