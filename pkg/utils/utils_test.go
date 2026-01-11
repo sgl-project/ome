@@ -536,10 +536,10 @@ func TestFilterPodOnlyAnnotations(t *testing.T) {
 		},
 		"FilterPrometheusAnnotations": {
 			annotations: map[string]string{
-				"prometheus.io/scrape":       "true",
-				"prometheus.io/port":         "8080",
-				"prometheus.io/path":         "/metrics",
-				"meta.helm.sh/release-name":  "test",
+				"prometheus.io/scrape":      "true",
+				"prometheus.io/port":        "8080",
+				"prometheus.io/path":        "/metrics",
+				"meta.helm.sh/release-name": "test",
 			},
 			expected: map[string]string{
 				"meta.helm.sh/release-name": "test",
@@ -557,9 +557,9 @@ func TestFilterPodOnlyAnnotations(t *testing.T) {
 		},
 		"FilterRDMAAnnotations": {
 			annotations: map[string]string{
-				"rdma.ome.io/auto-inject":    "true",
-				"rdma.ome.io/profile":        "default",
-				"ome.io/base-model-name":     "test-model",
+				"rdma.ome.io/auto-inject": "true",
+				"rdma.ome.io/profile":     "default",
+				"ome.io/base-model-name":  "test-model",
 			},
 			expected: map[string]string{
 				"ome.io/base-model-name": "test-model",
@@ -574,32 +574,32 @@ func TestFilterPodOnlyAnnotations(t *testing.T) {
 				"ome.io/serving-runtime":               "test-runtime",
 			},
 			expected: map[string]string{
-				"ome.io/base-model-name":  "test-model",
-				"ome.io/serving-runtime":  "test-runtime",
+				"ome.io/base-model-name": "test-model",
+				"ome.io/serving-runtime": "test-runtime",
 			},
 		},
 		"PreserveNonPodOnlyAnnotations": {
 			annotations: map[string]string{
-				"ome.io/deploymentMode":      "RawDeployment",
-				"ome.io/service-type":        "ClusterIP",
-				"custom.annotation/key":      "value",
-				"meta.helm.sh/release-name":  "test",
+				"ome.io/deploymentMode":     "RawDeployment",
+				"ome.io/service-type":       "ClusterIP",
+				"custom.annotation/key":     "value",
+				"meta.helm.sh/release-name": "test",
 			},
 			expected: map[string]string{
-				"ome.io/deploymentMode":      "RawDeployment",
-				"ome.io/service-type":        "ClusterIP",
-				"custom.annotation/key":      "value",
-				"meta.helm.sh/release-name":  "test",
+				"ome.io/deploymentMode":     "RawDeployment",
+				"ome.io/service-type":       "ClusterIP",
+				"custom.annotation/key":     "value",
+				"meta.helm.sh/release-name": "test",
 			},
 		},
 		"MixedAnnotations": {
 			annotations: map[string]string{
-				"k8s.grafana.com/scrape":               "true",
-				"networking.gke.io/interfaces":         "[...]",
-				constants.ModelInitInjectionKey:        "true",
-				"ome.io/base-model-name":               "test-model",
-				"ome.io/service-type":                  "ClusterIP",
-				"meta.helm.sh/release-name":            "test",
+				"k8s.grafana.com/scrape":        "true",
+				"networking.gke.io/interfaces":  "[...]",
+				constants.ModelInitInjectionKey: "true",
+				"ome.io/base-model-name":        "test-model",
+				"ome.io/service-type":           "ClusterIP",
+				"meta.helm.sh/release-name":     "test",
 			},
 			expected: map[string]string{
 				"ome.io/base-model-name":    "test-model",

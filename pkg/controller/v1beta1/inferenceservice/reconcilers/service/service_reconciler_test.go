@@ -12,8 +12,8 @@ import (
 
 func TestBuildServiceFiltersAnnotations(t *testing.T) {
 	scenarios := map[string]struct {
-		componentMeta        metav1.ObjectMeta
-		expectedAnnotations  map[string]string
+		componentMeta         metav1.ObjectMeta
+		expectedAnnotations   map[string]string
 		unexpectedAnnotations []string
 	}{
 		"FilterGrafanaAnnotations": {
@@ -21,10 +21,10 @@ func TestBuildServiceFiltersAnnotations(t *testing.T) {
 				Name:      "test-service",
 				Namespace: "default",
 				Annotations: map[string]string{
-					"k8s.grafana.com/scrape":   "true",
-					"k8s.grafana.com/port":     "8080",
-					"ome.io/base-model-name":   "test-model",
-					"ome.io/service-type":      "ClusterIP",
+					"k8s.grafana.com/scrape": "true",
+					"k8s.grafana.com/port":   "8080",
+					"ome.io/base-model-name": "test-model",
+					"ome.io/service-type":    "ClusterIP",
 				},
 			},
 			expectedAnnotations: map[string]string{
@@ -117,13 +117,13 @@ func TestBuildServiceFiltersAnnotations(t *testing.T) {
 				Name:      "test-service",
 				Namespace: "default",
 				Annotations: map[string]string{
-					"k8s.grafana.com/scrape":               "true",
-					"networking.gke.io/interfaces":         "[...]",
-					constants.ModelInitInjectionKey:        "true",
-					"rdma.ome.io/auto-inject":              "true",
-					"ome.io/base-model-name":               "test-model",
-					"ome.io/service-type":                  "ClusterIP",
-					"meta.helm.sh/release-name":            "test",
+					"k8s.grafana.com/scrape":        "true",
+					"networking.gke.io/interfaces":  "[...]",
+					constants.ModelInitInjectionKey: "true",
+					"rdma.ome.io/auto-inject":       "true",
+					"ome.io/base-model-name":        "test-model",
+					"ome.io/service-type":           "ClusterIP",
+					"meta.helm.sh/release-name":     "test",
 				},
 			},
 			expectedAnnotations: map[string]string{
