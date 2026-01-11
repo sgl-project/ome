@@ -397,6 +397,28 @@ var (
 	RevisionTemplateLabelDisallowedList = []string{
 		VisibilityLabel,
 	}
+
+	// PodOnlyAnnotationPrefixes contains annotation prefixes (or exact keys) that should only
+	// be applied to Pods, not to Services. These are typically used for pod-level configurations
+	// like monitoring, networking interfaces, container injection, and other pod-specific settings.
+	//
+	// Entries can be either:
+	// - Prefix patterns ending with "/" (e.g., "k8s.grafana.com/") - matches all annotations with this prefix
+	// - Exact annotation keys (e.g., ModelInitInjectionKey) - matches only that specific annotation
+	//
+	// Both styles work correctly because IsPrefixSupported uses strings.HasPrefix for matching.
+	//
+	// Note: prometheus.io/* annotations are intentionally NOT included here because they are
+	// legitimately used on Services for Prometheus service discovery.
+	PodOnlyAnnotationPrefixes = []string{
+		"k8s.grafana.com/",           // Grafana scraping annotations (k8s.grafana.com/scrape, k8s.grafana.com/port)
+		"loki.grafana.com/",          // Loki log collection annotations (loki.grafana.com/scrape, loki.grafana.com/log-format)
+		"networking.gke.io/",         // GKE multi-NIC and RDMA network annotations (networking.gke.io/interfaces, etc.)
+		"rdma.ome.io/",               // OME RDMA injection annotations (RDMAAutoInjectAnnotationKey, RDMAProfileAnnotationKey, etc.)
+		ModelInitInjectionKey,        // ome.io/inject-model-init - triggers model init container injection via webhook
+		FineTunedAdapterInjectionKey, // ome.io/inject-fine-tuned-adapter - triggers fine-tuned adapter injection via webhook
+		ServingSidecarInjectionKey,   // ome.io/inject-serving-sidecar - triggers serving sidecar injection via webhook
+	}
 )
 
 // CheckResultType raw k8s deployment, resource exist check result

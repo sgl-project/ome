@@ -16,6 +16,7 @@ import (
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/utils"
 )
 
 var log = logf.Log.WithName("ServiceReconciler")
@@ -92,19 +93,26 @@ func buildServiceWithLoadBalancer(
 	return service
 }
 
-// buildService constructs a Service object from the given specifications
+// buildService constructs a Service object from the given specifications.
+// It filters out pod-only annotations (e.g., Grafana scraping, GKE networking, container injection)
+// that should not be applied to Services. These annotations are defined in component specs
+// (like engineConfig.annotations) for pod-level configurations but have no effect on Services.
 func buildService(componentMeta metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec,
 	selector map[string]string,
 ) *corev1.Service {
+	// Create a copy to avoid mutating the original componentMeta, then filter pod-only annotations.
+	// The original componentMeta with all annotations is still used for Deployment/Pod creation.
+	serviceMeta := componentMeta.DeepCopy()
+	serviceMeta.Annotations = utils.FilterPodOnlyAnnotations(componentMeta.Annotations)
 
 	servicePorts := buildServicePorts(podSpec)
-	serviceType := determineServiceType(componentMeta)
+	serviceType := determineServiceType(*serviceMeta)
 	if selector == nil {
-		selector = map[string]string{"app": constants.TruncateNameWithMaxLength(componentMeta.Name, 63)}
+		selector = map[string]string{"app": constants.TruncateNameWithMaxLength(serviceMeta.Name, 63)}
 	}
 
-	return buildServiceWithLoadBalancer(componentMeta, serviceType, servicePorts, selector)
+	return buildServiceWithLoadBalancer(*serviceMeta, serviceType, servicePorts, selector)
 }
 
 // buildServicePorts creates service ports configuration from pod spec
