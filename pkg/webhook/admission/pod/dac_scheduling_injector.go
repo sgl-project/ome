@@ -63,8 +63,10 @@ func (d *DedicatedAIClusterSchedulingInjector) InjectAffinity(pod *v1.Pod) error
 		}
 	}
 
+	log.Info("Injecting DAC scheduling to pod", "podName", pod.Name, "DAC name", dacName, "DAC profile", dac.Spec.Profile, "DAC spec", dacSpec)
+
 	if isAcSupport {
-		log.Info("Have AC support with this DAC, skip dac inject to pod", "DAC profile", dac.Spec.Profile)
+		log.Info("AcceleratorClass is supported in this DAC. Skipping DAC/pod injection", "podName", pod.Name, "DAC name", dacName, "DAC profile", dac.Spec.Profile, "DAC spec", dacSpec)
 		return nil
 	}
 
@@ -75,10 +77,12 @@ func (d *DedicatedAIClusterSchedulingInjector) InjectAffinity(pod *v1.Pod) error
 		pod.Spec.Affinity = dacSpec.Affinity
 	}
 	if dacSpec.Resources != nil {
-		if pod.Spec.Resources == nil {
-			pod.Spec.Resources = &v1.ResourceRequirements{}
+		for i := range pod.Spec.Containers {
+			if pod.Spec.Containers[i].Name == constants.MainContainerName {
+				pod.Spec.Containers[i].Resources = *dacSpec.Resources
+				break
+			}
 		}
-		pod.Spec.Resources = dacSpec.Resources
 	}
 	if dacSpec.Tolerations != nil {
 		if pod.Spec.Tolerations == nil {
