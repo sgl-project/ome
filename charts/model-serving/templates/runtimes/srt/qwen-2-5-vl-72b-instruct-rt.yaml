@@ -3,6 +3,27 @@ kind: ClusterServingRuntime
 metadata:
   name: srt-qwen-2-5-vl-72b-instruct
 spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-a100-80gb-1
+      - nvidia-a100-80gb-2
+      - nvidia-a100-80gb-4
+      - nvidia-a100-80gb-8
+      - nvidia-a100-40gb-1
+      - nvidia-a100-40gb-2
+      - nvidia-a100-40gb-4
+      - nvidia-a100-40gb-8
+      - nvidia-h100-1
+      - nvidia-h100-2
+      - nvidia-h100-4
+      - nvidia-h100-8
+      - nvidia-a10-1
+      - nvidia-a10-2
+      - nvidia-a10-4
+      - nvidia-h200-1
+      - nvidia-h200-2
+      - nvidia-h200-4
+      - nvidia-h200-8
   disabled: false
   {{- if or .Values.commonAnnotations .Values.qwen_2_5_vl_72b_instruct.annotations }}
   annotations:
@@ -55,6 +76,64 @@ spec:
       modelArchitecture: Qwen2_5_VLForConditionalGeneration
       version: "1.0.0"
       priority: 1
+      acceleratorConfig:
+        nvidia-a100-80gb-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a100-80gb-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a100-80gb-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-a100-80gb-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-a100-40gb-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a100-40gb-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a100-40gb-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-a100-40gb-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-h100-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-h100-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-h100-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h100-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-a10-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a10-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a10-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h200-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-h200-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-h200-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h200-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
   modelSizeRange:
     min: 64.8B
     max: 79.2B
