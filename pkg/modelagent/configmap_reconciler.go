@@ -26,7 +26,7 @@ const (
 	ConfigAttr        = "config"
 	ArtifactAttr      = "artifact"
 	ShaAttr           = "sha"
-	ParentPath        = "parentPath"
+	ParentPathAttr    = "parentPath"
 	ChildrenPathsAttr = "childrenPaths"
 )
 
@@ -303,6 +303,7 @@ func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry
 				config.ApiCapabilities[i] = string(capability)
 			}
 		}
+		config.Artifact = cacheEntry.ModelMetadata.Artifact
 
 		modelEntry.Config = config
 	}
@@ -605,6 +606,7 @@ func (c *ConfigMapReconciler) updateModelProgressInConfigMap(ctx context.Context
 	// Store the model entry in the ConfigMap
 	configMap.Data[key] = string(entryJSON)
 
+	c.logger.Infof("will update model progress in configmap for key %s", key)
 	return c.saveConfigMap(ctx, configMap, modelInfo, needCreate)
 }
 
@@ -703,6 +705,29 @@ func (c *ConfigMapReconciler) getOrCreateConfigMap(ctx context.Context) (*corev1
 	return existingConfigMap, false, nil
 }
 
+/*
+getConfigMap retrieves the node-scoped ConfigMap from Kubernetes.
+
+It fetches the ConfigMap named after the agent's node (c.nodeName) in the configured
+namespace (c.namespace). On failure, the error is logged for observability and
+returned to the caller.
+
+Parameters:
+  - ctx: Context for cancellation and deadlines.
+
+Returns:
+  - *corev1.ConfigMap: The retrieved ConfigMap if found.
+  - error: Non-nil if the retrieval failed.
+*/
+func (c *ConfigMapReconciler) getConfigMap(ctx context.Context) (*corev1.ConfigMap, error) {
+	existingConfigMap, err := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Get(ctx, c.nodeName, metav1.GetOptions{})
+	if err != nil {
+		c.logger.Errorf("Failed retrieve node %s configmap: %v", c.nodeName, err)
+		return nil, err
+	}
+	return existingConfigMap, err
+}
+
 // getModelConfigMapKey gets the deterministic key for a model in the ConfigMap
 func (c *ConfigMapReconciler) getModelConfigMapKey(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) string {
 	var modelName, namespace string
@@ -785,6 +810,7 @@ func (c *ConfigMapReconciler) updateModelStatusInConfigMap(ctx context.Context, 
 		configMap.Data[key] = string(entryJSON)
 	}
 
+	c.logger.Infof("will update model status in configmap for key %s", key)
 	return c.saveConfigMap(ctx, configMap, modelInfo, needCreate)
 }
 
@@ -867,14 +893,14 @@ func (c *ConfigMapReconciler) saveConfigMap(ctx context.Context, configMap *core
 		// Store the data we want to apply - this is the caller's intended changes
 		dataToApply := configMap.Data
 
-		updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+		updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
 			if currentConfigMap.Data == nil {
 				currentConfigMap.Data = make(map[string]string)
 			}
 			for key, value := range dataToApply {
 				currentConfigMap.Data[key] = value
 			}
-			return currentConfigMap, nil
+			return true, currentConfigMap, nil
 		}
 		err := c.updateConfigMapWithRetry(ctx, updateConfigMap)
 
@@ -896,7 +922,7 @@ func (c *ConfigMapReconciler) saveConfigMap(ctx context.Context, configMap *core
 //
 // Returns:
 //   - error: Any error of updateConfigmap function, operation error of Kube, or final retry exhaustion.
-func (c *ConfigMapReconciler) updateConfigMapWithRetry(ctx context.Context, updateConfigmap func(currentConfigMap *corev1.ConfigMap) (*corev1.ConfigMap, error)) error {
+func (c *ConfigMapReconciler) updateConfigMapWithRetry(ctx context.Context, updateConfigmap func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error)) error {
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// Re-fetch the latest ConfigMap to get current ResourceVersion
 		latestCM, err := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Get(ctx, c.nodeName, metav1.GetOptions{})
@@ -905,10 +931,14 @@ func (c *ConfigMapReconciler) updateConfigMapWithRetry(ctx context.Context, upda
 			return err
 		}
 
-		updatedConfigmap, err := updateConfigmap(latestCM)
+		needUpdate, updatedConfigmap, err := updateConfigmap(latestCM)
 		if err != nil {
 			c.logger.Errorf("failed to compute updated ConfigMap: %s", err)
 			return err
+		}
+		if !needUpdate {
+			c.logger.Infof("no need to update ConfigMap to Kube API server")
+			return nil
 		}
 
 		// Update with the merged data
@@ -944,18 +974,20 @@ func getConfigMapModelInfo(baseModel *v1beta1.BaseModel, clusterBaseModel *v1bet
 
 /*
 FindMatchedModelFromConfigMap scans the provided ConfigMap Data for the first entry
-whose key has the provided modelType and whose JSON value contains config.artifact.sha equal to targetSha.
+whose key has the provided namespaced modelType and whose JSON value contains config.artifact.sha equal to targetSha and has the most children paths(Exclude self).
 
 Returns:
-  - modelKey:   The matched ConfigMap Data key (modelType + model identifier).
+  - modelKey:   The parent of the matched ConfigMap Data key (modelType + model identifier).
   - parentPath: The value of config.artifact.parentPath for the matched entry.
   - err:        The last JSON parsing error encountered during scanning; nil if none.
 */
-// TODO: Further Potential optimization could be to retrieve the matched model with the most children paths hoping concentrating on several parent paths
-func (c *ConfigMapReconciler) FindMatchedModelFromConfigMap(configMap *corev1.ConfigMap, targetSha string, modelType string) (string, string, error) {
+func (c *ConfigMapReconciler) FindMatchedModelFromConfigMap(configMap *corev1.ConfigMap, targetSha string, modelType string, currentModelTypeAndNodeName string) (string, string, error) {
 	var searchingError error // the last
-	for modelTypeAndModelName, jsonStr := range configMap.Data {
-		if !strings.HasPrefix(strings.ToLower(modelTypeAndModelName), strings.ToLower(modelType)) {
+
+	var matchedParentName, matchedParentPath string
+	var matchedParentChildrenNum = -1
+	for modelKey, jsonStr := range configMap.Data {
+		if !strings.HasPrefix(strings.ToLower(modelKey), strings.ToLower(modelType)) {
 			continue
 		}
 		// parsed JSON for this entry
@@ -980,15 +1012,59 @@ func (c *ConfigMapReconciler) FindMatchedModelFromConfigMap(configMap *corev1.Co
 			continue
 		}
 
-		if sha == targetSha {
-			parentPath, ok := artifact[ParentPath].(string)
+		if sha != targetSha {
+			continue
+		}
+
+		rawParent, ok := artifact[ParentPathAttr].(map[string]interface{})
+		if !ok {
+			searchingError = fmt.Errorf("parentPath is not an object")
+			continue
+		}
+
+		if len(rawParent) != 1 {
+			searchingError = fmt.Errorf("expected exactly one parentPath entry, got %d", len(rawParent))
+			continue
+		}
+
+		for k, v := range rawParent {
+			path, ok := v.(string)
 			if !ok {
+				searchingError = fmt.Errorf("parentPath value for %q is not a string", k)
 				continue
 			}
-			return modelTypeAndModelName, parentPath, nil
+			if strings.ToLower(k) == strings.ToLower(currentModelTypeAndNodeName) {
+				continue
+			}
+
+			childrenNum := len(extractChildrenPaths(artifact))
+			if childrenNum > matchedParentChildrenNum {
+				matchedParentChildrenNum = childrenNum
+				matchedParentName = k
+				matchedParentPath = path
+			}
 		}
 	}
-	return "", "", searchingError
+	c.logger.Infof("matchedParentName: %s, matchedParentPath: %s", matchedParentName, matchedParentPath)
+	return matchedParentName, matchedParentPath, searchingError
+}
+
+func extractChildrenPaths(artifact map[string]interface{}) []string {
+	// Read childrenPaths leniently and convert to []string
+	children := make([]string, 0)
+	if rawChildren, exists := artifact[ChildrenPathsAttr]; exists {
+		switch vv := rawChildren.(type) {
+		case []interface{}:
+			for _, v := range vv {
+				if s, ok := v.(string); ok {
+					children = append(children, s)
+				}
+			}
+		case []string:
+			children = append(children, vv...)
+		}
+	}
+	return children
 }
 
 // getModelDataByArtifactSha fetches the node-scoped ConfigMap (namespace "ome", name c.nodeName) and searches it for a model entry whose artifact SHA equals
@@ -997,7 +1073,7 @@ func (c *ConfigMapReconciler) FindMatchedModelFromConfigMap(configMap *corev1.Co
 // - modelKey:   The matched ConfigMap Data key (modelType + model identifier).
 // - parentPath: The value of config.artifact.parentPath for the matched entry.
 // - err:        The last JSON parsing error encountered during scanning; nil if none.
-func (c *ConfigMapReconciler) getModelDataByArtifactSha(ctx context.Context, targetSha string, modelType string) (string, string, error) {
+func (c *ConfigMapReconciler) getModelDataByArtifactSha(ctx context.Context, targetSha string, modelType string, currentModelTypeAndNodeName string) (string, string, error) {
 	cm, err := c.kubeClient.CoreV1().ConfigMaps("ome").Get(ctx, c.nodeName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -1006,9 +1082,9 @@ func (c *ConfigMapReconciler) getModelDataByArtifactSha(ctx context.Context, tar
 			return "", "", fmt.Errorf("cannot find configmap %s", c.nodeName)
 		}
 		c.logger.Errorf("Failed to get ConfigMap %s: %v", c.nodeName, err)
-		return "", "", fmt.Errorf("Failed to get ConfigMap %s: %v", c.nodeName, err)
+		return "", "", fmt.Errorf("failed to get ConfigMap %s: %v", c.nodeName, err)
 	}
-	return c.FindMatchedModelFromConfigMap(cm, targetSha, modelType)
+	return c.FindMatchedModelFromConfigMap(cm, targetSha, modelType, currentModelTypeAndNodeName)
 }
 
 // addPathToChildrenPaths appends newPath to the config.artifact.childrenPaths array if the newPath is not contained in the children paths
@@ -1016,6 +1092,7 @@ func (c *ConfigMapReconciler) addPathToChildrenPaths(modelTypeAndModelName strin
 	// Parse the JSON into a generic map
 	var obj map[string]interface{}
 	if err := json.Unmarshal([]byte(dataEntry), &obj); err != nil {
+		c.logger.Errorf("invalid JSON for key %s: %w", modelTypeAndModelName, err)
 		return "", fmt.Errorf("invalid JSON for key %s: %w", modelTypeAndModelName, err)
 	}
 	c.logger.Infof("current data: modelTypeAndModelName: %s, dataEntry: %s", modelTypeAndModelName, dataEntry)
@@ -1050,6 +1127,133 @@ func (c *ConfigMapReconciler) addPathToChildrenPaths(modelTypeAndModelName strin
 	return string(updated), nil
 }
 
+/*
+getParentPathAndChildrenPaths extracts parentPath and childrenPaths from a model entry's JSON.
+
+Parameters:
+  - modelTypeAndModelName: ConfigMap data key (used for error messages).
+  - dataEntry: JSON string to parse.
+
+Returns:
+  - parentPath: Normalized map extracted from config.artifact.parentPath (possibly empty).
+  - children: Slice extracted from config.artifact.childrenPaths (possibly empty).
+  - error: Parsing or structure conversion errors as described above.
+*/
+func (c *ConfigMapReconciler) getParentPathAndChildrenPaths(modelTypeAndModelName string, dataEntry string) (map[string]string, []string, error) {
+	// Parse the JSON into a generic map
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(dataEntry), &obj); err != nil {
+		c.logger.Errorf("invalid JSON for key %s: %w", modelTypeAndModelName, err)
+		return make(map[string]string), []string{}, fmt.Errorf("invalid JSON for key %s: %w", modelTypeAndModelName, err)
+	}
+	c.logger.Infof("current data: modelTypeAndModelName: %s, dataEntry: %s", modelTypeAndModelName, dataEntry)
+	// Navigate nested structure: config → artifact
+	config, okConfig := obj[ConfigAttr].(map[string]interface{})
+	if !okConfig {
+		// No config => no children paths
+		return make(map[string]string), []string{}, fmt.Errorf("invalid config conversion")
+	}
+	artifact, okArtifact := config[ArtifactAttr].(map[string]interface{})
+	if !okArtifact {
+		// No artifact => no children paths
+		return make(map[string]string), []string{}, fmt.Errorf("invalid artifact conversion")
+	}
+
+	children := extractChildrenPaths(artifact)
+
+	// Read childrenPaths leniently and convert to []string
+	parentPath := make(map[string]string)
+	if rawParent, exists := artifact[ParentPathAttr]; exists {
+		switch mp := rawParent.(type) {
+		case map[string]interface{}:
+			for k, v := range mp {
+				if s, ok := v.(string); ok {
+					parentPath[k] = s
+				}
+			}
+		case map[string]string:
+			for k, v := range mp {
+				parentPath[k] = v
+			}
+		}
+	}
+	c.logger.Infof("get parent paths is %v and children paths are %v", parentPath, children)
+	return parentPath, children, nil
+}
+
+/*
+removeChildPathFromParent removes the specified childPath from the JSON entry's
+config.artifact.childrenPaths. The method is lenient: it creates missing
+config/artifact structures, normalizes childrenPaths if it's missing or in a
+non-array form, and writes the updated list back.
+
+Parameters:
+  - childPath:  The path to remove from childrenPaths.
+  - parentName: The ConfigMap data key (used for logging/error messages).
+  - dataEntry:  The JSON string of the model entry to modify.
+
+Returns:
+  - string: The updated JSON entry with childrenPaths modified.
+  - error:  If the input JSON is invalid or JSON marshalling fails.
+*/
+func (c *ConfigMapReconciler) removeChildPathFromParent(childPath string, parentName string, dataEntry string) (string, error) {
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(dataEntry), &obj); err != nil {
+		c.logger.Errorf("invalid JSON for key %s: %w", parentName, err)
+		return "", fmt.Errorf("invalid JSON for key %s: %w", parentName, err)
+	}
+	c.logger.Infof("current data: modelTypeAndModelName: %s, dataEntry: %s", parentName, dataEntry)
+
+	// Navigate or create nested structure: config → artifact
+	config, okConfig := obj[ConfigAttr].(map[string]interface{})
+	if !okConfig {
+		config = map[string]interface{}{}
+		obj[ConfigAttr] = config
+	}
+	artifact, okArtifact := config[ArtifactAttr].(map[string]interface{})
+	if !okArtifact {
+		artifact = map[string]interface{}{}
+		config[ArtifactAttr] = artifact
+	}
+
+	// Normalize childrenPaths to []string
+	var children []string
+	if raw, exists := artifact[ChildrenPathsAttr]; exists {
+		switch vv := raw.(type) {
+		case []interface{}:
+			for _, v := range vv {
+				if s, okStr := v.(string); okStr {
+					children = append(children, s)
+				}
+			}
+		case []string:
+			children = append(children, vv...)
+		}
+	} else {
+		children = make([]string, 0)
+	}
+
+	// Remove target path and write back (ensure empty array, not null)
+	// Remove target path and write back as JSON array (not null)
+	result := utils.RemoveString(children, childPath)
+	if len(result) == 0 {
+		artifact[ChildrenPathsAttr] = []interface{}{}
+	} else {
+		arr := make([]interface{}, 0, len(result))
+		for _, s := range result {
+			arr = append(arr, s)
+		}
+		artifact[ChildrenPathsAttr] = arr
+	}
+
+	updated, err := json.Marshal(obj)
+	if err != nil {
+		return "", err
+	}
+	c.logger.Infof("will update: modelTypeAndModelName: %s, dataEntry: %s", parentName, string(updated))
+	return string(updated), nil
+}
+
 // updateConfigMapWithUpdatedChildrenPaths appends newPath into the JSON array
 // config.artifact.childrenPaths for the given modelTypeAndModelName entry and
 // persists the change to the Kubernetes API server with retry.
@@ -1064,21 +1268,66 @@ func (c *ConfigMapReconciler) addPathToChildrenPaths(modelTypeAndModelName strin
 func (c *ConfigMapReconciler) updateConfigMapWithUpdatedChildrenPaths(ctx context.Context, modelTypeAndModelName string, newPath string) error {
 	// Recompute the merged JSON inside the retry closure using the freshest data to avoid
 	// stomping concurrent updates and to reduce conflict retries.
-	updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+	updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
 		existingDataEntry, exists := currentConfigMap.Data[modelTypeAndModelName]
 		if !exists {
-			return currentConfigMap, fmt.Errorf("key %s not found in ConfigMap", modelTypeAndModelName)
+			c.logger.Infof("key %s not found in ConfigMap", modelTypeAndModelName)
+			return false, currentConfigMap, nil
 		}
 		mergedEntry, err := c.addPathToChildrenPaths(modelTypeAndModelName, newPath, existingDataEntry)
 		if err != nil {
-			return currentConfigMap, err
+			return false, currentConfigMap, err
 		}
 		currentConfigMap.Data[modelTypeAndModelName] = mergedEntry
-		return currentConfigMap, nil
+		return true, currentConfigMap, nil
 	}
 	err := c.updateConfigMapWithRetry(ctx, updateConfigMap)
 	if err != nil {
 		c.logger.Errorf("failed to add child paths %s to modelTypeAndModelName %s", newPath, modelTypeAndModelName)
 	}
 	return err
+}
+
+/*
+updateConfigMapWithRemovedChildPath removes the provided childPath from the parent
+model's config.artifact.childrenPaths within the node-scoped ConfigMap.
+
+Parameters:
+  - ctx:        Context for cancellation/timeouts.
+  - parentPath: A map expected to contain exactly one entry whose key is the parent
+    model's ConfigMap key (e.g. "namespace.basemodel.parent" or
+    "clusterbasemodel.parent"). The map value is ignored.
+  - childPath:  The absolute path of the child model to remove from the parent's childrenPaths.
+*/
+func (c *ConfigMapReconciler) updateConfigMapWithRemovedChildPath(ctx context.Context, parentName string, childPath string) error {
+	updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
+		existingDataEntry, exists := currentConfigMap.Data[parentName]
+		if !exists {
+			c.logger.Infof("key %s not found in ConfigMap", parentName)
+			return false, currentConfigMap, nil
+		}
+		removedEntry, err := c.removeChildPathFromParent(childPath, parentName, existingDataEntry)
+		if err != nil {
+			return false, currentConfigMap, err
+		}
+		currentConfigMap.Data[parentName] = removedEntry
+		return true, currentConfigMap, nil
+	}
+	err := c.updateConfigMapWithRetry(ctx, updateConfigMap)
+	if err != nil {
+		c.logger.Errorf("failed to remove child path %s from data entry %s", childPath, parentName)
+	}
+	return err
+}
+
+func (c *ConfigMapReconciler) getDataEntryBasedOnModelKey(ctx context.Context, modelKey string) (bool, string, error) {
+	// get cm
+	existingConfigMap, err := c.getConfigMap(ctx)
+	if err != nil {
+		c.logger.Errorf("cannot retrieve node configmap: %v", err)
+		return false, "", fmt.Errorf("cannot retrieve node configmap: %v", err)
+	}
+	dataEntry, exists := existingConfigMap.Data[modelKey]
+	c.logger.Infof("modelKey %s exists: %v", modelKey, exists)
+	return exists, dataEntry, nil
 }

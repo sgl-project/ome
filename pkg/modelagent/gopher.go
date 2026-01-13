@@ -204,7 +204,7 @@ func (s *Gopher) safeNodeLabelReconciliation(op *NodeLabelOp) error {
 
 // safeParseAndUpdateModelConfig executes the ModelConfigParser's ParseAndUpdateModelConfig method with mutex protection
 // to ensure thread-safe ConfigMap updates
-func (s *Gopher) safeParseAndUpdateModelConfig(modelPath string, baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel, sha string) error {
+func (s *Gopher) safeParseAndUpdateModelConfig(modelPath string, baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel, artifact *Artifact) error {
 	ctx := context.Background()
 	s.configMapMutex.Lock()
 	defer s.configMapMutex.Unlock()
@@ -216,9 +216,9 @@ func (s *Gopher) safeParseAndUpdateModelConfig(modelPath string, baseModel *v1be
 		return err
 	}
 
-	// add artifact info
-	if sha != "" {
-		metadata = s.modelConfigParser.populateArtifactAttribute(sha, modelPath, *metadata)
+	// add artifact info if necessary
+	if artifact != nil {
+		metadata = s.modelConfigParser.populateArtifactAttribute(artifact, metadata)
 	}
 
 	// If valid metadata was found, update the ConfigMap while still holding the lock
@@ -366,7 +366,7 @@ func (s *Gopher) processTask(task *GopherTask) error {
 				s.logger.Warnf("No model object found in task, skipping config parsing")
 			}
 
-			if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel, ""); err != nil {
+			if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel, nil); err != nil {
 				s.logger.Errorf("Failed to parse and update model config: %v", err)
 			}
 		case storage.StorageTypeVendor:
@@ -436,15 +436,9 @@ func (s *Gopher) processTask(task *GopherTask) error {
 		case storage.StorageTypeOCI:
 			s.logger.Infof("Starting deletion for model %s", modelInfo)
 			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
-
-			// Double-check if the path is still referenced by other models
-			isReferenced, err := s.isPathReferencedByOtherModels(destPath, task.BaseModel, task.ClusterBaseModel)
-			if err != nil {
-				// Cannot determine if the path is referenced; skip deletion to be safe
-				s.logger.Errorf("Failed to check if path %s is referenced by other models, skip the path deletion: %v", destPath, err)
-			} else if isReferenced {
-				s.logger.Infof("Skipping deletion of path %s for model %s as it is still referenced by other models", destPath, modelInfo)
-			} else {
+			// check if it needs to skip artifact deletion
+			isSkippingDeletion, _, _, _ := s.isSkippingArtifactDeletion(ctx, task, destPath, false)
+			if !isSkippingDeletion {
 				err = s.deleteModel(destPath, task)
 				if err != nil {
 					s.logger.Errorf("Failed to delete model %s: %v", modelInfo, err)
@@ -463,20 +457,36 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			// Use getDestPath to get the same path used during download
 			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
 
-			// Double-check if the path is still referenced by other models
-			isReferenced, err := s.isPathReferencedByOtherModels(destPath, task.BaseModel, task.ClusterBaseModel)
-			if err != nil {
-				// Cannot determine if the path is referenced; skip deletion to be safe
-				s.logger.Errorf("Failed to check if path %s is referenced by other models, skip the path deletion: %v", destPath, err)
-			} else if isReferenced {
-				s.logger.Infof("Skipping deletion of path %s for model %s as it is still referenced by other models", destPath, modelInfo)
-			} else {
+			// check if it needs to skip artifact deletion
+			isSkippingDeletion, isRemoveParent, parentName, parentDir := s.isSkippingArtifactDeletion(ctx, task, destPath, true)
+
+			if !isSkippingDeletion {
 				err = s.deleteModel(destPath, task)
 				if err != nil {
 					s.logger.Errorf("Failed to delete Hugging Face model %s: %v", modelInfo, err)
 					return err
 				}
 				s.logger.Infof("Successfully deleted Hugging Face model %s", modelInfo)
+			} else {
+				s.logger.Infof("model %s artifact deletion will be skipped", modelInfo)
+			}
+			if isRemoveParent && parentName != "" && parentDir != "" {
+				// check whether the parent directory still has other directory points to it using symbolic link
+				isParentHasSymbolicLinkPointedTo, symbolicLinkSearchErr := utils.HasSymlinkPointingToDir(s.modelRootDir, parentDir)
+				if symbolicLinkSearchErr != nil {
+					s.logger.Infof("fails to search for the SymbolicLink pointing to parent Dir %s: %v. will regard the parent is still being pointed conservatively", parentDir, symbolicLinkSearchErr)
+					isParentHasSymbolicLinkPointedTo = true
+				}
+				s.logger.Infof("parent %s:%s has other directory points to: %v", parentName, parentDir, isParentHasSymbolicLinkPointedTo)
+				if !isParentHasSymbolicLinkPointedTo {
+					err = s.deleteModel(parentDir, nil)
+					if err != nil {
+						s.logger.Errorf("fail to delete parent model artifact directory %s: %s", parentName, parentDir)
+					}
+					s.logger.Infof("Successfully delete parent model artifact directory %s: %s", parentName, parentDir)
+				}
+			} else {
+				s.logger.Infof("no need to delete parent model artifact directory %s: %s", parentName, parentDir)
 			}
 		case storage.StorageTypeLocal:
 			s.logger.Infof("Skipping deletion for local storage model %s (local files should not be deleted)", modelInfo)
@@ -890,10 +900,6 @@ func (s *Gopher) verifyDownloadedFiles(ociOSDataStore *ociobjectstore.OCIOSDataS
 }
 
 func (s *Gopher) deleteModel(destPath string, task *GopherTask) error {
-	if s.isReservingModelArtifact(task) {
-		return nil
-	}
-
 	startTime := time.Now()
 
 	err := os.RemoveAll(destPath)
@@ -926,25 +932,25 @@ func (s *Gopher) deleteModel(destPath string, task *GopherTask) error {
 func (s *Gopher) isReservingModelArtifact(task *GopherTask) bool {
 	// Guard against nil task or BaseModel; reserve logic applies only to BaseModel labels
 	if task == nil {
-		s.logger.Infof("Model artifact will be deleted")
+		s.logger.Infof("task is nil and will regard no reserved label")
 		return false
 	}
 	// for clusterBaseModel
 	if task.ClusterBaseModel != nil && task.ClusterBaseModel.Labels != nil {
 		if val, exists := task.ClusterBaseModel.Labels[constants.ReserveModelArtifact]; exists && strings.EqualFold(val, "true") {
-			s.logger.Infof("Model artifact will be reserved as ClusterBaseModel has matched label")
+			s.logger.Infof("ClusterBaseModel has reserved label")
 			return true
 		}
 	}
 	// for baseModel
 	if task.BaseModel != nil && task.BaseModel.Labels != nil {
 		if val, exists := task.BaseModel.Labels[constants.ReserveModelArtifact]; exists && strings.EqualFold(val, "true") {
-			s.logger.Infof("Model artifact will be reserved as BaseModel has matched label")
+			s.logger.Infof("BaseModel has reserved label")
 			return true
 		}
 	}
 
-	s.logger.Infof("Model artifact will be deleted")
+	s.logger.Infof("task is nil and will regard no reserved label")
 	return false
 }
 
@@ -966,24 +972,26 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 	destPath := getDestPath(&baseModelSpec, s.modelRootDir)
 
 	// fetch sha value based on model ID from Huggingface model API
-	shaStr, isShaAvailable := s.fetchSha(ctx, hfComponents.ModelID)
-	isEligible, matchedModelTypeAndModeName, parentPath := s.isEligibleForOptimization(ctx, task, baseModelSpec, modelType, namespace, isShaAvailable, shaStr, hfComponents.ModelID)
+	shaStr, isShaAvailable := s.fetchSha(ctx, hfComponents.ModelID, name)
+	isReuseEligible, matchedModelTypeAndModeName, parentPath := s.isEligibleForOptimization(ctx, task, baseModelSpec, modelType, namespace, isShaAvailable, shaStr, name)
 
-	if isEligible {
+	var artifact *Artifact
+	if isReuseEligible {
 		// create symbolic link
 		err := utils.CreateSymbolicLink(destPath, parentPath)
 		if err != nil {
-			s.logger.Errorf("failed to create symbolic link from %s to %s for model %s: %s", destPath, parentPath, hfComponents.ModelID, err)
+			s.logger.Errorf("failed to create symbolic link from %s to %s for model %s: %s", destPath, parentPath, name, err)
 			return err
 		}
-		s.logger.Infof("successfully create symbolic link from %s to %s for model: %s", destPath, parentPath, modelInfo)
+		s.logger.Infof("successfully create symbolic link from %s to %s for model: %s", destPath, parentPath, name)
 		// add path to childrenPaths in configmap
 		err = s.configMapReconciler.updateConfigMapWithUpdatedChildrenPaths(ctx, matchedModelTypeAndModeName, destPath)
 		if err != nil {
 			s.logger.Errorf("fail to update configmap to add new path to childrenPaths: %s", err)
 			return err
 		}
-		s.logger.Infof("successfully add the new path to childrenPath for model: %s", modelInfo)
+		s.logger.Infof("successfully add the new path to childrenPath for model: %s", name)
+		artifact = s.modelConfigParser.buildArtifactAttribute(shaStr, matchedModelTypeAndModeName, parentPath)
 	} else {
 		// Get Hugging Face token from storage key or parameters
 		hfToken := s.getHuggingFaceToken(task, baseModelSpec, modelInfo)
@@ -1114,6 +1122,7 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 
 		s.logger.Infof("Successfully downloaded HuggingFace model %s to %s",
 			modelInfo, downloadPath)
+		artifact = s.modelConfigParser.buildArtifactAttribute(shaStr, s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel), destPath)
 	}
 
 	// Parse model config and update ConfigMap
@@ -1128,7 +1137,7 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 		s.logger.Debugf("Using ClusterBaseModel %s for config parsing", clusterBaseModel.Name)
 	}
 
-	if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel, shaStr); err != nil {
+	if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel, artifact); err != nil {
 		s.logger.Errorf("Failed to parse and update model config: %v", err)
 	}
 	return nil
@@ -1145,32 +1154,32 @@ model creation process
 
 Returns:
   - matchedKey: the matched ConfigMap data key
-  - parentPath: the value of config.artifact.parentPath extracted from the matched entry
+  - matchedParentPath: the value of config.artifact.parentPath extracted from the matched entry
 */
 func (s *Gopher) handelReuseArtifactIfNecessary(ctx context.Context, baseModelSpec v1beta1.BaseModelSpec,
-	modelType string, modelId string, namespace string, shaStr string) (string, string) {
+	modelType string, modelName string, namespace string, shaStr string, currentModelTypeAndNodeName string) (string, string) {
 	// check whether identical artifact is already existing if model specified with ReuseIfExists
 	if baseModelSpec.Storage.DownloadPolicy != nil && *baseModelSpec.Storage.DownloadPolicy == v1beta1.ReuseIfExists {
 		var matchedModelTypeAndModelName string
-		var parentPath string
+		var matchedParentPath string
 		var err error
 		// prioritize searching parent path in ClusterBaseModel
 		// with hoping different basemodel in different namespaces could be linked to the same parent path to lower the chance of downloading artifact
 		if strings.ToLower(modelType) == strings.ToLower(constants.ClusterBaseModel) || strings.ToLower(modelType) == strings.ToLower(constants.BaseModel) {
-			matchedModelTypeAndModelName, parentPath, err = s.configMapReconciler.getModelDataByArtifactSha(ctx, shaStr, constants.LowerCaseClusterBaseModel)
+			matchedModelTypeAndModelName, matchedParentPath, err = s.configMapReconciler.getModelDataByArtifactSha(ctx, shaStr, constants.LowerCaseClusterBaseModel, currentModelTypeAndNodeName)
 			if err != nil {
-				s.logger.Warnf("get error when finding matched model in configmap for model : %s: %s", modelId, err)
+				s.logger.Warnf("get error when finding matched model in configmap for model : %s: %s", modelName, err)
 			}
 		}
 		if strings.ToLower(modelType) == strings.ToLower(constants.BaseModel) && matchedModelTypeAndModelName == "" {
 			// build namespaced model type
 			namespacedModelType := fmt.Sprintf("%s.%s", namespace, constants.LowerCaseBaseModel)
-			matchedModelTypeAndModelName, parentPath, err = s.configMapReconciler.getModelDataByArtifactSha(ctx, shaStr, namespacedModelType)
+			matchedModelTypeAndModelName, matchedParentPath, err = s.configMapReconciler.getModelDataByArtifactSha(ctx, shaStr, namespacedModelType, currentModelTypeAndNodeName)
 			if err != nil {
-				s.logger.Warnf("get error when finding matched model in configmap for model : %s: %s", modelId, err)
+				s.logger.Warnf("get error when finding matched model in configmap for model : %s: %s", modelName, err)
 			}
 		}
-		return matchedModelTypeAndModelName, parentPath
+		return matchedModelTypeAndModelName, matchedParentPath
 	}
 	return "", ""
 }
@@ -1227,7 +1236,7 @@ func (s *Gopher) processLocalStorageModel(ctx context.Context, task *GopherTask,
 		s.logger.Debugf("Using ClusterBaseModel %s for config parsing", clusterBaseModel.Name)
 	}
 
-	if err := s.safeParseAndUpdateModelConfig(modelPath, baseModel, clusterBaseModel, ""); err != nil {
+	if err := s.safeParseAndUpdateModelConfig(modelPath, baseModel, clusterBaseModel, nil); err != nil {
 		s.logger.Errorf("Failed to parse and update model config for local model: %v", err)
 		// This is not necessarily a failure - the model might still be usable
 	}
@@ -1243,20 +1252,20 @@ var fetchAttributeFromHfModelMetaData = FetchAttributeFromHfModelMetaData
 // It queries the Hugging Face model metadata API for the "sha" attribute and returns:
 // - the SHA string if available, along with true
 // - an empty string and false if the API call fails, or the attribute is missing/non-string/empty.
-func (s *Gopher) fetchSha(ctx context.Context, modelId string) (string, bool) {
+func (s *Gopher) fetchSha(ctx context.Context, modelId string, modelName string) (string, bool) {
 	var isShaAvailable = true
 	sha, err := fetchAttributeFromHfModelMetaData(ctx, modelId, Sha)
 	if err != nil {
-		s.logger.Errorf("Failed to retrieve sha from Hugging Face endpoint for model %s: %s", modelId, err)
+		s.logger.Errorf("Failed to retrieve sha from Hugging Face endpoint for model %s: %s", modelName, err)
 		isShaAvailable = false
 	}
 	shaStr, ok := sha.(string)
 	if !ok || shaStr == "" {
-		s.logger.Warnf("Could not get a valid sha string for model %s, proceeding with download without artifact reuse.", modelId)
+		s.logger.Warnf("Could not get a valid sha string for model %s, proceeding with download without artifact reuse.", modelName)
 		isShaAvailable = false
 	}
 	if isShaAvailable {
-		s.logger.Infof("fetched sha of model %s is %s", modelId, shaStr)
+		s.logger.Infof("fetched sha of model %s is %s", modelName, shaStr)
 	}
 	return shaStr, isShaAvailable
 }
@@ -1270,14 +1279,140 @@ Returns:
   - parentPath: artifact parent path from the matched entry (empty if no match)
 */
 func (s *Gopher) isEligibleForOptimization(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec,
-	modelType string, namespace string, isShaAvailable bool, shaStr, modelId string) (bool, string, string) {
+	modelType string, namespace string, isShaAvailable bool, shaStr, modelName string) (bool, string, string) {
 	if !isShaAvailable {
 		return false, "", ""
 	}
 
 	currentModelTypeAndNodeName := s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel)
-	matchedModelTypeAndModeName, parentPath := s.handelReuseArtifactIfNecessary(ctx, baseModelSpec, modelType, modelId, namespace, shaStr)
-	isEligible := matchedModelTypeAndModeName != "" && strings.ToLower(currentModelTypeAndNodeName) != strings.ToLower(matchedModelTypeAndModeName)
-	s.logger.Infof("found matched matchedModelTypeAndModeName %s for model %s, parentPath is %s, isEligible %t", matchedModelTypeAndModeName, modelId, parentPath, isEligible)
+	matchedModelTypeAndModeName, parentPath := s.handelReuseArtifactIfNecessary(ctx, baseModelSpec, modelType, modelName, namespace, shaStr, currentModelTypeAndNodeName)
+	isEligible := matchedModelTypeAndModeName != ""
+	s.logger.Infof("found matched matchedModelTypeAndModeName %s for model %s, parentPath is %s, isEligible %t", matchedModelTypeAndModeName, modelName, parentPath, isEligible)
 	return isEligible, matchedModelTypeAndModeName, parentPath
+}
+
+/*
+isSkippingArtifactDeletion decides whether to preserve a model artifact directory during deletion.
+
+Consider 3 aspects:
+1) If the path is still referenced by other BaseModel/ClusterBaseModel objects (excluding the current task's model),
+2) If the model resource (BaseModel or ClusterBaseModel) carries the reserve label (models.ome/reserve-model-artifact=true),
+3) If it needs to consider children path, inspect the node-scoped ConfigMap entry for this model for existence of children paths
+
+Parameters:
+- ctx: context for Kubernetes API operations.
+- task: the model task containing BaseModel or ClusterBaseModel; used for reference exclusion and reserve label checks.
+- destPath: the absolute filesystem path of the model artifact.
+- needsConsiderChildrenPath: whether to consider childrenPaths relationship before deletion.
+
+Returns:
+- bool: true to skip deletion; false to proceed with deletion.
+- bool: true to remove parent artifact directory
+- string: parent model name
+- string: parent model directory
+*/
+func (s *Gopher) isSkippingArtifactDeletion(ctx context.Context, task *GopherTask, destPath string, needsConsiderChildrenPath bool) (bool, bool, string, string) {
+	// Double-check if the path is still referenced by other models
+	isReferenced, err := s.isPathReferencedByOtherModels(destPath, task.BaseModel, task.ClusterBaseModel)
+	if err != nil {
+		// Cannot determine if the path is referenced; skip deletion to be safe
+		s.logger.Errorf("Failed to check if path %s is referenced by other models, skip the path deletion: %v", destPath, err)
+		return true, false, "", ""
+	}
+	if isReferenced {
+		return true, false, "", ""
+	}
+
+	// check whether the model CR has reserved label
+	hasReserveLabel := s.isReservingModelArtifact(task)
+	if hasReserveLabel {
+		return true, false, "", ""
+	}
+	if needsConsiderChildrenPath {
+		modelTypeAndModelName := s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel)
+		hasChildren, parentName, parentDir := s.hasChildrenPaths(ctx, modelTypeAndModelName)
+		s.removeChildPathFromParentConfigMapIfNecessary(ctx, hasChildren, parentName, modelTypeAndModelName, destPath)
+		isRemoveParent := s.isRemoveParentArtifactDirectory(ctx, hasChildren, parentName, parentDir)
+		return hasChildren, isRemoveParent, parentName, parentDir
+	} else {
+		return hasReserveLabel, false, "", ""
+	}
+}
+
+// hasChildrenPaths checks if the given model type and model name has children paths.
+// It retrieves the existing config map, determines the parent path and children paths,
+// If an error occurs during the process, it logs the error and returns true.
+func (s *Gopher) hasChildrenPaths(ctx context.Context, modelTypeAndModelName string) (bool, string, string) {
+	// get cm
+	existingConfigMap, err := s.configMapReconciler.getConfigMap(ctx)
+	if err != nil {
+		s.logger.Errorf("cannot retrieve node configmap and cannot determine whether it has childrenPaths and will regard it has: %v", err)
+		return true, "", ""
+	}
+	// regard it is parent, check config.artifact.childrenPaths. If there are no children paths, the artifact could be deleted
+	// if it does not have children, regard it is child, search for its parent. if the parent is located, remove the path from parent entry
+	dataEntry, exists := existingConfigMap.Data[modelTypeAndModelName]
+	if !exists {
+		s.logger.Errorf("cannot determine whether %s has childrenPaths and will regard it has because the corresponding entry does not exist in node configmap.", modelTypeAndModelName)
+		return true, "", ""
+	}
+	parentPath, childrenPaths, err := s.configMapReconciler.getParentPathAndChildrenPaths(modelTypeAndModelName, dataEntry)
+	if err != nil {
+		s.logger.Errorf("cannot determine whether it has childrenPaths and will regard it has because %v", err)
+		return true, "", ""
+
+	}
+	hasChildren := len(childrenPaths) != 0
+
+	var parentName, parentDir string
+	if parentPath != nil && len(parentPath) != 0 {
+		for key, value := range parentPath {
+			parentName = key
+			parentDir = value
+			break
+		}
+	}
+	return hasChildren, parentName, parentDir
+}
+
+/*
+removeChildPathFromParentConfigMapIfNecessary removes the child's destPath from its parent's
+config.artifact.childrenPaths entry in the node-scoped ConfigMap when meets condition.
+
+Parameters:
+  - ctx: context for Kubernetes API operations.
+  - hasChildren: whether the deleting model still has children paths in the ConfigMap.
+  - parentName: ConfigMap key for the parent model entry.
+  - modelTypeAndModelName: ConfigMap key for the current model entry (used for self-parent checks).
+  - destPath: absolute filesystem path of the current model artifact to remove from the parent's childrenPaths.
+*/
+func (s *Gopher) removeChildPathFromParentConfigMapIfNecessary(ctx context.Context, hasChildren bool, parentName string, modelTypeAndModelName string, destPath string) {
+	// if it does not have child, and its parent is not itself, need to remove the path from parent entry
+	if !hasChildren && strings.ToLower(parentName) != strings.ToLower(modelTypeAndModelName) {
+		err := s.configMapReconciler.updateConfigMapWithRemovedChildPath(ctx, parentName, destPath)
+		if err != nil {
+			s.logger.Errorf("failed to remove model %s child path %s from parentName %s", modelTypeAndModelName, destPath, parentName)
+		}
+	}
+}
+
+// isRemoveParentArtifactDirectory - return whether the parent artifact directory is eligible to be deleted
+// lenient way to determine whether the parent model cr is deleted or not. if more strictly, need to check the model cr existence
+// after checking the existence of parent entry in the configmap
+// However, due to the model key of configmap could be truncated, there is no way to retrieve the exact original parent model CR name and namespace
+// based on the current design
+func (s *Gopher) isRemoveParentArtifactDirectory(ctx context.Context, hasChildren bool, parentName string, parentDir string) bool {
+	// If there are still children, never remove the parent artifact directory.
+	if hasChildren {
+		return false
+	}
+
+	// If the parent entry still exists in the node ConfigMap, don't remove.
+	exists, _, err := s.configMapReconciler.getDataEntryBasedOnModelKey(ctx, parentName)
+	if err != nil && strings.Contains(err.Error(), "cannot retrieve node configmap") {
+		s.logger.Infof("cannot retrieve node configmap and cannot determine parent entry existence, will not remove artifact")
+		return false
+	}
+	s.logger.Infof("parent entry %s:%s exists on node configmap: %v", parentName, parentDir, exists)
+	return !exists
 }

@@ -67,9 +67,13 @@ type ModelConfig struct {
 
 // Artifact records the information of model artifact, including version (Sha) and storage paths
 type Artifact struct {
-	Sha           string   `json:"sha"`
-	ParentPath    string   `json:"parentPath"`
-	ChildrenPaths []string `json:"childrenPaths"`
+	Sha string `json:"sha"` // sha string fetched from HuggingFace
+	// parent model name -> parent model artifact storage path
+	// parent name convention is
+	// For ClusterBaseModel: clusterbasemodel.{model_name}
+	// For BaseModel: {namespace}.basemodel.{model_name}
+	ParentPath    map[string]string `json:"parentPath"`
+	ChildrenPaths []string          `json:"childrenPaths"` // an array of children paths
 }
 
 // DownloadProgress tracks the progress of a model download
@@ -150,12 +154,26 @@ func ConvertMetadataToModelConfig(metadata ModelMetadata) *ModelConfig {
 
 	// convert artifact
 	var artifact Artifact
-	if metadata.Artifact.Sha != "" || metadata.Artifact.ParentPath != "" || len(metadata.Artifact.ChildrenPaths) > 0 {
+	if metadata.Artifact.Sha != "" || metadata.Artifact.ParentPath != nil || metadata.Artifact.ChildrenPaths != nil {
 		currentArtifact := metadata.Artifact
+		// Deep copy ParentPath to avoid aliasing
+		var parent map[string]string
+		if currentArtifact.ParentPath != nil {
+			parent = make(map[string]string, len(currentArtifact.ParentPath))
+			for k, v := range currentArtifact.ParentPath {
+				parent[k] = v
+			}
+		}
+		// Preserve nil vs empty slice semantics for ChildrenPaths
+		var children []string
+		if currentArtifact.ChildrenPaths != nil {
+			children = make([]string, len(currentArtifact.ChildrenPaths))
+			copy(children, currentArtifact.ChildrenPaths)
+		}
 		artifact = Artifact{
 			Sha:           currentArtifact.Sha,
-			ParentPath:    currentArtifact.ParentPath,
-			ChildrenPaths: append([]string(nil), currentArtifact.ChildrenPaths...),
+			ParentPath:    parent,
+			ChildrenPaths: children,
 		}
 	}
 

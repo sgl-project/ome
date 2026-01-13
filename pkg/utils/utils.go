@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -327,4 +328,60 @@ func ContainsString(values []interface{}, target string, isCaseSensitive bool) b
 		}
 	}
 	return false
+}
+
+func HasSymlinkPointingToDir(searchDir, targetDir string) (bool, error) {
+	searchDir, err := filepath.Abs(searchDir)
+	if err != nil {
+		return false, err
+	}
+
+	targetDir, err = filepath.Abs(targetDir)
+	if err != nil {
+		return false, err
+	}
+	var errFound = errors.New("symlink pointing to target found")
+
+	err = filepath.WalkDir(searchDir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		// Skip evaluating targetDir itself, but DO NOT SkipDir
+		if path == targetDir {
+			return nil
+		}
+
+		// Only inspect symlinks
+		if d.Type()&os.ModeSymlink == 0 {
+			return nil
+		}
+
+		linkTarget, err := os.Readlink(path)
+		if err != nil {
+			return nil
+		}
+
+		// Resolve relative symlink
+		if !filepath.IsAbs(linkTarget) {
+			linkTarget = filepath.Join(filepath.Dir(path), linkTarget)
+		}
+
+		linkTarget = filepath.Clean(linkTarget)
+
+		if linkTarget == targetDir {
+			return errFound
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		if errors.Is(err, errFound) {
+			return true, nil
+		}
+		return false, err
+	}
+
+	return false, nil
 }
