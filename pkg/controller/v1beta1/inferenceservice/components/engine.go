@@ -294,7 +294,9 @@ func (e *Engine) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *me
 		UpdateVolumeMounts(&e.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
 		MergeEngineResources(&e.BaseComponentFields, isvc, &runnerSpec.Container)
 		MergeRuntimeArgumentsOverride(&e.BaseComponentFields, &runnerSpec.Container)
-		e.setParallelismEnvVarForEngine(&runnerSpec.Container, e.getWorkerSize())
+		if e.AcceleratorClass == nil {
+			e.setParallelismEnvVarForEngine(&runnerSpec.Container, e.getWorkerSize())
+		}
 	}
 
 	// Use common pod spec reconciler for base logic
@@ -326,7 +328,9 @@ func (e *Engine) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectMe
 			UpdateEnvVariables(&e.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
 			MergeEngineResources(&e.BaseComponentFields, isvc, &workerRunner.Container)
 			MergeRuntimeArgumentsOverride(&e.BaseComponentFields, &workerRunner.Container)
-			e.setParallelismEnvVarForEngine(&workerRunner.Container, e.getWorkerSize())
+			if e.AcceleratorClass == nil {
+				e.setParallelismEnvVarForEngine(&workerRunner.Container, e.getWorkerSize())
+			}
 		}
 	}
 
