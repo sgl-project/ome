@@ -290,7 +290,9 @@ func (d *Decoder) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *m
 		UpdateVolumeMounts(&d.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
 		MergeDecoderResources(&d.BaseComponentFields, isvc, &runnerSpec.Container)
 		MergeRuntimeArgumentsOverride(&d.BaseComponentFields, &runnerSpec.Container)
-		d.setParallelismEnvVarForDecoder(&runnerSpec.Container, d.getWorkerSize())
+		if d.AcceleratorClass == nil {
+			d.setParallelismEnvVarForDecoder(&runnerSpec.Container, d.getWorkerSize())
+		}
 	}
 
 	// Use common pod spec reconciler for base logic
@@ -323,7 +325,9 @@ func (d *Decoder) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectM
 			UpdateEnvVariables(&d.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
 			MergeDecoderResources(&d.BaseComponentFields, isvc, &workerRunner.Container)
 			MergeRuntimeArgumentsOverride(&d.BaseComponentFields, &workerRunner.Container)
-			d.setParallelismEnvVarForDecoder(&workerRunner.Container, d.getWorkerSize())
+			if d.AcceleratorClass == nil {
+				d.setParallelismEnvVarForDecoder(&workerRunner.Container, d.getWorkerSize())
+			}
 		}
 	}
 
