@@ -573,7 +573,6 @@ gpt-5-2-chat-latest:
 gpt-oss-120b:
   enabled: false
   lifecyclePhase: "ACTIVE"
-  compatibleDACShapes: "OAI_H100_X2"
   nodeAffinity:
     - BM.GPU.A100-v2.8
     - BM.GPU.B4.8
@@ -586,7 +585,6 @@ gpt-oss-120b:
 gpt-oss-20b:
   enabled: false
   lifecyclePhase: "ACTIVE"
-  compatibleDACShapes: "OAI_H100_X1"
 
 gpt-oss-120b-bf16:
   enabled: false
