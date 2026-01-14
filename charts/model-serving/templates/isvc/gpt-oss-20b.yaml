@@ -5,6 +5,8 @@ metadata:
   name: gpt-oss-20b
   namespace: gpt-oss-20b
 spec:
+  acceleratorSelector:
+    acceleratorClass: nvidia-h100-1
   predictor:
     model:
       runtime: srt-gpt-oss-20b

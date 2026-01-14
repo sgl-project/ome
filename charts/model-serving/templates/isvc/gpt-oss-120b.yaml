@@ -5,6 +5,8 @@ metadata:
   name: gpt-oss-120b
   namespace: gpt-oss-120b
 spec:
+  acceleratorSelector:
+    acceleratorClass: nvidia-h100-2
   predictor:
     model:
       runtime: srt-gpt-oss-120b-mxfp4
