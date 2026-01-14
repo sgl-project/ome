@@ -96,6 +96,7 @@ llama-3-70b-instruct:
 llama-4-scout-17b-16e-instruct:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "LARGE_GENERIC_V2"
   nodeAffinity:
     - BM.GPU.H100.8
     - BM.GPU.H200.8

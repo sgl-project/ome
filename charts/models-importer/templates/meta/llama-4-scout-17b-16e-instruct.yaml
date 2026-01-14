@@ -48,19 +48,14 @@ spec:
                 {{- end }}
     {{- end }}
   additionalMetadata:
-    {{ if index .Values "llama-4-scout-17b-16e-instruct" "isA100Only" }}
-    dacShapeConfigs: |-
-      compatibleDACShapes:
-        - name: LARGE_GENERIC
-          quotaUnit: 1
-          default: true
-    {{ else }}
-    dacShapeConfigs: |-
-      compatibleDACShapes:
-        - name: LARGE_GENERIC_V2
-          quotaUnit: 1
-          default: true
-    {{ end }}
+    {{- $shape := default "LARGE_GENERIC_V2" (index .Values "llama-4-scout-17b-16e-instruct" "compatibleDACShapes") }}
+      {{- if $shape }}
+      dacShapeConfigs: |-
+        compatibleDACShapes:
+          - name: {{ $shape }}
+            quotaUnit: 1
+            default: true
+      {{- end }}
     image-text-to-text: "true"
   modelConfiguration:
     {
