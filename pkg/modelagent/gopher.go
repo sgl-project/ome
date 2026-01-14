@@ -993,6 +993,24 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 		s.logger.Infof("successfully add the new path to childrenPath for model: %s", name)
 		artifact = s.modelConfigParser.buildArtifactAttribute(shaStr, matchedModelTypeAndModeName, parentPath)
 	} else {
+		// handle the case when download Policy is updated from ReuseIfExists to AlwaysDownload
+		hasSymlink, symbolicLinkErr := utils.IsSymbolicLink(destPath)
+		if symbolicLinkErr != nil {
+			s.logger.Warnf("failed to determine if %s is a symbolic link: %v", destPath, symbolicLinkErr)
+		}
+		if hasSymlink {
+			if removalErr := utils.RemoveSymbolicLink(destPath); removalErr != nil {
+				s.logger.Errorf("failed to remove existing symbolic link at %s: %v", destPath, removalErr)
+			}
+			s.logger.Infof("removed existing symbolic link at %s", destPath)
+			currentModelTypeAndNodeName := s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel)
+			hasChildren, parentName, _ := s.hasChildrenPaths(ctx, currentModelTypeAndNodeName)
+			if parentName != "" {
+				s.removeChildPathFromParentConfigMapIfNecessary(ctx, hasChildren, parentName, currentModelTypeAndNodeName, destPath)
+			}
+
+		}
+
 		// Get Hugging Face token from storage key or parameters
 		hfToken := s.getHuggingFaceToken(task, baseModelSpec, modelInfo)
 
@@ -1343,15 +1361,13 @@ func (s *Gopher) isSkippingArtifactDeletion(ctx context.Context, task *GopherTas
 // It retrieves the existing config map, determines the parent path and children paths,
 // If an error occurs during the process, it logs the error and returns true.
 func (s *Gopher) hasChildrenPaths(ctx context.Context, modelTypeAndModelName string) (bool, string, string) {
-	// get cm
-	existingConfigMap, err := s.configMapReconciler.getConfigMap(ctx)
+	// regard it is parent, check config.artifact.childrenPaths. If there are no children paths, the artifact could be deleted
+	// if it does not have children, regard it is child, search for its parent. if the parent is located, remove the path from parent entry
+	exists, dataEntry, err := s.configMapReconciler.getDataEntryBasedOnModelKey(ctx, modelTypeAndModelName)
 	if err != nil {
 		s.logger.Errorf("cannot retrieve node configmap and cannot determine whether it has childrenPaths and will regard it has: %v", err)
 		return true, "", ""
 	}
-	// regard it is parent, check config.artifact.childrenPaths. If there are no children paths, the artifact could be deleted
-	// if it does not have children, regard it is child, search for its parent. if the parent is located, remove the path from parent entry
-	dataEntry, exists := existingConfigMap.Data[modelTypeAndModelName]
 	if !exists {
 		s.logger.Errorf("cannot determine whether %s has childrenPaths and will regard it has because the corresponding entry does not exist in node configmap.", modelTypeAndModelName)
 		return true, "", ""
@@ -1363,15 +1379,7 @@ func (s *Gopher) hasChildrenPaths(ctx context.Context, modelTypeAndModelName str
 
 	}
 	hasChildren := len(childrenPaths) != 0
-
-	var parentName, parentDir string
-	if parentPath != nil && len(parentPath) != 0 {
-		for key, value := range parentPath {
-			parentName = key
-			parentDir = value
-			break
-		}
-	}
+	parentName, parentDir := parseParent(parentPath)
 	return hasChildren, parentName, parentDir
 }
 

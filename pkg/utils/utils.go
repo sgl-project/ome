@@ -279,24 +279,35 @@ func CreateSymbolicLink(childPath string, parentPath string) error {
 	// Check if symlink already exists
 	fileInfo, err := os.Lstat(childPath)
 	if err == nil {
-		if fileInfo.Mode()&os.ModeSymlink != 0 {
-			// It's a symlink, read its target
+		switch {
+		case fileInfo.Mode()&os.ModeSymlink != 0:
+			// Existing symlink
 			currentTarget, err := os.Readlink(childPath)
 			if err != nil {
-				return fmt.Errorf("failed to read existing symlink: %w", err)
+				return fmt.Errorf("failed to read existing symlink %s: %w", childPath, err)
 			}
 
 			if currentTarget == relTarget {
-				// Already points to the desired target, no-op
+				// Already correct
 				return nil
 			}
 
-			// Remove existing symlink
+			// Remove incorrect symlink
 			if err := os.Remove(childPath); err != nil {
-				return fmt.Errorf("failed to remove existing symlink: %w", err)
+				return fmt.Errorf("failed to remove existing symlink %s: %w", childPath, err)
 			}
-		} else {
-			return fmt.Errorf("file exists and is not a symlink: %s", childPath)
+
+		case fileInfo.IsDir():
+			// Existing directory (with or without content)
+			if err := os.RemoveAll(childPath); err != nil {
+				return fmt.Errorf("failed to remove existing directory %s: %w", childPath, err)
+			}
+
+		default:
+			// Existing regular file or other type
+			if err := os.Remove(childPath); err != nil {
+				return fmt.Errorf("failed to remove existing file %s: %w", childPath, err)
+			}
 		}
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("failed to stat childPath: %w", err)
@@ -330,6 +341,17 @@ func ContainsString(values []interface{}, target string, isCaseSensitive bool) b
 	return false
 }
 
+// HasSymlinkPointingToDir recursively searches under searchDir to determine
+// whether any symbolic link points to targetDir.
+//
+// The search traverses all subdirectories of searchDir (including children,
+// grandchildren, and deeper descendants) using filepath.WalkDir. The targetDir
+// itself is not evaluated as a candidate symlink, but its subtree is still
+// traversed to allow detection of symlinks located under targetDir.
+//
+// Only symbolic links are inspected. Regular files and directories are ignored.
+// Relative symlink targets are resolved against the symlink’s parent directory
+// and normalized before comparison.
 func HasSymlinkPointingToDir(searchDir, targetDir string) (bool, error) {
 	searchDir, err := filepath.Abs(searchDir)
 	if err != nil {
@@ -384,4 +406,43 @@ func HasSymlinkPointingToDir(searchDir, targetDir string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+// IsSymbolicLink determines whether the given path exists and is a symbolic link.
+func IsSymbolicLink(path string) (bool, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, fmt.Errorf("path %s does not exist: %w", path, err)
+		}
+		return false, fmt.Errorf("failed to stat path %s: %w", path, err)
+	}
+
+	if info.Mode()&os.ModeSymlink == 0 {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// RemoveSymbolicLink removes the symbolic link at the given path in a safe manner.
+//
+// This function guarantees that only the symbolic link itself is removed.
+// The target file or directory that the symlink points to is never modified.
+func RemoveSymbolicLink(path string) error {
+	isSymlink, err := IsSymbolicLink(path)
+	if err != nil {
+		return err
+	}
+
+	if !isSymlink {
+		// Path does not exist or is not a symlink
+		return fmt.Errorf("path %s is not symbolic link", path)
+	}
+
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("failed to remove symbolic link %s: %w", path, err)
+	}
+
+	return nil
 }
