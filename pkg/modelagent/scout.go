@@ -340,6 +340,10 @@ func (w *Scout) updateBaseModel(old, new interface{}) {
 		return
 	}
 
+	if w.isToDownloadOverrideDueToDownloadPolicyBasedOnBM(oldBaseModel, newBaseModel) {
+		w.generateDownloadOverrideTaskBasedOnBaseModel(newBaseModel)
+	}
+
 	hasChanges := false
 	for _, diff := range []struct {
 		name     string
@@ -360,24 +364,7 @@ func (w *Scout) updateBaseModel(old, new interface{}) {
 
 	if hasChanges && w.shouldDownloadModelInUpdateEvent(newBaseModel.Spec.Storage) {
 		w.logger.Infof("BaseModel %s needs refresh in namespace %s", newBaseModel.GetName(), newBaseModel.GetNamespace())
-
-		IsTensorrtLLMModel := newBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
-
-		modelType := string(constants.ServingBaseModel)
-		if modelTypeFromMetadata, ok := newBaseModel.Spec.AdditionalMetadata["type"]; ok {
-			modelType = modelTypeFromMetadata
-		}
-		gopherTask := &GopherTask{
-			TaskType:  DownloadOverride,
-			BaseModel: newBaseModel,
-			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
-				IsTensorrtLLMModel: IsTensorrtLLMModel,
-				ShapeAlias:         w.nodeShapeAlias,
-				ModelType:          modelType,
-			},
-		}
-
-		w.gopherChan <- gopherTask
+		w.generateDownloadOverrideTaskBasedOnBaseModel(newBaseModel)
 	}
 }
 
@@ -408,6 +395,10 @@ func (w *Scout) updateClusterBaseModel(old, new interface{}) {
 		return
 	}
 
+	if w.isToDownloadOverrideDueToDownloadPolicyBasedOnCBM(oldClusterBaseModel, newClusterBaseModel) {
+		w.generateDownloadOverrideTaskBasedOnClusterBaseModel(newClusterBaseModel)
+	}
+
 	hasChanges := false
 	for _, diff := range []struct {
 		name     string
@@ -428,25 +419,7 @@ func (w *Scout) updateClusterBaseModel(old, new interface{}) {
 
 	if hasChanges && w.shouldDownloadModelInUpdateEvent(newClusterBaseModel.Spec.Storage) {
 		w.logger.Infof("ClusterBaseModel %s need refresh", newClusterBaseModel.GetName())
-
-		IsTensorrtLLMModel := newClusterBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
-
-		modelType := string(constants.ServingBaseModel)
-		if modelTypeFromMetadata, ok := newClusterBaseModel.Spec.AdditionalMetadata["type"]; ok {
-			modelType = modelTypeFromMetadata
-		}
-
-		gopherTask := &GopherTask{
-			TaskType:         DownloadOverride,
-			ClusterBaseModel: newClusterBaseModel,
-			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
-				IsTensorrtLLMModel: IsTensorrtLLMModel,
-				ShapeAlias:         w.nodeShapeAlias,
-				ModelType:          modelType,
-			},
-		}
-
-		w.gopherChan <- gopherTask
+		w.generateDownloadOverrideTaskBasedOnClusterBaseModel(newClusterBaseModel)
 	}
 }
 
@@ -676,4 +649,98 @@ func (w *Scout) nodeMatchesExpression(expr v1.NodeSelectorRequirement) bool {
 	}
 
 	return false
+}
+
+func downloadPolicyOrDefault(storage *v1beta1.StorageSpec) v1beta1.DownloadPolicy {
+	if storage == nil || storage.DownloadPolicy == nil {
+		return v1beta1.AlwaysDownload // default
+	}
+	return *storage.DownloadPolicy
+}
+
+// isToDownloadOverrideDueToDownloadPolicyBasedOnCBM returns true when the download policy changes between
+// the old and new ClusterBaseModel and the new storage type is HuggingFace. If the storage type
+// cannot be determined from the new model's StorageUri, the method logs the error and returns false.
+func (w *Scout) isToDownloadOverrideDueToDownloadPolicyBasedOnCBM(oldClusterBaseModel *v1beta1.ClusterBaseModel, newClusterBaseModel *v1beta1.ClusterBaseModel) bool {
+	oldPolicy := downloadPolicyOrDefault(oldClusterBaseModel.Spec.Storage)
+	newPolicy := downloadPolicyOrDefault(newClusterBaseModel.Spec.Storage)
+
+	storageType, err := storage.GetStorageType(*newClusterBaseModel.Spec.Storage.StorageUri)
+	if err != nil {
+		w.logger.Errorf("Failed to get target directory path for model %s: %v", newClusterBaseModel.Name, err)
+		return false
+	}
+	isToDownloadOverride := oldPolicy != newPolicy && storageType == storage.StorageTypeHuggingFace
+
+	if isToDownloadOverride {
+		w.logger.Infof("ClusterBaseModel: %s: download policy is changed from %s to %s", newClusterBaseModel.Name, oldPolicy, newPolicy)
+	}
+	return isToDownloadOverride
+}
+
+// isToDownloadOverrideDueToDownloadPolicyBasedOnBM returns true when the download policy changes between
+// the old and new BaseModel and the new storage type is HuggingFace. If the storage type
+// cannot be determined from the new model's StorageUri, the method logs the error and returns false.
+func (w *Scout) isToDownloadOverrideDueToDownloadPolicyBasedOnBM(oldBaseModel *v1beta1.BaseModel, newBaseModel *v1beta1.BaseModel) bool {
+	oldPolicy := downloadPolicyOrDefault(oldBaseModel.Spec.Storage)
+	newPolicy := downloadPolicyOrDefault(newBaseModel.Spec.Storage)
+
+	storageType, err := storage.GetStorageType(*newBaseModel.Spec.Storage.StorageUri)
+	if err != nil {
+		w.logger.Errorf("Failed to get target directory path for model %s: %v", newBaseModel.Name, err)
+		return false
+	}
+	isToDownloadOverride := oldPolicy != newPolicy && storageType == storage.StorageTypeHuggingFace
+
+	if isToDownloadOverride {
+		w.logger.Infof("BaseModel: %s: download policy is changed from %s to %s", newBaseModel.Name, oldPolicy, newPolicy)
+	}
+	return isToDownloadOverride
+}
+
+/*
+generateDownloadOverrideTaskBasedOnClusterBaseModel constructs and enqueues a DownloadOverride GopherTask
+for the provided ClusterBaseModel.
+The task is sent to w.gopherChan for processing by Gopher workers.
+*/
+func (w *Scout) generateDownloadOverrideTaskBasedOnClusterBaseModel(clusterBaseModel *v1beta1.ClusterBaseModel) {
+	IsTensorrtLLMModel := clusterBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
+
+	modelType := string(constants.ServingBaseModel)
+	if modelTypeFromMetadata, ok := clusterBaseModel.Spec.AdditionalMetadata["type"]; ok {
+		modelType = modelTypeFromMetadata
+	}
+
+	gopherTask := &GopherTask{
+		TaskType:         DownloadOverride,
+		ClusterBaseModel: clusterBaseModel,
+		TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
+			IsTensorrtLLMModel: IsTensorrtLLMModel,
+			ShapeAlias:         w.nodeShapeAlias,
+			ModelType:          modelType,
+		},
+	}
+
+	w.logger.Infof("generate DownloadOverride task %v", clusterBaseModel.Spec.DisplayName)
+	w.gopherChan <- gopherTask
+}
+
+func (w *Scout) generateDownloadOverrideTaskBasedOnBaseModel(baseModel *v1beta1.BaseModel) {
+	IsTensorrtLLMModel := baseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
+
+	modelType := string(constants.ServingBaseModel)
+	if modelTypeFromMetadata, ok := baseModel.Spec.AdditionalMetadata["type"]; ok {
+		modelType = modelTypeFromMetadata
+	}
+	gopherTask := &GopherTask{
+		TaskType:  DownloadOverride,
+		BaseModel: baseModel,
+		TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
+			IsTensorrtLLMModel: IsTensorrtLLMModel,
+			ShapeAlias:         w.nodeShapeAlias,
+			ModelType:          modelType,
+		},
+	}
+	w.logger.Infof("generate DownloadOverride task %v", baseModel.Spec.DisplayName)
+	w.gopherChan <- gopherTask
 }

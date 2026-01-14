@@ -3,6 +3,8 @@ package modelagent
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -984,4 +986,448 @@ func TestNodeMatchesExpressionEdgeCases(t *testing.T) {
 			}
 		})
 	}
+}
+
+func ptr[T any](v T) *T {
+	return &v
+}
+
+func newClusterBaseModel(
+	name string,
+	policy v1beta1.DownloadPolicy,
+	storageURI string,
+) *v1beta1.ClusterBaseModel {
+	return &v1beta1.ClusterBaseModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				DownloadPolicy: ptr(policy),
+				StorageUri:     ptr(storageURI),
+			},
+		},
+	}
+}
+
+func newBaseModel(
+	name string,
+	policy v1beta1.DownloadPolicy,
+	storageURI string,
+) *v1beta1.BaseModel {
+	return &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				DownloadPolicy: ptr(policy),
+				StorageUri:     ptr(storageURI),
+			},
+		},
+	}
+}
+
+func TestDownloadPolicyOrDefault(t *testing.T) {
+	tests := []struct {
+		name     string
+		storage  *v1beta1.StorageSpec
+		expected v1beta1.DownloadPolicy
+	}{
+		{
+			name:     "storage is nil -> default AlwaysDownload",
+			storage:  nil,
+			expected: v1beta1.AlwaysDownload,
+		},
+		{
+			name: "storage exists but DownloadPolicy is nil -> default AlwaysDownload",
+			storage: &v1beta1.StorageSpec{
+				DownloadPolicy: nil,
+			},
+			expected: v1beta1.AlwaysDownload,
+		},
+		{
+			name: "storage exists and DownloadPolicy is set",
+			storage: &v1beta1.StorageSpec{
+				DownloadPolicy: ptr(v1beta1.ReuseIfExists),
+			},
+			expected: v1beta1.ReuseIfExists,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := downloadPolicyOrDefault(tt.storage)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestScout_isToDownloadOverrideDueToDownloadPolicy_CBM(t *testing.T) {
+	tests := []struct {
+		name     string
+		oldModel *v1beta1.ClusterBaseModel
+		newModel *v1beta1.ClusterBaseModel
+		expected bool
+	}{
+		{
+			name: "download policy changed and storage is HuggingFace",
+			oldModel: newClusterBaseModel(
+				"old-model",
+				v1beta1.ReuseIfExists,
+				"hf://meta-llama/llama-3",
+			),
+			newModel: newClusterBaseModel(
+				"new-model",
+				v1beta1.AlwaysDownload,
+				"hf://meta-llama/llama-3",
+			),
+			expected: true,
+		},
+		{
+			name: "download policy unchanged and storage is HuggingFace",
+			oldModel: newClusterBaseModel(
+				"old-model",
+				v1beta1.ReuseIfExists,
+				"hf://meta-llama/llama-3",
+			),
+			newModel: newClusterBaseModel(
+				"new-model",
+				v1beta1.ReuseIfExists,
+				"hf://meta-llama/llama-3",
+			),
+			expected: false,
+		},
+		{
+			name: "download policy changed but storage is not HuggingFace",
+			oldModel: newClusterBaseModel(
+				"old-model",
+				v1beta1.ReuseIfExists,
+				"s3://bucket/model",
+			),
+			newModel: newClusterBaseModel(
+				"new-model",
+				v1beta1.AlwaysDownload,
+				"s3://bucket/model",
+			),
+			expected: false,
+		},
+		{
+			name: "download policy unchanged and storage is not HuggingFace",
+			oldModel: newClusterBaseModel(
+				"old-model",
+				v1beta1.ReuseIfExists,
+				"s3://bucket/model",
+			),
+			newModel: newClusterBaseModel(
+				"new-model",
+				v1beta1.ReuseIfExists,
+				"s3://bucket/model",
+			),
+			expected: false,
+		},
+		{
+			name: "invalid storage URI returns false",
+			oldModel: newClusterBaseModel(
+				"old-model",
+				v1beta1.ReuseIfExists,
+				"hf://meta-llama/llama-3",
+			),
+			newModel: newClusterBaseModel(
+				"new-model",
+				v1beta1.AlwaysDownload,
+				"://invalid-uri",
+			),
+			expected: false,
+		},
+	}
+
+	logger, _ := zap.NewDevelopment()
+	sugaredLogger := logger.Sugar()
+	defer func(sugaredLogger *zap.SugaredLogger) {
+		_ = sugaredLogger.Sync()
+	}(sugaredLogger)
+	scout := &Scout{
+		logger: sugaredLogger,
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := scout.isToDownloadOverrideDueToDownloadPolicyBasedOnCBM(
+				tt.oldModel,
+				tt.newModel,
+			)
+
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestScout_isToDownloadOverrideDueToDownloadPolicy_BM(t *testing.T) {
+	tests := []struct {
+		name     string
+		oldModel *v1beta1.BaseModel
+		newModel *v1beta1.BaseModel
+		expected bool
+	}{
+		{
+			name: "download policy changed and storage is HuggingFace",
+			oldModel: newBaseModel(
+				"old-model",
+				v1beta1.ReuseIfExists,
+				"hf://meta-llama/llama-3",
+			),
+			newModel: newBaseModel(
+				"new-model",
+				v1beta1.AlwaysDownload,
+				"hf://meta-llama/llama-3",
+			),
+			expected: true,
+		},
+		{
+			name: "download policy unchanged and storage is HuggingFace",
+			oldModel: newBaseModel(
+				"old-model",
+				v1beta1.ReuseIfExists,
+				"hf://meta-llama/llama-3",
+			),
+			newModel: newBaseModel(
+				"new-model",
+				v1beta1.ReuseIfExists,
+				"hf://meta-llama/llama-3",
+			),
+			expected: false,
+		},
+		{
+			name: "download policy changed but storage is not HuggingFace",
+			oldModel: newBaseModel(
+				"old-model",
+				v1beta1.ReuseIfExists,
+				"s3://bucket/model",
+			),
+			newModel: newBaseModel(
+				"new-model",
+				v1beta1.AlwaysDownload,
+				"s3://bucket/model",
+			),
+			expected: false,
+		},
+		{
+			name: "download policy unchanged and storage is not HuggingFace",
+			oldModel: newBaseModel(
+				"old-model",
+				v1beta1.ReuseIfExists,
+				"s3://bucket/model",
+			),
+			newModel: newBaseModel(
+				"new-model",
+				v1beta1.ReuseIfExists,
+				"s3://bucket/model",
+			),
+			expected: false,
+		},
+		{
+			name: "invalid storage URI returns false",
+			oldModel: newBaseModel(
+				"old-model",
+				v1beta1.ReuseIfExists,
+				"hf://meta-llama/llama-3",
+			),
+			newModel: newBaseModel(
+				"new-model",
+				v1beta1.AlwaysDownload,
+				"://invalid-uri",
+			),
+			expected: false,
+		},
+	}
+
+	logger, _ := zap.NewDevelopment()
+	sugaredLogger := logger.Sugar()
+	defer func(sugaredLogger *zap.SugaredLogger) {
+		_ = sugaredLogger.Sync()
+	}(sugaredLogger)
+	scout := &Scout{
+		logger: sugaredLogger,
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := scout.isToDownloadOverrideDueToDownloadPolicyBasedOnBM(
+				tt.oldModel,
+				tt.newModel,
+			)
+
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// Tests for generateDownloadOverrideTaskBasedOnClusterBaseModel
+func TestGenerateDownloadOverrideTaskBasedOnClusterBaseModel_Defaults(t *testing.T) {
+	// logger
+	logger, _ := zap.NewDevelopment()
+	sugaredLogger := logger.Sugar()
+	defer func(s *zap.SugaredLogger) { _ = s.Sync() }(sugaredLogger)
+
+	// setup
+	ch := make(chan *GopherTask, 1)
+	scout := &Scout{
+		nodeShapeAlias: "a10",
+		gopherChan:     ch,
+		logger:         sugaredLogger,
+	}
+
+	cbm := &v1beta1.ClusterBaseModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cbm-default",
+		},
+		Spec: v1beta1.BaseModelSpec{
+			ModelFormat:        v1beta1.ModelFormat{Name: "onnx"},
+			AdditionalMetadata: map[string]string{},
+		},
+	}
+
+	// act
+	scout.generateDownloadOverrideTaskBasedOnClusterBaseModel(cbm)
+
+	// assert
+	task := <-ch
+	assert.NotNil(t, task)
+	assert.Equal(t, DownloadOverride, task.TaskType)
+	assert.Equal(t, cbm, task.ClusterBaseModel)
+	assert.Nil(t, task.BaseModel)
+	assert.NotNil(t, task.TensorRTLLMShapeFilter)
+
+	filter := task.TensorRTLLMShapeFilter
+	assert.False(t, filter.IsTensorrtLLMModel)
+	assert.Equal(t, "a10", filter.ShapeAlias)
+	assert.Equal(t, string(constants.ServingBaseModel), filter.ModelType)
+}
+
+func TestGenerateDownloadOverrideTaskBasedOnClusterBaseModel_TensorRTLLMAndMetadataType(t *testing.T) {
+	// logger
+	logger, _ := zap.NewDevelopment()
+	sugaredLogger := logger.Sugar()
+	defer func(s *zap.SugaredLogger) { _ = s.Sync() }(sugaredLogger)
+
+	// setup
+	ch := make(chan *GopherTask, 1)
+	scout := &Scout{
+		nodeShapeAlias: "a10",
+		gopherChan:     ch,
+		logger:         sugaredLogger,
+	}
+
+	cbm := &v1beta1.ClusterBaseModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cbm-trtllm",
+		},
+		Spec: v1beta1.BaseModelSpec{
+			ModelFormat: v1beta1.ModelFormat{Name: constants.TensorRTLLM},
+			AdditionalMetadata: map[string]string{
+				"type": "CustomType",
+			},
+		},
+	}
+
+	// act
+	scout.generateDownloadOverrideTaskBasedOnClusterBaseModel(cbm)
+
+	// assert
+	task := <-ch
+	assert.NotNil(t, task)
+	assert.Equal(t, DownloadOverride, task.TaskType)
+	assert.Equal(t, cbm, task.ClusterBaseModel)
+	assert.Nil(t, task.BaseModel)
+	assert.NotNil(t, task.TensorRTLLMShapeFilter)
+
+	filter := task.TensorRTLLMShapeFilter
+	assert.True(t, filter.IsTensorrtLLMModel)
+	assert.Equal(t, "a10", filter.ShapeAlias)
+	assert.Equal(t, "CustomType", filter.ModelType)
+}
+
+func TestGenerateDownloadOverrideTaskBasedOnBaseModel_Defaults(t *testing.T) {
+	// logger
+	logger, _ := zap.NewDevelopment()
+	sugaredLogger := logger.Sugar()
+	defer func(s *zap.SugaredLogger) { _ = s.Sync() }(sugaredLogger)
+
+	// setup
+	ch := make(chan *GopherTask, 1)
+	scout := &Scout{
+		nodeShapeAlias: "a10",
+		gopherChan:     ch,
+		logger:         sugaredLogger,
+	}
+
+	bm := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cbm-default",
+		},
+		Spec: v1beta1.BaseModelSpec{
+			ModelFormat:        v1beta1.ModelFormat{Name: "onnx"},
+			AdditionalMetadata: map[string]string{},
+		},
+	}
+
+	// act
+	scout.generateDownloadOverrideTaskBasedOnBaseModel(bm)
+
+	// assert
+	task := <-ch
+	assert.NotNil(t, task)
+	assert.Equal(t, DownloadOverride, task.TaskType)
+	assert.Equal(t, bm, task.BaseModel)
+	assert.Nil(t, task.ClusterBaseModel)
+	assert.NotNil(t, task.TensorRTLLMShapeFilter)
+
+	filter := task.TensorRTLLMShapeFilter
+	assert.False(t, filter.IsTensorrtLLMModel)
+	assert.Equal(t, "a10", filter.ShapeAlias)
+	assert.Equal(t, string(constants.ServingBaseModel), filter.ModelType)
+}
+
+func TestGenerateDownloadOverrideTaskBasedOnBaseModel_TensorRTLLMAndMetadataType(t *testing.T) {
+	// logger
+	logger, _ := zap.NewDevelopment()
+	sugaredLogger := logger.Sugar()
+	defer func(s *zap.SugaredLogger) { _ = s.Sync() }(sugaredLogger)
+
+	// setup
+	ch := make(chan *GopherTask, 1)
+	scout := &Scout{
+		nodeShapeAlias: "a10",
+		gopherChan:     ch,
+		logger:         sugaredLogger,
+	}
+
+	bm := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cbm-trtllm",
+		},
+		Spec: v1beta1.BaseModelSpec{
+			ModelFormat: v1beta1.ModelFormat{Name: constants.TensorRTLLM},
+			AdditionalMetadata: map[string]string{
+				"type": "CustomType",
+			},
+		},
+	}
+
+	// act
+	scout.generateDownloadOverrideTaskBasedOnBaseModel(bm)
+
+	// assert
+	task := <-ch
+	assert.NotNil(t, task)
+	assert.Equal(t, DownloadOverride, task.TaskType)
+	assert.Equal(t, bm, task.BaseModel)
+	assert.Nil(t, task.ClusterBaseModel)
+	assert.NotNil(t, task.TensorRTLLMShapeFilter)
+
+	filter := task.TensorRTLLMShapeFilter
+	assert.True(t, filter.IsTensorrtLLMModel)
+	assert.Equal(t, "a10", filter.ShapeAlias)
+	assert.Equal(t, "CustomType", filter.ModelType)
 }
