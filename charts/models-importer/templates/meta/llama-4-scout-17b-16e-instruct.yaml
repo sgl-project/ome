@@ -49,13 +49,13 @@ spec:
     {{- end }}
   additionalMetadata:
     {{- $shape := default "LARGE_GENERIC_V2" (index .Values "llama-4-scout-17b-16e-instruct" "compatibleDACShapes") }}
-      {{- if $shape }}
-      dacShapeConfigs: |-
-        compatibleDACShapes:
-          - name: {{ $shape }}
-            quotaUnit: 1
-            default: true
-      {{- end }}
+    {{- if $shape }}
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: {{ $shape }}
+          quotaUnit: 1
+          default: true
+    {{- end }}
     image-text-to-text: "true"
   modelConfiguration:
     {
