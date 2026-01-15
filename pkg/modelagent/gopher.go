@@ -991,8 +991,12 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 			return err
 		}
 		s.logger.Infof("successfully add the new path to childrenPath for model: %s", name)
-		artifact = s.modelConfigParser.buildArtifactAttribute(shaStr, matchedModelTypeAndModeName, parentPath)
+
+		childrenPaths := make([]string, 0)
+		childrenPaths, _, _, _ = s.parseModelConfigDataEntry(ctx, s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel))
+		artifact = s.modelConfigParser.buildArtifactAttribute(shaStr, matchedModelTypeAndModeName, parentPath, childrenPaths)
 	} else {
+		childrenPaths := make([]string, 0)
 		// handle the case when download Policy is updated from ReuseIfExists to AlwaysDownload
 		hasSymlink, symbolicLinkErr := utils.IsSymbolicLink(destPath)
 		if symbolicLinkErr != nil {
@@ -1004,11 +1008,14 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 			}
 			s.logger.Infof("removed existing symbolic link at %s", destPath)
 			currentModelTypeAndNodeName := s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel)
-			hasChildren, parentName, _ := s.hasChildrenPaths(ctx, currentModelTypeAndNodeName)
+			currentChildren, parentName, _, parseErr := s.parseModelConfigDataEntry(ctx, currentModelTypeAndNodeName)
+			hasChildren := hasChildrenPaths(childrenPaths, parseErr)
 			if parentName != "" {
 				s.removeChildPathFromParentConfigMapIfNecessary(ctx, hasChildren, parentName, currentModelTypeAndNodeName, destPath)
 			}
-
+			if hasChildren {
+				childrenPaths = currentChildren
+			}
 		}
 
 		// Get Hugging Face token from storage key or parameters
@@ -1140,7 +1147,7 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 
 		s.logger.Infof("Successfully downloaded HuggingFace model %s to %s",
 			modelInfo, downloadPath)
-		artifact = s.modelConfigParser.buildArtifactAttribute(shaStr, s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel), destPath)
+		artifact = s.modelConfigParser.buildArtifactAttribute(shaStr, s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel), destPath, childrenPaths)
 	}
 
 	// Parse model config and update ConfigMap
@@ -1348,7 +1355,8 @@ func (s *Gopher) isSkippingArtifactDeletion(ctx context.Context, task *GopherTas
 	}
 	if needsConsiderChildrenPath {
 		modelTypeAndModelName := s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel)
-		hasChildren, parentName, parentDir := s.hasChildrenPaths(ctx, modelTypeAndModelName)
+		childrenPaths, parentName, parentDir, parseErr := s.parseModelConfigDataEntry(ctx, modelTypeAndModelName)
+		hasChildren := hasChildrenPaths(childrenPaths, parseErr)
 		s.removeChildPathFromParentConfigMapIfNecessary(ctx, hasChildren, parentName, modelTypeAndModelName, destPath)
 		isRemoveParent := s.isRemoveParentArtifactDirectory(ctx, hasChildren, parentName, parentDir)
 		return hasChildren, isRemoveParent, parentName, parentDir
@@ -1357,30 +1365,39 @@ func (s *Gopher) isSkippingArtifactDeletion(ctx context.Context, task *GopherTas
 	}
 }
 
-// hasChildrenPaths checks if the given model type and model name has children paths.
+// parseModelConfigDataEntry checks if the given model type and model name has children paths.
 // It retrieves the existing config map, determines the parent path and children paths,
 // If an error occurs during the process, it logs the error and returns true.
-func (s *Gopher) hasChildrenPaths(ctx context.Context, modelTypeAndModelName string) (bool, string, string) {
+func (s *Gopher) parseModelConfigDataEntry(ctx context.Context, modelTypeAndModelName string) ([]string, string, string, error) {
 	// regard it is parent, check config.artifact.childrenPaths. If there are no children paths, the artifact could be deleted
 	// if it does not have children, regard it is child, search for its parent. if the parent is located, remove the path from parent entry
 	exists, dataEntry, err := s.configMapReconciler.getDataEntryBasedOnModelKey(ctx, modelTypeAndModelName)
 	if err != nil {
-		s.logger.Errorf("cannot retrieve node configmap and cannot determine whether it has childrenPaths and will regard it has: %v", err)
-		return true, "", ""
+		existenceErr := fmt.Errorf("cannot retrieve node configmap and cannot determine whether it has childrenPaths and will regard it has: %v", err)
+		s.logger.Errorf(existenceErr.Error())
+		return make([]string, 0), "", "", existenceErr
 	}
 	if !exists {
-		s.logger.Errorf("cannot determine whether %s has childrenPaths and will regard it has because the corresponding entry does not exist in node configmap.", modelTypeAndModelName)
-		return true, "", ""
+		nonExistence := fmt.Errorf("cannot determine whether %s has childrenPaths and will regard it has because the corresponding entry does not exist in node configmap", modelTypeAndModelName)
+		s.logger.Errorf(nonExistence.Error())
+		return make([]string, 0), "", "", nonExistence
 	}
 	parentPath, childrenPaths, err := s.configMapReconciler.getParentPathAndChildrenPaths(modelTypeAndModelName, dataEntry)
 	if err != nil {
-		s.logger.Errorf("cannot determine whether it has childrenPaths and will regard it has because %v", err)
-		return true, "", ""
+		parseErr := fmt.Errorf("cannot determine whether it has childrenPaths and will regard it has because %v", err)
+		s.logger.Errorf(parseErr.Error())
+		return make([]string, 0), "", "", parseErr
 
 	}
-	hasChildren := len(childrenPaths) != 0
 	parentName, parentDir := parseParent(parentPath)
-	return hasChildren, parentName, parentDir
+	return childrenPaths, parentName, parentDir, nil
+}
+
+func hasChildrenPaths(childrenPaths []string, parseError error) bool {
+	if parseError != nil {
+		return true
+	}
+	return len(childrenPaths) != 0
 }
 
 /*

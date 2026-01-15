@@ -1078,13 +1078,14 @@ func TestHasChildrenPaths_NoChildren_HasMatchedParent(t *testing.T) {
 	})
 	g, client := newGopherAndClientWithConfigMap(cm, t)
 
-	got, parentName, parentDir := g.hasChildrenPaths(context.Background(), childKey)
-	assert.False(t, got, "no children implies cleanup and return false")
+	actualChildren, parentName, parentDir, err := g.parseModelConfigDataEntry(context.Background(), childKey)
+	assert.Empty(t, actualChildren, "no children implies cleanup and return false")
 
 	// should have get CM once
 	assert.Equal(t, countConfigMapGets(client), 1, "expected a ConfigMap get to retrieve configmap")
 	assert.Equal(t, "clusterbasemodel.parentModel", parentName)
 	assert.Equal(t, "/models/parent", parentDir)
+	assert.NoError(t, err)
 
 }
 
@@ -1099,13 +1100,14 @@ func TestHasChildrenPaths_NoChildren_ParentItself(t *testing.T) {
 		childKey: childEntry,
 	})
 	g, client := newGopherAndClientWithConfigMap(cm, t)
-	got, parentName, parentDir := g.hasChildrenPaths(context.Background(), childKey)
-	assert.False(t, got, "no children")
+	actualChildren, parentName, parentDir, err := g.parseModelConfigDataEntry(context.Background(), childKey)
+	assert.Empty(t, actualChildren, "no children")
 
 	// should have get CM once
 	assert.Equal(t, countConfigMapGets(client), 1, "expected a ConfigMap get to retrieve configmap")
 	assert.Equal(t, "clusterbasemodel.childModel", parentName)
 	assert.Equal(t, "/models/childA", parentDir)
+	assert.NoError(t, err)
 }
 
 func TestHasChildrenPaths_WithChildren_ParentItself(t *testing.T) {
@@ -1126,25 +1128,28 @@ func TestHasChildrenPaths_WithChildren_ParentItself(t *testing.T) {
 	cm := makeConfigMap("node-y", map[string]string{modelKey: string(entryWithChild)})
 	g, client := newGopherAndClientWithConfigMap(cm, t)
 
-	got, parentName, parentDir := g.hasChildrenPaths(context.Background(), modelKey)
-	assert.True(t, got, "non-empty children should return true")
+	actualChildren, parentName, parentDir, err := g.parseModelConfigDataEntry(context.Background(), modelKey)
+	assert.Equal(t, []string{"/models/c"}, actualChildren, "non-empty children should return true")
 	//assert.Equal(t, 0, countConfigMapUpdates(client), "no update expected when entry already has children")
 	// 1 CM get should have been attempted
 	assert.Equal(t, countConfigMapGets(client), 1, "expected a ConfigMap get to retrieve configmap")
 	assert.Equal(t, "clusterbasemodel.entry", parentName)
 	assert.Equal(t, "/models/p", parentDir)
+	assert.NoError(t, err)
 }
 
 func TestHasChildrenPaths_GetConfigMapError(t *testing.T) {
 	// No ConfigMap created for this node
 	g, client := newGopherWithEmptyClient("missing-node", "ome", t)
 
-	got, parentName, parentDir := g.hasChildrenPaths(context.Background(), "clusterbasemodel.child")
+	actualChildren, parentName, parentDir, err := g.parseModelConfigDataEntry(context.Background(), "clusterbasemodel.child")
 
-	assert.True(t, got, "should conservatively return true when getConfigMap fails")
+	assert.Empty(t, actualChildren, "should be empty")
 	assert.Equal(t, countConfigMapGets(client), 1, "expected a ConfigMap get to retrieve configmap")
 	assert.Empty(t, parentName)
 	assert.Empty(t, parentDir)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "cannot retrieve node configmap and cannot determine whether it has childrenPaths and will regard it has")
 }
 
 func TestHasChildrenPaths_ParentParseError(t *testing.T) {
@@ -1172,13 +1177,15 @@ func TestHasChildrenPaths_ParentParseError(t *testing.T) {
 	})
 	g, client := newGopherAndClientWithConfigMap(cm, t)
 
-	got, parentName, parentDir := g.hasChildrenPaths(context.Background(), childKey)
-	assert.True(t, got, "error parsing parent/children should conservatively return true")
+	childrenPaths, parentName, parentDir, err := g.parseModelConfigDataEntry(context.Background(), childKey)
+	assert.Empty(t, childrenPaths, "should be empty")
 
 	// 1 CM get should have been attempted
 	assert.Equal(t, countConfigMapGets(client), 1, "expected a ConfigMap get to retrieve configmap")
 	assert.Empty(t, parentName)
 	assert.Empty(t, parentDir)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "cannot determine whether it has childrenPaths and will regard it has because")
 }
 
 func TestRemoveChildPathFromParentConfigMapIfNecessary_RemovesWhenEligible(t *testing.T) {
@@ -1585,4 +1592,83 @@ func TestIsSkippingArtifactDeletion_NoChildren_ProceedsAndUpdatesParent(t *testi
 	assert.False(t, isRemoveParent)
 	assert.Equal(t, parentKey, actualParentName)
 	assert.Equal(t, parentDir, actualParentDir)
+}
+
+func TestIsSkippingArtifactDeletion_ParseError_TreatsAsHasChildren(t *testing.T) {
+	node := "node-pe1"
+	ns, name := "ns", "child"
+	childKey := ns + ".basemodel." + name
+
+	// Malformed entry for the current model key to cause parse error in parseModelConfigDataEntry
+	cm := makeConfigMap(node, map[string]string{
+		childKey: "{}",
+	})
+	g, client := newGopherAndClientWithConfigMap(cm, t)
+	// No references and no reserve labels
+	g.baseModelLister = &mockBaseModelLister{}
+	g.clusterBaseModelLister = &mockClusterBaseModelLister{}
+
+	task := &GopherTask{
+		TaskType: Download,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: ns,
+				Name:      name,
+			},
+			Spec: v1beta1.BaseModelSpec{
+				Storage: &v1beta1.StorageSpec{},
+			},
+		},
+	}
+
+	skip, isRemoveParent, parentName, parentDir := g.isSkippingArtifactDeletion(context.Background(), task, "/models/child", true)
+	assert.True(t, skip, "parse error should be treated as hasChildren and skip deletion")
+	assert.False(t, isRemoveParent, "on parse error parent directory should not be removed")
+	assert.Empty(t, parentName, "parent name should be empty on parse error")
+	assert.Empty(t, parentDir, "parent dir should be empty on parse error")
+	assert.Equal(t, 1, countConfigMapGets(client), "expected a single ConfigMap get")
+}
+
+func TestIsSkippingArtifactDeletion_GetConfigMapError_TreatsAsHasChildren(t *testing.T) {
+	// No ConfigMap exists for this node
+	g, client := newGopherWithEmptyClient("missing-node", "ome", t)
+	// No references and no reserve labels
+	g.baseModelLister = &mockBaseModelLister{}
+	g.clusterBaseModelLister = &mockClusterBaseModelLister{}
+
+	task := &GopherTask{
+		TaskType: Download,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns",
+				Name:      "child",
+			},
+			Spec: v1beta1.BaseModelSpec{
+				Storage: &v1beta1.StorageSpec{},
+			},
+		},
+	}
+
+	skip, isRemoveParent, parentName, parentDir := g.isSkippingArtifactDeletion(context.Background(), task, "/models/child", true)
+	assert.True(t, skip, "failure to get configmap should be treated as hasChildren and skip deletion")
+	assert.False(t, isRemoveParent, "should not remove parent when configmap cannot be retrieved")
+	assert.Empty(t, parentName, "parent name should be empty when configmap cannot be retrieved")
+	assert.Empty(t, parentDir, "parent dir should be empty when configmap cannot be retrieved")
+	assert.Equal(t, 1, countConfigMapGets(client), "expected a ConfigMap get attempt")
+}
+
+func Test_hasChildrenPaths_ParseErrorReturnsTrue(t *testing.T) {
+	assert.True(t, hasChildrenPaths(nil, fmt.Errorf("parse error")))
+	assert.True(t, hasChildrenPaths([]string{}, fmt.Errorf("parse error")))
+	assert.True(t, hasChildrenPaths([]string{"/models/child"}, fmt.Errorf("parse error")))
+}
+
+func Test_hasChildrenPaths_EmptyNoError_ReturnsFalse(t *testing.T) {
+	assert.False(t, hasChildrenPaths(nil, nil))
+	assert.False(t, hasChildrenPaths([]string{}, nil))
+}
+
+func Test_hasChildrenPaths_NonEmptyNoError_ReturnsTrue(t *testing.T) {
+	assert.True(t, hasChildrenPaths([]string{"/child"}, nil))
+	assert.True(t, hasChildrenPaths([]string{"/child1", "/child2"}, nil))
 }

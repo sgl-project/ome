@@ -614,13 +614,14 @@ func TestBuildArtifactAttribute_Basic(t *testing.T) {
 	sha := "commit-sha-123"
 	parentName := "clusterbasemodel.parentModel"
 	parentPath := "/models/parent1"
+	childrenPaths := []string{"/models/child1"}
 
-	artifact := parser.buildArtifactAttribute(sha, parentName, parentPath)
+	artifact := parser.buildArtifactAttribute(sha, parentName, parentPath, childrenPaths)
 	if assert.NotNil(t, artifact, "artifact should not be nil") {
 		assert.Equal(t, sha, artifact.Sha, "sha should match input")
 		assert.Equal(t, map[string]string{parentName: parentPath}, artifact.ParentPath, "parentPath should be a single-entry map with provided key/value")
 		// ChildrenPaths should be a non-nil empty slice to allow safe appends
 		assert.NotNil(t, artifact.ChildrenPaths, "childrenPaths should be non-nil")
-		assert.Equal(t, 0, len(artifact.ChildrenPaths), "childrenPaths should be initialized empty")
+		assert.Equal(t, childrenPaths, artifact.ChildrenPaths, "childrenPaths should be same as input")
 	}
 }
