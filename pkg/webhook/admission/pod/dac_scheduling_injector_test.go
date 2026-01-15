@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -373,4 +374,97 @@ func TestDedicatedAIClusterSchedulingInjector_InjectAffinity_NoDACAnnotation(t *
 	// Verify that the pod was not modified
 	assert.Nil(t, pod.Spec.Affinity, "Pod affinity should remain nil when no DAC annotation")
 	assert.Nil(t, pod.Spec.Tolerations, "Pod tolerations should remain nil when no DAC annotation")
+}
+
+func TestDedicatedAIClusterSchedulingInjector_InjectAffinity_InjectsGPUResources(t *testing.T) {
+	gpuResourceName := v1.ResourceName("nvidia.com/gpu")
+	gpuQuantity := resource.MustParse("2")
+	cpuQuantity := resource.MustParse("8")
+
+	// Create a DAC with Resources including GPU
+	dac := &omev1beta1.DedicatedAICluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-dac-resources",
+		},
+		Spec: omev1beta1.DedicatedAIClusterSpec{
+			Profile: "custom-profile-resources",
+			Resources: &v1.ResourceRequirements{
+				Limits: v1.ResourceList{
+					gpuResourceName: gpuQuantity,
+					v1.ResourceCPU:  cpuQuantity,
+				},
+				Requests: v1.ResourceList{
+					gpuResourceName: gpuQuantity,
+					v1.ResourceCPU:  cpuQuantity,
+				},
+			},
+		},
+	}
+
+	// Create a DedicatedAIClusterProfile with non-AC-supported name
+	profile := &omev1beta1.DedicatedAIClusterProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "custom-profile-resources",
+		},
+		Spec: omev1beta1.DedicatedAIClusterProfileSpec{},
+	}
+
+	// Create the resources
+	err := c.Create(context.TODO(), dac)
+	require.NoError(t, err)
+	defer func() {
+		_ = c.Delete(context.TODO(), dac)
+	}()
+
+	err = c.Create(context.TODO(), profile)
+	require.NoError(t, err)
+	defer func() {
+		_ = c.Delete(context.TODO(), profile)
+	}()
+
+	// Create a pod with DAC annotation and ome-container
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod-resources",
+			Namespace: "default",
+			Annotations: map[string]string{
+				constants.DedicatedAICluster: "test-dac-resources",
+			},
+		},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Name:  constants.MainContainerName,
+					Image: "test-image",
+					Resources: v1.ResourceRequirements{
+						Limits: v1.ResourceList{
+							gpuResourceName: resource.MustParse("1"),
+							v1.ResourceCPU:  resource.MustParse("4"),
+						},
+						Requests: v1.ResourceList{
+							gpuResourceName: resource.MustParse("1"),
+							v1.ResourceCPU:  resource.MustParse("4"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Create the injector and inject affinity
+	injector := NewDedicatedAIClusterSchedulingInjector(c)
+	err = injector.InjectAffinity(pod)
+	require.NoError(t, err)
+
+	// Verify that only GPU resources were overridden
+	container := pod.Spec.Containers[0]
+	gpuLimits := container.Resources.Limits[gpuResourceName]
+	gpuRequests := container.Resources.Requests[gpuResourceName]
+	cpuLimits := container.Resources.Limits[v1.ResourceCPU]
+	cpuRequests := container.Resources.Requests[v1.ResourceCPU]
+	assert.Equal(t, gpuQuantity.String(), gpuLimits.String(), "GPU limits should be overridden")
+	assert.Equal(t, gpuQuantity.String(), gpuRequests.String(), "GPU requests should be overridden")
+	// CPU should remain unchanged
+	assert.Equal(t, "4", cpuLimits.String(), "CPU limits should NOT be overridden")
+	assert.Equal(t, "4", cpuRequests.String(), "CPU requests should NOT be overridden")
 }

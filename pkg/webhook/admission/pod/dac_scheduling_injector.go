@@ -77,9 +77,25 @@ func (d *DedicatedAIClusterSchedulingInjector) InjectAffinity(pod *v1.Pod) error
 		pod.Spec.Affinity = dacSpec.Affinity
 	}
 	if dacSpec.Resources != nil {
+		gpuResourceName := v1.ResourceName("nvidia.com/gpu")
 		for i := range pod.Spec.Containers {
 			if pod.Spec.Containers[i].Name == constants.MainContainerName {
-				pod.Spec.Containers[i].Resources = *dacSpec.Resources
+				if dacSpec.Resources.Limits != nil {
+					if gpuLimit, ok := dacSpec.Resources.Limits[gpuResourceName]; ok {
+						if pod.Spec.Containers[i].Resources.Limits == nil {
+							pod.Spec.Containers[i].Resources.Limits = v1.ResourceList{}
+						}
+						pod.Spec.Containers[i].Resources.Limits[gpuResourceName] = gpuLimit
+					}
+				}
+				if dacSpec.Resources.Requests != nil {
+					if gpuRequest, ok := dacSpec.Resources.Requests[gpuResourceName]; ok {
+						if pod.Spec.Containers[i].Resources.Requests == nil {
+							pod.Spec.Containers[i].Resources.Requests = v1.ResourceList{}
+						}
+						pod.Spec.Containers[i].Resources.Requests[gpuResourceName] = gpuRequest
+					}
+				}
 				break
 			}
 		}
