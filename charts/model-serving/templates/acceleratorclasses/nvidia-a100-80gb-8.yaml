@@ -26,6 +26,6 @@ spec:
     - name: cpu
       quantity: "128"
     - name: memory
-      quantity: "1792Gi"
+      quantity: "1680Gi"
     - name: nvidia.com/gpu
       quantity: "8"

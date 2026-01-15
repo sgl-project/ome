@@ -6,11 +6,11 @@ spec:
   count: 1
   resources:
     limits:
-      cpu: 56
+      cpu: 80
       memory: 896Gi
       nvidia.com/gpu: 4
     requests:
-      cpu: 56
+      cpu: 80
       memory: 896Gi
       nvidia.com/gpu: 4
   affinity:
