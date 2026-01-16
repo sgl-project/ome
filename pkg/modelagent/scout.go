@@ -662,6 +662,10 @@ func downloadPolicyOrDefault(storage *v1beta1.StorageSpec) v1beta1.DownloadPolic
 // the old and new ClusterBaseModel and the new storage type is HuggingFace. If the storage type
 // cannot be determined from the new model's StorageUri, the method logs the error and returns false.
 func (w *Scout) isToDownloadOverrideDueToDownloadPolicyBasedOnCBM(oldClusterBaseModel *v1beta1.ClusterBaseModel, newClusterBaseModel *v1beta1.ClusterBaseModel) bool {
+	//FIXMe: removal
+	w.logger.Infof("old is %v", oldClusterBaseModel)
+	w.logger.Infof("new is %v", newClusterBaseModel)
+
 	oldPolicy := downloadPolicyOrDefault(oldClusterBaseModel.Spec.Storage)
 	newPolicy := downloadPolicyOrDefault(newClusterBaseModel.Spec.Storage)
 
@@ -673,7 +677,7 @@ func (w *Scout) isToDownloadOverrideDueToDownloadPolicyBasedOnCBM(oldClusterBase
 	isToDownloadOverride := oldPolicy != newPolicy && storageType == storage.StorageTypeHuggingFace
 
 	if isToDownloadOverride {
-		w.logger.Infof("download policy is changed from %s to %s", oldPolicy, newPolicy)
+		w.logger.Infof("ClusterBaseModel: %s: download policy is changed from %s to %s", newClusterBaseModel.Name, oldPolicy, newPolicy)
 	}
 	return isToDownloadOverride
 }
@@ -693,7 +697,7 @@ func (w *Scout) isToDownloadOverrideDueToDownloadPolicyBasedOnBM(oldBaseModel *v
 	isToDownloadOverride := oldPolicy != newPolicy && storageType == storage.StorageTypeHuggingFace
 
 	if isToDownloadOverride {
-		w.logger.Infof("download policy is changed from %s to %s", oldPolicy, newPolicy)
+		w.logger.Infof("BaseModel: %s: download policy is changed from %s to %s", newBaseModel.Name, oldPolicy, newPolicy)
 	}
 	return isToDownloadOverride
 }
@@ -721,6 +725,7 @@ func (w *Scout) generateDownloadOverrideTaskBasedOnClusterBaseModel(clusterBaseM
 		},
 	}
 
+	w.logger.Infof("generate DownloadOverride task %v", clusterBaseModel.Spec.DisplayName)
 	w.gopherChan <- gopherTask
 }
 
@@ -740,6 +745,6 @@ func (w *Scout) generateDownloadOverrideTaskBasedOnBaseModel(baseModel *v1beta1.
 			ModelType:          modelType,
 		},
 	}
-
+	w.logger.Infof("generate DownloadOverride task %v", baseModel.Spec.DisplayName)
 	w.gopherChan <- gopherTask
 }
