@@ -1,0 +1,309 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: srt-orion-14b-base
+spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-a100-80gb-1
+      - nvidia-a100-80gb-2
+      - nvidia-a100-80gb-4
+      - nvidia-a100-80gb-8
+      - nvidia-a100-40gb-1
+      - nvidia-a100-40gb-2
+      - nvidia-a100-40gb-4
+      - nvidia-a100-40gb-8
+      - nvidia-h100-1
+      - nvidia-h100-2
+      - nvidia-h100-4
+      - nvidia-h100-8
+      - nvidia-a10-1
+      - nvidia-a10-2
+      - nvidia-a10-4
+      - nvidia-h200-1
+      - nvidia-h200-2
+      - nvidia-h200-4
+      - nvidia-h200-8
+  disabled: false
+  {{- if or .Values.commonAnnotations .Values.orion_14b_base.annotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{ toYaml .Values.commonAnnotations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.orion_14b_base.annotations }}
+    {{ toYaml .Values.orion_14b_base.annotations | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonLabels .Values.orion_14b_base.labels }}
+  labels:
+    {{- if .Values.commonLabels }}
+    {{ toYaml .Values.commonLabels | nindent 4 }}
+    {{- end }}
+    {{- if .Values.orion_14b_base.labels }}
+    {{ toYaml .Values.orion_14b_base.labels | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonTolerations .Values.orion_14b_base.tolerations }}
+  tolerations:
+    {{- if .Values.commonTolerations }}
+    {{ toYaml .Values.commonTolerations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.orion_14b_base.tolerations }}
+    {{ toYaml .Values.orion_14b_base.tolerations | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
+    {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+    - name: etc-pki
+      hostPath:
+        path: /etc/pki
+        type: Directory
+    {{- end }}
+  {{ with .Values.orion_14b_base }}
+  affinity: {{ .affinity | toYaml | nindent 4 }}
+  {{ end }}
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.34.0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: OrionForCausalLM
+      autoSelect: true
+      priority: 1
+      acceleratorConfig:
+        nvidia-a100-80gb-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a100-80gb-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a100-80gb-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-a100-80gb-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-a100-40gb-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a100-40gb-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a100-40gb-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-a100-40gb-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-h100-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-h100-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-h100-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h100-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-a10-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a10-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a10-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h200-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-h200-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-h200-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h200-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+  protocolVersions:
+    - openAI
+  modelSizeRange:
+    min: 12B
+    max: 16B
+  schedulerName: {{ .Values.commonSchedulerName }}
+  containers:
+    - name: ome-container
+      image: {{ .Values.orion_14b_base.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.orion_14b_base.image.tag | default .Values.sglang.commonImage.tag }}
+      ports:
+        - containerPort: {{ .Values.sglang.port }}
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m sglang.launch_server \
+          --host=0.0.0.0 \
+          --port={{ .Values.sglang.port }} \
+          --model-path="$MODEL_PATH" \
+          --served-model-name=vllm-model \
+          --tp-size=1 \
+          --mem-frac=0.9 \
+          --log-requests \
+          --trust-remote-code \
+          --enable-metrics
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 10
+          memory: 60Gi
+          nvidia.com/gpu: 1
+        limits:
+          cpu: 10
+          memory: 60Gi
+          nvidia.com/gpu: 1
+
+      readinessProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+
+      startupProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
+  engineConfig:
+    schedulerName: {{ .Values.commonSchedulerName }}
+    {{- if or .Values.commonAnnotations .Values.orion_14b_base.annotations }}
+    annotations:
+      {{- if .Values.commonAnnotations }}
+      {{ toYaml .Values.commonAnnotations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.orion_14b_base.annotations }}
+      {{ toYaml .Values.orion_14b_base.annotations | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.commonLabels .Values.orion_14b_base.labels }}
+    labels:
+      {{- if .Values.commonLabels }}
+      {{ toYaml .Values.commonLabels | nindent 6 }}
+      {{- end }}
+      {{- if .Values.orion_14b_base.labels }}
+      {{ toYaml .Values.orion_14b_base.labels | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.commonTolerations .Values.orion_14b_base.tolerations }}
+    tolerations:
+      {{- if .Values.commonTolerations }}
+      {{ toYaml .Values.commonTolerations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.orion_14b_base.tolerations }}
+      {{ toYaml .Values.orion_14b_base.tolerations | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+      {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+      - name: etc-pki
+        hostPath:
+          path: /etc/pki
+          type: Directory
+      {{- end }}
+    {{ with .Values.orion_14b_base }}
+    affinity: {{ .affinity | toYaml | nindent 6 }}
+    {{ end }}
+    runner:
+      name: ome-container
+      image: {{ .Values.orion_14b_base.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.orion_14b_base.image.tag | default .Values.sglang.commonImage.tag }}
+      ports:
+        - containerPort: {{ .Values.sglang.port }}
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m sglang.launch_server \
+          --host=0.0.0.0 \
+          --port={{ .Values.sglang.port }} \
+          --model-path="$MODEL_PATH" \
+          --served-model-name=vllm-model \
+          --tp-size=1 \
+          --mem-frac=0.9 \
+          --log-requests \
+          --trust-remote-code \
+          --enable-metrics
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 10
+          memory: 60Gi
+          nvidia.com/gpu: 1
+        limits:
+          cpu: 10
+          memory: 60Gi
+          nvidia.com/gpu: 1
+
+      readinessProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+
+      startupProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
