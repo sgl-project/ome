@@ -112,19 +112,18 @@ func (v *InferenceServiceValidator) validateInferenceService(ctx context.Context
 		if err := v.validateModelExists(ctx, isvc); err != nil {
 			return allWarnings, err
 		}
+		// Validate runtime and model resolution for new architecture
+		if isvc.Spec.Engine != nil {
+			warnings, err := v.validateRuntimeAndModelResolution(ctx, isvc)
+			if err != nil {
+				return allWarnings, err
+			}
+			allWarnings = append(allWarnings, warnings...)
+		}
 	} else {
 		// Skip model existing validation if the resource is being deleted (has deletionTimestamp)
 		// This allows the controller to remove finalizers even if referenced resources like BaseModel have already been deleted
 		validatorLogger.Info("skipping model existing validation for resource being deleted", "name", isvc.Name)
-	}
-
-	// Validate runtime and model resolution for new architecture
-	if isvc.Spec.Engine != nil {
-		warnings, err := v.validateRuntimeAndModelResolution(ctx, isvc)
-		if err != nil {
-			return allWarnings, err
-		}
-		allWarnings = append(allWarnings, warnings...)
 	}
 	return allWarnings, nil
 }
