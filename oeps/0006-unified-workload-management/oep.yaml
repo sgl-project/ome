@@ -1,0 +1,20 @@
+title: Workload Policy Layer and Unified Workload Management
+oep-number: 0006
+authors:
+  - "@bcfre"
+status: implementable
+creation-date: 2025-01-15
+reviewers:
+  - "@slin1237"
+approvers:
+  - "@slin1237"
+
+see-also:
+
+# The target maturity stage. Valid values are "alpha", "beta", "stable"
+stage: alpha
+
+# Metrics to monitor feature adoption and performance
+metrics:
+  - rbg-deployment-count
+  - strategy-reconcile-duration
