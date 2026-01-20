@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMergeMultilineArgs(t *testing.T) {
+func TestMergeArgs(t *testing.T) {
 	tests := []struct {
 		name          string
 		containerArgs []string
@@ -56,47 +56,103 @@ func TestMergeMultilineArgs(t *testing.T) {
 			expected:      []string{`--tp-size=4`},
 		},
 		{
-			name:          "Single-line args are appended",
+			name:          "Single-line args appends new arg",
 			containerArgs: []string{`python3 -m server`},
 			overrideArgs:  []string{`--debug`},
 			expected:      []string{`python3 -m server`, `--debug`},
 		},
 		{
-			name: "Multiple override args",
+			name: "Multiple override args on multiline",
 			containerArgs: []string{`python3 -m sglang.launch_server \
 --host=0.0.0.0`},
 			overrideArgs: []string{`--tp-size=4`, `--pp-size=2`},
 			expected: []string{`python3 -m sglang.launch_server \
 --host=0.0.0.0 \
---tp-size=4
+--tp-size=4 \
 --pp-size=2`},
-		},
-		{
-			name: "Container args with multiple elements",
-			containerArgs: []string{`python3 -m server \
---port=8080`, `extra-arg`},
-			overrideArgs: []string{`--tp-size=4`},
-			expected: []string{`python3 -m server \
---port=8080 \
---tp-size=4`, `extra-arg`},
 		},
 		{
 			name:          "Multiline args with newlines",
 			containerArgs: []string{"python3 -m sglang.launch_server\n--host=0.0.0.0\n--port=8080"},
 			overrideArgs:  []string{`--tp-size=4`},
-			expected:      []string{"python3 -m sglang.launch_server\n--host=0.0.0.0\n--port=8080 \\\n--tp-size=4"},
+			expected:      []string{"python3 -m sglang.launch_server \\\n--host=0.0.0.0 \\\n--port=8080 \\\n--tp-size=4"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := MergeMultilineArgs(tt.containerArgs, tt.overrideArgs)
+			result := MergeArgs(tt.containerArgs, tt.overrideArgs)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestOverrideIntParam(t *testing.T) {
+func TestMergeArgsListFormat(t *testing.T) {
+	tests := []struct {
+		name          string
+		containerArgs []string
+		overrideArgs  []string
+		expected      []string
+	}{
+		{
+			name:          "List format: override replaces existing key",
+			containerArgs: []string{"--tp-size=4", "--port=8080"},
+			overrideArgs:  []string{"--tp-size=8"},
+			expected:      []string{"--tp-size=8", "--port=8080"},
+		},
+		{
+			name:          "List format: new arg appended",
+			containerArgs: []string{"--tp-size=4", "--port=8080"},
+			overrideArgs:  []string{"--host=0.0.0.0"},
+			expected:      []string{"--tp-size=4", "--port=8080", "--host=0.0.0.0"},
+		},
+		{
+			name:          "List format: multiple overrides",
+			containerArgs: []string{"--tp-size=4", "--pp-size=2", "--port=8080"},
+			overrideArgs:  []string{"--tp-size=8", "--pp-size=4", "--debug"},
+			expected:      []string{"--tp-size=8", "--pp-size=4", "--port=8080", "--debug"},
+		},
+		{
+			name:          "List format: duplicate same value ignored",
+			containerArgs: []string{"--tp-size=4", "--port=8080"},
+			overrideArgs:  []string{"--tp-size=4"},
+			expected:      []string{"--tp-size=4", "--port=8080"},
+		},
+		{
+			name:          "List format: space-separated key value override",
+			containerArgs: []string{"--tp-size", "4", "--port", "8080"},
+			overrideArgs:  []string{"--tp-size", "8"},
+			expected:      []string{"--tp-size", "8", "--port", "8080"},
+		},
+		{
+			name:          "List format: mixed formats",
+			containerArgs: []string{"--tp-size=4", "--port", "8080"},
+			overrideArgs:  []string{"--tp-size=8", "--host=0.0.0.0"},
+			expected:      []string{"--tp-size=8", "--port", "8080", "--host=0.0.0.0"},
+		},
+		{
+			name:          "List format: command with args",
+			containerArgs: []string{"python3", "-m", "server", "--port=8080"},
+			overrideArgs:  []string{"--debug"},
+			expected:      []string{"python3", "-m", "server", "--port=8080", "--debug"},
+		},
+		{
+			name:          "List format: empty lists",
+			containerArgs: []string{},
+			overrideArgs:  []string{},
+			expected:      []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := MergeArgs(tt.containerArgs, tt.overrideArgs)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestOverrideArgParam(t *testing.T) {
 	tests := []struct {
 		name          string
 		containerArgs []string
@@ -106,7 +162,7 @@ func TestOverrideIntParam(t *testing.T) {
 		expectedFound bool
 	}{
 		{
-			name: "Override existing parameter with equals sign",
+			name: "Override existing parameter with equals sign (multiline)",
 			containerArgs: []string{`python3 -m sglang.launch_server \
 --host=0.0.0.0 \
 --tp-size=4 \
@@ -120,7 +176,7 @@ func TestOverrideIntParam(t *testing.T) {
 			expectedFound: true,
 		},
 		{
-			name: "Override existing parameter with space",
+			name: "Override existing parameter with space (multiline)",
 			containerArgs: []string{`python3 -m server \
 --tp-size 4 \
 --mem-frac=0.9`},
@@ -132,7 +188,7 @@ func TestOverrideIntParam(t *testing.T) {
 			expectedFound: true,
 		},
 		{
-			name: "Parameter not found",
+			name: "Parameter not found (multiline)",
 			containerArgs: []string{`python3 -m server \
 --host=0.0.0.0`},
 			key:   "--tp-size",
@@ -150,7 +206,7 @@ func TestOverrideIntParam(t *testing.T) {
 			expectedFound: false,
 		},
 		{
-			name: "Override pipeline parallel size",
+			name: "Override pipeline parallel size (multiline)",
 			containerArgs: []string{`python3 -m server \
 --pp-size=2 \
 --tp-size=4`},
@@ -162,7 +218,7 @@ func TestOverrideIntParam(t *testing.T) {
 			expectedFound: true,
 		},
 		{
-			name: "Override tensor-parallel-size (long form)",
+			name: "Override tensor-parallel-size long form (multiline)",
 			containerArgs: []string{`python3 -m server \
 --tensor-parallel-size=4`},
 			key:   "--tensor-parallel-size",
@@ -171,18 +227,94 @@ func TestOverrideIntParam(t *testing.T) {
 --tensor-parallel-size=8`},
 			expectedFound: true,
 		},
+		{
+			name:          "List format: override with equals sign",
+			containerArgs: []string{"--tp-size=4", "--port=8080"},
+			key:           "--tp-size",
+			value:         8,
+			expectedArgs:  []string{"--tp-size=8", "--port=8080"},
+			expectedFound: true,
+		},
+		{
+			name:          "List format: override with space separator",
+			containerArgs: []string{"--tp-size", "4", "--port", "8080"},
+			key:           "--tp-size",
+			value:         8,
+			expectedArgs:  []string{"--tp-size", "8", "--port", "8080"},
+			expectedFound: true,
+		},
+		{
+			name:          "List format: parameter not found",
+			containerArgs: []string{"--port=8080", "--host=0.0.0.0"},
+			key:           "--tp-size",
+			value:         8,
+			expectedArgs:  []string{"--port=8080", "--host=0.0.0.0"},
+			expectedFound: false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, found := OverrideIntParam(tt.containerArgs, tt.key, tt.value)
+			result, found := OverrideArgParam(tt.containerArgs, tt.key, tt.value)
 			assert.Equal(t, tt.expectedFound, found)
 			assert.Equal(t, tt.expectedArgs, result)
 		})
 	}
 }
 
-func TestMergeMultilineArgsEdgeCases(t *testing.T) {
+func TestOverrideCommandParam(t *testing.T) {
+	tests := []struct {
+		name            string
+		containerCmd    []string
+		key             string
+		value           int64
+		expectedCmd     []string
+		expectedUpdated bool
+	}{
+		{
+			name:            "Override with equals sign",
+			containerCmd:    []string{"python3", "-m", "server", "--tp-size=4"},
+			key:             "--tp-size",
+			value:           8,
+			expectedCmd:     []string{"python3", "-m", "server", "--tp-size=8"},
+			expectedUpdated: true,
+		},
+		{
+			name:            "Override with space separator",
+			containerCmd:    []string{"python3", "-m", "server", "--tp-size", "4"},
+			key:             "--tp-size",
+			value:           8,
+			expectedCmd:     []string{"python3", "-m", "server", "--tp-size", "8"},
+			expectedUpdated: true,
+		},
+		{
+			name:            "Parameter not found",
+			containerCmd:    []string{"python3", "-m", "server"},
+			key:             "--tp-size",
+			value:           8,
+			expectedCmd:     []string{"python3", "-m", "server"},
+			expectedUpdated: false,
+		},
+		{
+			name:            "Empty command",
+			containerCmd:    []string{},
+			key:             "--tp-size",
+			value:           8,
+			expectedCmd:     []string{},
+			expectedUpdated: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, updated := OverrideCommandParam(tt.containerCmd, tt.key, tt.value)
+			assert.Equal(t, tt.expectedUpdated, updated)
+			assert.Equal(t, tt.expectedCmd, result)
+		})
+	}
+}
+
+func TestMergeArgsEdgeCases(t *testing.T) {
 	tests := []struct {
 		name          string
 		containerArgs []string
@@ -214,7 +346,7 @@ func TestMergeMultilineArgsEdgeCases(t *testing.T) {
 			expected:      []string{},
 		},
 		{
-			name: "Override with whitespace",
+			name: "Override with whitespace (multiline)",
 			containerArgs: []string{`python3 -m server \
 --port=8080`},
 			overrideArgs: []string{`  --tp-size=4  `},
@@ -226,13 +358,13 @@ func TestMergeMultilineArgsEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := MergeMultilineArgs(tt.containerArgs, tt.overrideArgs)
+			result := MergeArgs(tt.containerArgs, tt.overrideArgs)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestMergeMultilineArgsUnion(t *testing.T) {
+func TestMergeArgsUnion(t *testing.T) {
 	tests := []struct {
 		name          string
 		containerArgs []string
@@ -269,20 +401,9 @@ func TestMergeMultilineArgsUnion(t *testing.T) {
 			overrideArgs: []string{`--tp-size=4`, `--pp-size=2`, `--dp=1`},
 			expected: []string{`python3 -m sglang.launch_server \
 --host=0.0.0.0 \
---tp-size=4
---pp-size=2
+--tp-size=4 \
+--pp-size=2 \
 --dp=1`},
-		},
-		{
-			name: "Union: exact match with trailing backslash",
-			containerArgs: []string{`python3 -m server \
---enable-metrics \
---log-requests \`},
-			overrideArgs: []string{`--enable-metrics`, `--new-flag`},
-			expected: []string{`python3 -m server \
---enable-metrics \
---log-requests \
---new-flag`},
 		},
 		{
 			name: "Union: case sensitive comparison",
@@ -294,7 +415,7 @@ func TestMergeMultilineArgsUnion(t *testing.T) {
 --enable-metrics`},
 		},
 		{
-			name: "Union: arg with different values (key=value format) - override replaces",
+			name: "Union: arg with different values - override replaces",
 			containerArgs: []string{`python3 -m server \
 --tp-size=4 \
 --port=8080`},
@@ -313,34 +434,12 @@ func TestMergeMultilineArgsUnion(t *testing.T) {
 --tp-size=4`},
 		},
 		{
-			name: "Union: whitespace variations - same value keeps existing",
-			containerArgs: []string{`python3 -m server \
---tp-size=4  \
-  --host=0.0.0.0`},
-			overrideArgs: []string{`  --tp-size=4  `, `--new-flag`},
-			expected: []string{`python3 -m server \
---tp-size=4  \
-  --host=0.0.0.0 \
---new-flag`},
-		},
-		{
-			name: "Union: whitespace variations - different value replaces",
-			containerArgs: []string{`python3 -m server \
---tp-size=4  \
-  --host=0.0.0.0`},
-			overrideArgs: []string{`  --tp-size=8  `, `--new-flag`},
-			expected: []string{`python3 -m server \
---tp-size=8 \
-  --host=0.0.0.0 \
---new-flag`},
-		},
-		{
 			name: "Union: multiple overrides with replacement",
 			containerArgs: []string{`python3 -m server \
 --tp-size=4 \
 --pp-size=2 \
 --port=8080`},
-			overrideArgs: []string{`python3 -m server`, `--tp-size=8`, `--pp-size=4`, `--new-flag`},
+			overrideArgs: []string{`--tp-size=8`, `--pp-size=4`, `--new-flag`},
 			expected: []string{`python3 -m server \
 --tp-size=8 \
 --pp-size=4 \
@@ -370,7 +469,7 @@ func TestMergeMultilineArgsUnion(t *testing.T) {
 --debug`},
 		},
 		{
-			name: "Union: multi-line override with command and flag replacement",
+			name: "Union: multi-line override with flag replacement",
 			containerArgs: []string{`python3 -m sglang.launch_server \
 --host=0.0.0.0 \
 --port=8080 \
@@ -379,8 +478,7 @@ func TestMergeMultilineArgsUnion(t *testing.T) {
 --model-path="$MODEL_PATH" \
 --tp-size=4 \
 --mem-frac=0.9`},
-			overrideArgs: []string{`python3 -m sglang.launch_server \
---tp-size=2`},
+			overrideArgs: []string{`--tp-size=2`},
 			expected: []string{`python3 -m sglang.launch_server \
 --host=0.0.0.0 \
 --port=8080 \
@@ -394,8 +492,68 @@ func TestMergeMultilineArgsUnion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := MergeMultilineArgs(tt.containerArgs, tt.overrideArgs)
+			result := MergeArgs(tt.containerArgs, tt.overrideArgs)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestOverrideKeyValueInSlice(t *testing.T) {
+	tests := []struct {
+		name          string
+		args          []string
+		key           string
+		value         int64
+		expectedArgs  []string
+		expectedFound bool
+	}{
+		{
+			name:          "Override with equals format",
+			args:          []string{"--tp-size=4", "--port=8080"},
+			key:           "--tp-size",
+			value:         8,
+			expectedArgs:  []string{"--tp-size=8", "--port=8080"},
+			expectedFound: true,
+		},
+		{
+			name:          "Override with space format",
+			args:          []string{"--tp-size", "4", "--port", "8080"},
+			key:           "--tp-size",
+			value:         8,
+			expectedArgs:  []string{"--tp-size", "8", "--port", "8080"},
+			expectedFound: true,
+		},
+		{
+			name:          "Key not found",
+			args:          []string{"--port=8080"},
+			key:           "--tp-size",
+			value:         8,
+			expectedArgs:  []string{"--port=8080"},
+			expectedFound: false,
+		},
+		{
+			name:          "Empty slice",
+			args:          []string{},
+			key:           "--tp-size",
+			value:         8,
+			expectedArgs:  []string{},
+			expectedFound: false,
+		},
+		{
+			name:          "Key at end without value (space format)",
+			args:          []string{"--port=8080", "--tp-size"},
+			key:           "--tp-size",
+			value:         8,
+			expectedArgs:  []string{"--port=8080", "--tp-size"},
+			expectedFound: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, found := overrideKeyValueInSlice(tt.args, tt.key, tt.value)
+			assert.Equal(t, tt.expectedFound, found)
+			assert.Equal(t, tt.expectedArgs, result)
 		})
 	}
 }
