@@ -317,11 +317,153 @@ func extractArgKey(arg string) string {
 	return arg
 }
 
-// mergeMultilineArgs merges container args with override args by combining multi-line strings.
-// It handles the case where args are multi-line strings (containing newlines or backslashes) and merges them
-// into a single multi-line string instead of creating separate array elements.
-// Smart override: if an override has the same key but different value, it replaces the existing value.
-func MergeMultilineArgs(containerArgs []string, overrideArgs []string) []string {
+// isMultilineFormat checks if the args are in multi-line string format
+// (contains newlines or backslash continuations)
+func isMultilineFormat(args []string) bool {
+	return len(args) > 0 &&
+		(strings.Contains(args[0], "\n") || strings.Contains(args[0], "\\"))
+}
+
+// normalizeArgs converts args to a flat list of individual arguments.
+// Handles both multi-line format and list-of-strings format.
+func normalizeArgs(args []string) []string {
+	var result []string
+	for _, arg := range args {
+		// Check if this is a multi-line string
+		if isMultilineFormat([]string{arg}) {
+			lines := strings.Split(arg, "\n")
+			for _, line := range lines {
+				trimmed := strings.TrimSpace(line)
+				// Remove trailing backslash
+				trimmed = strings.TrimRight(trimmed, "\\")
+				trimmed = strings.TrimSpace(trimmed)
+				if trimmed != "" {
+					result = append(result, trimmed)
+				}
+			}
+		} else {
+			trimmed := strings.TrimSpace(arg)
+			if trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+	}
+	return result
+}
+
+// toMultilineFormat converts a list of args back to multi-line format with backslash continuations.
+func toMultilineFormat(args []string) []string {
+	if len(args) == 0 {
+		return args
+	}
+
+	var builder strings.Builder
+	for i, arg := range args {
+		if i > 0 {
+			builder.WriteString("\n")
+		}
+		builder.WriteString(arg)
+		if i < len(args)-1 {
+			builder.WriteString(" \\")
+		}
+	}
+	return []string{builder.String()}
+}
+
+// argGroup represents a parsed argument which may be a single element or a key-value pair
+type argGroup struct {
+	key    string   // The flag key (e.g., "--tp-size")
+	values []string // The original elements (e.g., ["--tp-size=4"] or ["--tp-size", "4"])
+}
+
+// parseArgsIntoGroups parses a flat list of args into groups, detecting key-value pairs.
+// Handles: --key=value (single element), --key value (two elements), --flag (boolean)
+func parseArgsIntoGroups(args []string) []argGroup {
+	var groups []argGroup
+	i := 0
+	for i < len(args) {
+		arg := args[i]
+		key := extractArgKey(arg)
+
+		if key == "" {
+			// Non-flag argument, treat as its own group
+			groups = append(groups, argGroup{key: arg, values: []string{arg}})
+			i++
+			continue
+		}
+
+		// Check if this is --key=value format (value embedded)
+		if strings.Contains(arg, "=") {
+			groups = append(groups, argGroup{key: key, values: []string{arg}})
+			i++
+			continue
+		}
+
+		// Check if next element is a value (not a flag)
+		// A value is something that doesn't start with "-"
+		if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			// --key value format (two separate elements)
+			groups = append(groups, argGroup{key: key, values: []string{arg, args[i+1]}})
+			i += 2
+			continue
+		}
+
+		// Boolean flag or flag at end without value
+		groups = append(groups, argGroup{key: key, values: []string{arg}})
+		i++
+	}
+	return groups
+}
+
+// mergeArgsWithKeyOverride performs key-based merging of normalized args.
+// Override args with the same key replace existing args; new args are appended.
+// Handles both --key=value and --key value formats.
+// Returns the merged args in normalized (list) format.
+func mergeArgsWithKeyOverride(baseArgs []string, overrideArgs []string) []string {
+	// Parse both inputs into groups
+	baseGroups := parseArgsIntoGroups(baseArgs)
+	overrideGroups := parseArgsIntoGroups(overrideArgs)
+
+	// Build ordered map: key -> argGroup
+	argMap := make(map[string]argGroup)
+	orderedKeys := make([]string, 0, len(baseGroups)+len(overrideGroups))
+
+	// Process base args
+	for _, group := range baseGroups {
+		if _, exists := argMap[group.key]; !exists {
+			orderedKeys = append(orderedKeys, group.key)
+		}
+		argMap[group.key] = group
+	}
+
+	// Apply overrides: replace existing or append new
+	for _, group := range overrideGroups {
+		if _, exists := argMap[group.key]; exists {
+			// Replace existing value
+			argMap[group.key] = group
+		} else {
+			// Add new key
+			orderedKeys = append(orderedKeys, group.key)
+			argMap[group.key] = group
+		}
+	}
+
+	// Rebuild args in original order
+	var result []string
+	for _, key := range orderedKeys {
+		if group, exists := argMap[key]; exists {
+			result = append(result, group.values...)
+		}
+	}
+
+	return result
+}
+
+// MergeArgs merges container args with override args using key-based deduplication.
+// It handles both multi-line string format and list-of-strings format.
+// Override args with the same key replace existing args; new args are appended.
+// The output format matches the input format (multi-line or list).
+func MergeArgs(containerArgs []string, overrideArgs []string) []string {
 	if len(overrideArgs) == 0 {
 		return containerArgs
 	}
@@ -329,172 +471,80 @@ func MergeMultilineArgs(containerArgs []string, overrideArgs []string) []string 
 		return overrideArgs
 	}
 
-	// Check if the first arg in containerArgs is a multi-line string (contains newlines or backslashes)
-	// Note: The "|" YAML literal block scalar indicator is stripped by K8s during parsing
-	if len(containerArgs) > 0 && (strings.Contains(containerArgs[0], "\n") || strings.Contains(containerArgs[0], "\\")) {
-		// Parse the multi-line string from containerArgs
-		baseArg := containerArgs[0]
+	// Detect input format
+	inputIsMultiline := isMultilineFormat(containerArgs)
 
-		// Parse existing args into a map: key -> full arg string
-		// This enables smart override: if override has same key but different value, replace it
-		existingArgs := make(map[string]string) // key -> full arg (e.g., "--tp-size" -> "--tp-size=4")
-		argKeys := make(map[string]int)         // key -> line index for replacement
-		lines := strings.Split(baseArg, "\n")
+	// Normalize both inputs to flat list format
+	baseArgs := normalizeArgs(containerArgs)
+	overrides := normalizeArgs(overrideArgs)
 
-		for i, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			// Remove trailing backslash for parsing
-			trimmed = strings.TrimRight(trimmed, "\\")
-			trimmed = strings.TrimSpace(trimmed)
-			if trimmed != "" {
-				key := extractArgKey(trimmed)
-				if key != "" {
-					existingArgs[key] = trimmed
-					argKeys[key] = i
-				}
-			}
-		}
+	// Perform key-based merge
+	merged := mergeArgsWithKeyOverride(baseArgs, overrides)
 
-		// Process override args: replace existing keys or add new ones
-		overridesToAdd := make([]string, 0)
-		keysToReplace := make(map[string]string) // key -> new value
-
-		for _, arg := range overrideArgs {
-			// Split multi-line override args into individual lines
-			overrideLines := strings.Split(arg, "\n")
-
-			for _, line := range overrideLines {
-				trimmed := strings.TrimSpace(line)
-				// Remove trailing backslash
-				trimmed = strings.TrimRight(trimmed, "\\")
-				trimmed = strings.TrimSpace(trimmed)
-
-				if trimmed == "" {
-					continue
-				}
-
-				key := extractArgKey(trimmed)
-				if key == "" {
-					// If we can't extract a key, add it as-is
-					overridesToAdd = append(overridesToAdd, trimmed)
-					continue
-				}
-
-				if existingValue, exists := existingArgs[key]; exists {
-					// Key exists - check if value is different
-					if existingValue != trimmed {
-						// Different value - mark for replacement
-						keysToReplace[key] = trimmed
-					}
-					// Same value - do nothing (keep existing)
-				} else {
-					// New key - add it
-					overridesToAdd = append(overridesToAdd, trimmed)
-				}
-			}
-		}
-
-		// Rebuild the args with replacements (only if there are replacements to make)
-		var rebuiltArgs strings.Builder
-		if len(keysToReplace) > 0 {
-			for i, line := range lines {
-				// Preserve leading whitespace
-				leadingWhitespace := ""
-				trimmed := strings.TrimLeft(line, " \t")
-				if len(line) > len(trimmed) {
-					leadingWhitespace = line[:len(line)-len(trimmed)]
-				}
-
-				// Remove trailing backslash for key extraction
-				trimmedNoBackslash := strings.TrimRight(trimmed, " \t\\")
-				trimmedNoBackslash = strings.TrimSpace(trimmedNoBackslash)
-
-				if trimmedNoBackslash != "" {
-					key := extractArgKey(trimmedNoBackslash)
-					if newValue, shouldReplace := keysToReplace[key]; shouldReplace {
-						// Replace this line with the new value (preserve leading whitespace of original)
-						if i > 0 {
-							rebuiltArgs.WriteString("\n")
-						}
-						rebuiltArgs.WriteString(leadingWhitespace)
-						rebuiltArgs.WriteString(newValue)
-						if i < len(lines)-1 || len(overridesToAdd) > 0 {
-							rebuiltArgs.WriteString(" \\")
-						}
-						delete(keysToReplace, key) // Mark as processed
-					} else {
-						// Keep the original line as-is
-						if i > 0 {
-							rebuiltArgs.WriteString("\n")
-						}
-						rebuiltArgs.WriteString(line)
-					}
-				} else if i == 0 {
-					// First line is empty, keep it
-					rebuiltArgs.WriteString(line)
-				}
-			}
-		}
-
-		// Add new args that weren't replacements
-		var overrideContent strings.Builder
-		for _, arg := range overridesToAdd {
-			overrideContent.WriteString("\n")
-			overrideContent.WriteString(arg)
-		}
-
-		// Merge: use rebuilt args if there were replacements, otherwise use baseArg
-		merged := baseArg
-		if rebuiltArgs.Len() > 0 {
-			// We rebuilt the args due to replacements
-			merged = rebuiltArgs.String()
-		}
-		if overrideContent.Len() > 0 {
-			// Add new args that weren't duplicates or replacements
-			trimmedMerged := strings.TrimRight(merged, " \t\n")
-			if !strings.HasSuffix(trimmedMerged, "\\") {
-				merged = trimmedMerged + " \\"
-			}
-			merged = merged + overrideContent.String()
-		}
-
-		// Return merged arg followed by remaining args
-		result := []string{merged}
-		if len(containerArgs) > 1 {
-			result = append(result, containerArgs[1:]...)
-		}
-		return result
+	// Convert back to original format
+	if inputIsMultiline {
+		return toMultilineFormat(merged)
 	}
-
-	// If not multi-line format, just append
-	return append(append([]string{}, containerArgs...), overrideArgs...)
+	return merged
 }
 
-// OverrideIntParam overrides a specific integer parameter in a multiline command string.
+// OverrideArgParam overrides a specific parameter with key in args.
 // If the key exists (e.g., "--tp-size=4"), it replaces the value with the new one.
 // Returns the updated args and a boolean indicating whether the key was found and replaced.
-func OverrideIntParam(containerArgs []string, key string, value int64) ([]string, bool) {
+// The function handles most of the common formats:
+// List of separate strings, Multi-line string, and Key-Value pairs.
+func OverrideArgParam(containerArgs []string, key string, value int64) ([]string, bool) {
 	if len(containerArgs) == 0 {
 		return containerArgs, false
 	}
 
-	arg := containerArgs[0]
-	// Build regex pattern to match the key with its value
-	// Matches: --tp-size=4 or --tp-size 4
-	// Escapes special regex characters in the key
-	escapedKey := regexp.QuoteMeta(key)
-	pattern := regexp.MustCompile(escapedKey + `(?:=|\s+)\d+`)
+	updated := false
+	if isMultilineFormat(containerArgs) {
+		arg := containerArgs[0]
+		// Build regex pattern to match the key with its value
+		// Matches: --tp-size=4 or --tp-size 4
+		// Escapes special regex characters in the key
+		escapedKey := regexp.QuoteMeta(key)
+		pattern := regexp.MustCompile(escapedKey + `(?:=|\s+)\d+`)
 
-	// Check if the key exists in the string
-	if !pattern.MatchString(arg) {
-		return containerArgs, false
+		// Check if the key exists in the string
+		if !pattern.MatchString(arg) {
+			return containerArgs, updated
+		}
+
+		// Replace the existing value
+		replacement := key + "=" + strconv.FormatInt(value, 10)
+		arg = pattern.ReplaceAllString(arg, replacement)
+		// Update the containerArgs with the modified value
+		containerArgs[0] = arg
+		updated = true
+	} else {
+		containerArgs, updated = overrideKeyValueInSlice(containerArgs, key, value)
+	}
+	return containerArgs, updated
+}
+
+func OverrideCommandParam(containerCommand []string, key string, value int64) ([]string, bool) {
+	if len(containerCommand) == 0 {
+		return containerCommand, false
 	}
 
-	// Replace the existing value
-	replacement := key + "=" + strconv.Itoa(int(value))
-	arg = pattern.ReplaceAllString(arg, replacement)
-	// Update the containerArgs with the modified value
-	containerArgs[0] = arg
+	return overrideKeyValueInSlice(containerCommand, key, value)
+}
 
-	return containerArgs, true
+// overrideKeyValueInSlice finds a key in a slice of args and replaces its value.
+// Handles both "--key value" (separate elements) and "--key=value" (combined) formats.
+// Returns the modified slice and whether the key was found.
+func overrideKeyValueInSlice(args []string, key string, value int64) ([]string, bool) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == key && i+1 < len(args) {
+			args[i+1] = strconv.FormatInt(value, 10)
+			return args, true
+		} else if strings.HasPrefix(arg, key+"=") {
+			args[i] = key + "=" + strconv.FormatInt(value, 10)
+			return args, true
+		}
+	}
+	return args, false
 }
