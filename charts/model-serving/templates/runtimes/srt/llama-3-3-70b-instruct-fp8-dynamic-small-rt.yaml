@@ -127,7 +127,7 @@ spec:
         periodSeconds: 6
         initialDelaySeconds: 60
         timeoutSeconds: 30
-  enginneConfig:
+  engineConfig:
     schedulerName: {{ .Values.commonSchedulerName }}
     {{- if or .Values.commonAnnotations .Values.llama_3_3_70b_instruct_fp8_dynamic_small.annotations }}
     annotations:
