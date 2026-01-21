@@ -74,7 +74,8 @@ spec:
           --attention-backend=fa3 \
           --mm-attention-backend=fa3 \
           --disable-fast-image-processor \
-          --cuda-graph-max-bs=256
+          --cuda-graph-max-bs=256 \
+          --max-running-requests=300
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
