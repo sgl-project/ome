@@ -649,7 +649,7 @@ func TestCreateSymbolicLink_ReplacesExistingSymlinkWithDifferentTarget(t *testin
 	assertSymlink(t, childPath, expectedRel2, parentPath2)
 }
 
-func TestCreateSymbolicLink_ErrorWhenNonSymlinkAlreadyExists(t *testing.T) {
+func TestCreateSymbolicLink_WhenNonSymlinkAlreadyExists_RemoveAndCreateSymbolicLink(t *testing.T) {
 	tmp := t.TempDir()
 
 	parentPath := filepath.Join(tmp, "parent")
@@ -667,17 +667,23 @@ func TestCreateSymbolicLink_ErrorWhenNonSymlinkAlreadyExists(t *testing.T) {
 		t.Fatalf("failed to create regular file: %v", err)
 	}
 
-	if err := CreateSymbolicLink(childPath, parentPath); err == nil {
-		t.Fatalf("expected error when non-symlink already exists at childPath")
+	if err := CreateSymbolicLink(childPath, parentPath); err != nil {
+		t.Fatalf("not expect err")
 	}
 
 	info, err := os.Lstat(childPath)
 	if err != nil {
 		t.Fatalf("lstat failed: %v", err)
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		t.Fatalf("existing file should not be converted to symlink")
+	result := info.Mode()&os.ModeSymlink != 0
+	assert.True(t, result)
+
+	expectedRel, err := filepath.Rel(filepath.Dir(childPath), parentPath)
+	if err != nil {
+		t.Fatalf("failed to compute expected relative path: %v", err)
 	}
+
+	assertSymlink(t, childPath, expectedRel, parentPath)
 }
 
 func TestCreateSymbolicLink_CreatesParentDirsForChildPath(t *testing.T) {
@@ -974,6 +980,81 @@ func TestHasSymlinkPointingToDir(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.wantFound, found)
 			}
+		})
+	}
+}
+
+func TestRemoveSymbolicLink(t *testing.T) {
+	tests := []struct {
+		name        string
+		setup       func(t *testing.T, dir string) string
+		expectError bool
+	}{
+		{
+			name: "symlink exists and is removed",
+			setup: func(t *testing.T, dir string) string {
+				targetDir := filepath.Join(dir, "target")
+				linkPath := filepath.Join(dir, "link")
+
+				assert.NoError(t, os.Mkdir(targetDir, 0755))
+				assert.NoError(t, os.Symlink(targetDir, linkPath))
+
+				return linkPath
+			},
+			expectError: false,
+		},
+		{
+			name: "path does not exist (no-op)",
+			setup: func(t *testing.T, dir string) string {
+				return filepath.Join(dir, "nonexistent")
+			},
+			expectError: true,
+		},
+		{
+			name: "path exists but is a directory (error)",
+			setup: func(t *testing.T, dir string) string {
+				dirPath := filepath.Join(dir, "real-dir")
+				assert.NoError(t, os.Mkdir(dirPath, 0755))
+				return dirPath
+			},
+			expectError: true,
+		},
+		{
+			name: "path exists but is a regular file (error)",
+			setup: func(t *testing.T, dir string) string {
+				filePath := filepath.Join(dir, "file")
+				assert.NoError(t, os.WriteFile(filePath, []byte("data"), 0644))
+				return filePath
+			},
+			expectError: true,
+		},
+		{
+			name: "broken symlink is removed",
+			setup: func(t *testing.T, dir string) string {
+				linkPath := filepath.Join(dir, "broken-link")
+				assert.NoError(t, os.Symlink(filepath.Join(dir, "missing"), linkPath))
+				return linkPath
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			path := tt.setup(t, tempDir)
+
+			err := RemoveSymbolicLink(path)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+
+			_, statErr := os.Lstat(path)
+			assert.True(t, os.IsNotExist(statErr), "path should not exist after removal")
 		})
 	}
 }
