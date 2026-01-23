@@ -96,6 +96,11 @@ func (r *ResourceBase) getSecret(ctx context.Context, ref *v1beta1.SecretReferen
 
 // InitializeClient initializes an OpenAI client using organization credentials
 func (r *ResourceBase) InitializeClient(ctx context.Context, org *v1beta1.Organization) (*openaisdk.Client, error) {
+	return r.InitializeClientWithBaseURL(ctx, org, "")
+}
+
+// InitializeClientWithBaseURL initializes an OpenAI client using organization credentials and an optional base URL override
+func (r *ResourceBase) InitializeClientWithBaseURL(ctx context.Context, org *v1beta1.Organization, baseURL string) (*openaisdk.Client, error) {
 	if org.Spec.Vendor == nil {
 		return nil, fmt.Errorf("vendor is not specified")
 	}
@@ -115,8 +120,10 @@ func (r *ResourceBase) InitializeClient(ctx context.Context, org *v1beta1.Organi
 	}
 
 	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
-	if baseURL, ok := org.Spec.Config["baseURL"]; ok {
+	if baseURL != "" {
 		opts = append(opts, option.WithBaseURL(baseURL))
+	} else if baseURLFromOrg, ok := org.Spec.Config["baseURL"]; ok {
+		opts = append(opts, option.WithBaseURL(baseURLFromOrg))
 	}
 
 	return openaisdk.NewClient(opts...), nil
