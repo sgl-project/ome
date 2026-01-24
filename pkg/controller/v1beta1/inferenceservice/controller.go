@@ -289,6 +289,9 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "AcceleratorClassError", "Failed to get accelerator class for engine: %v", err)
 			return reconcile.Result{}, err
 		}
+		if engineAC == nil {
+			r.Log.Info("Accelerator class not specified for engine component", "inferenceService", isvc.Name)
+		}
 		engineSupportedModelFormats := r.RuntimeSelector.GetSupportedModelFormat(ctx, rt, baseModel, userSpecifiedRuntime)
 		r.Log.Info("Creating engine reconciler",
 			"deploymentMode", engineDeploymentMode,
@@ -316,6 +319,9 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			r.Log.Error(err, "Failed to get accelerator class for decoder component", "Name", isvc.Name)
 			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "AcceleratorClassError", "Failed to get accelerator class for decoder: %v", err)
 			return reconcile.Result{}, err
+		}
+		if decoderAC == nil {
+			r.Log.Info("Accelerator class not specified for decoder component", "inferenceService", isvc.Name)
 		}
 		decoderSupportedModelFormats := r.RuntimeSelector.GetSupportedModelFormat(ctx, rt, baseModel, userSpecifiedRuntime)
 		r.Log.Info("Creating decoder reconciler",
