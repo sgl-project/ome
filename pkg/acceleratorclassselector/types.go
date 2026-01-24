@@ -55,9 +55,6 @@ type Config struct {
 
 	// EnableDetailedLogging enables verbose logging for debugging
 	EnableDetailedLogging bool
-
-	// DefaultPriority is used when an accelerator class doesn't specify priority
-	DefaultPolicy v1beta1.AcceleratorSelectionPolicy
 }
 
 // NewConfig creates a new Config with default values.
@@ -65,6 +62,5 @@ func NewConfig(client client.Client) *Config {
 	return &Config{
 		Client:                client,
 		EnableDetailedLogging: false,
-		DefaultPolicy:         v1beta1.FirstAvailablePolicy,
 	}
 }

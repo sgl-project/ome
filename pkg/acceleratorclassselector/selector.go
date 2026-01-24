@@ -57,8 +57,14 @@ func (s *defaultSelector) GetAcceleratorClass(ctx context.Context, isvc *v1beta1
 			acName = *acceleratorClass
 		}
 		// if accelerator class didn't have name specified, try to get accelerator class by policy
+		// if policy is not specified, will skip getting acceleratorClass by policy
 		if acName == "" {
-			if acceleratorClass := s.getAcceleratorClassByPolicy(isvc, runtime, component); acceleratorClass != nil {
+			acceleratorPolicy := s.getAcceleratorPolicy(isvc, component)
+			if acceleratorPolicy == "" {
+				logger.Info("No accelerator policy found for component", "component", component, "inferenceService", isvc.Name)
+				return nil, "", nil
+			}
+			if acceleratorClass := s.getAcceleratorClassByPolicy(isvc, runtime, acceleratorPolicy); acceleratorClass != nil {
 				acName = *acceleratorClass
 			}
 		}
@@ -92,8 +98,7 @@ func (s *defaultSelector) getAcceleratorClassByName(isvc *v1beta1.InferenceServi
 }
 
 // TODO: Consider accelerator class selector by AcceleratorSelectionPolicy, currently only FirstAvailablePolicy is implemented
-func (s *defaultSelector) getAcceleratorClassByPolicy(isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec, component v1beta1.ComponentType) *string {
-	acceleratorPolicy := s.getAcceleratorPolicy(isvc, component)
+func (s *defaultSelector) getAcceleratorClassByPolicy(isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec, acceleratorPolicy v1beta1.AcceleratorSelectionPolicy) *string {
 	switch acceleratorPolicy {
 	case v1beta1.BestFitPolicy:
 		return nil
@@ -102,7 +107,7 @@ func (s *defaultSelector) getAcceleratorClassByPolicy(isvc *v1beta1.InferenceSer
 	case v1beta1.MostCapablePolicy:
 		return nil
 	case v1beta1.FirstAvailablePolicy:
-		// Return the first AcceleratorClass from runtime requirements as default for now
+		// Return the first AcceleratorClass from runtime requirements
 		if len(runtime.AcceleratorRequirements.AcceleratorClasses) > 0 {
 			return &runtime.AcceleratorRequirements.AcceleratorClasses[0]
 		}
@@ -177,12 +182,8 @@ func (s *defaultSelector) getComponentAcceleratorPolicy(isvc *v1beta1.InferenceS
 }
 
 // getAcceleratorPolicy determines the effective AcceleratorSelectionPolicy for the given component and InferenceService
-// defaulting to the selector's configured default policy if none is specified
+// If no policy is specified, an empty string is returned
 func (s *defaultSelector) getAcceleratorPolicy(isvc *v1beta1.InferenceService, component v1beta1.ComponentType) v1beta1.AcceleratorSelectionPolicy {
 	// Check component-specific AcceleratorOverride
-	if policy := s.getComponentAcceleratorPolicy(isvc, component); policy != "" {
-		return policy
-	}
-
-	return s.config.DefaultPolicy
+	return s.getComponentAcceleratorPolicy(isvc, component)
 }
