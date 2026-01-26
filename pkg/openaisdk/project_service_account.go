@@ -30,9 +30,6 @@ func (r *ProjectServiceAccountService) Create(ctx context.Context, projectID str
 	}
 	path := fmt.Sprintf("organization/projects/%s/service_accounts", projectID)
 
-	// Add project ID to request options
-	opts = append(opts, option.WithHeader("OpenAI-Project", projectID))
-
 	err = option.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
 	return
 }

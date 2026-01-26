@@ -3,7 +3,6 @@ package common
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
@@ -22,25 +21,6 @@ import (
 )
 
 // OpenAIServiceAccount implements ProjectScoped and ResourceOperation
-
-const defaultOpenAIBaseURL = "https://api.openai.com/v1/"
-
-var openAIBaseURLByGeography = map[string]string{
-	"US": "https://us.api.openai.com/v1/",
-	"EU": "https://eu.api.openai.com/v1/",
-}
-
-func resolveOpenAIBaseURL(geography string) string {
-	geo := strings.ToUpper(strings.TrimSpace(geography))
-	if geo == "" {
-		return defaultOpenAIBaseURL
-	}
-	if baseURL, ok := openAIBaseURLByGeography[geo]; ok {
-		return baseURL
-	}
-	return defaultOpenAIBaseURL
-}
-
 type OpenAIServiceAccount struct {
 	ResourceBase
 	Resource *v1beta1.ServiceAccount
@@ -82,32 +62,6 @@ func (sa *OpenAIServiceAccount) GetOpenAIClient(ctx context.Context) (*openaisdk
 	return openAIClient, nil
 }
 
-// GetOpenAIClientForProject initializes the OpenAI client using project geography
-func (sa *OpenAIServiceAccount) GetOpenAIClientForProject(ctx context.Context, project *v1beta1.Project) (*openaisdk.Client, error) {
-	// If a client is already set (for testing), return it
-	if sa.openAIClient != nil {
-		return sa.openAIClient, nil
-	}
-
-	org, err := sa.GetOrganization(ctx, sa.Resource)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize client: %w", err)
-	}
-
-	geography := ""
-	if project != nil && project.Spec.Config != nil {
-		geography = project.Spec.Config["geography"]
-	}
-	baseURL := resolveOpenAIBaseURL(geography)
-
-	openAIClient, err := sa.InitializeClientWithBaseURL(ctx, org, baseURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize OpenAI client: %w", err)
-	}
-
-	return openAIClient, nil
-}
-
 // SetOpenAIClient sets a custom OpenAI client for testing purposes
 func (sa *OpenAIServiceAccount) SetOpenAIClient(client *openaisdk.Client) {
 	sa.openAIClient = client
@@ -120,7 +74,7 @@ func (sa *OpenAIServiceAccount) Create(ctx context.Context) error {
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusProjectError, err)
 	}
 
-	openaiClient, err := sa.GetOpenAIClientForProject(ctx, project)
+	openaiClient, err := sa.GetOpenAIClient(ctx)
 	if err != nil {
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusInitError, err)
 	}
@@ -232,7 +186,7 @@ func (sa *OpenAIServiceAccount) Delete(ctx context.Context) error {
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusProjectError, err)
 	}
 
-	openaiClient, err := sa.GetOpenAIClientForProject(ctx, project)
+	openaiClient, err := sa.GetOpenAIClient(ctx)
 	if err != nil {
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusInitError, err)
 	}
