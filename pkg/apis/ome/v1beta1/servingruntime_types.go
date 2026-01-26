@@ -242,10 +242,14 @@ type AcceleratorRequirements struct {
 	// +kubebuilder:validation:Minimum=0
 	MinMemory *int64 `json:"minMemory,omitempty"`
 
-	// MinComputeCapability specifies minimum compute capability in TFLOPS
+	// MinComputePerformanceTFLOPS specifies minimum compute capability in TFLOPS
 	// +optional
 	// +kubebuilder:validation:Minimum=0
-	MinComputeCapability *int64 `json:"minComputeCapability,omitempty"`
+	MinComputePerformanceTFLOPS *int64 `json:"minComputePerformanceTFLOPS,omitempty"`
+
+	//MinArchitectureVersion Compute capability (NVIDIA) or equivalent
+	// +optional
+	MinArchitectureVersion *string `json:"minArchitectureVersion,omitempty"`
 
 	// RequiredFeatures lists hardware features that must be present
 	// Examples: ["tensor-cores", "fp8", "nvlink"]

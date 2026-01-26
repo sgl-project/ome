@@ -3,7 +3,6 @@ package acceleratorclass
 import (
 	"context"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -240,18 +239,6 @@ func nodeMatchCapabilities(ac *v1beta1.AcceleratorClass, node *corev1.Node) bool
 		}
 	}
 
-	// computeCapability: require at least 1 GPU present
-	if ac.Spec.Capabilities.ComputeCapability != "" {
-		acCompute, err := strconv.ParseFloat(ac.Spec.Capabilities.ComputeCapability, 64)
-		if err != nil {
-			return false
-		}
-		// Get GPU count from node resources
-		total, _ := getGPUCapacity(node)
-		if total < int64(acCompute) {
-			return false
-		}
-	}
 	return true
 }
 

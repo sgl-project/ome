@@ -75,12 +75,19 @@ spec:
                         maxMemory:
                           format: int64
                           type: integer
-                        minComputeCapability:
+                        minArchitectureVersion:
+                          type: string
+                        minComputePerformanceTFLOPS:
                           format: int64
                           type: integer
                         minMemory:
                           format: int64
                           type: integer
+                        preferredPrecisions:
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
                         requiredFeatures:
                           items:
                             type: string
@@ -116,12 +123,19 @@ spec:
                             maxMemory:
                               format: int64
                               type: integer
-                            minComputeCapability:
+                            minArchitectureVersion:
+                              type: string
+                            minComputePerformanceTFLOPS:
                               format: int64
                               type: integer
                             minMemory:
                               format: int64
                               type: integer
+                            preferredPrecisions:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
                             requiredFeatures:
                               items:
                                 type: string
@@ -12363,12 +12377,19 @@ spec:
                             maxMemory:
                               format: int64
                               type: integer
-                            minComputeCapability:
+                            minArchitectureVersion:
+                              type: string
+                            minComputePerformanceTFLOPS:
                               format: int64
                               type: integer
                             minMemory:
                               format: int64
                               type: integer
+                            preferredPrecisions:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
                             requiredFeatures:
                               items:
                                 type: string

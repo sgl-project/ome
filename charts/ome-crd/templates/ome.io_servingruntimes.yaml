@@ -61,7 +61,9 @@ spec:
                         type: string
                       type: array
                       x-kubernetes-list-type: atomic
-                    minComputeCapability:
+                    minArchitectureVersion:
+                      type: string
+                    minComputePerformanceTFLOPS:
                       format: int64
                       minimum: 0
                       type: integer
@@ -1229,12 +1231,19 @@ spec:
                             maxMemory:
                               format: int64
                               type: integer
-                            minComputeCapability:
+                            minArchitectureVersion:
+                              type: string
+                            minComputePerformanceTFLOPS:
                               format: int64
                               type: integer
                             minMemory:
                               format: int64
                               type: integer
+                            preferredPrecisions:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
                             requiredFeatures:
                               items:
                                 type: string
@@ -14183,12 +14192,19 @@ spec:
                             maxMemory:
                               format: int64
                               type: integer
-                            minComputeCapability:
+                            minArchitectureVersion:
+                              type: string
+                            minComputePerformanceTFLOPS:
                               format: int64
                               type: integer
                             minMemory:
                               format: int64
                               type: integer
+                            preferredPrecisions:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
                             requiredFeatures:
                               items:
                                 type: string
