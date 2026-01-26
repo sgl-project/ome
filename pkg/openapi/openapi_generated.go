@@ -76,6 +76,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PredictorSpec":              schema_pkg_apis_ome_v1beta1_PredictorSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RouterSpec":                 schema_pkg_apis_ome_v1beta1_RouterSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RunnerSpec":                 schema_pkg_apis_ome_v1beta1_RunnerSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ScalerAuthenticationRef":    schema_pkg_apis_ome_v1beta1_ScalerAuthenticationRef(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServiceMetadata":            schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntime":             schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":         schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
@@ -442,11 +443,18 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorConstraints(ref common.ReferenceCall
 							Format:      "int64",
 						},
 					},
-					"minComputeCapability": {
+					"minComputePerformanceTFLOPS": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MinComputeCapability in TFLOPS",
+							Description: "MinComputePerformanceTFLOPS in TFLOPS",
 							Type:        []string{"integer"},
 							Format:      "int64",
+						},
+					},
+					"minArchitectureVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinArchitectureVersion Compute capability (NVIDIA) or equivalent",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"requiredFeatures": {
@@ -497,6 +505,26 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorConstraints(ref common.ReferenceCall
 						},
 						SchemaProps: spec.SchemaProps{
 							Description: "ArchitectureFamilies limits selection to specific families Examples: [\"nvidia-hopper\", \"nvidia-ampere\"]",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"preferredPrecisions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "PreferredPrecisions lists numeric precisions in order of preference Examples: [\"fp8\", \"fp16\", \"fp32\"]",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -815,11 +843,18 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorRequirements(ref common.ReferenceCal
 							Format:      "int64",
 						},
 					},
-					"minComputeCapability": {
+					"minComputePerformanceTFLOPS": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MinComputeCapability specifies minimum compute capability in TFLOPS",
+							Description: "MinComputePerformanceTFLOPS specifies minimum compute capability in TFLOPS",
 							Type:        []string{"integer"},
 							Format:      "int64",
+						},
+					},
+					"minArchitectureVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinArchitectureVersion Compute capability (NVIDIA) or equivalent",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"requiredFeatures": {
@@ -3942,9 +3977,24 @@ func schema_pkg_apis_ome_v1beta1_KedaConfig(ref common.ReferenceCallback) common
 							Format:      "",
 						},
 					},
+					"authenticationRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AuthenticationRef references a TriggerAuthentication or ClusterTriggerAuthentication resource that contains the authentication configuration for the Prometheus server. This is required when the Prometheus server requires authentication (e.g., Grafana Cloud).\n\nExample:\n  authenticationRef:\n    name: grafana-cloud-auth\n    kind: TriggerAuthentication",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ScalerAuthenticationRef"),
+						},
+					},
+					"authModes": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AuthModes specifies the authentication mode(s) for the Prometheus scaler. Common values include: \"basic\", \"tls\", \"bearer\", \"custom\". Multiple modes can be specified comma-separated (e.g., \"tls,basic\").\n\nExample:\n  \"basic\" - Use basic authentication with username/password from TriggerAuthentication",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ScalerAuthenticationRef"},
 	}
 }
 
@@ -7648,6 +7698,34 @@ func schema_pkg_apis_ome_v1beta1_RunnerSpec(ref common.ReferenceCallback) common
 		},
 		Dependencies: []string{
 			"k8s.io/api/core/v1.ContainerPort", "k8s.io/api/core/v1.ContainerResizePolicy", "k8s.io/api/core/v1.EnvFromSource", "k8s.io/api/core/v1.EnvVar", "k8s.io/api/core/v1.Lifecycle", "k8s.io/api/core/v1.Probe", "k8s.io/api/core/v1.ResourceRequirements", "k8s.io/api/core/v1.SecurityContext", "k8s.io/api/core/v1.VolumeDevice", "k8s.io/api/core/v1.VolumeMount"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ScalerAuthenticationRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ScalerAuthenticationRef points to a KEDA TriggerAuthentication or ClusterTriggerAuthentication resource that contains the credentials for authenticating with the scaler's target (e.g., Prometheus server).",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the TriggerAuthentication or ClusterTriggerAuthentication resource.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind of the authentication resource being referenced. Valid values are \"TriggerAuthentication\" (namespace-scoped) or \"ClusterTriggerAuthentication\" (cluster-scoped).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
