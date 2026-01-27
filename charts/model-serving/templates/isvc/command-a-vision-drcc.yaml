@@ -1,4 +1,4 @@
-{{- if .Values.command_a_vision.enabled }}
+{{- if .Values.command_a_vision_drcc.enabled }}
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
