@@ -94,7 +94,7 @@ func GetTargetServicePort(ctx context.Context, c client.Client, isvc *v1beta1.In
 	return port, nil
 }
 
-// AddPreferredNodeAffinityForModel adds a preferred node affinity term to the pod spec
+// AddNodeSelectorForModelReadyNode adds a node selector to the pod spec
 // for scheduling pods on nodes where the base model is ready.
 // This is used by both InferenceService and BenchmarkJob controllers to ensure pods
 // are scheduled on nodes with the model available.
@@ -105,9 +105,9 @@ func GetTargetServicePort(ctx context.Context, c client.Client, isvc *v1beta1.In
 //
 // The function:
 //   - Determines the label key based on whether it's a ClusterBaseModel (empty namespace) or BaseModel
-//   - Adds a preferred node affinity with weight 100 to prefer nodes with "Ready" model status
-//   - Avoids adding duplicate affinity terms if one already exists for the same model
-func AddPreferredNodeAffinityForModel(podSpec *corev1.PodSpec, baseModelMeta *metav1.ObjectMeta) {
+//   - Adds a node selector requiring nodes with "Ready" model status
+//   - Skips if the label key already exists in the node selector
+func AddNodeSelectorForModelReadyNode(podSpec *corev1.PodSpec, baseModelMeta *metav1.ObjectMeta) {
 	if podSpec == nil || baseModelMeta == nil {
 		return
 	}
@@ -124,45 +124,13 @@ func AddPreferredNodeAffinityForModel(podSpec *corev1.PodSpec, baseModelMeta *me
 		labelKey = constants.GetBaseModelLabel(baseModelMeta.Namespace, baseModelMeta.Name)
 	}
 
-	// Initialize affinity structures if nil
-	if podSpec.Affinity == nil {
-		podSpec.Affinity = &corev1.Affinity{}
-	}
-	if podSpec.Affinity.NodeAffinity == nil {
-		podSpec.Affinity.NodeAffinity = &corev1.NodeAffinity{}
+	// Initialize node selector if nil
+	if podSpec.NodeSelector == nil {
+		podSpec.NodeSelector = make(map[string]string)
 	}
 
-	// Check if this model affinity term already exists to avoid duplicates
-	affinityExists := false
-	for _, term := range podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
-		for _, expr := range term.Preference.MatchExpressions {
-			if expr.Key == labelKey {
-				affinityExists = true
-				break
-			}
-		}
-		if affinityExists {
-			break
-		}
-	}
-
-	if !affinityExists {
-		// Use max weight (100) to strongly prefer nodes with ready models
-		preferredTerm := corev1.PreferredSchedulingTerm{
-			Weight: 100,
-			Preference: corev1.NodeSelectorTerm{
-				MatchExpressions: []corev1.NodeSelectorRequirement{
-					{
-						Key:      labelKey,
-						Operator: corev1.NodeSelectorOpIn,
-						Values:   []string{"Ready"},
-					},
-				},
-			},
-		}
-		podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = append(
-			podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
-			preferredTerm,
-		)
+	// Add the label if it doesn't already exist
+	if _, exists := podSpec.NodeSelector[labelKey]; !exists {
+		podSpec.NodeSelector[labelKey] = "Ready"
 	}
 }
