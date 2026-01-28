@@ -283,14 +283,17 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Step 5: Create reconcilers based on merged specs
 	if mergedEngine != nil {
-		engineAC, engineAcName, err := r.AcceleratorClassSelector.GetAcceleratorClass(ctx, isvc, rt, v1beta1.EngineComponent)
+		engineACObj, engineAcName, err := r.AcceleratorClassSelector.GetAcceleratorClass(ctx, isvc, rt, v1beta1.EngineComponent)
 		if err != nil {
 			r.Log.Error(err, "Failed to get accelerator class for engine component", "Name", isvc.Name)
 			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "AcceleratorClassError", "Failed to get accelerator class for engine: %v", err)
 			return reconcile.Result{}, err
 		}
-		if engineAC == nil {
+		var engineAC *v1beta1.AcceleratorClassSpec
+		if engineACObj == nil {
 			r.Log.Info("Accelerator class not specified for engine component", "inferenceService", isvc.Name)
+		} else {
+			engineAC = &engineACObj.Spec
 		}
 		engineSupportedModelFormats := r.RuntimeSelector.GetSupportedModelFormat(ctx, rt, baseModel, userSpecifiedRuntime)
 		r.Log.Info("Creating engine reconciler",
@@ -314,14 +317,17 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if mergedDecoder != nil {
-		decoderAC, decoderAcName, err := r.AcceleratorClassSelector.GetAcceleratorClass(ctx, isvc, rt, v1beta1.DecoderComponent)
+		decoderACObj, decoderAcName, err := r.AcceleratorClassSelector.GetAcceleratorClass(ctx, isvc, rt, v1beta1.DecoderComponent)
 		if err != nil {
 			r.Log.Error(err, "Failed to get accelerator class for decoder component", "Name", isvc.Name)
 			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "AcceleratorClassError", "Failed to get accelerator class for decoder: %v", err)
 			return reconcile.Result{}, err
 		}
-		if decoderAC == nil {
+		var decoderAC *v1beta1.AcceleratorClassSpec
+		if decoderACObj == nil {
 			r.Log.Info("Accelerator class not specified for decoder component", "inferenceService", isvc.Name)
+		} else {
+			decoderAC = &decoderACObj.Spec
 		}
 		decoderSupportedModelFormats := r.RuntimeSelector.GetSupportedModelFormat(ctx, rt, baseModel, userSpecifiedRuntime)
 		r.Log.Info("Creating decoder reconciler",

@@ -12,8 +12,8 @@ import (
 // It provides methods to select, validate, and list compatible accelerator classes.
 type Selector interface {
 	// GetAcceleratorClass selects the best accelerator class for a given inference service, runtime, and component.
-	// Returns the accelerator class spec, the accelerator class name, and an error if the fetch fails.
-	GetAcceleratorClass(ctx context.Context, isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec, component v1beta1.ComponentType) (*v1beta1.AcceleratorClassSpec, string, error)
+	// Returns the accelerator class, the accelerator class name, and an error if the fetch fails.
+	GetAcceleratorClass(ctx context.Context, isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec, component v1beta1.ComponentType) (*v1beta1.AcceleratorClass, string, error)
 }
 
 // AcceleratorSelection represents the selected accelerator class with metadata.
@@ -38,7 +38,7 @@ type AcceleratorFetcher interface {
 
 	// GetAcceleratorClass fetches a specific accelerator class by name.
 	// It first checks namespace-scoped accelerator classes, then cluster-scoped ones.
-	GetAcceleratorClass(ctx context.Context, name string) (*v1beta1.AcceleratorClassSpec, bool, error)
+	GetAcceleratorClass(ctx context.Context, name string) (*v1beta1.AcceleratorClass, bool, error)
 }
 
 // AcceleratorCollection holds both namespace and cluster scoped accelerator classes.
