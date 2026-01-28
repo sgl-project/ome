@@ -205,7 +205,7 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 	}
 
 	// Add preferred node affinity for model readiness using the shared utility function
-	isvcutils.AddPreferredNodeAffinityForModel(podSpec, b.BaseModelMeta)
+	isvcutils.AddNodeSelectorForModelReadyNode(podSpec, b.BaseModelMeta)
 
 	// Add node selector merged from AcceleratorClass if applicable
 	// Only add mergedNodeSelector to engine and decoder component.

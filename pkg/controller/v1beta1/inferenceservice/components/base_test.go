@@ -21,12 +21,12 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 		baseModel                         *v1beta1.BaseModelSpec
 		baseModelMeta                     *metav1.ObjectMeta
 		fineTunedServingWithMergedWeights bool
-		existingAffinity                  *v1.Affinity
+		existingNodeSelector              map[string]string
 		expectedLabelKey                  string
-		expectAffinity                    bool
+		expectNodeSelector                bool
 	}{
 		{
-			name: "BaseModel with namespace adds preferred affinity",
+			name: "BaseModel with namespace adds node selector",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
 					Name: "safetensors",
@@ -36,11 +36,11 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 				Name:      "llama-3-8b",
 				Namespace: "default",
 			},
-			expectedLabelKey: "models.ome.io/default.basemodel.llama-3-8b",
-			expectAffinity:   true,
+			expectedLabelKey:   "models.ome.io/default.basemodel.llama-3-8b",
+			expectNodeSelector: true,
 		},
 		{
-			name: "ClusterBaseModel without namespace adds preferred affinity",
+			name: "ClusterBaseModel without namespace adds node selector",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
 					Name: "safetensors",
@@ -50,11 +50,11 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 				Name: "mixtral-8x7b",
 				// No namespace for ClusterBaseModel
 			},
-			expectedLabelKey: "models.ome.io/clusterbasemodel.mixtral-8x7b",
-			expectAffinity:   true,
+			expectedLabelKey:   "models.ome.io/clusterbasemodel.mixtral-8x7b",
+			expectNodeSelector: true,
 		},
 		{
-			name: "Existing affinity should be preserved",
+			name: "Existing node selector should be preserved",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
 					Name: "safetensors",
@@ -64,29 +64,14 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 				Name:      "model-1",
 				Namespace: "test-ns",
 			},
-			existingAffinity: &v1.Affinity{
-				NodeAffinity: &v1.NodeAffinity{
-					PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
-						{
-							Weight: 50,
-							Preference: v1.NodeSelectorTerm{
-								MatchExpressions: []v1.NodeSelectorRequirement{
-									{
-										Key:      "existing-key",
-										Operator: v1.NodeSelectorOpIn,
-										Values:   []string{"existing-value"},
-									},
-								},
-							},
-						},
-					},
-				},
+			existingNodeSelector: map[string]string{
+				"existing-key": "existing-value",
 			},
-			expectedLabelKey: "models.ome.io/test-ns.basemodel.model-1",
-			expectAffinity:   true,
+			expectedLabelKey:   "models.ome.io/test-ns.basemodel.model-1",
+			expectNodeSelector: true,
 		},
 		{
-			name: "Skip affinity for merged fine-tuned weights",
+			name: "Skip node selector for merged fine-tuned weights",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
 					Name: "safetensors",
@@ -97,13 +82,13 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 				Namespace: "default",
 			},
 			fineTunedServingWithMergedWeights: true,
-			expectAffinity:                    false,
+			expectNodeSelector:                false,
 		},
 		{
-			name:           "No base model",
-			baseModel:      nil,
-			baseModelMeta:  nil,
-			expectAffinity: false,
+			name:               "No base model",
+			baseModel:          nil,
+			baseModelMeta:      nil,
+			expectNodeSelector: false,
 		},
 		{
 			name: "Long model names should be handled",
@@ -116,8 +101,8 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 				Name:      "very-long-model-name-that-exceeds-normal-length-limits-and-should-be-truncated",
 				Namespace: "long-namespace-name",
 			},
-			expectedLabelKey: constants.GetBaseModelLabel("long-namespace-name", "very-long-model-name-that-exceeds-normal-length-limits-and-should-be-truncated"),
-			expectAffinity:   true,
+			expectedLabelKey:   constants.GetBaseModelLabel("long-namespace-name", "very-long-model-name-that-exceeds-normal-length-limits-and-should-be-truncated"),
+			expectNodeSelector: true,
 		},
 	}
 
@@ -131,10 +116,13 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 				Log:                               ctrl.Log.WithName("test"),
 			}
 
-			// Create pod spec with existing affinity if provided
+			// Create pod spec with existing node selector if provided
 			podSpec := &v1.PodSpec{}
-			if tt.existingAffinity != nil {
-				podSpec.Affinity = tt.existingAffinity.DeepCopy()
+			if tt.existingNodeSelector != nil {
+				podSpec.NodeSelector = make(map[string]string)
+				for k, v := range tt.existingNodeSelector {
+					podSpec.NodeSelector[k] = v
+				}
 			}
 
 			// Create inference service
@@ -149,55 +137,35 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 			UpdatePodSpecNodeSelector(b, isvc, podSpec, "")
 
 			// Verify the result
-			if !tt.expectAffinity {
-				// Should not have added any affinity for model
-				if podSpec.Affinity == nil {
-					return // OK - no affinity added
+			if !tt.expectNodeSelector {
+				// Should not have added any node selector for model
+				if podSpec.NodeSelector == nil {
+					return // OK - no node selector added
 				}
-				if podSpec.Affinity.NodeAffinity == nil {
-					return // OK - no node affinity added
-				}
-				// If there's existing affinity, make sure we didn't add model affinity
-				for _, term := range podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
-					for _, expr := range term.Preference.MatchExpressions {
-						g.Expect(expr.Key).NotTo(gomega.HavePrefix("models.ome.io/"))
-					}
+				// Make sure we didn't add model node selector
+				for key := range podSpec.NodeSelector {
+					g.Expect(key).NotTo(gomega.HavePrefix("models.ome.io/"))
 				}
 				return
 			}
 
-			// Should have preferred node affinity
-			g.Expect(podSpec.Affinity).NotTo(gomega.BeNil())
-			g.Expect(podSpec.Affinity.NodeAffinity).NotTo(gomega.BeNil())
-			g.Expect(podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution).NotTo(gomega.BeEmpty())
+			// Should have node selector
+			g.Expect(podSpec.NodeSelector).NotTo(gomega.BeNil())
 
-			// Find the model affinity term
-			var foundModelTerm *v1.PreferredSchedulingTerm
-			for i := range podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
-				term := &podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution[i]
-				for _, expr := range term.Preference.MatchExpressions {
-					if expr.Key == tt.expectedLabelKey {
-						foundModelTerm = term
-						break
-					}
+			// Check that the expected label key exists with value "Ready"
+			value, found := podSpec.NodeSelector[tt.expectedLabelKey]
+			g.Expect(found).To(gomega.BeTrue(), "Model node selector label not found: %s", tt.expectedLabelKey)
+			g.Expect(value).To(gomega.Equal("Ready"))
+
+			// If there was existing node selector, verify it's preserved
+			if tt.existingNodeSelector != nil {
+				for k, v := range tt.existingNodeSelector {
+					existingValue, existingFound := podSpec.NodeSelector[k]
+					g.Expect(existingFound).To(gomega.BeTrue(), "Existing node selector should be preserved")
+					g.Expect(existingValue).To(gomega.Equal(v))
 				}
-				if foundModelTerm != nil {
-					break
-				}
-			}
-
-			g.Expect(foundModelTerm).NotTo(gomega.BeNil(), "Model affinity term not found")
-			g.Expect(foundModelTerm.Weight).To(gomega.Equal(int32(100)))
-			g.Expect(foundModelTerm.Preference.MatchExpressions).To(gomega.HaveLen(1))
-			g.Expect(foundModelTerm.Preference.MatchExpressions[0].Key).To(gomega.Equal(tt.expectedLabelKey))
-			g.Expect(foundModelTerm.Preference.MatchExpressions[0].Operator).To(gomega.Equal(v1.NodeSelectorOpIn))
-			g.Expect(foundModelTerm.Preference.MatchExpressions[0].Values).To(gomega.Equal([]string{"Ready"}))
-
-			// If there was existing affinity, verify it's preserved
-			if tt.existingAffinity != nil {
-				existingTermCount := len(tt.existingAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution)
-				// Should have existing terms + new model term
-				g.Expect(podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution).To(gomega.HaveLen(existingTermCount + 1))
+				// Should have existing labels + new model label
+				g.Expect(podSpec.NodeSelector).To(gomega.HaveLen(len(tt.existingNodeSelector) + 1))
 			}
 		})
 	}

@@ -59,9 +59,10 @@ func (s *defaultSelector) GetAcceleratorClass(ctx context.Context, isvc *v1beta1
 		// if accelerator class didn't have name specified, try to get accelerator class by policy
 		// if policy is not specified, will skip getting acceleratorClass by policy
 		if acName == "" {
+			logger.Info("No acceleratorClass name found for component", "component", component, "inferenceService", isvc.Name)
 			acceleratorPolicy := s.getAcceleratorPolicy(isvc, component)
 			if acceleratorPolicy == "" {
-				logger.Info("No accelerator policy found for component", "component", component, "inferenceService", isvc.Name)
+				logger.Info("No acceleratorClass policy found for component", "component", component, "inferenceService", isvc.Name)
 				return nil, "", nil
 			}
 			if acceleratorClass := s.getAcceleratorClassByPolicy(isvc, runtime, acceleratorPolicy); acceleratorClass != nil {
