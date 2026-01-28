@@ -247,8 +247,8 @@ func (r *BenchmarkJobReconciler) addNodeSelectorFromInferenceService(ctx context
 		return err
 	}
 
-	isvcutils.AddPreferredNodeAffinityForModel(podSpec, baseModelMeta)
-	r.Log.Info("Added node affinity for benchmark job",
+	isvcutils.AddNodeSelectorForModelReadyNode(podSpec, baseModelMeta)
+	r.Log.Info("Added node selector for benchmark job",
 		"baseModel", baseModelMeta.Name,
 		"namespace", baseModelMeta.Namespace,
 		"benchmarkJob", benchmarkJob.Name)
@@ -423,6 +423,7 @@ func (r *BenchmarkJobReconciler) applyPodOverrides(podSpec *v1.PodSpec, override
 		Volumes:       podSpec.Volumes,
 		Tolerations:   podSpec.Tolerations,
 		Affinity:      podSpec.Affinity,
+		NodeSelector:  podSpec.NodeSelector,
 		RestartPolicy: v1.RestartPolicyNever,
 	}
 
