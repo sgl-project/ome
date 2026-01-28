@@ -55,6 +55,10 @@ type Config struct {
 
 	// EnableDetailedLogging enables verbose logging for debugging
 	EnableDetailedLogging bool
+
+	// ConsiderAvailability filters out accelerators with zero availability
+	// Default: false (let scheduler handle availability)
+	ConsiderAvailability bool
 }
 
 // NewConfig creates a new Config with default values.
