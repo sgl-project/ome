@@ -44,7 +44,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: ord.ocir.io/idqj093njucb/official-sgl:v0.5.3.post1.8c4b18c-cu129
+      image: fra.ocir.io/idqj093njucb/official-sgl:v0.5.7.dcf17400f-cu129
       ports:
         - containerPort: 8080
           name: http1
@@ -75,7 +75,8 @@ spec:
           --mm-attention-backend=fa3 \
           --disable-fast-image-processor \
           --cuda-graph-max-bs=256 \
-          --max-running-requests=300
+          --max-running-requests=300 \
+          --limit-mm-data-per-request='{"image": 10}'
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
