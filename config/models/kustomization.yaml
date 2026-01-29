@@ -83,8 +83,8 @@ resources:
   - lmms-lab/llava-onevision-qwen2-7b-ov.yaml
 
   # lmsys
-  - lmsys/gpt-oss-120b.yaml
-  - lmsys/gpt-oss-20b.yaml
+  - lmsys/vicuna-7b-v1-5.yaml
+  - lmsys/vicuna-13b-v1-5.yaml
 
   # meta
   - meta/Llama-3-70B-Instruct.yaml

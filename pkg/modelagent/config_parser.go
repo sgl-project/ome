@@ -447,11 +447,11 @@ Fields set:
 
 Returns a pointer to the created Artifact.
 */
-func (p *ModelConfigParser) buildArtifactAttribute(sha string, matchedParentName string, parentPath string) *Artifact {
+func (p *ModelConfigParser) buildArtifactAttribute(sha string, matchedParentName string, parentPath string, childrenPaths []string) *Artifact {
 	artifact := Artifact{
 		Sha:           sha,
 		ParentPath:    map[string]string{matchedParentName: parentPath},
-		ChildrenPaths: make([]string, 0),
+		ChildrenPaths: childrenPaths,
 	}
 	return &artifact
 }

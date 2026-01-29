@@ -205,7 +205,7 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 	}
 
 	// Add preferred node affinity for model readiness using the shared utility function
-	isvcutils.AddPreferredNodeAffinityForModel(podSpec, b.BaseModelMeta)
+	isvcutils.AddNodeSelectorForModelReadyNode(podSpec, b.BaseModelMeta)
 
 	// Add node selector merged from AcceleratorClass if applicable
 	// Only add mergedNodeSelector to engine and decoder component.
@@ -259,45 +259,50 @@ func MergeRuntimeArgumentsOverride(b *BaseComponentFields, container *corev1.Con
 	// append arg var from runtime spec if it is specified
 	if b.SupportedModelFormat != nil && b.SupportedModelFormat.AcceleratorConfig != nil && b.AcceleratorClassName != "" {
 		acceleratorModelConfig := b.SupportedModelFormat.GetAcceleratorConfig(b.AcceleratorClassName)
-		argsOverride := acceleratorModelConfig.RuntimeArgsOverride
-		container.Args = isvcutils.MergeMultilineArgs(container.Args, argsOverride)
+		if acceleratorModelConfig != nil {
+			argsOverride := acceleratorModelConfig.RuntimeArgsOverride
+			container.Args = isvcutils.MergeArgs(container.Args, argsOverride)
 
-		// if runtime argument override has TensorParallelism, update the args accordingly
-		if acceleratorModelConfig.TensorParallelismOverride != nil {
-			tensorParallelismConfig := acceleratorModelConfig.TensorParallelismOverride
+			// if runtime argument override has TensorParallelism, update the args accordingly
+			// it will be in container.command or container.args
+			// check these two places
+			if acceleratorModelConfig.TensorParallelismOverride != nil {
+				tensorParallelismConfig := acceleratorModelConfig.TensorParallelismOverride
 
-			// Override tensor parallel size if specified
-			if tensorParallelismConfig.TensorParallelSize != nil && *tensorParallelismConfig.TensorParallelSize > 0 {
-				var updated bool
-				// Check --tp-size first, it is the parameter used in sglang
-				container.Args, updated = isvcutils.OverrideIntParam(container.Args, "--tp-size", *tensorParallelismConfig.TensorParallelSize)
-				if !updated {
-					// Check --tp next, it is the alias of --tp-size in sglang
-					container.Args, updated = isvcutils.OverrideIntParam(container.Args, "--tp", *tensorParallelismConfig.TensorParallelSize)
+				// Override tensor parallel size if specified
+				// --tp-size and --tp are parameters used in sglang
+				// --tensor-parallel-size is the parameter used in vllm
+				if tensorParallelismConfig.TensorParallelSize != nil && *tensorParallelismConfig.TensorParallelSize > 0 {
+					overrideParam(container, []string{"--tp-size", "--tp", "--tensor-parallel-size"}, *tensorParallelismConfig.TensorParallelSize)
 				}
-				if !updated {
-					// If --tp-size doesn't exist, check --tensor-parallel-size, it is the parameter used in vllm
-					container.Args, _ = isvcutils.OverrideIntParam(container.Args, "--tensor-parallel-size", *tensorParallelismConfig.TensorParallelSize)
-				}
-			}
-
-			// Override pipeline parallel size if specified
-			if tensorParallelismConfig.PipelineParallelSize != nil && *tensorParallelismConfig.PipelineParallelSize > 0 {
-				var updated bool
-				// Check --pp-size first, it is the parameter used in sglang
-				container.Args, updated = isvcutils.OverrideIntParam(container.Args, "--pp-size", *tensorParallelismConfig.PipelineParallelSize)
-				if !updated {
-					// Check --pp next, it is the alias of --pp-size in sglang
-					container.Args, updated = isvcutils.OverrideIntParam(container.Args, "--pp", *tensorParallelismConfig.PipelineParallelSize)
-				}
-				if !updated {
-					// If --pp-size doesn't exist, check --pipeline-parallel-size
-					container.Args, _ = isvcutils.OverrideIntParam(container.Args, "--pipeline-parallel-size", *tensorParallelismConfig.PipelineParallelSize)
+				// Override pipeline parallel size if specified
+				// --pp-size and --pp are parameters used in sglang
+				// --pipeline-parallel-size is parameter used in vllm
+				if tensorParallelismConfig.PipelineParallelSize != nil && *tensorParallelismConfig.PipelineParallelSize > 0 {
+					overrideParam(container, []string{"--pp-size", "--pp", "--pipeline-parallel-size"}, *tensorParallelismConfig.PipelineParallelSize)
 				}
 			}
 		}
 	}
+}
 
+func overrideParam(container *corev1.Container, aliases []string, value int64) {
+	var updated bool
+	// First, try to override in container.Args
+	for _, alias := range aliases {
+		container.Args, updated = isvcutils.OverrideArgParam(container.Args, alias, value)
+		if updated {
+			return // Found and updated in Args
+		}
+	}
+
+	// If not found in Args, try to override in container.Command
+	for _, alias := range aliases {
+		container.Command, updated = isvcutils.OverrideCommandParam(container.Command, alias, value)
+		if updated {
+			return // Found and updated in Command
+		}
+	}
 }
 
 // isResourcesUnspecified checks if the resource requirements are unspecified

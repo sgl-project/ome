@@ -175,58 +175,6 @@ func TestAcceleratorClass_Reconcile_MatchMemoryGB(t *testing.T) {
 	g.Expect(curr.Status.Nodes).NotTo(ContainElement("node-b"))
 }
 
-func TestAcceleratorClass_Reconcile_MatchCapabilities(t *testing.T) {
-	g := NewWithT(t)
-
-	scheme := runtime.NewScheme()
-	g.Expect(v1beta1.AddToScheme(scheme)).To(Succeed())
-	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
-
-	ac := &v1beta1.AcceleratorClass{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-ac-capabilities"},
-		Spec: v1beta1.AcceleratorClassSpec{
-			Discovery: v1beta1.AcceleratorDiscovery{NodeSelector: map[string]string{"accel": "nvidia"}},
-			Capabilities: v1beta1.AcceleratorCapabilities{
-				ComputeCapability: "7",
-			},
-		},
-	}
-
-	nodeA := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "node-a", Labels: map[string]string{"accel": "nvidia"}},
-		Status: corev1.NodeStatus{
-			Capacity: corev1.ResourceList{
-				corev1.ResourceName(constants.NvidiaGPUResourceType): resource.MustParse("8"),
-			},
-		},
-	}
-	nodeB := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "node-b", Labels: map[string]string{"accel": "nvidia"}},
-		Status: corev1.NodeStatus{
-			Capacity: corev1.ResourceList{
-				corev1.ResourceName(constants.NvidiaGPUResourceType): resource.MustParse("6"),
-			},
-		},
-	}
-
-	c := ctrlclientfake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(ac, nodeA, nodeB).
-		WithStatusSubresource(&v1beta1.AcceleratorClass{}).
-		Build()
-
-	reconciler := &AcceleratorClassReconciler{Client: c, Log: ctrl.Log.WithName("AcceleratorClassTest"), Scheme: scheme, Recorder: record.NewFakeRecorder(5)}
-
-	ctx := context.TODO()
-	_, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: ac.Name}})
-	g.Expect(err).NotTo(HaveOccurred())
-
-	curr := &v1beta1.AcceleratorClass{}
-	g.Expect(c.Get(ctx, types.NamespacedName{Name: ac.Name}, curr)).To(Succeed())
-	g.Expect(curr.Status.AvailableNodes).To(Equal(int32(1)))
-	g.Expect(curr.Status.Nodes).To(ContainElement("node-a"))
-}
-
 func TestAcceleratorClass_Reconcile_DoesNotUpdateTimestampOnNoChange(t *testing.T) {
 	g := NewWithT(t)
 
@@ -295,20 +243,4 @@ func Test_getGPUCapacity_Helper(t *testing.T) {
 	g.Expect(byRes).To(HaveKeyWithValue("nvidia.com/mig-1g.10gb", int64(4)))
 	g.Expect(byRes).To(HaveKeyWithValue("amd.com/gpu", int64(1)))
 	g.Expect(byRes).To(HaveKeyWithValue("gpu.intel.com/cards", int64(3)))
-}
-
-func Test_nodeMatchCapabilities_GPUCount(t *testing.T) {
-	g := NewWithT(t)
-
-	ac := &v1beta1.AcceleratorClass{
-		Spec: v1beta1.AcceleratorClassSpec{
-			Capabilities: v1beta1.AcceleratorCapabilities{ComputeCapability: "1"},
-		},
-	}
-
-	node := &corev1.Node{Status: corev1.NodeStatus{Capacity: corev1.ResourceList{corev1.ResourceName(constants.NvidiaGPUResourceType): resource.MustParse("1")}}}
-	g.Expect(nodeMatchCapabilities(ac, node)).To(BeTrue())
-
-	ac.Spec.Capabilities.ComputeCapability = "2"
-	g.Expect(nodeMatchCapabilities(ac, node)).To(BeFalse())
 }

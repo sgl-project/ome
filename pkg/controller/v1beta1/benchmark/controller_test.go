@@ -707,26 +707,10 @@ func TestBenchmarkJobReconciler_addNodeSelectorFromInferenceService(t *testing.T
 			assert.NoError(t, err)
 
 			if tt.expectAffinity {
-				assert.NotNil(t, podSpec.Affinity, "Affinity should not be nil")
-				assert.NotNil(t, podSpec.Affinity.NodeAffinity, "NodeAffinity should not be nil")
-
-				preferredTerms := podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
-				assert.NotEmpty(t, preferredTerms, "PreferredDuringSchedulingIgnoredDuringExecution should not be empty")
-
-				// Check that the expected label key exists
-				found := false
-				for _, term := range preferredTerms {
-					for _, expr := range term.Preference.MatchExpressions {
-						if expr.Key == tt.expectLabelKey {
-							found = true
-							assert.Equal(t, corev1.NodeSelectorOpIn, expr.Operator)
-							assert.Contains(t, expr.Values, "Ready")
-							assert.Equal(t, int32(100), term.Weight)
-							break
-						}
-					}
-				}
-				assert.True(t, found, "Expected label key %s not found in affinity terms", tt.expectLabelKey)
+				assert.NotNil(t, podSpec.NodeSelector, "NodeSelector should not be nil")
+				value, found := podSpec.NodeSelector[tt.expectLabelKey]
+				assert.True(t, found, "Expected label key %s not found in node selector", tt.expectLabelKey)
+				assert.Equal(t, "Ready", value)
 			}
 		})
 	}
@@ -816,28 +800,14 @@ func TestBenchmarkJobReconciler_createPodSpec_NodeAffinity(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, podSpec)
 
-	// Verify node affinity was added
-	assert.NotNil(t, podSpec.Affinity, "Affinity should not be nil")
-	assert.NotNil(t, podSpec.Affinity.NodeAffinity, "NodeAffinity should not be nil")
-
-	preferredTerms := podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
-	assert.NotEmpty(t, preferredTerms, "PreferredDuringSchedulingIgnoredDuringExecution should not be empty")
+	// Verify node selector was added
+	assert.NotNil(t, podSpec.NodeSelector, "NodeSelector should not be nil")
 
 	// Check that the expected label key exists
 	expectedLabelKey := "models.ome.io/default.basemodel.test-model"
-	found := false
-	for _, term := range preferredTerms {
-		for _, expr := range term.Preference.MatchExpressions {
-			if expr.Key == expectedLabelKey {
-				found = true
-				assert.Equal(t, corev1.NodeSelectorOpIn, expr.Operator)
-				assert.Contains(t, expr.Values, "Ready")
-				assert.Equal(t, int32(100), term.Weight)
-				break
-			}
-		}
-	}
-	assert.True(t, found, "Expected label key %s not found in affinity terms", expectedLabelKey)
+	value, found := podSpec.NodeSelector[expectedLabelKey]
+	assert.True(t, found, "Expected label key %s not found in node selector", expectedLabelKey)
+	assert.Equal(t, "Ready", value)
 }
 
 func TestBenchmarkJobReconciler_createPodSpec_NodeAffinity_WithPodOverride(t *testing.T) {
@@ -932,28 +902,14 @@ func TestBenchmarkJobReconciler_createPodSpec_NodeAffinity_WithPodOverride(t *te
 	// Verify PodOverride was applied (custom image)
 	assert.Equal(t, "custom-image:latest", podSpec.Containers[0].Image)
 
-	// Verify node affinity was preserved after PodOverride was applied
-	assert.NotNil(t, podSpec.Affinity, "Affinity should not be nil after PodOverride")
-	assert.NotNil(t, podSpec.Affinity.NodeAffinity, "NodeAffinity should not be nil after PodOverride")
-
-	preferredTerms := podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
-	assert.NotEmpty(t, preferredTerms, "PreferredDuringSchedulingIgnoredDuringExecution should not be empty after PodOverride")
+	// Verify node selector was preserved after PodOverride was applied
+	assert.NotNil(t, podSpec.NodeSelector, "NodeSelector should not be nil after PodOverride")
 
 	// Check that the expected label key exists
 	expectedLabelKey := "models.ome.io/default.basemodel.test-model"
-	found := false
-	for _, term := range preferredTerms {
-		for _, expr := range term.Preference.MatchExpressions {
-			if expr.Key == expectedLabelKey {
-				found = true
-				assert.Equal(t, corev1.NodeSelectorOpIn, expr.Operator)
-				assert.Contains(t, expr.Values, "Ready")
-				assert.Equal(t, int32(100), term.Weight)
-				break
-			}
-		}
-	}
-	assert.True(t, found, "Expected label key %s not found in affinity terms after PodOverride", expectedLabelKey)
+	value, found := podSpec.NodeSelector[expectedLabelKey]
+	assert.True(t, found, "Expected label key %s not found in node selector after PodOverride", expectedLabelKey)
+	assert.Equal(t, "Ready", value)
 }
 
 func TestBenchmarkJobReconciler_updateStatus(t *testing.T) {

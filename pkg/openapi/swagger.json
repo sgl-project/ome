@@ -216,8 +216,12 @@
           "type": "integer",
           "format": "int64"
         },
-        "minComputeCapability": {
-          "description": "MinComputeCapability in TFLOPS",
+        "minArchitectureVersion": {
+          "description": "MinArchitectureVersion Compute capability (NVIDIA) or equivalent",
+          "type": "string"
+        },
+        "minComputePerformanceTFLOPS": {
+          "description": "MinComputePerformanceTFLOPS in TFLOPS",
           "type": "integer",
           "format": "int64"
         },
@@ -225,6 +229,15 @@
           "description": "MinMemory in GB",
           "type": "integer",
           "format": "int64"
+        },
+        "preferredPrecisions": {
+          "description": "PreferredPrecisions lists numeric precisions in order of preference Examples: [\"fp8\", \"fp16\", \"fp32\"]",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "requiredFeatures": {
           "description": "RequiredFeatures that must be present",
@@ -390,8 +403,12 @@
           },
           "x-kubernetes-list-type": "atomic"
         },
-        "minComputeCapability": {
-          "description": "MinComputeCapability specifies minimum compute capability in TFLOPS",
+        "minArchitectureVersion": {
+          "description": "MinArchitectureVersion Compute capability (NVIDIA) or equivalent",
+          "type": "string"
+        },
+        "minComputePerformanceTFLOPS": {
+          "description": "MinComputePerformanceTFLOPS specifies minimum compute capability in TFLOPS",
           "type": "integer",
           "format": "int64"
         },
@@ -2165,6 +2182,14 @@
       "description": "KedaConfig stores the configuration settings for KEDA autoscaling within the InferenceService. It includes fields like the Prometheus server address, custom query, scaling threshold, and operator.",
       "type": "object",
       "properties": {
+        "authModes": {
+          "description": "AuthModes specifies the authentication mode(s) for the Prometheus scaler. Common values include: \"basic\", \"tls\", \"bearer\", \"custom\". Multiple modes can be specified comma-separated (e.g., \"tls,basic\").\n\nExample:\n  \"basic\" - Use basic authentication with username/password from TriggerAuthentication",
+          "type": "string"
+        },
+        "authenticationRef": {
+          "description": "AuthenticationRef references a TriggerAuthentication or ClusterTriggerAuthentication resource that contains the authentication configuration for the Prometheus server. This is required when the Prometheus server requires authentication (e.g., Grafana Cloud).\n\nExample:\n  authenticationRef:\n    name: grafana-cloud-auth\n    kind: TriggerAuthentication",
+          "$ref": "#/definitions/v1beta1.ScalerAuthenticationRef"
+        },
         "customPromQuery": {
           "description": "CustomPromQuery defines a custom Prometheus query that KEDA will execute to evaluate the desired metric for scaling. This query should return a single numerical value that represents the metric to be monitored.\n\nExample:\n  avg_over_time(http_requests_total{service=\"llama\"}[5m])",
           "type": "string"
@@ -4265,6 +4290,21 @@
         "workingDir": {
           "description": "Container's working directory. If not specified, the container runtime's default will be used, which might be configured in the container image. Cannot be updated.",
           "type": "string"
+        }
+      }
+    },
+    "v1beta1.ScalerAuthenticationRef": {
+      "description": "ScalerAuthenticationRef points to a KEDA TriggerAuthentication or ClusterTriggerAuthentication resource that contains the credentials for authenticating with the scaler's target (e.g., Prometheus server).",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "Kind of the authentication resource being referenced. Valid values are \"TriggerAuthentication\" (namespace-scoped) or \"ClusterTriggerAuthentication\" (cluster-scoped).",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the TriggerAuthentication or ClusterTriggerAuthentication resource.",
+          "type": "string",
+          "default": ""
         }
       }
     },

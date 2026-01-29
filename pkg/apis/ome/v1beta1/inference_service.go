@@ -82,9 +82,13 @@ type AcceleratorConstraints struct {
 	// +optional
 	MaxMemory *int64 `json:"maxMemory,omitempty"`
 
-	// MinComputeCapability in TFLOPS
+	// MinComputePerformanceTFLOPS in TFLOPS
 	// +optional
-	MinComputeCapability *int64 `json:"minComputeCapability,omitempty"`
+	MinComputePerformanceTFLOPS *int64 `json:"minComputePerformanceTFLOPS,omitempty"`
+
+	//MinArchitectureVersion Compute capability (NVIDIA) or equivalent
+	// +optional
+	MinArchitectureVersion *string `json:"minArchitectureVersion,omitempty"`
 
 	// RequiredFeatures that must be present
 	// +optional
@@ -101,6 +105,12 @@ type AcceleratorConstraints struct {
 	// +optional
 	// +listType=atomic
 	ArchitectureFamilies []string `json:"architectureFamilies,omitempty"`
+
+	// PreferredPrecisions lists numeric precisions in order of preference
+	// Examples: ["fp8", "fp16", "fp32"]
+	// +optional
+	// +listType=atomic
+	PreferredPrecisions []string `json:"preferredPrecisions,omitempty"`
 }
 
 // AcceleratorSelectionPolicy defines how to select among matching accelerators

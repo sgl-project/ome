@@ -190,9 +190,14 @@ func (in *AcceleratorConstraints) DeepCopyInto(out *AcceleratorConstraints) {
 		*out = new(int64)
 		**out = **in
 	}
-	if in.MinComputeCapability != nil {
-		in, out := &in.MinComputeCapability, &out.MinComputeCapability
+	if in.MinComputePerformanceTFLOPS != nil {
+		in, out := &in.MinComputePerformanceTFLOPS, &out.MinComputePerformanceTFLOPS
 		*out = new(int64)
+		**out = **in
+	}
+	if in.MinArchitectureVersion != nil {
+		in, out := &in.MinArchitectureVersion, &out.MinArchitectureVersion
+		*out = new(string)
 		**out = **in
 	}
 	if in.RequiredFeatures != nil {
@@ -207,6 +212,11 @@ func (in *AcceleratorConstraints) DeepCopyInto(out *AcceleratorConstraints) {
 	}
 	if in.ArchitectureFamilies != nil {
 		in, out := &in.ArchitectureFamilies, &out.ArchitectureFamilies
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
+	if in.PreferredPrecisions != nil {
+		in, out := &in.PreferredPrecisions, &out.PreferredPrecisions
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
@@ -414,9 +424,14 @@ func (in *AcceleratorRequirements) DeepCopyInto(out *AcceleratorRequirements) {
 		*out = new(int64)
 		**out = **in
 	}
-	if in.MinComputeCapability != nil {
-		in, out := &in.MinComputeCapability, &out.MinComputeCapability
+	if in.MinComputePerformanceTFLOPS != nil {
+		in, out := &in.MinComputePerformanceTFLOPS, &out.MinComputePerformanceTFLOPS
 		*out = new(int64)
+		**out = **in
+	}
+	if in.MinArchitectureVersion != nil {
+		in, out := &in.MinArchitectureVersion, &out.MinArchitectureVersion
+		*out = new(string)
 		**out = **in
 	}
 	if in.RequiredFeatures != nil {
