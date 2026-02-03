@@ -188,6 +188,14 @@ cohere:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.7.6-02132025"
 
+  rerankv4_0_fastImage:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.11.0-12302025"
+
+  rerankv4_0_proImage:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.11.0-12302025"
+
   command1Image:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.4.6-ms-1112-2302"
