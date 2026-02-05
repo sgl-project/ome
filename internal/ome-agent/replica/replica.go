@@ -2,6 +2,7 @@ package replica
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -83,6 +84,7 @@ func (r *ReplicaAgent) Start() error {
 
 	sourceObjs, err := r.listSourceObjects()
 	if err != nil {
+		r.writeTerminationLog(err.Error())
 		return err
 	}
 
@@ -90,10 +92,37 @@ func (r *ReplicaAgent) Start() error {
 
 	replicatorImp, err := NewReplicator(r)
 	if err != nil {
+		r.writeTerminationLog(err.Error())
 		return err
 	}
 
-	return replicatorImp.Replicate(sourceObjs)
+	err = replicatorImp.Replicate(sourceObjs)
+	if err != nil {
+		r.writeTerminationLog(err.Error())
+	}
+	return err
+}
+
+func (r *ReplicaAgent) writeTerminationLog(message string) {
+	f, err := os.OpenFile("/dev/termination-log", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		if _, ferr := fmt.Fprintf(os.Stderr, "Failed to open /dev/termination-log: %v\n", err); ferr != nil {
+			r.Logger.Errorf("Failed to write error to os.Stderr: %v", ferr)
+		}
+		return
+	}
+
+	if _, err = fmt.Fprintln(f, message); err != nil {
+		if _, ferr := fmt.Fprintf(os.Stderr, "Failed to write to /dev/termination-log: %v\n", err); ferr != nil {
+			r.Logger.Errorf("Failed to write error to os.Stderr: %v", ferr)
+		}
+	}
+
+	if err = f.Close(); err != nil {
+		if _, ferr := fmt.Fprintf(os.Stderr, "Failed to close /dev/termination-log: %v\n", err); ferr != nil {
+			r.Logger.Errorf("Failed to write error to os.Stderr: %v", ferr)
+		}
+	}
 }
 
 func (r *ReplicaAgent) listSourceObjects() ([]common.ReplicationObject, error) {
