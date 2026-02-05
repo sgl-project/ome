@@ -292,6 +292,7 @@ const (
 	ModelCapabilityTextToSpeech     ModelCapability = "TEXT_TO_SPEECH"
 	ModelCapabilitySpeechToText     ModelCapability = "SPEECH_TO_TEXT"
 	ModelCapabilityAudioTranslation ModelCapability = "AUDIO_TRANSLATION"
+	ModelCapabilityRealtime         ModelCapability = "REALTIME"
 	ModelCapabilityUnknown          ModelCapability = ""
 )
 
