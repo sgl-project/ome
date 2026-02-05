@@ -38,6 +38,7 @@ type ModelMetadata struct {
 	ModelConfiguration        []byte
 	DecodedModelConfiguration map[string]interface{} `json:"DecodedModelConfiguration,omitempty"`
 	Quantization              v1beta1.ModelQuantization
+	DiffusionPipeline         *v1beta1.DiffusionPipelineSpec
 	Artifact                  Artifact `json:"Artifact,omitempty"`
 }
 
