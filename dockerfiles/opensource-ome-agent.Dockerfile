@@ -32,6 +32,11 @@ RUN if [ -n "$COMMIT_HASH" ]; then \
 
 WORKDIR /ome
 
+# Downgrade go.mod directive
+ENV GOTOOLCHAIN=local
+RUN go mod edit -go=1.24
+RUN go mod tidy
+
 # Set env so Rust picks up OpenSSL 3
 ENV OPENSSL_DIR=/usr \
     OPENSSL_LIB_DIR=/usr/lib64/openssl3 \
