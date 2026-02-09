@@ -54,7 +54,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: ord.ocir.io/idqj093njucb/official-sgl:v0.5.3.post1.8c4b18c-cu129
+      image: ord.ocir.io/idqj093njucb/official-sgl:v0.5.7.7446814-cu129
       ports:
         - containerPort: 8080
           name: http1
@@ -65,29 +65,34 @@ spec:
         - --
       args:
         - |
-          python3 -m sglang.launch_server \
+          python3 -m sglang_router.launch_server \
           --host=0.0.0.0 \
           --port={{ .Values.sglang.port }} \
           --enable-metrics \
           --log-requests \
           --log-requests-level=1 \
           --model-path="$MODEL_PATH" \
-          --tp 1 \
+          --tp=1 \
           --mem-frac=0.9 \
           --tool-call-parser=gpt-oss \
           --reasoning-parser=gpt-oss \
-          --context-length=131072
+          --served-model-name="gpt-oss-20b" \
+          --grpc-mode \
+          --enable-hierarchical-cache --hicache-size=80 --enable-cache-report \
+          --prefill-attention-backend=triton --decode-attention-backend=triton \
+          --hicache-io-backend=kernel \
+          --hicache-mem-layout=layer_first
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
           cpu: 10
-          memory: 30Gi
+          memory: 128Gi
           nvidia.com/gpu: 1
         limits:
           cpu: 10
-          memory: 30Gi
+          memory: 128Gi
           nvidia.com/gpu: 1
 
       readinessProbe:
