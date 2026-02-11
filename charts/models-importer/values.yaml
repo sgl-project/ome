@@ -307,6 +307,11 @@ cohere-command-r-plus-082024-v1-6-128k:
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "LARGE_COHERE_V2_2"
 
+cohere-command-r-plus-082024-v2-0-128k:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "LARGE_COHERE_V3"
+
 cohere-command-r-plus-082024-v1-7-0-a100-tp4-64k-40g:
   enabled: false
   lifecyclePhase: "ACTIVE"
