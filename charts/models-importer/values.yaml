@@ -584,6 +584,16 @@ gpt-5-2-chat-latest:
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
+gpt-5-2-codex:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-3-codex:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
 gpt-oss-120b:
   enabled: false
   lifecyclePhase: "ACTIVE"
