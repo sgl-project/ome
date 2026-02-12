@@ -144,28 +144,23 @@ spec:
           name: http1
           protocol: TCP
       command:
-        - python3
-        - -m
-        - sglang.launch_server
-        - --host
-        - "0.0.0.0"
-        - --port
-        - "8080"
-        - --enable-metrics
-        - --log-requests
-        - --model-path
-        - $(MODEL_PATH)
-        - --tp-size
-        - "2"
-        - --mem-frac
-        - "0.9"
-        - --served-model-name
-        - vllm-model
-        - --trust-remote-code
-        - --reasoning-parser
-        - nano_v3
-        - --tool-call-parser
-        - qwen3_coder
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m sglang.launch_server \
+          --host=0.0.0.0 \
+          --port={{ .Values.sglang.port }} \
+          --enable-metrics \
+          --log-requests \
+          --model-path="$MODEL_PATH" \
+          --tp 2 \
+          --mem-frac=0.9 \
+          --served-model-name=vllm-model \
+          --trust-remote-code \
+          --reasoning-parser=nano_v3 \
+          --tool-call-parser=qwen3_coder
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -256,28 +251,23 @@ spec:
           name: http1
           protocol: TCP
       command:
-        - python3
-        - -m
-        - sglang.launch_server
-        - --host
-        - "0.0.0.0"
-        - --port
-        - "8080"
-        - --enable-metrics
-        - --log-requests
-        - --model-path
-        - $(MODEL_PATH)
-        - --tp-size
-        - "2"
-        - --mem-frac
-        - "0.9"
-        - --served-model-name
-        - vllm-model
-        - --trust-remote-code
-        - --reasoning-parser
-        - nano_v3
-        - --tool-call-parser
-        - qwen3_coder
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m sglang.launch_server \
+          --host=0.0.0.0 \
+          --port={{ .Values.sglang.port }} \
+          --enable-metrics \
+          --log-requests \
+          --model-path="$MODEL_PATH" \
+          --tp 2 \
+          --mem-frac=0.9 \
+          --served-model-name=vllm-model \
+          --trust-remote-code \
+          --reasoning-parser=nano_v3 \
+          --tool-call-parser=qwen3_coder
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
