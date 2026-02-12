@@ -39,7 +39,7 @@ spec:
   additionalMetadata:
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: SMALL_COHERE
+        - name: SMALL_COHERE_V2
           quotaUnit: 1
           default: true
     internalName: "command-r-082024-v2-0-tp1-128k"
