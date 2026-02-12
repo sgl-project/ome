@@ -8,6 +8,12 @@ A Helm chart for importing ome base models
 
 | Key                                                                 | Type   | Default                                      | Description |
 |---------------------------------------------------------------------|--------|----------------------------------------------|-------------|
+| claude-opus-4-6.enabled                                             | bool   | `false`                                      |             |
+| claude-opus-4-6.lifecyclePhase                                      | string | `"ACTIVE"`                                   |             |
+| claude-sonnet-4-5.enabled                                           | bool   | `false`                                      |             |
+| claude-sonnet-4-5.lifecyclePhase                                    | string | `"ACTIVE"`                                   |             |
+| claude-haiku-4-5.enabled                                            | bool   | `false`                                      |             |
+| claude-haiku-4-5.lifecyclePhase                                     | string | `"ACTIVE"`                                   |             |
 | cohere-command-1-52b-v14-2-0.enabled                                | bool   | `false`                                      |             |
 | cohere-command-1-52b-v14-2-0.lifecyclePhase                         | string | `"ONDEMAND_SERVING_DISABLED"`                |             |
 | cohere-command-1-52b-v14-2-gen.enabled                              | bool   | `false`                                      |             |
