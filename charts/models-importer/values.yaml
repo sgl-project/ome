@@ -209,6 +209,11 @@ nl2sql-llama-3-1-8b-ft:
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
 
+fusion-llama-3-1-8b-accountingperiod-bql-ner-moduletrigger:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "SMALL_GENERIC_V2"
+
 command-a-032025:
   enabled: false
   lifecyclePhase: "ACTIVE"
