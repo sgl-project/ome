@@ -503,6 +503,124 @@ func TestIsPrefixSupported(t *testing.T) {
 	}
 }
 
+func TestFilterPodOnlyAnnotations(t *testing.T) {
+	scenarios := map[string]struct {
+		annotations map[string]string
+		expected    map[string]string
+	}{
+		"NilAnnotations": {
+			annotations: nil,
+			expected:    nil,
+		},
+		"EmptyAnnotations": {
+			annotations: map[string]string{},
+			expected:    map[string]string{},
+		},
+		"FilterGrafanaAnnotations": {
+			annotations: map[string]string{
+				"k8s.grafana.com/scrape": "true",
+				"k8s.grafana.com/port":   "8080",
+				"ome.io/base-model-name": "test-model",
+			},
+			expected: map[string]string{
+				"ome.io/base-model-name": "test-model",
+			},
+		},
+		"FilterLokiAnnotations": {
+			annotations: map[string]string{
+				"loki.grafana.com/scrape":     "true",
+				"loki.grafana.com/log-format": "json",
+				"meta.helm.sh/release-name":   "test",
+			},
+			expected: map[string]string{
+				"meta.helm.sh/release-name": "test",
+			},
+		},
+		"FilterPrometheusAnnotations": {
+			annotations: map[string]string{
+				"prometheus.io/scrape":      "true",
+				"prometheus.io/port":        "8080",
+				"prometheus.io/path":        "/metrics",
+				"meta.helm.sh/release-name": "test",
+			},
+			expected: map[string]string{
+				"meta.helm.sh/release-name": "test",
+			},
+		},
+		"FilterNetworkingGKEAnnotations": {
+			annotations: map[string]string{
+				"networking.gke.io/default-interface": "eth0",
+				"networking.gke.io/interfaces":        "[{\"interfaceName\":\"eth0\"}]",
+				"meta.helm.sh/release-name":           "test",
+			},
+			expected: map[string]string{
+				"meta.helm.sh/release-name": "test",
+			},
+		},
+		"FilterRDMAAnnotations": {
+			annotations: map[string]string{
+				"rdma.ome.io/auto-inject": "true",
+				"rdma.ome.io/profile":     "default",
+				"ome.io/base-model-name":  "test-model",
+			},
+			expected: map[string]string{
+				"ome.io/base-model-name": "test-model",
+			},
+		},
+		"FilterInjectionAnnotations": {
+			annotations: map[string]string{
+				constants.ModelInitInjectionKey:        "true",
+				constants.FineTunedAdapterInjectionKey: "weight-name",
+				constants.ServingSidecarInjectionKey:   "true",
+				"ome.io/base-model-name":               "test-model",
+				"ome.io/serving-runtime":               "test-runtime",
+			},
+			expected: map[string]string{
+				"ome.io/base-model-name": "test-model",
+				"ome.io/serving-runtime": "test-runtime",
+			},
+		},
+		"PreserveNonPodOnlyAnnotations": {
+			annotations: map[string]string{
+				"ome.io/deploymentMode":     "RawDeployment",
+				"ome.io/service-type":       "ClusterIP",
+				"custom.annotation/key":     "value",
+				"meta.helm.sh/release-name": "test",
+			},
+			expected: map[string]string{
+				"ome.io/deploymentMode":     "RawDeployment",
+				"ome.io/service-type":       "ClusterIP",
+				"custom.annotation/key":     "value",
+				"meta.helm.sh/release-name": "test",
+			},
+		},
+		"MixedAnnotations": {
+			annotations: map[string]string{
+				"k8s.grafana.com/scrape":        "true",
+				"networking.gke.io/interfaces":  "[...]",
+				constants.ModelInitInjectionKey: "true",
+				"ome.io/base-model-name":        "test-model",
+				"ome.io/service-type":           "ClusterIP",
+				"meta.helm.sh/release-name":     "test",
+			},
+			expected: map[string]string{
+				"ome.io/base-model-name":    "test-model",
+				"ome.io/service-type":       "ClusterIP",
+				"meta.helm.sh/release-name": "test",
+			},
+		},
+	}
+
+	for name, scenario := range scenarios {
+		t.Run(name, func(t *testing.T) {
+			result := FilterPodOnlyAnnotations(scenario.annotations)
+			if diff := cmp.Diff(scenario.expected, result); diff != "" {
+				t.Errorf("Test %q unexpected result (-want +got): %v", name, diff)
+			}
+		})
+	}
+}
+
 // Helper to assert a path is a symlink with expected relative target and resolves to the absolute target.
 func assertSymlink(t *testing.T, linkPath, expectedRelTarget, absoluteTarget string) {
 	t.Helper()

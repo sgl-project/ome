@@ -55,6 +55,24 @@ func Includes(slice []string, value string) bool {
 	return false
 }
 
+// FilterPodOnlyAnnotations removes annotations that should only be applied to Pods,
+// not to Services. This is used when creating Kubernetes Service objects to prevent
+// pod-specific annotations (like Grafana scraping, GKE networking, container injection)
+// from being applied to Services where they have no effect.
+//
+// The filtering is based on constants.PodOnlyAnnotationPrefixes which contains both
+// prefix patterns (e.g., "k8s.grafana.com/") and exact annotation keys.
+//
+// Returns nil if input is nil, otherwise returns a new map with pod-only annotations removed.
+func FilterPodOnlyAnnotations(annotations map[string]string) map[string]string {
+	if annotations == nil {
+		return nil
+	}
+	return Filter(annotations, func(key string) bool {
+		return !IsPrefixSupported(key, constants.PodOnlyAnnotationPrefixes)
+	})
+}
+
 func IncludesArg(slice []string, arg string) bool {
 	for _, v := range slice {
 		if v == arg || strings.HasPrefix(v, arg) {
