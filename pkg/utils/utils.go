@@ -259,3 +259,12 @@ func DerefString(s *string) string {
 	}
 	return ""
 }
+
+func ContainsAny(text string, patterns []string) bool {
+	for _, p := range patterns {
+		if strings.Contains(text, p) {
+			return true
+		}
+	}
+	return false
+}

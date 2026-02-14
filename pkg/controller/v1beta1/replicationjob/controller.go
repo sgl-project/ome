@@ -25,9 +25,8 @@ import (
 )
 
 const (
-	objectStorageReplicaCommand = "replica"
-	huggingFaceReplicaCommand   = "hf-download"
-	omeAgentConfigFilePath      = "/ome-agent.yaml"
+	replicaCommand         = "replica"
+	omeAgentConfigFilePath = "/ome-agent.yaml"
 )
 
 // +kubebuilder:rbac:groups=ome.io,resources=replicationjobs,verbs=get;list;watch;create;update;patch;delete
@@ -255,7 +254,7 @@ func (r *ReplicationJobReconciler) patchContainer(base, override v1.Container) (
 // buildJobArgs constructs the command line arguments for the ome-agent replica container.
 func (r *ReplicationJobReconciler) buildJobArgs() []string {
 	var args []string
-	args = append(args, objectStorageReplicaCommand)
+	args = append(args, replicaCommand)
 	args = append(args, "--config", omeAgentConfigFilePath, "--debug")
 	return args
 }
@@ -302,12 +301,33 @@ func (r *ReplicationJobReconciler) updateStatus(
 		}
 
 		// A job is considered failed if it either reaches its backoffLimit or has a failure condition.
-		// In this case, backoffLimit is set to 0 because retry behavior is managed by ome-agent.
+		// Here, backoffLimit is set to 0 because retry behavior is managed by ome-agent.
 		for _, cond := range job.Status.Conditions {
 			if cond.Type == batchv1.JobFailed && cond.Status == v1.ConditionTrue {
 				isFailed = true
 				completionTime = &cond.LastTransitionTime
-				status.Message = cond.Message
+
+				// Retrieve detailed error from pod (exit code and termination log)
+				rawMsg := r.getPodErrorInfo(ctx, replicationJob.Namespace, job.Name, log)
+				formattedMsg, errStatus := utils.FormatClientErrorAndStatus(rawMsg)
+				status.Message = formattedMsg
+
+				// Determine condition type and reason
+				condType := constants.StateReasonError
+				reason := constants.StateReasonError
+				if errStatus != "" {
+					condType = constants.ClientError
+					reason = errStatus
+				}
+
+				errorCondition := metav1.Condition{
+					Type:               condType,
+					Status:             metav1.ConditionTrue,
+					Reason:             reason,
+					Message:            formattedMsg,
+					LastTransitionTime: metav1.Now(),
+				}
+				status.Conditions = setOrUpdateCondition(status.Conditions, errorCondition)
 				break
 			}
 		}
@@ -367,14 +387,75 @@ func (r *ReplicationJobReconciler) updateStatus(
 	return r.Status().Update(ctx, replicationJob)
 }
 
+func setOrUpdateCondition(conditions []metav1.Condition, newCondition metav1.Condition) []metav1.Condition {
+	for i, cond := range conditions {
+		if cond.Type == newCondition.Type {
+			conditions[i] = newCondition
+			return conditions
+		}
+	}
+	return append(conditions, newCondition)
+}
+
 func (r *ReplicationJobReconciler) updateFailedStatus(ctx context.Context, replicationJob *v1beta1.ReplicationJob, log logr.Logger, err error) error {
 	replicationJob.Status.Status = v1beta1.ReplicationJobFailed
-	replicationJob.Status.Message = err.Error()
+	if replicationJob.Status.Message == "" {
+		replicationJob.Status.Message = err.Error()
+	}
 	if err := r.Status().Update(ctx, replicationJob); err != nil {
 		log.Error(err, "Failed to update replicationJob failed status")
 		return err
 	}
 	return nil
+}
+
+// getPodErrorInfo retrieves error information from the pod associated with the job.
+// It checks container termination messages and exit codes.
+func (r *ReplicationJobReconciler) getPodErrorInfo(ctx context.Context, namespace, jobName string, log logr.Logger) string {
+	// List pods with the job name as label selector
+	podList := &v1.PodList{}
+	labelSelector := client.MatchingLabels{
+		"job-name": jobName,
+	}
+	err := r.List(ctx, podList, client.InNamespace(namespace), labelSelector)
+	if err != nil {
+		msg := "Failed to list pods for job"
+		log.Error(err, msg, "job", jobName)
+		return msg
+	}
+
+	// Find the failed pod (usually the first one if job failed)
+	for _, pod := range podList.Items {
+		// Check container termination status for exit code and termination message
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			if containerStatus.State.Terminated != nil {
+				terminated := containerStatus.State.Terminated
+				if terminated.ExitCode != 0 {
+					if terminated.Message != "" {
+						log.Info("Found error in pod termination message", "pod", pod.Name, "container", containerStatus.Name, "exitCode", terminated.ExitCode)
+						log.Error(errors.New(terminated.Message), "pod terminated with error message", "pod", pod.Name, "job", jobName)
+						return terminated.Message
+					}
+					// Check termination reason as fallback
+					if terminated.Reason != "" {
+						return terminated.Reason
+					}
+				}
+			}
+			// Check waiting state for errors
+			if containerStatus.State.Waiting != nil {
+				waiting := containerStatus.State.Waiting
+				if waiting.Reason == constants.StateReasonError || waiting.Reason == constants.StateReasonCrashLoopBackOff {
+					if waiting.Message != "" {
+						return waiting.Message
+					}
+					return waiting.Reason
+				}
+			}
+		}
+	}
+
+	return ""
 }
 
 // SetupWithManager sets up the controller with the Manager.

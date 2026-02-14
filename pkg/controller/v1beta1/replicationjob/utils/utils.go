@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 
@@ -207,4 +208,30 @@ func ValidateStorageUris(source *v1beta1.StorageSpec, destination *v1beta1.Stora
 		return fmt.Errorf("destination storageType %v is not supported for replication", destStorageType)
 	}
 	return nil
+}
+
+func FormatClientErrorAndStatus(message string) (string, string) {
+	if message == "" {
+		return message, ""
+	}
+
+	msgLower := strings.ToLower(message)
+
+	unauthorizedPatterns := []string{"http 401", "401", "unauthorized"}
+	forbiddenPatterns := []string{"http 403", "403", "forbidden", "gated", "is gated", "requires authentication"}
+	notFoundPatterns := []string{"http 404", "404", "not found", "file not found"}
+
+	if utils.ContainsAny(msgLower, unauthorizedPatterns) {
+		return "Unauthorized: Authentication failed. Please check your HuggingFace authentication token.", constants.AuthFailed
+	}
+
+	if utils.ContainsAny(msgLower, forbiddenPatterns) {
+		return "Forbidden: Access denied. Please check your HuggingFace authentication token and repository permissions.", constants.PermissionDenied
+	}
+
+	if utils.ContainsAny(msgLower, notFoundPatterns) {
+		return "Not found: The requested model or file could not be found in the repository. Please verify the HuggingFace model or file name.", constants.NotFound
+	}
+
+	return message, ""
 }

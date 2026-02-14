@@ -46,6 +46,14 @@ var (
 	ReplicationJobLabel         = "replicationJob"
 )
 
+// Auth Error Constants
+var (
+	ClientError      = "ClientError"
+	AuthFailed       = "AuthFailed"
+	NotFound         = "NotFound"
+	PermissionDenied = "PermissionDenied"
+)
+
 // AI Platform Constants
 var (
 	AIPlatformConfigMapName = "aiplatform-config"

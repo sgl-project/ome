@@ -198,3 +198,69 @@ func TestValidateStorageUris(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatClientErrorAndStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		wantMsg    string
+		wantStatus string
+	}{
+		{
+			name:       "Empty message",
+			input:      "",
+			wantMsg:    "",
+			wantStatus: "",
+		},
+		{
+			name:       "Unauthorized - 401",
+			input:      "HTTP 401 error",
+			wantMsg:    "Unauthorized: Authentication failed. Please check your HuggingFace authentication token.",
+			wantStatus: constants.AuthFailed,
+		},
+		{
+			name:       "Unauthorized - word",
+			input:      "User is unauthorized to access this model",
+			wantMsg:    "Unauthorized: Authentication failed. Please check your HuggingFace authentication token.",
+			wantStatus: constants.AuthFailed,
+		},
+		{
+			name:       "Forbidden - 403",
+			input:      "http 403: forbidden",
+			wantMsg:    "Forbidden: Access denied. Please check your HuggingFace authentication token and repository permissions.",
+			wantStatus: constants.PermissionDenied,
+		},
+		{
+			name:       "Forbidden - gated",
+			input:      "The model is gated and requires authentication",
+			wantMsg:    "Forbidden: Access denied. Please check your HuggingFace authentication token and repository permissions.",
+			wantStatus: constants.PermissionDenied,
+		},
+		{
+			name:       "Not Found - 404",
+			input:      "HTTP 404",
+			wantMsg:    "Not found: The requested model or file could not be found in the repository. Please verify the HuggingFace model or file name.",
+			wantStatus: constants.NotFound,
+		},
+		{
+			name:       "Not Found - file not found",
+			input:      "file not found on server",
+			wantMsg:    "Not found: The requested model or file could not be found in the repository. Please verify the HuggingFace model or file name.",
+			wantStatus: constants.NotFound,
+		},
+		{
+			name:       "Other message",
+			input:      "some other error occurred",
+			wantMsg:    "some other error occurred",
+			wantStatus: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotMsg, gotStatus := FormatClientErrorAndStatus(tc.input)
+			assert.Equal(t, tc.wantMsg, gotMsg)
+			assert.Equal(t, tc.wantStatus, gotStatus)
+		})
+	}
+}

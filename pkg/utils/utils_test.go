@@ -562,3 +562,25 @@ func TestDerefString(t *testing.T) {
 		})
 	}
 }
+
+func TestContainsAny(t *testing.T) {
+	tests := []struct {
+		text     string
+		patterns []string
+		expected bool
+	}{
+		{"hello world", []string{"bye", "world"}, true},
+		{"hello world", []string{"bye", "goodbye"}, false},
+		{"hello world", []string{"lo", "xx"}, true},
+		{"hello world", []string{}, false},
+		{"", []string{"hello"}, false},
+		{"foo", []string{""}, true}, // empty substring always matches
+	}
+
+	for _, tt := range tests {
+		result := ContainsAny(tt.text, tt.patterns)
+		if result != tt.expected {
+			t.Errorf("ContainsAny(%q, %q) = %v; want %v", tt.text, tt.patterns, result, tt.expected)
+		}
+	}
+}
