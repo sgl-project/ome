@@ -20,6 +20,7 @@ type KMSVault struct {
 
 // NewKMSVault initializes a new KMSVault instance with the provided configuration and environment.
 func NewKMSVault(config *Config) (*KMSVault, error) {
+	common.EnableInstanceMetadataServiceLookup()
 	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config provider: %w", err)

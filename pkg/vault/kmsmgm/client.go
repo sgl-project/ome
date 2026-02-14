@@ -37,6 +37,7 @@ type DefinedTags struct {
 
 // NewKmsMgm initializes a new KmsMgm instance with the given configuration and environment.
 func NewKmsMgm(config *Config) (*KmsMgm, error) {
+	common.EnableInstanceMetadataServiceLookup()
 	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config provider: %w", err)

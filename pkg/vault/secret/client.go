@@ -21,6 +21,7 @@ type Secret struct {
 
 // NewSecret initializes a new Secret instance with the provided configuration and environment.
 func NewSecret(config *Config) (*Secret, error) {
+	common.EnableInstanceMetadataServiceLookup()
 	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create config provider: %w", err)

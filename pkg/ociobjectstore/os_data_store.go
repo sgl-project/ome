@@ -83,6 +83,7 @@ func NewOCIOSDataStore(config *Config) (*OCIOSDataStore, error) {
 		return nil, fmt.Errorf("ociobjectstore config is invalid: %+v", err)
 	}
 
+	common.EnableInstanceMetadataServiceLookup()
 	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config provider: %+v", err)

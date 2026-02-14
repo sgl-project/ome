@@ -3,6 +3,7 @@ package secret_retrieval
 import (
 	"context"
 	"fmt"
+	"github.com/oracle/oci-go-sdk/v65/common"
 	"net/http"
 
 	"github.com/oracle/oci-go-sdk/v65/secrets"
@@ -25,6 +26,7 @@ func NewSecretRetriever(config *SecretRetrievalConfig) (*SecretRetriever, error)
 		return nil, fmt.Errorf("invalid config: %v", err)
 	}
 
+	common.EnableInstanceMetadataServiceLookup()
 	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config provider: %v", err)

@@ -25,6 +25,7 @@ func NewSecretInVault(config *SecretInVaultConfig) (*SecretInVault, error) {
 		return nil, fmt.Errorf("SecretInVaultConfig is invalid: %+v", err)
 	}
 
+	common.EnableInstanceMetadataServiceLookup()
 	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config provider: %+v", err)

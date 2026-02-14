@@ -21,6 +21,7 @@ type KmsCrypto struct {
 
 // NewKmsCrypto initializes a new KmsCrypto instance with the given configuration and environment.
 func NewKmsCrypto(config *Config) (*KmsCrypto, error) {
+	common.EnableInstanceMetadataServiceLookup()
 	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config provider: %w", err)

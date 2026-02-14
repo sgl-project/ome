@@ -20,6 +20,7 @@ type VaultClient struct {
 
 // NewVaultClient initializes a new VaultClient with the provided configuration and environment.
 func NewVaultClient(config *Config) (*VaultClient, error) {
+	common.EnableInstanceMetadataServiceLookup()
 	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create config provider: %w", err)
