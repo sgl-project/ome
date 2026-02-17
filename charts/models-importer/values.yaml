@@ -820,6 +820,11 @@ claude-sonnet-4-5:
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
+claude-sonnet-4-6:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
 claude-haiku-4-5:
   enabled: false
   enableImageInput: true
