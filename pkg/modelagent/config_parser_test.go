@@ -26,6 +26,16 @@ type mockHuggingFaceModel struct {
 	torchDtype         string
 	modelSizeBytes     int64
 	hasVision          bool
+	diffusionModel     *modelconfig.DiffusionPipelineSpec
+}
+
+type mockDiffusionModel struct {
+	mockHuggingFaceModel
+	diffusionModel *modelconfig.DiffusionPipelineSpec
+}
+
+func (m *mockDiffusionModel) GetDiffusionModel() *modelconfig.DiffusionPipelineSpec {
+	return m.diffusionModel
 }
 
 // Implement all methods of the HuggingFaceModel interface
@@ -236,7 +246,7 @@ func TestDetermineModelCapabilitiesFromHF(t *testing.T) {
 
 	testCases := []struct {
 		name                 string
-		mockModel            *mockHuggingFaceModel
+		mockModel            modelconfig.HuggingFaceModel
 		expectedCapabilities []string
 	}{
 		{
@@ -292,6 +302,21 @@ func TestDetermineModelCapabilitiesFromHF(t *testing.T) {
 				hasVision:    true,
 			},
 			expectedCapabilities: []string{string(v1beta1.ModelCapabilityImageTextToText)},
+		},
+		{
+			name: "Diffusion Model",
+			mockModel: &mockDiffusionModel{
+				mockHuggingFaceModel: mockHuggingFaceModel{
+					modelType:    "diffusers",
+					architecture: "StableDiffusionPipeline",
+					hasVision:    true,
+				},
+				diffusionModel: &modelconfig.DiffusionPipelineSpec{ClassName: "StableDiffusionPipeline"},
+			},
+			expectedCapabilities: []string{
+				string(v1beta1.ModelCapabilityTextToImage),
+				string(v1beta1.ModelCapabilityImageTextToImage),
+			},
 		},
 	}
 
@@ -508,8 +533,9 @@ func TestParseDiffusionPipelineSpec(t *testing.T) {
   "safety_checker": ["diffusers", "StableDiffusionSafetyChecker"]
 }`)
 
-	pipeline, err := parseDiffusionPipelineSpec(data)
+	parsed, err := modelconfig.ParseDiffusionPipelineSpec(data)
 	assert.NoError(t, err)
+	pipeline := convertDiffusionPipelineSpec(parsed)
 	if assert.NotNil(t, pipeline) {
 		if assert.NotNil(t, pipeline.ClassName) {
 			assert.Equal(t, "StableDiffusionPipeline", *pipeline.ClassName)
@@ -623,7 +649,17 @@ func TestParseModelConfig_PrefersModelIndex(t *testing.T) {
 		logger: sugar,
 		loadModelConfig: func(configPath string) (modelconfig.HuggingFaceModel, error) {
 			loadCalled = true
-			return &mockHuggingFaceModel{}, nil
+			return &mockDiffusionModel{
+				mockHuggingFaceModel: mockHuggingFaceModel{
+					modelType:    "diffusers",
+					architecture: "StableDiffusionPipeline",
+					hasVision:    true,
+				},
+				diffusionModel: &modelconfig.DiffusionPipelineSpec{
+					ClassName: "StableDiffusionPipeline",
+					Scheduler: &modelconfig.DiffusionComponentSpec{Library: "diffusers", Type: "EulerDiscreteScheduler"},
+				},
+			}, nil
 		},
 	}
 
@@ -639,7 +675,7 @@ func TestParseModelConfig_PrefersModelIndex(t *testing.T) {
 		}
 		assert.Equal(t, "diffusers", metadata.ModelFormat.Name)
 	}
-	assert.False(t, loadCalled, "loadModelConfig should not be called when model_index.json is present")
+	assert.True(t, loadCalled, "loadModelConfig should be called when model_index.json is present")
 }
 
 func TestFormatParamCount(t *testing.T) {

@@ -70,20 +70,13 @@ func (p *ModelConfigParser) ParseModelConfig(modelDir string, baseModel *v1beta1
 	modelIndexPath, err := p.findModelIndexFile(modelDir)
 	if err == nil {
 		p.logger.Infof("Found model_index.json at: %s", modelIndexPath)
-		pipeline, loadErr := p.loadDiffusionPipelineSpec(modelIndexPath)
+		hfModel, loadErr := p.loadModelConfig(modelIndexPath)
 		if loadErr != nil {
-			return nil, loadErr
+			return nil, fmt.Errorf("failed to parse model_index.json with hf_model_config: %w", loadErr)
 		}
-		if pipeline != nil {
-			metadata.DiffusionPipeline = pipeline
-			metadata.ModelFramework = &v1beta1.ModelFrameworkSpec{
-				Name: "diffusers",
-			}
-			metadata.ModelFormat = v1beta1.ModelFormat{
-				Name: "diffusers",
-			}
-			hasMetadata = true
-		}
+
+		metadata = p.extractModelMetadataFromHF(hfModel)
+		hasMetadata = true
 	} else {
 		p.logger.Infof("model_index.json not found: %v", err)
 
@@ -282,30 +275,51 @@ func (p *ModelConfigParser) extractModelMetadataFromHF(hfModel modelconfig.Huggi
 	p.logger.Infof("Extracting metadata from HuggingFace model: type=%s, architecture=%s",
 		hfModel.GetModelType(), hfModel.GetArchitecture())
 
+	var diffusionModel *modelconfig.DiffusionPipelineSpec
+	if dm, ok := hfModel.(modelconfig.HuggingFaceDiffusionModel); ok {
+		diffusionModel = dm.GetDiffusionModel()
+	}
+	isDiffusion := diffusionModel != nil
+	modelType := hfModel.GetModelType()
+
 	metadata := ModelMetadata{
-		ModelType:          hfModel.GetModelType(),
+		ModelType:          modelType,
 		ModelArchitecture:  hfModel.GetArchitecture(),
 		ModelParameterSize: modelconfig.FormatParamCount(hfModel.GetParameterCount()),
 		MaxTokens:          int32(hfModel.GetContextLength()),
 		ModelCapabilities:  p.determineModelCapabilitiesFromHF(hfModel),
 	}
 
-	// Set the model format (most models use SafeTensors)
-	version := "1.0.0"
-	metadata.ModelFormat = v1beta1.ModelFormat{
-		Name:    "safetensors",
-		Version: &version,
-	}
+	if isDiffusion {
+		metadata.ModelFormat = v1beta1.ModelFormat{
+			Name:    "diffusers",
+			Version: &diffusionModel.DiffusersVersion,
+		}
+		metadata.ModelFramework = &v1beta1.ModelFrameworkSpec{
+			Name:    "diffusers",
+			Version: &diffusionModel.DiffusersVersion,
+		}
+		metadata.DiffusionPipeline = convertDiffusionPipelineSpec(diffusionModel)
+	} else {
+		// Set the model format (most models use SafeTensors)
+		version := "1.0.0"
+		metadata.ModelFormat = v1beta1.ModelFormat{
+			Name:    "safetensors",
+			Version: &version,
+		}
 
-	metadata.ModelFramework = &v1beta1.ModelFrameworkSpec{
-		Name: "transformers",
+		metadata.ModelFramework = &v1beta1.ModelFrameworkSpec{
+			Name: "transformers",
+		}
 	}
 
 	// Set transformer version if available
-	transformerVersion := hfModel.GetTransformerVersion()
-	if transformerVersion != "" {
-		metadata.ModelFramework.Version = &transformerVersion
-		p.logger.Infof("Setting transformer version: %s", transformerVersion)
+	if !isDiffusion {
+		transformerVersion := hfModel.GetTransformerVersion()
+		if transformerVersion != "" {
+			metadata.ModelFramework.Version = &transformerVersion
+			p.logger.Infof("Setting transformer version: %s", transformerVersion)
+		}
 	}
 
 	// Extract quantization information if available
@@ -439,115 +453,39 @@ func (p *ModelConfigParser) updateModelSpec(spec *v1beta1.BaseModelSpec, metadat
 	p.logger.Info("Model spec update complete")
 }
 
-func (p *ModelConfigParser) loadDiffusionPipelineSpec(modelIndexPath string) (*v1beta1.DiffusionPipelineSpec, error) {
-	data, err := os.ReadFile(modelIndexPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read model_index.json at %s: %w", modelIndexPath, err)
+func convertDiffusionPipelineSpec(pipeline *modelconfig.DiffusionPipelineSpec) *v1beta1.DiffusionPipelineSpec {
+	if pipeline == nil {
+		return nil
 	}
 
-	pipeline, err := parseDiffusionPipelineSpec(data)
-	if err != nil {
-		return nil, err
+	spec := &v1beta1.DiffusionPipelineSpec{}
+	if pipeline.ClassName != "" {
+		className := pipeline.ClassName
+		spec.ClassName = &className
 	}
 
-	return pipeline, nil
+	spec.Scheduler = convertDiffusionComponent(pipeline.Scheduler)
+	spec.TextEncoder = convertDiffusionComponent(pipeline.TextEncoder)
+	spec.Tokenizer = convertDiffusionComponent(pipeline.Tokenizer)
+	spec.Transformer = convertDiffusionComponent(pipeline.Transformer)
+	spec.VAE = convertDiffusionComponent(pipeline.VAE)
+
+	if len(pipeline.AdditionalComponents) > 0 {
+		additional := make(map[string]v1beta1.DiffusionComponentSpec, len(pipeline.AdditionalComponents))
+		for key, value := range pipeline.AdditionalComponents {
+			additional[key] = v1beta1.DiffusionComponentSpec{Library: value.Library, Type: value.Type}
+		}
+		spec.AdditionalComponents = additional
+	}
+
+	return spec
 }
 
-func parseDiffusionPipelineSpec(data []byte) (*v1beta1.DiffusionPipelineSpec, error) {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("failed to parse model_index.json: %w", err)
+func convertDiffusionComponent(component *modelconfig.DiffusionComponentSpec) *v1beta1.DiffusionComponentSpec {
+	if component == nil {
+		return nil
 	}
-
-	pipeline := &v1beta1.DiffusionPipelineSpec{}
-	className := parseJSONStringField(raw, "_class_name", "class_name", "className")
-	if className != "" {
-		pipeline.ClassName = &className
-	}
-
-	additional := map[string]v1beta1.DiffusionComponentSpec{}
-	for key, value := range raw {
-		if strings.HasPrefix(key, "_") {
-			continue
-		}
-
-		component, ok := parseDiffusersComponent(value)
-		if !ok {
-			continue
-		}
-
-		switch strings.ToLower(key) {
-		case "scheduler":
-			pipeline.Scheduler = component
-		case "text_encoder":
-			pipeline.TextEncoder = component
-		case "tokenizer":
-			pipeline.Tokenizer = component
-		case "transformer", "unet":
-			pipeline.Transformer = component
-		case "vae":
-			pipeline.VAE = component
-		default:
-			additional[key] = *component
-		}
-	}
-
-	if len(additional) > 0 {
-		pipeline.AdditionalComponents = additional
-	}
-
-	if pipeline.ClassName == nil &&
-		pipeline.Scheduler == nil &&
-		pipeline.TextEncoder == nil &&
-		pipeline.Tokenizer == nil &&
-		pipeline.Transformer == nil &&
-		pipeline.VAE == nil &&
-		len(pipeline.AdditionalComponents) == 0 {
-		return nil, fmt.Errorf("model_index.json did not contain diffusion pipeline metadata")
-	}
-
-	return pipeline, nil
-}
-
-func parseDiffusersComponent(raw json.RawMessage) (*v1beta1.DiffusionComponentSpec, bool) {
-	var parts []string
-	if err := json.Unmarshal(raw, &parts); err == nil {
-		switch len(parts) {
-		case 0:
-			return nil, false
-		case 1:
-			return &v1beta1.DiffusionComponentSpec{Type: parts[0]}, true
-		default:
-			return &v1beta1.DiffusionComponentSpec{Library: parts[0], Type: parts[1]}, true
-		}
-	}
-
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &obj); err != nil {
-		return nil, false
-	}
-
-	className := parseJSONStringField(obj, "_class_name", "class_name", "className", "type")
-	library := parseJSONStringField(obj, "_library", "library")
-	if className == "" && library == "" {
-		return nil, false
-	}
-
-	return &v1beta1.DiffusionComponentSpec{Library: library, Type: className}, true
-}
-
-func parseJSONStringField(values map[string]json.RawMessage, keys ...string) string {
-	for _, key := range keys {
-		raw, ok := values[key]
-		if !ok {
-			continue
-		}
-		var value string
-		if err := json.Unmarshal(raw, &value); err == nil && value != "" {
-			return value
-		}
-	}
-	return ""
+	return &v1beta1.DiffusionComponentSpec{Library: component.Library, Type: component.Type}
 }
 
 // determineModelCapabilitiesFromHF determines the model capabilities based on the HuggingFaceModel
@@ -580,6 +518,19 @@ func (p *ModelConfigParser) determineModelCapabilitiesFromHF(hfModel modelconfig
 	var capabilities []string
 	architecture := hfModel.GetArchitecture()
 	modelType := hfModel.GetModelType()
+
+	// Logic is not correct here.
+	// Presence of "image" in the pipeline layers could indicate Image capability
+	// Prense of "3D" in pipeline layers could indicate Video capability
+	// More research needed here.
+	if dm, ok := hfModel.(modelconfig.HuggingFaceDiffusionModel); ok {
+		if dm.GetDiffusionModel() != nil {
+			return append(capabilities,
+				string(v1beta1.ModelCapabilityTextToImage),
+				string(v1beta1.ModelCapabilityImageTextToImage),
+			)
+		}
+	}
 
 	// For vision, only support image text capability right now
 	if hfModel.HasVision() {
