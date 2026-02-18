@@ -5,6 +5,9 @@ metadata:
   name: gemini-3-flash-preview
   labels:
     genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "gemini-3-flash-preview" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "gemini-3-flash-preview" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "gemini-3-flash-preview" "timeDedicatedRetired" }}"
   annotations:
     models.ome.io/runtime: ""
     models.ome.io/category: "SMALL"

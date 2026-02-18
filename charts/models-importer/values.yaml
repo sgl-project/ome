@@ -700,30 +700,37 @@ text-embedding-3-large:
 
 gemini-2-0-flash-lite:
   enabled: false
+  enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
 gemini-2-0-flash:
   enabled: false
+  enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
 gemini-2-5-flash:
   enabled: false
+  enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
 gemini-2-5-flash-lite:
   enabled: false
+  enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
 gemini-2-5-pro:
   enabled: false
+  enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
 gemini-3-pro-preview:
   enabled: false
+  enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
 gemini-3-flash-preview:
   enabled: false
+  enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
 grok-3-0404:
