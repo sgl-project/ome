@@ -384,9 +384,12 @@ func ProcessBaseAnnotations(b *BaseComponentFields, isvc *v1beta1.InferenceServi
 	}
 
 	if b.FineTunedServingWithMergedWeights {
-		// For FT serving using merged FT weights, no need base model
+		// For FT serving using merged FT weights, no need base model, so:
+		// 1) add annotation to indicate using merged weights for FT serving;
+		// 2) add annotation to skip model init injection;
 		b.Log.Info("Fine-tuned serving with merged weights", "namespace", isvc.Namespace)
 		annotations[constants.FTServingWithMergedWeightsAnnotationKey] = "true"
+		annotations[constants.ModelInitInjectionKey] = "false"
 	} else if b.BaseModelMeta != nil {
 		// Add model init required annotations (for non-merged FT or regular serving)
 		baseModelDecryptionKeyName, ok := b.BaseModelMeta.Annotations[constants.BaseModelDecryptionKeyName]
