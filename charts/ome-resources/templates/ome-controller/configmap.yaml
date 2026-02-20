@@ -64,7 +64,7 @@ data:
     }
   modelInit: |-
     {
-        "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
+        "image" : "{{ .Values.ome.omeAgent.opensource.image }}:{{ .Values.ome.omeAgent.opensource.tag }}",
         "memoryRequest": "{{ .Values.ome.omeAgent.modelInit.memoryRequest }}",
         "memoryLimit": "{{ .Values.ome.omeAgent.modelInit.memoryLimit }}",
         "cpuRequest": "{{ .Values.ome.omeAgent.modelInit.cpuRequest }}",
@@ -78,7 +78,7 @@ data:
     }
   servingSidecar: |-
     {
-        "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
+        "image" : "{{ .Values.ome.omeAgent.service.image }}:{{ .Values.ome.omeAgent.service.tag }}",
         "memoryRequest": "2Gi",
         "memoryLimit": "4Gi",
         "cpuRequest": "1",
@@ -89,7 +89,7 @@ data:
     }
   fineTunedAdapter: |-
     {
-        "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
+        "image" : "{{ .Values.ome.omeAgent.opensource.image }}:{{ .Values.ome.omeAgent.opensource.tag }}",
         "memoryRequest": "{{ .Values.ome.omeAgent.fineTunedAdapter.memoryRequest }}",
         "memoryLimit": "{{ .Values.ome.omeAgent.fineTunedAdapter.memoryLimit }}",
         "cpuRequest": "{{ .Values.ome.omeAgent.fineTunedAdapter.cpuRequest }}",
@@ -100,11 +100,11 @@ data:
     }
   trainingSidecar: |-
     {
-      "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
-      "region" : "{{ .Values.trainingSidecar.region }}",
-      "namespace": "{{ .Values.trainingSidecar.namespace }}",
-      "fineTunedModelBucket": "{{ .Values.trainingSidecar.fineTunedModelBucket }}",
-      "trainingMetricsBucket": "{{ .Values.trainingSidecar.trainingMetricsBucket }}",
+      "image" : "{{ .Values.ome.omeAgent.service.image }}:{{ .Values.ome.omeAgent.service.tag }}",
+      "region" : "{{ .Values.ome.omeAgent.region }}",
+      "namespace": "{{ .Values.ome.omeAgent.namespace }}",
+      "fineTunedModelBucket": "{{ .Values.ome.omeAgent.trainingSidecar.fineTunedModelBucket }}",
+      "trainingMetricsBucket": "{{ .Values.ome.omeAgent.trainingSidecar.trainingMetricsBucket }}",
       "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}"
     }
 ---
@@ -170,7 +170,7 @@ data:
   replicationjob: |
     {
       "podConfig": {
-        "image": "{{ default .Values.ome.omeAgent.image .Values.ome.replicationJob.image }}:{{ default .Values.ome.omeAgent.tag .Values.ome.replicationJob.tag }}",
+        "image": "{{ .Values.ome.omeAgent.opensource.image }}:{{ .Values.ome.omeAgent.opensource.tag }}",
         "resources": {{ .Values.ome.replicationJob.resources | toJson }}
       },
       "source": {
