@@ -29,6 +29,7 @@ spec:
           library: diffusers
           type: AutoencoderKLQwenImage
       autoSelect: true
+      modelArchitecture: QwenImagePipeline
       priority: 1
   protocolVersions:
     - openAI
@@ -67,7 +68,7 @@ spec:
         - $(MODEL_PATH)
         - --served-model-name
         - Qwen/Qwen-Image
-        - -tp-size
+        - --tp-size
         - "1"
       volumeMounts:
         - mountPath: /dev/shm

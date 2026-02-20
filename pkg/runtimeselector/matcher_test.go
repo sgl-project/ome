@@ -751,6 +751,62 @@ func TestGetCompatibilityDetails(t *testing.T) {
 	})
 }
 
+func TestMatcherPicksRuntimeByModelSize(t *testing.T) {
+	matcher := NewDefaultRuntimeMatcher(NewConfig(nil))
+	isvc := &v1beta1.InferenceService{}
+
+	model := &v1beta1.BaseModelSpec{
+		ModelFormat:        v1beta1.ModelFormat{Name: "diffusers"},
+		ModelParameterSize: ptr("7B"),
+	}
+
+	smallRuntime := &v1beta1.ServingRuntimeSpec{
+		SupportedModelFormats: []v1beta1.SupportedModelFormat{
+			{
+				ModelFormat: &v1beta1.ModelFormat{Name: "diffusers"},
+				AutoSelect:  ptr(true),
+			},
+		},
+		ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
+			Min: ptr("1B"),
+			Max: ptr("5B"),
+		},
+	}
+
+	midRuntime := &v1beta1.ServingRuntimeSpec{
+		SupportedModelFormats: []v1beta1.SupportedModelFormat{
+			{
+				ModelFormat: &v1beta1.ModelFormat{Name: "diffusers"},
+				AutoSelect:  ptr(true),
+			},
+		},
+		ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
+			Min: ptr("6B"),
+			Max: ptr("13B"),
+		},
+	}
+
+	smallReport, err := matcher.GetCompatibilityDetails(smallRuntime, model, isvc, "small-runtime")
+	assert.NoError(t, err)
+	assert.False(t, smallReport.IsCompatible)
+	assert.False(t, smallReport.MatchDetails.SizeMatch)
+	assert.NotEmpty(t, smallReport.IncompatibilityReasons)
+
+	midReport, err := matcher.GetCompatibilityDetails(midRuntime, model, isvc, "mid-runtime")
+	assert.NoError(t, err)
+	assert.True(t, midReport.IsCompatible)
+	assert.True(t, midReport.MatchDetails.SizeMatch)
+
+	selected := ""
+	if smallReport.IsCompatible {
+		selected = "small-runtime"
+	} else if midReport.IsCompatible {
+		selected = "mid-runtime"
+	}
+
+	assert.Equal(t, "mid-runtime", selected)
+}
+
 func TestGetCompatibilityDetails_AcceleratorClasses(t *testing.T) {
 	matcher := NewDefaultRuntimeMatcher(NewConfig(nil))
 

@@ -43,7 +43,7 @@ func ListRepoFiles(ctx context.Context, config *DownloadConfig) ([]RepoFile, err
 	var apiURL string
 	switch repoType {
 	case RepoTypeModel:
-		apiURL = fmt.Sprintf("%s/api/models/%s/tree/%s?recursive=true", endpoint, url.PathEscape(config.RepoID), url.QueryEscape(revision))
+		apiURL = fmt.Sprintf("%s/api/models/%s/tree/%s?recursive=true", endpoint, config.RepoID, url.QueryEscape(revision))
 	case RepoTypeDataset:
 		apiURL = fmt.Sprintf("%s/api/datasets/%s/tree/%s?recursive=true", endpoint, url.PathEscape(config.RepoID), url.QueryEscape(revision))
 	case RepoTypeSpace:

@@ -9,29 +9,6 @@ spec:
   displayName: qwen.qwen-image
   disabled: false
   version: "1.0.0"
-  modelFormat:
-    name: diffusers
-    version: "0.34.0.dev0"
-  modelFramework:
-    name: diffusers
-    version: "0.34.0.dev0"
-  diffusionPipeline:
-    className: QwenImagePipeline
-    scheduler:
-      library: diffusers
-      type: FlowMatchEulerDiscreteScheduler
-    textEncoder:
-      library: transformers
-      type: Qwen2_5_VLForConditionalGeneration
-    tokenizer:
-      library: transformers
-      type: Qwen2Tokenizer
-    transformer:
-      library: diffusers
-      type: QwenImageTransformer2DModel
-    vae:
-      library: diffusers
-      type: AutoencoderKLQwenImage
   storage:
     storageUri: hf://Qwen/Qwen-Image
     path: /raid/models/Qwen/Qwen-Image

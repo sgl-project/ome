@@ -21,6 +21,8 @@ import (
 const (
 	// DefaultConfigFileName Default config file name used by Hugging Face models
 	DefaultConfigFileName = "config.json"
+	// DefaultModelIndexFileName Default model index file name used by diffusers models
+	DefaultModelIndexFileName = "model_index.json"
 )
 
 // modelConfigLoader is a function type for loading model configurations
@@ -44,7 +46,7 @@ func NewModelConfigParser(omeClient versioned.Interface, logger *zap.SugaredLogg
 	}
 }
 
-// ParseModelConfig reads the config.json file from the model directory and extracts metadata
+// ParseModelConfig reads model_index.json (if present) or config.json from the model directory and extracts metadata
 // without updating any resources. This allows the caller to control when and how updates happen.
 func (p *ModelConfigParser) ParseModelConfig(modelDir string, baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) (*ModelMetadata, error) {
 	p.logger.Infof("Parsing model config at: %s", modelDir)
@@ -61,23 +63,46 @@ func (p *ModelConfigParser) ParseModelConfig(modelDir string, baseModel *v1beta1
 		return nil, nil
 	}
 
-	// Look for the config.json file - it could be at the root level or a subdirectory
-	configPath, err := p.findConfigFile(modelDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find config.json file: %w", err)
+	var metadata ModelMetadata
+	var hasMetadata bool
+
+	// Prefer model_index.json for diffusion models (skip config.json search if present)
+	modelIndexPath, err := p.findModelIndexFile(modelDir)
+	if err == nil {
+		p.logger.Infof("Found model_index.json at: %s", modelIndexPath)
+		hfModel, loadErr := p.loadModelConfig(modelIndexPath)
+		if loadErr != nil {
+			return nil, fmt.Errorf("failed to parse model_index.json with hf_model_config: %w", loadErr)
+		}
+
+		metadata = p.extractModelMetadataFromHF(hfModel)
+		hasMetadata = true
+	} else {
+		p.logger.Infof("model_index.json not found: %v", err)
+
+		// Look for the config.json file - it could be at the root level or a subdirectory
+		configPath, findErr := p.findConfigFile(modelDir)
+		if findErr != nil {
+			p.logger.Infof("Config file not found: %v", findErr)
+		} else {
+			p.logger.Infof("Found config file at: %s", configPath)
+
+			// Parse the config.json file using the hfutil.model_config module
+			hfModel, loadErr := p.loadModelConfig(configPath)
+			if loadErr != nil {
+				return nil, fmt.Errorf("failed to parse config file with hf_model_config: %w", loadErr)
+			}
+
+			// Use the HuggingFaceModel interface to extract metadata
+			metadata = p.extractModelMetadataFromHF(hfModel)
+			hasMetadata = true
+			p.logger.Infof("Extracted metadata: %+v", metadata)
+		}
 	}
 
-	p.logger.Infof("Found config file at: %s", configPath)
-
-	// Parse the config.json file using the hfutil.model_config module
-	hfModel, err := p.loadModelConfig(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse config file with hf_model_config: %w", err)
+	if !hasMetadata {
+		return nil, fmt.Errorf("no model_index.json or config.json found in %s", modelDir)
 	}
-
-	// Use the HuggingFaceModel interface to extract metadata
-	metadata := p.extractModelMetadataFromHF(hfModel)
-	p.logger.Infof("Extracted metadata: %+v", metadata)
 
 	// Update BaseModel or ClusterBaseModel if provided
 	if baseModel != nil {
@@ -138,6 +163,37 @@ func (p *ModelConfigParser) findConfigFile(modelDir string) (string, error) {
 		return "", fmt.Errorf("config.json not found in %s", modelDir)
 	}
 	return configPath, nil
+}
+
+// findModelIndexFile searches for the model_index.json file in the model directory
+// It checks the root directory and common subdirectories
+func (p *ModelConfigParser) findModelIndexFile(modelDir string) (string, error) {
+	// Check the root directory first
+	rootIndexPath := filepath.Join(modelDir, DefaultModelIndexFileName)
+	if _, err := os.Stat(rootIndexPath); err == nil {
+		return rootIndexPath, nil
+	}
+
+	// If not found in rootdir, do a recursive search (limited to avoid deep searching)
+	var indexPath string
+	err := filepath.Walk(modelDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Skip error files
+		}
+		if !info.IsDir() && info.Name() == DefaultModelIndexFileName {
+			indexPath = path
+			return filepath.SkipDir // Found it, stop searching
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if indexPath == "" {
+		return "", fmt.Errorf("model_index.json not found in %s", modelDir)
+	}
+	return indexPath, nil
 }
 
 // updateModel is a generic function to update either a BaseModel or ClusterBaseModel
@@ -219,30 +275,51 @@ func (p *ModelConfigParser) extractModelMetadataFromHF(hfModel modelconfig.Huggi
 	p.logger.Infof("Extracting metadata from HuggingFace model: type=%s, architecture=%s",
 		hfModel.GetModelType(), hfModel.GetArchitecture())
 
+	var diffusionModel *modelconfig.DiffusionPipelineSpec
+	if dm, ok := hfModel.(modelconfig.HuggingFaceDiffusionModel); ok {
+		diffusionModel = dm.GetDiffusionModel()
+	}
+	isDiffusion := diffusionModel != nil
+	modelType := hfModel.GetModelType()
+
 	metadata := ModelMetadata{
-		ModelType:          hfModel.GetModelType(),
+		ModelType:          modelType,
 		ModelArchitecture:  hfModel.GetArchitecture(),
 		ModelParameterSize: modelconfig.FormatParamCount(hfModel.GetParameterCount()),
 		MaxTokens:          int32(hfModel.GetContextLength()),
 		ModelCapabilities:  p.determineModelCapabilitiesFromHF(hfModel),
 	}
 
-	// Set the model format (most models use SafeTensors)
-	version := "1.0.0"
-	metadata.ModelFormat = v1beta1.ModelFormat{
-		Name:    "safetensors",
-		Version: &version,
-	}
+	if isDiffusion {
+		metadata.ModelFormat = v1beta1.ModelFormat{
+			Name:    "diffusers",
+			Version: &diffusionModel.DiffusersVersion,
+		}
+		metadata.ModelFramework = &v1beta1.ModelFrameworkSpec{
+			Name:    "diffusers",
+			Version: &diffusionModel.DiffusersVersion,
+		}
+		metadata.DiffusionPipeline = convertDiffusionPipelineSpec(diffusionModel)
+	} else {
+		// Set the model format (most models use SafeTensors)
+		version := "1.0.0"
+		metadata.ModelFormat = v1beta1.ModelFormat{
+			Name:    "safetensors",
+			Version: &version,
+		}
 
-	metadata.ModelFramework = &v1beta1.ModelFrameworkSpec{
-		Name: "transformers",
+		metadata.ModelFramework = &v1beta1.ModelFrameworkSpec{
+			Name: "transformers",
+		}
 	}
 
 	// Set transformer version if available
-	transformerVersion := hfModel.GetTransformerVersion()
-	if transformerVersion != "" {
-		metadata.ModelFramework.Version = &transformerVersion
-		p.logger.Infof("Setting transformer version: %s", transformerVersion)
+	if !isDiffusion {
+		transformerVersion := hfModel.GetTransformerVersion()
+		if transformerVersion != "" {
+			metadata.ModelFramework.Version = &transformerVersion
+			p.logger.Infof("Setting transformer version: %s", transformerVersion)
+		}
 	}
 
 	// Extract quantization information if available
@@ -333,6 +410,11 @@ func (p *ModelConfigParser) updateModelSpec(spec *v1beta1.BaseModelSpec, metadat
 				*c = new.(*v1beta1.ModelFrameworkSpec)
 				isUpdated = true
 			}
+		case **v1beta1.DiffusionPipelineSpec:
+			if *c == nil && new != nil {
+				*c = new.(*v1beta1.DiffusionPipelineSpec)
+				isUpdated = true
+			}
 		case **v1beta1.ModelQuantization:
 			if *c == nil && new.(v1beta1.ModelQuantization) != "" {
 				val := new.(v1beta1.ModelQuantization)
@@ -366,8 +448,44 @@ func (p *ModelConfigParser) updateModelSpec(spec *v1beta1.BaseModelSpec, metadat
 	updateField(&spec.ApiCapabilities, metadata.ApiCapabilities, "ApiCapabilities")
 	updateField(&spec.Quantization, metadata.Quantization, "Quantization")
 	updateField(&spec.ModelConfiguration, metadata.ModelConfiguration, "ModelConfiguration")
+	updateField(&spec.DiffusionPipeline, metadata.DiffusionPipeline, "DiffusionPipeline")
 
 	p.logger.Info("Model spec update complete")
+}
+
+func convertDiffusionPipelineSpec(pipeline *modelconfig.DiffusionPipelineSpec) *v1beta1.DiffusionPipelineSpec {
+	if pipeline == nil {
+		return nil
+	}
+
+	spec := &v1beta1.DiffusionPipelineSpec{}
+	if pipeline.ClassName != "" {
+		className := pipeline.ClassName
+		spec.ClassName = &className
+	}
+
+	spec.Scheduler = convertDiffusionComponent(pipeline.Scheduler)
+	spec.TextEncoder = convertDiffusionComponent(pipeline.TextEncoder)
+	spec.Tokenizer = convertDiffusionComponent(pipeline.Tokenizer)
+	spec.Transformer = convertDiffusionComponent(pipeline.Transformer)
+	spec.VAE = convertDiffusionComponent(pipeline.VAE)
+
+	if len(pipeline.AdditionalComponents) > 0 {
+		additional := make(map[string]v1beta1.DiffusionComponentSpec, len(pipeline.AdditionalComponents))
+		for key, value := range pipeline.AdditionalComponents {
+			additional[key] = v1beta1.DiffusionComponentSpec{Library: value.Library, Type: value.Type}
+		}
+		spec.AdditionalComponents = additional
+	}
+
+	return spec
+}
+
+func convertDiffusionComponent(component *modelconfig.DiffusionComponentSpec) *v1beta1.DiffusionComponentSpec {
+	if component == nil {
+		return nil
+	}
+	return &v1beta1.DiffusionComponentSpec{Library: component.Library, Type: component.Type}
 }
 
 // determineModelCapabilitiesFromHF determines the model capabilities based on the HuggingFaceModel
@@ -400,6 +518,19 @@ func (p *ModelConfigParser) determineModelCapabilitiesFromHF(hfModel modelconfig
 	var capabilities []string
 	architecture := hfModel.GetArchitecture()
 	modelType := hfModel.GetModelType()
+
+	// Logic is not correct here.
+	// Presence of "image" in the pipeline layers could indicate Image capability
+	// Prense of "3D" in pipeline layers could indicate Video capability
+	// More research needed here.
+	if dm, ok := hfModel.(modelconfig.HuggingFaceDiffusionModel); ok {
+		if dm.GetDiffusionModel() != nil {
+			return append(capabilities,
+				string(v1beta1.ModelCapabilityTextToImage),
+				string(v1beta1.ModelCapabilityImageTextToImage),
+			)
+		}
+	}
 
 	// For vision, only support image text capability right now
 	if hfModel.HasVision() {

@@ -26,6 +26,16 @@ type mockHuggingFaceModel struct {
 	torchDtype         string
 	modelSizeBytes     int64
 	hasVision          bool
+	diffusionModel     *modelconfig.DiffusionPipelineSpec
+}
+
+type mockDiffusionModel struct {
+	mockHuggingFaceModel
+	diffusionModel *modelconfig.DiffusionPipelineSpec
+}
+
+func (m *mockDiffusionModel) GetDiffusionModel() *modelconfig.DiffusionPipelineSpec {
+	return m.diffusionModel
 }
 
 // Implement all methods of the HuggingFaceModel interface
@@ -236,7 +246,7 @@ func TestDetermineModelCapabilitiesFromHF(t *testing.T) {
 
 	testCases := []struct {
 		name                 string
-		mockModel            *mockHuggingFaceModel
+		mockModel            modelconfig.HuggingFaceModel
 		expectedCapabilities []string
 	}{
 		{
@@ -292,6 +302,21 @@ func TestDetermineModelCapabilitiesFromHF(t *testing.T) {
 				hasVision:    true,
 			},
 			expectedCapabilities: []string{string(v1beta1.ModelCapabilityImageTextToText)},
+		},
+		{
+			name: "Diffusion Model",
+			mockModel: &mockDiffusionModel{
+				mockHuggingFaceModel: mockHuggingFaceModel{
+					modelType:    "diffusers",
+					architecture: "StableDiffusionPipeline",
+					hasVision:    true,
+				},
+				diffusionModel: &modelconfig.DiffusionPipelineSpec{ClassName: "StableDiffusionPipeline"},
+			},
+			expectedCapabilities: []string{
+				string(v1beta1.ModelCapabilityTextToImage),
+				string(v1beta1.ModelCapabilityImageTextToImage),
+			},
 		},
 	}
 
@@ -496,6 +521,54 @@ func TestUpdateModelSpec(t *testing.T) {
 	assert.Equal(t, "7B", *existingSpec.ModelParameterSize)
 }
 
+func TestParseDiffusionPipelineSpec(t *testing.T) {
+	data := []byte(`{
+  "_class_name": "StableDiffusionPipeline",
+  "_diffusers_version": "0.24.0",
+  "scheduler": ["diffusers", "EulerDiscreteScheduler"],
+  "text_encoder": ["transformers", "CLIPTextModel"],
+  "tokenizer": ["transformers", "CLIPTokenizer"],
+  "unet": ["diffusers", "UNet2DConditionModel"],
+  "vae": ["diffusers", "AutoencoderKL"],
+  "safety_checker": ["diffusers", "StableDiffusionSafetyChecker"]
+}`)
+
+	parsed, err := modelconfig.ParseDiffusionPipelineSpec(data)
+	assert.NoError(t, err)
+	pipeline := convertDiffusionPipelineSpec(parsed)
+	if assert.NotNil(t, pipeline) {
+		if assert.NotNil(t, pipeline.ClassName) {
+			assert.Equal(t, "StableDiffusionPipeline", *pipeline.ClassName)
+		}
+		if assert.NotNil(t, pipeline.Scheduler) {
+			assert.Equal(t, "diffusers", pipeline.Scheduler.Library)
+			assert.Equal(t, "EulerDiscreteScheduler", pipeline.Scheduler.Type)
+		}
+		if assert.NotNil(t, pipeline.TextEncoder) {
+			assert.Equal(t, "transformers", pipeline.TextEncoder.Library)
+			assert.Equal(t, "CLIPTextModel", pipeline.TextEncoder.Type)
+		}
+		if assert.NotNil(t, pipeline.Tokenizer) {
+			assert.Equal(t, "transformers", pipeline.Tokenizer.Library)
+			assert.Equal(t, "CLIPTokenizer", pipeline.Tokenizer.Type)
+		}
+		if assert.NotNil(t, pipeline.Transformer) {
+			assert.Equal(t, "diffusers", pipeline.Transformer.Library)
+			assert.Equal(t, "UNet2DConditionModel", pipeline.Transformer.Type)
+		}
+		if assert.NotNil(t, pipeline.VAE) {
+			assert.Equal(t, "diffusers", pipeline.VAE.Library)
+			assert.Equal(t, "AutoencoderKL", pipeline.VAE.Type)
+		}
+		if assert.NotNil(t, pipeline.AdditionalComponents) {
+			component, ok := pipeline.AdditionalComponents["safety_checker"]
+			assert.True(t, ok)
+			assert.Equal(t, "diffusers", component.Library)
+			assert.Equal(t, "StableDiffusionSafetyChecker", component.Type)
+		}
+	}
+}
+
 // TestParseModelConfig tests part of the ParseModelConfig method logic,
 // focusing on the parts that don't rely on the modelconfig.LoadModelConfig function
 func TestParseModelConfig(t *testing.T) {
@@ -544,6 +617,65 @@ func TestParseModelConfig(t *testing.T) {
 
 	// Note: We can't fully test cases 3 and 4 without mocking the private loadModelConfig field,
 	// but we can at least verify the shouldSkipConfigParsing functionality
+}
+
+func TestParseModelConfig_PrefersModelIndex(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "model-index-test")
+	assert.NoError(t, err)
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(tempDir)
+
+	logger, _ := zap.NewDevelopment()
+	sugar := logger.Sugar()
+
+	modelIndex := []byte(`{
+  "_class_name": "StableDiffusionPipeline",
+  "scheduler": ["diffusers", "EulerDiscreteScheduler"]
+}`)
+	modelIndexPath := filepath.Join(tempDir, DefaultModelIndexFileName)
+	err = os.WriteFile(modelIndexPath, modelIndex, 0644)
+	assert.NoError(t, err)
+
+	vaeDir := filepath.Join(tempDir, "vae")
+	err = os.MkdirAll(vaeDir, 0755)
+	assert.NoError(t, err)
+	configPath := filepath.Join(vaeDir, DefaultConfigFileName)
+	err = os.WriteFile(configPath, []byte(`{"model_type":"vae","architectures":["AutoencoderKL"]}`), 0644)
+	assert.NoError(t, err)
+
+	loadCalled := false
+	parser := &ModelConfigParser{
+		logger: sugar,
+		loadModelConfig: func(configPath string) (modelconfig.HuggingFaceModel, error) {
+			loadCalled = true
+			return &mockDiffusionModel{
+				mockHuggingFaceModel: mockHuggingFaceModel{
+					modelType:    "diffusers",
+					architecture: "StableDiffusionPipeline",
+					hasVision:    true,
+				},
+				diffusionModel: &modelconfig.DiffusionPipelineSpec{
+					ClassName: "StableDiffusionPipeline",
+					Scheduler: &modelconfig.DiffusionComponentSpec{Library: "diffusers", Type: "EulerDiscreteScheduler"},
+				},
+			}, nil
+		},
+	}
+
+	metadata, parseErr := parser.ParseModelConfig(tempDir, nil, nil)
+	assert.NoError(t, parseErr)
+	if assert.NotNil(t, metadata) {
+		assert.NotNil(t, metadata.DiffusionPipeline)
+		if metadata.DiffusionPipeline != nil && metadata.DiffusionPipeline.ClassName != nil {
+			assert.Equal(t, "StableDiffusionPipeline", *metadata.DiffusionPipeline.ClassName)
+		}
+		if assert.NotNil(t, metadata.ModelFramework) {
+			assert.Equal(t, "diffusers", metadata.ModelFramework.Name)
+		}
+		assert.Equal(t, "diffusers", metadata.ModelFormat.Name)
+	}
+	assert.True(t, loadCalled, "loadModelConfig should be called when model_index.json is present")
 }
 
 func TestFormatParamCount(t *testing.T) {
