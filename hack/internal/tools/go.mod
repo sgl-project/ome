@@ -3,7 +3,7 @@ module github.com/sgl-project/ome/hack/internal/tools
 go 1.24.1
 
 require (
-	github.com/gohugoio/hugo v0.154.2
+	github.com/gohugoio/hugo v0.154.3
 	github.com/golangci/golangci-lint v1.64.8
 	github.com/mikefarah/yq/v4 v4.44.3
 	github.com/norwoodj/helm-docs v1.12.0
