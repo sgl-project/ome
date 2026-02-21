@@ -123,8 +123,8 @@ spec:
       - name: dshm
         emptyDir:
           medium: Memory
-#    affinity:
-#      nodeAffinity:
+    affinity:
+      nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
             - matchExpressions:
