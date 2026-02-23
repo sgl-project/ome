@@ -451,8 +451,13 @@ install: kustomize ## 🚀 Deploy controller in the configured Kubernetes cluste
 		git checkout HEAD -- ../certmanager/certificate.yaml; \
 	fi
 	@echo "✅ Certificate configuration complete"
+
+	@echo "\n🚀 Step 2: Renewing cert manager..."
+	kubectl -n cert-manager rollout restart deployment cert-manager
+	kubectl -n cert-manager rollout restart deployment cert-manager-webhook
+	kubectl -n cert-manager rollout restart deployment cert-manager-cainjector
 	
-	@echo "\n🚀 Step 2: Deploying OME components..."
+	@echo "\n🚀 Step 3: Deploying OME components..."
 	@echo "  • Applying kustomize configuration..."
 	kubectl apply --server-side --force-conflicts -k config/default
 	
@@ -462,14 +467,14 @@ install: kustomize ## 🚀 Deploy controller in the configured Kubernetes cluste
 	fi
 	
 	@if [ ${WAIT_FOR_CONTROLLER} = true ]; then \
-		echo "\n⏳ Step 3: Waiting for OME controller to be ready..."; \
+		echo "\n⏳ Step 4: Waiting for OME controller to be ready..."; \
 		kubectl wait --for=condition=ready pod -l control-plane=ome-controller-manager -n ome --timeout=300s; \
 	fi
 	
-	@echo "\n🔄 Step 4: Applying cluster resources..."
+	@echo "\n🔄 Step 5: Applying cluster resources..."
 	kubectl apply --server-side --force-conflicts -k config/clusterresources
 	
-	@echo "\n🧹 Step 5: Cleanup..."
+	@echo "\n🧹 Step 6: Cleanup..."
 	@git checkout HEAD -- config/certmanager/certificate.yaml
 	@echo "✅ Cleanup complete"
 	
