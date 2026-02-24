@@ -54,6 +54,7 @@ type MCPRouteSpec struct {
 type MCPBackendRef struct {
 	// ServerRef references an MCPServer in the same namespace
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self.name != ''",message="ServerRef.name must be explicitly provided and cannot be empty"
 	ServerRef corev1.LocalObjectReference `json:"serverRef"`
 
 	// Weight for traffic splitting across backends
@@ -160,6 +161,7 @@ type MCPRouteStatus struct {
 }
 
 type BackendStatus struct {
+	// +kubebuilder:validation:XValidation:rule="self.name != ''",message="ServerRef.name must be explicitly provided and cannot be empty"
 	ServerRef corev1.LocalObjectReference `json:"serverRef"`
 	Ready     bool                        `json:"ready"`
 	Endpoint  string                      `json:"endpoint,omitempty"`
@@ -191,6 +193,7 @@ type OIDCAuthentication struct {
 
 	// ClientSecretRef references a Secret containing the client secret
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self.name != ''",message="clientSecretRef.name must be explicitly provided and cannot be empty"
 	ClientSecretRef corev1.SecretKeySelector `json:"clientSecretRef"`
 
 	// Scopes defines the OAuth2 scopes to request
@@ -219,6 +222,7 @@ type APIKeyAuthentication struct {
 
 	// SecretRefs references Secrets containing valid API keys
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:XValidation:rule="self.all(x, x.name != '')",message="secretRefs elements must have explicitly provided non-empty names"
 	SecretRefs []corev1.SecretKeySelector `json:"secretRefs"`
 }
 
