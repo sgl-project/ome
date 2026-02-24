@@ -519,16 +519,32 @@ func (p *ModelConfigParser) determineModelCapabilitiesFromHF(hfModel modelconfig
 	architecture := hfModel.GetArchitecture()
 	modelType := hfModel.GetModelType()
 
-	// Logic is not correct here.
-	// Presence of "image" in the pipeline layers could indicate Image capability
-	// Prense of "3D" in pipeline layers could indicate Video capability
-	// More research needed here.
+	normalizedArchitecture := strings.ToLower(architecture)
+	normalizedModelType := strings.ToLower(modelType)
+
+	// Tested against 90+ models.
 	if dm, ok := hfModel.(modelconfig.HuggingFaceDiffusionModel); ok {
-		if dm.GetDiffusionModel() != nil {
-			return append(capabilities,
-				string(v1beta1.ModelCapabilityTextToImage),
-				string(v1beta1.ModelCapabilityImageTextToImage),
-			)
+		pipeline := dm.GetDiffusionModel()
+		if pipeline == nil {
+			return capabilities
+		}
+		if strings.Contains(normalizedArchitecture, "imageedit") ||
+			strings.Contains(normalizedArchitecture, "pix2pix") ||
+			strings.Contains(normalizedArchitecture, "img2img") ||
+			strings.Contains(normalizedArchitecture, "inpaint") {
+			return append(capabilities, string(v1beta1.ModelCapabilityImageTextToImage))
+		}
+		if strings.Contains(normalizedArchitecture, "image") ||
+			strings.Contains(normalizedArchitecture, "pix") ||
+			strings.Contains(normalizedArchitecture, "stablediffusion") {
+			return append(capabilities, string(v1beta1.ModelCapabilityTextToImage))
+		}
+		if strings.Contains(normalizedArchitecture, "texttovideo") ||
+			strings.Contains(normalizedArchitecture, "t2v") {
+			return append(capabilities, string(v1beta1.ModelCapabilityTextToVideo))
+		}
+		if strings.Contains(normalizedArchitecture, "video") {
+			return append(capabilities, string(v1beta1.ModelCapabilityImageTextToVideo))
 		}
 	}
 
@@ -537,13 +553,21 @@ func (p *ModelConfigParser) determineModelCapabilitiesFromHF(hfModel modelconfig
 		return append(capabilities, string(v1beta1.ModelCapabilityImageTextToText))
 	}
 
+	// Check for omni-model capability
+	if strings.Contains(normalizedArchitecture, "omni") {
+		return append(capabilities,
+			string(v1beta1.ModelCapabilityTextToAudio), string(v1beta1.ModelCapabilityImageTextToAudio),
+			string(v1beta1.ModelCapabilityVideoTextToAudio), string(v1beta1.ModelCapabilityAudioToText),
+			string(v1beta1.ModelCapabilityAudioToAudio))
+	}
+
 	// Check for text embedding capability
-	if strings.Contains(strings.ToLower(architecture), "embedding") ||
-		strings.Contains(strings.ToLower(architecture), "sentence") ||
-		strings.Contains(strings.ToLower(modelType), "bert") ||
+	if strings.Contains(normalizedArchitecture, "embedding") ||
+		strings.Contains(normalizedArchitecture, "sentence") ||
+		strings.Contains(normalizedModelType, "bert") ||
 		// Special case for known embedding models
-		(strings.Contains(strings.ToLower(modelType), "mistral") &&
-			strings.Contains(strings.ToLower(architecture), "mistralmodel")) {
+		(strings.Contains(normalizedModelType, "mistral") &&
+			strings.Contains(normalizedArchitecture, "mistralmodel")) {
 		return append(capabilities, string(v1beta1.ModelCapabilityEmbedding))
 	}
 

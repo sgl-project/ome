@@ -11,23 +11,6 @@ spec:
       modelFormat:
         name: diffusers
         version: "0.34.0.dev0"
-      diffusionPipeline:
-        className: QwenImagePipeline
-        scheduler:
-          library: diffusers
-          type: FlowMatchEulerDiscreteScheduler
-        textEncoder:
-          library: transformers
-          type: Qwen2_5_VLForConditionalGeneration
-        tokenizer:
-          library: transformers
-          type: Qwen2Tokenizer
-        transformer:
-          library: diffusers
-          type: QwenImageTransformer2DModel
-        vae:
-          library: diffusers
-          type: AutoencoderKLQwenImage
       autoSelect: true
       modelArchitecture: QwenImagePipeline
       priority: 1
@@ -75,12 +58,13 @@ spec:
           name: dshm
       resources:
         requests:
-          cpu: "8"
-          memory: "24Gi"
+          # TextEncoder + Image Transformer layers runs on CPU
+          cpu: "32"
+          memory: "100Gi"
           nvidia.com/gpu: 1
         limits:
-          cpu: "8"
-          memory: "24Gi"
+          cpu: "32"
+          memory: "100Gi"
           nvidia.com/gpu: 1
 
       readinessProbe:
@@ -108,7 +92,7 @@ spec:
         failureThreshold: 150
         successThreshold: 1
         periodSeconds: 6
-        initialDelaySeconds: 60
+        initialDelaySeconds: 300
         timeoutSeconds: 30
   routerConfig:
     runner:

@@ -315,7 +315,49 @@ func TestDetermineModelCapabilitiesFromHF(t *testing.T) {
 			},
 			expectedCapabilities: []string{
 				string(v1beta1.ModelCapabilityTextToImage),
+			},
+		},
+		{
+			name: "Diffusion QwenImagePipeline",
+			mockModel: &mockDiffusionModel{
+				mockHuggingFaceModel: mockHuggingFaceModel{
+					modelType:    "diffusers",
+					architecture: "QwenImagePipeline",
+					hasVision:    true,
+				},
+				diffusionModel: &modelconfig.DiffusionPipelineSpec{ClassName: "QwenImagePipeline"},
+			},
+			expectedCapabilities: []string{
+				string(v1beta1.ModelCapabilityTextToImage),
+			},
+		},
+		{
+			name: "Diffusion QwenImageEditPlus",
+			mockModel: &mockDiffusionModel{
+				mockHuggingFaceModel: mockHuggingFaceModel{
+					modelType:    "diffusers",
+					architecture: "QwenImageEditPlus",
+					hasVision:    true,
+				},
+				diffusionModel: &modelconfig.DiffusionPipelineSpec{ClassName: "QwenImageEditPlus"},
+			},
+			expectedCapabilities: []string{
 				string(v1beta1.ModelCapabilityImageTextToImage),
+			},
+		},
+		{
+			name: "Transformer Qwen3 Omni",
+			mockModel: &mockHuggingFaceModel{
+				modelType:    "qwen",
+				architecture: "Qwen3OmniMoeForConditionalGeneration",
+				hasVision:    false,
+			},
+			expectedCapabilities: []string{
+				string(v1beta1.ModelCapabilityTextToAudio),
+				string(v1beta1.ModelCapabilityImageTextToAudio),
+				string(v1beta1.ModelCapabilityVideoTextToAudio),
+				string(v1beta1.ModelCapabilityAudioToText),
+				string(v1beta1.ModelCapabilityAudioToAudio),
 			},
 		},
 	}
