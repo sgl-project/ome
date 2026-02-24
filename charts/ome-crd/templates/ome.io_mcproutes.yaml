@@ -1,0 +1,442 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: mcproutes.ome.io
+spec:
+  group: ome.io
+  names:
+    kind: MCPRoute
+    listKind: MCPRouteList
+    plural: mcproutes
+    shortNames:
+    - mcpr
+    singular: mcproute
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.backendRefs[*]
+      name: Backends
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              authentication:
+                properties:
+                  apiKey:
+                    properties:
+                      header:
+                        default: X-API-Key
+                        type: string
+                      secretRefs:
+                        items:
+                          properties:
+                            key:
+                              type: string
+                            name:
+                              default: ""
+                              type: string
+                            optional:
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        minItems: 1
+                        type: array
+                    required:
+                    - header
+                    - secretRefs
+                    type: object
+                  jwt:
+                    properties:
+                      audiences:
+                        items:
+                          type: string
+                        minItems: 1
+                        type: array
+                      issuer:
+                        type: string
+                      jwksURI:
+                        type: string
+                    required:
+                    - audiences
+                    - jwksURI
+                    type: object
+                  oidc:
+                    properties:
+                      clientID:
+                        type: string
+                      clientSecretRef:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      issuer:
+                        type: string
+                      scopes:
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - clientID
+                    - clientSecretRef
+                    - issuer
+                    type: object
+                type: object
+              authorization:
+                properties:
+                  rules:
+                    items:
+                      properties:
+                        conditions:
+                          items:
+                            properties:
+                              key:
+                                type: string
+                              operator:
+                                default: Equal
+                                enum:
+                                - Equal
+                                - NotEqual
+                                - In
+                                - NotIn
+                                - Matches
+                                - NotMatches
+                                type: string
+                              type:
+                                enum:
+                                - IPAddress
+                                - TimeOfDay
+                                - RequestHeader
+                                type: string
+                              value:
+                                type: string
+                            required:
+                            - operator
+                            - type
+                            - value
+                            type: object
+                          type: array
+                        permissions:
+                          items:
+                            properties:
+                              actions:
+                                enum:
+                                - tools/call
+                                - tools/list
+                                items:
+                                  type: string
+                                minItems: 1
+                                type: array
+                              tools:
+                                items:
+                                  type: string
+                                minItems: 1
+                                type: array
+                            required:
+                            - actions
+                            - tools
+                            type: object
+                          minItems: 1
+                          type: array
+                        principals:
+                          items:
+                            type: string
+                          minItems: 1
+                          type: array
+                      required:
+                      - permissions
+                      - principals
+                      type: object
+                    minItems: 1
+                    type: array
+                required:
+                - rules
+                type: object
+              backendRefs:
+                items:
+                  properties:
+                    serverRef:
+                      properties:
+                        name:
+                          default: ""
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    weight:
+                      default: 1
+                      format: int32
+                      minimum: 0
+                      type: integer
+                  required:
+                  - serverRef
+                  type: object
+                maxItems: 16
+                minItems: 1
+                type: array
+              filters:
+                items:
+                  properties:
+                    requestHeaderModifier:
+                      properties:
+                        add:
+                          items:
+                            properties:
+                              name:
+                                type: string
+                              value:
+                                type: string
+                            required:
+                            - name
+                            - value
+                            type: object
+                          type: array
+                        remove:
+                          items:
+                            type: string
+                          type: array
+                        set:
+                          items:
+                            properties:
+                              name:
+                                type: string
+                              value:
+                                type: string
+                            required:
+                            - name
+                            - value
+                            type: object
+                          type: array
+                      type: object
+                    responseHeaderModifier:
+                      properties:
+                        add:
+                          items:
+                            properties:
+                              name:
+                                type: string
+                              value:
+                                type: string
+                            required:
+                            - name
+                            - value
+                            type: object
+                          type: array
+                        remove:
+                          items:
+                            type: string
+                          type: array
+                        set:
+                          items:
+                            properties:
+                              name:
+                                type: string
+                              value:
+                                type: string
+                            required:
+                            - name
+                            - value
+                            type: object
+                          type: array
+                      type: object
+                    type:
+                      enum:
+                      - RequestHeaderModifier
+                      - ResponseHeaderModifier
+                      type: string
+                  required:
+                  - type
+                  type: object
+                type: array
+              matches:
+                items:
+                  properties:
+                    backendRefs:
+                      items:
+                        properties:
+                          serverRef:
+                            properties:
+                              name:
+                                default: ""
+                                type: string
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          weight:
+                            default: 1
+                            format: int32
+                            minimum: 0
+                            type: integer
+                        required:
+                        - serverRef
+                        type: object
+                      type: array
+                    headers:
+                      items:
+                        properties:
+                          name:
+                            type: string
+                          type:
+                            default: Exact
+                            enum:
+                            - Exact
+                            - Prefix
+                            - Regex
+                            type: string
+                          value:
+                            type: string
+                        required:
+                        - name
+                        - type
+                        - value
+                        type: object
+                      type: array
+                    method:
+                      type: string
+                    toolMatch:
+                      properties:
+                        exactMatch:
+                          type: string
+                        prefixMatch:
+                          type: string
+                        regexMatch:
+                          type: string
+                      type: object
+                    tools:
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                type: array
+              rateLimit:
+                properties:
+                  limits:
+                    items:
+                      properties:
+                        dimension:
+                          enum:
+                          - user
+                          - ip
+                          - tool
+                          - principal
+                          - namespace
+                          type: string
+                        requests:
+                          format: int32
+                          minimum: 1
+                          type: integer
+                        tools:
+                          items:
+                            type: string
+                          type: array
+                        unit:
+                          enum:
+                          - second
+                          - minute
+                          - hour
+                          - day
+                          type: string
+                      required:
+                      - dimension
+                      - requests
+                      - unit
+                      type: object
+                    minItems: 1
+                    type: array
+                required:
+                - limits
+                type: object
+            required:
+            - backendRefs
+            type: object
+          status:
+            properties:
+              backendStatuses:
+                items:
+                  properties:
+                    endpoint:
+                      type: string
+                    message:
+                      type: string
+                    ready:
+                      type: boolean
+                    serverRef:
+                      properties:
+                        name:
+                          default: ""
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                  required:
+                  - ready
+                  - serverRef
+                  type: object
+                type: array
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              gatewayURL:
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

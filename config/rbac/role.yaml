@@ -188,6 +188,8 @@ rules:
   - finetunedweights/finalizers
   - inferenceservices
   - inferenceservices/finalizers
+  - mcproutes
+  - mcpservers
   - servingruntimes
   - servingruntimes/finalizers
   verbs:
@@ -203,6 +205,8 @@ rules:
   resources:
   - acceleratorclasses/finalizers
   - clusterbasemodels/finalizers
+  - mcproutes/finalizers
+  - mcpservers/finalizers
   verbs:
   - update
 - apiGroups:
@@ -216,6 +220,8 @@ rules:
   - clusterservingruntimes/status
   - finetunedweights/status
   - inferenceservices/status
+  - mcproutes/status
+  - mcpservers/status
   - servingruntimes/status
   verbs:
   - get
