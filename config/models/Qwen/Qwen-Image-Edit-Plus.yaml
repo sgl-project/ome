@@ -1,0 +1,13 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: qwen-image-edit-plus
+spec:
+  vendor: Qwen
+  displayName: qwen.qwen-image
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://Qwen/Qwen-Image-Edit-2511
+    path: /raid/models/Qwen/Qwen-Image-Edit-2511
+    key: "hf-token"
