@@ -59,7 +59,7 @@ spec:
         - name: INSTANCE_TYPE_MAP
           valueFrom:
             configMapKeyRef:
-              name: ome-instance-type-map
+              name: model-agent-config-map
               key: instance-type-map
         volumeMounts:
         - name: host-models
