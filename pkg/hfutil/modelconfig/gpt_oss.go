@@ -227,6 +227,11 @@ func (c *GptOssConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *GptOssConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the GPT-OSS model handler
 func init() {
 	RegisterModelLoader("gpt_oss", func(configPath string) (HuggingFaceModel, error) {

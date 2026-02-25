@@ -105,6 +105,11 @@ func (c *MiniCPMConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *MiniCPMConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the MiniCPM model handler
 func init() {
 	RegisterModelLoader("minicpm", func(configPath string) (HuggingFaceModel, error) {

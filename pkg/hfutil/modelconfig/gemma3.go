@@ -143,6 +143,11 @@ func (c *Gemma3Config) HasVision() bool {
 	return true
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *Gemma3Config) IsEmbedding() bool {
+	return false
+}
+
 // Register the Gemma3 model handler
 func init() {
 	RegisterModelLoader("gemma3", func(configPath string) (HuggingFaceModel, error) {

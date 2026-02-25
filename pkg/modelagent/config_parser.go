@@ -350,6 +350,7 @@ func (p *ModelConfigParser) extractModelMetadataFromHF(hfModel modelconfig.Huggi
 		ContextLength      int    `json:"context_length"`
 		ParameterCount     string `json:"parameter_count"`
 		HasVision          bool   `json:"has_vision"`
+		IsEmbedding        bool   `json:"is_embedding"`
 		TransformerVersion string `json:"transformers_version"`
 		TorchDtype         string `json:"torch_dtype"`
 		ModelSizeBytes     int64  `json:"model_size_bytes"`
@@ -359,6 +360,7 @@ func (p *ModelConfigParser) extractModelMetadataFromHF(hfModel modelconfig.Huggi
 		ContextLength:      hfModel.GetContextLength(),
 		ParameterCount:     modelconfig.FormatParamCount(hfModel.GetParameterCount()),
 		HasVision:          hfModel.HasVision(),
+		IsEmbedding:        hfModel.IsEmbedding(),
 		TransformerVersion: hfModel.GetTransformerVersion(),
 		TorchDtype:         hfModel.GetTorchDtype(),
 		ModelSizeBytes:     modelSizeBytes,
@@ -562,7 +564,8 @@ func (p *ModelConfigParser) determineModelCapabilitiesFromHF(hfModel modelconfig
 	}
 
 	// Check for text embedding capability
-	if strings.Contains(normalizedArchitecture, "embedding") ||
+	if hfModel.IsEmbedding() ||
+		strings.Contains(normalizedArchitecture, "embedding") ||
 		strings.Contains(normalizedArchitecture, "sentence") ||
 		strings.Contains(normalizedModelType, "bert") ||
 		// Special case for known embedding models

@@ -98,6 +98,11 @@ func (c *BaichuanConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *BaichuanConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the Baichuan model handler
 func init() {
 	RegisterModelLoader("baichuan", func(configPath string) (HuggingFaceModel, error) {

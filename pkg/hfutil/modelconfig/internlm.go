@@ -99,6 +99,11 @@ func (c *InternLMConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *InternLMConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the InternLM model handler
 func init() {
 	RegisterModelLoader("internlm", func(configPath string) (HuggingFaceModel, error) {

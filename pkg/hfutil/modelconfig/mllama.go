@@ -183,6 +183,11 @@ func (c *MLlamaConfig) HasVision() bool {
 	return true
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *MLlamaConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the MLlama model handler
 func init() {
 	RegisterModelLoader("mllama", func(configPath string) (HuggingFaceModel, error) {

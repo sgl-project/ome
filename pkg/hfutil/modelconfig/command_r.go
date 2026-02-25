@@ -110,6 +110,11 @@ func (c *CommandRConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *CommandRConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the Command-R model handler
 func init() {
 	RegisterModelLoader("cohere", func(configPath string) (HuggingFaceModel, error) {

@@ -112,6 +112,11 @@ func (c *ExaoneConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *ExaoneConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the ExaONE model handler
 func init() {
 	RegisterModelLoader("exaone", func(configPath string) (HuggingFaceModel, error) {

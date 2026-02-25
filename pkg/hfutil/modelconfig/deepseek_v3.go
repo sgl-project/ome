@@ -187,6 +187,11 @@ func (c *DeepseekV3Config) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *DeepseekV3Config) IsEmbedding() bool {
+	return false
+}
+
 // Register the DeepSeek V3 model handler
 func init() {
 	RegisterModelLoader("deepseek_v3", func(configPath string) (HuggingFaceModel, error) {

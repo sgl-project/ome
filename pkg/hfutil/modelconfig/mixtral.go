@@ -155,6 +155,11 @@ func (c *MixtralConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *MixtralConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the Mixtral model handler
 func init() {
 	RegisterModelLoader("mixtral", func(configPath string) (HuggingFaceModel, error) {

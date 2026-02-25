@@ -249,6 +249,11 @@ func (c *Llama4Config) HasVision() bool {
 	return c.VisionConfig != nil
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *Llama4Config) IsEmbedding() bool {
+	return false
+}
+
 // Helper function to estimate MoE model parameters
 func estimateMoEParamCount(hiddenSize, layers, intermediateSize, numExperts, expertsPerToken int) int64 {
 	// Base parameters (shared across all experts)

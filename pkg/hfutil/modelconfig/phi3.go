@@ -113,6 +113,11 @@ func (c *Phi3Config) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *Phi3Config) IsEmbedding() bool {
+	return false
+}
+
 // Register the Phi3 model handler
 func init() {
 	RegisterModelLoader("phi3", func(configPath string) (HuggingFaceModel, error) {

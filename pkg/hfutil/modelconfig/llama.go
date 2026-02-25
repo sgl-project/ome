@@ -208,6 +208,11 @@ func (c *LlamaConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *LlamaConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the Llama model handler
 func init() {
 	RegisterModelLoader("llama", func(configPath string) (HuggingFaceModel, error) {

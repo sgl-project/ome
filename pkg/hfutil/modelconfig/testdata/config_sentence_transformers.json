@@ -1,0 +1,8 @@
+{
+  "prompts": {
+    "query": "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:",
+    "document": ""
+  },
+  "default_prompt_name": null,
+  "similarity_fn_name": "cosine"
+}

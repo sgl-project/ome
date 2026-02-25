@@ -96,6 +96,11 @@ func (c *XverseConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *XverseConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the XVERSE model handler
 func init() {
 	RegisterModelLoader("xverse", func(configPath string) (HuggingFaceModel, error) {
