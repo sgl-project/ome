@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -38,6 +40,12 @@ type HuggingFaceModel interface {
 
 	// HasVision returns true if this is a multimodal vision model
 	HasVision() bool
+}
+
+// HuggingFaceDiffusionModel represents diffusion models that expose pipeline metadata.
+type HuggingFaceDiffusionModel interface {
+	HuggingFaceModel
+	GetDiffusionModel() *DiffusionPipelineSpec
 }
 
 // AutoMap defines the mapping of model classes for custom Hugging Face models
@@ -200,7 +208,9 @@ func EstimateModelSizeBytes(paramCount int64, dtype string) int64 {
 	return int64(float64(paramCount) * sizePerParam)
 }
 
-// Map of model type to model loader functions with thread-safe access
+// Map of model keys to model loader functions with thread-safe access.
+// For transformer-style config.json, the key is model_type.
+// For diffusion model_index.json, the key is the pipeline class name.
 var (
 	modelLoadersMu sync.RWMutex
 	modelLoaders   = make(map[string]func(string) (HuggingFaceModel, error))
@@ -278,8 +288,152 @@ func (c *GenericModelConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(paramCount, c.TorchDtype)
 }
 
-// loadGenericConfig loads a generic model configuration as a fallback
-func loadGenericConfig(configPath string) (*GenericModelConfig, error) {
+// GenericDiffusionModelConfig is a fallback configuration for diffusers model_index.json files.
+// It includes common diffusion pipeline components for easy access.
+type GenericDiffusionModelConfig struct {
+	BaseModelConfig
+
+	DiffusersVersion  string
+	DiffusionPipeline *DiffusionPipelineSpec
+}
+
+func (c *GenericDiffusionModelConfig) GetDiffusionModel() *DiffusionPipelineSpec {
+	return c.DiffusionPipeline
+}
+
+func (c *GenericDiffusionModelConfig) GetParameterCount() int64 {
+	if c.ConfigPath == "" {
+		return 0
+	}
+
+	baseDir := filepath.Dir(c.ConfigPath)
+	textEncoderConfig := filepath.Join(baseDir, "text_encoder", "config.json")
+	transformerConfig := filepath.Join(baseDir, "transformer", "config.json")
+	if _, err := os.Stat(transformerConfig); err != nil {
+		unetConfig := filepath.Join(baseDir, "unet", "config.json")
+		if _, unetErr := os.Stat(unetConfig); unetErr == nil {
+			transformerConfig = unetConfig
+		}
+	}
+	vaeConfig := filepath.Join(baseDir, "vae", "config.json")
+
+	total := int64(0)
+
+	add := func(label, configPath string, required bool) bool {
+		if configPath == "" {
+			if required {
+				fmt.Printf("Warning: %s config path is empty\n", label)
+				return false
+			}
+			return true
+		}
+		if _, err := os.Stat(configPath); err != nil {
+			if required {
+				fmt.Printf("Warning: %s config not found at '%s': %v\n", label, configPath, err)
+				return false
+			}
+			return true
+		}
+
+		count, err := FindAndParseSafetensors(configPath)
+		if err != nil {
+			if required {
+				fmt.Printf("Warning: failed to parse %s safetensors: %v\n", label, err)
+				return false
+			}
+			return true
+		}
+		if total > math.MaxInt64-count {
+			fmt.Printf("Warning: parameter count overflow when adding %s\n", label)
+			return false
+		}
+		total += count
+		return true
+	}
+
+	if !add("text_encoder", textEncoderConfig, true) {
+		return 0
+	}
+	if !add("transformer", transformerConfig, true) {
+		return 0
+	}
+	if !add("vae", vaeConfig, true) {
+		return 0
+	}
+
+	for name := range c.DiffusionPipeline.AdditionalComponents {
+		configPath := filepath.Join(baseDir, name, "config.json")
+		if !add(name, configPath, false) {
+			return 0
+		}
+	}
+
+	return total
+}
+
+func (c *GenericDiffusionModelConfig) GetQuantizationType() string {
+	// Not supported. Doesn't seem to be standardized in HF.
+	return ""
+}
+
+func (c *GenericDiffusionModelConfig) GetContextLength() int {
+	if c.ConfigPath == "" {
+		return 0
+	}
+
+	textEncoderConfig := filepath.Join(filepath.Dir(c.ConfigPath), "text_encoder", "config.json")
+	data, err := os.ReadFile(textEncoderConfig)
+	if err != nil {
+		return 0
+	}
+
+	data = SanitizeJSONBytes(data)
+
+	var meta struct {
+		MaxPositionEmbeds int `json:"max_position_embeddings"`
+	}
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return 0
+	}
+	if meta.MaxPositionEmbeds > 0 {
+		return meta.MaxPositionEmbeds
+	}
+	return 0
+}
+
+func (c *GenericDiffusionModelConfig) GetModelSizeBytes() int64 {
+	paramCount := c.GetParameterCount()
+	if paramCount == 0 {
+		return 0
+	}
+	return EstimateModelSizeBytes(paramCount, c.TorchDtype)
+}
+
+func (c *GenericDiffusionModelConfig) HasVision() bool {
+	return true
+}
+
+// loadGenericModelConfig loads a generic model configuration as a fallback.
+// It also handles diffusers model_index.json files when model_type is absent.
+func loadGenericModelConfig(configPath string) (HuggingFaceModel, error) {
+	if filepath.Base(configPath) == "model_index.json" {
+		pipeline, err := LoadDiffusionPipelineSpec(configPath)
+		if err != nil {
+			return nil, err
+		}
+
+		config := &GenericDiffusionModelConfig{
+			DiffusersVersion:  pipeline.DiffusersVersion,
+			DiffusionPipeline: pipeline,
+		}
+		config.ConfigPath = configPath
+		config.ModelType = "diffusers"
+		if pipeline.ClassName != "" {
+			config.Architectures = []string{pipeline.ClassName}
+		}
+		return config, nil
+	}
+
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file '%s': %w", configPath, err)
@@ -298,10 +452,12 @@ func loadGenericConfig(configPath string) (*GenericModelConfig, error) {
 	return &config, nil
 }
 
-// RegisterModelLoader safely registers a model loader function for a given model type
-func RegisterModelLoader(modelType string, loader func(string) (HuggingFaceModel, error)) {
-	if modelType == "" {
-		panic("model type cannot be empty")
+// RegisterModelLoader safely registers a model loader function for a given model key.
+// For transformer-style config.json, the key is model_type.
+// For diffusion model_index.json, the key is the pipeline class name.
+func RegisterModelLoader(modelKey string, loader func(string) (HuggingFaceModel, error)) {
+	if modelKey == "" {
+		panic("model key cannot be empty")
 	}
 	if loader == nil {
 		panic("loader function cannot be nil")
@@ -309,17 +465,18 @@ func RegisterModelLoader(modelType string, loader func(string) (HuggingFaceModel
 
 	modelLoadersMu.Lock()
 	defer modelLoadersMu.Unlock()
-	modelLoaders[modelType] = loader
+	modelLoaders[modelKey] = loader
 }
 
-// GetSupportedModelTypes returns a list of all supported model types
+// GetSupportedModelTypes returns a list of all registered model keys.
+// These are model_type values for transformer configs and class names for diffusion pipelines.
 func GetSupportedModelTypes() []string {
 	modelLoadersMu.RLock()
 	defer modelLoadersMu.RUnlock()
 
 	types := make([]string, 0, len(modelLoaders))
-	for modelType := range modelLoaders {
-		types = append(types, modelType)
+	for modelKey := range modelLoaders {
+		types = append(types, modelKey)
 	}
 	return types
 }
@@ -353,8 +510,10 @@ func SanitizeJSONBytes(data []byte) []byte {
 	return []byte(s)
 }
 
-// LoadModelConfig loads a model configuration from a config.json file
-// and returns the appropriate model implementation based on the "model_type" field.
+// LoadModelConfig loads a model configuration from a config.json or model_index.json file
+// and returns the appropriate model implementation based on the model key:
+// - transformer config.json: "model_type"
+// - diffusion model_index.json: "_class_name" (pipeline class name)
 // This is the main entry point for users who want to load any supported model
 // without knowing its specific type in advance.
 //
@@ -394,13 +553,25 @@ func LoadModelConfig(configPath string) (HuggingFaceModel, error) {
 		return nil, fmt.Errorf("failed to parse model config JSON from '%s': %w", configPath, err)
 	}
 
-	if baseConfig.ModelType == "" {
-		return nil, fmt.Errorf("model_type field is missing or empty in config file '%s'", configPath)
+	modelKey := baseConfig.ModelType
+	diffusionClassName := ""
+	if modelKey == "" && filepath.Base(configPath) == "model_index.json" {
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(data, &raw); err == nil {
+			diffusionClassName = parseJSONStringField(raw, "_class_name", "class_name", "className")
+		}
+		if diffusionClassName != "" {
+			modelKey = diffusionClassName
+		}
+	}
+
+	if modelKey == "" {
+		return nil, fmt.Errorf("model_type or _class_name field is missing or empty in config file '%s'", configPath)
 	}
 
 	// Load using registered model loaders (thread-safe access)
 	modelLoadersMu.RLock()
-	loader, exists := modelLoaders[baseConfig.ModelType]
+	loader, exists := modelLoaders[modelKey]
 	modelLoadersMu.RUnlock()
 
 	if !exists {
@@ -410,12 +581,12 @@ func LoadModelConfig(configPath string) (HuggingFaceModel, error) {
 			"Parameter count will be estimated from safetensors or architecture.",
 			baseConfig.ModelType)
 
-		return loadGenericConfig(configPath)
+		return loadGenericModelConfig(configPath)
 	}
 
 	model, err := loader(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load %s model from '%s': %w", baseConfig.ModelType, configPath, err)
+		return nil, fmt.Errorf("failed to load %s model from '%s': %w", modelKey, configPath, err)
 	}
 
 	return model, nil
