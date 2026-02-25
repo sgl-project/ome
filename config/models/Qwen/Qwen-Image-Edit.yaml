@@ -4,7 +4,7 @@ metadata:
   name: qwen-image-edit
 spec:
   vendor: Qwen
-  displayName: qwen.qwen-image
+  displayName: qwen.qwen-image-edit
   disabled: false
   version: "1.0.0"
   storage:
