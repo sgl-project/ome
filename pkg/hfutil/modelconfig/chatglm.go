@@ -121,6 +121,11 @@ func (c *ChatGLMConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *ChatGLMConfig) IsEmbedding() bool {
+	return false
+}
+
 // GetTorchDtype returns the torch data type used by the model
 func (c *ChatGLMConfig) GetTorchDtype() string {
 	if c.TorchDtype != "" {

@@ -40,6 +40,9 @@ type HuggingFaceModel interface {
 
 	// HasVision returns true if this is a multimodal vision model
 	HasVision() bool
+
+	// IsEmbedding returns true if this model is intended for generating embeddings
+	IsEmbedding() bool
 }
 
 // HuggingFaceDiffusionModel represents diffusion models that expose pipeline metadata.
@@ -90,6 +93,12 @@ func (c *BaseModelConfig) GetTorchDtype() string {
 
 // Default implementation for HasVision - most models don't have vision capabilities
 func (c *BaseModelConfig) HasVision() bool {
+	return false
+}
+
+// IsEmbedding returns true if this generic model can be reliably identified as an embedding model.
+// By default, this returns false.
+func (c *BaseModelConfig) IsEmbedding() bool {
 	return false
 }
 
@@ -411,6 +420,10 @@ func (c *GenericDiffusionModelConfig) GetModelSizeBytes() int64 {
 
 func (c *GenericDiffusionModelConfig) HasVision() bool {
 	return true
+}
+
+func (c *GenericDiffusionModelConfig) IsEmbedding() bool {
+	return false
 }
 
 // loadGenericModelConfig loads a generic model configuration as a fallback.

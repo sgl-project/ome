@@ -411,7 +411,7 @@ func (v *InferenceServiceValidator) resolveModelAndRuntime(ctx context.Context, 
 		// Check if runtime can be auto-selected
 		selection, err := v.RuntimeSelector.SelectRuntime(ctx, baseModel, isvc)
 		if err != nil {
-			return warnings, fmt.Errorf("no supporting runtime found for model %s and engine does not have complete runner configuration", isvc.Spec.Model.Name)
+			return warnings, fmt.Errorf("no supporting runtime found for model %s and engine does not have complete runner configuration: %w", isvc.Spec.Model.Name, err)
 		}
 		// Success - runtime will be auto-selected
 		warnings = append(warnings, fmt.Sprintf("Runtime %s will be auto-selected for model %s",

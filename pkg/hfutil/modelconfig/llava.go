@@ -167,6 +167,11 @@ func (c *LLaVAConfig) HasVision() bool {
 	return true
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *LLaVAConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the LLaVA model handler
 func init() {
 	RegisterModelLoader("llava", func(configPath string) (HuggingFaceModel, error) {

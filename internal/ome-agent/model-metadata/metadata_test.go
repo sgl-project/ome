@@ -28,6 +28,7 @@ type mockHuggingFaceModel struct {
 	torchDtype         string
 	modelSizeBytes     int64
 	hasVision          bool
+	isEmbedding        bool
 }
 
 func (m *mockHuggingFaceModel) GetModelType() string          { return m.modelType }
@@ -39,6 +40,7 @@ func (m *mockHuggingFaceModel) GetQuantizationType() string   { return m.quantiz
 func (m *mockHuggingFaceModel) GetTorchDtype() string         { return m.torchDtype }
 func (m *mockHuggingFaceModel) GetModelSizeBytes() int64      { return m.modelSizeBytes }
 func (m *mockHuggingFaceModel) HasVision() bool               { return m.hasVision }
+func (m *mockHuggingFaceModel) IsEmbedding() bool             { return m.isEmbedding }
 
 func TestMetadataExtractor_updateSpec(t *testing.T) {
 	zapLogger, _ := zap.NewDevelopment()

@@ -119,6 +119,11 @@ func (c *BertConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns true since this is an embedding model
+func (c *BertConfig) IsEmbedding() bool {
+	return true
+}
+
 // Register the BERT model handler
 func init() {
 	RegisterModelLoader("bert", func(configPath string) (HuggingFaceModel, error) {

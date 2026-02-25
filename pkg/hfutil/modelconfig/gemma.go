@@ -137,6 +137,11 @@ func (c *GemmaConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *GemmaConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the Gemma model handlers
 func init() {
 	// Register for "gemma", "gemma2", and "gemma3_text" model types

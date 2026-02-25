@@ -181,6 +181,11 @@ func (c *DeepSeekVLConfig) HasVision() bool {
 	return true
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *DeepSeekVLConfig) IsEmbedding() bool {
+	return false
+}
+
 // GetArchitecture returns the model architecture
 func (c *DeepSeekVLConfig) GetArchitecture() string {
 	if len(c.Architectures) > 0 {

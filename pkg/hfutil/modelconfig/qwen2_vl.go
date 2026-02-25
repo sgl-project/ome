@@ -148,6 +148,11 @@ func (c *Qwen2VLConfig) HasVision() bool {
 	return true // Qwen2-VL models have vision capabilities
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *Qwen2VLConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the Qwen2-VL and Qwen2.5-VL model handlers
 func init() {
 	RegisterModelLoader("qwen2_vl", func(configPath string) (HuggingFaceModel, error) {

@@ -113,6 +113,11 @@ func (c *Qwen3MoeConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *Qwen3MoeConfig) IsEmbedding() bool {
+	return false
+}
+
 func init() {
 	RegisterModelLoader("qwen3_moe", func(configPath string) (HuggingFaceModel, error) {
 		return LoadQwen3MoeConfig(configPath)

@@ -126,6 +126,11 @@ func (c *PhiMoEConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *PhiMoEConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the PhiMoE model handler
 func init() {
 	RegisterModelLoader("phimoe", func(configPath string) (HuggingFaceModel, error) {

@@ -140,6 +140,11 @@ func (c *MistralConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns true since this is an embedding model
+func (c *MistralConfig) IsEmbedding() bool {
+	return true
+}
+
 // Register the Mistral model handler
 func init() {
 	RegisterModelLoader("mistral", func(configPath string) (HuggingFaceModel, error) {

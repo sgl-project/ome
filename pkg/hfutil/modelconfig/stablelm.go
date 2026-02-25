@@ -96,6 +96,11 @@ func (c *StableLMConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *StableLMConfig) IsEmbedding() bool {
+	return false
+}
+
 // Register the StableLM model handler
 func init() {
 	RegisterModelLoader("stablelm", func(configPath string) (HuggingFaceModel, error) {

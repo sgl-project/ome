@@ -148,6 +148,11 @@ func (c *Qwen3VLConfig) HasVision() bool {
 	return true
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *Qwen3VLConfig) IsEmbedding() bool {
+	return false
+}
+
 // estimateQwen3VLMoEParams estimates parameters for Qwen3-VL MoE models
 func estimateQwen3VLMoEParams(hiddenSize, numLayers, moeIntermediateSize, numExperts, vocabSize int) int64 {
 	// Embeddings

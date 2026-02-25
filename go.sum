@@ -1340,9 +1340,7 @@ k8s.io/component-helpers v0.31.4/go.mod h1:Ddq5GYRK/1uNoPNgJh9N5osPutvBweQEcIG6b
 k8s.io/controller-manager v0.30.12/go.mod h1:vbZ0OY4XMFGJDl9lTaPGc+BDocukZzMH41iNVc5BcY8=
 k8s.io/csi-translation-lib v0.30.12/go.mod h1:5lNKaS8VpgmTpH6rPAdwEbQ9HvCnpOGaqpP7OAUFj/I=
 k8s.io/dynamic-resource-allocation v0.30.12/go.mod h1:+1QBI9MRebuOMtLAqCK/RB+oKCh9f+2EhAgkEOV7Fz8=
-k8s.io/gengo v0.0.0-20230829151522-9cce18d56c01 h1:pWEwq4Asjm4vjW7vcsmijwBhOr1/shsbSYiWXmNGlks=
 k8s.io/gengo v0.0.0-20230829151522-9cce18d56c01/go.mod h1:FiNAH4ZV3gBg2Kwh89tzAEV2be7d5xI0vBa/VySYy3E=
-k8s.io/gengo/v2 v2.0.0-20240911193312-2b36238f13e9 h1:si3PfKm8dDYxgfbeA6orqrtLkvvIeH8UqffFJDl0bz4=
 k8s.io/gengo/v2 v2.0.0-20240911193312-2b36238f13e9/go.mod h1:EJykeLsmFC60UQbYJezXkEsG2FLrt0GPNkU5iK5GWxU=
 k8s.io/klog v1.0.0/go.mod h1:4Bi6QPql/J/LkTDqv7R/cd3hPo4k2DG6Ptcz060Ez5I=
 k8s.io/klog/hack/tools v0.0.0-20210917071902-331d2323a192/go.mod h1:DXW3Mv8xqJvjXWiBSBHrK2O4mq5LMD0clqkv3b1g9HA=

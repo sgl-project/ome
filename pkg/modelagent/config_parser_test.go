@@ -26,6 +26,7 @@ type mockHuggingFaceModel struct {
 	torchDtype         string
 	modelSizeBytes     int64
 	hasVision          bool
+	isEmbedding        bool
 	diffusionModel     *modelconfig.DiffusionPipelineSpec
 }
 
@@ -48,6 +49,7 @@ func (m *mockHuggingFaceModel) GetQuantizationType() string   { return m.quantiz
 func (m *mockHuggingFaceModel) GetTorchDtype() string         { return m.torchDtype }
 func (m *mockHuggingFaceModel) GetModelSizeBytes() int64      { return m.modelSizeBytes }
 func (m *mockHuggingFaceModel) HasVision() bool               { return m.hasVision }
+func (m *mockHuggingFaceModel) IsEmbedding() bool             { return m.isEmbedding }
 
 // Define a helper function to create a mock model with default values
 func createDefaultMockModel() *mockHuggingFaceModel {
@@ -61,6 +63,7 @@ func createDefaultMockModel() *mockHuggingFaceModel {
 		torchDtype:         "float16",
 		modelSizeBytes:     14000000000, // 14GB
 		hasVision:          false,
+		isEmbedding:        false,
 	}
 }
 

@@ -182,6 +182,11 @@ func (c *KimiK2Config) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *KimiK2Config) IsEmbedding() bool {
+	return false
+}
+
 // Register the Kimi-K2 model handler
 func init() {
 	RegisterModelLoader("kimi_k2", func(configPath string) (HuggingFaceModel, error) {

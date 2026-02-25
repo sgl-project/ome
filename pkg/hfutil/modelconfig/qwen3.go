@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+
+	"github.com/sgl-project/ome/pkg/constants"
 )
 
 // Qwen3Config defines the configuration for Qwen3 models
@@ -39,6 +42,9 @@ type Qwen3Config struct {
 	TieWordEmbeddings bool `json:"tie_word_embeddings"`
 	UseCache          bool `json:"use_cache"`
 	UseSlidingWindow  bool `json:"use_sliding_window"`
+
+	// Embedding config
+	SimilarityFnName string `json:"similarity_fn_name"`
 }
 
 // LoadQwen3Config loads a Qwen3 model configuration from a JSON file
@@ -73,6 +79,8 @@ func (c *Qwen3Config) GetParameterCount() int64 {
 	// Hard-coded parameter counts based on model size
 	if c.HiddenSize == 2560 && c.NumHiddenLayers == 36 {
 		return 4_000_000_000 // 4B parameters
+	} else if c.HiddenSize == 4096 && c.NumHiddenLayers == 36 {
+		return 8_000_000_000 // 8B parameters
 	}
 
 	// For unknown configurations, estimate based on architecture
@@ -103,9 +111,45 @@ func (c *Qwen3Config) HasVision() bool {
 	return false // Base Qwen3 models don't have vision capabilities
 }
 
+// IsEmbedding returns true if this Qwen3 model is an embedding model (i.e., if
+// SimilarityFnName is set, as in Qwen3 Embedding models), and false for base models.
+func (c *Qwen3Config) IsEmbedding() bool {
+	return c.SimilarityFnName != ""
+}
+
+// GetSentenceTransformersConfigPath returns the full path to config_sentence_transformers.json
+// residing in the same directory as the given configPath, and verifies its existence.
+// Returns the full path if the file exists, or an error if not.
+func GetSentenceTransformersConfigPath(configPath string) (string, error) {
+	dir := filepath.Dir(configPath)
+	stConfigPath := filepath.Join(dir, constants.SentenceTransformersConfigFileName)
+	if _, err := os.Stat(stConfigPath); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("%s not found in %s", constants.SentenceTransformersConfigFileName, dir)
+		}
+		return "", fmt.Errorf("error checking %s: %w", stConfigPath, err)
+	}
+	return stConfigPath, nil
+}
+
 // Register the Qwen3 model handler
 func init() {
 	RegisterModelLoader("qwen3", func(configPath string) (HuggingFaceModel, error) {
-		return LoadQwen3Config(configPath)
+		qwen3Config, err := LoadQwen3Config(configPath)
+		if err != nil {
+			return nil, err
+		}
+		stConfigPath, err := GetSentenceTransformersConfigPath(configPath)
+		if err == nil {
+			// If sentence transformers config exists, load it to get SimilarityFnName
+			stConfig, err := LoadQwen3Config(stConfigPath)
+			if err == nil {
+				qwen3Config.SimilarityFnName = stConfig.SimilarityFnName
+			} else {
+				fmt.Printf("Warning: found config_sentence_transformers.json at %s but failed to parse: %v\n", stConfigPath, err)
+			}
+		}
+		// If st config is not found, this is not an embedding model; that's OK.
+		return qwen3Config, nil
 	})
 }

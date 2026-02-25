@@ -140,6 +140,11 @@ func (c *DBRXConfig) HasVision() bool {
 	return false
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *DBRXConfig) IsEmbedding() bool {
+	return false
+}
+
 // GetArchitecture returns the model architecture
 func (c *DBRXConfig) GetArchitecture() string {
 	if len(c.Architectures) > 0 {

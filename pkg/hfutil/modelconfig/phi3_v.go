@@ -102,6 +102,11 @@ func (c *Phi3VConfig) HasVision() bool {
 	return c.ImgProcessor != nil
 }
 
+// IsEmbedding returns false since this is not an embedding model
+func (c *Phi3VConfig) IsEmbedding() bool {
+	return false
+}
+
 // Helper function to estimate model parameters
 func estimateModelParams(hiddenSize, numLayers, intermediateSize, vocabSize int) int64 {
 	// This is an approximation - actual parameter count may vary

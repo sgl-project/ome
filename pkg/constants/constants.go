@@ -277,6 +277,10 @@ const (
 	ModelConfigKey = "models.json"
 )
 
+const (
+	SentenceTransformersConfigFileName = "config_sentence_transformers.json"
+)
+
 type InferenceServiceComponent string
 
 type InferenceServiceVerb string
