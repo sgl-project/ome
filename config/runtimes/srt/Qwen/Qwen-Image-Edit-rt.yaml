@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-qwen-image
+  name: srt-qwen-image-edit
 spec:
   disabled: false
   supportedModelFormats:
@@ -12,7 +12,16 @@ spec:
         name: diffusers
         version: "0.34.0.dev0"
       autoSelect: true
-      modelArchitecture: QwenImagePipeline
+      modelArchitecture: QwenImageEditPlusPipeline
+      priority: 1
+    - modelFramework:
+        name: diffusers
+        version: "0.34.0.dev0"
+      modelFormat:
+        name: diffusers
+        version: "0.34.0.dev0"
+      autoSelect: true
+      modelArchitecture: QwenImageEditPipeline
       priority: 1
   protocolVersions:
     - openAI
@@ -74,7 +83,7 @@ spec:
         failureThreshold: 5
         successThreshold: 1
         periodSeconds: 60
-        timeoutSeconds: 200
+        timeoutSeconds: 60
 
       livenessProbe:
         httpGet:
