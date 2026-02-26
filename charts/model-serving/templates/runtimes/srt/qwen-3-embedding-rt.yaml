@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-qwen-3-embedding-0-6b
+  name: srt-qwen-3-embedding
 spec:
   acceleratorRequirements:
     acceleratorClasses:
@@ -25,31 +25,31 @@ spec:
       - nvidia-h200-4
       - nvidia-h200-8
   disabled: false
-  {{- if or .Values.commonAnnotations .Values.qwen_3_embedding_0_6b.annotations }}
+  {{- if or .Values.commonAnnotations .Values.qwen_3_embedding.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
     {{ toYaml .Values.commonAnnotations | nindent 4 }}
     {{- end }}
-    {{- if .Values.qwen_3_embedding_0_6b.annotations }}
-    {{ toYaml .Values.qwen_3_embedding_0_6b.annotations | nindent 4 }}
+    {{- if .Values.qwen_3_embedding.annotations }}
+    {{ toYaml .Values.qwen_3_embedding.annotations | nindent 4 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonLabels .Values.qwen_3_embedding_0_6b.labels }}
+  {{- if or .Values.commonLabels .Values.qwen_3_embedding.labels }}
   labels:
     {{- if .Values.commonLabels }}
     {{ toYaml .Values.commonLabels | nindent 4 }}
     {{- end }}
-    {{- if .Values.qwen_3_embedding_0_6b.labels }}
-    {{ toYaml .Values.qwen_3_embedding_0_6b.labels | nindent 4 }}
+    {{- if .Values.qwen_3_embedding.labels }}
+    {{ toYaml .Values.qwen_3_embedding.labels | nindent 4 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonTolerations .Values.qwen_3_embedding_0_6b.tolerations }}
+  {{- if or .Values.commonTolerations .Values.qwen_3_embedding.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
     {{ toYaml .Values.commonTolerations | nindent 4 }}
     {{- end }}
-    {{- if .Values.qwen_3_embedding_0_6b.tolerations }}
-    {{ toYaml .Values.qwen_3_embedding_0_6b.tolerations | nindent 4 }}
+    {{- if .Values.qwen_3_embedding.tolerations }}
+    {{ toYaml .Values.qwen_3_embedding.tolerations | nindent 4 }}
     {{- end }}
   {{- end }}
   volumes:
@@ -62,7 +62,7 @@ spec:
         path: /etc/pki
         type: Directory
     {{- end }}
-  {{ with .Values.qwen_3_embedding_0_6b }}
+  {{ with .Values.qwen_3_embedding }}
   affinity: {{ .affinity | toYaml | nindent 4 }}
   {{ end }}
   supportedModelFormats:
@@ -134,15 +134,83 @@ spec:
         nvidia-h200-8:
           tensorParallelismOverride:
             tensorParallelSize: 8
+    - modelFramework:
+        name: transformers
+        version: "4.51.2"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      autoSelect: true
+      modelArchitecture: Qwen3ForCausalLM
+      version: "1.0.0"
+      priority: 1
+      acceleratorConfig:
+        nvidia-a100-80gb-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a100-80gb-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a100-80gb-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-a100-80gb-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-a100-40gb-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a100-40gb-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a100-40gb-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-a100-40gb-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-h100-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-h100-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-h100-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h100-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-a10-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a10-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a10-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h200-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-h200-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-h200-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h200-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
   modelSizeRange:
     min: 500M
-    max: 700M
+    max: 8.8B
   protocolVersions:
     - openAI
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.qwen_3_embedding_0_6b.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.qwen_3_embedding_0_6b.image.tag | default .Values.sglang.commonImage.tag }}
+      image: {{ .Values.qwen_3_embedding.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.qwen_3_embedding.image.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}
           name: http1
@@ -168,12 +236,12 @@ spec:
           name: dshm
       resources:
         requests:
-          cpu: 4
-          memory: 8Gi
+          cpu: 10
+          memory: 30Gi
           nvidia.com/gpu: 1
         limits:
-          cpu: 4
-          memory: 8Gi
+          cpu: 10
+          memory: 30Gi
           nvidia.com/gpu: 1
       readinessProbe:
         httpGet:
@@ -202,31 +270,31 @@ spec:
         timeoutSeconds: 30
   engineConfig:
     schedulerName: {{ .Values.commonSchedulerName }}
-    {{- if or .Values.commonAnnotations .Values.qwen_3_embedding_0_6b.annotations }}
+    {{- if or .Values.commonAnnotations .Values.qwen_3_embedding.annotations }}
     annotations:
       {{- if .Values.commonAnnotations }}
       {{ toYaml .Values.commonAnnotations | nindent 6 }}
       {{- end }}
-      {{- if .Values.qwen_3_embedding_0_6b.annotations }}
-      {{ toYaml .Values.qwen_3_embedding_0_6b.annotations | nindent 6 }}
+      {{- if .Values.qwen_3_embedding.annotations }}
+      {{ toYaml .Values.qwen_3_embedding.annotations | nindent 6 }}
       {{- end }}
     {{- end }}
-    {{- if or .Values.commonLabels .Values.qwen_3_embedding_0_6b.labels }}
+    {{- if or .Values.commonLabels .Values.qwen_3_embedding.labels }}
     labels:
       {{- if .Values.commonLabels }}
       {{ toYaml .Values.commonLabels | nindent 6 }}
       {{- end }}
-      {{- if .Values.qwen_3_embedding_0_6b.labels }}
-      {{ toYaml .Values.qwen_3_embedding_0_6b.labels | nindent 6 }}
+      {{- if .Values.qwen_3_embedding.labels }}
+      {{ toYaml .Values.qwen_3_embedding.labels | nindent 6 }}
       {{- end }}
     {{- end }}
-    {{- if or .Values.commonTolerations .Values.qwen_3_embedding_0_6b.tolerations }}
+    {{- if or .Values.commonTolerations .Values.qwen_3_embedding.tolerations }}
     tolerations:
       {{- if .Values.commonTolerations }}
       {{ toYaml .Values.commonTolerations | nindent 6 }}
       {{- end }}
-      {{- if .Values.qwen_3_embedding_0_6b.tolerations }}
-      {{ toYaml .Values.qwen_3_embedding_0_6b.tolerations | nindent 6 }}
+      {{- if .Values.qwen_3_embedding.tolerations }}
+      {{ toYaml .Values.qwen_3_embedding.tolerations | nindent 6 }}
       {{- end }}
     {{- end }}
     volumes:
@@ -239,12 +307,12 @@ spec:
           path: /etc/pki
           type: Directory
         {{- end }}
-    {{ with .Values.qwen_3_embedding_0_6b }}
+    {{ with .Values.qwen_3_embedding }}
     affinity: {{ .affinity | toYaml | nindent 6 }}
     {{ end }}
     runner:
       name: ome-container
-      image: {{ .Values.qwen_3_embedding_0_6b.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.qwen_3_embedding_0_6b.image.tag | default .Values.sglang.commonImage.tag }}
+      image: {{ .Values.qwen_3_embedding.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.qwen_3_embedding.image.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}
           name: http1
@@ -270,12 +338,12 @@ spec:
           name: dshm
       resources:
         requests:
-          cpu: 4
-          memory: 8Gi
+          cpu: 10
+          memory: 30Gi
           nvidia.com/gpu: 1
         limits:
-          cpu: 4
-          memory: 8Gi
+          cpu: 10
+          memory: 30Gi
           nvidia.com/gpu: 1
       readinessProbe:
         httpGet:

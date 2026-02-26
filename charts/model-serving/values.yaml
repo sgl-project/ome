@@ -2737,7 +2737,7 @@ qwen_3_vl_30b_a3b_instruct:
     repository:
     tag:
 
-qwen_3_embedding_0_6b:
+qwen_3_embedding:
   enabled: false
   annotations: { }
   affinity:
