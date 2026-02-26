@@ -390,16 +390,17 @@ func (c *ConfigMapReconciler) ReconcileModelStatus(ctx context.Context, statusOp
 	modelInfo := getConfigMapModelInfo(statusOp.BaseModel, statusOp.ClusterBaseModel)
 	c.logger.Infof("Reconciling model status in ConfigMap for %s with status: %s", modelInfo, statusOp.ModelStatus)
 
-	// Get or create the ConfigMap
-	configMap, needCreate, err := c.getOrCreateConfigMap(ctx)
-	if err != nil {
-		c.logger.Errorf("Failed to get or create ConfigMap for %s: %v", modelInfo, err)
-		return err
-	}
-	c.logger.Debugf("Got ConfigMap (needCreate=%v) for %s: %+v", needCreate, modelInfo, configMap.Name)
+	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		// Get or create the ConfigMap (fresh on each retry)
+		configMap, needCreate, err := c.getOrCreateConfigMap(ctx)
+		if err != nil {
+			return err
+		}
 
-	// Update the ConfigMap with status
-	err = c.updateModelStatusInConfigMap(ctx, configMap, statusOp, needCreate)
+		// Update the ConfigMap with status
+		return c.updateModelStatusInConfigMap(ctx, configMap, statusOp, needCreate)
+	})
+
 	if err != nil {
 		c.logger.Errorf("Failed to update model status in ConfigMap for %s: %v", modelInfo, err)
 		return err
