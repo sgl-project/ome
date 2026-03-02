@@ -182,8 +182,8 @@ For TensorRT-LLM models, the Model Agent provides intelligent shape filtering:
 2. **Shape Identification**: Maps GPU hardware to TensorRT-LLM shape identifiers (e.g., `GPU.A100.4`, `GPU.H100.8`)
 3. **File Filtering**: Only downloads model files that match the detected GPU shape
 
-The instance type to GPU short name mapping is configurable via the `ome-instance-type-map` ConfigMap, which is automatically deployed with the Model Agent. This allows you to add support for new cloud instance types without code changes.
-To add or modify mappings, you can edit this ConfigMap directly. For example, to add a mapping for a new instance type new-gpu-instance, you can use `kubectl edit configmap ome-instance-type-map -n <namespace>` and add the new entry to the instance-type-map data."
+The instance type to GPU short name mapping is configurable via the `model-agent-config-map` ConfigMap, which is automatically deployed with the Model Agent. This allows you to add support for new cloud instance types without code changes.
+To add or modify mappings, you can edit this ConfigMap directly. For example, to add a mapping for a new instance type new-gpu-instance, you can use `kubectl edit configmap model-agent-config-map -n <namespace>` and add the new entry to the instance-type-map data."
 
 #### Shape Filtering Logic
 
