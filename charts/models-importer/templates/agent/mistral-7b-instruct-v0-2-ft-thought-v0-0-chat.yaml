@@ -18,6 +18,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "mistral-7b-instruct-v0-2-ft-thought-v0-0-chat" "osBucket" }}/o/{{ index .Values "mistral-7b-instruct-v0-2-ft-thought-v0-0-chat" "vendor" }}/{{ index .Values "mistral-7b-instruct-v0-2-ft-thought-v0-0-chat" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "mistral-7b-instruct-v0-2-ft-thought-v0-0-chat" "vendor" }}/{{ index .Values "mistral-7b-instruct-v0-2-ft-thought-v0-0-chat" "osPrefixOverride" }}"
+    {{- with index .Values "mistral-7b-instruct-v0-2-ft-thought-v0-0-chat" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: olm
   version: "0.0"
   modelFormat:

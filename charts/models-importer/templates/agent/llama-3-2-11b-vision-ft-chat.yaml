@@ -18,6 +18,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-2-11b-vision-ft-chat" "osBucket" }}/o/{{ index .Values "llama-3-2-11b-vision-ft-chat" "vendor" }}/{{ index .Values "llama-3-2-11b-vision-ft-chat" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "llama-3-2-11b-vision-ft-chat" "vendor" }}/{{ index .Values "llama-3-2-11b-vision-ft-chat" "osPrefixOverride" }}"
+    {{- with index .Values "llama-3-2-11b-vision-ft-chat" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: olm
   version: "1.0.0"
   modelFormat:

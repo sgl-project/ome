@@ -21,6 +21,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "e5-mistral-7b-instruct" "osBucket" }}/o/{{ index .Values "e5-mistral-7b-instruct" "vendor" }}/{{ index .Values "e5-mistral-7b-instruct" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "e5-mistral-7b-instruct" "vendor" }}/{{ index .Values "e5-mistral-7b-instruct" "osPrefixOverride" }}"
+    {{- with index .Values "e5-mistral-7b-instruct" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: intfloat
   version: "0.0"
   modelFramework:

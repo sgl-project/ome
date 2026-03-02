@@ -20,6 +20,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-1-6b-v15-6-gen" "osBucket" }}/o/{{ index .Values "cohere-command-1-6b-v15-6-gen" "vendor" }}/{{ index .Values "cohere-command-1-6b-v15-6-gen" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "cohere-command-1-6b-v15-6-gen" "vendor" }}/{{ index .Values "cohere-command-1-6b-v15-6-gen" "osPrefixOverride" }}"
+    {{- with index .Values "cohere-command-1-6b-v15-6-gen" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}     
   vendor: {{ index .Values "cohere-command-1-6b-v15-6-gen" "vendor" }}
   version: "15.6"
   modelFormat:

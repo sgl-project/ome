@@ -23,6 +23,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-1-52b-v14-2-0" "osBucket" }}/o/{{ index .Values "cohere-command-1-52b-v14-2-0" "vendor" }}/{{ index .Values "cohere-command-1-52b-v14-2-0" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "cohere-command-1-52b-v14-2-0" "vendor" }}/{{ index .Values "cohere-command-1-52b-v14-2-0" "osPrefixOverride" }}"
+    {{- with index .Values "cohere-command-1-52b-v14-2-0" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}     
   vendor: {{ index .Values "cohere-command-1-52b-v14-2-0" "vendor" }}
   version: "14.2"
   modelFormat:

@@ -21,6 +21,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "nl2sql-m1-base-7b" "osBucket" }}/o/{{ index .Values "nl2sql-m1-base-7b" "vendor" }}/{{ index .Values "nl2sql-m1-base-7b" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "nl2sql-m1-base-7b" "vendor" }}/{{ index .Values "nl2sql-m1-base-7b" "osPrefixOverride" }}"
+    {{- with index .Values "nl2sql-m1-base-7b" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: olm
   version: "1.0"
   modelFormat:

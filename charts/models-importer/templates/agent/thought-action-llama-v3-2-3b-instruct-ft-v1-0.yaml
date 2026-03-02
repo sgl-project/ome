@@ -21,6 +21,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "thought-action-llama-v3-2-3b-instruct-ft-v1-0" "osBucket" }}/o/{{ index .Values "thought-action-llama-v3-2-3b-instruct-ft-v1-0" "vendor" }}/{{ index .Values "thought-action-llama-v3-2-3b-instruct-ft-v1-0" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "thought-action-llama-v3-2-3b-instruct-ft-v1-0" "vendor" }}/{{ index .Values "thought-action-llama-v3-2-3b-instruct-ft-v1-0" "osPrefixOverride" }}"
+    {{- with index .Values "thought-action-llama-v3-2-3b-instruct-ft-v1-0" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: olm
   version: "1.0"
   modelFormat:

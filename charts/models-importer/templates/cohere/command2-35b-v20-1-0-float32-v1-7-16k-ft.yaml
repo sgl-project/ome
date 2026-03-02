@@ -20,6 +20,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "command2-35b-v20-1-0-float32-v1-7-16k-ft" "osBucket" }}/o/{{ index .Values "command2-35b-v20-1-0-float32-v1-7-16k-ft" "vendor" }}/{{ index .Values "command2-35b-v20-1-0-float32-v1-7-16k-ft" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "command2-35b-v20-1-0-float32-v1-7-16k-ft" "vendor" }}/{{ index .Values "command2-35b-v20-1-0-float32-v1-7-16k-ft" "osPrefixOverride" }}"
+    {{- with index .Values "command2-35b-v20-1-0-float32-v1-7-16k-ft" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}    
   vendor: {{ index .Values "command2-35b-v20-1-0-float32-v1-7-16k-ft" "vendor" }}
   version: "1.7"
   modelFormat:

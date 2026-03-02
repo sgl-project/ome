@@ -22,6 +22,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-3-70b-instruct" "osBucket" }}/o/{{ index .Values "llama-3-3-70b-instruct" "vendor" }}/{{ index .Values "llama-3-3-70b-instruct" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "llama-3-3-70b-instruct" "vendor" }}/{{ index .Values "llama-3-3-70b-instruct" "osPrefixOverride" }}"
+    {{- with index .Values "llama-3-3-70b-instruct" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: meta
   version: "1.0.0"
   modelFramework:

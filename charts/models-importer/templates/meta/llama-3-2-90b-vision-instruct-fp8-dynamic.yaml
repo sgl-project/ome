@@ -22,6 +22,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "osBucket" }}/o/{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "vendor" }}/{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "vendor" }}/{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "osPrefixOverride" }}"
+    {{- with index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "nodeAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: meta
   version: "1.0.0"
   modelFramework:

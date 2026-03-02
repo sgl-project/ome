@@ -21,6 +21,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "fusion-llama-3-1-8b-accountingperiod-bql-ner-moduletrigger" "osBucket" }}/o/{{ index .Values "fusion-llama-3-1-8b-accountingperiod-bql-ner-moduletrigger" "vendor" }}/{{ index .Values "fusion-llama-3-1-8b-accountingperiod-bql-ner-moduletrigger" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "fusion-llama-3-1-8b-accountingperiod-bql-ner-moduletrigger" "vendor" }}/{{ index .Values "fusion-llama-3-1-8b-accountingperiod-bql-ner-moduletrigger" "osPrefixOverride" }}"
+    {{- with index .Values "fusion-llama-3-1-8b-accountingperiod-bql-ner-moduletrigger" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: olm
   version: "1.0.0"
   modelFormat:

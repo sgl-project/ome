@@ -18,6 +18,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "nl2rqs-7b-v3" "osBucket" }}/o/{{ index .Values "nl2rqs-7b-v3" "vendor" }}/{{ index .Values "nl2rqs-7b-v3" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "nl2rqs-7b-v3" "vendor" }}/{{ index .Values "nl2rqs-7b-v3" "osPrefixOverride" }}"
+    {{- with index .Values "nl2rqs-7b-v3" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: olm
   version: "3.0"
   modelFormat:

@@ -4,26 +4,38 @@ osnamespace: mynamespace
 cohere-command-1-6b-v14-2-gen:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 cohere-command-1-6b-v15-6-gen:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 cohere-command-1-52b-v14-2-gen:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4  
 
 cohere-command-1-52b-v15-6-gen:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4  
 
 command2-35b-v19-0-0-float32-v1-2-16k-ft:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 command2-35b-v20-1-0-float32-v1-7-16k-ft:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 llama-3-1-405b-instruct-fp8:
   enabled: false
@@ -51,22 +63,32 @@ llama-3-1-8b-instruct:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V1"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 llama-3-3-70b-instruct:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 llama-3-3-70b-instruct-ft:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 llama-3-1-70b-instruct-ft:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 llama-3-70b-instruct-ft:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 llama-3-3-70b-instruct-fp8-dynamic:
   enabled: false
@@ -83,15 +105,21 @@ llama-3-3-70b-instruct-fp8-dynamic:
 llama-3-2-90b-vision-instruct-fp8-dynamic:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 llama-3-2-11b-vision-instruct:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 llama-3-70b-instruct:
   enabled: false
   lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 llama-4-scout-17b-16e-instruct:
   enabled: false
@@ -122,11 +150,15 @@ llama-guard-4-12b:
 mixtral-8x7b-instruct-v0-1-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 e5-mistral-7b-instruct:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 deberta-v3-base-prompt-injection-v2:
   enabled: false
@@ -141,45 +173,63 @@ gliner-large-v2-1:
 mistral-7b-instruct-v0-2-ft-action-v0-0-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 mistral-7b-instruct-v0-2-ft-action-v0-1-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 mistral-7b-instruct-v0-2-ft-thought-v0-0-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 mistral-7b-instruct-v0-2-ft-thought-v0-1-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 phi-3-vision-128k-instruct-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 phi-3-vision-128k-instruct-ft-v1:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 nl2sql-m1-base-7b:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 nl2rqs-7b-v3:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 nl2rqs-7b-v4:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 nl2sql-m1-premium-70b:
   enabled: false
@@ -198,21 +248,29 @@ llama-3-2-11b-vision-ft-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 thought-action-llama-v3-2-3b-instruct-ft-v1-0:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 nl2sql-llama-3-1-8b-ft:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 fusion-llama-3-1-8b-accountingperiod-bql-ner-moduletrigger:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 command-a-032025:
   enabled: false
@@ -328,18 +386,26 @@ cohere-command-r-082024-v1-7-tp1-16k:
 cohere-command-1-6b-v14-2-0:
   enabled: false
   lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 cohere-command-1-6b-v15-6-0:
   enabled: false
   lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 cohere-command-1-52b-v14-2-0:
   enabled: false
   lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 cohere-command-1-52b-v15-6-0:
   enabled: false
   lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 cohere-command-latest:
   modelReference: "command-r-082024-v1.7-tp1-128k"
@@ -352,6 +418,8 @@ cohere-command-plus-latest:
 cohere-command-1-52b-v16-0-0:
   enabled: false
   lifecyclePhase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
+  nodeAntiAffinity:
+    - BM.GPU.A10.4
 
 cohere-command-1-v15-6-0-trt:
   enabled: false

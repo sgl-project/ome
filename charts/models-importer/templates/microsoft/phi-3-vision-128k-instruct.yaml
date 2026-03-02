@@ -21,6 +21,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "phi-3-vision-128k-instruct-chat" "osBucket" }}/o/{{ index .Values "phi-3-vision-128k-instruct-chat" "vendor" }}/{{ index .Values "phi-3-vision-128k-instruct-chat" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "phi-3-vision-128k-instruct-chat" "vendor" }}/{{ index .Values "phi-3-vision-128k-instruct-chat" "osPrefixOverride" }}"
+    {{- with index .Values "phi-3-vision-128k-instruct-chat" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: microsoft
   version: "0.1"
   modelFramework:

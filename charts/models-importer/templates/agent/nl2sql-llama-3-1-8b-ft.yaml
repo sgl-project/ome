@@ -21,6 +21,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "nl2sql-llama-3-1-8b-ft" "osBucket" }}/o/{{ index .Values "nl2sql-llama-3-1-8b-ft" "vendor" }}/{{ index .Values "nl2sql-llama-3-1-8b-ft" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "nl2sql-llama-3-1-8b-ft" "vendor" }}/{{ index .Values "nl2sql-llama-3-1-8b-ft" "osPrefixOverride" }}"
+    {{- with index .Values "nl2sql-llama-3-1-8b-ft" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: olm
   version: "1.0.0"
   modelFormat:

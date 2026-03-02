@@ -21,6 +21,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "phi-3-vision-128k-instruct-ft-v1" "osBucket" }}/o/{{ index .Values "phi-3-vision-128k-instruct-ft-v1" "vendor" }}/{{ index .Values "phi-3-vision-128k-instruct-ft-v1" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "phi-3-vision-128k-instruct-ft-v1" "vendor" }}/{{ index .Values "phi-3-vision-128k-instruct-ft-v1" "osPrefixOverride" }}"
+    {{- with index .Values "phi-3-vision-128k-instruct-ft-v1" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: olm
   version: "1.0"
   modelFormat:

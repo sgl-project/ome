@@ -18,6 +18,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "mixtral-8x7b-instruct-v0-1-chat" "osBucket" }}/o/{{ index .Values "mixtral-8x7b-instruct-v0-1-chat" "vendor" }}/{{ index .Values "mixtral-8x7b-instruct-v0-1-chat" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "mixtral-8x7b-instruct-v0-1-chat" "vendor" }}/{{ index .Values "mixtral-8x7b-instruct-v0-1-chat" "osPrefixOverride" }}"
+    {{- with index .Values "mixtral-8x7b-instruct-v0-1-chat" "nodeAntiAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                {{- range . }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: mistralai
   version: "0.1"
   modelFormat:
