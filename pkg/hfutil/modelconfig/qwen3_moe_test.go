@@ -1,6 +1,7 @@
 package modelconfig
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 )
@@ -66,9 +67,55 @@ func TestQwen3MoeConfig(t *testing.T) {
 		t.Error("Expected HasVision to return false for Qwen3, but got true")
 	}
 
+	// Check quantization type (should be empty for non-quantized model)
+	if config.GetQuantizationType() != "" {
+		t.Errorf("Expected empty quantization type, but got '%s'", config.GetQuantizationType())
+	}
+
 	// Check model size bytes (should be non-zero)
 	modelSize := config.GetModelSizeBytes()
 	if modelSize <= 0 {
 		t.Errorf("Expected model size bytes to be positive, but got %d", modelSize)
+	}
+}
+
+func TestQwen3MoeQuantizationConfig(t *testing.T) {
+	jsonData := []byte(`{
+		"architectures": ["Qwen3MoeForCausalLM"],
+		"model_type": "qwen3_moe",
+		"hidden_size": 2048,
+		"intermediate_size": 3072,
+		"num_hidden_layers": 48,
+		"num_attention_heads": 32,
+		"num_key_value_heads": 4,
+		"max_position_embeddings": 262144,
+		"vocab_size": 151936,
+		"num_experts": 128,
+		"num_experts_per_tok": 8,
+		"moe_intermediate_size": 768,
+		"torch_dtype": "float8_e4m3fn",
+		"quantization_config": {
+			"activation_scheme": "dynamic",
+			"fmt": "e4m3",
+			"quant_method": "fp8",
+			"weight_block_size": [128, 128]
+		}
+	}`)
+
+	config := &Qwen3MoeConfig{}
+	if err := json.Unmarshal(jsonData, config); err != nil {
+		t.Fatalf("Failed to unmarshal Qwen3Moe FP8 config: %v", err)
+	}
+
+	if config.GetQuantizationType() != "fp8" {
+		t.Errorf("Expected quantization type 'fp8', but got '%s'", config.GetQuantizationType())
+	}
+
+	if config.QuantizationConfig == nil {
+		t.Fatal("Expected QuantizationConfig to be non-nil")
+	}
+
+	if config.QuantizationConfig.Format != "e4m3" {
+		t.Errorf("Expected format 'e4m3', but got '%s'", config.QuantizationConfig.Format)
 	}
 }

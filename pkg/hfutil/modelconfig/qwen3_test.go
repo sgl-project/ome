@@ -66,10 +66,67 @@ func TestQwen3Config(t *testing.T) {
 		t.Error("Expected HasVision to return false for Qwen3, but got true")
 	}
 
+	// Check quantization type (should be empty for non-quantized model)
+	if config.GetQuantizationType() != "" {
+		t.Errorf("Expected empty quantization type, but got '%s'", config.GetQuantizationType())
+	}
+
 	// Check model size bytes (should be non-zero)
 	modelSize := config.GetModelSizeBytes()
 	if modelSize <= 0 {
 		t.Errorf("Expected model size bytes to be positive, but got %d", modelSize)
+	}
+}
+
+func TestQwen3FP8Config(t *testing.T) {
+	configPath := filepath.Join("testdata", "qwen3_8b_fp8.json")
+
+	// Load the config
+	config, err := LoadModelConfig(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load Qwen3 FP8 config: %v", err)
+	}
+
+	// Check that it's the correct model type
+	if config.GetModelType() != "qwen3" {
+		t.Errorf("Expected model type 'qwen3' but got '%s'", config.GetModelType())
+	}
+
+	// Check that it's parsed as a Qwen3Config
+	qwen3Config, ok := config.(*Qwen3Config)
+	if !ok {
+		t.Fatalf("Expected config to be of type *Qwen3Config, but got %T", config)
+	}
+
+	// Check quantization type
+	if config.GetQuantizationType() != "fp8" {
+		t.Errorf("Expected quantization type 'fp8', but got '%s'", config.GetQuantizationType())
+	}
+
+	// Check quantization config details
+	if qwen3Config.QuantizationConfig == nil {
+		t.Fatal("Expected QuantizationConfig to be non-nil")
+	}
+
+	if qwen3Config.QuantizationConfig.Format != "e4m3" {
+		t.Errorf("Expected format 'e4m3', but got '%s'", qwen3Config.QuantizationConfig.Format)
+	}
+
+	if qwen3Config.QuantizationConfig.ActivationScheme != "dynamic" {
+		t.Errorf("Expected activation scheme 'dynamic', but got '%s'", qwen3Config.QuantizationConfig.ActivationScheme)
+	}
+
+	if len(qwen3Config.QuantizationConfig.WeightBlockSize) != 2 {
+		t.Errorf("Expected weight_block_size to have 2 elements, but got %d", len(qwen3Config.QuantizationConfig.WeightBlockSize))
+	}
+
+	// Verify key model fields are still parsed correctly
+	if qwen3Config.HiddenSize != 4096 {
+		t.Errorf("Expected hidden size to be 4096, but got %d", qwen3Config.HiddenSize)
+	}
+
+	if qwen3Config.NumHiddenLayers != 36 {
+		t.Errorf("Expected hidden layers to be 36, but got %d", qwen3Config.NumHiddenLayers)
 	}
 }
 

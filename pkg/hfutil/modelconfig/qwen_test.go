@@ -1,6 +1,7 @@
 package modelconfig
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 )
@@ -123,6 +124,11 @@ func TestQwenConfig(t *testing.T) {
 		t.Errorf("Expected transformers version '4.32.0', but got '%s'", config.GetTransformerVersion())
 	}
 
+	// Check quantization type (should be empty for non-quantized model)
+	if config.GetQuantizationType() != "" {
+		t.Errorf("Expected empty quantization type, but got '%s'", config.GetQuantizationType())
+	}
+
 	// Check auto_map parsing
 	if qwenConfig.AutoMap == nil {
 		t.Error("Expected auto_map to be parsed, but it is nil")
@@ -136,5 +142,43 @@ func TestQwenConfig(t *testing.T) {
 		if qwenConfig.AutoMap.AutoModelForCausalLM != expectedAutoModel {
 			t.Errorf("Expected AutoModelForCausalLM to be '%s', but got '%s'", expectedAutoModel, qwenConfig.AutoMap.AutoModelForCausalLM)
 		}
+	}
+}
+
+func TestQwenQuantizationConfig(t *testing.T) {
+	jsonData := []byte(`{
+		"architectures": ["QWenLMHeadModel"],
+		"model_type": "qwen",
+		"hidden_size": 4096,
+		"intermediate_size": 22016,
+		"num_hidden_layers": 32,
+		"num_attention_heads": 32,
+		"kv_channels": 128,
+		"vocab_size": 151936,
+		"seq_length": 8192,
+		"torch_dtype": "float8_e4m3fn",
+		"quantization_config": {
+			"activation_scheme": "dynamic",
+			"fmt": "e4m3",
+			"quant_method": "fp8",
+			"weight_block_size": [128, 128]
+		}
+	}`)
+
+	config := &QwenConfig{}
+	if err := json.Unmarshal(jsonData, config); err != nil {
+		t.Fatalf("Failed to unmarshal Qwen FP8 config: %v", err)
+	}
+
+	if config.GetQuantizationType() != "fp8" {
+		t.Errorf("Expected quantization type 'fp8', but got '%s'", config.GetQuantizationType())
+	}
+
+	if config.QuantizationConfig == nil {
+		t.Fatal("Expected QuantizationConfig to be non-nil")
+	}
+
+	if config.QuantizationConfig.Format != "e4m3" {
+		t.Errorf("Expected format 'e4m3', but got '%s'", config.QuantizationConfig.Format)
 	}
 }
