@@ -98,6 +98,12 @@ func LoadQwen3VLConfig(configPath string) (*Qwen3VLConfig, error) {
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse Qwen3-VL config JSON from '%s': %w", configPath, err)
 	}
+	// Qwen3.5 configs keep dtype under text_config.dtype.
+	// Promote it to the common TorchDtype field so size estimation stays correct.
+	if (config.ModelType == "qwen3_5" || config.ModelType == "qwen3_5_moe") &&
+		config.TorchDtype == "" && config.TextConfig.Dtype != "" {
+		config.TorchDtype = config.TextConfig.Dtype
+	}
 	config.ConfigPath = configPath
 	return &config, nil
 }

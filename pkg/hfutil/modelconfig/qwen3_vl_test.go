@@ -330,6 +330,16 @@ func TestQwen35ConfigDense(t *testing.T) {
 	if params := config.GetParameterCount(); params <= 0 {
 		t.Errorf("Expected positive parameter count, got %d", params)
 	}
+
+	if qwenConfig.GetTorchDtype() != "bfloat16" {
+		t.Errorf("Expected torch dtype 'bfloat16', got '%s'", qwenConfig.GetTorchDtype())
+	}
+
+	paramCount := config.GetParameterCount()
+	expectedModelSize := EstimateModelSizeBytes(paramCount, "bfloat16")
+	if modelSize := config.GetModelSizeBytes(); modelSize != expectedModelSize {
+		t.Errorf("Expected model size bytes %d, got %d", expectedModelSize, modelSize)
+	}
 }
 
 func TestQwen35ConfigMoE(t *testing.T) {
@@ -367,5 +377,15 @@ func TestQwen35ConfigMoE(t *testing.T) {
 
 	if params := config.GetParameterCount(); params <= 0 {
 		t.Errorf("Expected positive parameter count, got %d", params)
+	}
+
+	if qwenConfig.GetTorchDtype() != "bfloat16" {
+		t.Errorf("Expected torch dtype 'bfloat16', got '%s'", qwenConfig.GetTorchDtype())
+	}
+
+	paramCount := config.GetParameterCount()
+	expectedModelSize := EstimateModelSizeBytes(paramCount, "bfloat16")
+	if modelSize := config.GetModelSizeBytes(); modelSize != expectedModelSize {
+		t.Errorf("Expected model size bytes %d, got %d", expectedModelSize, modelSize)
 	}
 }
