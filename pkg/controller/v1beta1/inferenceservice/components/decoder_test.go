@@ -345,6 +345,8 @@ func TestDecoderReconcile(t *testing.T) {
 				tt.deploymentMode,
 				tt.baseModel,
 				tt.baseModelMeta,
+				nil, // draftModel
+				nil, // draftModelMeta
 				tt.decoderSpec,
 				tt.runtime,
 				tt.runtimeName,
@@ -470,6 +472,8 @@ func TestDecoderReconcileObjectMeta(t *testing.T) {
 				constants.RawDeployment,
 				tt.baseModel,
 				tt.baseModelMeta,
+				nil, // draftModel
+				nil, // draftModelMeta
 				tt.decoderSpec,
 				nil, // runtime
 				tt.runtimeName,
@@ -580,6 +584,8 @@ func TestDecoderWorkerPodSpec(t *testing.T) {
 				constants.RawDeployment,
 				nil, // baseModel
 				nil, // baseModelMeta
+				nil, // draftModel
+				nil, // draftModelMeta
 				tt.decoderSpec,
 				nil, // runtime
 				"",  // runtimeName
@@ -658,6 +664,8 @@ func TestDecoderComponentConfig(t *testing.T) {
 				constants.RawDeployment,
 				nil, // baseModel
 				nil, // baseModelMeta
+				nil, // draftModel
+				nil, // draftModelMeta
 				tt.decoderSpec,
 				nil, // runtime
 				"test-runtime",
@@ -811,6 +819,8 @@ func TestDecoderAcceleratorOverride(t *testing.T) {
 				constants.RawDeployment,
 				nil, // baseModel
 				nil, // baseModelMeta
+				nil, // draftModel
+				nil, // draftModelMeta
 				tt.decoderSpec,
 				tt.runtime,
 				"test-runtime",
@@ -1184,6 +1194,8 @@ func TestDecoderResourceMerging(t *testing.T) {
 				constants.RawDeployment,
 				nil, // baseModel
 				nil, // baseModelMeta
+				nil, // draftModel
+				nil, // draftModelMeta
 				tt.decoderSpec,
 				tt.runtime,
 				"test-runtime",
@@ -1365,6 +1377,8 @@ func TestDecoderAffinityMerging(t *testing.T) {
 				constants.RawDeployment,
 				nil, // baseModel
 				nil, // baseModelMeta
+				nil, // draftModel
+				nil, // draftModelMeta
 				tt.decoderSpec,
 				nil, // runtime
 				"test-runtime",

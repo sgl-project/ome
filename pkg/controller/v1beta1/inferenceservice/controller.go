@@ -222,6 +222,19 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return reconcile.Result{}, err
 	}
 
+	// Step 1b: Reconcile optional draft model (for speculative decoding)
+	draftModel, draftModelMeta, err := isvcutils.ReconcileDraftModel(r.Client, isvc)
+	if err != nil {
+		r.Log.Error(err, "Failed to reconcile draft model", "Name", isvc.Name)
+		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "DraftModelReconcileError", err.Error())
+		return reconcile.Result{}, err
+	}
+	if draftModel != nil {
+		r.Log.Info("Draft model configured for speculative decoding",
+			"draftModel", isvc.Spec.DraftModel.Name,
+			"inferenceService", isvc.Name)
+	}
+
 	// Step 2: Get runtime spec (either specified or auto-selected based on model)
 	var rt *v1beta1.ServingRuntimeSpec
 	var rtName string
@@ -303,6 +316,8 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			engineDeploymentMode,
 			baseModel,
 			baseModelMeta,
+			draftModel,
+			draftModelMeta,
 			mergedEngine,
 			rt,
 			rtName,
@@ -334,6 +349,8 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			decoderDeploymentMode,
 			baseModel,
 			baseModelMeta,
+			draftModel,
+			draftModelMeta,
 			mergedDecoder,
 			rt,
 			rtName,

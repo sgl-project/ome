@@ -34,6 +34,8 @@ type BaseComponentFields struct {
 	RuntimeName                       string
 	AcceleratorClass                  *v1beta1.AcceleratorClassSpec
 	AcceleratorClassName              string
+	DraftModel                        *v1beta1.BaseModelSpec
+	DraftModelMeta                    *metav1.ObjectMeta
 	FineTunedServing                  bool
 	FineTunedServingWithMergedWeights bool
 	FineTunedWeights                  []*v1beta1.FineTunedWeight
@@ -100,6 +102,18 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 		}
 	}
 
+	// Add draft model volume mount if specified
+	if b.DraftModel != nil && b.DraftModel.Storage != nil && b.DraftModel.Storage.Path != nil && b.DraftModelMeta != nil {
+		if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
+			vm := corev1.VolumeMount{
+				Name:      b.DraftModelMeta.Name,
+				MountPath: *b.DraftModel.Storage.Path,
+				ReadOnly:  true,
+			}
+			isvcutils.AppendVolumeMount(container, &vm)
+		}
+	}
+
 	// Add fine-tuned serving volume mounts
 	if b.FineTunedServing {
 		defaultModelVolumeMount := corev1.VolumeMount{
@@ -142,6 +156,14 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 				b.Log.Info("Base model serving - adding MODEL_PATH env variable if not provided", "inference service", isvc.Name, "namespace", isvc.Namespace)
 				isvcutils.AppendEnvVarsIfNotExist(container, &[]corev1.EnvVar{
 					{Name: constants.ModelPathEnvVarKey, Value: *b.BaseModel.Storage.Path},
+				})
+			}
+
+			// Draft model for speculative decoding - add DRAFT_MODEL_PATH env variable
+			if b.DraftModel != nil && b.DraftModel.Storage != nil && b.DraftModel.Storage.Path != nil {
+				b.Log.Info("Adding DRAFT_MODEL_PATH env variable for speculative decoding", "inference service", isvc.Name, "namespace", isvc.Namespace)
+				isvcutils.AppendEnvVarsIfNotExist(container, &[]corev1.EnvVar{
+					{Name: constants.DraftModelPathEnvVarKey, Value: *b.DraftModel.Storage.Path},
 				})
 			}
 		}
@@ -207,6 +229,11 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 	// Add preferred node affinity for model readiness using the shared utility function
 	isvcutils.AddNodeSelectorForModelReadyNode(podSpec, b.BaseModelMeta)
 
+	// Add node selector for draft model so pods only land on nodes with both models ready
+	if b.DraftModelMeta != nil {
+		isvcutils.AddNodeSelectorForModelReadyNode(podSpec, b.DraftModelMeta)
+	}
+
 	// Add node selector merged from AcceleratorClass if applicable
 	// Only add mergedNodeSelector to engine and decoder component.
 	mergedNodeSelector := isvcutils.MergeNodeSelector(b.Runtime, b.AcceleratorClass, isvc, componentType)
@@ -238,6 +265,19 @@ func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService
 			},
 		}
 		podSpec.Volumes = append(podSpec.Volumes, modelVolume)
+	}
+
+	// Add draft model volume if specified
+	if b.DraftModel != nil && b.DraftModel.Storage != nil && b.DraftModel.Storage.Path != nil && b.DraftModelMeta != nil {
+		draftModelVolume := corev1.Volume{
+			Name: b.DraftModelMeta.Name,
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: *b.DraftModel.Storage.Path,
+				},
+			},
+		}
+		podSpec.Volumes = append(podSpec.Volumes, draftModelVolume)
 	}
 
 	// Add empty model directory volume if required for fine-tuned serving

@@ -34,6 +34,12 @@ type InferenceServiceSpec struct {
 	// +optional
 	Model *ModelRef `json:"model,omitempty"`
 
+	// DraftModel defines an optional smaller draft model for speculative decoding.
+	// References a BaseModel or ClusterBaseModel, just like Model.
+	// When set, the draft model's storage path is injected as the DRAFT_MODEL_PATH environment variable.
+	// +optional
+	DraftModel *ModelRef `json:"draftModel,omitempty"`
+
 	// Runtime defines the serving runtime environment that will be used to execute the model.
 	// It is an inference service spec template that determines how the service should be deployed.
 	// Runtime is optional - if not defined, the operator will automatically select the best runtime
