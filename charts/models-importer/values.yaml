@@ -694,6 +694,30 @@ gpt-oss-20b-bf16:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+gpt-4o-mini-transcribe:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-transcribe-diarize:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-mini-tts:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-transcribe:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-realtime:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+sora-2-pro:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 o1:
   enabled: false
   enableImageInput: true
@@ -801,6 +825,26 @@ gemini-3-flash-preview:
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
+gemini-2-5-flash-image:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gemini-2-5-flash-tts:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gemini-3-pro-image-preview:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gemini-live-2-5-flash-native-audio:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+veo-3-0-generate-001:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 grok-3-0404:
   enabled: false
   lifecyclePhase: "ACTIVE"
@@ -874,6 +918,18 @@ grok-code-fast-1:
   lifecyclePhase: "ACTIVE"
 
 grok-voice-agent:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-2-image:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-imagine-image:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-imagine-video:
   enabled: false
   lifecyclePhase: "ACTIVE"
 

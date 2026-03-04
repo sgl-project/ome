@@ -1,0 +1,35 @@
+{{- if index .Values "gemini-3-pro-image-preview" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: gemini-3-pro-image-preview
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: ""
+    models.ome.io/category: "LARGE"
+    models.ome.io/experimental: "{{ index .Values "gemini-3-pro-image-preview" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "gemini-3-pro-image-preview" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "gemini-3-pro-image-preview" "lifecyclePhase" }}"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: google.gemini-3-pro-image-preview
+  storage:
+    storageUri: "vendor://google/models/{{ index .Values "gemini-3-pro-image-preview" "osPrefixOverride" }}"
+  vendor: {{ index .Values "gemini-3-pro-image-preview" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelArchitecture: GeminiForCausalLM
+  modelParameterSize: 1.8T
+  modelCapabilities:
+    - "CHAT"
+    - "TEXT_TO_IMAGE"
+    - "IMAGE_TEXT_TO_IMAGE"
+  maxTokens: 65536
+{{- end }}
