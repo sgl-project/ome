@@ -147,16 +147,16 @@ func (s *defaultSelector) GetCompatibleRuntimes(ctx context.Context, model *v1be
 }
 
 // ValidateRuntime checks if a specific runtime supports a model.
-func (s *defaultSelector) ValidateRuntime(ctx context.Context, runtimeName string, baseModel *v1beta1.BaseModelSpec, draftModel *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) error {
+func (s *defaultSelector) ValidateRuntime(ctx context.Context, runtimeName string, model *v1beta1.BaseModelSpec, draftModel *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) error {
 	namespace := isvc.Namespace
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("Validating runtime",
 		"runtime", runtimeName,
-		"model", baseModel.ModelFormat.Name,
+		"model", model.ModelFormat.Name,
 		"namespace", namespace)
 
 	// Validate model
-	if err := s.validateModel(baseModel); err != nil {
+	if err := s.validateModel(model); err != nil {
 		return err
 	}
 
@@ -175,14 +175,14 @@ func (s *defaultSelector) ValidateRuntime(ctx context.Context, runtimeName strin
 	}
 
 	// Check compatibility
-	compatible, err := s.matcher.IsCompatible(runtimeSpec, baseModel, draftModel, isvc, runtimeName)
+	compatible, err := s.matcher.IsCompatible(runtimeSpec, model, draftModel, isvc, runtimeName)
 	if err != nil {
 		return err
 	}
 
 	if !compatible {
 		// Get detailed compatibility report for better error message
-		report, _ := s.matcher.GetCompatibilityDetails(runtimeSpec, baseModel, draftModel, isvc, runtimeName)
+		report, _ := s.matcher.GetCompatibilityDetails(runtimeSpec, model, draftModel, isvc, runtimeName)
 
 		reason := "incompatible model format"
 		if report != nil && len(report.IncompatibilityReasons) > 0 {
@@ -191,8 +191,8 @@ func (s *defaultSelector) ValidateRuntime(ctx context.Context, runtimeName strin
 
 		return &RuntimeCompatibilityError{
 			RuntimeName: runtimeName,
-			ModelName:   getModelName(baseModel),
-			ModelFormat: baseModel.ModelFormat.Name,
+			ModelName:   getModelName(model),
+			ModelFormat: model.ModelFormat.Name,
 			Reason:      reason,
 		}
 	}

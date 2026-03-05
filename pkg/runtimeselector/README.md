@@ -41,7 +41,7 @@ type Selector interface {
     GetCompatibleRuntimes(ctx context.Context, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, namespace string) ([]RuntimeMatch, error)
 
     // Validate a specific runtime choice
-    ValidateRuntime(ctx context.Context, runtimeName string, baseModel *v1beta1.BaseModelSpec, draftModel *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) error
+    ValidateRuntime(ctx context.Context, runtimeName string, model *v1beta1.BaseModelSpec, draftModel *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) error
 
     // Get runtime spec by name
     GetRuntime(ctx context.Context, name string, namespace string) (*v1beta1.ServingRuntimeSpec, bool, error)
