@@ -332,6 +332,7 @@ type ServingRuntimeRef struct {
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="BaseModel",type="string",JSONPath=".spec.model.name"
 // +kubebuilder:printcolumn:name="Runtime",type="string",JSONPath=".spec.runtime.name"
+// +kubebuilder:printcolumn:name="DraftModel",type="string",JSONPath=".spec.draftModel.name"
 // +kubebuilder:printcolumn:name="Prev",type="integer",JSONPath=".status.components.engine.traffic[?(@.tag=='prev')].percent"
 // +kubebuilder:printcolumn:name="Latest",type="integer",JSONPath=".status.components.engine.traffic[?(@.latestRevision==true)].percent"
 // +kubebuilder:printcolumn:name="PrevRolledoutRevision",type="string",JSONPath=".status.components.engine.traffic[?(@.tag=='prev')].revisionName"
