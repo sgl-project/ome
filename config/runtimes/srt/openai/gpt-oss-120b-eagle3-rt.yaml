@@ -20,6 +20,10 @@ spec:
   draftModelSizeRange:
     min: 0.1B
     max: 1B
+  supportedDraftModelFormats:
+    - modelFormat:
+        name: safetensors
+        version: "1.0.0"
   protocolVersions:
     - openAI
   engineConfig:
