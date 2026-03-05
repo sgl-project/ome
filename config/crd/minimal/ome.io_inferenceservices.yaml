@@ -28,9 +28,6 @@ spec:
     - jsonPath: .spec.runtime.name
       name: Runtime
       type: string
-    - jsonPath: .spec.draftModel.name
-      name: DraftModel
-      type: string
     - jsonPath: .status.components.engine.traffic[?(@.tag=='prev')].percent
       name: Prev
       type: integer
