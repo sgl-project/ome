@@ -4630,6 +4630,15 @@
           "description": "If specified, the pod will be dispatched by specified scheduler. If not specified, the pod will be dispatched by default scheduler.",
           "type": "string"
         },
+        "supportedDraftModelFormats": {
+          "description": "SupportedDraftModelFormats lists draft model formats (format, framework, architecture) supported when using this runtime with speculative decoding. Validated only when the InferenceService specifies a draft model. If nil or empty and a draft model is specified, the runtime is incompatible.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.SupportedDraftModelFormat"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
         "supportedModelFormats": {
           "description": "Model formats and version supported by this runtime",
           "type": "array",
@@ -4718,6 +4727,24 @@
         "storageUri": {
           "description": "StorageUri specifies the source URI of the model in a supported storage backend. Supported formats: - OCI Object Storage:   oci://n/{namespace}/b/{bucket}/o/{object_path} - Persistent Volume:    pvc://{pvc-name}/{sub-path} - Vendor-specific:      vendor://{vendor-name}/{resource-type}/{resource-path} This field is required.",
           "type": "string"
+        }
+      }
+    },
+    "v1beta1.SupportedDraftModelFormat": {
+      "description": "SupportedDraftModelFormat describes a draft model format supported by a runtime for speculative decoding. All fields are optional: if set, the draft model must match; if unset, that dimension is not checked.",
+      "type": "object",
+      "properties": {
+        "modelArchitecture": {
+          "description": "ModelArchitecture of the draft model, e.g., \"LlamaForCausalLM\", \"GptOssForCausalLM\"",
+          "type": "string"
+        },
+        "modelFormat": {
+          "description": "ModelFormat of the draft model, e.g., \"SafeTensors\", \"PyTorch\"",
+          "$ref": "#/definitions/v1beta1.ModelFormat"
+        },
+        "modelFramework": {
+          "description": "ModelFramework of the draft model, e.g., \"Transformers\", \"PyTorch\"",
+          "$ref": "#/definitions/v1beta1.ModelFrameworkSpec"
         }
       }
     },

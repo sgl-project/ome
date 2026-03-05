@@ -934,8 +934,12 @@ func TestIsCompatible_DraftModelSizeRange(t *testing.T) {
 	ptrStr := func(s string) *string { return &s }
 
 	// Runtime with separate main and draft size ranges (e.g. Eagle3 speculative decoding)
+	// Must declare supported draft formats so draft format check passes before size check
 	rt := &v1beta1.ServingRuntimeSpec{
 		SupportedModelFormats: []v1beta1.SupportedModelFormat{
+			{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+		},
+		SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
 			{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
 		},
 		ModelSizeRange:          &v1beta1.ModelSizeRangeSpec{Min: ptrStr("115B"), Max: ptrStr("125B")},
@@ -980,6 +984,156 @@ func TestIsCompatible_DraftModelSizeRange(t *testing.T) {
 	t.Run("no draft model => only main size checked", func(t *testing.T) {
 		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}, ModelParameterSize: ptrStr("120B")}
 		ok, err := matcher.IsCompatible(rt, baseModel, nil, isvc, "eagle3-rt")
+		assert.NoError(t, err)
+		assert.True(t, ok)
+	})
+}
+
+func TestIsCompatible_DraftModelSupportedFormats(t *testing.T) {
+	matcher := NewDefaultRuntimeMatcher(NewConfig(nil))
+	isvc := &v1beta1.InferenceService{}
+
+	t.Run("draft present, runtime has no SupportedDraftModelFormats => incompatible", func(t *testing.T) {
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats:   []v1beta1.SupportedModelFormat{{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}}},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+			// SupportedDraftModelFormats nil/empty
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		draftModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.False(t, ok)
+		report, _ := matcher.GetCompatibilityDetails(rt, baseModel, draftModel, isvc, "rt")
+		assert.Contains(t, report.IncompatibilityReasons, "runtime does not declare supported draft model formats")
+	})
+
+	t.Run("draft present, runtime has matching SupportedDraftModelFormats entry => compatible", func(t *testing.T) {
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		draftModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("draft present, draft format not in SupportedDraftModelFormats => incompatible", func(t *testing.T) {
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "pytorch"}}, // only pytorch draft
+			},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		draftModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.False(t, ok)
+		report, _ := matcher.GetCompatibilityDetails(rt, baseModel, draftModel, isvc, "rt")
+		assert.Contains(t, report.IncompatibilityReasons, "draft model format not in supported draft formats")
+	})
+
+	t.Run("draft present, optional fields: entry with only modelArchitecture set, draft matches => compatible", func(t *testing.T) {
+		arch := "GptOssForCausalLM"
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+				{ModelArchitecture: &arch},
+			},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		draftModel := &v1beta1.BaseModelSpec{
+			ModelFormat:       v1beta1.ModelFormat{Name: "safetensors"},
+			ModelArchitecture: &arch,
+		}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("draft present, optional fields: entry with only modelArchitecture set, draft differs => incompatible", func(t *testing.T) {
+		arch := "GptOssForCausalLM"
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+				{ModelArchitecture: &arch},
+			},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		otherArch := "LlamaForCausalLM"
+		draftModel := &v1beta1.BaseModelSpec{
+			ModelFormat:       v1beta1.ModelFormat{Name: "safetensors"},
+			ModelArchitecture: &otherArch,
+		}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("default format: draft omits ModelFormat, main has safetensors, runtime supports safetensors draft => compatible", func(t *testing.T) {
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		draftModel := &v1beta1.BaseModelSpec{} // no ModelFormat set (empty name) => defaults to main's
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("default format: draft specifies different format => incompatible", func(t *testing.T) {
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		draftModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("runtime entry with all fields nil => matches any draft", func(t *testing.T) {
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+				{}, // all nil => match any draft
+			},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		draftModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
 		assert.NoError(t, err)
 		assert.True(t, ok)
 	})

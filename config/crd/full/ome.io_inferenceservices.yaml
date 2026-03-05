@@ -29,6 +29,9 @@ spec:
         - jsonPath: .spec.runtime.name
           name: Runtime
           type: string
+        - jsonPath: .spec.draftModel.name
+          name: DraftModel
+          type: string
         - jsonPath: .status.components.engine.traffic[?(@.tag=='prev')].percent
           name: Prev
           type: integer
@@ -12355,6 +12358,24 @@ spec:
                             - name
                           x-kubernetes-list-type: map
                       type: object
+                  type: object
+                draftModel:
+                  properties:
+                    apiGroup:
+                      default: ome.io
+                      type: string
+                    fineTunedWeights:
+                      items:
+                        type: string
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    kind:
+                      default: ClusterBaseModel
+                      type: string
+                    name:
+                      type: string
+                  required:
+                    - name
                   type: object
                 engine:
                   properties:

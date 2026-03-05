@@ -49,10 +49,15 @@ func (m *DefaultRuntimeMatcher) IsCompatible(runtime *v1beta1.ServingRuntimeSpec
 				// If model size check failed, continue checking other formats
 				continue
 			}
-			// When draft model is used, validate draft model size against draftModelSizeRange if set
-			if draftModel != nil && runtime.DraftModelSizeRange != nil {
-				if err := m.checkDraftModelSize(runtime, draftModel, runtimeName); err != nil {
+			// When draft model is used, validate draft format then draft size
+			if draftModel != nil {
+				if !m.draftModelFormatSupported(runtime, model, draftModel) {
 					continue
+				}
+				if runtime.DraftModelSizeRange != nil {
+					if err := m.checkDraftModelSize(runtime, draftModel, runtimeName); err != nil {
+						continue
+					}
 				}
 			}
 			return true, nil
@@ -129,6 +134,27 @@ func (m *DefaultRuntimeMatcher) GetCompatibilityDetails(runtime *v1beta1.Serving
 			return report, nil
 		}
 		report.MatchDetails.SizeMatch = true
+	}
+
+	// Check draft model format when draft model is used
+	if draftModel != nil {
+		if len(runtime.SupportedDraftModelFormats) == 0 {
+			report.IncompatibilityReasons = append(report.IncompatibilityReasons,
+				"runtime does not declare supported draft model formats")
+			return report, nil
+		}
+		draftFormatMatch := false
+		for _, df := range runtime.SupportedDraftModelFormats {
+			if m.compareSupportedDraftModelFormats(draftModel, model, df) {
+				draftFormatMatch = true
+				break
+			}
+		}
+		if !draftFormatMatch {
+			report.IncompatibilityReasons = append(report.IncompatibilityReasons,
+				"draft model format not in supported draft formats")
+			return report, nil
+		}
 	}
 
 	// Check draft model size when draft model is used and runtime defines draftModelSizeRange
@@ -663,6 +689,77 @@ func (m *DefaultRuntimeMatcher) checkModelSize(runtime *v1beta1.ServingRuntimeSp
 	}
 
 	return nil
+}
+
+// draftModelFormatSupported returns true if the runtime declares supported draft formats and at least one matches the draft model.
+// Uses effective draft format: if draft does not specify a format (ModelFormat.Name empty), main model's format is used.
+func (m *DefaultRuntimeMatcher) draftModelFormatSupported(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, draftModel *v1beta1.BaseModelSpec) bool {
+	if len(runtime.SupportedDraftModelFormats) == 0 {
+		return false
+	}
+	for _, df := range runtime.SupportedDraftModelFormats {
+		if m.compareSupportedDraftModelFormats(draftModel, model, df) {
+			return true
+		}
+	}
+	return false
+}
+
+// compareSupportedDraftModelFormats checks if a draft model matches a supported draft format.
+// All fields on the runtime format are optional: if set, the draft must match; if unset, that dimension is not checked.
+// Effective draft format: if draftModel.ModelFormat.Name is empty, mainModel.ModelFormat is used so format is never nil for comparison.
+// If the runtime entry has all fields nil, it matches any draft.
+func (m *DefaultRuntimeMatcher) compareSupportedDraftModelFormats(draftModel, mainModel *v1beta1.BaseModelSpec, format v1beta1.SupportedDraftModelFormat) bool {
+	// All fields nil on runtime => match any draft
+	if format.ModelFormat == nil && format.ModelFramework == nil && format.ModelArchitecture == nil {
+		return true
+	}
+
+	// Effective draft format: draft's format if specified, else main model's (never nil for comparison)
+	effectiveFormat := &draftModel.ModelFormat
+	if draftModel.ModelFormat.Name == "" {
+		effectiveFormat = &mainModel.ModelFormat
+	}
+
+	// Check format (only if runtime specifies it)
+	if format.ModelFormat != nil {
+		if effectiveFormat.Name != format.ModelFormat.Name {
+			return false
+		}
+		if format.ModelFormat.Version != nil && effectiveFormat.Version != nil {
+			if !m.compareModelFormatVersions(format.ModelFormat, effectiveFormat) {
+				return false
+			}
+		} else if (format.ModelFormat.Version == nil) != (effectiveFormat.Version == nil) {
+			return false
+		}
+	}
+
+	// Check framework (only if runtime specifies it)
+	if format.ModelFramework != nil {
+		if draftModel.ModelFramework == nil {
+			return false
+		}
+		if format.ModelFramework.Name != draftModel.ModelFramework.Name {
+			return false
+		}
+		if format.ModelFramework.Version != nil && draftModel.ModelFramework.Version != nil {
+			if !m.compareModelFrameworkVersions(format.ModelFramework, draftModel.ModelFramework) {
+				return false
+			}
+		} else if (format.ModelFramework.Version == nil) != (draftModel.ModelFramework.Version == nil) {
+			return false
+		}
+	}
+
+	// Check architecture (only if runtime specifies it)
+	if format.ModelArchitecture != nil {
+		if draftModel.ModelArchitecture == nil || *draftModel.ModelArchitecture != *format.ModelArchitecture {
+			return false
+		}
+	}
+
+	return true
 }
 
 // checkDraftModelSize verifies the draft model size is within the runtime's supported draft model range.

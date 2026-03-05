@@ -14171,6 +14171,13 @@ spec:
                   type: boolean
                 dnsPolicy:
                   type: string
+                draftModelSizeRange:
+                  properties:
+                    max:
+                      type: string
+                    min:
+                      type: string
+                  type: object
                 engineConfig:
                   properties:
                     acceleratorOverride:
@@ -31531,6 +31538,46 @@ spec:
                   type: object
                 schedulerName:
                   type: string
+                supportedDraftModelFormats:
+                  items:
+                    properties:
+                      modelArchitecture:
+                        type: string
+                      modelFormat:
+                        properties:
+                          name:
+                            type: string
+                          operator:
+                            default: Equal
+                            type: string
+                          version:
+                            type: string
+                          weight:
+                            default: 1
+                            format: int64
+                            type: integer
+                        required:
+                          - name
+                        type: object
+                      modelFramework:
+                        properties:
+                          name:
+                            type: string
+                          operator:
+                            default: Equal
+                            type: string
+                          version:
+                            type: string
+                          weight:
+                            default: 1
+                            format: int64
+                            type: integer
+                        required:
+                          - name
+                        type: object
+                    type: object
+                  type: array
+                  x-kubernetes-list-type: atomic
                 supportedModelFormats:
                   items:
                     properties:
