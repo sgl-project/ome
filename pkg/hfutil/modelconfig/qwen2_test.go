@@ -109,12 +109,12 @@ func TestQwen2QuantizationConfig(t *testing.T) {
 		t.Fatalf("Failed to unmarshal Qwen2 FP8 config: %v", err)
 	}
 
-	if config.GetQuantizationType() != "fp8" {
-		t.Errorf("Expected quantization type 'fp8', but got '%s'", config.GetQuantizationType())
-	}
-
 	if config.QuantizationConfig == nil {
 		t.Fatal("Expected QuantizationConfig to be non-nil")
+	}
+
+	if config.GetQuantizationType() != "fp8" {
+		t.Errorf("Expected quantization type 'fp8', but got '%s'", config.GetQuantizationType())
 	}
 
 	if config.QuantizationConfig.Format != "e4m3" {

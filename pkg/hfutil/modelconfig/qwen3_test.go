@@ -98,14 +98,14 @@ func TestQwen3FP8Config(t *testing.T) {
 		t.Fatalf("Expected config to be of type *Qwen3Config, but got %T", config)
 	}
 
-	// Check quantization type
-	if config.GetQuantizationType() != "fp8" {
-		t.Errorf("Expected quantization type 'fp8', but got '%s'", config.GetQuantizationType())
-	}
-
 	// Check quantization config details
 	if qwen3Config.QuantizationConfig == nil {
 		t.Fatal("Expected QuantizationConfig to be non-nil")
+	}
+
+	// Check quantization type
+	if config.GetQuantizationType() != "fp8" {
+		t.Errorf("Expected quantization type 'fp8', but got '%s'", config.GetQuantizationType())
 	}
 
 	if qwen3Config.QuantizationConfig.Format != "e4m3" {
