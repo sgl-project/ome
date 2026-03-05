@@ -3,6 +3,8 @@ package replicationjob
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
@@ -224,6 +226,25 @@ func (r *ReplicationJobReconciler) createPodSpecWithContainer(container v1.Conta
 				Effect:   v1.TaintEffectNoSchedule,
 			},
 		},
+		Affinity: &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{
+						{
+							MatchExpressions: []v1.NodeSelectorRequirement{
+								{
+									Key:      "node.kubernetes.io/instance-type",
+									Operator: v1.NodeSelectorOpNotIn,
+									Values: []string{
+										"BM.GPU.A10.4", // EXCLUDE A10 to avoid ephemeral storage pressure
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 		RestartPolicy: v1.RestartPolicyNever,
 	}
 }
@@ -295,7 +316,10 @@ func (r *ReplicationJobReconciler) updateStatus(
 		var isComplete, isFailed bool
 		var completionTime *metav1.Time
 
-		if job.Status.CompletionTime != nil {
+		// Retrieve detailed error from pod (exit code and termination log)
+		rawMsg := r.getPodErrorInfo(ctx, replicationJob.Namespace, job.Name, log)
+
+		if job.Status.CompletionTime != nil && rawMsg == "" {
 			isComplete = true
 			completionTime = job.Status.CompletionTime
 		}
@@ -303,12 +327,12 @@ func (r *ReplicationJobReconciler) updateStatus(
 		// A job is considered failed if it either reaches its backoffLimit or has a failure condition.
 		// Here, backoffLimit is set to 0 because retry behavior is managed by ome-agent.
 		for _, cond := range job.Status.Conditions {
-			if cond.Type == batchv1.JobFailed && cond.Status == v1.ConditionTrue {
+			if cond.Type == batchv1.JobFailed && cond.Status == v1.ConditionTrue ||
+				strings.Contains(rawMsg, v1.PodReasonTerminationByKubelet) {
+
 				isFailed = true
 				completionTime = &cond.LastTransitionTime
 
-				// Retrieve detailed error from pod (exit code and termination log)
-				rawMsg := r.getPodErrorInfo(ctx, replicationJob.Namespace, job.Name, log)
 				formattedMsg, errStatus := utils.FormatClientErrorAndStatus(rawMsg)
 				status.Message = formattedMsg
 
@@ -318,6 +342,9 @@ func (r *ReplicationJobReconciler) updateStatus(
 				if errStatus != "" {
 					condType = constants.ClientError
 					reason = errStatus
+				} else if strings.Contains(rawMsg, v1.PodReasonTerminationByKubelet) {
+					condType = constants.NodeError
+					reason = v1.PodReasonTerminationByKubelet
 				}
 
 				errorCondition := metav1.Condition{
@@ -426,7 +453,23 @@ func (r *ReplicationJobReconciler) getPodErrorInfo(ctx context.Context, namespac
 
 	// Find the failed pod (usually the first one if job failed)
 	for _, pod := range podList.Items {
-		// Check container termination status for exit code and termination message
+		// 1. Check Pod conditions (for evictions, node resource pressure, and abnormal reasons)
+		for _, cond := range pod.Status.Conditions {
+			// Check for PodDisruption conditions (introduced in Kubernetes v1.29+).
+			// These disruptions (e.g., DisruptionTarget=True) may not be reflected in the Job status,
+			// and affected Jobs might still appear as completed (Succeeded) despite being interrupted.
+			if cond.Type == v1.DisruptionTarget &&
+				cond.Status == v1.ConditionTrue &&
+				cond.Reason == v1.PodReasonTerminationByKubelet {
+				msg := fmt.Sprintf(
+					"Job '%s': Condition Type='%s', Reason='%s', Message='%s'",
+					jobName, cond.Type, cond.Reason, cond.Message)
+				log.Info(msg)
+				return msg
+			}
+		}
+		// 2. Check container statuses
+		// 2.1 Check container termination status for exit code and termination message
 		for _, containerStatus := range pod.Status.ContainerStatuses {
 			if containerStatus.State.Terminated != nil {
 				terminated := containerStatus.State.Terminated
@@ -442,7 +485,7 @@ func (r *ReplicationJobReconciler) getPodErrorInfo(ctx context.Context, namespac
 					}
 				}
 			}
-			// Check waiting state for errors
+			// 2.2 Check waiting state for errors
 			if containerStatus.State.Waiting != nil {
 				waiting := containerStatus.State.Waiting
 				if waiting.Reason == constants.StateReasonError || waiting.Reason == constants.StateReasonCrashLoopBackOff {

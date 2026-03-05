@@ -22,6 +22,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	cfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -511,6 +512,7 @@ func TestReplicationJobReconciler_updateStatus(t *testing.T) {
 		name           string
 		replicationJob *v1beta1.ReplicationJob
 		existingJob    *batchv1.Job
+		existingPod    *corev1.Pod
 		expectedError  bool
 	}{
 		{
@@ -522,6 +524,7 @@ func TestReplicationJobReconciler_updateStatus(t *testing.T) {
 				},
 			},
 			existingJob:   nil,
+			existingPod:   nil,
 			expectedError: false,
 		},
 		{
@@ -546,6 +549,98 @@ func TestReplicationJobReconciler_updateStatus(t *testing.T) {
 					},
 				},
 			},
+			existingPod:   nil,
+			expectedError: false,
+		},
+		{
+			name: "job exists and fails on client error",
+			replicationJob: &v1beta1.ReplicationJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-job",
+					Namespace: "default",
+				},
+			},
+			existingJob: &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-job",
+					Namespace: "default",
+				},
+				Status: batchv1.JobStatus{
+					Conditions: []batchv1.JobCondition{
+						{
+							Type:   batchv1.JobFailed,
+							Status: corev1.ConditionTrue,
+						},
+					},
+				},
+			},
+			existingPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+					Labels: map[string]string{
+						"job-name": "test-job",
+					},
+				},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name: "test-container",
+							State: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{
+									ExitCode:   1,
+									Reason:     "Error",
+									Message:    "401 unauthorized",
+									FinishedAt: metav1.Now(),
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedError: false,
+		},
+		{
+			name: "job exists and fails on node error",
+			replicationJob: &v1beta1.ReplicationJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-job",
+					Namespace: "default",
+				},
+			},
+			existingJob: &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-job",
+					Namespace: "default",
+				},
+				Status: batchv1.JobStatus{
+					Conditions: []batchv1.JobCondition{
+						{
+							Type:   batchv1.JobFailed,
+							Status: corev1.ConditionTrue,
+						},
+					},
+				},
+			},
+			existingPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+					Labels: map[string]string{
+						"job-name": "test-job",
+					},
+				},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{
+						{
+							Type:    corev1.PodConditionType("DisruptionTarget"),
+							Status:  corev1.ConditionTrue,
+							Reason:  "TerminationByKubelet",
+							Message: "The node was low on resource: ephemeral-storage. Threshold quantity: 1142927001550, available: 1112205360Ki.",
+						},
+					},
+				},
+			},
 			expectedError: false,
 		},
 	}
@@ -566,6 +661,10 @@ func TestReplicationJobReconciler_updateStatus(t *testing.T) {
 				tt.existingJob.SetGroupVersionKind(batchv1.SchemeGroupVersion.WithKind("Job"))
 				clientBuilder = clientBuilder.WithObjects(tt.existingJob)
 			}
+			if tt.existingPod != nil {
+				tt.existingPod.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Pod"))
+				clientBuilder = clientBuilder.WithObjects(tt.existingPod)
+			}
 
 			client := clientBuilder.Build()
 
@@ -579,6 +678,46 @@ func TestReplicationJobReconciler_updateStatus(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+			}
+
+			if tt.name == "job exists and fails on client error" {
+				// Fetch the updated ReplicationJob from the client after status update
+				updated := &v1beta1.ReplicationJob{}
+				err := client.Get(context.Background(), ctrlclient.ObjectKey{
+					Name:      replicationJobCopy.Name,
+					Namespace: replicationJobCopy.Namespace,
+				}, updated)
+				assert.NoError(t, err)
+
+				// Find the condition of type ClientError
+				found := false
+				for _, cond := range updated.Status.Conditions {
+					if cond.Type == constants.ClientError && cond.Status == metav1.ConditionTrue {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "Expected a status condition type ClientError with status True")
+			}
+
+			if tt.name == "job exists and fails on node error" {
+				// Fetch the updated ReplicationJob from the client after status update
+				updated := &v1beta1.ReplicationJob{}
+				err := client.Get(context.Background(), ctrlclient.ObjectKey{
+					Name:      replicationJobCopy.Name,
+					Namespace: replicationJobCopy.Namespace,
+				}, updated)
+				assert.NoError(t, err)
+
+				// Assert that there is a condition with Type NodeError and Status True
+				found := false
+				for _, cond := range updated.Status.Conditions {
+					if cond.Type == constants.NodeError && cond.Status == metav1.ConditionTrue {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "Expected a status condition with Type NodeError and Status True")
 			}
 		})
 	}

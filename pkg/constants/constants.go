@@ -54,6 +54,11 @@ var (
 	PermissionDenied = "PermissionDenied"
 )
 
+// Node Error Constants
+var (
+	NodeError = "NodeError"
+)
+
 // AI Platform Constants
 var (
 	AIPlatformConfigMapName = "aiplatform-config"
