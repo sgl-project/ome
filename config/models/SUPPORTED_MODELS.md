@@ -139,6 +139,7 @@ This document provides a comprehensive reference of all models supported by SGLa
 |-------------------------|----------------------------------------|-------------------------|---------------------------------|--------|---------|----------------|------------|
 | GPT-OSS 20B             | `openai/gpt-oss-20b`                   | 20B                     | GPTOSSForCausalLM               | 40 GB  | -       | No             | Configured |
 | GPT-OSS 120B            | `openai/gpt-oss-120b`                  | 120B                    | GPTOSSForCausalLM               | 240 GB | -       | No             | Configured |
+| GPT-OSS 120B Eagle3 (draft) | `nvidia/gpt-oss-120b-eagle3-long-context` | Draft for spec decoding | GptOssForCausalLM               | -      | -       | No             | Configured |
 | ChatGLM2 6B             | `THUDM/chatglm2-6b`                    | 6B                      | ChatGLMForConditionalGeneration | 12 GB  | 32K     | No             | Configured |
 | GLM-4 9B Chat           | `ZhipuAI/glm-4-9b-chat`                | 9B                      | ChatGLMForConditionalGeneration | 18 GB  | 1M      | No             | Configured |
 | InternLM2 7B            | `internlm/internlm2-7b`                | 7B                      | InternLM2ForCausalLM            | 14 GB  | 32K     | No             | Configured |

@@ -931,6 +931,7 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorResource(ref common.ReferenceCallbac
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -3648,6 +3649,7 @@ func schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref common.Reference
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -3808,6 +3810,12 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref common.ReferenceCallba
 					"model": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Model defines the model to be used for inference, referencing either a BaseModel or a custom model. This allows models to be managed independently of the serving configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelRef"),
+						},
+					},
+					"draftModel": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DraftModel defines an optional smaller draft model for speculative decoding. References a BaseModel or ClusterBaseModel, just like Model. When set, the draft model's storage path is injected as the DRAFT_MODEL_PATH environment variable.",
 							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelRef"),
 						},
 					},
@@ -4597,6 +4605,7 @@ func schema_pkg_apis_ome_v1beta1_ModelFormat(ref common.ReferenceCallback) commo
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -4638,6 +4647,7 @@ func schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref common.ReferenceCallback
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -4692,6 +4702,7 @@ func schema_pkg_apis_ome_v1beta1_ModelRef(ref common.ReferenceCallback) common.O
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -5094,6 +5105,7 @@ func schema_pkg_apis_ome_v1beta1_ModelSpec(ref common.ReferenceCallback) common.
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -5231,6 +5243,7 @@ func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) c
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -6188,6 +6201,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref common.ReferenceCall
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -7694,6 +7708,7 @@ func schema_pkg_apis_ome_v1beta1_RunnerSpec(ref common.ReferenceCallback) common
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -7724,6 +7739,7 @@ func schema_pkg_apis_ome_v1beta1_ScalerAuthenticationRef(ref common.ReferenceCal
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -8087,6 +8103,7 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref common.ReferenceCallback)
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -8121,6 +8138,12 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 					"modelSizeRange": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ModelSizeRange is the range of model sizes supported by this runtime",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec"),
+						},
+					},
+					"draftModelSizeRange": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DraftModelSizeRange is the range of draft model sizes supported when using this runtime with speculative decoding. Validated only when the InferenceService specifies a draft model.",
 							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec"),
 						},
 					},

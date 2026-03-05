@@ -41,7 +41,7 @@ type Selector interface {
     GetCompatibleRuntimes(ctx context.Context, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, namespace string) ([]RuntimeMatch, error)
 
     // Validate a specific runtime choice
-    ValidateRuntime(ctx context.Context, runtimeName string, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) error
+    ValidateRuntime(ctx context.Context, runtimeName string, baseModel *v1beta1.BaseModelSpec, draftModel *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) error
 
     // Get runtime spec by name
     GetRuntime(ctx context.Context, name string, namespace string) (*v1beta1.ServingRuntimeSpec, bool, error)
@@ -70,10 +70,10 @@ Handles compatibility checking:
 ```go
 type RuntimeMatcher interface {
     // Check basic compatibility
-    IsCompatible(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, runtimeName string) (bool, error)
+    IsCompatible(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, draftModel *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, runtimeName string) (bool, error)
 
     // Get detailed compatibility report
-    GetCompatibilityDetails(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, runtimeName string) (*CompatibilityReport, error)
+    GetCompatibilityDetails(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, draftModel *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, runtimeName string) (*CompatibilityReport, error)
 }
 ```
 
@@ -204,7 +204,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
     if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" {
         // Validate specified runtime
         rtName = isvc.Spec.Runtime.Name
-        if err := r.RuntimeSelector.ValidateRuntime(ctx, rtName, baseModel, isvc); err != nil {
+        if err := r.RuntimeSelector.ValidateRuntime(ctx, rtName, baseModel, draftModel, isvc); err != nil {
             return reconcile.Result{}, fmt.Errorf("runtime validation failed: %w", err)
         }
 
@@ -250,7 +250,7 @@ func (v *InferenceServiceValidator) ValidateCreate(ctx context.Context, obj runt
 
     // Check if runtime can be selected/validated (with accelerator awareness)
     if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" {
-        if err := v.RuntimeSelector.ValidateRuntime(ctx, isvc.Spec.Runtime.Name, baseModel, isvc); err != nil {
+        if err := v.RuntimeSelector.ValidateRuntime(ctx, isvc.Spec.Runtime.Name, baseModel, draftModel, isvc); err != nil {
             return nil, fmt.Errorf("invalid runtime selection: %w", err)
         }
     } else {

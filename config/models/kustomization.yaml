@@ -124,6 +124,7 @@ resources:
   - nvidia/Llama-3.1-Nemotron-Nano-8B-v1.yaml
   - nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16.yaml
   - nvidia/NVIDIA-Nemotron-Nano-9B-v2.yaml
+  - nvidia/gpt-oss-120b-eagle3-long-context.yaml
 
   # openai
   - openai/clip-vit-large-patch14-336.yaml

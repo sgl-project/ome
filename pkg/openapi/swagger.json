@@ -2101,6 +2101,10 @@
           "description": "Decoder defines the decoder spec This is specifically used for PD (Prefill-Decode) disaggregated serving deployments. Similar to Engine in structure, it allows for container and pod specifications, but is only utilized when implementing the disaggregated serving pattern to separate the prefill and decode phases of inference.",
           "$ref": "#/definitions/v1beta1.DecoderSpec"
         },
+        "draftModel": {
+          "description": "DraftModel defines an optional smaller draft model for speculative decoding. References a BaseModel or ClusterBaseModel, just like Model. When set, the draft model's storage path is injected as the DRAFT_MODEL_PATH environment variable.",
+          "$ref": "#/definitions/v1beta1.ModelRef"
+        },
         "engine": {
           "description": "Engine defines the serving engine spec This provides detailed container and pod specifications for model serving. It allows defining the model runner (container spec), as well as complete pod specifications including init containers, sidecar containers, and other pod-level configurations. Engine can also be configured for multi-node deployments using leader and worker specifications.",
           "$ref": "#/definitions/v1beta1.EngineSpec"
@@ -4558,6 +4562,10 @@
         "dnsPolicy": {
           "description": "Set DNS policy for the pod. Defaults to \"ClusterFirst\". Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'. DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy. To have DNS options set along with hostNetwork, you have to specify DNS policy explicitly to 'ClusterFirstWithHostNet'.",
           "type": "string"
+        },
+        "draftModelSizeRange": {
+          "description": "DraftModelSizeRange is the range of draft model sizes supported when using this runtime with speculative decoding. Validated only when the InferenceService specifies a draft model.",
+          "$ref": "#/definitions/v1beta1.ModelSizeRangeSpec"
         },
         "engineConfig": {
           "description": "Engine configuration for this runtime",
