@@ -244,7 +244,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// Validate specified runtime
 		rtName = isvc.Spec.Runtime.Name
 		userSpecifiedRuntime = true
-		if err := r.RuntimeSelector.ValidateRuntime(ctx, rtName, baseModel, isvc); err != nil {
+		if err := r.RuntimeSelector.ValidateRuntime(ctx, rtName, baseModel, draftModel, isvc); err != nil {
 			r.Log.Error(err, "Runtime validation failed", "runtime", rtName, "model", isvc.Spec.Model.Name)
 			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeValidationError",
 				"Runtime %s does not support model %s: %v", rtName, isvc.Spec.Model.Name, err)

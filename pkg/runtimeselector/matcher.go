@@ -26,7 +26,7 @@ func NewDefaultRuntimeMatcher(config *Config) RuntimeMatcher {
 }
 
 // IsCompatible checks if a runtime can serve a model.
-func (m *DefaultRuntimeMatcher) IsCompatible(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, runtimeName string) (bool, error) {
+func (m *DefaultRuntimeMatcher) IsCompatible(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, draftModel *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, runtimeName string) (bool, error) {
 	// Quick checks first
 	if runtime.IsDisabled() {
 		return false, &RuntimeDisabledError{RuntimeName: runtimeName}
@@ -44,11 +44,18 @@ func (m *DefaultRuntimeMatcher) IsCompatible(runtime *v1beta1.ServingRuntimeSpec
 	// Check if any supported format matches
 	for _, format := range runtime.SupportedModelFormats {
 		if m.compareSupportedModelFormats(model, format) {
-			// Found a matching format, now check model size if specified
-			if err := m.checkModelSize(runtime, model, runtimeName); err == nil {
-				return true, nil
+			// Found a matching format, now check main model size if specified
+			if err := m.checkModelSize(runtime, model, runtimeName); err != nil {
+				// If model size check failed, continue checking other formats
+				continue
 			}
-			// If model size check failed, continue checking other formats
+			// When draft model is used, validate draft model size against draftModelSizeRange if set
+			if draftModel != nil && runtime.DraftModelSizeRange != nil {
+				if err := m.checkDraftModelSize(runtime, draftModel, runtimeName); err != nil {
+					continue
+				}
+			}
+			return true, nil
 		}
 	}
 
@@ -57,7 +64,7 @@ func (m *DefaultRuntimeMatcher) IsCompatible(runtime *v1beta1.ServingRuntimeSpec
 }
 
 // GetCompatibilityDetails returns detailed compatibility information.
-func (m *DefaultRuntimeMatcher) GetCompatibilityDetails(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, runtimeName string) (*CompatibilityReport, error) {
+func (m *DefaultRuntimeMatcher) GetCompatibilityDetails(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, draftModel *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, runtimeName string) (*CompatibilityReport, error) {
 	ctx := context.Background()
 	logger := log.FromContext(ctx)
 
@@ -108,7 +115,7 @@ func (m *DefaultRuntimeMatcher) GetCompatibilityDetails(runtime *v1beta1.Serving
 		return report, nil
 	}
 
-	// Check model size compatibility
+	// Check main model size compatibility
 	if model.ModelParameterSize != nil && runtime.ModelSizeRange != nil {
 		modelSize := parseModelSize(*model.ModelParameterSize)
 		minSize := parseModelSize(*runtime.ModelSizeRange.Min)
@@ -122,6 +129,24 @@ func (m *DefaultRuntimeMatcher) GetCompatibilityDetails(runtime *v1beta1.Serving
 			return report, nil
 		}
 		report.MatchDetails.SizeMatch = true
+	}
+
+	// Check draft model size when draft model is used and runtime defines draftModelSizeRange
+	if draftModel != nil && runtime.DraftModelSizeRange != nil {
+		if draftModel.ModelParameterSize == nil {
+			report.IncompatibilityReasons = append(report.IncompatibilityReasons,
+				"draft model does not specify size, but runtime has draft model size constraints")
+			return report, nil
+		}
+		draftSize := parseModelSize(*draftModel.ModelParameterSize)
+		minDraft := parseModelSize(*runtime.DraftModelSizeRange.Min)
+		maxDraft := parseModelSize(*runtime.DraftModelSizeRange.Max)
+		if draftSize < minDraft || draftSize > maxDraft {
+			report.IncompatibilityReasons = append(report.IncompatibilityReasons,
+				fmt.Sprintf("draft model size %s is outside supported draft range [%s, %s]",
+					*draftModel.ModelParameterSize, *runtime.DraftModelSizeRange.Min, *runtime.DraftModelSizeRange.Max))
+			return report, nil
+		}
 	}
 
 	// At this point, runtime supports the model
@@ -637,6 +662,26 @@ func (m *DefaultRuntimeMatcher) checkModelSize(runtime *v1beta1.ServingRuntimeSp
 		}
 	}
 
+	return nil
+}
+
+// checkDraftModelSize verifies the draft model size is within the runtime's supported draft model range.
+func (m *DefaultRuntimeMatcher) checkDraftModelSize(runtime *v1beta1.ServingRuntimeSpec, draftModel *v1beta1.BaseModelSpec, runtimeName string) error {
+	if draftModel.ModelParameterSize == nil || runtime.DraftModelSizeRange == nil {
+		return nil
+	}
+	draftSize := parseModelSize(*draftModel.ModelParameterSize)
+	minSize := parseModelSize(*runtime.DraftModelSizeRange.Min)
+	maxSize := parseModelSize(*runtime.DraftModelSizeRange.Max)
+	if draftSize < minSize || draftSize > maxSize {
+		return &RuntimeCompatibilityError{
+			RuntimeName: runtimeName,
+			ModelName:   "",
+			ModelFormat: draftModel.ModelFormat.Name,
+			Reason: fmt.Sprintf("draft model size %s is outside supported draft range [%s, %s]",
+				*draftModel.ModelParameterSize, *runtime.DraftModelSizeRange.Min, *runtime.DraftModelSizeRange.Max),
+		}
+	}
 	return nil
 }
 

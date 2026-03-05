@@ -196,6 +196,11 @@ type ServingRuntimeSpec struct {
 	// +optional
 	ModelSizeRange *ModelSizeRangeSpec `json:"modelSizeRange,omitempty"`
 
+	// DraftModelSizeRange is the range of draft model sizes supported when using this runtime with
+	// speculative decoding. Validated only when the InferenceService specifies a draft model.
+	// +optional
+	DraftModelSizeRange *ModelSizeRangeSpec `json:"draftModelSizeRange,omitempty"`
+
 	// Set to true to disable use of this runtime
 	// +optional
 	Disabled *bool `json:"disabled,omitempty"`
