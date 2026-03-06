@@ -49,11 +49,14 @@ spec:
                 {{- end }}
     {{- end }}
   additionalMetadata:
+    {{- $shape := default "LARGE_GENERIC_2" (index .Values "llama-4-maverick-17b-128e-instruct-fp8" "compatibleDACShapes") }}
+    {{- if $shape }}
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: LARGE_GENERIC_2
+        - name: {{ $shape }}
           quotaUnit: 1
           default: true
+    {{- end }}
     image-text-to-text: "true"
   modelConfiguration:
     {

@@ -101,6 +101,7 @@ llama-3-3-70b-instruct-fp8-dynamic:
     - BM.GPU.H200.8
     - BM.GPU.B4.8
     - BM.GPU4.8
+    - BM.GPU.B200.8
 
 llama-3-2-90b-vision-instruct-fp8-dynamic:
   enabled: false
@@ -133,6 +134,7 @@ llama-4-scout-17b-16e-instruct:
     - BM.GPU.A100-v2.8
     - BM.GPU.B4.8
     - BM.GPU4.8
+    - BM.GPU.B200.8
 
 llama-4-maverick-17b-128e-instruct-fp8:
   enabled: false
@@ -142,6 +144,7 @@ llama-4-maverick-17b-128e-instruct-fp8:
     - BM.GPU.H200.8
     - BM.GPU.H200-NC.8
     - BM.GPU.H100-NC.8
+    - BM.GPU.B200.8
 
 llama-guard-4-12b:
   enabled: false

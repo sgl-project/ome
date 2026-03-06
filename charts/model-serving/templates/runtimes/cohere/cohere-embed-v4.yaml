@@ -49,6 +49,7 @@ spec:
                   - BM.GPU.H200.8
                   - BM.GPU.H200-NC.8
                   - BM.GPU.H100-NC.8
+                  - BM.GPU.B200.8
   protocolVersions:
     - cohere
   schedulerName: {{ .Values.commonSchedulerName }}
@@ -123,6 +124,7 @@ spec:
                     - BM.GPU.H200.8
                     - BM.GPU.H200-NC.8
                     - BM.GPU.H100-NC.8
+                    - BM.GPU.B200.8
     schedulerName: {{ .Values.commonSchedulerName }}
     volumes:
       - name: shared-memory

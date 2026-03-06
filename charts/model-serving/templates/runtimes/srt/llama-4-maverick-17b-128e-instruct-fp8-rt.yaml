@@ -219,6 +219,7 @@ spec:
                   - BM.GPU.H200.8
                   - BM.GPU.H200-NC.8
                   - BM.GPU.H100-NC.8
+                  - BM.GPU.B200.8
   containers:
     - name: ome-container
       image: {{ .Values.llama_4_maverick_17b_128e_instruct_fp8.image.srt.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.llama_4_maverick_17b_128e_instruct_fp8.image.srt.tag | default .Values.sglang.latestImage.tag }}
