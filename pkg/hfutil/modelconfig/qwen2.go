@@ -39,6 +39,9 @@ type Qwen2Config struct {
 	TieWordEmbeddings bool `json:"tie_word_embeddings"`
 	UseCache          bool `json:"use_cache"`
 	UseSlidingWindow  bool `json:"use_sliding_window"`
+
+	// Quantization
+	QuantizationConfig *QuantizationConfig `json:"quantization_config,omitempty"`
 }
 
 // LoadQwen2Config loads a Qwen2 model configuration from a JSON file
@@ -99,7 +102,10 @@ func (c *Qwen2Config) GetModelSizeBytes() int64 {
 
 // GetQuantizationType returns the quantization method used (if any)
 func (c *Qwen2Config) GetQuantizationType() string {
-	return "" // No quantization by default
+	if c.QuantizationConfig != nil && c.QuantizationConfig.QuantMethod != "" {
+		return c.QuantizationConfig.QuantMethod
+	}
+	return ""
 }
 
 // HasVision returns false for Qwen2 base models

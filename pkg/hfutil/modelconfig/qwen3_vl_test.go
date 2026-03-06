@@ -1,6 +1,7 @@
 package modelconfig
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 )
@@ -243,5 +244,148 @@ func TestQwen3VLConfigNonMoE(t *testing.T) {
 	tolerance := expectedCount / 20       // 5% tolerance
 	if paramCount < expectedCount-tolerance || paramCount > expectedCount+tolerance {
 		t.Errorf("Expected parameter count to be around %d (±%d), but got %d", expectedCount, tolerance, paramCount)
+	}
+}
+
+func TestQwen3VLQuantizationConfig(t *testing.T) {
+	jsonData := []byte(`{
+		"architectures": ["Qwen3VLForConditionalGeneration"],
+		"model_type": "qwen3_vl",
+		"image_token_id": 151655,
+		"video_token_id": 151656,
+		"vision_start_token_id": 151652,
+		"vision_end_token_id": 151653,
+		"tie_word_embeddings": false,
+		"text_config": {
+			"hidden_size": 2048,
+			"intermediate_size": 11008,
+			"num_hidden_layers": 28,
+			"num_attention_heads": 16,
+			"num_key_value_heads": 8,
+			"max_position_embeddings": 262144,
+			"vocab_size": 151936,
+			"rope_theta": 5000000.0
+		},
+		"vision_config": {
+			"hidden_size": 1152,
+			"depth": 27,
+			"num_heads": 16,
+			"intermediate_size": 4304
+		},
+		"quantization_config": {
+			"activation_scheme": "dynamic",
+			"fmt": "e4m3",
+			"quant_method": "fp8",
+			"weight_block_size": [128, 128]
+		}
+	}`)
+
+	config := &Qwen3VLConfig{}
+	if err := json.Unmarshal(jsonData, config); err != nil {
+		t.Fatalf("Failed to unmarshal Qwen3VL FP8 config: %v", err)
+	}
+
+	if config.QuantizationConfig == nil {
+		t.Fatal("Expected QuantizationConfig to be non-nil")
+	}
+
+	if config.GetQuantizationType() != "fp8" {
+		t.Errorf("Expected quantization type 'fp8', but got '%s'", config.GetQuantizationType())
+	}
+
+	if config.QuantizationConfig.Format != "e4m3" {
+		t.Errorf("Expected format 'e4m3', but got '%s'", config.QuantizationConfig.Format)
+	}
+}
+
+func TestQwen35ConfigDense(t *testing.T) {
+	configPath := filepath.Join("testdata", "qwen3_5_27b.json")
+
+	config, err := LoadModelConfig(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load Qwen3.5 dense config: %v", err)
+	}
+
+	if config.GetModelType() != "qwen3_5" {
+		t.Errorf("Expected model type 'qwen3_5' but got '%s'", config.GetModelType())
+	}
+
+	qwenConfig, ok := config.(*Qwen3VLConfig)
+	if !ok {
+		t.Fatalf("Expected config to be of type *Qwen3VLConfig, but got %T", config)
+	}
+
+	if !config.HasVision() {
+		t.Error("Expected HasVision to return true for Qwen3.5 dense model")
+	}
+
+	if qwenConfig.TextConfig.HiddenSize != 3584 {
+		t.Errorf("Expected hidden size 3584, got %d", qwenConfig.TextConfig.HiddenSize)
+	}
+
+	if context := config.GetContextLength(); context != 262144 {
+		t.Errorf("Expected context length 262144, got %d", context)
+	}
+
+	if params := config.GetParameterCount(); params <= 0 {
+		t.Errorf("Expected positive parameter count, got %d", params)
+	}
+
+	if qwenConfig.GetTorchDtype() != "bfloat16" {
+		t.Errorf("Expected torch dtype 'bfloat16', got '%s'", qwenConfig.GetTorchDtype())
+	}
+
+	paramCount := config.GetParameterCount()
+	expectedModelSize := EstimateModelSizeBytes(paramCount, "bfloat16")
+	if modelSize := config.GetModelSizeBytes(); modelSize != expectedModelSize {
+		t.Errorf("Expected model size bytes %d, got %d", expectedModelSize, modelSize)
+	}
+}
+
+func TestQwen35ConfigMoE(t *testing.T) {
+	configPath := filepath.Join("testdata", "qwen3_5_35b_a3b.json")
+
+	config, err := LoadModelConfig(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load Qwen3.5 MoE config: %v", err)
+	}
+
+	if config.GetModelType() != "qwen3_5_moe" {
+		t.Errorf("Expected model type 'qwen3_5_moe' but got '%s'", config.GetModelType())
+	}
+
+	qwenConfig, ok := config.(*Qwen3VLConfig)
+	if !ok {
+		t.Fatalf("Expected config to be of type *Qwen3VLConfig, but got %T", config)
+	}
+
+	if !config.HasVision() {
+		t.Error("Expected HasVision to return true for Qwen3.5 MoE model")
+	}
+
+	if qwenConfig.TextConfig.NumExperts != 128 {
+		t.Errorf("Expected num experts 128, got %d", qwenConfig.TextConfig.NumExperts)
+	}
+
+	if qwenConfig.TextConfig.MoeIntermediateSize != 512 {
+		t.Errorf("Expected moe_intermediate_size 512, got %d", qwenConfig.TextConfig.MoeIntermediateSize)
+	}
+
+	if context := config.GetContextLength(); context != 262144 {
+		t.Errorf("Expected context length 262144, got %d", context)
+	}
+
+	if params := config.GetParameterCount(); params <= 0 {
+		t.Errorf("Expected positive parameter count, got %d", params)
+	}
+
+	if qwenConfig.GetTorchDtype() != "bfloat16" {
+		t.Errorf("Expected torch dtype 'bfloat16', got '%s'", qwenConfig.GetTorchDtype())
+	}
+
+	paramCount := config.GetParameterCount()
+	expectedModelSize := EstimateModelSizeBytes(paramCount, "bfloat16")
+	if modelSize := config.GetModelSizeBytes(); modelSize != expectedModelSize {
+		t.Errorf("Expected model size bytes %d, got %d", expectedModelSize, modelSize)
 	}
 }

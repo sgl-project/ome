@@ -45,6 +45,9 @@ type Qwen3Config struct {
 
 	// Embedding config
 	SimilarityFnName string `json:"similarity_fn_name"`
+
+	// Quantization
+	QuantizationConfig *QuantizationConfig `json:"quantization_config,omitempty"`
 }
 
 // LoadQwen3Config loads a Qwen3 model configuration from a JSON file
@@ -103,7 +106,10 @@ func (c *Qwen3Config) GetModelSizeBytes() int64 {
 
 // GetQuantizationType returns the quantization method used (if any)
 func (c *Qwen3Config) GetQuantizationType() string {
-	return "" // No quantization by default
+	if c.QuantizationConfig != nil && c.QuantizationConfig.QuantMethod != "" {
+		return c.QuantizationConfig.QuantMethod
+	}
+	return ""
 }
 
 // HasVision returns false for Qwen3 base models

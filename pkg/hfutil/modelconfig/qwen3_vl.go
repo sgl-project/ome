@@ -16,6 +16,9 @@ type Qwen3VLConfig struct {
 	VisionConfig       Qwen3VLVisionConfig `json:"vision_config"`
 	VisionStartTokenId int                 `json:"vision_start_token_id"`
 	VisionEndTokenId   int                 `json:"vision_end_token_id"`
+
+	// Quantization
+	QuantizationConfig *QuantizationConfig `json:"quantization_config,omitempty"`
 }
 
 // Qwen3VLTextConfig represents the text transformer configuration.
@@ -95,6 +98,12 @@ func LoadQwen3VLConfig(configPath string) (*Qwen3VLConfig, error) {
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse Qwen3-VL config JSON from '%s': %w", configPath, err)
 	}
+	// Qwen3.5 configs keep dtype under text_config.dtype.
+	// Promote it to the common TorchDtype field so size estimation stays correct.
+	if (config.ModelType == "qwen3_5" || config.ModelType == "qwen3_5_moe") &&
+		config.TorchDtype == "" && config.TextConfig.Dtype != "" {
+		config.TorchDtype = config.TextConfig.Dtype
+	}
 	config.ConfigPath = configPath
 	return &config, nil
 }
@@ -140,6 +149,9 @@ func (c *Qwen3VLConfig) GetModelSizeBytes() int64 {
 
 // GetQuantizationType returns the quantization method used (if any).
 func (c *Qwen3VLConfig) GetQuantizationType() string {
+	if c.QuantizationConfig != nil && c.QuantizationConfig.QuantMethod != "" {
+		return c.QuantizationConfig.QuantMethod
+	}
 	return ""
 }
 
@@ -204,6 +216,14 @@ func init() {
 		return LoadQwen3VLConfig(configPath)
 	})
 	RegisterModelLoader("qwen3_vl", func(configPath string) (HuggingFaceModel, error) {
+		return LoadQwen3VLConfig(configPath)
+	})
+	// Qwen3.5 models use the qwen3_5 / qwen3_5_moe model_type values and
+	// keep the same top-level multimodal shape (text_config + vision_config).
+	RegisterModelLoader("qwen3_5", func(configPath string) (HuggingFaceModel, error) {
+		return LoadQwen3VLConfig(configPath)
+	})
+	RegisterModelLoader("qwen3_5_moe", func(configPath string) (HuggingFaceModel, error) {
 		return LoadQwen3VLConfig(configPath)
 	})
 }
