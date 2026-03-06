@@ -54,6 +54,11 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        - name: INSTANCE_TYPE_MAP
+          valueFrom:
+            configMapKeyRef:
+              name: model-agent-config-map
+              key: instance-type-map
         {{- if or (eq .Values.ome.ociETC.realm "oc5") (eq .Values.ome.ociETC.realm "oc6") }}
         - name: REQUESTS_CA_BUNDLE
           value: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
