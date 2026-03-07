@@ -699,6 +699,8 @@ func TestEngineReconcile(t *testing.T) {
 				tt.deploymentMode,
 				tt.baseModel,
 				tt.baseModelMeta,
+				nil, // draftModel
+				nil, // draftModelMeta
 				tt.engineSpec,
 				nil, // runtime
 				tt.runtimeName,
@@ -880,6 +882,8 @@ func TestEngineReconcileObjectMeta(t *testing.T) {
 				constants.RawDeployment,
 				tt.baseModel,
 				tt.baseModelMeta,
+				nil, // draftModel
+				nil, // draftModelMeta
 				tt.engineSpec,
 				nil, // runtime
 				tt.runtimeName,
@@ -1019,6 +1023,8 @@ func TestEngineWorkerPodSpec(t *testing.T) {
 				constants.RawDeployment,
 				nil, // baseModel
 				nil, // baseModelMeta
+				nil, // draftModel
+				nil, // draftModelMeta
 				tt.engineSpec,
 				nil, // runtime
 				"",  // runtimeName
@@ -1216,6 +1222,8 @@ func TestEngineResourceMerging(t *testing.T) {
 				constants.RawDeployment,
 				nil, // baseModel
 				nil, // baseModelMeta
+				nil, // draftModel
+				nil, // draftModelMeta
 				tt.engineSpec,
 				tt.runtime,
 				"test-runtime",
@@ -1397,6 +1405,8 @@ func TestEngineAffinityMerging(t *testing.T) {
 				constants.RawDeployment,
 				nil, // baseModel
 				nil, // baseModelMeta
+				nil, // draftModel
+				nil, // draftModelMeta
 				tt.engineSpec,
 				nil, // runtime
 				"test-runtime",

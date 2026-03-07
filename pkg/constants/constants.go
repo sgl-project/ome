@@ -267,6 +267,7 @@ const (
 	TFewWeightPathEnvVarKey = "TFEW_PATH"
 
 	ModelPathEnvVarKey       = "MODEL_PATH"
+	DraftModelPathEnvVarKey  = "DRAFT_MODEL_PATH"
 	ServedModelNameEnvVarKey = "SERVED_MODEL_NAME"
 
 	ParallelismSizeEnvVarKey = "PARALLELISM_SIZE"

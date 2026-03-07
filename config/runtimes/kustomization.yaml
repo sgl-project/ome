@@ -8,6 +8,7 @@ resources:
 - srt/e5-mistral-7b-instruct-rt.yaml
 - srt/gpt-oss-120b-rt.yaml
 - srt/gpt-oss-20b-rt.yaml
+- srt/openai/gpt-oss-120b-eagle3-rt.yaml
 - srt/kimi-k2-pd-rt.yaml
 - srt/meta/llama-3-1-70b-instruct-pd-rt.yaml
 - srt/meta/llama-3-1-70b-instruct-rt.yaml

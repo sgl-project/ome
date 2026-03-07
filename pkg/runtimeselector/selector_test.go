@@ -943,12 +943,12 @@ func TestValidateRuntime_DisabledAndNoAutoSelect(t *testing.T) {
 	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Namespace: "default"}}
 
 	// Disabled should return RuntimeDisabledError
-	err := selector.ValidateRuntime(ctx, "rt-disabled", model, isvc)
+	err := selector.ValidateRuntime(ctx, "rt-disabled", model, nil, isvc)
 	assert.Error(t, err)
 	assert.True(t, IsRuntimeDisabledError(err))
 
 	// NoAutoSelect should return nil (compatible), even though auto-select is false
-	assert.NoError(t, selector.ValidateRuntime(ctx, "rt-no-auto", model, isvc))
+	assert.NoError(t, selector.ValidateRuntime(ctx, "rt-no-auto", model, nil, isvc))
 }
 
 func TestGetSupportedModelFormat_CustomRuntime(t *testing.T) {

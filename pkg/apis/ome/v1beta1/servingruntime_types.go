@@ -60,6 +60,21 @@ type SupportedModelFormat struct {
 	AcceleratorConfig map[string]*AcceleratorModelConfig `json:"acceleratorConfig,omitempty"`
 }
 
+// SupportedDraftModelFormat describes a draft model format supported by a runtime for speculative decoding.
+// All fields are optional: if set, the draft model must match; if unset, that dimension is not checked.
+// +k8s:openapi-gen=true
+type SupportedDraftModelFormat struct {
+	// ModelFormat of the draft model, e.g., "SafeTensors", "PyTorch"
+	// +optional
+	ModelFormat *ModelFormat `json:"modelFormat,omitempty"`
+	// ModelFramework of the draft model, e.g., "Transformers", "PyTorch"
+	// +optional
+	ModelFramework *ModelFrameworkSpec `json:"modelFramework,omitempty"`
+	// ModelArchitecture of the draft model, e.g., "LlamaForCausalLM", "GptOssForCausalLM"
+	// +optional
+	ModelArchitecture *string `json:"modelArchitecture,omitempty"`
+}
+
 // AcceleratorModelConfig provides accelerator-specific overrides for this model format
 // +k8s:openapi-gen=true
 type AcceleratorModelConfig struct {
@@ -195,6 +210,18 @@ type ServingRuntimeSpec struct {
 	// ModelSizeRange is the range of model sizes supported by this runtime
 	// +optional
 	ModelSizeRange *ModelSizeRangeSpec `json:"modelSizeRange,omitempty"`
+
+	// DraftModelSizeRange is the range of draft model sizes supported when using this runtime with
+	// speculative decoding. Validated only when the InferenceService specifies a draft model.
+	// +optional
+	DraftModelSizeRange *ModelSizeRangeSpec `json:"draftModelSizeRange,omitempty"`
+
+	// SupportedDraftModelFormats lists draft model formats (format, framework, architecture) supported
+	// when using this runtime with speculative decoding. Validated only when the InferenceService
+	// specifies a draft model. If nil or empty and a draft model is specified, the runtime is incompatible.
+	// +optional
+	// +listType=atomic
+	SupportedDraftModelFormats []SupportedDraftModelFormat `json:"supportedDraftModelFormats,omitempty"`
 
 	// Set to true to disable use of this runtime
 	// +optional
