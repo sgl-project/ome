@@ -109,6 +109,11 @@ command_r_plus_082024_v2_0_128k:
   minReplicas: 1
   maxReplicas: 1
 
+cohere_command_r_v1_3_16k_chat:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
 cohere:
   commonAnnotations:
     prometheus.io/port: '8081'

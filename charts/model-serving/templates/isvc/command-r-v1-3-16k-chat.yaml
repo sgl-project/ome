@@ -1,0 +1,20 @@
+{{- if .Values.cohere_command_r_v1_3_16k_chat.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: command-r-v1-3-16k-chat
+  namespace: command-r-v1-3-16k-chat
+spec:
+  predictor:
+    model:
+      runtime: cohere-command-r-v4
+      baseModel: command-r-v1-3-16k-chat
+      protocolVersion: cohere
+    minReplicas: {{ .Values.cohere_command_r_v1_3_16k_chat.minReplicas }}
+    maxReplicas: {{ .Values.cohere_command_r_v1_3_16k_chat.maxReplicas }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: command-r-v1-3-16k-chat
+{{- end }}
