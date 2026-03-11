@@ -56,22 +56,23 @@ spec:
         - --
       args:
         - |
-          python3 -m sglang_router.launch_server \
-          --host=0.0.0.0 \
-          --port={{ .Values.sglang.port }} \
+          python -m sglang.launch_server \
+          --model-path="$MODEL_PATH" \
+          --host 127.0.0.1 \
+          --port 31000 \
+          --grpc-mode \
+          --tp-size=2 \
           --enable-metrics \
           --log-requests \
           --log-requests-level=1 \
-          --model-path="$MODEL_PATH" \
-          --tp=2 \
-          --tool-call-parser=gpt-oss \
+          --served-model-name="gpt-oss-120b" &
+          sleep 120 && \
+          python -m smg.launch_router \
+          --worker-urls grpc://127.0.0.1:31000 \
+          --host 0.0.0.0 \
+          --port={{ .Values.sglang.port }} \
           --reasoning-parser=gpt-oss \
-          --served-model-name="gpt-oss-120b" \
-          --grpc-mode \
-          --enable-hierarchical-cache --hicache-size=80 --enable-cache-report \
-          --prefill-attention-backend=triton --decode-attention-backend=triton \
-          --hicache-io-backend=kernel \
-          --hicache-mem-layout=layer_first
+          --log-json
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
