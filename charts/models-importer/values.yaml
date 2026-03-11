@@ -670,6 +670,26 @@ gpt-5-3-codex:
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
+gpt-5-4:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-4-2026-03-05:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-4-pro:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-4-pro-2026-03-05:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
 gpt-oss-120b:
   enabled: false
   lifecyclePhase: "ACTIVE"
