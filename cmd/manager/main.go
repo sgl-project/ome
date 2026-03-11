@@ -37,6 +37,7 @@ import (
 	volcanobatch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
 	volcano "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 
+	"github.com/sgl-project/ome/pkg/apis/ome/v1alpha1"
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
 	v1beta1acceleratorclasscontroller "github.com/sgl-project/ome/pkg/controller/v1beta1/acceleratorclass"
@@ -84,6 +85,7 @@ func init() {
 	istionetworking.VirtualServiceUnmarshaler.AllowUnknownFields = true
 	istionetworking.GatewayUnmarshaler.AllowUnknownFields = true
 
+	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	utilruntime.Must(v1beta1.AddToScheme(scheme))
 	utilruntime.Must(schedulerpluginsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
