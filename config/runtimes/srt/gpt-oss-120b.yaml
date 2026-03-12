@@ -45,7 +45,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: ord.ocir.io/idqj093njucb/official-sgl:v0.5.7.7446814-cu129
+      image: ord.ocir.io/idqj093njucb/official-sgl:v0.5.9-smg-b367912d
       ports:
         - containerPort: 8080
           name: http1
