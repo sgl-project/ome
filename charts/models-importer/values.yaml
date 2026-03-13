@@ -936,6 +936,30 @@ grok-4-self-hosted:
   nodeAffinity:
     - BM.GPU.H100.8
 
+grok-4-20-beta-multi-agent:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-4-20-beta-non-reasoning:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-4-20-beta-reasoning:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-4-20-multi-agent:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-4-20-non-reasoning:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-4-20-reasoning:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 grok-code-fast-1:
   enabled: false
   lifecyclePhase: "ACTIVE"
