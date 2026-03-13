@@ -44,7 +44,7 @@ func (f *DefaultAcceleratorFetcher) FetchAcceleratorClasses(ctx context.Context)
 
 // GetAcceleratorClass fetches a specific accelerator class by name.
 // It first checks namespace-scoped accelerator classes, then cluster-scoped ones.
-func (f *DefaultAcceleratorFetcher) GetAcceleratorClass(ctx context.Context, name string) (*v1beta1.AcceleratorClassSpec, bool, error) {
+func (f *DefaultAcceleratorFetcher) GetAcceleratorClass(ctx context.Context, name string) (*v1beta1.AcceleratorClass, bool, error) {
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("Getting accelerator class", "name", name)
 
@@ -53,7 +53,7 @@ func (f *DefaultAcceleratorFetcher) GetAcceleratorClass(ctx context.Context, nam
 	acceleratorClassName := client.ObjectKey{Name: name}
 	if err := f.client.Get(ctx, acceleratorClassName, &clusterAcceleratorClass); err == nil {
 		logger.V(1).Info("Found cluster-scoped accelerator class", "name", name)
-		return &clusterAcceleratorClass.Spec, true, nil
+		return &clusterAcceleratorClass, true, nil
 	}
 
 	// Not found in either scope
