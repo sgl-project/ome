@@ -23,6 +23,8 @@ type ComponentBuilder struct {
 	deploymentMode         constants.DeploymentModeType
 	baseModel              *v1beta1.BaseModelSpec
 	baseModelMeta          *metav1.ObjectMeta
+	draftModel             *v1beta1.BaseModelSpec
+	draftModelMeta         *metav1.ObjectMeta
 	runtime                *v1beta1.ServingRuntimeSpec
 	runtimeName            string
 	supportedModelFormat   *v1beta1.SupportedModelFormat
@@ -57,6 +59,13 @@ func (b *ComponentBuilder) WithDeploymentMode(mode constants.DeploymentModeType)
 func (b *ComponentBuilder) WithBaseModel(spec *v1beta1.BaseModelSpec, meta *metav1.ObjectMeta) *ComponentBuilder {
 	b.baseModel = spec
 	b.baseModelMeta = meta
+	return b
+}
+
+// WithDraftModel sets the draft model
+func (b *ComponentBuilder) WithDraftModel(spec *v1beta1.BaseModelSpec, meta *metav1.ObjectMeta) *ComponentBuilder {
+	b.draftModel = spec
+	b.draftModelMeta = meta
 	return b
 }
 
@@ -96,6 +105,8 @@ func (b *ComponentBuilder) buildBaseFields() BaseComponentFields {
 		DeploymentMode:         b.deploymentMode,
 		BaseModel:              b.baseModel,
 		BaseModelMeta:          b.baseModelMeta,
+		DraftModel:             b.draftModel,
+		DraftModelMeta:         b.draftModelMeta,
 		Runtime:                b.runtime,
 		RuntimeName:            b.runtimeName,
 		StatusManager:          status.NewStatusReconciler(),
@@ -114,6 +125,8 @@ func (b *ComponentBuilder) BuildEngine(spec *v1beta1.EngineSpec) Component {
 		b.deploymentMode,
 		b.baseModel,
 		b.baseModelMeta,
+		b.draftModel,
+		b.draftModelMeta,
 		spec,
 		b.runtime,
 		b.runtimeName,
@@ -134,6 +147,8 @@ func (b *ComponentBuilder) BuildDecoder(spec *v1beta1.DecoderSpec) Component {
 		b.deploymentMode,
 		b.baseModel,
 		b.baseModelMeta,
+		b.draftModel,
+		b.draftModelMeta,
 		spec,
 		b.runtime,
 		b.runtimeName,
@@ -203,6 +218,8 @@ func (f *ComponentBuilderFactory) CreateEngineComponent(
 	deploymentMode constants.DeploymentModeType,
 	baseModel *v1beta1.BaseModelSpec,
 	baseModelMeta *metav1.ObjectMeta,
+	draftModel *v1beta1.BaseModelSpec,
+	draftModelMeta *metav1.ObjectMeta,
 	engineSpec *v1beta1.EngineSpec,
 	runtime *v1beta1.ServingRuntimeSpec,
 	runtimeName string,
@@ -213,6 +230,7 @@ func (f *ComponentBuilderFactory) CreateEngineComponent(
 	return f.NewBuilder().
 		WithDeploymentMode(deploymentMode).
 		WithBaseModel(baseModel, baseModelMeta).
+		WithDraftModel(draftModel, draftModelMeta).
 		WithRuntime(runtime, runtimeName).
 		WithAcceleratorClass(acceleratorClass, acceleratorClassName).
 		WithSupportedModelFormat(supportedModelFormat).
@@ -224,6 +242,8 @@ func (f *ComponentBuilderFactory) CreateDecoderComponent(
 	deploymentMode constants.DeploymentModeType,
 	baseModel *v1beta1.BaseModelSpec,
 	baseModelMeta *metav1.ObjectMeta,
+	draftModel *v1beta1.BaseModelSpec,
+	draftModelMeta *metav1.ObjectMeta,
 	decoderSpec *v1beta1.DecoderSpec,
 	runtime *v1beta1.ServingRuntimeSpec,
 	runtimeName string,
@@ -234,6 +254,7 @@ func (f *ComponentBuilderFactory) CreateDecoderComponent(
 	return f.NewBuilder().
 		WithDeploymentMode(deploymentMode).
 		WithBaseModel(baseModel, baseModelMeta).
+		WithDraftModel(draftModel, draftModelMeta).
 		WithRuntime(runtime, runtimeName).
 		WithAcceleratorClass(acceleratorClass, acceleratorClassName).
 		WithSupportedModelFormat(supportedModelFormat).

@@ -425,7 +425,7 @@ func TestRuntimeSupportsModel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			matcher := NewDefaultRuntimeMatcher(NewConfig(nil))
 			isvc := &v1beta1.InferenceService{}
-			report, err := matcher.GetCompatibilityDetails(tt.srSpec, tt.baseModel, isvc, tt.runtimeName)
+			report, err := matcher.GetCompatibilityDetails(tt.srSpec, tt.baseModel, nil, isvc, tt.runtimeName)
 
 			assert.NoError(t, err)
 
@@ -684,7 +684,7 @@ func TestGetCompatibilityDetails(t *testing.T) {
 		}
 
 		isvc := &v1beta1.InferenceService{}
-		report, err := matcher.GetCompatibilityDetails(runtime, baseModel, isvc, "test-runtime")
+		report, err := matcher.GetCompatibilityDetails(runtime, baseModel, nil, isvc, "test-runtime")
 		assert.NoError(t, err)
 		assert.False(t, report.IsCompatible)
 		assert.Contains(t, report.IncompatibilityReasons, "runtime is disabled")
@@ -707,7 +707,7 @@ func TestGetCompatibilityDetails(t *testing.T) {
 		}
 
 		isvc := &v1beta1.InferenceService{}
-		report, err := matcher.GetCompatibilityDetails(runtime, baseModel, isvc, "test-runtime")
+		report, err := matcher.GetCompatibilityDetails(runtime, baseModel, nil, isvc, "test-runtime")
 		assert.NoError(t, err)
 		assert.True(t, report.IsCompatible) // Runtime is compatible, just not auto-selectable
 		assert.NotEmpty(t, report.Warnings)
@@ -736,7 +736,7 @@ func TestGetCompatibilityDetails(t *testing.T) {
 		}
 
 		isvc := &v1beta1.InferenceService{}
-		report, err := matcher.GetCompatibilityDetails(runtime, baseModel, isvc, "test-runtime")
+		report, err := matcher.GetCompatibilityDetails(runtime, baseModel, nil, isvc, "test-runtime")
 		assert.NoError(t, err)
 		assert.True(t, report.IsCompatible)
 		assert.NotEmpty(t, report.Warnings)
@@ -786,13 +786,13 @@ func TestMatcherPicksRuntimeByModelSize(t *testing.T) {
 		},
 	}
 
-	smallReport, err := matcher.GetCompatibilityDetails(smallRuntime, model, isvc, "small-runtime")
+	smallReport, err := matcher.GetCompatibilityDetails(smallRuntime, model, nil, isvc, "small-runtime")
 	assert.NoError(t, err)
 	assert.False(t, smallReport.IsCompatible)
 	assert.False(t, smallReport.MatchDetails.SizeMatch)
 	assert.NotEmpty(t, smallReport.IncompatibilityReasons)
 
-	midReport, err := matcher.GetCompatibilityDetails(midRuntime, model, isvc, "mid-runtime")
+	midReport, err := matcher.GetCompatibilityDetails(midRuntime, model, nil, isvc, "mid-runtime")
 	assert.NoError(t, err)
 	assert.True(t, midReport.IsCompatible)
 	assert.True(t, midReport.MatchDetails.SizeMatch)
@@ -834,7 +834,7 @@ func TestGetCompatibilityDetails_AcceleratorClasses(t *testing.T) {
 		cls := "nvidia-a100"
 		isvc := &v1beta1.InferenceService{Spec: v1beta1.InferenceServiceSpec{AcceleratorSelector: &v1beta1.AcceleratorSelector{AcceleratorClass: &cls}}}
 
-		report, err := matcher.GetCompatibilityDetails(rt, baseModel, isvc, "rt")
+		report, err := matcher.GetCompatibilityDetails(rt, baseModel, nil, isvc, "rt")
 		assert.NoError(t, err)
 		assert.True(t, report.IsCompatible)
 	})
@@ -844,7 +844,7 @@ func TestGetCompatibilityDetails_AcceleratorClasses(t *testing.T) {
 		cls := "H100"
 		isvc := &v1beta1.InferenceService{Spec: v1beta1.InferenceServiceSpec{AcceleratorSelector: &v1beta1.AcceleratorSelector{AcceleratorClass: &cls}}}
 
-		report, err := matcher.GetCompatibilityDetails(rt, baseModel, isvc, "rt")
+		report, err := matcher.GetCompatibilityDetails(rt, baseModel, nil, isvc, "rt")
 		assert.NoError(t, err)
 		assert.False(t, report.IsCompatible)
 		assert.NotEmpty(t, report.IncompatibilityReasons)
@@ -863,7 +863,7 @@ func TestGetCompatibilityDetails_AcceleratorClasses(t *testing.T) {
 		cls := "H100"
 		isvc := &v1beta1.InferenceService{Spec: v1beta1.InferenceServiceSpec{Engine: &v1beta1.EngineSpec{AcceleratorOverride: &v1beta1.AcceleratorSelector{AcceleratorClass: &cls}}}}
 
-		report, err := matcher.GetCompatibilityDetails(rt, baseModel, isvc, "rt")
+		report, err := matcher.GetCompatibilityDetails(rt, baseModel, nil, isvc, "rt")
 		assert.NoError(t, err)
 		assert.True(t, report.IsCompatible)
 	})
@@ -873,7 +873,7 @@ func TestGetCompatibilityDetails_AcceleratorClasses(t *testing.T) {
 		cls := "H100"
 		isvc := &v1beta1.InferenceService{Spec: v1beta1.InferenceServiceSpec{Decoder: &v1beta1.DecoderSpec{AcceleratorOverride: &v1beta1.AcceleratorSelector{AcceleratorClass: &cls}}}}
 
-		report, err := matcher.GetCompatibilityDetails(rt, baseModel, isvc, "rt")
+		report, err := matcher.GetCompatibilityDetails(rt, baseModel, nil, isvc, "rt")
 		assert.NoError(t, err)
 		assert.False(t, report.IsCompatible)
 	})
@@ -881,7 +881,7 @@ func TestGetCompatibilityDetails_AcceleratorClasses(t *testing.T) {
 	t.Run("no accelerator classes in runtime => compatible", func(t *testing.T) {
 		rt := mkRuntime([]string{}) // empty means no restriction
 		isvc := &v1beta1.InferenceService{}
-		report, err := matcher.GetCompatibilityDetails(rt, baseModel, isvc, "rt")
+		report, err := matcher.GetCompatibilityDetails(rt, baseModel, nil, isvc, "rt")
 		assert.NoError(t, err)
 		assert.True(t, report.IsCompatible)
 	})
@@ -895,7 +895,7 @@ func TestIsCompatible_DisabledAndAcceleratorErrors(t *testing.T) {
 
 	t.Run("disabled runtime returns error", func(t *testing.T) {
 		rt := &v1beta1.ServingRuntimeSpec{Disabled: ptr(true)}
-		ok, err := matcher.IsCompatible(rt, baseModel, isvc, "rt")
+		ok, err := matcher.IsCompatible(rt, baseModel, nil, isvc, "rt")
 		assert.False(t, ok)
 		assert.Error(t, err)
 		assert.True(t, IsRuntimeDisabledError(err))
@@ -909,7 +909,7 @@ func TestIsCompatible_DisabledAndAcceleratorErrors(t *testing.T) {
 		cls := "H100"
 		isvc := &v1beta1.InferenceService{Spec: v1beta1.InferenceServiceSpec{AcceleratorSelector: &v1beta1.AcceleratorSelector{AcceleratorClass: &cls}}}
 
-		ok, err := matcher.IsCompatible(rt, baseModel, isvc, "rt")
+		ok, err := matcher.IsCompatible(rt, baseModel, nil, isvc, "rt")
 		assert.False(t, ok)
 		assert.Error(t, err)
 		assert.True(t, IsRuntimeCompatibilityError(err))
@@ -922,9 +922,220 @@ func TestIsCompatible_DisabledAndAcceleratorErrors(t *testing.T) {
 			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
 		}
 		model := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}, ModelParameterSize: ptr("70B")}
-		ok, err := matcher.IsCompatible(rt, model, isvc, "rt")
+		ok, err := matcher.IsCompatible(rt, model, nil, isvc, "rt")
 		assert.False(t, ok)
 		assert.NoError(t, err)
+	})
+}
+
+func TestIsCompatible_DraftModelSizeRange(t *testing.T) {
+	matcher := NewDefaultRuntimeMatcher(NewConfig(nil))
+	isvc := &v1beta1.InferenceService{}
+	ptrStr := func(s string) *string { return &s }
+
+	// Runtime with separate main and draft size ranges (e.g. Eagle3 speculative decoding)
+	// Must declare supported draft formats so draft format check passes before size check
+	rt := &v1beta1.ServingRuntimeSpec{
+		SupportedModelFormats: []v1beta1.SupportedModelFormat{
+			{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+		},
+		SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+			{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+		},
+		ModelSizeRange:          &v1beta1.ModelSizeRangeSpec{Min: ptrStr("115B"), Max: ptrStr("125B")},
+		DraftModelSizeRange:     &v1beta1.ModelSizeRangeSpec{Min: ptrStr("60B"), Max: ptrStr("70B")},
+		AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+	}
+
+	t.Run("main and draft in range => compatible", func(t *testing.T) {
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}, ModelParameterSize: ptrStr("120B")}
+		draftModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}, ModelParameterSize: ptrStr("63.08B")}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "eagle3-rt")
+		assert.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("main in range, draft out of range => incompatible", func(t *testing.T) {
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}, ModelParameterSize: ptrStr("120B")}
+		draftModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}, ModelParameterSize: ptrStr("80B")}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "eagle3-rt")
+		assert.NoError(t, err)
+		assert.False(t, ok)
+		report, _ := matcher.GetCompatibilityDetails(rt, baseModel, draftModel, isvc, "eagle3-rt")
+		assert.NotNil(t, report)
+		assert.False(t, report.IsCompatible)
+		assert.Contains(t, report.IncompatibilityReasons[0], "draft model size")
+		assert.Contains(t, report.IncompatibilityReasons[0], "outside supported draft range")
+	})
+
+	t.Run("main out of range, draft in range => incompatible", func(t *testing.T) {
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}, ModelParameterSize: ptrStr("63B")}
+		draftModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}, ModelParameterSize: ptrStr("63B")}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "eagle3-rt")
+		assert.NoError(t, err)
+		assert.False(t, ok)
+		report, _ := matcher.GetCompatibilityDetails(rt, baseModel, draftModel, isvc, "eagle3-rt")
+		assert.NotNil(t, report)
+		assert.False(t, report.IsCompatible)
+		assert.Contains(t, report.IncompatibilityReasons[0], "model size")
+		assert.Contains(t, report.IncompatibilityReasons[0], "outside supported range")
+	})
+
+	t.Run("no draft model => only main size checked", func(t *testing.T) {
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}, ModelParameterSize: ptrStr("120B")}
+		ok, err := matcher.IsCompatible(rt, baseModel, nil, isvc, "eagle3-rt")
+		assert.NoError(t, err)
+		assert.True(t, ok)
+	})
+}
+
+func TestIsCompatible_DraftModelSupportedFormats(t *testing.T) {
+	matcher := NewDefaultRuntimeMatcher(NewConfig(nil))
+	isvc := &v1beta1.InferenceService{}
+
+	t.Run("draft present, runtime has no SupportedDraftModelFormats => incompatible", func(t *testing.T) {
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats:   []v1beta1.SupportedModelFormat{{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}}},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+			// SupportedDraftModelFormats nil/empty
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		draftModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.False(t, ok)
+		report, _ := matcher.GetCompatibilityDetails(rt, baseModel, draftModel, isvc, "rt")
+		assert.Contains(t, report.IncompatibilityReasons, "runtime does not declare supported draft model formats")
+	})
+
+	t.Run("draft present, runtime has matching SupportedDraftModelFormats entry => compatible", func(t *testing.T) {
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		draftModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("draft present, draft format not in SupportedDraftModelFormats => incompatible", func(t *testing.T) {
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "pytorch"}}, // only pytorch draft
+			},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		draftModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.False(t, ok)
+		report, _ := matcher.GetCompatibilityDetails(rt, baseModel, draftModel, isvc, "rt")
+		assert.Contains(t, report.IncompatibilityReasons, "draft model format not in supported draft formats")
+	})
+
+	t.Run("draft present, optional fields: entry with only modelArchitecture set, draft matches => compatible", func(t *testing.T) {
+		arch := "GptOssForCausalLM"
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+				{ModelArchitecture: &arch},
+			},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		draftModel := &v1beta1.BaseModelSpec{
+			ModelFormat:       v1beta1.ModelFormat{Name: "safetensors"},
+			ModelArchitecture: &arch,
+		}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("draft present, optional fields: entry with only modelArchitecture set, draft differs => incompatible", func(t *testing.T) {
+		arch := "GptOssForCausalLM"
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+				{ModelArchitecture: &arch},
+			},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		otherArch := "LlamaForCausalLM"
+		draftModel := &v1beta1.BaseModelSpec{
+			ModelFormat:       v1beta1.ModelFormat{Name: "safetensors"},
+			ModelArchitecture: &otherArch,
+		}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("default format: draft omits ModelFormat, main has safetensors, runtime supports safetensors draft => compatible", func(t *testing.T) {
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		draftModel := &v1beta1.BaseModelSpec{} // no ModelFormat set (empty name) => defaults to main's
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("default format: draft specifies different format => incompatible", func(t *testing.T) {
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		draftModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("runtime entry with all fields nil => matches any draft", func(t *testing.T) {
+		rt := &v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"}},
+			},
+			SupportedDraftModelFormats: []v1beta1.SupportedDraftModelFormat{
+				{}, // all nil => match any draft
+			},
+			AcceleratorRequirements: &v1beta1.AcceleratorRequirements{},
+		}
+		baseModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "safetensors"}}
+		draftModel := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}}
+		ok, err := matcher.IsCompatible(rt, baseModel, draftModel, isvc, "rt")
+		assert.NoError(t, err)
+		assert.True(t, ok)
 	})
 }
 
@@ -1418,7 +1629,7 @@ func TestGetCompatibilityDetails_DetailedFormatMismatch(t *testing.T) {
 		}
 
 		isvc := &v1beta1.InferenceService{}
-		report, err := matcher.GetCompatibilityDetails(runtime, model, isvc, "test-runtime")
+		report, err := matcher.GetCompatibilityDetails(runtime, model, nil, isvc, "test-runtime")
 		assert.NoError(t, err)
 		assert.False(t, report.IsCompatible)
 		assert.NotEmpty(t, report.IncompatibilityReasons)
@@ -1436,7 +1647,7 @@ func TestGetCompatibilityDetails_DetailedFormatMismatch(t *testing.T) {
 		}
 
 		isvc := &v1beta1.InferenceService{}
-		report, err := matcher.GetCompatibilityDetails(runtime, model, isvc, "test-runtime")
+		report, err := matcher.GetCompatibilityDetails(runtime, model, nil, isvc, "test-runtime")
 		assert.NoError(t, err)
 		assert.False(t, report.IsCompatible)
 		assert.NotEmpty(t, report.IncompatibilityReasons)

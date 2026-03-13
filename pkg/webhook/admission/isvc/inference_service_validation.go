@@ -398,10 +398,23 @@ func (v *InferenceServiceValidator) resolveModelAndRuntime(ctx context.Context, 
 		return warnings, fmt.Errorf("model %s is disabled", isvc.Spec.Model.Name)
 	}
 
+	// Resolve optional draft model for speculative decoding
+	var draftModel *v1beta1.BaseModelSpec
+	if isvc.Spec.DraftModel != nil && isvc.Spec.DraftModel.Name != "" {
+		dm, _, err := isvcutils.GetBaseModel(v.Client, isvc.Spec.DraftModel.Name, isvc.Namespace)
+		if err != nil {
+			return warnings, fmt.Errorf("failed to resolve draft model %s: %w", isvc.Spec.DraftModel.Name, err)
+		}
+		if dm.Disabled != nil && *dm.Disabled {
+			return warnings, fmt.Errorf("draft model %s is disabled", isvc.Spec.DraftModel.Name)
+		}
+		draftModel = dm
+	}
+
 	// Check runtime selection/validation
 	if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" {
-		// Validate specified runtime
-		if err := v.RuntimeSelector.ValidateRuntime(ctx, isvc.Spec.Runtime.Name, baseModel, isvc); err != nil {
+		// Validate specified runtime (including draft model size when draft is set)
+		if err := v.RuntimeSelector.ValidateRuntime(ctx, isvc.Spec.Runtime.Name, baseModel, draftModel, isvc); err != nil {
 			return warnings, fmt.Errorf("runtime %s does not support model %s: %w",
 				isvc.Spec.Runtime.Name, isvc.Spec.Model.Name, err)
 		}

@@ -65,6 +65,25 @@ func ReconcileBaseModel(cl client.Client, isvc *v1beta1.InferenceService) (*v1be
 	return baseModel, baseModelMeta, nil
 }
 
+// ReconcileDraftModel retrieves and validates the optional draft model for an InferenceService.
+// Returns (nil, nil, nil) when no draft model is specified.
+func ReconcileDraftModel(cl client.Client, isvc *v1beta1.InferenceService) (*v1beta1.BaseModelSpec, *metav1.ObjectMeta, error) {
+	if isvc.Spec.DraftModel == nil || isvc.Spec.DraftModel.Name == "" {
+		return nil, nil, nil
+	}
+
+	draftModel, draftModelMeta, err := GetBaseModel(cl, isvc.Spec.DraftModel.Name, isvc.Namespace)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get draft model %s: %w", isvc.Spec.DraftModel.Name, err)
+	}
+
+	if draftModel.Disabled != nil && *draftModel.Disabled {
+		return nil, nil, fmt.Errorf("specified draft model %s is disabled", isvc.Spec.DraftModel.Name)
+	}
+
+	return draftModel, draftModelMeta, nil
+}
+
 // MergeRuntimeSpecs merges the runtime and isvc specs to get final engine, decoder, and router specs
 func MergeRuntimeSpecs(isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec, log logr.Logger) (*v1beta1.EngineSpec, *v1beta1.DecoderSpec, *v1beta1.RouterSpec, error) {
 	var runtimeEngine *v1beta1.EngineSpec

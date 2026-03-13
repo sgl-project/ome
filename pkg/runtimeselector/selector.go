@@ -61,8 +61,8 @@ func (s *defaultSelector) SelectRuntime(ctx context.Context, model *v1beta1.Base
 
 		// Check namespace runtimes
 		for _, rt := range collection.NamespaceRuntimes {
-			if compatible, _ := s.matcher.IsCompatible(&rt.Spec, model, isvc, rt.Name); !compatible {
-				report, _ := s.matcher.GetCompatibilityDetails(&rt.Spec, model, isvc, rt.Name)
+			if compatible, _ := s.matcher.IsCompatible(&rt.Spec, model, nil, isvc, rt.Name); !compatible {
+				report, _ := s.matcher.GetCompatibilityDetails(&rt.Spec, model, nil, isvc, rt.Name)
 				if report != nil && len(report.IncompatibilityReasons) > 0 {
 					excludedRuntimes[rt.Name] = fmt.Errorf("%s", report.IncompatibilityReasons[0])
 				}
@@ -71,8 +71,8 @@ func (s *defaultSelector) SelectRuntime(ctx context.Context, model *v1beta1.Base
 
 		// Check cluster runtimes
 		for _, rt := range collection.ClusterRuntimes {
-			if compatible, _ := s.matcher.IsCompatible(&rt.Spec, model, isvc, rt.Name); !compatible {
-				report, _ := s.matcher.GetCompatibilityDetails(&rt.Spec, model, isvc, rt.Name)
+			if compatible, _ := s.matcher.IsCompatible(&rt.Spec, model, nil, isvc, rt.Name); !compatible {
+				report, _ := s.matcher.GetCompatibilityDetails(&rt.Spec, model, nil, isvc, rt.Name)
 				if report != nil && len(report.IncompatibilityReasons) > 0 {
 					excludedRuntimes[rt.Name] = fmt.Errorf("%s", report.IncompatibilityReasons[0])
 				}
@@ -147,7 +147,7 @@ func (s *defaultSelector) GetCompatibleRuntimes(ctx context.Context, model *v1be
 }
 
 // ValidateRuntime checks if a specific runtime supports a model.
-func (s *defaultSelector) ValidateRuntime(ctx context.Context, runtimeName string, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) error {
+func (s *defaultSelector) ValidateRuntime(ctx context.Context, runtimeName string, model *v1beta1.BaseModelSpec, draftModel *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) error {
 	namespace := isvc.Namespace
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("Validating runtime",
@@ -175,14 +175,14 @@ func (s *defaultSelector) ValidateRuntime(ctx context.Context, runtimeName strin
 	}
 
 	// Check compatibility
-	compatible, err := s.matcher.IsCompatible(runtimeSpec, model, isvc, runtimeName)
+	compatible, err := s.matcher.IsCompatible(runtimeSpec, model, draftModel, isvc, runtimeName)
 	if err != nil {
 		return err
 	}
 
 	if !compatible {
 		// Get detailed compatibility report for better error message
-		report, _ := s.matcher.GetCompatibilityDetails(runtimeSpec, model, isvc, runtimeName)
+		report, _ := s.matcher.GetCompatibilityDetails(runtimeSpec, model, draftModel, isvc, runtimeName)
 
 		reason := "incompatible model format"
 		if report != nil && len(report.IncompatibilityReasons) > 0 {
@@ -224,8 +224,8 @@ func (s *defaultSelector) evaluateRuntime(ctx context.Context, spec *v1beta1.Ser
 		return nil
 	}
 
-	// Check basic compatibility (mimics RuntimeSupportsModel)
-	report, err := s.matcher.GetCompatibilityDetails(spec, model, isvc, name)
+	// Check basic compatibility (mimics RuntimeSupportsModel).
+	report, err := s.matcher.GetCompatibilityDetails(spec, model, nil, isvc, name)
 	if err != nil {
 		logger.Error(err, "Failed to get compatibility details", "runtime", name)
 		return nil

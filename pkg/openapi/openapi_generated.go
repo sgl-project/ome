@@ -85,6 +85,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimeSpec":         schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimeStatus":       schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageSpec":                schema_pkg_apis_ome_v1beta1_StorageSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedDraftModelFormat":  schema_pkg_apis_ome_v1beta1_SupportedDraftModelFormat(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedModelFormat":       schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedRuntime":           schema_pkg_apis_ome_v1beta1_SupportedRuntime(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.TensorParallelismConfig":    schema_pkg_apis_ome_v1beta1_TensorParallelismConfig(ref),
@@ -931,6 +932,7 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorResource(ref common.ReferenceCallbac
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -3648,6 +3650,7 @@ func schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref common.Reference
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -3808,6 +3811,12 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref common.ReferenceCallba
 					"model": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Model defines the model to be used for inference, referencing either a BaseModel or a custom model. This allows models to be managed independently of the serving configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelRef"),
+						},
+					},
+					"draftModel": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DraftModel defines an optional smaller draft model for speculative decoding. References a BaseModel or ClusterBaseModel, just like Model. When set, the draft model's storage path is injected as the DRAFT_MODEL_PATH environment variable.",
 							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelRef"),
 						},
 					},
@@ -4597,6 +4606,7 @@ func schema_pkg_apis_ome_v1beta1_ModelFormat(ref common.ReferenceCallback) commo
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -4638,6 +4648,7 @@ func schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref common.ReferenceCallback
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -4692,6 +4703,7 @@ func schema_pkg_apis_ome_v1beta1_ModelRef(ref common.ReferenceCallback) common.O
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -5094,6 +5106,7 @@ func schema_pkg_apis_ome_v1beta1_ModelSpec(ref common.ReferenceCallback) common.
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -5231,6 +5244,7 @@ func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) c
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -6188,6 +6202,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref common.ReferenceCall
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -7694,6 +7709,7 @@ func schema_pkg_apis_ome_v1beta1_RunnerSpec(ref common.ReferenceCallback) common
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -7724,6 +7740,7 @@ func schema_pkg_apis_ome_v1beta1_ScalerAuthenticationRef(ref common.ReferenceCal
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -8087,6 +8104,7 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref common.ReferenceCallback)
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -8122,6 +8140,31 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 						SchemaProps: spec.SchemaProps{
 							Description: "ModelSizeRange is the range of model sizes supported by this runtime",
 							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec"),
+						},
+					},
+					"draftModelSizeRange": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DraftModelSizeRange is the range of draft model sizes supported when using this runtime with speculative decoding. Validated only when the InferenceService specifies a draft model.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec"),
+						},
+					},
+					"supportedDraftModelFormats": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "SupportedDraftModelFormats lists draft model formats (format, framework, architecture) supported when using this runtime with speculative decoding. Validated only when the InferenceService specifies a draft model. If nil or empty and a draft model is specified, the runtime is incompatible.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedDraftModelFormat"),
+									},
+								},
+							},
 						},
 					},
 					"disabled": {
@@ -8358,7 +8401,7 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorRequirements", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DecoderSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.EngineSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RouterSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedModelFormat", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerPodSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorRequirements", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DecoderSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.EngineSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RouterSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedDraftModelFormat", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedModelFormat", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerPodSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume"},
 	}
 }
 
@@ -8463,6 +8506,40 @@ func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) commo
 		},
 		Dependencies: []string{
 			"k8s.io/api/core/v1.NodeAffinity"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_SupportedDraftModelFormat(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SupportedDraftModelFormat describes a draft model format supported by a runtime for speculative decoding. All fields are optional: if set, the draft model must match; if unset, that dimension is not checked.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"modelFormat": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ModelFormat of the draft model, e.g., \"SafeTensors\", \"PyTorch\"",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFormat"),
+						},
+					},
+					"modelFramework": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ModelFramework of the draft model, e.g., \"Transformers\", \"PyTorch\"",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec"),
+						},
+					},
+					"modelArchitecture": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ModelArchitecture of the draft model, e.g., \"LlamaForCausalLM\", \"GptOssForCausalLM\"",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFormat", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec"},
 	}
 }
 

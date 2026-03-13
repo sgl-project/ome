@@ -1,0 +1,17 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: gpt-oss-120b-eagle3
+  namespace: ome
+  annotations:
+    ome.io/deploymentMode: RawDeployment
+spec:
+  model:
+    name: gpt-oss-120b
+  draftModel:
+    name: gpt-oss-120b-eagle3-long-context
+  runtime:
+    name: srt-gpt-oss-120b-eagle3
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
