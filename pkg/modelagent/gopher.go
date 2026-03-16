@@ -2,6 +2,7 @@ package modelagent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -324,6 +325,25 @@ func (s *Gopher) processTask(task *GopherTask) error {
 				s.logger.Errorf("Failed to get target directory path for model %s: %v", modelInfo, err)
 				return err
 			}
+
+			// Check if the model is already present on shared storage.
+			// Only for fresh Download tasks — DownloadOverride indicates a spec change
+			// or failed retry that must re-evaluate the model files.
+			if task.TaskType == Download && s.isModelAlreadyDownloaded(destPath) {
+				s.logger.Infof("Model %s already exists at %s (shared storage), skipping OCI download", modelInfo, destPath)
+				var baseModel *v1beta1.BaseModel
+				var clusterBaseModel *v1beta1.ClusterBaseModel
+				if task.BaseModel != nil {
+					baseModel = task.BaseModel
+				} else if task.ClusterBaseModel != nil {
+					clusterBaseModel = task.ClusterBaseModel
+				}
+				if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel, nil); err != nil {
+					s.logger.Errorf("Failed to parse and update model config for pre-existing model: %v", err)
+				}
+				break
+			}
+
 			err = utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
 				downloadErr := s.downloadModel(ctx, osUri, destPath, task)
 				if downloadErr != nil {
@@ -971,6 +991,29 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 	// Create destination path
 	destPath := getDestPath(&baseModelSpec, s.modelRootDir)
 
+	// Check if the model is already present on shared storage (e.g., another node
+	// already downloaded it to the same NFS/shared filesystem path). When storage is
+	// shared across nodes, each model-agent would otherwise independently re-download
+	// from HuggingFace, causing rate-limiting and hours of unnecessary I/O.
+	// Only for fresh Download tasks — DownloadOverride indicates a spec change
+	// or failed retry that must re-evaluate the model files.
+	if task.TaskType == Download && s.isModelAlreadyDownloaded(destPath) {
+		s.logger.Infof("Model %s already exists at %s (shared storage), skipping HuggingFace download", modelInfo, destPath)
+
+		var baseModel *v1beta1.BaseModel
+		var clusterBaseModel *v1beta1.ClusterBaseModel
+		if task.BaseModel != nil {
+			baseModel = task.BaseModel
+		} else if task.ClusterBaseModel != nil {
+			clusterBaseModel = task.ClusterBaseModel
+		}
+
+		if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel, nil); err != nil {
+			s.logger.Errorf("Failed to parse and update model config for pre-existing model: %v", err)
+		}
+		return nil
+	}
+
 	// fetch sha value based on model ID from Huggingface model API
 	shaStr, isShaAvailable := s.fetchSha(ctx, hfComponents.ModelID, name)
 	isReuseEligible, matchedModelTypeAndModeName, parentPath := s.isEligibleForOptimization(ctx, task, baseModelSpec, modelType, namespace, isShaAvailable, shaStr, name)
@@ -1439,4 +1482,80 @@ func (s *Gopher) isRemoveParentArtifactDirectory(ctx context.Context, hasChildre
 	}
 	s.logger.Infof("parent entry %s:%s exists on node configmap: %v", parentName, parentDir, exists)
 	return !exists
+}
+
+// isModelAlreadyDownloaded checks whether the model files are already present at
+// destPath. This handles the shared-storage case: when multiple nodes mount the
+// same filesystem (e.g., NFS at /storage/models), the first node that finishes an
+// HF download writes the files once. Subsequent nodes should detect the existing
+// files and skip re-downloading.
+//
+// The check requires model.safetensors.index.json to be present so that ALL
+// expected shards can be verified. Without the index file, completeness cannot
+// be determined and the method returns false (letting the normal download proceed).
+func (s *Gopher) isModelAlreadyDownloaded(destPath string) bool {
+	// Check if directory exists
+	info, err := os.Stat(destPath)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+
+	// Check for config.json (primary indicator of a complete HF download).
+	// Use err != nil (not os.IsNotExist) so that NFS I/O errors and permission
+	// errors are treated conservatively as "not present" rather than silently
+	// falling through as "exists".
+	configPath := filepath.Join(destPath, "config.json")
+	if _, err := os.Stat(configPath); err != nil {
+		return false
+	}
+
+	// Require model.safetensors.index.json for shard completeness verification.
+	// Without it we cannot determine if the download is complete, so fall through
+	// to let the normal download path handle it.
+	indexPath := filepath.Join(destPath, "model.safetensors.index.json")
+	indexData, err := os.ReadFile(indexPath)
+	if err != nil {
+		return false
+	}
+
+	var index struct {
+		WeightMap map[string]string `json:"weight_map"`
+	}
+	if err := json.Unmarshal(indexData, &index); err != nil {
+		s.logger.Warnf("Failed to parse model index file %s: %v", indexPath, err)
+		return false
+	}
+
+	if len(index.WeightMap) == 0 {
+		return false
+	}
+
+	// Build a set of filenames for fast lookup
+	entries, err := os.ReadDir(destPath)
+	if err != nil {
+		return false
+	}
+	fileSet := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			fileSet[entry.Name()] = true
+		}
+	}
+
+	// Collect unique shard filenames and verify every one exists on disk
+	expectedShards := make(map[string]bool)
+	for _, shard := range index.WeightMap {
+		expectedShards[shard] = true
+	}
+
+	for shard := range expectedShards {
+		if !fileSet[shard] {
+			s.logger.Infof("Model at %s is missing shard %s (expected %d shards), not treating as complete",
+				destPath, shard, len(expectedShards))
+			return false
+		}
+	}
+
+	s.logger.Infof("Model at %s has all %d expected shards from index", destPath, len(expectedShards))
+	return true
 }

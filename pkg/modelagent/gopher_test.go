@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -959,6 +961,86 @@ func TestIsEligibleForOptimization_NoMatch(t *testing.T) {
 	assert.False(t, eligible)
 	assert.Empty(t, key)
 	assert.Empty(t, parent)
+}
+
+func TestIsModelAlreadyDownloaded(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	sugaredLogger := logger.Sugar()
+	defer func() { _ = sugaredLogger.Sync() }()
+
+	gopher := &Gopher{logger: sugaredLogger}
+
+	t.Run("nonexistent directory returns false", func(t *testing.T) {
+		assert.False(t, gopher.isModelAlreadyDownloaded("/nonexistent/path/that/does/not/exist"))
+	})
+
+	t.Run("empty directory returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("directory with only config.json returns false (no weights)", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"llama"}`), 0644))
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("directory with only weights returns false (no config.json)", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00001-of-00002.safetensors"), []byte("weight data"), 0644))
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("config.json and weights but no index file returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"llama"}`), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00001-of-00002.safetensors"), []byte("weight data"), 0644))
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir), "without index file, cannot verify completeness")
+	})
+
+	t.Run("file path instead of directory returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		filePath := filepath.Join(dir, "somefile")
+		assert.NoError(t, os.WriteFile(filePath, []byte("data"), 0644))
+		assert.False(t, gopher.isModelAlreadyDownloaded(filePath))
+	})
+
+	// Shard completeness tests using model.safetensors.index.json
+
+	t.Run("index with all shards present returns true", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"llama"}`), 0644))
+		index := `{"metadata":{"total_size":100},"weight_map":{"w1":"model-00001-of-00002.safetensors","w2":"model-00002-of-00002.safetensors"}}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors.index.json"), []byte(index), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00001-of-00002.safetensors"), []byte("data"), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00002-of-00002.safetensors"), []byte("data"), 0644))
+		assert.True(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("index with missing shard returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"llama"}`), 0644))
+		index := `{"metadata":{"total_size":100},"weight_map":{"w1":"model-00001-of-00002.safetensors","w2":"model-00002-of-00002.safetensors"}}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors.index.json"), []byte(index), 0644))
+		// Only write shard 1, shard 2 is missing
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00001-of-00002.safetensors"), []byte("data"), 0644))
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("malformed index file returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"llama"}`), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors.index.json"), []byte(`{invalid json`), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00001-of-00001.safetensors"), []byte("data"), 0644))
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("index with empty weight_map returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"llama"}`), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors.index.json"), []byte(`{"weight_map":{}}`), 0644))
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
+	})
 }
 
 func TestIsEligibleForOptimization_AlwaysDownloadNotEligible(t *testing.T) {
