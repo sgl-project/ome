@@ -408,7 +408,10 @@ func (w *Scout) updateClusterBaseModel(old, new interface{}) {
 		{"Annotations", oldClusterBaseModel.Annotations, newClusterBaseModel.Annotations},
 		{"Spec", oldClusterBaseModel.Spec, newClusterBaseModel.Spec},
 	} {
+		w.logger.Infof("Diffing %s for ClusterBaseModel: %s in old %v vs new %v in namespace %s",
+			diff.name, newClusterBaseModel.Name, diff.old, diff.new, newClusterBaseModel.Namespace)
 		result, err := kmp.SafeDiff(diff.old, diff.new)
+		w.logger.Infof("Diff result for %s: %s", diff.name, result)
 		if err != nil {
 			w.logger.Errorf("Failed to diff %s for BaseModel: %s in namespace %s",
 				diff.name, newClusterBaseModel.Name, newClusterBaseModel.Namespace)
