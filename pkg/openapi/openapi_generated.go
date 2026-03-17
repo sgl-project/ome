@@ -70,6 +70,8 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfileStatus":  schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfileStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterSpec":           schema_pkg_apis_ome_v1beta1_DedicatedAIClusterSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterStatus":         schema_pkg_apis_ome_v1beta1_DedicatedAIClusterStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec":           schema_pkg_apis_ome_v1beta1_DiffusionComponentSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DiffusionPipelineSpec":            schema_pkg_apis_ome_v1beta1_DiffusionPipelineSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Endpoint":                         schema_pkg_apis_ome_v1beta1_Endpoint(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EndpointSpec":                     schema_pkg_apis_ome_v1beta1_EndpointSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EngineSpec":                       schema_pkg_apis_ome_v1beta1_EngineSpec(ref),
@@ -1023,6 +1025,7 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorResource(ref common.ReferenceCallbac
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -1427,6 +1430,12 @@ func schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref common.ReferenceCallback) com
 							Format:      "int32",
 						},
 					},
+					"diffusionPipeline": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DiffusionPipeline captures pipeline-specific metadata for diffusion models (from model_index.json).",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DiffusionPipelineSpec"),
+						},
+					},
 					"additionalMetadata": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Additional metadata for the model",
@@ -1448,7 +1457,7 @@ func schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref common.ReferenceCallback) com
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFormat", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DiffusionPipelineSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFormat", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -2861,6 +2870,7 @@ func schema_pkg_apis_ome_v1beta1_CrossReference(ref common.ReferenceCallback) co
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -4068,6 +4078,105 @@ func schema_pkg_apis_ome_v1beta1_DedicatedAIClusterStatus(ref common.ReferenceCa
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_DiffusionComponentSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DiffusionComponentSpec captures an individual component used by a diffusion pipeline. The fields map directly to entries in a diffusers model_index.json file.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"library": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Library providing the component implementation, e.g., \"diffusers\" or \"transformers\".",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type is the fully qualified class name for the component, e.g., \"FlowMatchEulerDiscreteScheduler\".",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_DiffusionPipelineSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DiffusionPipelineSpec describes a diffusers pipeline so that runtimes can validate compatibility. When set, these fields should mirror the content of the model's model_index.json file.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"className": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ClassName is the pipeline implementation, e.g., \"StableDiffusionXLPipeline\" or \"QwenImagePipeline\".",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"scheduler": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Scheduler component used by the pipeline.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec"),
+						},
+					},
+					"textEncoder": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TextEncoder component used by the pipeline.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec"),
+						},
+					},
+					"tokenizer": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Tokenizer component used by the pipeline.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec"),
+						},
+					},
+					"transformer": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Transformer (UNet/DiT) component used by the pipeline.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec"),
+						},
+					},
+					"vae": {
+						SchemaProps: spec.SchemaProps{
+							Description: "VAE component used by the pipeline.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec"),
+						},
+					},
+					"additionalComponents": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-map-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "AdditionalComponents captures any other pipeline parts keyed by their model_index.json entry.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_Endpoint(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -4999,6 +5108,7 @@ func schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref common.Reference
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -5731,6 +5841,7 @@ func schema_pkg_apis_ome_v1beta1_InferenceStep(ref common.ReferenceCallback) com
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -6666,6 +6777,7 @@ func schema_pkg_apis_ome_v1beta1_ModelFormat(ref common.ReferenceCallback) commo
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -6707,6 +6819,7 @@ func schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref common.ReferenceCallback
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -6761,6 +6874,7 @@ func schema_pkg_apis_ome_v1beta1_ModelRef(ref common.ReferenceCallback) common.O
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -7163,6 +7277,7 @@ func schema_pkg_apis_ome_v1beta1_ModelSpec(ref common.ReferenceCallback) common.
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -7300,6 +7415,7 @@ func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) c
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -9184,6 +9300,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref common.ReferenceCall
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -11330,6 +11447,7 @@ func schema_pkg_apis_ome_v1beta1_RunnerSpec(ref common.ReferenceCallback) common
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -11367,6 +11485,7 @@ func schema_pkg_apis_ome_v1beta1_RuntimeRef(ref common.ReferenceCallback) common
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -11976,6 +12095,7 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref common.ReferenceCallback)
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -12409,6 +12529,12 @@ func schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref common.ReferenceCallba
 							Format:      "",
 						},
 					},
+					"diffusionPipeline": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DiffusionPipeline supported by this runtime (used for diffusion models).",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DiffusionPipelineSpec"),
+						},
+					},
 					"autoSelect": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Set to true to allow the ServingRuntime to be used for automatic model placement if this model format is specified with no explicit runtime.",
@@ -12442,7 +12568,7 @@ func schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref common.ReferenceCallba
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.AcceleratorModelConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFormat", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.AcceleratorModelConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DiffusionPipelineSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFormat", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec"},
 	}
 }
 

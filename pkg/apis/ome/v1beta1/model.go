@@ -46,6 +46,51 @@ type ModelFrameworkSpec struct {
 	Weight int64 `json:"weight,omitempty"`
 }
 
+// DiffusionComponentSpec captures an individual component used by a diffusion pipeline.
+// The fields map directly to entries in a diffusers model_index.json file.
+type DiffusionComponentSpec struct {
+	// Library providing the component implementation, e.g., "diffusers" or "transformers".
+	// +optional
+	Library string `json:"library,omitempty"`
+
+	// Type is the fully qualified class name for the component, e.g., "FlowMatchEulerDiscreteScheduler".
+	// +optional
+	Type string `json:"type,omitempty"`
+}
+
+// DiffusionPipelineSpec describes a diffusers pipeline so that runtimes can validate compatibility.
+// When set, these fields should mirror the content of the model's model_index.json file.
+type DiffusionPipelineSpec struct {
+	// ClassName is the pipeline implementation, e.g., "StableDiffusionXLPipeline" or "QwenImagePipeline".
+	// +optional
+	ClassName *string `json:"className,omitempty"`
+
+	// Scheduler component used by the pipeline.
+	// +optional
+	Scheduler *DiffusionComponentSpec `json:"scheduler,omitempty"`
+
+	// TextEncoder component used by the pipeline.
+	// +optional
+	TextEncoder *DiffusionComponentSpec `json:"textEncoder,omitempty"`
+
+	// Tokenizer component used by the pipeline.
+	// +optional
+	Tokenizer *DiffusionComponentSpec `json:"tokenizer,omitempty"`
+
+	// Transformer (UNet/DiT) component used by the pipeline.
+	// +optional
+	Transformer *DiffusionComponentSpec `json:"transformer,omitempty"`
+
+	// VAE component used by the pipeline.
+	// +optional
+	VAE *DiffusionComponentSpec `json:"vae,omitempty"`
+
+	// AdditionalComponents captures any other pipeline parts keyed by their model_index.json entry.
+	// +optional
+	// +mapType=atomic
+	AdditionalComponents map[string]DiffusionComponentSpec `json:"additionalComponents,omitempty" protobuf:"bytes,8,rep,name=additionalComponents"`
+}
+
 type RuntimeSelectorOperator string
 
 const (
@@ -173,6 +218,10 @@ type BaseModelSpec struct {
 	// MaxTokens is the maximum number of tokens that can be processed by the model
 	MaxTokens *int32 `json:"maxTokens,omitempty"`
 
+	// DiffusionPipeline captures pipeline-specific metadata for diffusion models (from model_index.json).
+	// +optional
+	DiffusionPipeline *DiffusionPipelineSpec `json:"diffusionPipeline,omitempty"`
+
 	// Additional metadata for the model
 	// +optional
 	AdditionalMetadata map[string]string `json:"additionalMetadata,omitempty"`
@@ -221,7 +270,7 @@ const (
 // ModelCapability enum
 // TODO: Remove legacy capabilities
 //
-// +kubebuilder:validation:Enum=TEXT_GENERATION;TEXT_SUMMARIZATION;TEXT_EMBEDDINGS;TEXT_RERANK;CHAT;VISION;EMBEDDING;RERANK;TEXT_TO_TEXT;IMAGE_TEXT_TO_TEXT;TEXT_TO_IMAGE;IMAGE_TEXT_TO_IMAGE;TEXT_TO_SPEECH;SPEECH_TO_TEXT;AUDIO_TRANSLATION
+// +kubebuilder:validation:Enum=TEXT_GENERATION;TEXT_SUMMARIZATION;TEXT_EMBEDDINGS;TEXT_RERANK;CHAT;VISION;EMBEDDING;RERANK;TEXT_TO_TEXT;TEXT_TO_AUDIO;TEXT_TO_IMAGE;TEXT_TO_VIDEO;IMAGE_TEXT_TO_TEXT;IMAGE_TEXT_TO_AUDIO;IMAGE_TEXT_TO_IMAGE;IMAGE_TEXT_TO_VIDEO;VIDEO_TEXT_TO_AUDIO;AUDIO_TO_TEXT;AUDIO_TO_AUDIO;AUDIO_TRANSLATION
 type ModelCapability string
 
 const (
@@ -237,11 +286,16 @@ const (
 	ModelCapabilityEmbedding        ModelCapability = "EMBEDDING"
 	ModelCapabilityRerank           ModelCapability = "RERANK"
 	ModelCapabilityTextToText       ModelCapability = "TEXT_TO_TEXT"
-	ModelCapabilityImageTextToText  ModelCapability = "IMAGE_TEXT_TO_TEXT"
+	ModelCapabilityTextToAudio      ModelCapability = "TEXT_TO_AUDIO"
 	ModelCapabilityTextToImage      ModelCapability = "TEXT_TO_IMAGE"
+	ModelCapabilityTextToVideo      ModelCapability = "TEXT_TO_VIDEO"
+	ModelCapabilityImageTextToText  ModelCapability = "IMAGE_TEXT_TO_TEXT"
+	ModelCapabilityImageTextToAudio ModelCapability = "IMAGE_TEXT_TO_AUDIO"
 	ModelCapabilityImageTextToImage ModelCapability = "IMAGE_TEXT_TO_IMAGE"
-	ModelCapabilityTextToSpeech     ModelCapability = "TEXT_TO_SPEECH"
-	ModelCapabilitySpeechToText     ModelCapability = "SPEECH_TO_TEXT"
+	ModelCapabilityImageTextToVideo ModelCapability = "IMAGE_TEXT_TO_VIDEO"
+	ModelCapabilityVideoTextToAudio ModelCapability = "VIDEO_TEXT_TO_AUDIO"
+	ModelCapabilityAudioToText      ModelCapability = "AUDIO_TO_TEXT"
+	ModelCapabilityAudioToAudio     ModelCapability = "AUDIO_TO_AUDIO"
 	ModelCapabilityAudioTranslation ModelCapability = "AUDIO_TRANSLATION"
 	ModelCapabilityUnknown          ModelCapability = ""
 )

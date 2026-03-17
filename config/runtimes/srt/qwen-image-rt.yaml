@@ -1,0 +1,156 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: srt-qwen-image-edit
+spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-a100-40gb-1
+  disabled: false
+  modelSizeRange:
+    min: 26B
+    max: 32B
+  supportedModelFormats:
+    - modelFramework:
+        name: diffusers
+        version: "0.34.0.dev0"
+        operator: Equal
+      modelFormat:
+        name: diffusers
+        version: "0.34.0.dev0"
+        operator: Equal
+      autoSelect: true
+      modelArchitecture: QwenImagePipeline
+      priority: 1
+      acceleratorConfig:
+        nvidia-a100-40gb-1:
+          runtimeArgsOverride:
+            - --dit-layerwise-offload
+    - modelFramework:
+        name: diffusers
+        version: "0.36.0.dev0"
+        operator: Equal
+      modelFormat:
+        name: diffusers
+        version: "0.36.0.dev0"
+        operator: Equal
+      autoSelect: true
+      modelArchitecture: QwenImagePipeline
+      priority: 1
+      acceleratorConfig:
+        nvidia-a100-40gb-1:
+          runtimeArgsOverride:
+            - --dit-layerwise-offload
+    - modelFramework:
+        name: diffusers
+        version: "0.36.0.dev0"
+        operator: Equal
+      modelFormat:
+        name: diffusers
+        version: "0.36.0.dev0"
+        operator: Equal
+      autoSelect: true
+      modelArchitecture: QwenImageEditPlusPipeline
+      priority: 1
+      acceleratorConfig:
+        nvidia-a100-40gb-1:
+          runtimeArgsOverride:
+            - --dit-layerwise-offload
+    - modelFramework:
+        name: diffusers
+        version: "0.35.0.dev0"
+        operator: Equal
+      modelFormat:
+        name: diffusers
+        version: "0.35.0.dev0"
+        operator: Equal
+      autoSelect: true
+      modelArchitecture: QwenImageEditPipeline
+      priority: 1
+      acceleratorConfig:
+        nvidia-a100-40gb-1:
+          runtimeArgsOverride:
+              - --dit-layerwise-offload
+  protocolVersions:
+    - openAI
+  engineConfig:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+      prometheus.io/path: "/metrics"
+    labels:
+      logging-forward: enabled
+    tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+    runner:
+      name: ome-container
+      image: fra.ocir.io/idqj093njucb/official-sgl-diffusion:v0.5.9-5bf21db-cuda128
+      ports:
+        - containerPort: 8080
+          name: http1
+          protocol: TCP
+      command:
+        - sglang
+        - serve
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --model-path="$MODEL_PATH"
+        - --tp-size
+        - "1"
+        - --num-gpus
+        - "1"
+        - --output-path
+        - ""
+        - --input-save-path
+        - ""
+        - --enable-metrics
+        - --vae-tiling
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          # TextEncoder + Image Transformer layers runs on CPU
+          cpu: "32"
+          memory: "110Gi"
+          nvidia.com/gpu: 1
+        limits:
+          cpu: "32"
+          memory: "110Gi"
+          nvidia.com/gpu: 1
+
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 300
+        timeoutSeconds: 30
