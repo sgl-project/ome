@@ -412,21 +412,27 @@ func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
 // FindCompatibleRuntimes handles GET /api/v1/runtimes/compatible?format=<format>&framework=<framework>
 func (h *RuntimesHandler) FindCompatibleRuntimes(c *gin.Context) {
 	ctx := c.Request.Context()
-	modelFormat := c.Query("format")
-	modelFramework := c.Query("framework")
+	profile := services.ModelProfile{
+		Format:        c.Query("format"),
+		Framework:     c.Query("framework"),
+		Architecture:  c.Query("architecture"),
+		ParameterSize: c.Query("size"),
+	}
 
-	if modelFormat == "" {
+	if profile.Format == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Model format is required",
 		})
 		return
 	}
 
-	matches, err := h.intelligence.FindCompatibleRuntimes(ctx, modelFormat, modelFramework)
+	matches, err := h.intelligence.FindCompatibleRuntimes(ctx, profile)
 	if err != nil {
 		h.logger.Error("Failed to find compatible runtimes",
-			zap.String("format", modelFormat),
-			zap.String("framework", modelFramework),
+			zap.String("format", profile.Format),
+			zap.String("framework", profile.Framework),
+			zap.String("architecture", profile.Architecture),
+			zap.String("size", profile.ParameterSize),
 			zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to find compatible runtimes",
@@ -445,21 +451,28 @@ func (h *RuntimesHandler) FindCompatibleRuntimes(c *gin.Context) {
 func (h *RuntimesHandler) CheckCompatibility(c *gin.Context) {
 	ctx := c.Request.Context()
 	name := c.Param("name")
-	modelFormat := c.Query("format")
-	modelFramework := c.Query("framework")
+	profile := services.ModelProfile{
+		Format:        c.Query("format"),
+		Framework:     c.Query("framework"),
+		Architecture:  c.Query("architecture"),
+		ParameterSize: c.Query("size"),
+	}
 
-	if modelFormat == "" {
+	if profile.Format == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Model format is required",
 		})
 		return
 	}
 
-	check, err := h.intelligence.CheckCompatibility(ctx, name, modelFormat, modelFramework)
+	check, err := h.intelligence.CheckCompatibility(ctx, name, profile)
 	if err != nil {
 		h.logger.Error("Failed to check compatibility",
 			zap.String("runtime", name),
-			zap.String("format", modelFormat),
+			zap.String("format", profile.Format),
+			zap.String("framework", profile.Framework),
+			zap.String("architecture", profile.Architecture),
+			zap.String("size", profile.ParameterSize),
 			zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to check compatibility",
@@ -474,21 +487,27 @@ func (h *RuntimesHandler) CheckCompatibility(c *gin.Context) {
 // GetRecommendation handles GET /api/v1/runtimes/recommend?format=<format>&framework=<framework>
 func (h *RuntimesHandler) GetRecommendation(c *gin.Context) {
 	ctx := c.Request.Context()
-	modelFormat := c.Query("format")
-	modelFramework := c.Query("framework")
+	profile := services.ModelProfile{
+		Format:        c.Query("format"),
+		Framework:     c.Query("framework"),
+		Architecture:  c.Query("architecture"),
+		ParameterSize: c.Query("size"),
+	}
 
-	if modelFormat == "" {
+	if profile.Format == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Model format is required",
 		})
 		return
 	}
 
-	recommendation, err := h.intelligence.GetRecommendation(ctx, modelFormat, modelFramework)
+	recommendation, err := h.intelligence.GetRecommendation(ctx, profile)
 	if err != nil {
 		h.logger.Error("Failed to get recommendation",
-			zap.String("format", modelFormat),
-			zap.String("framework", modelFramework),
+			zap.String("format", profile.Format),
+			zap.String("framework", profile.Framework),
+			zap.String("architecture", profile.Architecture),
+			zap.String("size", profile.ParameterSize),
 			zap.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error":   "No compatible runtime found",

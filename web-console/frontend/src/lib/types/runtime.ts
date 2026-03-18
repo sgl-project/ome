@@ -238,6 +238,7 @@ export interface RuntimeMatch {
   reasons: string[]
   warnings?: string[]
   recommendation: string
+  signals?: RuntimeSignals
 }
 
 export interface CompatibilityCheck {
@@ -251,4 +252,14 @@ export interface RuntimeValidationResult {
   valid: boolean
   errors: string[]
   warnings: string[]
+}
+
+export interface RuntimeSignals {
+  matchedFormat?: string
+  matchedFramework?: string
+  matchedArchitecture?: string
+  modelSizeRange?: string
+  runtimeFamily?: string
+  protocols?: string[]
+  autoSelectEnabled?: boolean
 }

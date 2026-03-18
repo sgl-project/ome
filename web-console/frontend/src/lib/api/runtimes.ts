@@ -12,6 +12,13 @@ export interface CompatibleRuntimesResponse {
   total: number
 }
 
+export interface RuntimeRecommendationParams {
+  format: string
+  framework?: string
+  architecture?: string
+  size?: string
+}
+
 export const runtimesApi = {
   list: async (namespace?: string): Promise<ListResponse<ClusterServingRuntime>> => {
     const params = namespace ? { namespace } : {}
@@ -44,12 +51,16 @@ export const runtimesApi = {
   },
 
   // Intelligence features
-  findCompatible: async (
-    format: string,
-    framework?: string
-  ): Promise<CompatibleRuntimesResponse> => {
+  findCompatible: async ({
+    format,
+    framework,
+    architecture,
+    size,
+  }: RuntimeRecommendationParams): Promise<CompatibleRuntimesResponse> => {
     const params: Record<string, string> = { format }
     if (framework) params.framework = framework
+    if (architecture) params.architecture = architecture
+    if (size) params.size = size
     const response = await apiClient.get<CompatibleRuntimesResponse>('/runtimes/compatible', {
       params,
     })
@@ -58,20 +69,28 @@ export const runtimesApi = {
 
   checkCompatibility: async (
     name: string,
-    format: string,
-    framework?: string
+    { format, framework, architecture, size }: RuntimeRecommendationParams
   ): Promise<CompatibilityCheck> => {
     const params: Record<string, string> = { format }
     if (framework) params.framework = framework
+    if (architecture) params.architecture = architecture
+    if (size) params.size = size
     const response = await apiClient.get<CompatibilityCheck>(`/runtimes/${name}/compatibility`, {
       params,
     })
     return response.data
   },
 
-  getRecommendation: async (format: string, framework?: string): Promise<RuntimeMatch> => {
+  getRecommendation: async ({
+    format,
+    framework,
+    architecture,
+    size,
+  }: RuntimeRecommendationParams): Promise<RuntimeMatch> => {
     const params: Record<string, string> = { format }
     if (framework) params.framework = framework
+    if (architecture) params.architecture = architecture
+    if (size) params.size = size
     const response = await apiClient.get<RuntimeMatch>('/runtimes/recommend', { params })
     return response.data
   },

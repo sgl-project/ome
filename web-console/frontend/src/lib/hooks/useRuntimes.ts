@@ -41,10 +41,23 @@ export function useUpdateRuntime() {
 
 // Runtime Intelligence Hooks (specialized operations not covered by factory)
 
-export function useCompatibleRuntimes(format?: string, framework?: string) {
+export function useCompatibleRuntimes(
+  format?: string,
+  framework?: string,
+  architecture?: string,
+  size?: string
+) {
   return useQuery({
-    queryKey: queryKeys.related(RESOURCE_KEY, 'compatible', 'search', format, framework),
-    queryFn: () => runtimesApi.findCompatible(format!, framework),
+    queryKey: queryKeys.related(
+      RESOURCE_KEY,
+      'compatible',
+      'search',
+      format,
+      framework,
+      architecture,
+      size
+    ),
+    queryFn: () => runtimesApi.findCompatible({ format: format!, framework, architecture, size }),
     enabled: !!format,
     staleTime: DEFAULT_QUERY_CONFIG.staleTime,
     gcTime: DEFAULT_QUERY_CONFIG.gcTime,
@@ -53,10 +66,25 @@ export function useCompatibleRuntimes(format?: string, framework?: string) {
   })
 }
 
-export function useRuntimeCompatibility(name?: string, format?: string, framework?: string) {
+export function useRuntimeCompatibility(
+  name?: string,
+  format?: string,
+  framework?: string,
+  architecture?: string,
+  size?: string
+) {
   return useQuery({
-    queryKey: queryKeys.related(RESOURCE_KEY, name || '', 'compatibility', format, framework),
-    queryFn: () => runtimesApi.checkCompatibility(name!, format!, framework),
+    queryKey: queryKeys.related(
+      RESOURCE_KEY,
+      name || '',
+      'compatibility',
+      format,
+      framework,
+      architecture,
+      size
+    ),
+    queryFn: () =>
+      runtimesApi.checkCompatibility(name!, { format: format!, framework, architecture, size }),
     enabled: !!name && !!format,
     staleTime: DEFAULT_QUERY_CONFIG.staleTime,
     gcTime: DEFAULT_QUERY_CONFIG.gcTime,
@@ -65,10 +93,23 @@ export function useRuntimeCompatibility(name?: string, format?: string, framewor
   })
 }
 
-export function useRuntimeRecommendation(format?: string, framework?: string) {
+export function useRuntimeRecommendation(
+  format?: string,
+  framework?: string,
+  architecture?: string,
+  size?: string
+) {
   return useQuery({
-    queryKey: queryKeys.related(RESOURCE_KEY, 'recommend', 'search', format, framework),
-    queryFn: () => runtimesApi.getRecommendation(format!, framework),
+    queryKey: queryKeys.related(
+      RESOURCE_KEY,
+      'recommend',
+      'search',
+      format,
+      framework,
+      architecture,
+      size
+    ),
+    queryFn: () => runtimesApi.getRecommendation({ format: format!, framework, architecture, size }),
     enabled: !!format,
     staleTime: DEFAULT_QUERY_CONFIG.staleTime,
     gcTime: DEFAULT_QUERY_CONFIG.gcTime,

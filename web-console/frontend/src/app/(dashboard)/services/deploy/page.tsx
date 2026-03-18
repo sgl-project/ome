@@ -116,6 +116,41 @@ function RuntimeCard({
         <ScoreBadge score={match.score} />
       </div>
 
+      {match.signals && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {match.signals.runtimeFamily && (
+            <span className="inline-flex items-center rounded-md bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium uppercase">
+              {match.signals.runtimeFamily}
+            </span>
+          )}
+          {match.signals.matchedFormat && (
+            <span className="inline-flex items-center rounded-md bg-muted text-muted-foreground px-2 py-0.5 text-xs">
+              Format: {match.signals.matchedFormat}
+            </span>
+          )}
+          {match.signals.matchedFramework && (
+            <span className="inline-flex items-center rounded-md bg-muted text-muted-foreground px-2 py-0.5 text-xs">
+              Framework: {match.signals.matchedFramework}
+            </span>
+          )}
+          {match.signals.matchedArchitecture && (
+            <span className="inline-flex items-center rounded-md bg-muted text-muted-foreground px-2 py-0.5 text-xs">
+              Arch: {match.signals.matchedArchitecture}
+            </span>
+          )}
+          {match.signals.modelSizeRange && (
+            <span className="inline-flex items-center rounded-md bg-muted text-muted-foreground px-2 py-0.5 text-xs">
+              Size: {match.signals.modelSizeRange}
+            </span>
+          )}
+          {match.signals.autoSelectEnabled && (
+            <span className="inline-flex items-center rounded-md bg-accent/10 text-accent px-2 py-0.5 text-xs">
+              Auto-select
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Reasons */}
       {match.reasons.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1">
@@ -206,13 +241,22 @@ export default function DeployServicePage() {
   // Extract model format and framework for smart selection
   const modelFormat = selectedModel?.spec.modelFormat?.name
   const modelFramework = selectedModel?.spec.modelFramework?.name
+  const modelArchitecture = selectedModel?.spec.modelArchitecture
+  const modelSize = selectedModel?.spec.modelParameterSize
 
   // Smart selection queries - only enabled when a model is selected
   const { data: compatibleData, isLoading: compatibleLoading } = useCompatibleRuntimes(
     modelFormat,
-    modelFramework
+    modelFramework,
+    modelArchitecture,
+    modelSize
   )
-  const { data: recommendedRuntime } = useRuntimeRecommendation(modelFormat, modelFramework)
+  const { data: recommendedRuntime } = useRuntimeRecommendation(
+    modelFormat,
+    modelFramework,
+    modelArchitecture,
+    modelSize
+  )
 
   const {
     register,
@@ -458,6 +502,11 @@ export default function DeployServicePage() {
                         {selectedModel.spec.modelFramework?.name && (
                           <span className="inline-flex items-center rounded-md bg-accent/10 text-accent px-2 py-0.5 text-xs font-medium">
                             Framework: {selectedModel.spec.modelFramework.name}
+                          </span>
+                        )}
+                        {selectedModel.spec.modelArchitecture && (
+                          <span className="inline-flex items-center rounded-md bg-muted text-muted-foreground px-2 py-0.5 text-xs font-medium">
+                            Arch: {selectedModel.spec.modelArchitecture}
                           </span>
                         )}
                         {selectedModel.spec.modelParameterSize && (
