@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-mistral-small-3-1-24b-instruct-2503
+  name: vllm-devstral-small-2-24b-instruct-tp2
 spec:
   disabled: false
   supportedModelFormats:
@@ -13,6 +13,16 @@ spec:
         version: "1.0.0"
       modelArchitecture: Mistral3ForConditionalGeneration
       autoSelect: false
+      priority: 1
+    - modelFramework:
+        name: transformers
+        version: "5.0.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: Mistral3ForConditionalGeneration
+      quantization: fp8
+      autoSelect: true
       priority: 1
   protocolVersions:
     - openAI
@@ -36,7 +46,7 @@ spec:
           medium: Memory
     runner:
       name: ome-container
-      image: docker.io/lmsysorg/sglang:v0.5.5.post3-cu129-amd64
+      image: ghcr.io/lightseekorg/smg:1.3.2-vllm-v0.17.0
       ports:
         - containerPort: 8080
           name: http1
@@ -44,21 +54,20 @@ spec:
       command:
         - python3
         - -m
-        - sglang.launch_server
+        - vllm.entrypoints.openai.api_server
         - --host
         - "0.0.0.0"
         - --port
         - "8080"
-        - --enable-metrics
-        - --log-requests
-        - --model-path
+        - --model
         - $(MODEL_PATH)
-        - --tp-size
+        - --tensor-parallel-size
         - "2"
-        - --mem-frac
+        - --gpu-memory-utilization
         - "0.9"
-        - --served-model-name
-        - mistralai/Mistral-Small-3.1-24B-Instruct-2503
+        - --enable-auto-tool-choice
+        - --tool-call-parser
+        - mistral
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -74,12 +83,12 @@ spec:
 
       readinessProbe:
         httpGet:
-          path: /health_generate
+          path: /health
           port: 8080
         failureThreshold: 3
         successThreshold: 1
-        periodSeconds: 60
-        timeoutSeconds: 200
+        periodSeconds: 90
+        timeoutSeconds: 20
 
       livenessProbe:
         httpGet:
@@ -92,7 +101,7 @@ spec:
 
       startupProbe:
         httpGet:
-          path: /health_generate
+          path: /health
           port: 8080
         failureThreshold: 150
         successThreshold: 1

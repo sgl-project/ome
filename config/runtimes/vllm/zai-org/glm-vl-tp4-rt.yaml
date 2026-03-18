@@ -1,0 +1,107 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-glm-vl-tp4
+spec:
+  disabled: false
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.57.1"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: Glm4vMoeForConditionalGeneration
+      autoSelect: true
+      priority: 1
+    - modelFramework:
+        name: transformers
+        version: "5.0.0-rc0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: Glm4vMoeForConditionalGeneration
+      autoSelect: true
+      priority: 1
+  protocolVersions:
+    - openAI
+  modelSizeRange:
+    min: 100B
+    max: 115B
+  engineConfig:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+      prometheus.io/path: "/metrics"
+    labels:
+      logging-forward: enabled
+    tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+    runner:
+      name: ome-container
+      image: ghcr.io/lightseekorg/smg:1.3.2-vllm-v0.17.0
+      ports:
+        - containerPort: 8080
+          name: http1
+          protocol: TCP
+      command:
+        - python3
+        - -m
+        - vllm.entrypoints.openai.api_server
+        - --port
+        - "8080"
+        - --model
+        - $(MODEL_PATH)
+        - --tensor-parallel-size
+        - "4"
+        - --gpu-memory-utilization
+        - "0.9"
+        - --enable-auto-tool-choice
+        - --tool-call-parser
+        - glm45
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 20
+          memory: 200Gi
+          nvidia.com/gpu: 4
+        limits:
+          cpu: 20
+          memory: 200Gi
+          nvidia.com/gpu: 4
+
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 90
+        timeoutSeconds: 20
+
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
