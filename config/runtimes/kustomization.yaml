@@ -32,6 +32,7 @@ resources:
 - srt/mistral-7b-instruct-rt.yaml
 - srt/mixtral-8x7b-instruct-pd-rt.yaml
 - srt/mixtral-8x7b-instruct-rt.yaml
+- srt/zai-org/glm-text-fp8-tp8-rt.yaml
 # vLLM runtimes
 - vllm/e5-mistral-7b-instruct-rt.yaml
 - vllm/llama-3-1-405b-instruct-fp8-rt.yaml
@@ -50,3 +51,7 @@ resources:
 - vllm/llama-4-scout-17b-16e-instruct-rt.yaml
 - vllm/mistral-7b-instruct-rt.yaml
 - vllm/mixtral-8x7b-instruct-rt.yaml
+- vllm/zai-org/glm-vl-tp4-rt.yaml
+- vllm/minimax/minimax-m2-fp8-tp8-rt.yaml
+- vllm/mistralai/devstral-2-123b-instruct-fp8-tp4-rt.yaml
+- vllm/mistralai/devstral-small-2-24b-instruct-tp2-rt.yaml

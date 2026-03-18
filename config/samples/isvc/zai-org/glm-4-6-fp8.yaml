@@ -7,11 +7,11 @@ metadata:
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
-  name: glm-4-5v
+  name: glm-4-6-fp8
   namespace: glm
 spec:
   model:
-    name: glm-4-5v
+    name: glm-4-6-fp8
   engine:
     minReplicas: 1
     maxReplicas: 1
