@@ -1,0 +1,24 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: glm-4-7-fp8
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: zai-org
+  displayName: zai-org.glm-4.7-fp8
+  modelArchitecture: Glm4MoeForCausalLM
+  disabled: false
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.52.3"
+  modelParameterSize: 355B
+  quantization: fp8
+  storage:
+    storageUri: hf://zai-org/GLM-4.7-FP8
+    path: /raid/models/zai-org/GLM-4.7-FP8
+    key: hf-token

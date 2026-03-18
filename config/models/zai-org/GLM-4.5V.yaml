@@ -8,8 +8,16 @@ spec:
     - VIDEO_TEXT_TO_TEXT
   vendor: zai-org
   displayName: zai-org.glm-4.5v
+  modelArchitecture: Glm4vMoeForConditionalGeneration
   disabled: false
   version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.57.1"
+  modelParameterSize: 106B
   storage:
     storageUri: hf://zai-org/GLM-4.5V
     path: /raid/models/zai-org/GLM-4.5V
