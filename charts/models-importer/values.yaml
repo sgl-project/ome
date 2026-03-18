@@ -560,6 +560,11 @@ gpt-audio:
   enableImageInput: false
   lifecyclePhase: "ACTIVE"
 
+gpt-audio-mini:
+  enabled: false
+  enableImageInput: false
+  lifecyclePhase: "ACTIVE"
+
 gpt-image-1:
   enabled: false
   enableImageInput: false

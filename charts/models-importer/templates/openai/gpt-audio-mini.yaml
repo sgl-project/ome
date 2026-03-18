@@ -1,0 +1,35 @@
+{{- if index .Values "gpt-audio-mini" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: gpt-audio-mini
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: ""
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "gpt-audio-mini" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "gpt-audio-mini" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "gpt-audio-mini" "lifecyclePhase" }}"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: openai.gpt-audio-mini
+  storage:
+    storageUri: "vendor://openai/models/{{ index .Values "gpt-audio-mini" "osPrefixOverride" }}"
+  vendor: {{ index .Values "gpt-audio-mini" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelArchitecture: OpenAIForCausalLM
+  modelParameterSize: 3.6B
+  modelCapabilities:
+    - "CHAT"
+    - "AUDIO_TO_TEXT"
+    - "TEXT_TO_AUDIO"
+  maxTokens: 128000
+{{- end }}
