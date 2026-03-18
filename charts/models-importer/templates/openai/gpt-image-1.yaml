@@ -30,6 +30,5 @@ spec:
   modelCapabilities:
     - "TEXT_TO_IMAGE"
     - "IMAGE_TEXT_TO_IMAGE"
-    - "IMAGE_TO_IMAGE"
   maxTokens: 128000
 {{- end }}
