@@ -1,0 +1,35 @@
+{{- if index .Values "gpt-5-4-nano-2026-03-17" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: gpt-5-4-nano-2026-03-17
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: ""
+    models.ome.io/category: "LARGE"
+    models.ome.io/experimental: "{{ index .Values "gpt-5-4-nano-2026-03-17" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "gpt-5-4-nano-2026-03-17" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "gpt-5-4-nano-2026-03-17" "lifecyclePhase" }}"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: openai.gpt-5.4-nano-2026-03-17
+  storage:
+    storageUri: "vendor://openai/models/{{ index .Values "gpt-5-4-nano-2026-03-17" "osPrefixOverride" }}"
+  vendor: {{ index .Values "gpt-5-4-nano-2026-03-17" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelArchitecture: OpenAIForCausalLM
+  modelParameterSize: 1.8T
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 128000
+  additionalMetadata:
+    image-text-to-text: "{{ index .Values "gpt-5-4-nano-2026-03-17" "enableImageInput" }}"
+{{- end }}
