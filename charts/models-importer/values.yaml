@@ -961,15 +961,15 @@ grok-4-self-hosted:
   nodeAffinity:
     - BM.GPU.H100.8
 
-grok-4-20-beta-multi-agent:
+grok-4-20-multi-agent-0309:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
-grok-4-20-beta-non-reasoning:
+grok-4-20-0309-non-reasoning:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
-grok-4-20-beta-reasoning:
+grok-4-20-0309-reasoning:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
