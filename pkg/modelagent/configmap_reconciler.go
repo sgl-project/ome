@@ -238,12 +238,7 @@ func (c *ConfigMapReconciler) recreateConfigMap(ctx context.Context) {
 			config.ModelParameterSize = cacheEntry.ModelMetadata.ModelParameterSize
 			config.MaxTokens = cacheEntry.ModelMetadata.MaxTokens
 			config.Quantization = string(cacheEntry.ModelMetadata.Quantization)
-			if len(cacheEntry.ModelMetadata.ApiCapabilities) > 0 {
-				config.ApiCapabilities = make([]string, len(cacheEntry.ModelMetadata.ApiCapabilities))
-				for i, capability := range cacheEntry.ModelMetadata.ApiCapabilities {
-					config.ApiCapabilities[i] = string(capability)
-				}
-			}
+			config.ApiCapabilities = cacheEntry.ModelMetadata.ApiCapabilities
 			config.Artifact = cacheEntry.ModelMetadata.Artifact
 			modelEntry.Config = config
 		}
@@ -297,12 +292,7 @@ func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry
 		config.ModelParameterSize = cacheEntry.ModelMetadata.ModelParameterSize
 		config.MaxTokens = cacheEntry.ModelMetadata.MaxTokens
 		config.Quantization = string(cacheEntry.ModelMetadata.Quantization)
-		if len(cacheEntry.ModelMetadata.ApiCapabilities) > 0 {
-			config.ApiCapabilities = make([]string, len(cacheEntry.ModelMetadata.ApiCapabilities))
-			for i, capability := range cacheEntry.ModelMetadata.ApiCapabilities {
-				config.ApiCapabilities[i] = string(capability)
-			}
-		}
+		config.ApiCapabilities = cacheEntry.ModelMetadata.ApiCapabilities
 		config.Artifact = cacheEntry.ModelMetadata.Artifact
 
 		modelEntry.Config = config
