@@ -63,22 +63,29 @@ spec:
           --port=8080 \
           --enable-metrics \
           --log-requests \
+          --log-requests-level=1 \
           --model-path="$MODEL_PATH" \
           --tp-size=4 \
           --mem-frac=0.9 \
           --tool-call-parser=llama3 \
-          --chat-template /sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama3.1_json.jinja
+          --chat-template /sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama3.1_json.jinja \
+          --enable-hierarchical-cache \
+          --hicache-size=80 \
+          --enable-cache-report \
+          --prefill-attention-backend=flashinfer --decode-attention-backend=flashinfer \
+          --hicache-io-backend=kernel \
+          --hicache-mem-layout=layer_first
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
           cpu: 10
-          memory: 160Gi
+          memory: 512Gi
           nvidia.com/gpu: 4
         limits:
           cpu: 10
-          memory: 160Gi
+          memory: 512Gi
           nvidia.com/gpu: 4
 
       readinessProbe:
