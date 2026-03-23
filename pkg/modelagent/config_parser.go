@@ -401,12 +401,6 @@ func (p *ModelConfigParser) updateModelSpec(spec *v1beta1.BaseModelSpec, metadat
 				*c = new.(v1beta1.ModelFormat)
 				isUpdated = true
 			}
-		case *[]v1beta1.ModelAPICapability:
-			newAPICapabilities := new.([]v1beta1.ModelAPICapability)
-			if len(*c) == 0 && len(newAPICapabilities) > 0 {
-				*c = append([]v1beta1.ModelAPICapability(nil), newAPICapabilities...)
-				isUpdated = true
-			}
 		case **v1beta1.ModelFrameworkSpec:
 			if *c == nil && new != nil {
 				*c = new.(*v1beta1.ModelFrameworkSpec)
