@@ -1,0 +1,20 @@
+{{- if .Values.rerank_v4_0_fast.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: rerank-v4-0-fast
+  namespace: rerank-v4-0-fast
+spec:
+  predictor:
+    model:
+      runtime: cohere-rerank-v4-0-fast
+      baseModel: rerank-v4-0-fast
+      protocolVersion: cohere
+    minReplicas: {{ .Values.rerank_v4_0_fast.minReplicas}}
+    maxReplicas: {{ .Values.rerank_v4_0_fast.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rerank-v4-0-fast
+{{- end }}

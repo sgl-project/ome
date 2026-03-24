@@ -96,6 +96,11 @@ embed_v4:
   minReplicas: 1
   maxReplicas: 1
 
+rerank_v4_0_fast:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
 command_r_082024_v1_7_tp1_128k:
   enabled: false
   minReplicas: 1
