@@ -37,11 +37,18 @@ spec:
     - "TEXT_RERANK"
   maxTokens: 4096
   additionalMetadata:
+    {{ $defaultDACShape := default "COHERE_H100_X1" (index .Values "cohere-rerank-v4-0-pro" "defaultDACShape") -}}
+    {{ $additionalDACShapes := index .Values "cohere-rerank-v4-0-pro" "additionalDACShapes" | default (list) -}}
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: RERANK_COHERE
+        - name: {{ $defaultDACShape }}
           quotaUnit: 1
           default: true
+        {{ range $additionalDACShapes }}
+        - name: {{ . }}
+          quotaUnit: 1
+          default: false
+        {{ end }}
     internalName: "rerank-v4-0-pro"
     type: "Serving"
 {{- end }}

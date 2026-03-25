@@ -448,10 +448,14 @@ cohere-rerank-v3-5:
 cohere-rerank-v4-0-pro:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  defaultDACShape: "COHERE_H100_X1"
+  additionalDACShapes: []
 
 cohere-rerank-v4-0-fast:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  defaultDACShape: "COHERE_H100_X1"
+  additionalDACShapes: []
 
 deepseek-r1:
   enabled: false
