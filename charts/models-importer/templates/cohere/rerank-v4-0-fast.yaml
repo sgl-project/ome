@@ -44,11 +44,11 @@ spec:
         - name: {{ $defaultDACShape }}
           quotaUnit: 1
           default: true
-        {{ range $additionalDACShapes }}
+        {{- range $additionalDACShapes }}
         - name: {{ . }}
           quotaUnit: 1
           default: false
-        {{ end }}
+        {{- end }}
     internalName: "rerank-v4-0-fast"
     type: "Serving"
 {{- end }}
