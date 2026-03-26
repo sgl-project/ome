@@ -29,6 +29,8 @@ spec:
   modelParameterSize: 1.8T
   modelCapabilities:
     - "CHAT"
+  apiCapabilities:
+    - "OPENAI_V1_RESPONSES"
   maxTokens: 128000
   additionalMetadata:
     image-text-to-text: "{{ index .Values "gpt-5-4-pro" "enableImageInput" }}"

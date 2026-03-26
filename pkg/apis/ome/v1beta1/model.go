@@ -197,7 +197,7 @@ type BaseModelSpec struct {
 	// API capabilities supported by the model, e.g., "OPENAI_V1_CHAT_COMPLETIONS"
 	// +listType=atomic
 	// +optional
-	ApiCapabilities []ModelAPICapability `json:"apiCapabilities,omitempty"`
+	ApiCapabilities []string `json:"apiCapabilities,omitempty"`
 
 	// Configuration of the model, stored as generic JSON for flexibility.
 	// +optional

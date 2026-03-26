@@ -29,6 +29,8 @@ spec:
   modelParameterSize: 1.8T
   modelCapabilities:
   - "CHAT"
+  apiCapabilities:
+    - "ANTHROPIC_V1_MESSAGES"
   maxTokens: 64000
   additionalMetadata:
     image-text-to-text: "{{ index .Values "claude-haiku-4-5" "enableImageInput" }}"
