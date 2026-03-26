@@ -31,7 +31,7 @@ const (
 
 	// defaultTPM is the default TPM (tokens per minute) limit assigned to each xAI API key.
 	// Adjust this value if default rate limiting requirements change.
-	defaultTPM string = "100000"
+	defaultTPM string = "200000"
 )
 
 // XAIServiceAccount implements ProjectScoped and ResourceOperation
