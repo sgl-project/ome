@@ -188,7 +188,7 @@ func TestDefaultAcceleratorFetcher_GetAcceleratorClass(t *testing.T) {
 		expectFound               bool
 		expectClusterScoped       bool
 		expectError               bool
-		validateSpec              func(*testing.T, *v1beta1.AcceleratorClassSpec)
+		validateSpec              func(*testing.T, *v1beta1.AcceleratorClass)
 	}{
 		{
 			name:                 "Cluster-scoped accelerator class found",
@@ -217,11 +217,11 @@ func TestDefaultAcceleratorFetcher_GetAcceleratorClass(t *testing.T) {
 			expectFound:         true,
 			expectClusterScoped: true,
 			expectError:         false,
-			validateSpec: func(t *testing.T, spec *v1beta1.AcceleratorClassSpec) {
-				g.Expect(spec).NotTo(gomega.BeNil())
-				g.Expect(spec.Discovery.NodeSelector).To(gomega.HaveKeyWithValue("accelerator", "nvidia-h100"))
-				g.Expect(spec.Resources).To(gomega.HaveLen(1))
-				g.Expect(spec.Resources[0].Name).To(gomega.Equal("nvidia.com/gpu"))
+			validateSpec: func(t *testing.T, ac *v1beta1.AcceleratorClass) {
+				g.Expect(ac).NotTo(gomega.BeNil())
+				g.Expect(ac.Spec.Discovery.NodeSelector).To(gomega.HaveKeyWithValue("accelerator", "nvidia-h100"))
+				g.Expect(ac.Spec.Resources).To(gomega.HaveLen(1))
+				g.Expect(ac.Spec.Resources[0].Name).To(gomega.Equal("nvidia.com/gpu"))
 			},
 		},
 		{
@@ -241,8 +241,8 @@ func TestDefaultAcceleratorFetcher_GetAcceleratorClass(t *testing.T) {
 			expectFound:         false,
 			expectClusterScoped: false,
 			expectError:         true,
-			validateSpec: func(t *testing.T, spec *v1beta1.AcceleratorClassSpec) {
-				g.Expect(spec).To(gomega.BeNil())
+			validateSpec: func(t *testing.T, ac *v1beta1.AcceleratorClass) {
+				g.Expect(ac).To(gomega.BeNil())
 			},
 		},
 		{
@@ -252,8 +252,8 @@ func TestDefaultAcceleratorFetcher_GetAcceleratorClass(t *testing.T) {
 			expectFound:               false,
 			expectClusterScoped:       false,
 			expectError:               true,
-			validateSpec: func(t *testing.T, spec *v1beta1.AcceleratorClassSpec) {
-				g.Expect(spec).To(gomega.BeNil())
+			validateSpec: func(t *testing.T, ac *v1beta1.AcceleratorClass) {
+				g.Expect(ac).To(gomega.BeNil())
 			},
 		},
 		{
@@ -296,11 +296,11 @@ func TestDefaultAcceleratorFetcher_GetAcceleratorClass(t *testing.T) {
 			expectFound:         true,
 			expectClusterScoped: true,
 			expectError:         false,
-			validateSpec: func(t *testing.T, spec *v1beta1.AcceleratorClassSpec) {
-				g.Expect(spec).NotTo(gomega.BeNil())
-				g.Expect(spec.Discovery.NodeSelector).To(gomega.HaveKeyWithValue("accelerator", "amd-mi300x"))
-				g.Expect(spec.Resources).To(gomega.HaveLen(1))
-				g.Expect(spec.Resources[0].Name).To(gomega.Equal("amd.com/gpu"))
+			validateSpec: func(t *testing.T, ac *v1beta1.AcceleratorClass) {
+				g.Expect(ac).NotTo(gomega.BeNil())
+				g.Expect(ac.Spec.Discovery.NodeSelector).To(gomega.HaveKeyWithValue("accelerator", "amd-mi300x"))
+				g.Expect(ac.Spec.Resources).To(gomega.HaveLen(1))
+				g.Expect(ac.Spec.Resources[0].Name).To(gomega.Equal("amd.com/gpu"))
 			},
 		},
 	}
