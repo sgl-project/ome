@@ -232,7 +232,6 @@ type ServingRuntimeSpec struct {
 // +k8s:openapi-gen=true
 type AcceleratorRequirements struct {
 	// AcceleratorClasses lists the names of AcceleratorClasses this runtime supports
-	// If empty, the runtime supports any accelerator
 	// +optional
 	// +listType=atomic
 	AcceleratorClasses []string `json:"acceleratorClasses,omitempty"`
@@ -390,11 +389,9 @@ func (f *SupportedModelFormat) IsAutoSelectEnabled() bool {
 }
 
 func (srSpec *ServingRuntimeSpec) SupportsAcceleratorClass(acceleratorClass string) bool {
-	if srSpec.AcceleratorRequirements == nil || len(srSpec.AcceleratorRequirements.AcceleratorClasses) == 0 {
-		// No requirements means supports all accelerators
-		return true
+	if srSpec.AcceleratorRequirements == nil {
+		return false
 	}
-
 	for _, supported := range srSpec.AcceleratorRequirements.AcceleratorClasses {
 		if supported == acceleratorClass {
 			return true

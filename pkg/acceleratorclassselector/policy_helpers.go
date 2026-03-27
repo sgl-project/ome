@@ -27,15 +27,15 @@ func candidatesFromNames(
 ) ([]v1beta1.AcceleratorClass, error) {
 	logger := log.FromContext(ctx)
 
-	// Deduplicate names
-	uniqueNames := make(map[string]struct{})
+	// Deduplicate names while preserving order
+	seen := make(map[string]struct{})
+	candidates := make([]v1beta1.AcceleratorClass, 0, len(names))
+
 	for _, name := range names {
-		uniqueNames[name] = struct{}{}
-	}
-
-	candidates := make([]v1beta1.AcceleratorClass, 0, len(uniqueNames))
-
-	for name := range uniqueNames {
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
 		ac, found, err := fetcher.GetAcceleratorClass(ctx, name)
 		if err != nil {
 			logger.Error(err, "Failed to fetch AcceleratorClass", "name", name)
@@ -316,50 +316,23 @@ func calculateComputePerformanceTFLOPSScore(
 	return 0.0
 }
 
-// getCandidateCost extracts cost with priority: spot > hourly > token > tier
-func getCandidateCost(candidate v1beta1.AcceleratorClass) (*resource.Quantity, string, error) {
-	spec := candidate.Spec
-	if spec.Cost == nil {
-		return nil, "", fmt.Errorf("no cost information")
-	}
-
-	// Priority 1: Spot pricing (if available)
-	if spec.Cost.SpotPerHour != nil {
-		return spec.Cost.SpotPerHour, "spot-hourly", nil
-	}
-
-	// Priority 2: On-demand hourly
-	if spec.Cost.PerHour != nil {
-		return spec.Cost.PerHour, "hourly", nil
-	}
-
-	// Priority 3: Token-based (less preferred, harder to compare)
-	if spec.Cost.PerMillionTokens != nil {
-		return spec.Cost.PerMillionTokens, "per-million-tokens", nil
-	}
-
-	// Fallback: Try to use cost tier as string
-	if spec.Cost.Tier != "" {
-		// Map tier to numeric value: low=1, medium=2, high=3
-		tierValue := int64(2) // default medium
-		switch strings.ToLower(spec.Cost.Tier) {
-		case "low":
-			tierValue = 1
-		case "medium":
-			tierValue = 2
-		case "high":
-			tierValue = 3
-		}
-		qty := resource.NewQuantity(tierValue, resource.DecimalSI)
-		return qty, "tier", nil
-	}
-
-	return nil, "", fmt.Errorf("no cost data available")
-}
-
 // compareCosts returns -1 if cost1 < cost2, 0 if equal, 1 if cost1 > cost2
 func compareCosts(cost1, cost2 *resource.Quantity) int {
 	return cost1.Cmp(*cost2)
+}
+
+// tierToNumeric maps a cost tier string to a numeric value for comparison.
+func tierToNumeric(tier string) int64 {
+	switch strings.ToLower(tier) {
+	case "low":
+		return 1
+	case "medium":
+		return 2
+	case "high":
+		return 3
+	default:
+		return 2 // default medium
+	}
 }
 
 // candidateMaxValues holds the maximum values across all candidates for normalization
