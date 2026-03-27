@@ -766,6 +766,10 @@ gpt-realtime:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+gpt-realtime-mini:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 sora-2-pro:
   enabled: false
   lifecyclePhase: "ACTIVE"
@@ -1002,6 +1006,10 @@ grok-2-image:
   lifecyclePhase: "ACTIVE"
 
 grok-imagine-image:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-imagine-image-pro:
   enabled: false
   lifecyclePhase: "ACTIVE"
 

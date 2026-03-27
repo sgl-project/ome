@@ -28,6 +28,7 @@ spec:
   modelArchitecture: xAiForCausalLM
   modelParameterSize: 1.7T
   modelCapabilities:
-    - "CHAT"
+    - "AUDIO_TO_AUDIO"
+    - "REALTIME"
   maxTokens: 256000
   {{- end }}
