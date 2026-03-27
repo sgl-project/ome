@@ -360,32 +360,32 @@ func TestServingRuntimeSpec_SupportsAcceleratorClass(t *testing.T) {
 			expected:         false,
 		},
 		{
-			name: "returns true when accelerator requirements is nil",
+			name: "returns false when accelerator requirements is nil",
 			spec: &ServingRuntimeSpec{
 				AcceleratorRequirements: nil,
 			},
 			acceleratorClass: "nvidia-a100",
-			expected:         true,
+			expected:         false,
 		},
 		{
-			name: "returns true when accelerator classes list is empty",
+			name: "returns false when accelerator classes list is empty",
 			spec: &ServingRuntimeSpec{
 				AcceleratorRequirements: &AcceleratorRequirements{
 					AcceleratorClasses: []string{},
 				},
 			},
 			acceleratorClass: "nvidia-a100",
-			expected:         true,
+			expected:         false,
 		},
 		{
-			name: "returns true when accelerator classes list is nil",
+			name: "returns false when accelerator classes list is nil",
 			spec: &ServingRuntimeSpec{
 				AcceleratorRequirements: &AcceleratorRequirements{
 					AcceleratorClasses: nil,
 				},
 			},
 			acceleratorClass: "nvidia-a100",
-			expected:         true,
+			expected:         false,
 		},
 	}
 

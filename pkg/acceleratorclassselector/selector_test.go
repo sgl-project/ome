@@ -301,6 +301,149 @@ func TestSelectCheapest_Integration(t *testing.T) {
 	}
 }
 
+// TestSelectCheapest_CostTypeGrouping tests that cost comparison groups same-unit costs together
+func TestSelectCheapest_CostTypeGrouping(t *testing.T) {
+	tests := []struct {
+		name         string
+		candidates   []v1beta1.AcceleratorClass
+		expectedName string
+		expectNil    bool
+		description  string
+	}{
+		{
+			name: "Mixed hourly types - spot vs on-demand same unit",
+			candidates: []v1beta1.AcceleratorClass{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "ac-a"},
+					Spec: v1beta1.AcceleratorClassSpec{
+						Cost: &v1beta1.AcceleratorCost{
+							SpotPerHour: resource.NewQuantity(5, resource.DecimalSI),
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "ac-b"},
+					Spec: v1beta1.AcceleratorClassSpec{
+						Cost: &v1beta1.AcceleratorCost{
+							PerHour: resource.NewQuantity(3, resource.DecimalSI),
+						},
+					},
+				},
+			},
+			expectedName: "ac-b",
+			description:  "B's on-demand $3 < A's spot $5, both in hourly group",
+		},
+		{
+			name: "Hourly vs token - hourly group takes priority",
+			candidates: []v1beta1.AcceleratorClass{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "ac-hourly"},
+					Spec: v1beta1.AcceleratorClassSpec{
+						Cost: &v1beta1.AcceleratorCost{
+							PerHour: resource.NewQuantity(10, resource.DecimalSI),
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "ac-token"},
+					Spec: v1beta1.AcceleratorClassSpec{
+						Cost: &v1beta1.AcceleratorCost{
+							PerMillionTokens: resource.NewQuantity(1, resource.DecimalSI),
+						},
+					},
+				},
+			},
+			expectedName: "ac-hourly",
+			description:  "Hourly group wins over token group even if token value is lower",
+		},
+		{
+			name: "Only token pricing",
+			candidates: []v1beta1.AcceleratorClass{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "ac-expensive-token"},
+					Spec: v1beta1.AcceleratorClassSpec{
+						Cost: &v1beta1.AcceleratorCost{
+							PerMillionTokens: resource.NewQuantity(50, resource.DecimalSI),
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "ac-cheap-token"},
+					Spec: v1beta1.AcceleratorClassSpec{
+						Cost: &v1beta1.AcceleratorCost{
+							PerMillionTokens: resource.NewQuantity(10, resource.DecimalSI),
+						},
+					},
+				},
+			},
+			expectedName: "ac-cheap-token",
+			description:  "When only token pricing exists, compare by tokens",
+		},
+		{
+			name: "Only tier pricing",
+			candidates: []v1beta1.AcceleratorClass{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "ac-high"},
+					Spec: v1beta1.AcceleratorClassSpec{
+						Cost: &v1beta1.AcceleratorCost{
+							Tier: "high",
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "ac-low"},
+					Spec: v1beta1.AcceleratorClassSpec{
+						Cost: &v1beta1.AcceleratorCost{
+							Tier: "low",
+						},
+					},
+				},
+			},
+			expectedName: "ac-low",
+			description:  "When only tier exists, pick lowest tier",
+		},
+		{
+			name: "No cost data at all",
+			candidates: []v1beta1.AcceleratorClass{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "ac-no-cost-1"},
+					Spec:       v1beta1.AcceleratorClassSpec{},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "ac-no-cost-2"},
+					Spec:       v1beta1.AcceleratorClassSpec{},
+				},
+			},
+			expectNil:   true,
+			description: "No cost data returns nil",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			selector := &defaultSelector{
+				config:  &Config{},
+				fetcher: newMockFetcher(),
+			}
+			ctx := context.Background()
+
+			selected := selector.selectCheapest(ctx, tt.candidates)
+
+			if tt.expectNil {
+				if selected != nil {
+					t.Errorf("%s: expected nil, got %s", tt.description, *selected)
+				}
+				return
+			}
+			if selected == nil {
+				t.Errorf("%s: selectCheapest() returned nil", tt.description)
+			} else if *selected != tt.expectedName {
+				t.Errorf("%s: selectCheapest() = %s, want %s", tt.description, *selected, tt.expectedName)
+			}
+		})
+	}
+}
+
 // TestSelectMostCapable_Integration tests MostCapable policy with realistic data
 func TestSelectMostCapable_Integration(t *testing.T) {
 	tests := []struct {

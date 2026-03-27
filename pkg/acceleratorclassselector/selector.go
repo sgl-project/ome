@@ -3,6 +3,8 @@ package acceleratorclassselector
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -310,47 +312,82 @@ func (s *defaultSelector) selectCheapest(ctx context.Context, validCandidates []
 		return &validCandidates[0].Name
 	}
 
-	// Extract costs and filter candidates with cost data
-	type candidateWithCost struct {
-		candidate v1beta1.AcceleratorClass
-		cost      *v1beta1.AcceleratorCost
-		costValue string
-	}
-
-	candidatesWithCost := make([]candidateWithCost, 0, len(validCandidates))
+	// Filter candidates with cost data
+	withCost := make([]v1beta1.AcceleratorClass, 0, len(validCandidates))
 	for _, candidate := range validCandidates {
-		cost, costType, err := getCandidateCost(candidate)
-		if err != nil {
-			logger.V(1).Info("Skipping candidate without cost data", "name", candidate.Name, "error", err.Error())
-			continue
+		if candidate.Spec.Cost != nil {
+			withCost = append(withCost, candidate)
+		} else {
+			logger.V(1).Info("Skipping candidate without cost data", "name", candidate.Name)
 		}
-		candidatesWithCost = append(candidatesWithCost, candidateWithCost{
-			candidate: candidate,
-			cost:      candidate.Spec.Cost,
-			costValue: costType,
-		})
-		logger.V(1).Info("Candidate cost", "name", candidate.Name, "costType", costType, "cost", cost.String())
 	}
 
-	if len(candidatesWithCost) == 0 {
+	if len(withCost) == 0 {
 		logger.Error(nil, "No cost data available for any candidate")
 		return nil
 	}
 
-	// Find cheapest candidate
-	cheapest := candidatesWithCost[0]
-	cheapestCost, _, _ := getCandidateCost(cheapest.candidate)
-	for i := 1; i < len(candidatesWithCost); i++ {
-		candidate := candidatesWithCost[i]
-		candidateCost, _, _ := getCandidateCost(candidate.candidate)
-		if compareCosts(candidateCost, cheapestCost) < 0 {
-			cheapest = candidate
-			cheapestCost = candidateCost
+	// Group 1: Hourly pricing (SpotPerHour or PerHour — same unit $/hour)
+	var cheapest *v1beta1.AcceleratorClass
+	var cheapestCost *resource.Quantity
+	for i := range withCost {
+		c := &withCost[i]
+		var cost *resource.Quantity
+		if c.Spec.Cost.SpotPerHour != nil {
+			cost = c.Spec.Cost.SpotPerHour
+		} else if c.Spec.Cost.PerHour != nil {
+			cost = c.Spec.Cost.PerHour
+		}
+		if cost == nil {
+			continue
+		}
+		if cheapest == nil || compareCosts(cost, cheapestCost) < 0 {
+			cheapest = c
+			cheapestCost = cost
 		}
 	}
+	if cheapest != nil {
+		logger.Info("Cheapest selected", "name", cheapest.Name, "costType", "hourly")
+		return &cheapest.Name
+	}
 
-	logger.Info("Cheapest selected", "name", cheapest.candidate.Name, "costType", cheapest.costValue)
-	return &cheapest.candidate.Name
+	// Group 2: Token-based pricing ($/million tokens)
+	for i := range withCost {
+		c := &withCost[i]
+		cost := c.Spec.Cost.PerMillionTokens
+		if cost == nil {
+			continue
+		}
+		if cheapest == nil || compareCosts(cost, cheapestCost) < 0 {
+			cheapest = c
+			cheapestCost = cost
+		}
+	}
+	if cheapest != nil {
+		logger.Info("Cheapest selected", "name", cheapest.Name, "costType", "per-million-tokens")
+		return &cheapest.Name
+	}
+
+	// Group 3: Tier fallback (low=1, medium=2, high=3)
+	var cheapestTier int64
+	for i := range withCost {
+		c := &withCost[i]
+		if c.Spec.Cost.Tier == "" {
+			continue
+		}
+		tierVal := tierToNumeric(c.Spec.Cost.Tier)
+		if cheapest == nil || tierVal < cheapestTier {
+			cheapest = c
+			cheapestTier = tierVal
+		}
+	}
+	if cheapest != nil {
+		logger.Info("Cheapest selected", "name", cheapest.Name, "costType", "tier")
+		return &cheapest.Name
+	}
+
+	logger.Error(nil, "No usable cost fields found for any candidate")
+	return nil
 }
 
 // selectMostCapable selects the most powerful accelerator based on performance metrics
