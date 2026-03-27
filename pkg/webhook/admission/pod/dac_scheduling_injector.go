@@ -16,8 +16,8 @@ import (
 var (
 	// Supported DAC profile patterns for AcceleratorClass mapping
 	// Format: GPU_TYPE[-MEMORY]-x<count>
-	// Examples: a10-x1, a100-40g-x2, H100-x4
-	acSupportedDACProfilePattern = regexp.MustCompile(`^(a10|a100-40g|a100-80g|h100|h200)-x([1248])$`)
+	// Examples: a10-x1, a100-40g-x2, H100-x4, b200-x1
+	acSupportedDACProfilePattern = regexp.MustCompile(`^(a10|a100-40g|a100-80g|h100|h200|b200)-x([1248])$`)
 )
 
 type DedicatedAIClusterSchedulingInjector struct {

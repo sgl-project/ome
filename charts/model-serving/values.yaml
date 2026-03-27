@@ -215,6 +215,10 @@ cohere:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.7.6-02132025"
 
+  rerankv3_5_2Image:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.11.1-01222026"
+
   rerankv4_0_fastImage:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.11.0-12302025"
@@ -242,6 +246,10 @@ cohere:
   commandAVisionImage:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.10.7-07312025"
+
+  commandAVisionB200Image:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.12.1-03022026"
 
   commandAReasoningImage:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all

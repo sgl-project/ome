@@ -69,7 +69,11 @@ spec:
         medium: Memory
   containers:
     - name: ome-container
-      image: "{{ .Values.cohere.commandAVisionImage.repository }}:{{ .Values.cohere.commandAVisionImage.tag }}"
+      image: "{{- if eq .Values.oci.region "me-abudhabi-1" -}}
+        {{ .Values.cohere.commandAVisionB200Image.repository }}:{{ .Values.cohere.commandAVisionB200Image.tag }}
+        {{- else -}}
+        {{ .Values.cohere.commandAVisionImage.repository }}:{{ .Values.cohere.commandAVisionImage.tag }}
+        {{- end }}"
       ports:
         - containerPort: 8080
           name: http1
@@ -151,7 +155,11 @@ spec:
       {{- end }}
     runner:
       name: ome-container
-      image: "{{ .Values.cohere.commandAVisionImage.repository }}:{{ .Values.cohere.commandAVisionImage.tag }}"
+      image: "{{- if eq .Values.oci.region "me-abudhabi-1" -}}
+        {{ .Values.cohere.commandAVisionB200Image.repository }}:{{ .Values.cohere.commandAVisionB200Image.tag }}
+        {{- else -}}
+        {{ .Values.cohere.commandAVisionImage.repository }}:{{ .Values.cohere.commandAVisionImage.tag }}
+        {{- end }}"
       ports:
         - containerPort: 8080
           name: http1

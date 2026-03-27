@@ -9,7 +9,11 @@ metadata:
     genai-model-dedicated-retired-date: "{{ index .Values "llama-3-1-8b-instruct" "timeDedicatedRetired" }}"
   annotations:
     # TODO clean up annotations after migration, which is used in MP
+    {{- if index .Values "llama-3-1-8b-instruct" "isB200Only" }}
+    models.ome.io/runtime: "srt-llama-3-1-8b-instruct"
+    {{- else }}
     models.ome.io/runtime: "vllm-llama-3-1-8b-instruct"
+    {{- end }}
     models.ome.io/category: "SMALL"
     models.ome.io/experimental: "{{ index .Values "llama-3-1-8b-instruct" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "llama-3-1-8b-instruct" "isInternal" }}"

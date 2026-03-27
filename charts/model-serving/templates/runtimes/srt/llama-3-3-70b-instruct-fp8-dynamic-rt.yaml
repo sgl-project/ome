@@ -3,6 +3,9 @@ kind: ClusterServingRuntime
 metadata:
   name: srt-llama-3-3-70b-instruct-fp8-dynamic
 spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-b200-2
   disabled: false
   {{- if or .Values.commonAnnotations .Values.llama_3_3_70b_instruct_fp8_dynamic.annotations }}
   annotations:
@@ -56,6 +59,12 @@ spec:
       autoSelect: true
       priority: 1
       version: "1.0.0"
+      acceleratorConfig:
+        nvidia-b200-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+          runtimeArgsOverride:
+            - --attention-backend=trtllm_mha
   modelSizeRange:
     min: 60B
     max: 75B

@@ -1,18 +1,18 @@
 apiVersion: ome.io/v1beta1
 kind: DedicatedAIClusterProfile
 metadata:
-  name: xsmall-b200
+  name: b200-x4
 spec:
   count: 1
   resources:
     limits:
-      cpu: 20
-      memory: 440Gi
-      nvidia.com/gpu: 1
+      cpu: 80
+      memory: 1760Gi
+      nvidia.com/gpu: 4
     requests:
-      cpu: 20
-      memory: 440Gi
-      nvidia.com/gpu: 1
+      cpu: 80
+      memory: 1760Gi
+      nvidia.com/gpu: 4
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

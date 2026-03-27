@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: DedicatedAIClusterProfile
 metadata:
-  name: xsmall-b200
+  name: b200-x1
 spec:
   count: 1
   resources:

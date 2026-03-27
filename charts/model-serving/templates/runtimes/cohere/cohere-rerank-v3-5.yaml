@@ -90,7 +90,11 @@ spec:
     {{- end }}
   containers:
     - name: ome-container
-      image: "{{ .Values.cohere.embedv3Image.repository }}:{{ .Values.cohere.rerankv3_5Image.tag }}"
+      image: "{{- if eq .Values.oci.region "me-abudhabi-1" -}}
+        {{ .Values.cohere.rerankv3_5_2Image.repository }}:{{ .Values.cohere.rerankv3_5_2Image.tag }}
+        {{- else -}}
+        {{ .Values.cohere.embedv3Image.repository }}:{{ .Values.cohere.rerankv3_5Image.tag }}
+        {{- end }}"
       ports:
         - containerPort: 8080
           name: http1
@@ -101,10 +105,14 @@ spec:
           cpu: 4
           memory: 120Gi
           nvidia.com/gpu: "1"
+      {{- $modelPath := "/opt/ml/model/python" }}
+      {{- if eq .Values.oci.region "me-abudhabi-1" }}
+      {{- $modelPath = "/opt/ml/model" }}
+      {{- end }}
       volumeMounts:
         - mountPath: /dev/shm
           name: shared-memory
-        - mountPath: /opt/ml/model/python
+        - mountPath: {{ $modelPath }}
           name: model-empty-dir
       readinessProbe:
         {{- toYaml .Values.cohere.readinessProbe | nindent 8 }}
@@ -193,7 +201,11 @@ spec:
       {{- end }}
     runner:
       name: ome-container
-      image: "{{ .Values.cohere.embedv3Image.repository }}:{{ .Values.cohere.rerankv3_5Image.tag }}"
+      image: "{{- if eq .Values.oci.region "me-abudhabi-1" -}}
+        {{ .Values.cohere.rerankv3_5_2Image.repository }}:{{ .Values.cohere.rerankv3_5_2Image.tag }}
+        {{- else -}}
+        {{ .Values.cohere.embedv3Image.repository }}:{{ .Values.cohere.rerankv3_5Image.tag }}
+        {{- end }}"
       ports:
         - containerPort: 8080
           name: http1
@@ -204,10 +216,14 @@ spec:
           cpu: 4
           memory: 120Gi
           nvidia.com/gpu: "1"
+      {{- $modelPath := "/opt/ml/model/python" }}
+      {{- if eq .Values.oci.region "me-abudhabi-1" }}
+      {{- $modelPath = "/opt/ml/model" }}
+      {{- end }}
       volumeMounts:
         - mountPath: /dev/shm
           name: shared-memory
-        - mountPath: /opt/ml/model/python
+        - mountPath: {{ $modelPath }}
           name: model-empty-dir
         {{- if .Values.cohere.blocklistOverride.enabled }}
         {{- toYaml .Values.cohere.blocklistOverride.volumeMounts | nindent 8 }}

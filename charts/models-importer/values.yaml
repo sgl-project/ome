@@ -445,6 +445,10 @@ cohere-rerank-v3-5:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+cohere-rerank-v3-5-2:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 cohere-rerank-v4-0-pro:
   enabled: false
   lifecyclePhase: "ACTIVE"

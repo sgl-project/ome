@@ -23,7 +23,7 @@ var (
 	// Supported DAC profile patterns for AcceleratorClass mapping
 	// Format: GPU_TYPE[-MEMORY]-x<count>
 	// Examples: a10-x1, a100-40g-x2, H100-x4
-	supportedDACProfilePattern = regexp.MustCompile(`^(a10|a100-40g|a100-80g|h100|h200)-x([1248])$`)
+	supportedDACProfilePattern = regexp.MustCompile(`^(a10|a100-40g|a100-80g|h100|h200|b200)-x([1248])$`)
 )
 
 // InferenceServiceACMutator is responsible for setting AcceleratorSelector.AcceleratorClass
@@ -110,13 +110,18 @@ func (m *InferenceServiceACMutator) Handle(ctx context.Context, req admission.Re
 //   - a100-80g-x4 -> nvidia-a100-80gb-4
 //   - h100-x1     -> nvidia-h100-1
 //   - h200-x8     -> nvidia-h200-8
+//   - b200-x1     -> nvidia-b200-1
+//   - b200-x2     -> nvidia-b200-2
+//   - b200-x4     -> nvidia-b200-4
+//   - b200-x8     -> nvidia-b200-8
 func mapDACProfileToAcceleratorClass(profileName string) string {
+
 	matches := supportedDACProfilePattern.FindStringSubmatch(profileName)
 	if matches == nil {
 		return ""
 	}
 
-	gpuType := matches[1] // e.g., "a10", "a100-40G", "h100"
+	gpuType := matches[1] // e.g., "a10", "a100-40g", "h100"
 	count := matches[2]   // e.g., "1", "2", "4", "8"
 
 	// Normalize GPU type to AcceleratorClass format
@@ -132,6 +137,8 @@ func mapDACProfileToAcceleratorClass(profileName string) string {
 		acName = "nvidia-h100-" + count
 	case "h200":
 		acName = "nvidia-h200-" + count
+	case "b200":
+		acName = "nvidia-b200-" + count
 	default:
 		return ""
 	}
@@ -172,5 +179,6 @@ func GetSupportedDACProfiles() []string {
 		"a100-80g-x1", "a100-80g-x2", "a100-80g-x4", "a100-80g-x8",
 		"h100-x1", "h100-x2", "h100-x4", "h100-x8",
 		"h200-x1", "h200-x2", "h200-x4", "h200-x8",
+		"b200-x1", "b200-x2", "b200-x4", "b200-x8",
 	}
 }

@@ -53,7 +53,7 @@ spec:
   additionalMetadata:
     {{/* this model will use LARGE_GENERIC only in regions with no H100, both LARGE_GENERIC and LARGE_GENERIC_V2 in other regions*/}}
     {{- $cfg := default "LARGE_GENERIC" (index .Values "llama-3-3-70b-instruct-fp8-dynamic" "compatibleDACShapes") -}}
-    {{- if index .Values "llama-3-3-70b-instruct-fp8-dynamic" "isA100Only" -}}
+    {{- if or (index .Values "llama-3-3-70b-instruct-fp8-dynamic" "isA100Only") (index .Values "llama-3-3-70b-instruct-fp8-dynamic" "isB200Only") -}}
     dacShapeConfigs: |-
       compatibleDACShapes:
         - name: {{ $cfg }}
