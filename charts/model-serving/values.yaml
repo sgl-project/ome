@@ -2687,8 +2687,12 @@ qwen_3_235b_a22b_instruct:
   maxReplicas: 1
   scaleMetric: {}
   image:
-    repository:
-    tag:
+    vllm:
+      repository:
+      tag:
+    srt:
+      repository:
+      tag:
 
 qwen_3_30b_a3b_instruct:
   enabled: false
