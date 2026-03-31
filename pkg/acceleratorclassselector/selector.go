@@ -312,76 +312,49 @@ func (s *defaultSelector) selectCheapest(ctx context.Context, validCandidates []
 		return &validCandidates[0].Name
 	}
 
-	// Filter candidates with cost data
-	withCost := make([]v1beta1.AcceleratorClass, 0, len(validCandidates))
-	for _, candidate := range validCandidates {
-		if candidate.Spec.Cost != nil {
-			withCost = append(withCost, candidate)
-		} else {
-			logger.V(1).Info("Skipping candidate without cost data", "name", candidate.Name)
-		}
-	}
-
-	if len(withCost) == 0 {
-		logger.Error(nil, "No cost data available for any candidate")
-		return nil
-	}
-
-	// Group 1: Hourly pricing (SpotPerHour or PerHour — same unit $/hour)
-	var cheapest *v1beta1.AcceleratorClass
-	var cheapestCost *resource.Quantity
-	for i := range withCost {
-		c := &withCost[i]
-		var cost *resource.Quantity
-		if c.Spec.Cost.SpotPerHour != nil {
-			cost = c.Spec.Cost.SpotPerHour
-		} else if c.Spec.Cost.PerHour != nil {
-			cost = c.Spec.Cost.PerHour
-		}
-		if cost == nil {
+	// Single pass: categorize candidates into cost groups
+	var hourlyCandidates, tokenCandidates, tierCandidates []v1beta1.AcceleratorClass
+	for _, c := range validCandidates {
+		if c.Spec.Cost == nil {
+			logger.V(1).Info("Skipping candidate without cost data", "name", c.Name)
 			continue
 		}
-		if cheapest == nil || compareCosts(cost, cheapestCost) < 0 {
-			cheapest = c
-			cheapestCost = cost
+		if c.Spec.Cost.SpotPerHour != nil || c.Spec.Cost.PerHour != nil {
+			hourlyCandidates = append(hourlyCandidates, c)
+		}
+		if c.Spec.Cost.PerMillionTokens != nil {
+			tokenCandidates = append(tokenCandidates, c)
+		}
+		if c.Spec.Cost.Tier != "" {
+			tierCandidates = append(tierCandidates, c)
 		}
 	}
-	if cheapest != nil {
+
+	// Select cheapest from the highest-priority non-empty group
+	if len(hourlyCandidates) > 0 {
+		cheapest := findCheapestByCost(hourlyCandidates, getHourlyCost)
 		logger.Info("Cheapest selected", "name", cheapest.Name, "costType", "hourly")
 		return &cheapest.Name
 	}
 
-	// Group 2: Token-based pricing ($/million tokens)
-	for i := range withCost {
-		c := &withCost[i]
-		cost := c.Spec.Cost.PerMillionTokens
-		if cost == nil {
-			continue
-		}
-		if cheapest == nil || compareCosts(cost, cheapestCost) < 0 {
-			cheapest = c
-			cheapestCost = cost
-		}
-	}
-	if cheapest != nil {
+	if len(tokenCandidates) > 0 {
+		cheapest := findCheapestByCost(tokenCandidates, func(c v1beta1.AcceleratorClass) *resource.Quantity {
+			return c.Spec.Cost.PerMillionTokens
+		})
 		logger.Info("Cheapest selected", "name", cheapest.Name, "costType", "per-million-tokens")
 		return &cheapest.Name
 	}
 
-	// Group 3: Tier fallback (low=1, medium=2, high=3)
-	var cheapestTier int64
-	for i := range withCost {
-		c := &withCost[i]
-		if c.Spec.Cost.Tier == "" {
-			continue
+	if len(tierCandidates) > 0 {
+		cheapest := tierCandidates[0]
+		cheapestTier := tierToNumeric(cheapest.Spec.Cost.Tier)
+		for _, c := range tierCandidates[1:] {
+			tierVal := tierToNumeric(c.Spec.Cost.Tier)
+			if tierVal < cheapestTier {
+				cheapest = c
+				cheapestTier = tierVal
+			}
 		}
-		tierVal := tierToNumeric(c.Spec.Cost.Tier)
-		if cheapest == nil || tierVal < cheapestTier {
-			cheapest = c
-			cheapestTier = tierVal
-		}
-	}
-	if cheapest != nil {
 		logger.Info("Cheapest selected", "name", cheapest.Name, "costType", "tier")
 		return &cheapest.Name
 	}

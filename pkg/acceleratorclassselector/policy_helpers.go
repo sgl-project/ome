@@ -316,9 +316,31 @@ func calculateComputePerformanceTFLOPSScore(
 	return 0.0
 }
 
+// getHourlyCost returns SpotPerHour if available, otherwise PerHour.
+func getHourlyCost(candidate v1beta1.AcceleratorClass) *resource.Quantity {
+	if candidate.Spec.Cost.SpotPerHour != nil {
+		return candidate.Spec.Cost.SpotPerHour
+	}
+	return candidate.Spec.Cost.PerHour
+}
+
 // compareCosts returns -1 if cost1 < cost2, 0 if equal, 1 if cost1 > cost2
 func compareCosts(cost1, cost2 *resource.Quantity) int {
 	return cost1.Cmp(*cost2)
+}
+
+// findCheapestByCost returns the candidate with the lowest cost extracted by costFn.
+func findCheapestByCost(candidates []v1beta1.AcceleratorClass, costFn func(v1beta1.AcceleratorClass) *resource.Quantity) v1beta1.AcceleratorClass {
+	cheapest := candidates[0]
+	cheapestCost := costFn(cheapest)
+	for _, c := range candidates[1:] {
+		cost := costFn(c)
+		if compareCosts(cost, cheapestCost) < 0 {
+			cheapest = c
+			cheapestCost = cost
+		}
+	}
+	return cheapest
 }
 
 // tierToNumeric maps a cost tier string to a numeric value for comparison.
