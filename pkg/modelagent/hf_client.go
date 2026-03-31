@@ -50,7 +50,12 @@ var (
 
 // FetchAttributeFromHfModelMetaData retrieves a single top-level attribute from the Hugging Face model metadata endpoint for the provided modelId.
 func FetchAttributeFromHfModelMetaData(ctx context.Context, modelId string, attribute string) (interface{}, error) {
-	modelMetaDataUrl, err := hfModelMetaDataUrl(modelId)
+	return fetchAttributeFromHfModelMetaDataWithEndpoint(ctx, modelId, attribute, DefaultEndpoint)
+}
+
+// fetchAttributeFromHfModelMetaDataWithEndpoint is the internal implementation that accepts a configurable base endpoint.
+func fetchAttributeFromHfModelMetaDataWithEndpoint(ctx context.Context, modelId string, attribute string, endpoint string) (interface{}, error) {
+	modelMetaDataUrl, err := hfModelMetaDataUrlWithEndpoint(modelId, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build model metadata URL: %s", err)
 	}
@@ -253,6 +258,10 @@ func GetHTTPClient() *http.Client {
 // Resulting URL format:
 // {https://huggingface.co/api/models/{modelId}
 func hfModelMetaDataUrl(modelId string) (string, error) {
+	return hfModelMetaDataUrlWithEndpoint(modelId, DefaultEndpoint)
+}
+
+func hfModelMetaDataUrlWithEndpoint(modelId string, endpoint string) (string, error) {
 	if modelId == "" {
 		return "", fmt.Errorf("no model name has been specified")
 	}
@@ -262,6 +271,6 @@ func hfModelMetaDataUrl(modelId string) (string, error) {
 		return "", fmt.Errorf("invalid model name %q: expected format <namespace>/<model>", modelId)
 	}
 
-	baseUrl := fmt.Sprintf("%s/%s", DefaultEndpoint, HfAPI)
+	baseUrl := fmt.Sprintf("%s/%s", endpoint, HfAPI)
 	return fmt.Sprintf("%s/models/%s", baseUrl, modelId), nil
 }

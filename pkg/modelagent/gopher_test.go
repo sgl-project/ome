@@ -7,14 +7,11 @@ import (
 	"fmt"
 	"testing"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	"go.uber.org/zap/zaptest"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
@@ -1293,60 +1290,6 @@ func TestRemoveChildPathFromParentConfigMapIfNecessary_ErrorWhenParentMissing_No
 	}, "method should not panic when reconciler returns error")
 
 	assert.Equal(t, 0, countConfigMapUpdates(client), "no ConfigMap update should occur when parent key missing")
-}
-
-// Mocks specialized for isRemoveParentArtifactDirectory tests
-type testBaseModelNamespaceLister struct {
-	models map[string]*v1beta1.BaseModel
-}
-
-func (l testBaseModelNamespaceLister) List(selector labels.Selector) ([]*v1beta1.BaseModel, error) {
-	out := make([]*v1beta1.BaseModel, 0, len(l.models))
-	for _, m := range l.models {
-		out = append(out, m)
-	}
-	return out, nil
-}
-
-func (l testBaseModelNamespaceLister) Get(name string) (*v1beta1.BaseModel, error) {
-	if m, ok := l.models[name]; ok {
-		return m, nil
-	}
-	return nil, apierrors.NewNotFound(schema.GroupResource{Group: "ome.io", Resource: "basemodels"}, name)
-}
-
-type testBaseModelLister struct {
-	byNS map[string]testBaseModelNamespaceLister
-}
-
-func (l testBaseModelLister) List(selector labels.Selector) ([]*v1beta1.BaseModel, error) {
-	return nil, nil
-}
-
-func (l testBaseModelLister) BaseModels(namespace string) omev1beta1lister.BaseModelNamespaceLister {
-	if ns, ok := l.byNS[namespace]; ok {
-		return ns
-	}
-	return testBaseModelNamespaceLister{models: map[string]*v1beta1.BaseModel{}}
-}
-
-type testClusterBaseModelLister struct {
-	models map[string]*v1beta1.ClusterBaseModel
-}
-
-func (l testClusterBaseModelLister) List(selector labels.Selector) ([]*v1beta1.ClusterBaseModel, error) {
-	out := make([]*v1beta1.ClusterBaseModel, 0, len(l.models))
-	for _, m := range l.models {
-		out = append(out, m)
-	}
-	return out, nil
-}
-
-func (l testClusterBaseModelLister) Get(name string) (*v1beta1.ClusterBaseModel, error) {
-	if m, ok := l.models[name]; ok {
-		return m, nil
-	}
-	return nil, apierrors.NewNotFound(schema.GroupResource{Group: "ome.io", Resource: "clusterbasemodels"}, name)
 }
 
 func TestIsRemoveParentArtifactDirectory_HasChildren_False(t *testing.T) {

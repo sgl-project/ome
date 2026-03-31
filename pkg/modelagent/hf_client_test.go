@@ -47,24 +47,23 @@ func TestFetchAttributeFromHfModelMetaData(t *testing.T) {
 			statusCode:    404,
 			wantErr:       true,
 			expectedValue: "",
-			errMessageStr: "failed to invoke HuggingFace endpoint https://huggingface.co/api/models/deepseek-ai/DeepSeek-V3-unknown: response status code",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if !tt.wantErr || tt.statusCode > 0 {
-				server := createMockHfMetaDataServer(tt.statusCode, tt.attribute, tt.modelId)
-				defer server.Close()
-			}
+			server := createMockHfMetaDataServer(tt.statusCode, tt.attribute, tt.modelId)
+			defer server.Close()
 
 			ctx := context.Background()
 
-			value, err := FetchAttributeFromHfModelMetaData(ctx, tt.modelId, tt.attribute)
+			value, err := fetchAttributeFromHfModelMetaDataWithEndpoint(ctx, tt.modelId, tt.attribute, server.URL)
 
 			if tt.wantErr {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errMessageStr)
+				if tt.errMessageStr != "" {
+					assert.Contains(t, err.Error(), tt.errMessageStr)
+				}
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, tt.expectedValue, value)
@@ -79,20 +78,25 @@ func createMockHfMetaDataServer(statusCode int, attribute string, modelId string
 			if statusCode == 200 {
 				if modelId == "deepseek-ai/DeepSeek-V3" {
 					if attribute == "sha" {
-						var data map[string]interface{}
-						data[attribute] = "e815299b0bcbac849fa540c768ef21845365c9eb"
+						data := map[string]interface{}{
+							attribute: "e815299b0bcbac849fa540c768ef21845365c9eb",
+						}
 						bytes, _ := json.Marshal(data)
 						writer.Write(bytes)
 					} else {
-						writer.Write(make([]byte, 100))
+						// Return valid JSON without the requested attribute
+						data := map[string]interface{}{
+							"sha": "e815299b0bcbac849fa540c768ef21845365c9eb",
+						}
+						bytes, _ := json.Marshal(data)
+						writer.Write(bytes)
 					}
-
 				}
-			} else if statusCode == 404 {
+			} else {
+				writer.WriteHeader(statusCode)
 				writer.Write([]byte("Repository not found"))
 			}
 		}
-
 	}))
 
 }

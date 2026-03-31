@@ -1189,13 +1189,13 @@ func (s *Gopher) handelReuseArtifactIfNecessary(ctx context.Context, baseModelSp
 		var err error
 		// prioritize searching parent path in ClusterBaseModel
 		// with hoping different basemodel in different namespaces could be linked to the same parent path to lower the chance of downloading artifact
-		if strings.ToLower(modelType) == strings.ToLower(constants.ClusterBaseModel) || strings.ToLower(modelType) == strings.ToLower(constants.BaseModel) {
+		if strings.EqualFold(modelType, constants.ClusterBaseModel) || strings.EqualFold(modelType, constants.BaseModel) {
 			matchedModelTypeAndModelName, matchedParentPath, err = s.configMapReconciler.getModelDataByArtifactSha(ctx, shaStr, constants.LowerCaseClusterBaseModel, currentModelTypeAndNodeName)
 			if err != nil {
 				s.logger.Warnf("get error when finding matched model in configmap for model : %s: %s", modelName, err)
 			}
 		}
-		if strings.ToLower(modelType) == strings.ToLower(constants.BaseModel) && matchedModelTypeAndModelName == "" {
+		if strings.EqualFold(modelType, constants.BaseModel) && matchedModelTypeAndModelName == "" {
 			// build namespaced model type
 			namespacedModelType := fmt.Sprintf("%s.%s", namespace, constants.LowerCaseBaseModel)
 			matchedModelTypeAndModelName, matchedParentPath, err = s.configMapReconciler.getModelDataByArtifactSha(ctx, shaStr, namespacedModelType, currentModelTypeAndNodeName)
@@ -1412,7 +1412,7 @@ Parameters:
 */
 func (s *Gopher) removeChildPathFromParentConfigMapIfNecessary(ctx context.Context, hasChildren bool, parentName string, modelTypeAndModelName string, destPath string) {
 	// if it does not have child, and its parent is not itself, need to remove the path from parent entry
-	if !hasChildren && strings.ToLower(parentName) != strings.ToLower(modelTypeAndModelName) {
+	if !hasChildren && !strings.EqualFold(parentName, modelTypeAndModelName) {
 		err := s.configMapReconciler.updateConfigMapWithRemovedChildPath(ctx, parentName, destPath)
 		if err != nil {
 			s.logger.Errorf("failed to remove model %s child path %s from parentName %s", modelTypeAndModelName, destPath, parentName)

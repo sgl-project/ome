@@ -1023,7 +1023,7 @@ func (c *ConfigMapReconciler) FindMatchedModelFromConfigMap(configMap *corev1.Co
 				searchingError = fmt.Errorf("parentPath value for %q is not a string", k)
 				continue
 			}
-			if strings.ToLower(k) == strings.ToLower(currentModelTypeAndNodeName) {
+			if strings.EqualFold(k, currentModelTypeAndNodeName) {
 				continue
 			}
 
