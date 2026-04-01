@@ -204,8 +204,15 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 		return
 	}
 
-	// Add preferred node affinity for model readiness using the shared utility function
-	isvcutils.AddNodeSelectorForModelReadyNode(podSpec, b.BaseModelMeta)
+	// Optional: omit models.ome.io/...=Ready so autoscalers can provision GPU nodes before the
+	// model-agent labels them (see SkipModelReadyNodeSelectorAnnotationKey).
+	if isvcutils.IsSkipModelReadyNodeSelector(isvc.Annotations) {
+		b.Log.Info("Skipping model-ready nodeSelector per InferenceService annotation",
+			"annotation", constants.SkipModelReadyNodeSelectorAnnotationKey,
+			"inferenceService", isvc.Name, "namespace", isvc.Namespace)
+	} else {
+		isvcutils.AddNodeSelectorForModelReadyNode(podSpec, b.BaseModelMeta)
+	}
 
 	// Add node selector merged from AcceleratorClass if applicable
 	// Only add mergedNodeSelector to engine and decoder component.
@@ -219,7 +226,7 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 		}
 	}
 
-	b.Log.Info("Added preferred node affinity for model scheduling",
+	b.Log.Info("Updated pod nodeSelector for model scheduling",
 		"modelName", b.BaseModelMeta.Name,
 		"namespace", b.BaseModelMeta.Namespace,
 		"inferenceService", isvc.Name)
