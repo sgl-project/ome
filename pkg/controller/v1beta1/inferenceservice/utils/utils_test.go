@@ -1870,6 +1870,25 @@ func TestGetTargetServicePort_ServiceNameResolution(t *testing.T) {
 	}
 }
 
+func TestIsSkipModelReadyNodeSelector(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotations map[string]string
+		want        bool
+	}{
+		{name: "nil annotations", annotations: nil, want: false},
+		{name: "empty annotations", annotations: map[string]string{}, want: false},
+		{name: "true", annotations: map[string]string{constants.SkipModelReadyNodeSelectorAnnotationKey: "true"}, want: true},
+		{name: "false is not skip", annotations: map[string]string{constants.SkipModelReadyNodeSelectorAnnotationKey: "false"}, want: false},
+		{name: "other value is not skip", annotations: map[string]string{constants.SkipModelReadyNodeSelectorAnnotationKey: "yes"}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsSkipModelReadyNodeSelector(tt.annotations))
+		})
+	}
+}
+
 func TestAddNodeSelectorForReadyModel(t *testing.T) {
 	tests := []struct {
 		name             string
