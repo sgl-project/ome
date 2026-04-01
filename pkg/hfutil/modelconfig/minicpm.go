@@ -95,11 +95,6 @@ func (c *MiniCPMConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), c.TorchDtype)
 }
 
-// GetQuantizationType returns the quantization method used (if any)
-func (c *MiniCPMConfig) GetQuantizationType() string {
-	return "" // No quantization by default
-}
-
 // HasVision returns false for base MiniCPM models
 func (c *MiniCPMConfig) HasVision() bool {
 	return false

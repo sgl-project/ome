@@ -171,11 +171,6 @@ func (c *DeepSeekVLConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), dtype)
 }
 
-// GetQuantizationType returns the quantization method used (if any)
-func (c *DeepSeekVLConfig) GetQuantizationType() string {
-	return "" // No quantization by default
-}
-
 // HasVision returns true for DeepSeek VL models
 func (c *DeepSeekVLConfig) HasVision() bool {
 	return true

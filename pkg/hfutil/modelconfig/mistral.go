@@ -108,11 +108,6 @@ func (c *MistralConfig) GetTransformerVersion() string {
 	return c.TransformerVersion
 }
 
-func (c *MistralConfig) GetQuantizationType() string {
-	// Mistral doesn't have quantization in this config
-	return ""
-}
-
 func (c *MistralConfig) GetArchitecture() string {
 	if len(c.Architectures) > 0 {
 		return c.Architectures[0]

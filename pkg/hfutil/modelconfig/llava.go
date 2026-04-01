@@ -157,11 +157,6 @@ func (c *LLaVAConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), dtype)
 }
 
-// GetQuantizationType returns the quantization method used (if any)
-func (c *LLaVAConfig) GetQuantizationType() string {
-	return "" // No quantization by default
-}
-
 // HasVision returns true for LLaVA models
 func (c *LLaVAConfig) HasVision() bool {
 	return true

@@ -102,11 +102,6 @@ func (c *ExaoneConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), c.TorchDtype)
 }
 
-// GetQuantizationType returns the quantization method used (if any)
-func (c *ExaoneConfig) GetQuantizationType() string {
-	return "" // No quantization by default
-}
-
 // HasVision returns false for ExaONE base models
 func (c *ExaoneConfig) HasVision() bool {
 	return false

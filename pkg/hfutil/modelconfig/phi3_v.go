@@ -92,11 +92,6 @@ func (c *Phi3VConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), c.TorchDtype)
 }
 
-// GetQuantizationType returns the quantization method used (if any)
-func (c *Phi3VConfig) GetQuantizationType() string {
-	return "" // No quantization by default
-}
-
 // HasVision returns true since this is a multimodal vision model
 func (c *Phi3VConfig) HasVision() bool {
 	return c.ImgProcessor != nil

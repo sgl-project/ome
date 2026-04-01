@@ -16,9 +16,6 @@ type Qwen3VLConfig struct {
 	VisionConfig       Qwen3VLVisionConfig `json:"vision_config"`
 	VisionStartTokenId int                 `json:"vision_start_token_id"`
 	VisionEndTokenId   int                 `json:"vision_end_token_id"`
-
-	// Quantization
-	QuantizationConfig *QuantizationConfig `json:"quantization_config,omitempty"`
 }
 
 // Qwen3VLTextConfig represents the text transformer configuration.
@@ -145,14 +142,6 @@ func (c *Qwen3VLConfig) GetContextLength() int {
 // GetModelSizeBytes returns the estimated size of the model in bytes.
 func (c *Qwen3VLConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), c.TorchDtype)
-}
-
-// GetQuantizationType returns the quantization method used (if any).
-func (c *Qwen3VLConfig) GetQuantizationType() string {
-	if c.QuantizationConfig != nil && c.QuantizationConfig.QuantMethod != "" {
-		return c.QuantizationConfig.QuantMethod
-	}
-	return ""
 }
 
 // HasVision returns true for Qwen3-VL models.

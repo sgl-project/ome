@@ -89,11 +89,6 @@ func (c *InternLMConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), c.TorchDtype)
 }
 
-// GetQuantizationType returns the quantization method used (if any)
-func (c *InternLMConfig) GetQuantizationType() string {
-	return "" // No quantization by default
-}
-
 // HasVision returns false for InternLM base models
 func (c *InternLMConfig) HasVision() bool {
 	return false

@@ -60,9 +60,6 @@ type KimiK2Config struct {
 	// RoPE scaling (YARN type for Kimi-K2)
 	RopeScaling RopeScalingConfig `json:"rope_scaling"`
 
-	// Quantization settings
-	QuantizationConfig *QuantizationConfig `json:"quantization_config,omitempty"`
-
 	// Misc options
 	TieWordEmbeddings bool    `json:"tie_word_embeddings"`
 	UseCache          bool    `json:"use_cache"`
@@ -139,14 +136,6 @@ func (c *KimiK2Config) GetParameterCount() int64 {
 // GetTransformerVersion returns the transformers library version
 func (c *KimiK2Config) GetTransformerVersion() string {
 	return c.BaseModelConfig.TransformerVersion
-}
-
-// GetQuantizationType returns the quantization method used (if any)
-func (c *KimiK2Config) GetQuantizationType() string {
-	if c.QuantizationConfig != nil && c.QuantizationConfig.QuantMethod != "" {
-		return c.QuantizationConfig.QuantMethod
-	}
-	return ""
 }
 
 // GetArchitecture returns the model architecture

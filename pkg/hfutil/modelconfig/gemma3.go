@@ -133,11 +133,6 @@ func (c *Gemma3Config) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), c.TorchDtype)
 }
 
-// GetQuantizationType returns the quantization method used (if any)
-func (c *Gemma3Config) GetQuantizationType() string {
-	return "" // No quantization by default
-}
-
 // HasVision returns true since Gemma3 is a multimodal vision model
 func (c *Gemma3Config) HasVision() bool {
 	return true

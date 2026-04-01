@@ -86,11 +86,6 @@ func (c *XverseConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), c.TorchDtype)
 }
 
-// GetQuantizationType returns the quantization method used (if any)
-func (c *XverseConfig) GetQuantizationType() string {
-	return "" // No quantization by default
-}
-
 // HasVision returns false for XVERSE base models
 func (c *XverseConfig) HasVision() bool {
 	return false

@@ -100,11 +100,6 @@ func (c *CommandRConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), c.TorchDtype)
 }
 
-// GetQuantizationType returns the quantization method used (if any)
-func (c *CommandRConfig) GetQuantizationType() string {
-	return "" // No quantization by default
-}
-
 // HasVision returns false for Command-R base models
 func (c *CommandRConfig) HasVision() bool {
 	return false

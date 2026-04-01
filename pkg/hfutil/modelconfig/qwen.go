@@ -48,9 +48,6 @@ type QwenConfig struct {
 	FP32           bool   `json:"fp32"`
 	OnnxSafe       *bool  `json:"onnx_safe"`
 	TokenizerClass string `json:"tokenizer_class"`
-
-	// Quantization
-	QuantizationConfig *QuantizationConfig `json:"quantization_config,omitempty"`
 }
 
 // LoadQwenConfig loads a Qwen v1 model configuration from a JSON file
@@ -108,14 +105,6 @@ func (c *QwenConfig) GetContextLength() int {
 // GetModelSizeBytes returns the estimated size of the model in bytes
 func (c *QwenConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), c.TorchDtype)
-}
-
-// GetQuantizationType returns the quantization method used (if any)
-func (c *QwenConfig) GetQuantizationType() string {
-	if c.QuantizationConfig != nil && c.QuantizationConfig.QuantMethod != "" {
-		return c.QuantizationConfig.QuantMethod
-	}
-	return ""
 }
 
 // HasVision returns false for Qwen v1 base models

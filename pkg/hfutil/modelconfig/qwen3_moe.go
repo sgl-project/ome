@@ -59,9 +59,6 @@ type Qwen3MoeConfig struct {
 	// Misc options
 	TieWordEmbeddings bool `json:"tie_word_embeddings"`
 	UseCache          bool `json:"use_cache"`
-
-	// Quantization
-	QuantizationConfig *QuantizationConfig `json:"quantization_config,omitempty"`
 }
 
 // LoadQwen3MoeConfig loads a Qwen3Moe model configuration from a JSON file
@@ -104,14 +101,6 @@ func (c *Qwen3MoeConfig) GetContextLength() int {
 // GetModelSizeBytes returns the estimated size of the model in bytes
 func (c *Qwen3MoeConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), c.TorchDtype)
-}
-
-// GetQuantizationType returns the quantization method used (if any)
-func (c *Qwen3MoeConfig) GetQuantizationType() string {
-	if c.QuantizationConfig != nil && c.QuantizationConfig.QuantMethod != "" {
-		return c.QuantizationConfig.QuantMethod
-	}
-	return ""
 }
 
 // HasVision returns false for Qwen3Moe base models

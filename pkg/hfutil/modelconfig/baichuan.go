@@ -88,11 +88,6 @@ func (c *BaichuanConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), c.TorchDtype)
 }
 
-// GetQuantizationType returns the quantization method used (if any)
-func (c *BaichuanConfig) GetQuantizationType() string {
-	return "" // No quantization by default
-}
-
 // HasVision returns false for Baichuan base models
 func (c *BaichuanConfig) HasVision() bool {
 	return false
