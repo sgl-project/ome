@@ -22,6 +22,7 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 		baseModelMeta                     *metav1.ObjectMeta
 		fineTunedServingWithMergedWeights bool
 		existingNodeSelector              map[string]string
+		isvcAnnotations                   map[string]string
 		expectedLabelKey                  string
 		expectNodeSelector                bool
 	}{
@@ -91,6 +92,39 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 			expectNodeSelector: false,
 		},
 		{
+			name: "Skip model-ready nodeSelector when InferenceService annotation is true",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "safetensors",
+				},
+			},
+			baseModelMeta: &metav1.ObjectMeta{
+				Name:      "my-model",
+				Namespace: "",
+			},
+			isvcAnnotations: map[string]string{
+				constants.SkipModelReadyNodeSelectorAnnotationKey: "true",
+			},
+			expectNodeSelector: false,
+		},
+		{
+			name: "Annotation false still adds model-ready nodeSelector",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "safetensors",
+				},
+			},
+			baseModelMeta: &metav1.ObjectMeta{
+				Name:      "my-model",
+				Namespace: "",
+			},
+			isvcAnnotations: map[string]string{
+				constants.SkipModelReadyNodeSelectorAnnotationKey: "false",
+			},
+			expectedLabelKey:   "models.ome.io/clusterbasemodel.my-model",
+			expectNodeSelector: true,
+		},
+		{
 			name: "Long model names should be handled",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
@@ -128,13 +162,14 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 			// Create inference service
 			isvc := &v1beta1.InferenceService{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-isvc",
-					Namespace: "default",
+					Name:        "test-isvc",
+					Namespace:   "default",
+					Annotations: tt.isvcAnnotations,
 				},
 			}
 
 			// Call the function
-			UpdatePodSpecNodeSelector(b, isvc, podSpec, "")
+			UpdatePodSpecNodeSelector(b, isvc, podSpec, v1beta1.EngineComponent)
 
 			// Verify the result
 			if !tt.expectNodeSelector {
