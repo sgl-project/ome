@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/benchmark/reconcilers/job"
 	benchmarkutils "github.com/sgl-project/ome/pkg/controller/v1beta1/benchmark/utils"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
@@ -247,11 +248,19 @@ func (r *BenchmarkJobReconciler) addNodeSelectorFromInferenceService(ctx context
 		return err
 	}
 
-	isvcutils.AddNodeSelectorForModelReadyNode(podSpec, baseModelMeta)
-	r.Log.Info("Added node selector for benchmark job",
-		"baseModel", baseModelMeta.Name,
-		"namespace", baseModelMeta.Namespace,
-		"benchmarkJob", benchmarkJob.Name)
+	if isvcutils.IsSkipModelReadyNodeSelector(inferenceService.Annotations) {
+		r.Log.Info("Skipping model-ready nodeSelector for benchmark job (InferenceService annotation)",
+			"annotation", constants.SkipModelReadyNodeSelectorAnnotationKey,
+			"inferenceService", inferenceService.Namespace+"/"+inferenceService.Name,
+			"benchmarkJob", benchmarkJob.Name,
+			"baseModel", baseModelMeta.Name)
+	} else {
+		isvcutils.AddNodeSelectorForModelReadyNode(podSpec, baseModelMeta)
+		r.Log.Info("Added model-ready nodeSelector for benchmark job",
+			"baseModel", baseModelMeta.Name,
+			"namespace", baseModelMeta.Namespace,
+			"benchmarkJob", benchmarkJob.Name)
+	}
 
 	return nil
 }
