@@ -194,21 +194,10 @@ func TestResourceBase_InitializeClient(t *testing.T) {
 		},
 	}
 
-	// Create test secret
-	testSecret := &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-secret",
-			Namespace: "default",
-		},
-		Data: map[string][]byte{
-			"api-key": []byte("test-api-key"),
-		},
-	}
-
 	// Create fake client
 	fakeClient := cfake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(testOrg, testSecret).
+		WithObjects(testOrg).
 		Build()
 
 	// Create resource base
@@ -217,19 +206,32 @@ func TestResourceBase_InitializeClient(t *testing.T) {
 		Clientset: kfake.NewSimpleClientset(),
 	}
 
+	err := os.MkdirAll("/tmp/secrets-store", 0755)
+	require.NoError(t, err)
+
+	err = os.WriteFile("/tmp/secrets-store/openai-admin-key", []byte("test-api-key"), 0644)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		os.Remove("/tmp/secrets-store/openai-admin-key")
+		os.Remove("/tmp/secrets-store")
+	})
+
 	t.Run("InitializeClient", func(t *testing.T) {
 		client, err := rb.InitializeClient(context.Background(), testOrg)
 		require.NoError(t, err)
 		assert.NotNil(t, client)
 	})
 
-	t.Run("InitializeClient_NoSecret", func(t *testing.T) {
-		// Create org with non-existent secret
-		orgNoSecret := testOrg.DeepCopy()
-		orgNoSecret.Spec.SecretRef.Name = "non-existent"
+	t.Run("InitializeClient_NoSecretFile", func(t *testing.T) {
+		err := os.Remove("/tmp/secrets-store/openai-admin-key")
+		require.NoError(t, err)
 
-		_, err := rb.InitializeClient(context.Background(), orgNoSecret)
+		_, err = rb.InitializeClient(context.Background(), testOrg)
 		assert.Error(t, err)
+
+		err = os.WriteFile("/tmp/secrets-store/openai-admin-key", []byte("test-api-key"), 0644)
+		require.NoError(t, err)
 	})
 
 	t.Run("InitializeClient_NoVendor", func(t *testing.T) {
@@ -247,6 +249,75 @@ func TestResourceBase_InitializeClient(t *testing.T) {
 		orgUnsupported.Spec.Vendor = vendorPtr(v1beta1.VendorUnsupported)
 
 		_, err := rb.InitializeClient(context.Background(), orgUnsupported)
+		assert.Error(t, err)
+	})
+}
+
+func TestResourceBase_InitializeXaiClient(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, v1beta1.AddToScheme(scheme))
+	require.NoError(t, v1.AddToScheme(scheme))
+
+	testOrg := &v1beta1.Organization{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-xai-org",
+		},
+		Spec: v1beta1.OrganizationSpec{
+			Vendor: vendorPtr(v1beta1.VendorXAI),
+		},
+	}
+
+	fakeClient := cfake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(testOrg).
+		Build()
+
+	rb := ResourceBase{
+		Client:    fakeClient,
+		Clientset: kfake.NewSimpleClientset(),
+	}
+
+	err := os.MkdirAll("/tmp/secrets-store", 0755)
+	require.NoError(t, err)
+
+	err = os.WriteFile("/tmp/secrets-store/xai-admin-key", []byte("test-xai-api-key"), 0644)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		os.Remove("/tmp/secrets-store/xai-admin-key")
+		os.Remove("/tmp/secrets-store")
+	})
+
+	t.Run("InitializeXaiClient", func(t *testing.T) {
+		client, err := rb.InitializeXaiClient(context.Background(), testOrg)
+		require.NoError(t, err)
+		assert.NotNil(t, client)
+	})
+
+	t.Run("InitializeXaiClient_NoSecretFile", func(t *testing.T) {
+		err := os.Remove("/tmp/secrets-store/xai-admin-key")
+		require.NoError(t, err)
+
+		_, err = rb.InitializeXaiClient(context.Background(), testOrg)
+		assert.Error(t, err)
+
+		err = os.WriteFile("/tmp/secrets-store/xai-admin-key", []byte("test-xai-api-key"), 0644)
+		require.NoError(t, err)
+	})
+
+	t.Run("InitializeXaiClient_NoVendor", func(t *testing.T) {
+		orgNoVendor := testOrg.DeepCopy()
+		orgNoVendor.Spec.Vendor = nil
+
+		_, err := rb.InitializeXaiClient(context.Background(), orgNoVendor)
+		assert.Error(t, err)
+	})
+
+	t.Run("InitializeXaiClient_UnsupportedVendor", func(t *testing.T) {
+		orgUnsupported := testOrg.DeepCopy()
+		orgUnsupported.Spec.Vendor = vendorPtr(v1beta1.VendorUnsupported)
+
+		_, err := rb.InitializeXaiClient(context.Background(), orgUnsupported)
 		assert.Error(t, err)
 	})
 }

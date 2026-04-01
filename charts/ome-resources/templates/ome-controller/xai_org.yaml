@@ -12,19 +12,4 @@ spec:
   organizationId: {{.Values.ome.ociETC.serviceCompartmentId}}
   vendor: xai
   disabled: false
-  secretRef:
-    name: xai-admin-key
-    key: XAI_ADMIN_API_KEY
-    namespace: {{.Values.xai.namespace}}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: xai-admin-key
-  namespace: {{.Values.xai.namespace}}
-  annotations:
-    helm.sh/resource-policy: keep
-type: Opaque
-data:
-  XAI_ADMIN_API_KEY: eGFpLXRva2VuLTFzbGpubnhBZ3luSE1VQ0ZWZmloaVFOcVIyRGY1eDAzUjBkQWxZY1dNNXo2S3RnMHE1cjFPTkx1ZzlyVlRPVWJaQ3JKcGYzZVhjd3B1djh0
 {{- end }}

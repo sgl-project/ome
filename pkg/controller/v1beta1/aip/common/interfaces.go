@@ -20,7 +20,6 @@ import (
 	"github.com/go-logr/logr"
 	googleOption "google.golang.org/api/option"
 	serviceusage "google.golang.org/api/serviceusage/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -83,17 +82,6 @@ type ResourceBase struct {
 	Scheme    *runtime.Scheme
 }
 
-func (r *ResourceBase) getSecret(ctx context.Context, ref *v1beta1.SecretReference) (*v1.Secret, error) {
-	secret := &v1.Secret{}
-	if err := r.Get(ctx, client.ObjectKey{
-		Name:      ref.Name,
-		Namespace: ref.Namespace,
-	}, secret); err != nil {
-		return nil, err
-	}
-	return secret, nil
-}
-
 // InitializeClient initializes an OpenAI client using organization credentials
 func (r *ResourceBase) InitializeClient(ctx context.Context, org *v1beta1.Organization) (*openaisdk.Client, error) {
 	if org.Spec.Vendor == nil {
@@ -104,14 +92,14 @@ func (r *ResourceBase) InitializeClient(ctx context.Context, org *v1beta1.Organi
 		return nil, fmt.Errorf("unsupported vendor: %s", *org.Spec.Vendor)
 	}
 
-	secret, err := r.getSecret(ctx, org.Spec.SecretRef)
+	adminSecret, err := r.GetOpenAiAdminSecret(org)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get API key secret: %w", err)
+		return nil, fmt.Errorf("failed to get OpenAI admin secret: %w", err)
 	}
 
-	apiKey := string(secret.Data[org.Spec.SecretRef.Key])
+	apiKey := string(adminSecret)
 	if apiKey == "" {
-		return nil, fmt.Errorf("API key is empty in secret %s", org.Spec.SecretRef.Name)
+		return nil, fmt.Errorf("OpenAI admin API key is empty in OCI Vault secret")
 	}
 
 	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
@@ -120,6 +108,27 @@ func (r *ResourceBase) InitializeClient(ctx context.Context, org *v1beta1.Organi
 	}
 
 	return openaisdk.NewClient(opts...), nil
+}
+
+func (r *ResourceBase) GetOpenAiAdminSecret(org *v1beta1.Organization) ([]byte, error) {
+	if org.Spec.Vendor == nil {
+		return nil, fmt.Errorf("vendor is not specified for organization %s", org.Name)
+	}
+
+	if *org.Spec.Vendor != "openai" {
+		return nil, fmt.Errorf("unsupported vendor: %s (expected: openai)", *org.Spec.Vendor)
+	}
+
+	adminSecret, err := os.ReadFile("/tmp/secrets-store/openai-admin-key")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read OpenAI admin API key file: %w", err)
+	}
+
+	if len(adminSecret) == 0 {
+		return nil, fmt.Errorf("OpenAI admin API key is empty in OCI Vault secret")
+	}
+
+	return adminSecret, nil
 }
 
 // InitializeGcpProjectClient initializes a GCP Project client using organization credentials
@@ -239,14 +248,14 @@ func (r *ResourceBase) InitializeXaiClient(ctx context.Context, org *v1beta1.Org
 		return nil, fmt.Errorf("unsupported vendor: %s", *org.Spec.Vendor)
 	}
 
-	secret, err := r.getSecret(ctx, org.Spec.SecretRef)
+	adminSecret, err := r.GetXaiAdminSecret(org)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get API key secret: %w", err)
+		return nil, fmt.Errorf("failed to get xAI admin secret: %w", err)
 	}
 
-	apiKey := string(secret.Data[org.Spec.SecretRef.Key])
+	apiKey := string(adminSecret)
 	if apiKey == "" {
-		return nil, fmt.Errorf("API key is empty in secret %s", org.Spec.SecretRef.Name)
+		return nil, fmt.Errorf("xAI admin API key is empty in OCI Vault secret")
 	}
 
 	opts := []xaiOptions.RequestOption{xaiOptions.WithAPIKey(apiKey)}
@@ -255,4 +264,25 @@ func (r *ResourceBase) InitializeXaiClient(ctx context.Context, org *v1beta1.Org
 	}
 
 	return xaisdk.NewClient(opts...), nil
+}
+
+func (r *ResourceBase) GetXaiAdminSecret(org *v1beta1.Organization) ([]byte, error) {
+	if org.Spec.Vendor == nil {
+		return nil, fmt.Errorf("vendor is not specified for organization %s", org.Name)
+	}
+
+	if *org.Spec.Vendor != "xai" {
+		return nil, fmt.Errorf("unsupported vendor: %s (expected: xai)", *org.Spec.Vendor)
+	}
+
+	adminSecret, err := os.ReadFile("/tmp/secrets-store/xai-admin-key")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read xAI admin API key file: %w", err)
+	}
+
+	if len(adminSecret) == 0 {
+		return nil, fmt.Errorf("xAI admin API key is empty in OCI Vault secret")
+	}
+
+	return adminSecret, nil
 }
