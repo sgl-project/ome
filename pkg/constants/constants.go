@@ -335,6 +335,11 @@ const (
 	InferenceServiceLabel = "ome.io/inferenceservice"
 )
 
+// SkipModelReadyNodeSelectorAnnotationKey, when set to "true" on an InferenceService, omits the
+// models.ome.io/...=Ready nodeSelector from engine and decoder pods. Use this with elastic GPU
+// pools (e.g. Karpenter) where nodes are provisioned before the model-agent applies the Ready label.
+const SkipModelReadyNodeSelectorAnnotationKey = "ome.io/skip-model-ready-node-selector"
+
 // InferenceService default/canary constants
 const (
 	InferenceServiceDefault = "default"
