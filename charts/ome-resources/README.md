@@ -90,3 +90,21 @@ OME Resources and Controller
 | ome.omeAgent.tag | string | `"v0.1.2"` |  |
 | ome.omeAgent.vaultId | string | `"ocid1.vault.oc1.ap-osaka-1.dummy.dummy-vault"` |  |
 | ome.version | string | `"v0.1.2"` |  |
+
+## Autoscaling (Karpenter / cluster autoscaler)
+
+Engine and decoder pods normally get a **required** `nodeSelector` of the form `models.ome.io/clusterbasemodel.<name>=Ready` (or the namespace-scoped base-model equivalent). The model-agent DaemonSet applies that label only **after** weights are on disk. On elastic GPU pools, autoscalers such as Karpenter may refuse to provision a node when the pod requires a label that no template advertises yet, which can deadlock cold starts.
+
+**Opt-in:** set this annotation on the `InferenceService` to **omit** the model-ready `nodeSelector` (accelerator / runtime merged selectors still apply):
+
+```yaml
+metadata:
+  annotations:
+    ome.io/skip-model-ready-node-selector: "true"
+```
+
+**Semantics:** pods may schedule on a GPU node before the model is present on the host; you rely on hostPath + model-agent download, container restarts, or similar until the model is available. GPU pool labels, taints, and tolerations must still align (for example `gpu=true` and `nvidia.com/gpu` tolerations).
+
+**BenchmarkJob:** if the job references an `InferenceService`, the same annotation on that `InferenceService` controls whether the benchmark pod gets the model-ready selector.
+
+Multi-node or PD-disaggregated behavior is unchanged; this only affects the optional model-ready scheduling constraint for cluster- or namespace-scoped base models.
