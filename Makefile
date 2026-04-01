@@ -7,6 +7,12 @@ TAG          ?= $(GIT_TAG)
 ARCH         ?= linux/amd64
 MANAGER_IMG  ?= $(REGISTRY)/ome-manager:$(TAG)
 
+# Optional final-stage base for manager/model-agent/ome-agent Dockerfiles (default oraclelinux:10-slim).
+# Apple Silicon + --platform=linux/amd64 uses QEMU; OL10 glibc can fail with "CPU does not support x86-64-v3".
+# For local amd64 builds on Mac, use: BASE_IMAGE=ubuntu:24.04 make ome-image
+BASE_IMAGE ?=
+BASE_IMAGE_DOCKER_ARGS = $(if $(BASE_IMAGE),--build-arg BASE_IMAGE=$(BASE_IMAGE),)
+
 # Git version and commit information for build
 version_pkg = github.com/sgl-project/ome/pkg/version
 GIT_TAG ?= $(shell git describe --tags --dirty --always)
@@ -332,6 +338,7 @@ run-ome-agent-replica: fmt vet ome-agent ## Run ome-agent binary from local host
 ome-image: fmt vet ## Build ome-manager image.
 	@echo "🚀 Building ome-manager image..."
 	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
+		$(BASE_IMAGE_DOCKER_ARGS) \
 		--build-arg VERSION=$(GIT_TAG) \
 		--build-arg GIT_TAG=$(GIT_TAG) \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
@@ -342,6 +349,7 @@ ome-image: fmt vet ## Build ome-manager image.
 model-agent-image: fmt vet ## Build model-agent image.
 	@echo "🚀 Building model-agent image..."
 	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
+		$(BASE_IMAGE_DOCKER_ARGS) \
 		--build-arg VERSION=$(GIT_TAG) \
 		--build-arg GIT_TAG=$(GIT_TAG) \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
@@ -362,6 +370,7 @@ multinode-prober-image: fmt vet ## Build multinode-prober image.
 ome-agent-image: fmt vet xet-build ## Build ome-agent image.
 	@echo "🚀 Building ome-agent image..."
 	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
+		$(BASE_IMAGE_DOCKER_ARGS) \
 		--build-arg VERSION=$(GIT_TAG) \
 		--build-arg GIT_TAG=$(GIT_TAG) \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
@@ -388,11 +397,13 @@ build-all-images: fmt vet ## 🚀 Build all images for current architecture
 build-all-images-multiarch: fmt vet docker-buildx-setup ## 🌍 Build all images for multiple architectures
 	@echo "🌍 Building all OME images for linux/amd64,linux/arm64..."
 	$(DOCKER_BUILD_CMD) buildx build --platform=linux/amd64,linux/arm64 \
+		$(BASE_IMAGE_DOCKER_ARGS) \
 		--build-arg VERSION=$(GIT_TAG) \
 		--build-arg GIT_TAG=$(GIT_TAG) \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		. -f dockerfiles/manager.Dockerfile -t $(MANAGER_IMG) --push
 	$(DOCKER_BUILD_CMD) buildx build --platform=linux/amd64,linux/arm64 \
+		$(BASE_IMAGE_DOCKER_ARGS) \
 		--build-arg VERSION=$(GIT_TAG) \
 		--build-arg GIT_TAG=$(GIT_TAG) \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
@@ -403,6 +414,7 @@ build-all-images-multiarch: fmt vet docker-buildx-setup ## 🌍 Build all images
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		. -f dockerfiles/multinode-prober.Dockerfile -t $(REGISTRY)/multinode-prober:$(TAG) --push
 	$(DOCKER_BUILD_CMD) buildx build --platform=linux/amd64,linux/arm64 \
+		$(BASE_IMAGE_DOCKER_ARGS) \
 		--build-arg VERSION=$(GIT_TAG) \
 		--build-arg GIT_TAG=$(GIT_TAG) \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
