@@ -94,6 +94,16 @@ func GetTargetServicePort(ctx context.Context, c client.Client, isvc *v1beta1.In
 	return port, nil
 }
 
+// IsSkipModelReadyNodeSelector reports whether the InferenceService annotation requests omitting
+// the models.ome.io/...=Ready nodeSelector (for autoscaling / cold-start scheduling).
+func IsSkipModelReadyNodeSelector(annotations map[string]string) bool {
+	if annotations == nil {
+		return false
+	}
+	v, ok := annotations[constants.SkipModelReadyNodeSelectorAnnotationKey]
+	return ok && v == "true"
+}
+
 // AddNodeSelectorForModelReadyNode adds a node selector to the pod spec
 // for scheduling pods on nodes where the base model is ready.
 // This is used by both InferenceService and BenchmarkJob controllers to ensure pods
