@@ -268,6 +268,8 @@ func initializeComponents(
 		logger,
 		baseModelInformer.Lister(),
 		clusterBaseModelInformer.Lister(),
+		cfg.nodeName,
+		cfg.namespace,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gopher: %w", err)

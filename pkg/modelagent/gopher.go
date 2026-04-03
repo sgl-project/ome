@@ -4,17 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"go.uber.org/zap"
+	coordinationv1 "k8s.io/api/coordination/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
@@ -64,6 +68,13 @@ type Gopher struct {
 	// Track active downloads for cancellation
 	activeDownloads      map[string]context.CancelFunc // key: model UID
 	activeDownloadsMutex sync.RWMutex
+
+	// Shared storage coordination: when modelRootDir is on a shared filesystem
+	// (NFS, GPFS, CephFS, Lustre), only the download leader should download.
+	// Other agents wait with jitter and recheck for files on disk.
+	isSharedStorage bool
+	nodeName        string
+	namespace       string
 }
 
 const (
@@ -84,10 +95,17 @@ func NewGopher(
 	metrics *Metrics,
 	logger *zap.SugaredLogger,
 	baseModelLister omev1beta1lister.BaseModelLister,
-	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister) (*Gopher, error) {
+	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister,
+	nodeName string,
+	namespace string) (*Gopher, error) {
 
 	if xetConfig == nil {
 		return nil, fmt.Errorf("xet hugging face config cannot be nil")
+	}
+
+	shared := isSharedFilesystem(modelRootDir, logger)
+	if shared {
+		logger.Infof("Detected shared filesystem at %s — download leader election enabled", modelRootDir)
 	}
 
 	return &Gopher{
@@ -106,6 +124,9 @@ func NewGopher(
 		activeDownloads:        make(map[string]context.CancelFunc),
 		baseModelLister:        baseModelLister,
 		clusterBaseModelLister: clusterBaseModelLister,
+		isSharedStorage:        shared,
+		nodeName:               nodeName,
+		namespace:              namespace,
 	}, nil
 }
 
@@ -331,15 +352,8 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			// or failed retry that must re-evaluate the model files.
 			if task.TaskType == Download && s.isModelAlreadyDownloaded(destPath) {
 				s.logger.Infof("Model %s already exists at %s (shared storage), skipping OCI download", modelInfo, destPath)
-				var baseModel *v1beta1.BaseModel
-				var clusterBaseModel *v1beta1.ClusterBaseModel
-				if task.BaseModel != nil {
-					baseModel = task.BaseModel
-				} else if task.ClusterBaseModel != nil {
-					clusterBaseModel = task.ClusterBaseModel
-				}
-				if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel, nil); err != nil {
-					return fmt.Errorf("model files exist at %s but config update failed: %w", destPath, err)
+				if err := s.skipDownloadAndUpdateConfig(destPath, task); err != nil {
+					return err
 				}
 				break
 			}
@@ -997,21 +1011,25 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 	// from HuggingFace, causing rate-limiting and hours of unnecessary I/O.
 	// Only for fresh Download tasks — DownloadOverride indicates a spec change
 	// or failed retry that must re-evaluate the model files.
-	if task.TaskType == Download && s.isModelAlreadyDownloaded(destPath) {
-		s.logger.Infof("Model %s already exists at %s (shared storage), skipping HuggingFace download", modelInfo, destPath)
-
-		var baseModel *v1beta1.BaseModel
-		var clusterBaseModel *v1beta1.ClusterBaseModel
-		if task.BaseModel != nil {
-			baseModel = task.BaseModel
-		} else if task.ClusterBaseModel != nil {
-			clusterBaseModel = task.ClusterBaseModel
+	if task.TaskType == Download {
+		if s.isModelAlreadyDownloaded(destPath) {
+			s.logger.Infof("Model %s already exists at %s (shared storage), skipping HuggingFace download", modelInfo, destPath)
+			return s.skipDownloadAndUpdateConfig(destPath, task)
 		}
 
-		if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel, nil); err != nil {
-			return fmt.Errorf("model files exist at %s but config update failed: %w", destPath, err)
+		// On shared storage, only the download leader should proceed. Non-leaders
+		// wait for the leader to finish and then recheck for files on disk.
+		if s.isSharedStorage && !s.isDownloadLeader(ctx, modelInfo) {
+			if s.waitForSharedStorageModel(ctx, destPath, modelInfo) {
+				s.logger.Infof("Model %s appeared on shared storage at %s after waiting for leader", modelInfo, destPath)
+				return s.skipDownloadAndUpdateConfig(destPath, task)
+			}
+			if ctx.Err() != nil {
+				return fmt.Errorf("download cancelled while waiting for shared storage leader: %w", ctx.Err())
+			}
+			// Timed out waiting — fall through to download as a fallback
+			s.logger.Warnf("Model %s not found after waiting for leader, proceeding with own download", modelInfo)
 		}
-		return nil
 	}
 
 	// fetch sha value based on model ID from Huggingface model API
@@ -1484,6 +1502,24 @@ func (s *Gopher) isRemoveParentArtifactDirectory(ctx context.Context, hasChildre
 	return !exists
 }
 
+// skipDownloadAndUpdateConfig handles the case where model files already exist
+// at the destination path (e.g., downloaded by another node on shared storage,
+// or left from a previous run). It parses the model config and updates the
+// ConfigMap, bypassing the download step.
+func (s *Gopher) skipDownloadAndUpdateConfig(destPath string, task *GopherTask) error {
+	var baseModel *v1beta1.BaseModel
+	var clusterBaseModel *v1beta1.ClusterBaseModel
+	if task.BaseModel != nil {
+		baseModel = task.BaseModel
+	} else if task.ClusterBaseModel != nil {
+		clusterBaseModel = task.ClusterBaseModel
+	}
+	if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel, nil); err != nil {
+		return fmt.Errorf("model files exist at %s but config update failed: %w", destPath, err)
+	}
+	return nil
+}
+
 // isModelAlreadyDownloaded checks whether the model files are already present at
 // destPath. This handles the shared-storage case: when multiple nodes mount the
 // same filesystem (e.g., NFS at /storage/models), the first node that finishes an
@@ -1695,5 +1731,191 @@ func (s *Gopher) checkConfigAndWeights(destPath string) bool {
 	}
 
 	s.logger.Infof("checkConfigAndWeights(%s): config.json exists but no weight files found", destPath)
+	return false
+}
+
+// isSharedFilesystem detects whether the given path is on a shared/network
+// filesystem by checking the filesystem type via syscall.Statfs.
+// Known shared filesystem types: NFS, GPFS, CephFS, Lustre, GlusterFS, FUSE.
+// Note: filesystem type detection via magic numbers only works on Linux.
+// On macOS/Darwin, Statfs_t has a different layout and this will return false.
+func isSharedFilesystem(path string, logger *zap.SugaredLogger) bool {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(path, &stat); err != nil {
+		logger.Warnf("isSharedFilesystem(%s): syscall.Statfs failed: %v — shared storage detection disabled", path, err)
+		return false
+	}
+	// Filesystem magic numbers (from linux/magic.h and kernel sources)
+	switch stat.Type {
+	case 0x6969:       // NFS_SUPER_MAGIC
+		return true
+	case 0x47504653:   // GPFS (IBM Spectrum Scale)
+		return true
+	case 0x00C36400:   // CEPH_SUPER_MAGIC
+		return true
+	case 0x0BD00BD0:   // LUSTRE_SUPER_MAGIC
+		return true
+	case 0x65735546:   // FUSE_SUPER_MAGIC (commonly used for network mounts)
+		return true
+	case 0x6A656A62:   // GlusterFS
+		return true
+	default:
+		return false
+	}
+}
+
+const (
+	// downloadLeaderLeasePrefix is the prefix for per-model K8s Leases used for
+	// leader election on shared storage. Each model gets its own lease so different
+	// models can be downloaded in parallel by different nodes.
+	downloadLeaderLeasePrefix = "model-download-"
+
+	// downloadLeaderLeaseDuration is how long a leader holds a per-model lease.
+	downloadLeaderLeaseDuration = 5 * time.Minute
+
+	// sharedStorageRecheckInterval is how often non-leaders recheck for files.
+	sharedStorageRecheckInterval = 30 * time.Second
+
+	// sharedStorageMaxJitter is the max random jitter added before rechecks.
+	sharedStorageMaxJitter = 15 * time.Second
+)
+
+// sanitizeLeaseeName converts a model identifier (e.g., "google/gemma-4-31B-it")
+// into a valid K8s resource name (lowercase, no slashes, max 253 chars).
+func sanitizeLeaseName(modelInfo string) string {
+	name := strings.ToLower(modelInfo)
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, "_", "-")
+	name = strings.ReplaceAll(name, " ", "-")
+	name = strings.ReplaceAll(name, ".", "-")
+	// Strip any remaining non-alphanumeric/dash characters
+	filtered := make([]byte, 0, len(name))
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' {
+			filtered = append(filtered, c)
+		}
+	}
+	name = string(filtered)
+	// Trim leading/trailing dashes
+	name = strings.Trim(name, "-")
+	// K8s names must be <= 253 chars
+	if len(name) > 200 {
+		name = name[:200]
+	}
+	return downloadLeaderLeasePrefix + name
+}
+
+// isDownloadLeader checks if this node currently holds the per-model download
+// Lease. Each model gets its own lease so different models can be downloaded in
+// parallel by different nodes. If the lease doesn't exist, it tries to create it
+// (becoming leader). If held by this node, it renews and returns true. If held by
+// another node, it checks for expiry and attempts to take over; otherwise returns false.
+func (s *Gopher) isDownloadLeader(ctx context.Context, modelInfo string) bool {
+	leaseName := sanitizeLeaseName(modelInfo)
+	leasesClient := s.kubeClient.CoordinationV1().Leases(s.namespace)
+	now := metav1.NewMicroTime(time.Now())
+
+	lease, err := leasesClient.Get(ctx, leaseName, metav1.GetOptions{})
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			// API server error — coordination unavailable, download independently
+			s.logger.Warnf("Failed to check download leader lease (API error): %v — this node will download independently", err)
+			return true
+		}
+		// Lease doesn't exist — try to create it and become leader
+		leaseDuration := int32(downloadLeaderLeaseDuration.Seconds())
+		newLease := &coordinationv1.Lease{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      leaseName,
+				Namespace: s.namespace,
+			},
+			Spec: coordinationv1.LeaseSpec{
+				HolderIdentity:       &s.nodeName,
+				LeaseDurationSeconds: &leaseDuration,
+				AcquireTime:          &now,
+				RenewTime:            &now,
+			},
+		}
+		_, createErr := leasesClient.Create(ctx, newLease, metav1.CreateOptions{})
+		if createErr != nil {
+			s.logger.Infof("Failed to acquire download leader lease for %s (another node won): %v", modelInfo, createErr)
+			return false
+		}
+		s.logger.Infof("Acquired download leader lease for %s — this node (%s) will download", modelInfo, s.nodeName)
+		return true
+	}
+
+	// Lease exists — check if we hold it or if it's expired
+	if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity == s.nodeName {
+		// We hold it — renew
+		lease.Spec.RenewTime = &now
+		_, err = leasesClient.Update(ctx, lease, metav1.UpdateOptions{})
+		if err != nil {
+			if apierrors.IsConflict(err) || apierrors.IsNotFound(err) {
+				s.logger.Warnf("Lost download leader lease during renewal: %v — yielding leadership", err)
+				return false
+			}
+			s.logger.Warnf("Failed to renew download leader lease (transient error): %v — proceeding as leader", err)
+		}
+		return true
+	}
+
+	// Another node holds it — check if expired
+	if lease.Spec.RenewTime != nil && lease.Spec.LeaseDurationSeconds != nil {
+		expiry := lease.Spec.RenewTime.Time.Add(time.Duration(*lease.Spec.LeaseDurationSeconds) * time.Second)
+		if time.Now().After(expiry) {
+			// Expired — take over
+			lease.Spec.HolderIdentity = &s.nodeName
+			lease.Spec.AcquireTime = &now
+			lease.Spec.RenewTime = &now
+			_, err = leasesClient.Update(ctx, lease, metav1.UpdateOptions{})
+			if err != nil {
+				s.logger.Infof("Failed to take over expired download leader lease: %v", err)
+				return false
+			}
+			s.logger.Infof("Took over expired download leader lease for %s — this node (%s) will download", modelInfo, s.nodeName)
+			return true
+		}
+	}
+
+	holderID := "<unknown>"
+	if lease.Spec.HolderIdentity != nil {
+		holderID = *lease.Spec.HolderIdentity
+	}
+	s.logger.Infof("Download leader lease for %s held by %s — this node (%s) will wait for shared storage files",
+		modelInfo, holderID, s.nodeName)
+	return false
+}
+
+// waitForSharedStorageModel waits for a model to appear on shared storage,
+// with jitter and periodic rechecks. Returns true if the model appeared (another
+// node downloaded it), false if the context was cancelled or max wait exceeded.
+// Maximum wait time is downloadLeaderLeaseDuration + 30s (currently 5m30s).
+func (s *Gopher) waitForSharedStorageModel(ctx context.Context, destPath string, modelInfo string) bool {
+	maxWait := downloadLeaderLeaseDuration + 30*time.Second
+	deadline := time.Now().Add(maxWait)
+
+	for time.Now().Before(deadline) {
+		// Add random jitter to avoid thundering herd on recheck
+		jitter := time.Duration(rand.Int63n(int64(sharedStorageMaxJitter)))
+		s.logger.Infof("Shared storage: waiting %v before rechecking %s for model %s", sharedStorageRecheckInterval+jitter, destPath, modelInfo)
+
+		timer := time.NewTimer(sharedStorageRecheckInterval + jitter)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			s.logger.Infof("Shared storage: wait cancelled for model %s at %s: %v", modelInfo, destPath, ctx.Err())
+			return false
+		case <-timer.C:
+		}
+
+		if s.isModelAlreadyDownloaded(destPath) {
+			s.logger.Infof("Shared storage: model %s appeared at %s (downloaded by leader)", modelInfo, destPath)
+			return true
+		}
+	}
+
+	s.logger.Warnf("Shared storage: timed out waiting for model %s at %s — will attempt own download", modelInfo, destPath)
 	return false
 }
