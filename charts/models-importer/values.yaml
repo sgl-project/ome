@@ -968,6 +968,10 @@ grok-4-1-fast-non-reasoning:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+grok-tts:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 grok-4-fast-self-hosted:
   enabled: false
   lifecyclePhase: "ACTIVE"

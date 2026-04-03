@@ -1,0 +1,33 @@
+{{- if index .Values "grok-tts" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: grok-tts
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: ""
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "grok-tts" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "grok-tts" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "grok-tts" "lifecyclePhase" }}"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: xai.grok-tts
+  storage:
+    storageUri: "vendor://xai/models/{{ index .Values "grok-tts" "osPrefixOverride" }}"
+  vendor: {{ index .Values "grok-tts" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelArchitecture: xAiForCausalLM
+  modelParameterSize: 8B
+  modelCapabilities:
+    - "TEXT_TO_AUDIO"
+  maxTokens: 128000
+{{- end }}
