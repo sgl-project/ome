@@ -985,19 +985,6 @@ func TestIsModelAlreadyDownloaded(t *testing.T) {
 		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
 	})
 
-	t.Run("directory with only weights returns false (no config.json)", func(t *testing.T) {
-		dir := t.TempDir()
-		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00001-of-00002.safetensors"), []byte("weight data"), 0644))
-		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
-	})
-
-	t.Run("config.json and weights but no index file returns false", func(t *testing.T) {
-		dir := t.TempDir()
-		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"llama"}`), 0644))
-		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00001-of-00002.safetensors"), []byte("weight data"), 0644))
-		assert.False(t, gopher.isModelAlreadyDownloaded(dir), "without index file, cannot verify completeness")
-	})
-
 	t.Run("file path instead of directory returns false", func(t *testing.T) {
 		dir := t.TempDir()
 		filePath := filepath.Join(dir, "somefile")
@@ -1005,9 +992,9 @@ func TestIsModelAlreadyDownloaded(t *testing.T) {
 		assert.False(t, gopher.isModelAlreadyDownloaded(filePath))
 	})
 
-	// Shard completeness tests using model.safetensors.index.json
+	// --- Sharded safetensors tests ---
 
-	t.Run("index with all shards present returns true", func(t *testing.T) {
+	t.Run("safetensors index with all shards present returns true", func(t *testing.T) {
 		dir := t.TempDir()
 		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"llama"}`), 0644))
 		index := `{"metadata":{"total_size":100},"weight_map":{"w1":"model-00001-of-00002.safetensors","w2":"model-00002-of-00002.safetensors"}}`
@@ -1017,28 +1004,172 @@ func TestIsModelAlreadyDownloaded(t *testing.T) {
 		assert.True(t, gopher.isModelAlreadyDownloaded(dir))
 	})
 
-	t.Run("index with missing shard returns false", func(t *testing.T) {
+	t.Run("safetensors index with missing shard returns false", func(t *testing.T) {
 		dir := t.TempDir()
 		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"llama"}`), 0644))
 		index := `{"metadata":{"total_size":100},"weight_map":{"w1":"model-00001-of-00002.safetensors","w2":"model-00002-of-00002.safetensors"}}`
 		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors.index.json"), []byte(index), 0644))
-		// Only write shard 1, shard 2 is missing
 		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00001-of-00002.safetensors"), []byte("data"), 0644))
 		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
 	})
 
-	t.Run("malformed index file returns false", func(t *testing.T) {
+	t.Run("malformed safetensors index returns false (no fallback)", func(t *testing.T) {
 		dir := t.TempDir()
 		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"llama"}`), 0644))
 		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors.index.json"), []byte(`{invalid json`), 0644))
 		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00001-of-00001.safetensors"), []byte("data"), 0644))
+		// Index exists but is malformed → authoritative false, no fallback
 		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
 	})
 
-	t.Run("index with empty weight_map returns false", func(t *testing.T) {
+	t.Run("safetensors index with empty weight_map returns false (no fallback)", func(t *testing.T) {
 		dir := t.TempDir()
 		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"llama"}`), 0644))
 		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors.index.json"), []byte(`{"weight_map":{}}`), 0644))
+		// Index exists but empty → authoritative false, no fallback
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	// --- Diffusion pipeline tests ---
+
+	t.Run("diffusion model with all components returns true", func(t *testing.T) {
+		dir := t.TempDir()
+		index := `{"_class_name":"QwenImagePipeline","_diffusers_version":"0.36.0","scheduler":["diffusers","FlowMatchEulerDiscreteScheduler"],"transformer":["diffusers","QwenTransformer2DModel"],"vae":["diffusers","AutoencoderKL"]}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model_index.json"), []byte(index), 0644))
+		// Create component subdirectories with at least one file each
+		for _, comp := range []string{"scheduler", "transformer", "vae"} {
+			compDir := filepath.Join(dir, comp)
+			assert.NoError(t, os.MkdirAll(compDir, 0755))
+			assert.NoError(t, os.WriteFile(filepath.Join(compDir, "config.json"), []byte(`{}`), 0644))
+		}
+		assert.True(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("diffusion model with missing component returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		index := `{"_class_name":"QwenImagePipeline","scheduler":["diffusers","Scheduler"],"transformer":["diffusers","Transformer"],"vae":["diffusers","VAE"]}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model_index.json"), []byte(index), 0644))
+		// Only create scheduler and transformer, vae is missing
+		for _, comp := range []string{"scheduler", "transformer"} {
+			compDir := filepath.Join(dir, comp)
+			assert.NoError(t, os.MkdirAll(compDir, 0755))
+			assert.NoError(t, os.WriteFile(filepath.Join(compDir, "config.json"), []byte(`{}`), 0644))
+		}
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("diffusion model with empty component directory returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		index := `{"_class_name":"Pipeline","transformer":["diffusers","Model"]}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model_index.json"), []byte(index), 0644))
+		assert.NoError(t, os.MkdirAll(filepath.Join(dir, "transformer"), 0755))
+		// transformer dir exists but is empty
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("diffusion model with null component is skipped", func(t *testing.T) {
+		dir := t.TempDir()
+		index := `{"_class_name":"Pipeline","transformer":["diffusers","Model"],"safety_checker":null}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model_index.json"), []byte(index), 0644))
+		compDir := filepath.Join(dir, "transformer")
+		assert.NoError(t, os.MkdirAll(compDir, 0755))
+		assert.NoError(t, os.WriteFile(filepath.Join(compDir, "model.safetensors"), []byte("data"), 0644))
+		assert.True(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	// --- Fallback: config.json + weight file ---
+
+	t.Run("config.json and single safetensors file returns true", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"llama"}`), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors"), []byte("weight data"), 0644))
+		assert.True(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("config.json and .bin weight file returns true", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"bert"}`), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "pytorch_model.bin"), []byte("weight data"), 0644))
+		assert.True(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("config.json and .gguf weight file returns true", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{}`), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-q4.gguf"), []byte("weight data"), 0644))
+		assert.True(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("config.json and .pt weight file returns true", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{}`), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.pt"), []byte("weight data"), 0644))
+		assert.True(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("only weights without config.json returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors"), []byte("weight data"), 0644))
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	// --- Strategy ordering tests ---
+
+	t.Run("safetensors index takes priority over diffusion index", func(t *testing.T) {
+		dir := t.TempDir()
+		// Failing safetensors index (missing shard)
+		stIndex := `{"weight_map":{"w1":"shard-00001.safetensors","w2":"shard-00002.safetensors"}}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors.index.json"), []byte(stIndex), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "shard-00001.safetensors"), []byte("data"), 0644))
+		// shard-00002 is missing
+
+		// Passing diffusion index
+		diffIndex := `{"_class_name":"Pipeline","encoder":["diffusers","Encoder"]}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model_index.json"), []byte(diffIndex), 0644))
+		assert.NoError(t, os.MkdirAll(filepath.Join(dir, "encoder"), 0755))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "encoder", "config.json"), []byte(`{}`), 0644))
+
+		// Safetensors check is authoritative — must return false despite valid diffusion layout
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("safetensors index with many weights mapping to same shard returns true", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{}`), 0644))
+		index := `{"weight_map":{"layer1.weight":"model-00001-of-00001.safetensors","layer1.bias":"model-00001-of-00001.safetensors","layer2.weight":"model-00001-of-00001.safetensors"}}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors.index.json"), []byte(index), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00001-of-00001.safetensors"), []byte("data"), 0644))
+		assert.True(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	// --- Additional diffusion edge cases ---
+
+	t.Run("malformed diffusion index returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model_index.json"), []byte(`{not valid json`), 0644))
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("diffusion index with only metadata keys returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		index := `{"_class_name":"Pipeline","_diffusers_version":"0.36.0"}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model_index.json"), []byte(index), 0644))
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("diffusion component exists as file not directory returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		index := `{"_class_name":"Pipeline","transformer":["diffusers","Model"]}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model_index.json"), []byte(index), 0644))
+		// "transformer" is a file, not a directory
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "transformer"), []byte("not a directory"), 0644))
+		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
+	t.Run("diffusion index with path traversal component key returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		index := `{"_class_name":"Pipeline","../etc":["diffusers","Exploit"]}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model_index.json"), []byte(index), 0644))
 		assert.False(t, gopher.isModelAlreadyDownloaded(dir))
 	})
 }

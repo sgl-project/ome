@@ -339,7 +339,7 @@ func (s *Gopher) processTask(task *GopherTask) error {
 					clusterBaseModel = task.ClusterBaseModel
 				}
 				if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel, nil); err != nil {
-					s.logger.Errorf("Failed to parse and update model config for pre-existing model: %v", err)
+					return fmt.Errorf("model files exist at %s but config update failed: %w", destPath, err)
 				}
 				break
 			}
@@ -1009,7 +1009,7 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 		}
 
 		if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel, nil); err != nil {
-			s.logger.Errorf("Failed to parse and update model config for pre-existing model: %v", err)
+			return fmt.Errorf("model files exist at %s but config update failed: %w", destPath, err)
 		}
 		return nil
 	}
@@ -1490,31 +1490,65 @@ func (s *Gopher) isRemoveParentArtifactDirectory(ctx context.Context, hasChildre
 // HF download writes the files once. Subsequent nodes should detect the existing
 // files and skip re-downloading.
 //
-// The check requires model.safetensors.index.json to be present so that ALL
-// expected shards can be verified. Without the index file, completeness cannot
-// be determined and the method returns false (letting the normal download proceed).
+// Supports three model layouts:
+//  1. Sharded safetensors: model.safetensors.index.json lists all expected shards.
+//  2. Diffusion pipelines: model_index.json lists component subdirectories, each
+//     containing its own config and weight files.
+//  3. Single-file models: no index file, but config.json + at least one weight
+//     file (.safetensors, .bin, .pt, .gguf) present. Note: this fallback cannot
+//     verify shard completeness for multi-shard models without an index file.
+//
+// All filesystem checks treat errors conservatively as "not present" so that
+// NFS I/O or permission errors fall through to the normal download path rather
+// than silently skipping the download.
 func (s *Gopher) isModelAlreadyDownloaded(destPath string) bool {
 	// Check if directory exists
 	info, err := os.Stat(destPath)
-	if err != nil || !info.IsDir() {
+	if err != nil {
+		if os.IsNotExist(err) {
+			s.logger.Infof("isModelAlreadyDownloaded(%s): directory does not exist", destPath)
+		} else {
+			s.logger.Warnf("isModelAlreadyDownloaded(%s): failed to stat directory: %v", destPath, err)
+		}
+		return false
+	}
+	if !info.IsDir() {
+		s.logger.Warnf("isModelAlreadyDownloaded(%s): path exists but is not a directory", destPath)
 		return false
 	}
 
-	// Check for config.json (primary indicator of a complete HF download).
-	// Use err != nil (not os.IsNotExist) so that NFS I/O errors and permission
-	// errors are treated conservatively as "not present" rather than silently
-	// falling through as "exists".
-	configPath := filepath.Join(destPath, "config.json")
-	if _, err := os.Stat(configPath); err != nil {
-		return false
+	// Try each layout in order of specificity.
+	// When an index file exists, its verdict is authoritative — we don't fall
+	// through to a weaker check that might accept an incomplete download.
+
+	// 1. Sharded safetensors with model.safetensors.index.json
+	indexPath := filepath.Join(destPath, "model.safetensors.index.json")
+	if _, err := os.Stat(indexPath); err == nil {
+		return s.checkSafetensorsIndex(destPath)
 	}
 
-	// Require model.safetensors.index.json for shard completeness verification.
-	// Without it we cannot determine if the download is complete, so fall through
-	// to let the normal download path handle it.
+	// 2. Diffusion pipeline with model_index.json
+	diffIndexPath := filepath.Join(destPath, "model_index.json")
+	if _, err := os.Stat(diffIndexPath); err == nil {
+		return s.checkDiffusionIndex(destPath)
+	}
+
+	// 3. Fallback: config.json + at least one weight file
+	if s.checkConfigAndWeights(destPath) {
+		return true
+	}
+
+	s.logger.Infof("isModelAlreadyDownloaded(%s): no known layout matched, will proceed with download", destPath)
+	return false
+}
+
+// checkSafetensorsIndex verifies a sharded safetensors model by reading
+// model.safetensors.index.json and ensuring every listed shard file exists.
+func (s *Gopher) checkSafetensorsIndex(destPath string) bool {
 	indexPath := filepath.Join(destPath, "model.safetensors.index.json")
 	indexData, err := os.ReadFile(indexPath)
 	if err != nil {
+		s.logger.Warnf("checkSafetensorsIndex(%s): failed to read index file: %v", destPath, err)
 		return false
 	}
 
@@ -1522,17 +1556,17 @@ func (s *Gopher) isModelAlreadyDownloaded(destPath string) bool {
 		WeightMap map[string]string `json:"weight_map"`
 	}
 	if err := json.Unmarshal(indexData, &index); err != nil {
-		s.logger.Warnf("Failed to parse model index file %s: %v", indexPath, err)
+		s.logger.Warnf("checkSafetensorsIndex(%s): failed to parse index file (may be mid-write by another node on shared storage): %v", destPath, err)
 		return false
 	}
-
 	if len(index.WeightMap) == 0 {
+		s.logger.Infof("checkSafetensorsIndex(%s): index has empty weight_map", destPath)
 		return false
 	}
 
-	// Build a set of filenames for fast lookup
 	entries, err := os.ReadDir(destPath)
 	if err != nil {
+		s.logger.Warnf("checkSafetensorsIndex(%s): failed to read directory: %v", destPath, err)
 		return false
 	}
 	fileSet := make(map[string]bool, len(entries))
@@ -1542,20 +1576,124 @@ func (s *Gopher) isModelAlreadyDownloaded(destPath string) bool {
 		}
 	}
 
-	// Collect unique shard filenames and verify every one exists on disk
+	// Verify every expected shard exists
 	expectedShards := make(map[string]bool)
 	for _, shard := range index.WeightMap {
 		expectedShards[shard] = true
 	}
-
 	for shard := range expectedShards {
 		if !fileSet[shard] {
-			s.logger.Infof("Model at %s is missing shard %s (expected %d shards), not treating as complete",
+			s.logger.Infof("checkSafetensorsIndex(%s): missing shard %s (expected %d shards), not treating as complete",
 				destPath, shard, len(expectedShards))
 			return false
 		}
 	}
 
-	s.logger.Infof("Model at %s has all %d expected shards from index", destPath, len(expectedShards))
+	s.logger.Infof("checkSafetensorsIndex(%s): verified, all %d shards present", destPath, len(expectedShards))
 	return true
+}
+
+// checkDiffusionIndex verifies a diffusion pipeline model by reading
+// model_index.json and ensuring every listed component subdirectory exists
+// and is non-empty.
+func (s *Gopher) checkDiffusionIndex(destPath string) bool {
+	indexPath := filepath.Join(destPath, "model_index.json")
+	indexData, err := os.ReadFile(indexPath)
+	if err != nil {
+		s.logger.Warnf("checkDiffusionIndex(%s): failed to read index file: %v", destPath, err)
+		return false
+	}
+
+	var index map[string]interface{}
+	if err := json.Unmarshal(indexData, &index); err != nil {
+		s.logger.Warnf("checkDiffusionIndex(%s): failed to parse index file (may be mid-write by another node on shared storage): %v", destPath, err)
+		return false
+	}
+
+	// Components are top-level keys that don't start with "_" (e.g. "transformer",
+	// "vae", "text_encoder"). Keys like "_class_name" and "_diffusers_version" are
+	// metadata.
+	componentCount := 0
+	for key, val := range index {
+		if len(key) > 0 && key[0] == '_' {
+			continue
+		}
+		// Component values are arrays like ["diffusers", "ClassName"] or null
+		if val == nil {
+			continue
+		}
+		// Guard against path traversal from untrusted JSON keys
+		if filepath.Base(key) != key {
+			s.logger.Warnf("checkDiffusionIndex(%s): skipping suspicious component key %q", destPath, key)
+			return false
+		}
+		componentCount++
+		compDir := filepath.Join(destPath, key)
+		dirInfo, err := os.Stat(compDir)
+		if err != nil {
+			s.logger.Warnf("checkDiffusionIndex(%s): failed to stat component directory %s: %v", destPath, key, err)
+			return false
+		}
+		if !dirInfo.IsDir() {
+			s.logger.Warnf("checkDiffusionIndex(%s): component %s exists but is not a directory", destPath, key)
+			return false
+		}
+		// Check that the component directory is not empty
+		compEntries, err := os.ReadDir(compDir)
+		if err != nil {
+			s.logger.Warnf("checkDiffusionIndex(%s): failed to read component directory %s: %v", destPath, key, err)
+			return false
+		}
+		if len(compEntries) == 0 {
+			s.logger.Infof("checkDiffusionIndex(%s): component directory %s is empty", destPath, key)
+			return false
+		}
+	}
+
+	if componentCount == 0 {
+		s.logger.Infof("checkDiffusionIndex(%s): model_index.json has no components", destPath)
+		return false
+	}
+
+	s.logger.Infof("checkDiffusionIndex(%s): verified, all %d components present", destPath, componentCount)
+	return true
+}
+
+// checkConfigAndWeights is a fallback check for single-file models or models
+// without an index file. It verifies config.json exists and at least one
+// weight file (.safetensors, .bin, .pt, .gguf) is present.
+func (s *Gopher) checkConfigAndWeights(destPath string) bool {
+	configPath := filepath.Join(destPath, "config.json")
+	if _, err := os.Stat(configPath); err != nil {
+		s.logger.Infof("checkConfigAndWeights(%s): no config.json found", destPath)
+		return false
+	}
+
+	entries, err := os.ReadDir(destPath)
+	if err != nil {
+		s.logger.Warnf("checkConfigAndWeights(%s): failed to read directory: %v", destPath, err)
+		return false
+	}
+
+	weightExtensions := map[string]bool{
+		".safetensors": true,
+		".bin":         true,
+		".pt":          true,
+		".gguf":        true,
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		ext := filepath.Ext(entry.Name())
+		if weightExtensions[ext] {
+			s.logger.Warnf("checkConfigAndWeights(%s): using fallback heuristic (no index file found). "+
+				"config.json + weight file %s found, but shard completeness cannot be fully verified. "+
+				"If the model fails to load, re-trigger a DownloadOverride to force re-download.", destPath, entry.Name())
+			return true
+		}
+	}
+
+	s.logger.Infof("checkConfigAndWeights(%s): config.json exists but no weight files found", destPath)
+	return false
 }
