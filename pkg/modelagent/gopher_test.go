@@ -1077,6 +1077,20 @@ func TestIsModelAlreadyDownloaded(t *testing.T) {
 		assert.True(t, gopher.isModelAlreadyDownloaded(dir))
 	})
 
+	t.Run("diffusion model with float and null-array metadata is skipped", func(t *testing.T) {
+		dir := t.TempDir()
+		// Real-world pattern: boundary_ratio is a float, image_encoder is [null, null]
+		index := `{"_class_name":"Pipeline","boundary_ratio":0.9,"image_encoder":[null,null],"transformer":["diffusers","Model"],"vae":["diffusers","VAE"]}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model_index.json"), []byte(index), 0644))
+		for _, comp := range []string{"transformer", "vae"} {
+			compDir := filepath.Join(dir, comp)
+			assert.NoError(t, os.MkdirAll(compDir, 0755))
+			assert.NoError(t, os.WriteFile(filepath.Join(compDir, "config.json"), []byte(`{}`), 0644))
+		}
+		// boundary_ratio and image_encoder should NOT require directories
+		assert.True(t, gopher.isModelAlreadyDownloaded(dir))
+	})
+
 	// --- Fallback: config.json + weight file ---
 
 	t.Run("config.json and single safetensors file returns true", func(t *testing.T) {

@@ -1207,6 +1207,14 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 
 		s.logger.Infof("Successfully downloaded HuggingFace model %s to %s",
 			modelInfo, downloadPath)
+
+		// Clean up the per-model download leader lease so other agents detect
+		// "not found" → check files on disk → skip. Without cleanup, non-leaders
+		// must wait for the lease to expire (5 min) before they can take it over.
+		if s.isSharedStorage {
+			s.releaseDownloadLease(ctx, modelInfo)
+		}
+
 		artifact = s.modelConfigParser.buildArtifactAttribute(shaStr, s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel), destPath, childrenPaths)
 	}
 
@@ -1654,8 +1662,16 @@ func (s *Gopher) checkDiffusionIndex(destPath string) bool {
 		if len(key) > 0 && key[0] == '_' {
 			continue
 		}
-		// Component values are arrays like ["diffusers", "ClassName"] or null
-		if val == nil {
+		// Components are arrays like ["diffusers", "ClassName"]. Skip:
+		// - null values (disabled components)
+		// - non-array values like floats (e.g. "boundary_ratio": 0.9)
+		// - arrays of nulls (e.g. "image_encoder": [null, null])
+		arr, isArray := val.([]interface{})
+		if !isArray || len(arr) < 2 {
+			continue
+		}
+		// Check that the first element is a non-null string (library name)
+		if _, isStr := arr[0].(string); !isStr {
 			continue
 		}
 		// Guard against path traversal from untrusted JSON keys
@@ -1886,6 +1902,19 @@ func (s *Gopher) isDownloadLeader(ctx context.Context, modelInfo string) bool {
 	s.logger.Infof("Download leader lease for %s held by %s — this node (%s) will wait for shared storage files",
 		modelInfo, holderID, s.nodeName)
 	return false
+}
+
+// releaseDownloadLease deletes the per-model download leader lease after a
+// successful download. This allows waiting agents to immediately detect "no lease"
+// → check files on disk → skip, instead of waiting for the lease to expire.
+func (s *Gopher) releaseDownloadLease(ctx context.Context, modelInfo string) {
+	leaseName := sanitizeLeaseName(modelInfo)
+	err := s.kubeClient.CoordinationV1().Leases(s.namespace).Delete(ctx, leaseName, metav1.DeleteOptions{})
+	if err != nil {
+		s.logger.Warnf("Failed to release download leader lease %s: %v (non-critical, lease will expire)", leaseName, err)
+	} else {
+		s.logger.Infof("Released download leader lease %s after successful download", leaseName)
+	}
 }
 
 // waitForSharedStorageModel waits for a model to appear on shared storage,
