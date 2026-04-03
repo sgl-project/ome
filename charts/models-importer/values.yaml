@@ -885,6 +885,16 @@ gemini-3-flash-preview:
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
+gemini-3-1-pro-preview:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gemini-3-1-flash-lite-preview:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
 gemini-2-5-flash-image:
   enabled: false
   lifecyclePhase: "ACTIVE"
