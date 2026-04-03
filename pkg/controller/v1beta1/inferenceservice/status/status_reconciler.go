@@ -2,11 +2,15 @@ package status
 
 import (
 	"reflect"
+	"time"
 
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
 	"knative.dev/pkg/apis"
 	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	lwsspec "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
@@ -17,14 +21,50 @@ const (
 	FullTrafficPercent           = 100
 	RoutesReadyCondition         = "RoutesReady"
 	ConfigurationsReadyCondition = "ConfigurationsReady"
+	defaultPodLogTailLines       = int64(200)
+	defaultPodLogLimitBytes      = int64(32 * 1024)
+	defaultPodLogFetchTimeout    = 2 * time.Second
 )
 
 // StatusReconciler handles all status-related operations for InferenceService
-type StatusReconciler struct{}
+type StatusReconciler struct {
+	Clientset        kubernetes.Interface
+	Log              logr.Logger
+	podLogFetcher    func(namespace, podName, containerName string, previous bool) (string, error)
+	podLogTailLines  int64
+	podLogLimitBytes int64
+}
 
-// NewStatusReconciler creates a new StatusReconciler instance
-func NewStatusReconciler() *StatusReconciler {
-	return &StatusReconciler{}
+// NewStatusReconciler creates a new StatusReconciler instance.
+// Pass a nil clientset when Kubernetes log fetching is not needed.
+func NewStatusReconciler(clientset kubernetes.Interface) *StatusReconciler {
+	reconciler := &StatusReconciler{
+		Clientset:        clientset,
+		Log:              logf.Log.WithName("InferenceServiceStatus"),
+		podLogTailLines:  defaultPodLogTailLines,
+		podLogLimitBytes: defaultPodLogLimitBytes,
+	}
+	if clientset != nil {
+		reconciler.podLogFetcher = reconciler.fetchPodLogs
+	}
+	return reconciler
+}
+
+// WithLogger overrides the default logger and returns the reconciler for chaining.
+func (sr *StatusReconciler) WithLogger(log logr.Logger) *StatusReconciler {
+	sr.Log = log
+	return sr
+}
+
+// WithPodLogFetchLimits overrides the default pod log fetch bounds used for failure inspection.
+func (sr *StatusReconciler) WithPodLogFetchLimits(tailLines, limitBytes int64) *StatusReconciler {
+	if tailLines > 0 {
+		sr.podLogTailLines = tailLines
+	}
+	if limitBytes > 0 {
+		sr.podLogLimitBytes = limitBytes
+	}
+	return sr
 }
 
 // PropagateRawStatus propagates status from raw Kubernetes deployment
@@ -147,10 +187,10 @@ func (sr *StatusReconciler) PropagateStatus(
 // PropagateModelStatus propagates model status from pod information
 func (sr *StatusReconciler) PropagateModelStatus(
 	status *v1beta1.InferenceServiceStatus,
+	component v1beta1.ComponentType,
 	statusSpec v1beta1.ComponentStatusSpec,
 	podList *v1.PodList,
 	rawDeployment bool) {
-
 	// Check at least one pod is running for the latest revision of inferenceservice
 	totalCopies := len(podList.Items)
 	if totalCopies == 0 {
@@ -177,7 +217,7 @@ func (sr *StatusReconciler) PropagateModelStatus(
 	}
 
 	// Check container statuses
-	sr.checkContainerStatuses(status, firstPod, totalCopies)
+	sr.checkContainerStatuses(status, component, firstPod, totalCopies)
 }
 
 // UpdateModelRevisionStates updates the model revision states
