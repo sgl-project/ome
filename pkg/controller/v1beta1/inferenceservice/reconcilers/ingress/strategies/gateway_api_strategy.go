@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
-	"knative.dev/pkg/apis"
 	knapis "knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -88,13 +87,13 @@ func (g *GatewayAPIStrategy) Reconcile(ctx context.Context, isvc *v1beta1.Infere
 		}
 
 		// If we are here, then all the HTTPRoutes are ready, Mark ingress as ready
-		isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
+		isvc.Status.SetCondition(v1beta1.IngressReady, &knapis.Condition{
 			Type:   v1beta1.IngressReady,
 			Status: corev1.ConditionTrue,
 		})
 	} else {
 		// Ingress creation is disabled. We set it to true as the isvc condition depends on it.
-		isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
+		isvc.Status.SetCondition(v1beta1.IngressReady, &knapis.Condition{
 			Type:   v1beta1.IngressReady,
 			Status: corev1.ConditionTrue,
 		})
@@ -106,7 +105,7 @@ func (g *GatewayAPIStrategy) Reconcile(ctx context.Context, isvc *v1beta1.Infere
 		return err
 	}
 	isvc.Status.Address = &duckv1.Addressable{
-		URL: &apis.URL{
+		URL: &knapis.URL{
 			Host:   g.getRawServiceHost(isvc),
 			Scheme: g.ingressConfig.UrlScheme,
 			Path:   "",
@@ -123,7 +122,7 @@ func (g *GatewayAPIStrategy) reconcileComponentHTTPRoute(ctx context.Context, is
 	}
 	if desired == nil {
 		// Set ingress condition to indicate component not ready
-		isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
+		isvc.Status.SetCondition(v1beta1.IngressReady, &knapis.Condition{
 			Type:    v1beta1.IngressReady,
 			Status:  corev1.ConditionFalse,
 			Reason:  "ComponentNotReady",
@@ -194,7 +193,7 @@ func (g *GatewayAPIStrategy) checkHTTPRouteStatuses(ctx context.Context, isvc *v
 
 		if ready, reason, message := g.isHTTPRouteReady(httpRoute.Status); !ready {
 			componentType := g.getComponentType(comp.name, isvc)
-			isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
+			isvc.Status.SetCondition(v1beta1.IngressReady, &knapis.Condition{
 				Type:    v1beta1.IngressReady,
 				Status:  corev1.ConditionFalse,
 				Reason:  *reason,

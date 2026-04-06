@@ -27,7 +27,6 @@ type mockHuggingFaceModel struct {
 	modelSizeBytes     int64
 	hasVision          bool
 	isEmbedding        bool
-	diffusionModel     *modelconfig.DiffusionPipelineSpec
 }
 
 type mockDiffusionModel struct {

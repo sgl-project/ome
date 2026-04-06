@@ -214,7 +214,7 @@ func (m *DefaultRuntimeMatcher) evaluateFormatMatch(model *v1beta1.BaseModelSpec
 	}
 
 	// Check model format
-	if format.ModelFormat != nil && &model.ModelFormat != nil {
+	if format.ModelFormat != nil {
 		if format.ModelFormat.Name == model.ModelFormat.Name {
 			// Check version compatibility if both are specified
 			if format.ModelFormat.Version != nil && model.ModelFormat.Version != nil {
@@ -323,7 +323,7 @@ func (m *DefaultRuntimeMatcher) compareSupportedModelFormats(model *v1beta1.Base
 	}
 
 	// Check model format
-	if format.ModelFormat != nil && &model.ModelFormat != nil {
+	if format.ModelFormat != nil {
 		if format.ModelFormat.Name != model.ModelFormat.Name {
 			return false
 		}
@@ -334,7 +334,7 @@ func (m *DefaultRuntimeMatcher) compareSupportedModelFormats(model *v1beta1.Base
 		} else if (format.ModelFormat.Version == nil) != (model.ModelFormat.Version == nil) {
 			return false
 		}
-	} else if (format.ModelFormat != nil) != (&model.ModelFormat != nil) {
+	} else {
 		return false
 	}
 

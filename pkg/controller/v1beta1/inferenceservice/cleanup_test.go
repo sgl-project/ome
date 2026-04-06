@@ -344,6 +344,15 @@ func TestContains(t *testing.T) {
 	}
 }
 
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
 // Helper functions to create test resources
 
 func createDeployment(name, namespace, isvcName, uid string, component v1beta1.ComponentType) *appsv1.Deployment {

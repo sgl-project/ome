@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
-	"golang.org/x/term"
 
 	"github.com/sgl-project/ome/pkg/configutils"
 	"github.com/sgl-project/ome/pkg/logging"
@@ -104,11 +103,6 @@ func getProgressModeFromEnv() ProgressDisplayMode {
 	default:
 		return ProgressModeAuto
 	}
-}
-
-// isInteractiveTerminal checks if stdout is connected to an interactive terminal
-func isInteractiveTerminal() bool {
-	return term.IsTerminal(int(os.Stdout.Fd()))
 }
 
 // NewHubConfig builds and returns a new configuration from the given options

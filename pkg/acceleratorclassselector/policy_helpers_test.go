@@ -14,11 +14,6 @@ func int64Ptr(v int64) *int64 {
 	return &v
 }
 
-// Helper function to create string pointer
-func stringPtr(v string) *string {
-	return &v
-}
-
 // TestScoreFromTFLOPS tests the scoreFromTFLOPS helper function
 func TestScoreFromTFLOPS(t *testing.T) {
 	tests := []struct {

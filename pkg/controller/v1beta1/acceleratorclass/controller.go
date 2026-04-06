@@ -9,8 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"k8s.io/apimachinery/pkg/fields"
-
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -147,87 +145,6 @@ func nodePassesDiscovery(ac *v1beta1.AcceleratorClass, node *corev1.Node) bool {
 	}
 
 	return true
-}
-
-func matchNodeSelectorTerm(node *corev1.Node, term corev1.NodeSelectorTerm) bool {
-	if len(term.MatchExpressions) > 0 {
-		for _, req := range term.MatchExpressions {
-			if !matchNodeSelectorExpressions(node, req) {
-				return false
-			}
-		}
-	}
-	if len(term.MatchFields) > 0 {
-		for _, req := range term.MatchFields {
-			if !matchNodeSelectorFields(node, req) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func matchNodeSelectorExpressions(node *corev1.Node, req corev1.NodeSelectorRequirement) bool {
-	val, has := node.Labels[req.Key]
-	switch req.Operator {
-	case corev1.NodeSelectorOpIn:
-		if !has {
-			return false
-		}
-		for _, v := range req.Values {
-			if v == val {
-				return true
-			}
-		}
-		return false
-	case corev1.NodeSelectorOpNotIn:
-		if !has {
-			return true
-		}
-		for _, v := range req.Values {
-			if v == val {
-				return false
-			}
-		}
-		return true
-	case corev1.NodeSelectorOpExists:
-		return has
-	case corev1.NodeSelectorOpDoesNotExist:
-		return !has
-	case corev1.NodeSelectorOpGt:
-		if !has || len(req.Values) == 0 {
-			return false
-		}
-		return strings.Compare(val, req.Values[0]) > 0
-	case corev1.NodeSelectorOpLt:
-		if !has || len(req.Values) == 0 {
-			return false
-		}
-		return strings.Compare(val, req.Values[0]) < 0
-	default:
-		return true
-	}
-}
-
-func matchNodeSelectorFields(node *corev1.Node, req corev1.NodeSelectorRequirement) bool {
-	val, has := extractNodeFields(node)[req.Key]
-	if !has {
-		return false
-	}
-	for _, v := range req.Values {
-		if v == val {
-			return true
-		}
-	}
-	return false
-}
-
-func extractNodeFields(n *corev1.Node) fields.Set {
-	f := make(fields.Set)
-	if len(n.Name) > 0 {
-		f["metadata.name"] = n.Name
-	}
-	return f
 }
 
 func nodeMatchCapabilities(ac *v1beta1.AcceleratorClass, node *corev1.Node) bool {

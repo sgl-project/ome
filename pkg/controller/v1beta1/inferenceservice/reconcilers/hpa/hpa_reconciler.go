@@ -80,10 +80,6 @@ func calculateMaxReplicas(componentExt *v1beta1.ComponentExtensionSpec, minRepli
 	return maxReplicas
 }
 
-func getDeploymentName(metadata metav1.ObjectMeta) string {
-	return metadata.Name
-}
-
 func getHPAMetrics(metadata metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec) []autoscalingv2.MetricSpec {
 	utilization := getTargetUtilization(metadata, componentExt)
 	resourceName := getResourceName(componentExt)

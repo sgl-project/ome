@@ -183,7 +183,7 @@ func ReplacePlaceholders(container *v1.Container, meta metav1.ObjectMeta) error 
 func MergeNodeSelector(runtime *v1beta1.ServingRuntimeSpec, acceleratorClass *v1beta1.AcceleratorClassSpec, isvc *v1beta1.InferenceService, component v1beta1.ComponentType) map[string]string {
 	// Start with runtime node selector
 	mergedNodeSelector := map[string]string{}
-	if runtime != nil && &runtime.ServingRuntimePodSpec != nil && runtime.ServingRuntimePodSpec.NodeSelector != nil {
+	if runtime != nil && runtime.ServingRuntimePodSpec.NodeSelector != nil {
 		for k, v := range runtime.ServingRuntimePodSpec.NodeSelector {
 			mergedNodeSelector[k] = v
 		}
@@ -199,7 +199,7 @@ func MergeNodeSelector(runtime *v1beta1.ServingRuntimeSpec, acceleratorClass *v1
 	// Finally merge in isvc node selector, overriding any conflicts
 	switch component {
 	case v1beta1.EngineComponent:
-		if isvc.Spec.Engine != nil && &isvc.Spec.Engine.PodSpec != nil && isvc.Spec.Engine.PodSpec.NodeSelector != nil {
+		if isvc.Spec.Engine != nil && isvc.Spec.Engine.PodSpec.NodeSelector != nil {
 			for k, v := range isvc.Spec.Engine.PodSpec.NodeSelector {
 				mergedNodeSelector[k] = v
 			}
@@ -207,7 +207,7 @@ func MergeNodeSelector(runtime *v1beta1.ServingRuntimeSpec, acceleratorClass *v1
 		return mergedNodeSelector
 
 	case v1beta1.DecoderComponent:
-		if isvc.Spec.Decoder != nil && &isvc.Spec.Decoder.PodSpec != nil && isvc.Spec.Decoder.PodSpec.NodeSelector != nil {
+		if isvc.Spec.Decoder != nil && isvc.Spec.Decoder.PodSpec.NodeSelector != nil {
 			for k, v := range isvc.Spec.Decoder.PodSpec.NodeSelector {
 				mergedNodeSelector[k] = v
 			}
@@ -231,7 +231,7 @@ func MergeResource(container *v1.Container, acceleratorClass *v1beta1.Accelerato
 		container.Resources.Requests = v1.ResourceList{}
 	}
 	// Merge resource requests from runtime with the same container name if it does not already exist.
-	if runtime != nil && &runtime.ServingRuntimePodSpec != nil && runtime.ServingRuntimePodSpec.Containers != nil {
+	if runtime != nil && runtime.ServingRuntimePodSpec.Containers != nil {
 		for _, rtContainer := range runtime.ServingRuntimePodSpec.Containers {
 			if rtContainer.Name == container.Name {
 				for resourceName, quantity := range rtContainer.Resources.Requests {
@@ -258,7 +258,7 @@ func MergeResource(container *v1.Container, acceleratorClass *v1beta1.Accelerato
 		container.Resources.Limits = v1.ResourceList{}
 	}
 	// Merge resource limits from runtime with the same container name if it does not already exist.
-	if runtime != nil && &runtime.ServingRuntimePodSpec != nil && runtime.ServingRuntimePodSpec.Containers != nil {
+	if runtime != nil && runtime.ServingRuntimePodSpec.Containers != nil {
 		for _, rtContainer := range runtime.ServingRuntimePodSpec.Containers {
 			if rtContainer.Name == container.Name {
 				for resourceName, quantity := range rtContainer.Resources.Limits {
