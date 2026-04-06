@@ -1,0 +1,85 @@
+default_stages: [pre-commit, pre-push, manual]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-symlinks
+      - id: destroyed-symlinks
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents, --unsafe]
+        exclude: ^deploy/helm/.*/templates/|^deploy/helm/.*/tests/|^charts/.*/templates/
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-shebang-scripts-are-executable
+        exclude: \.rs$
+      - id: detect-private-key
+        exclude: .*_test\.go$
+      - id: mixed-line-ending
+      - id: no-commit-to-branch
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        args: ['-L', 'AfterAll,NotIn,UpToDate,WithT,allReady']
+        exclude: |
+          (?x)^(
+            charts/.*/templates/.*\.yaml$|
+            config/crd/.*|
+            site/assets/.*\.svg$|
+            .*go\.sum$|
+            .*package-lock\.json$
+          )$
+
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: go fmt
+        description: Format Go code with gofmt
+        entry: gofmt -s -w .
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: go-vet
+        name: go vet
+        description: Run go vet on Go packages
+        entry: go vet ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: helm-lint
+        name: helm lint
+        description: Lint Helm charts
+        entry: bash -c 'for chart in charts/*/; do helm lint "$chart" || exit 1; done'
+        language: system
+        always_run: true
+        pass_filenames: false
+
+      - id: branch-name-check
+        name: Branch naming convention
+        description: Ensure branch name follows <type>/<desc> or <username>/<desc> format
+        entry: |
+          bash -c '
+            branch=$(git rev-parse --abbrev-ref HEAD)
+            if [[ "$branch" != "main" && ! "$branch" =~ ^[a-z0-9]([a-z0-9._-]*[a-z0-9])?/[a-z0-9._-]+$ ]]; then
+              echo "Branch \"$branch\" does not follow naming convention: <type>/<description> or <username>/<description>"
+              exit 1
+            fi
+          '
+        language: system
+        stages: [pre-push]
+        always_run: true
+        pass_filenames: false
+
+      - id: go-mod-tidy
+        name: go mod tidy
+        description: Check that go.mod and go.sum are tidy
+        entry: bash -c 'go mod tidy && git diff --exit-code go.mod go.sum'
+        language: system
+        types: [go]
+        pass_filenames: false
