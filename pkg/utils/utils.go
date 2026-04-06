@@ -349,7 +349,7 @@ func ContainsString(values []interface{}, target string, isCaseSensitive bool) b
 			if isCaseSensitive {
 				result = s == target
 			} else {
-				result = strings.ToLower(s) == strings.ToLower(target)
+				result = strings.EqualFold(s, target)
 			}
 			if result {
 				return result

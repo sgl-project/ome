@@ -1324,7 +1324,7 @@ func (c *ConfigMapReconciler) getDataEntryBasedOnModelKey(ctx context.Context, m
 
 func parseParent(parentMap map[string]string) (string, string) {
 	var parentName, parentDir string
-	if parentMap != nil && len(parentMap) != 0 {
+	if len(parentMap) != 0 {
 		for key, value := range parentMap {
 			parentName = key
 			parentDir = value

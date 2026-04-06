@@ -117,7 +117,7 @@ func Parse(s string) (Version, error) {
 	// Prerelease
 	for _, str := range prerelease {
 		if len(str) == 0 {
-			return Version{}, errors.New("Prerelease meta data is empty")
+			return Version{}, errors.New("prerelease meta data is empty")
 		}
 		v.Pre = append(v.Pre, str)
 	}
@@ -125,15 +125,15 @@ func Parse(s string) (Version, error) {
 	// Build meta data
 	for _, str := range build {
 		if len(str) == 0 {
-			return Version{}, errors.New("Build meta data is empty")
+			return Version{}, errors.New("build meta data is empty")
 		}
 		v.Build = append(v.Build, str)
 	}
 
-	// DEV
+	// Dev meta data
 	for _, str := range dev {
 		if len(str) == 0 {
-			return Version{}, errors.New("Dev meta data is empty")
+			return Version{}, errors.New("dev meta data is empty")
 		}
 		v.Dev = append(v.Dev, str)
 	}
