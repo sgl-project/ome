@@ -75,6 +75,11 @@ type Gopher struct {
 	isSharedStorage bool
 	nodeName        string
 	namespace       string
+
+	// downloadTimeout is the maximum time allowed for a single model download.
+	// Prevents stuck downloads (e.g., xet retrying 403 errors forever) from
+	// blocking workers indefinitely.
+	downloadTimeout time.Duration
 }
 
 const (
@@ -97,10 +102,14 @@ func NewGopher(
 	baseModelLister omev1beta1lister.BaseModelLister,
 	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister,
 	nodeName string,
-	namespace string) (*Gopher, error) {
+	namespace string,
+	downloadTimeout time.Duration) (*Gopher, error) {
 
 	if xetConfig == nil {
 		return nil, fmt.Errorf("xet hugging face config cannot be nil")
+	}
+	if downloadTimeout <= 0 {
+		return nil, fmt.Errorf("downloadTimeout must be positive, got %v", downloadTimeout)
 	}
 
 	shared := isSharedFilesystem(modelRootDir, logger)
@@ -127,6 +136,7 @@ func NewGopher(
 		isSharedStorage:        shared,
 		nodeName:               nodeName,
 		namespace:              namespace,
+		downloadTimeout:        downloadTimeout,
 	}, nil
 }
 
@@ -297,8 +307,9 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			// Continue with download anyway
 		}
 
-		// Create a cancellable context for this download
-		ctx, cancel = context.WithCancel(context.Background())
+		// Create a context with timeout for this download to prevent stuck
+		// downloads (e.g., xet retrying 403 errors) from blocking workers forever.
+		ctx, cancel = context.WithTimeout(context.Background(), s.downloadTimeout)
 
 		// Register the cancel function
 		s.activeDownloadsMutex.Lock()
@@ -359,9 +370,13 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			}
 
 			err = utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
+				// Short-circuit if context is already done (timeout or cancel)
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
 				downloadErr := s.downloadModel(ctx, osUri, destPath, task)
 				if downloadErr != nil {
-					// Check if context was cancelled
+					// Check if context was cancelled during download
 					if ctx.Err() != nil {
 						s.logger.Infof("Download cancelled for model %s: %v", modelInfo, ctx.Err())
 						return ctx.Err()
@@ -372,12 +387,19 @@ func (s *Gopher) processTask(task *GopherTask) error {
 				return downloadErr
 			})
 			if err != nil {
-				s.logger.Errorf("All download attempts failed for model %s: %v", modelInfo, err)
-
-				// Record download failure in metrics
+				// Record download failure in metrics with specific error classification
 				errorType := "download_error"
-				if strings.Contains(err.Error(), "MD5") {
+				if ctx.Err() == context.Canceled {
+					errorType = "download_cancelled"
+					s.logger.Infof("Download cancelled for OCI model %s: %v", modelInfo, err)
+				} else if ctx.Err() == context.DeadlineExceeded {
+					errorType = "download_timeout"
+					s.logger.Errorf("Download timed out for OCI model %s after %v: %v", modelInfo, s.downloadTimeout, err)
+				} else if strings.Contains(err.Error(), "MD5") {
 					errorType = "md5_verification_error"
+					s.logger.Errorf("All download attempts failed for model %s: %v", modelInfo, err)
+				} else {
+					s.logger.Errorf("All download attempts failed for model %s: %v", modelInfo, err)
 				}
 				s.metrics.RecordFailedDownload(modelType, namespace, name, errorType)
 
@@ -1190,9 +1212,25 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 		// when status becomes Ready/Failed, ensuring the controller sees the final progress
 		downloadPath, err := xet.SnapshotDownloadWithProgress(ctx, config, progressHandler, progressThrottle)
 
+		// Always release the download leader lease after a download attempt
+		// (success or failure). On failure, this lets non-leaders detect "no lease"
+		// and try their own download instead of waiting the full 5-minute expiry.
+		// Use a fresh context since the download context may be near its deadline.
+		if s.isSharedStorage {
+			leaseCtx, leaseCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer leaseCancel()
+			s.releaseDownloadLease(leaseCtx, modelInfo)
+		}
+
 		if err != nil {
 			// Check error type for better handling
-			if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "rate limit") {
+			if ctx.Err() == context.Canceled {
+				s.logger.Infof("Download cancelled for HuggingFace model %s: %v", modelInfo, err)
+				s.metrics.RecordFailedDownload(modelType, namespace, name, "download_cancelled")
+			} else if ctx.Err() == context.DeadlineExceeded {
+				s.logger.Errorf("Download timed out for HuggingFace model %s after %v: %v", modelInfo, s.downloadTimeout, err)
+				s.metrics.RecordFailedDownload(modelType, namespace, name, "download_timeout")
+			} else if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "rate limit") {
 				s.logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", modelInfo, err)
 				s.metrics.RecordRateLimit(modelType, namespace, name, 30*time.Second) // Estimate
 				s.metrics.RecordFailedDownload(modelType, namespace, name, "rate_limit_error")
@@ -1207,13 +1245,6 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 
 		s.logger.Infof("Successfully downloaded HuggingFace model %s to %s",
 			modelInfo, downloadPath)
-
-		// Clean up the per-model download leader lease so other agents detect
-		// "not found" → check files on disk → skip. Without cleanup, non-leaders
-		// must wait for the lease to expire (5 min) before they can take it over.
-		if s.isSharedStorage {
-			s.releaseDownloadLease(ctx, modelInfo)
-		}
 
 		artifact = s.modelConfigParser.buildArtifactAttribute(shaStr, s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel), destPath, childrenPaths)
 	}
@@ -1763,17 +1794,17 @@ func isSharedFilesystem(path string, logger *zap.SugaredLogger) bool {
 	}
 	// Filesystem magic numbers (from linux/magic.h and kernel sources)
 	switch stat.Type {
-	case 0x6969:       // NFS_SUPER_MAGIC
+	case 0x6969: // NFS_SUPER_MAGIC
 		return true
-	case 0x47504653:   // GPFS (IBM Spectrum Scale)
+	case 0x47504653: // GPFS (IBM Spectrum Scale)
 		return true
-	case 0x00C36400:   // CEPH_SUPER_MAGIC
+	case 0x00C36400: // CEPH_SUPER_MAGIC
 		return true
-	case 0x0BD00BD0:   // LUSTRE_SUPER_MAGIC
+	case 0x0BD00BD0: // LUSTRE_SUPER_MAGIC
 		return true
-	case 0x65735546:   // FUSE_SUPER_MAGIC (commonly used for network mounts)
+	case 0x65735546: // FUSE_SUPER_MAGIC (commonly used for network mounts)
 		return true
-	case 0x6A656A62:   // GlusterFS
+	case 0x6A656A62: // GlusterFS
 		return true
 	default:
 		return false
