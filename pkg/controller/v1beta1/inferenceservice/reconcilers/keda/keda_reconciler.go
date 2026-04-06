@@ -100,14 +100,6 @@ func calculateMaxReplicas(componentExt *v1beta1.ComponentExtensionSpec, minRepli
 	return minReplicas
 }
 
-// getDeploymentName constructs the deployment name based on the componentMeta
-func getDeploymentName(metadata metav1.ObjectMeta) string {
-	if enabledKueue, ok := metadata.Annotations["kueue-enabled"]; ok && enabledKueue == "true" {
-		return fmt.Sprintf("%s-%s", metadata.Name, "new")
-	}
-	return metadata.Name
-}
-
 // getScaledObjectTriggers constructs the triggers for the ScaledObject
 func getScaledObjectTriggers(metadata metav1.ObjectMeta, inferenceServiceSpec v1beta1.InferenceServiceSpec) []kedav1.ScaleTriggers {
 	kedaConfig := inferenceServiceSpec.KedaConfig

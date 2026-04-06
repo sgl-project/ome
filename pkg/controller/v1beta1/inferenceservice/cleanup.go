@@ -3,7 +3,6 @@ package inferenceservice
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -132,49 +131,6 @@ func (r *InferenceServiceReconciler) shouldKeepExternalService(isvc *v1beta1.Inf
 		return activeComponents[v1beta1.RouterComponent] ||
 			activeComponents[v1beta1.EngineComponent] ||
 			activeComponents[v1beta1.PredictorComponent]
-	}
-	return false
-}
-
-// cleanupRemovedComponentsDynamic uses discovery to dynamically clean up unknown resource types.
-func (r *InferenceServiceReconciler) cleanupRemovedComponentsDynamic(
-	ctx context.Context,
-	isvc *v1beta1.InferenceService,
-	activeComponents map[v1beta1.ComponentType]bool,
-) error {
-	log := log.FromContext(ctx)
-	selector := labels.Set{constants.InferenceServicePodLabelKey: isvc.Name}.AsSelector()
-
-	apiLists, err := r.Clientset.Discovery().ServerPreferredResources()
-	if err != nil {
-		log.Info("Partial resource discovery failure", "error", err)
-	}
-
-	for _, list := range apiLists {
-		gv, err := schema.ParseGroupVersion(list.GroupVersion)
-		if err != nil {
-			continue
-		}
-
-		for _, res := range list.APIResources {
-			if !contains(res.Verbs, "list") || !contains(res.Verbs, "delete") || strings.Contains(res.Name, "/") {
-				continue
-			}
-			gvk := schema.GroupVersionKind{Group: gv.Group, Version: gv.Version, Kind: res.Kind}
-			if err := r.cleanupResourcesOfType(ctx, gvk, isvc, selector, activeComponents); err != nil {
-				log.V(1).Info("Failed to cleanup dynamically discovered resource", "gvk", gvk, "error", err)
-			}
-		}
-	}
-	return nil
-}
-
-// contains checks if slice contains item.
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
 	}
 	return false
 }

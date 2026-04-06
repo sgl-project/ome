@@ -582,7 +582,7 @@ func TestGCPCredentials_TokenCaching(t *testing.T) {
 	creds.mu.RUnlock()
 
 	if cachedToken == nil {
-		t.Error("Token was not cached")
+		t.Fatal("Token was not cached")
 	}
 	if cachedToken.AccessToken != token1 {
 		t.Error("Cached token doesn't match returned token")
@@ -775,7 +775,7 @@ func TestGCPCredentials_SignRequestUpdatesCache(t *testing.T) {
 	creds.mu.RUnlock()
 
 	if cachedToken == nil {
-		t.Error("Token was not cached by SignRequest")
+		t.Fatal("Token was not cached by SignRequest")
 	}
 	if cachedToken.AccessToken != "sign-token-1" {
 		t.Errorf("Expected cached token to be 'sign-token-1', got %s", cachedToken.AccessToken)

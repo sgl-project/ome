@@ -1291,7 +1291,6 @@ func TestRemoveChildPathFromParentConfigMapIfNecessary_ErrorWhenParentMissing_No
 
 	assert.Equal(t, 0, countConfigMapUpdates(client), "no ConfigMap update should occur when parent key missing")
 }
-
 func TestIsRemoveParentArtifactDirectory_HasChildren_False(t *testing.T) {
 	cm := makeConfigMap("node-1", map[string]string{})
 	g, client := newGopherAndClientWithConfigMap(cm, t)

@@ -291,7 +291,7 @@ func TestBuildServiceWithEmptyAnnotations(t *testing.T) {
 	service := buildService(componentMeta, podSpec, nil)
 
 	if service == nil {
-		t.Error("Expected service to be created, got nil")
+		t.Fatal("Expected service to be created, got nil")
 	}
 	if len(service.Annotations) != 0 {
 		t.Errorf("Expected empty annotations, got %v", service.Annotations)

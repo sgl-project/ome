@@ -104,7 +104,7 @@ func (s *DefaultRuntimeScorer) CompareRuntimes(r1, r2 RuntimeMatch, model *v1bet
 func (s *DefaultRuntimeScorer) CalculateFormatScore(model *v1beta1.BaseModelSpec, supportedFormat v1beta1.SupportedModelFormat, priority int64) int64 {
 	// Compare model format
 	modelFormatMatches := false
-	if supportedFormat.ModelFormat != nil && &model.ModelFormat.Name != nil {
+	if supportedFormat.ModelFormat != nil {
 		if supportedFormat.ModelFormat.Name != model.ModelFormat.Name {
 			return 0 // Format name doesn't match
 		}
@@ -137,7 +137,7 @@ func (s *DefaultRuntimeScorer) CalculateFormatScore(model *v1beta1.BaseModelSpec
 	}
 
 	// Check the matching condition (same as original line 223-224)
-	if (modelFormatMatches || (supportedFormat.ModelFormat == nil && &model.ModelFormat == nil)) &&
+	if (modelFormatMatches || supportedFormat.ModelFormat == nil) &&
 		(modelFrameworkMatches || (supportedFormat.ModelFramework == nil && model.ModelFramework == nil)) {
 
 		// Calculate weighted score
