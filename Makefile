@@ -593,7 +593,7 @@ xet-build: ## 🔧 Build XET library
 	@echo "✅ XET library built"
 
 .PHONY: test
-test: fmt vet manifests envtest xet-build ## 🧪 Run all tests with coverage
+test: tidy fmt vet manifests envtest xet-build ## 🧪 Run all tests with coverage
 	@echo "\n🧪 Running comprehensive test suite (Toolchain: $(GOTOOLCHAIN))..."
 	$(call run_go_test,$(CMD_PACKAGES),cmd)
 	$(call run_go_test,$(PKG_PACKAGES),pkg)
