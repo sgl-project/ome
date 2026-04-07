@@ -24,6 +24,24 @@ When submitting a pull request:
 5. Fill out the pull request template completely. The template will guide you through providing all necessary information.
 6. Link any related issues using the "Fixes #123" syntax to automatically close them when the PR is merged.
 
+#### Pre-commit check
+**Pre-commit hooks** run these checks automatically on every commit.
+- **General Checks**: Trailing whitespace, end-of-file fixing, YAML/TOML validation, merge conflict detection, large file prevention
+- **Go Formatting**: `go-fmt`, `go-vet` with workspace-wide formatting
+- **Helm Linting**: `helm-lint` with all warnings treated as errors
+- **Spell Checking**: `codespell` for catching typos across all text files
+To set up:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+To run it:
+```bash
+pre-commit run --all-files #run all hooks on all files.
+pre-commit run go-fmt --all-files # run go-fmt hooks on all files.
+```
+
 ### PR Template
 
 It is required to classify your PR and make the commit message concise and useful. Prefix the PR title appropriately to indicate the type of change. Please use one of the following:
@@ -286,7 +304,7 @@ For VSCode or Cursor, follow these steps to set up the development environment:
    {
        "name": "OME Manager",
        "type": "go",
-       "request": "launch", 
+       "request": "launch",
        "mode": "debug",
        "program": "${workspaceFolder}/cmd/manager/main.go",
        "env": {
