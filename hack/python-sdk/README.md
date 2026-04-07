@@ -20,4 +20,3 @@ From root folder, execute the script `/hack/python-sdk/client-gen.sh` to install
 ./hack/python-sdk/client-gen.sh
 ```
 After the script execution, the Python SDK is generated in the `python/ome` directory. Some files such as [README](../../python/ome/README.md) and documents need to be merged manually after the script execution.
-

@@ -503,4 +503,3 @@ kubectl logs -l serving.ome.io/inferenceservice=llama-chat
 ```bash
 kubectl top pods -l serving.ome.io/inferenceservice=llama-chat
 ```
-
