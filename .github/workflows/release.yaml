@@ -148,17 +148,17 @@ jobs:
         run: |
           VERSION=${{ needs.prepare.outputs.version }}
           TAG=${{ needs.prepare.outputs.tag }}
-          
+
           # Update chart versions
           for chart in charts/*/; do
             yq eval -i ".version = \"${VERSION}\"" ${chart}Chart.yaml
             yq eval -i ".appVersion = \"${VERSION}\"" ${chart}Chart.yaml
-            
+
             # Update image tags in values.yaml for ome-resources chart
             if [[ -f ${chart}values.yaml ]] && [[ $(basename ${chart}) == "ome-resources" ]]; then
               # Update the defaultVersion anchor
               yq eval -i ".ome.version = \"${TAG}\"" ${chart}values.yaml
-              
+
               # Update specific image tags that don't use the anchor
               yq eval -i ".ome.benchmarkJob.tag = \"${TAG}\"" ${chart}values.yaml
               yq eval -i ".ome.multinodeProber.tag = \"${TAG}\"" ${chart}values.yaml
@@ -237,15 +237,15 @@ jobs:
       - name: Organize release assets
         run: |
           mkdir -p release-assets
-          
+
           # Copy Helm charts
           cp artifacts/helm-charts/*.tgz release-assets/ || true
           cp artifacts/helm-charts/index.yaml release-assets/helm-index.yaml || true
-          
+
           # Copy SBOMs
           cp artifacts/sbom-*/*.json release-assets/ || true
           cp artifacts/source-sbom/*.json release-assets/ || true
-          
+
           # Create checksums
           cd release-assets
           sha256sum * > SHA256SUMS
@@ -256,65 +256,65 @@ jobs:
         run: |
           cat > release-notes.md << EOF
           # OME ${{ needs.prepare.outputs.version }}
-          
+
           ## 🚀 What's New
-          
+
           <!-- Add release highlights here -->
-          
+
           ## 📦 Container Images
-          
+
           The following container images are available:
-          
+
           \`\`\`bash
           # OME Manager
           docker pull ghcr.io/moirai-internal/ome-manager:${{ needs.prepare.outputs.tag }}
-          
+
           # Model Agent
           docker pull ghcr.io/moirai-internal/model-agent:${{ needs.prepare.outputs.tag }}
-          
+
           # OME Agent
           docker pull ghcr.io/moirai-internal/ome-agent:${{ needs.prepare.outputs.tag }}
-          
+
           # Multinode Prober
           docker pull ghcr.io/moirai-internal/multinode-prober:${{ needs.prepare.outputs.tag }}
           \`\`\`
-          
+
           ## ⎈ Helm Installation
-          
+
           ### Option 1: OCI Registry (Recommended)
-          
+
           \`\`\`bash
           # Install directly from OCI registry
           helm install ome-crd oci://ghcr.io/moirai-internal/charts/ome-crd --version ${{ needs.prepare.outputs.version }} --namespace ome --create-namespace
           helm install ome oci://ghcr.io/moirai-internal/charts/ome-resources --version ${{ needs.prepare.outputs.version }} --namespace ome
           \`\`\`
-          
+
           ### Option 2: GitHub Releases
-          
+
           \`\`\`bash
           # Add the OME Helm repository
           helm repo add ome https://github.com/sgl-project/ome/releases/download/${{ needs.prepare.outputs.tag }}
           helm repo update
-          
+
           # Install OME
           helm install ome-crd ome/ome-crd --namespace ome --create-namespace
           helm install ome ome/ome-resources --namespace ome
           \`\`\`
-          
+
           ## 📋 Changelog
-          
+
           <!-- Generate from commits or add manually -->
-          
+
           ## 📄 Software Bill of Materials
-          
+
           SBOMs are available in both SPDX and CycloneDX formats for:
           - Source code
           - All container images
-          
+
           ## 🔐 Signatures
-          
+
           All container images are signed with cosign. Verify with:
-          
+
           \`\`\`bash
           cosign verify ghcr.io/moirai-internal/ome-manager:${{ needs.prepare.outputs.tag }} \
             --certificate-identity-regexp=https://github.com/sgl-project/ome/.github/workflows/release.yaml@refs/tags/.* \

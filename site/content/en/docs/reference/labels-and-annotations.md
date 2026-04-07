@@ -155,4 +155,4 @@ These annotations control model encryption and decryption:
 ### Priority Classes
 
 - `volcano-scheduling-high-priority`: High priority for Volcano scheduling
-- `kueue-scheduling-high-priority`: High priority for Kueue workload scheduling 
+- `kueue-scheduling-high-priority`: High priority for Kueue workload scheduling

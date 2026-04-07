@@ -515,4 +515,4 @@ To remove benchmark resources:
 ```bash
 kubectl delete benchmarkjob -n benchmark-demo simple-benchmark
 kubectl delete namespace benchmark-demo
-``` 
+```

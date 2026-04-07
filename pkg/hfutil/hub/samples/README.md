@@ -101,7 +101,7 @@ export HF_TOKEN=your_token_here  # Required!
 go run llama_download.go
 ```
 
-**Requirements:** 
+**Requirements:**
 - HF token required (Llama models are gated)
 - ~5GB storage space
 - Good internet connection
@@ -236,4 +236,4 @@ The examples use these external dependencies:
 Install dependencies:
 ```bash
 go mod download
-``` 
+```

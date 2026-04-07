@@ -4,19 +4,19 @@ This package provides Go utilities for loading, parsing, and analyzing Hugging F
 
 ## Features
 
-- **Automatic model detection:**  
+- **Automatic model detection:**
   Detects and loads configuration for any supported model type.
-- **Model metadata extraction:**  
+- **Model metadata extraction:**
   Extracts key information, including:
   - Parameter count
   - Context window size
   - Model architecture
   - Vision capabilities (for multimodal models)
-- **Extensible architecture:**  
+- **Extensible architecture:**
   Easy to add support for new model families.
-- **Accurate parameter counting:**  
+- **Accurate parameter counting:**
   Handles complex cases such as Mixture of Experts (MoE) and multi-file safetensors models.
-- **Comprehensive test coverage:**  
+- **Comprehensive test coverage:**
   Unit tests and real-world test data for all supported models.
 
 ## Supported Model Families
@@ -29,7 +29,7 @@ This package provides Go utilities for loading, parsing, and analyzing Hugging F
 - **Qwen Family**: Qwen2, Qwen2.5
 - **Gemma Family**: Gemma, Gemma2
 - **ChatGLM Family**: ChatGLM3, GLM-4
-- **Other Models**: 
+- **Other Models**:
   - StableLM (StabilityAI)
   - MiniCPM, MiniCPM3
   - InternLM, InternLM2

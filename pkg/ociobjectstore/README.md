@@ -38,16 +38,16 @@ func main() {
     v := viper.New()
     v.Set("auth_type", "InstancePrincipal")
     v.Set("region_override", "us-chicago-1")
-    
+
     // Create logger (implement logging.Interface)
     logger := &YourLogger{}
-    
+
     // Create data store
     cds, err := ociobjectstore.ProvideOCIOSDataStore(v, logger)
     if err != nil {
         panic(err)
     }
-    
+
     // Use the data store...
 }
 ```
@@ -87,7 +87,7 @@ source := ociobjectstore.ObjectURI{
 err := cds.Download(source, "/local/target/dir")
 
 // Download with custom thread count
-err = cds.Download(source, "/local/target/dir", 
+err = cds.Download(source, "/local/target/dir",
     ociobjectstore.WithThreads(10))
 
 // Download with multiple options
@@ -195,7 +195,7 @@ err := cds.Upload("/local/path/to/file.txt", target)
 err = cds.Upload("Hello, World!", target)
 
 // Multipart upload for large files
-err = cds.MultipartFileUpload("/local/large-file.bin", target, 
+err = cds.MultipartFileUpload("/local/large-file.bin", target,
     16, // 16MB chunks
     10) // 10 concurrent threads
 ```
@@ -255,7 +255,7 @@ obo_token: "your-obo-token"  # Required if enable_obo_token is true
 ### Authentication Types
 
 - `InstancePrincipal`: Use OCI instance principal authentication
-- `UserPrincipal`: Use OCI user principal authentication  
+- `UserPrincipal`: Use OCI user principal authentication
 - `ResourcePrincipal`: Use OCI resource principal authentication
 
 ### OBO Token Support
@@ -288,16 +288,16 @@ func main() {
         // Provide dependencies
         fx.Provide(NewViper),
         fx.Provide(NewLogger),
-        
+
         // Add OCI Object Store module
         ociobjectstore.OCIOSDataStoreModule,
-        
+
         // Use the data store
         fx.Invoke(func(cds *ociobjectstore.OCIOSDataStore) {
             // Your application logic here
         }),
     )
-    
+
     app.Run()
 }
 ```
@@ -319,7 +319,7 @@ func main() {
             // Use multiple stores
         }),
     )
-    
+
     app.Run()
 }
 ```

@@ -1,7 +1,7 @@
 {{ define "type" }}
 
 ## `{{ .Name.Name }}`     {#{{ .Anchor }}}
-    
+
 {{ if eq .Kind "Alias" -}}
 (Alias of `{{ .Underlying }}`)
 {{ end }}
@@ -33,4 +33,4 @@
 </tbody>
 </table>
 {{- end -}}
-{{- end -}} 
+{{- end -}}

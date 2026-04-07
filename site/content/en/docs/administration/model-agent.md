@@ -293,7 +293,7 @@ type ConfigMapManager struct {
 func (cm *ConfigMapManager) UpdateModelStatus(modelKey string, status ModelStatus) error {
     cm.mutex.Lock()
     defer cm.mutex.Unlock()
-    
+
     // Update ConfigMap data
     // Handle conflicts and retries
 }
@@ -351,7 +351,7 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         http.Error(w, "Models directory not accessible", http.StatusServiceUnavailable)
         return
     }
-    
+
     w.WriteHeader(http.StatusOK)
     w.Write([]byte("OK"))
 }
@@ -381,7 +381,7 @@ The Model Agent provides detailed Prometheus metrics:
 # Total successful downloads
 model_agent_downloads_success_total{model_type="llama", namespace="default", name="llama-70b"} 1
 
-# Total failed downloads  
+# Total failed downloads
 model_agent_downloads_failed_total{model_type="llama", namespace="default", name="llama-70b"} 0
 
 # Download duration
@@ -642,7 +642,7 @@ groups:
     for: 2m
     annotations:
       summary: "Model download failure detected"
-      
+
   - alert: ModelAgentDown
     expr: up{job="model-agent"} == 0
     for: 1m
@@ -659,4 +659,4 @@ Key metrics to dashboard:
 - Agent resource utilization
 - ConfigMap update frequency
 
-This comprehensive guide provides the operational knowledge needed to effectively manage the Model Agent in production OME deployments. 
+This comprehensive guide provides the operational knowledge needed to effectively manage the Model Agent in production OME deployments.

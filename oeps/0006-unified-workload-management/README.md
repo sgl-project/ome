@@ -112,20 +112,20 @@ graph TB
         ISVCReconciler[ISVC Reconciler]
         StrategyManager[Strategy Manager]
     end
-    
+
     subgraph "Workload Strategy Layer"
         SingleStrategy[Single Component Strategy]
         RBGStrategy[RBG Strategy]
         FutureStrategy[Future Strategies...]
     end
-    
+
     subgraph "Component Layer"
         EngineComponent[Engine Component]
         DecoderComponent[Decoder Component]
         RouterComponent[Router Component]
         ConfigExtractor[ComponentConfigExtractor]
     end
-    
+
     subgraph "Resource Reconcilers"
         RBGReconciler[RBG Reconciler]
         RawDeploymentReconciler[Deployment Reconciler]
@@ -135,7 +135,7 @@ graph TB
         PDBReconciler[PDB Reconciler]
         RBACReconciler[RBAC Reconciler]
     end
-    
+
     subgraph "Kubernetes Resources"
         RBGResource[RoleBasedGroup]
         DeploymentResource[Deployment]
@@ -145,26 +145,26 @@ graph TB
         PDBResource[PDB]
         RBACResource[RBAC]
     end
-    
+
     ISVCReconciler -->|Select Strategy| StrategyManager
     StrategyManager -->|Return Strategy| SingleStrategy
     StrategyManager -->|Return Strategy| RBGStrategy
-    
+
     SingleStrategy -->|Reconcile Independently| EngineComponent
     SingleStrategy -->|Reconcile Independently| DecoderComponent
     SingleStrategy -->|Reconcile Independently| RouterComponent
-    
+
     RBGStrategy -->|Extract Config| ConfigExtractor
     ConfigExtractor -.->|Implemented by| EngineComponent
     ConfigExtractor -.->|Implemented by| DecoderComponent
     ConfigExtractor -.->|Implemented by| RouterComponent
-    
+
     RBGStrategy -->|Create/Update| RBGReconciler
-    
+
     EngineComponent -->|Single Mode| RawDeploymentReconciler
     EngineComponent -->|Single Mode| KnativeReconciler
     DecoderComponent -->|Single Mode| MultiNodeReconciler
-    
+
     RBGReconciler -->|Manage| RBGResource
     RawDeploymentReconciler -->|Manage| DeploymentResource
     KnativeReconciler -->|Manage| KnativeResource
@@ -298,26 +298,26 @@ The strategy selection process executes in the InferenceService Controller's Rec
 flowchart TD
     Start[Start Reconciliation] --> GetAnnotations[Get InferenceService Annotations]
     GetAnnotations --> SelectStrategy[Call StrategyManager.SelectStrategy]
-    
+
     SelectStrategy --> CheckRegistered{Any Registered Strategies?}
     CheckRegistered -->|No| Error1[Return Error: No Available Strategy]
     CheckRegistered -->|Yes| IterateStrategies[Iterate All Strategies]
-    
+
     IterateStrategies --> IsApplicable{Strategy.IsApplicable?}
     IsApplicable -->|Yes| ValidateMode[Strategy.ValidateDeploymentModes]
     IsApplicable -->|No| NextStrategy[Check Next Strategy]
-    
+
     ValidateMode --> ValidResult{Validation Passed?}
     ValidResult -->|Yes| StrategySelected[Strategy Selected]
     ValidResult -->|No| Error2[Return Error: Deployment Mode Incompatible]
-    
+
     NextStrategy --> MoreStrategies{More Strategies?}
     MoreStrategies -->|Yes| IsApplicable
     MoreStrategies -->|No| Error3[Return Error: No Applicable Strategy]
-    
+
     StrategySelected --> ReconcileWorkload[Call Strategy.ReconcileWorkload]
     ReconcileWorkload --> End[Complete]
-    
+
     Error1 --> End
     Error2 --> End
     Error3 --> End
@@ -362,11 +362,11 @@ sequenceDiagram
     participant RBGReconciler as RBG Reconciler
     participant HPAReconciler as HPA Reconciler
     participant K8sAPI as Kubernetes API
-    
+
     ISVCController->>RBGStrategy: ReconcileWorkload(request)
-    
+
     Note over RBGStrategy: Phase 1: Build Component Configurations
-    
+
     RBGStrategy->>ComponentBuilder: CreateEngineComponent()
     ComponentBuilder-->>RBGStrategy: engineComponent
     RBGStrategy->>ConfigExtractor: GetPodSpec(isvc)
@@ -375,25 +375,25 @@ sequenceDiagram
     ConfigExtractor-->>RBGStrategy: engineMetadata
     RBGStrategy->>ConfigExtractor: GetComponentExtension()
     ConfigExtractor-->>RBGStrategy: engineExtension
-    
+
     Note over RBGStrategy: Repeat above process for Decoder and Router
-    
+
     RBGStrategy->>ComponentBuilder: CreateDecoderComponent()
     RBGStrategy->>ConfigExtractor: Extract decoder configs
     RBGStrategy->>ComponentBuilder: CreateRouterComponent()
     RBGStrategy->>ConfigExtractor: Extract router configs
-    
+
     Note over RBGStrategy: Phase 2: Create RBAC Resources
-    
+
     RBGStrategy->>RBGStrategy: reconcileRBAC(componentConfigs)
     RBGStrategy->>K8sAPI: Create/Update ServiceAccount, Role, RoleBinding
-    
+
     Note over RBGStrategy: Phase 3: Reconcile RBG Resource
-    
+
     RBGStrategy->>RBGReconciler: Reconcile(isvc, componentConfigs)
     RBGReconciler->>RBGReconciler: buildRoles(componentConfigs)
     RBGReconciler->>K8sAPI: Get existing RBG
-    
+
     alt RBG Does Not Exist
         RBGReconciler->>RBGReconciler: createRBG(isvc, roles)
         RBGReconciler->>K8sAPI: Create RBG
@@ -402,16 +402,16 @@ sequenceDiagram
         Note over RBGReconciler: Preserve existing replica configuration
         RBGReconciler->>K8sAPI: Update RBG
     end
-    
+
     RBGReconciler-->>RBGStrategy: Result
-    
+
     Note over RBGStrategy: Phase 4: Create HPA Resources
-    
+
     loop For Each Role Create HPA
         RBGStrategy->>HPAReconciler: Reconcile(hpa)
         HPAReconciler->>K8sAPI: Create/Update HPA
     end
-    
+
     RBGStrategy-->>ISVCController: Result
 ```
 
@@ -423,25 +423,25 @@ Used to pass component configuration between RBG strategy and RBG Reconciler:
 type ComponentConfig struct {
     // ComponentType specifies component type (Engine/Decoder/Router)
     ComponentType v1beta1.ComponentType
-    
+
     // DeploymentMode specifies deployment mode for this component (RawDeployment or MultiNode)
     DeploymentMode constants.DeploymentModeType
-    
+
     // PodSpec used for RawDeployment mode or as base template for MultiNode mode
     PodSpec *corev1.PodSpec
-    
+
     // LeaderPodSpec used for leader node in MultiNode mode
     LeaderPodSpec *corev1.PodSpec
-    
+
     // WorkerPodSpec used for worker nodes in MultiNode mode
     WorkerPodSpec *corev1.PodSpec
-    
+
     // WorkerSize specifies worker node count (MultiNode mode)
     WorkerSize int
-    
+
     // ComponentExtensionSpec contains replica count, scaling configuration, etc.
     ComponentExtensionSpec *v1beta1.ComponentExtensionSpec
-    
+
     // ObjectMeta contains name, labels, annotations, and other metadata
     ObjectMeta metav1.ObjectMeta
 }

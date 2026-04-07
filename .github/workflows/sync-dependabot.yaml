@@ -37,13 +37,13 @@ jobs:
           # Update main module
           go mod tidy
           go mod download
-          
+
           # Update tools module
           cd hack/internal/tools
           go mod tidy
           go mod download
           cd -
-          
+
           # Update site module
           cd site
           go mod tidy

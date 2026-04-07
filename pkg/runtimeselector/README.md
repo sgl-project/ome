@@ -58,7 +58,7 @@ Abstracts runtime resource fetching:
 type RuntimeFetcher interface {
     // Fetch all runtimes in a namespace
     FetchRuntimes(ctx context.Context, namespace string) (*RuntimeCollection, error)
-    
+
     // Get specific runtime by name
     GetRuntime(ctx context.Context, name string, namespace string) (*v1beta1.ServingRuntimeSpec, bool, error)
 }
@@ -84,7 +84,7 @@ Calculates runtime scores:
 type RuntimeScorer interface {
     // Calculate score for runtime-model pair
     CalculateScore(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec) (int64, error)
-    
+
     // Compare two runtime matches
     CompareRuntimes(a, b RuntimeMatch, model *v1beta1.BaseModelSpec) int
 }
@@ -124,7 +124,7 @@ type RuntimeScorer interface {
 
 The matcher evaluates compatibility across multiple dimensions:
 
-1. **Accelerator Class Requirements** 
+1. **Accelerator Class Requirements**
    - Checks if runtime's required accelerator classes match InferenceService requirements
    - Validates accelerator class from multiple sources:
      - InferenceService annotations (`ome.io/accelerator-class`)
@@ -176,7 +176,7 @@ type InferenceServiceReconciler struct {
 func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
     // Initialize runtime selector
     r.RuntimeSelector = runtimeselector.New(mgr.GetClient())
-    
+
     // Add watches to populate cache
     ctrlBuilder.
         Watches(&v1beta1.ServingRuntime{},
@@ -187,7 +187,7 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
             handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []reconcile.Request {
                 return nil // Just populate cache
             }))
-    
+
     return ctrlBuilder.Complete(r)
 }
 ```
@@ -278,7 +278,7 @@ if runtimeselector.IsNoRuntimeFoundError(err) {
         "namespace", e.Namespace,
         "totalRuntimes", e.TotalRuntimes,
         "excludedCount", len(e.ExcludedRuntimes))
-    
+
     // Log why each runtime was excluded
     for name, reason := range e.ExcludedRuntimes {
         log.Info("Runtime excluded", "runtime", name, "reason", reason)

@@ -221,7 +221,7 @@ jobs:
             --build-arg GIT_COMMIT=${{ github.sha }} \
             . -f dockerfiles/manager.Dockerfile \
             -t local/ome-manager:pr-test
-          
+
           docker buildx build --platform=linux/amd64,linux/arm64 \
             --build-arg VERSION=pr-test \
             --build-arg GIT_TAG=pr-${{ github.event.pull_request.number }} \
@@ -264,20 +264,20 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const needs = context.payload.workflow_run ? 
-              context.payload.workflow_run.pull_requests[0].number : 
+            const needs = context.payload.workflow_run ?
+              context.payload.workflow_run.pull_requests[0].number :
               context.issue.number;
-            
+
             const jobs = {
               'quick-checks': '${{ needs.quick-checks.result }}',
               'test-and-build': '${{ needs.test-and-build.result }}',
               'docker-validation': '${{ needs.docker-validation.result }}',
               'helm-validation': '${{ needs.helm-validation.result }}'
             };
-            
+
             let allPassed = true;
             let summary = '## 📋 PR Validation Summary\n\n';
-            
+
             for (const [job, status] of Object.entries(jobs)) {
               const emoji = status === 'success' ? '✅' : status === 'skipped' ? '⏭️' : '❌';
               summary += `${emoji} **${job}**: ${status}\n`;
@@ -285,10 +285,10 @@ jobs:
                 allPassed = false;
               }
             }
-            
+
             summary += '\n';
-            summary += allPassed ? 
-              '### ✅ All checks passed! Ready for review.' : 
+            summary += allPassed ?
+              '### ✅ All checks passed! Ready for review.' :
               '### ❌ Some checks failed. Please review the errors above.';
-            
+
             core.summary.addRaw(summary).write();

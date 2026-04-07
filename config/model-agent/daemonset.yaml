@@ -7,7 +7,7 @@ spec:
   updateStrategy:
     type: RollingUpdate
   selector:
-    matchLabels: 
+    matchLabels:
       app.kubernetes.io/component: "ome-model-agent-daemonset"
   template:
     metadata:
@@ -92,5 +92,5 @@ spec:
             memory: 100Gi
       tolerations:
         - key: nvidia.com/gpu
-          operator: Exists  
+          operator: Exists
           effect: NoSchedule

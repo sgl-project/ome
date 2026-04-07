@@ -103,7 +103,7 @@ Defines routing from gateway to backend MCPServers (namespace-scoped). Applicati
 -   **Embedded policies**: Authentication, authorization, and rate limiting specific to this route
 -   **Request filters**: Header modifications, transformations
 
-Routes are **automatically discovered** by gateway (no parentRef needed). 
+Routes are **automatically discovered** by gateway (no parentRef needed).
 
 ### Internal Gateway Deployment (Auto-Managed by OME)
 
@@ -265,7 +265,7 @@ Alice gets direct server access with minimal overhead while still benefiting fro
 
 1.  **Hosted Server Container Name**: When using a `hosted` `MCPServer`, the container running the MCP server process within the `podSpec` must be named `mcp-server` for the controller to correctly inject configurations. (This requirement may be relaxed in future versions using label selectors.)
 2.  **Permissions**: The `permissionProfile` with `kubeResources` is very powerful. Misconfiguration can create security risks. The controller creates `Roles`/`RoleBindings`, so RBAC must be enabled in the cluster. Documentation will strongly emphasize the principle of least privilege.
-3.  **Operator-Managed Gateway**: The gateway component in v1alpha1 is **not a user-facing CRD**. It's managed internally by OME based on InferenceService configuration. 
+3.  **Operator-Managed Gateway**: The gateway component in v1alpha1 is **not a user-facing CRD**. It's managed internally by OME based on InferenceService configuration.
 4.  **Gateway Scope**: In v1alpha1, each InferenceService gets its own logical gateway configuration. Shared gateway infrastructure (multi-tenant) will be considered for v1beta1 if user feedback indicates strong demand.
 5.  **Policy Embedding**: Policies (authentication, authorization, rate limiting) are embedded in MCPRoute and InferenceService specs rather than separate CRDs. This simplifies the API for v1alpha1 while maintaining a path to separate Policy CRDs in future versions.
 6.  **Transport Limitations**: `stdio` transport is only suitable for simple, single-shot tools and does not support scaling beyond one replica. `streamable-http` or `sse` are recommended for production deployments.
@@ -282,7 +282,7 @@ Alice gets direct server access with minimal overhead while still benefiting fro
     -   **Mitigation**: The API is declarative with all permissions explicitly defined in YAML and auditable. The controller generates narrowly scoped `Roles` with least-privilege principles. Documentation and examples will strongly emphasize security best practices. Consider adding validation webhooks to warn about overly broad permissions.
 
 -   **Risk 2: Gateway as Single Point of Failure**: If the managed gateway goes down, all tool access is lost (when gateway mode is enabled).
-    -   **Mitigation**: The managed gateway will support multiple replicas with automatic load balancing. Standard Kubernetes practices for HA (Pod anti-affinity, PodDisruptionBudget) will be applied. 
+    -   **Mitigation**: The managed gateway will support multiple replicas with automatic load balancing. Standard Kubernetes practices for HA (Pod anti-affinity, PodDisruptionBudget) will be applied.
 
 -   **Risk 3: Limited Flexibility in v1alpha1**: Starting with operator-managed gateway means less flexibility for advanced users who need custom gateway configurations.
     -   **Mitigation**: The design includes a clear evolution path. v1beta1 can introduce user-facing MCPGateway CRD and separate Policy CRDs based on validated user needs. The simplified v1alpha1 design accelerates time-to-market while gathering real-world usage patterns to inform future enhancements.
@@ -298,7 +298,7 @@ The model introduces two CRDs with clear separation of concerns.
 
 ### MCPServer Resource
 
-MCPServer defines individual MCP tool servers (namespace-scoped). 
+MCPServer defines individual MCP tool servers (namespace-scoped).
 
 **Key Points**:
 - Namespace-scoped (routes can only reference servers in same namespace)
@@ -1541,7 +1541,7 @@ spec:
 4.  **No Cross-Namespace Route Sharing**: InferenceService can only reference MCPRoute in the same namespace.
     - Platform teams cannot create a single shared route for all namespaces
     - Route configuration must be duplicated per namespace
-    - **Mitigation**: v1beta1 introduces MCPGateway Config that provides defaults. Routes inherit these defaults, minimizing duplication. Use auto-create mode to avoid managing routes entirely. 
+    - **Mitigation**: v1beta1 introduces MCPGateway Config that provides defaults. Routes inherit these defaults, minimizing duplication. Use auto-create mode to avoid managing routes entirely.
 
 5.  **Latency Overhead**: Gateway introduces extra network hop and policy evaluation overhead:
     - Estimated latency: 2-10ms per request (varies by policy complexity)

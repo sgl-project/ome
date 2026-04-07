@@ -15,14 +15,14 @@ assignees: ''
 
 ## Why is this needed?
 
-<!-- 
+<!--
 Explain why this enhancement would be useful to OME users.
 Include use cases and benefits.
 -->
 
 ## Completion requirements
 
-<!-- 
+<!--
 This enhancement requires the following artifacts:
 
 - [ ] Design doc (if significant feature)
@@ -33,7 +33,7 @@ This enhancement requires the following artifacts:
 
 ## Can you help us implement this enhancement?
 
-<!-- 
+<!--
 Let us know if you're interested in contributing!
 - [ ] Yes, I can contribute
 - [ ] No, but I'm available for testing

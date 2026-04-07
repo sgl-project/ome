@@ -400,4 +400,4 @@ kubectl delete inferenceservice -n llama-70b-demo llama-3-3-70b-instruct
 kubectl delete inferenceservice -n deepseek-r1 deepseek-r1
 ```
 
-This will clean up all associated resources including deployments, services, and storage. 
+This will clean up all associated resources including deployments, services, and storage.

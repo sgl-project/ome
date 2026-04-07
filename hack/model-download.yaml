@@ -30,7 +30,7 @@ spec:
       containers:
       - name: model-downloader
         image: ubuntu:devel
-        command: 
+        command:
           - "/bin/bash"
           - "-c"
           - |

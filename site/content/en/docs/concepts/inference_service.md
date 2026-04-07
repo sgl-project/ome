@@ -17,7 +17,7 @@ Think of InferenceService as the "deployment blueprint" for your AI workloads. I
 OME uses a **component-based architecture** where InferenceService can be composed of multiple specialized components:
 
 - **Model**: References the AI model to serve (BaseModel/ClusterBaseModel)
-- **Runtime**: References the serving runtime environment (ServingRuntime/ClusterServingRuntime)  
+- **Runtime**: References the serving runtime environment (ServingRuntime/ClusterServingRuntime)
 - **Engine**: Main inference component that processes requests
 - **Decoder**: Optional component for disaggregated serving (prefill-decode separation)
 - **Router**: Optional component for request routing and load balancing
@@ -53,13 +53,13 @@ spec:
     serviceAccountName: custom-sa
     nodeSelector:
       accelerator: nvidia-a100
-    
-    # Component configuration  
+
+    # Component configuration
     minReplicas: 1
     maxReplicas: 10
     scaleMetric: cpu
     scaleTarget: 70
-    
+
     # Container configuration
     runner:
       image: custom-vllm:latest
@@ -144,7 +144,7 @@ Leverages Knative Serving for automatic scaling including scale-to-zero capabili
 
 ```yaml
 apiVersion: ome.io/v1beta1
-kind: InferenceService  
+kind: InferenceService
 metadata:
   name: llama-chat
 spec:
@@ -174,7 +174,7 @@ spec:
   engine:
     minReplicas: 1
     maxReplicas: 2
-    # Worker node configuration  
+    # Worker node configuration
     worker:
       size: 1  # Number of worker nodes
 ```
@@ -192,17 +192,17 @@ metadata:
 spec:
   model:
     name: deepseek-r1
-  
+
   # Router handles request routing and load balancing for prefill-decode disaggregation
   router:
     minReplicas: 1
     maxReplicas: 3
-  
+
   # Engine handles prefill phase
   engine:
     minReplicas: 1
     maxReplicas: 3
-  
+
   # Decoder handles token generation
   decoder:
     minReplicas: 2

@@ -126,7 +126,7 @@ spec:
     # Must use conservative settings that work on smallest GPU
     - name: GPU_MEMORY_UTILIZATION
       value: "0.85"  # Conservative for all GPUs
-    - name: MAX_MODEL_LEN  
+    - name: MAX_MODEL_LEN
       value: "16384" # Limited by smallest GPU
     # Can't enable H100-specific optimizations like FP8
 ```
@@ -141,12 +141,12 @@ spec:
   supportedModelFormats:
     - name: safetensors
       autoSelect: true
-  
+
   acceleratorRequirements:
     requiredCapabilities:
       minComputeCapability: "8.0"
       requiredFeatures: ["tensor-cores"]
-    
+
   # GPU-specific optimizations
   acceleratorConfigurations:
     - selector:
@@ -161,7 +161,7 @@ spec:
       runner:
         args:
           - "--enable-prefix-caching"
-          
+
     - selector:
         acceleratorClass: nvidia-h100-80gb
       env:
@@ -269,7 +269,7 @@ spec:
     name: llama-7b
   runtime:
     name: sglang-universal
-    
+
   # Router configuration - CPU only
   router:
     nodeSelector:
@@ -283,7 +283,7 @@ spec:
         cpu: "4"
         memory: "8Gi"
         # No GPU resources specified
-  
+
   # Engine configuration - GPU required
   engine:
     # AcceleratorClass nodeSelector will be merged here
@@ -294,7 +294,7 @@ spec:
         resources:
           limits:
             nvidia.com/gpu: 1
-  
+
   # Accelerator selection only affects engine/decoder
   acceleratorSelector:
     preferredClasses: ["nvidia-a100-40gb"]
@@ -314,7 +314,7 @@ spec:
   supportedModelFormats:
     - name: safetensors
       autoSelect: true
-  
+
   # Define cost-aware preferences
   acceleratorRequirements:
     preferenceOrder:
@@ -328,7 +328,7 @@ spec:
         conditions:
           - modelSize: ">70B"
           - requestSize: ">4096"  # Large requests need H100 performance
-  
+
   # Cost-optimized configurations per GPU
   acceleratorConfigurations:
     - selector:
@@ -338,7 +338,7 @@ spec:
           value: "32"  # Conservative batching
         - name: QUANTIZATION
           value: "awq"  # Use quantization to fit more on A100
-      
+
     - selector:
         acceleratorClass: nvidia-h100-80gb
       env:
@@ -378,7 +378,7 @@ spec:
   supportedModelFormats:
     - name: safetensors
       autoSelect: true
-  
+
   acceleratorConfigurations:
     # A100 configuration - no speculative decoding due to memory constraints
     - selector:
@@ -394,7 +394,7 @@ spec:
         args:
           - "--enable-prefix-caching"
           - "--enable-cuda-graph"
-    
+
     # H100 configuration - full optimization features
     - selector:
         acceleratorClass: nvidia-h100-80gb
@@ -416,7 +416,7 @@ spec:
           - "--enable-chunked-prefill"
           - "--num-speculative-tokens=5"
           - "--spec-decoding-acceptance-method=typical"
-    
+
     # H200 configuration - maximum performance
     - selector:
         acceleratorClass: nvidia-h200-96gb
@@ -434,7 +434,7 @@ spec:
       runner:
         args:
           - "--enable-prefix-caching"
-          - "--enable-cuda-graph" 
+          - "--enable-cuda-graph"
           - "--enable-chunked-prefill"
           - "--num-speculative-tokens=7"
           - "--enable-flashinfer"  # H200 optimized kernels
@@ -458,17 +458,17 @@ spec:
         - sh
         - -c
         - >
-          python3 -m sglang.launch_server 
-          --host 0.0.0.0 --port 8080 
-          --model-path ${MODEL_PATH} 
-          --tp-size 16 
-          --nccl-init $(LWS_LEADER_ADDRESS):5000 
-          --nnodes ${LWS_GROUP_SIZE} 
-          --node-rank ${LWS_WORKER_INDEX} 
-          --trust-remote-code 
-          --enable-torch-compile 
-          --torch-compile-max-bs 1 
-          --reasoning-parser deepseek-r1 
+          python3 -m sglang.launch_server
+          --host 0.0.0.0 --port 8080
+          --model-path ${MODEL_PATH}
+          --tp-size 16
+          --nccl-init $(LWS_LEADER_ADDRESS):5000
+          --nnodes ${LWS_GROUP_SIZE}
+          --node-rank ${LWS_WORKER_INDEX}
+          --trust-remote-code
+          --enable-torch-compile
+          --torch-compile-max-bs 1
+          --reasoning-parser deepseek-r1
           --enable-metrics
   # Even with acceleratorSelector, args from acceleratorConfigurations are NOT applied
   # because user specified command
@@ -492,15 +492,15 @@ spec:
         - "--model-path=${MODEL_PATH}"
         - "--tp-size=8"
         - "--trust-remote-code"
-  
+
   runtime:
     name: sglang-performance-optimized
-  
+
   acceleratorSelector:
     preferredClasses: ["nvidia-h100-80gb"]
-  
+
   # Result: Final args will be:
-  # ["--host=0.0.0.0", "--port=8080", "--model-path=${MODEL_PATH}", 
+  # ["--host=0.0.0.0", "--port=8080", "--model-path=${MODEL_PATH}",
   #  "--tp-size=8", "--trust-remote-code",
   #  "--enable-prefix-caching", "--enable-cuda-graph",  # From acceleratorConfig
   #  "--enable-chunked-prefill", "--num-speculative-tokens=5",
@@ -521,13 +521,13 @@ spec:
           value: "4"  # User override
         - name: CUSTOM_SETTING
           value: "user-value"
-  
+
   runtime:
     name: sglang-performance-optimized
-  
+
   acceleratorSelector:
     preferredClasses: ["nvidia-h100-80gb"]
-  
+
   # Result: Final env will include:
   # TENSOR_PARALLEL_SIZE=4 (user value wins)
   # CUSTOM_SETTING=user-value (user defined)
@@ -607,7 +607,7 @@ spec:
   vendor: nvidia
   family: ampere
   model: a100
-  
+
   discovery:
     nodeSelector:
       nvidia.com/gpu.product: "NVIDIA-A100-SXM4-40GB"
@@ -619,7 +619,7 @@ spec:
           values: ["NVIDIA-A100-SXM4-40GB", "NVIDIA-A100-PCIE-40GB"]
     pciVendorID: "10de"
     deviceIDs: ["20b0", "20b2"]  # Different A100 variants
-  
+
   capabilities:
     memoryGB: "40Gi"
     computeCapability: "8.0"
@@ -633,14 +633,14 @@ spec:
       fp16TFLOPS: 312
       fp32TFLOPS: 156
       int8TOPS: 624
-  
+
   resources:
     - name: nvidia.com/gpu
       quantity: "1"
     - name: nvidia.com/mig-3g.20gb
       quantity: "2"
       divisible: true
-  
+
   cost:
     perHour: "2.21"  # Current cloud pricing
     spotPerHour: "0.88"
@@ -656,13 +656,13 @@ spec:
   vendor: nvidia
   family: hopper
   model: h100
-  
+
   discovery:
     nodeSelector:
       nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
     pciVendorID: "10de"
     deviceIDs: ["2330"]
-  
+
   capabilities:
     memoryGB: "80Gi"
     computeCapability: "9.0"
@@ -677,11 +677,11 @@ spec:
       fp8TFLOPS: 3958  # With sparsity
       fp16TFLOPS: 1979
       fp32TFLOPS: 989
-  
+
   resources:
     - name: nvidia.com/gpu
       quantity: "1"
-  
+
   cost:
     perHour: "5.12"  # Higher cost for newer GPU
     spotPerHour: "2.05"
@@ -697,7 +697,7 @@ spec:
   vendor: amd
   family: cdna2
   model: mi250x
-  
+
   discovery:
     nodeSelector:
       amd.com/gpu.product: "MI250X"
@@ -707,7 +707,7 @@ spec:
         - key: gpu.amd.com/model
           operator: In
           values: ["mi250x", "MI250X"]
-  
+
   capabilities:
     memoryGB: "128Gi"  # 2x64GB
     rocmVersion: "5.7"
@@ -718,7 +718,7 @@ spec:
     performance:
       fp16TFLOPS: 383
       fp32TFLOPS: 47.9
-  
+
   resources:
     - name: amd.com/gpu
       quantity: "1"
@@ -733,18 +733,18 @@ spec:
   vendor: intel
   family: ponte-vecchio
   model: max-1550
-  
+
   discovery:
     nodeSelector:
       gpu.intel.com/product: "max-1550"
-  
+
   capabilities:
     memoryGB: "128Gi"
     levelZeroVersion: "1.3"
     features:
       - xmx-engines
       - ray-tracing
-  
+
   resources:
     - name: gpu.intel.com/i915
       quantity: "1"
@@ -781,7 +781,7 @@ data:
       capabilities:
         memoryGB: "16Gi"
         features: ["tensor-cores"]
-    
+
     # Medium GPU for standard workloads
     ---
     apiVersion: ome.io/v1beta1
@@ -803,7 +803,7 @@ data:
       capabilities:
         memoryGB: "40Gi"
         minComputeCapability: "8.0"
-    
+
     # Large GPU for large models
     ---
     apiVersion: ome.io/v1beta1
@@ -835,9 +835,9 @@ func (r *AcceleratorDiscoveryReconciler) discoverGPUs(ctx context.Context) error
     if err := r.List(ctx, nodes); err != nil {
         return err
     }
-    
+
     discoveredGPUs := make(map[string]*AcceleratorClassSpec)
-    
+
     for _, node := range nodes.Items {
         // Check for NVIDIA GPUs
         if product, ok := node.Labels["nvidia.com/gpu.product"]; ok {
@@ -846,7 +846,7 @@ func (r *AcceleratorDiscoveryReconciler) discoverGPUs(ctx context.Context) error
                 discoveredGPUs[product] = spec
             }
         }
-        
+
         // Check for AMD GPUs
         if product, ok := node.Labels["amd.com/gpu.product"]; ok {
             if _, exists := discoveredGPUs[product]; !exists {
@@ -855,7 +855,7 @@ func (r *AcceleratorDiscoveryReconciler) discoverGPUs(ctx context.Context) error
             }
         }
     }
-    
+
     // Create AcceleratorClass for each discovered GPU type
     for name, spec := range discoveredGPUs {
         ac := &AcceleratorClass{
@@ -871,7 +871,7 @@ func (r *AcceleratorDiscoveryReconciler) discoverGPUs(ctx context.Context) error
             return err
         }
     }
-    
+
     return nil
 }
 ```
@@ -892,7 +892,7 @@ func (r *AcceleratorDiscoveryReconciler) discoverGPUs(ctx context.Context) error
 type AcceleratorClass struct {
     metav1.TypeMeta   `json:",inline"`
     metav1.ObjectMeta `json:"metadata,omitempty"`
-    
+
     Spec   AcceleratorClassSpec   `json:"spec,omitempty"`
     Status AcceleratorClassStatus `json:"status,omitempty"`
 }
@@ -901,29 +901,29 @@ type AcceleratorClassSpec struct {
     // Vendor of the accelerator (nvidia, amd, intel, etc.)
     // +optional
     Vendor string `json:"vendor,omitempty"`
-    
+
     // Family of the accelerator (ampere, hopper, cdna2, etc.)
     // +optional
     Family string `json:"family,omitempty"`
-    
+
     // Model name (a100, h100, mi250x, etc.)
     // +optional
     Model string `json:"model,omitempty"`
-    
+
     // Discovery patterns to identify nodes with this accelerator
     Discovery AcceleratorDiscovery `json:"discovery"`
-    
+
     // Capabilities of this accelerator class
     Capabilities AcceleratorCapabilities `json:"capabilities"`
-    
+
     // Resources exposed by this accelerator
     // +optional
     Resources []AcceleratorResource `json:"resources,omitempty"`
-    
+
     // Integration with external systems
     // +optional
     Integration *AcceleratorIntegration `json:"integration,omitempty"`
-    
+
     // Cost information for optimization decisions
     // +optional
     Cost *AcceleratorCost `json:"cost,omitempty"`
@@ -933,15 +933,15 @@ type AcceleratorCost struct {
     // Cost per hour in dollars
     // +optional
     PerHour *resource.Quantity `json:"perHour,omitempty"`
-    
+
     // Cost per million tokens (for usage-based pricing)
     // +optional
     PerMillionTokens *resource.Quantity `json:"perMillionTokens,omitempty"`
-    
+
     // Spot instance pricing if available
     // +optional
     SpotPerHour *resource.Quantity `json:"spotPerHour,omitempty"`
-    
+
     // Cost tier for simplified selection (low, medium, high)
     // +optional
     Tier string `json:"tier,omitempty"`
@@ -951,15 +951,15 @@ type AcceleratorDiscovery struct {
     // NodeSelector to identify nodes with this accelerator
     // +optional
     NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-    
+
     // NodeSelectorTerms for more complex node selection
     // +optional
     NodeSelectorTerms []v1.NodeSelectorTerm `json:"nodeSelectorTerms,omitempty"`
-    
+
     // PCIVendorID for device discovery (e.g., "10de" for NVIDIA)
     // +optional
     PCIVendorID string `json:"pciVendorID,omitempty"`
-    
+
     // DeviceIDs list of PCI device IDs
     // +optional
     DeviceIDs []string `json:"deviceIDs,omitempty"`
@@ -969,23 +969,23 @@ type AcceleratorCapabilities struct {
     // Memory capacity in GB
     // +optional
     MemoryGB *resource.Quantity `json:"memoryGB,omitempty"`
-    
+
     // Compute capability (NVIDIA) or equivalent
     // +optional
     ComputeCapability string `json:"computeCapability,omitempty"`
-    
+
     // Clock speeds
     // +optional
     ClockSpeedMHz *int32 `json:"clockSpeedMHz,omitempty"`
-    
+
     // Memory bandwidth
     // +optional
     MemoryBandwidthGBps *resource.Quantity `json:"memoryBandwidthGBps,omitempty"`
-    
+
     // Features supported by this accelerator
     // +optional
     Features []string `json:"features,omitempty"`
-    
+
     // Performance metrics
     // +optional
     Performance *AcceleratorPerformance `json:"performance,omitempty"`
@@ -994,11 +994,11 @@ type AcceleratorCapabilities struct {
 type AcceleratorResource struct {
     // Name of the resource (e.g., nvidia.com/gpu)
     Name string `json:"name"`
-    
+
     // Quantity per accelerator
     // +kubebuilder:default="1"
     Quantity resource.Quantity `json:"quantity,omitempty"`
-    
+
     // Divisible indicates if the resource can be subdivided
     // +optional
     Divisible bool `json:"divisible,omitempty"`
@@ -1008,7 +1008,7 @@ type AcceleratorIntegration struct {
     // KueueResourceFlavor name to sync with
     // +optional
     KueueResourceFlavor string `json:"kueueResourceFlavor,omitempty"`
-    
+
     // VolcanoGPUType for Volcano integration
     // +optional
     VolcanoGPUType string `json:"volcanoGPUType,omitempty"`
@@ -1018,19 +1018,19 @@ type AcceleratorClassStatus struct {
     // Nodes that have this accelerator
     // +optional
     Nodes []string `json:"nodes,omitempty"`
-    
+
     // Total number of accelerators in the cluster
     // +optional
     TotalAccelerators int32 `json:"totalAccelerators,omitempty"`
-    
+
     // Available accelerators (not allocated)
     // +optional
     AvailableAccelerators int32 `json:"availableAccelerators,omitempty"`
-    
+
     // Last update time
     // +optional
     LastUpdated metav1.Time `json:"lastUpdated,omitempty"`
-    
+
     // Conditions represent the latest available observations
     // +optional
     Conditions []metav1.Condition `json:"conditions,omitempty"`
@@ -1048,7 +1048,7 @@ type InferenceServiceSpec struct {
     Model   *ModelRef    `json:"model,omitempty"`
     Runtime *ServingRuntimeRef `json:"runtime,omitempty"`
     Router  *RouterSpec  `json:"router,omitempty"`
-    
+
     // NEW: Accelerator selection preferences
     // +optional
     AcceleratorSelector *AcceleratorSelector `json:"acceleratorSelector,omitempty"`
@@ -1058,20 +1058,20 @@ type AcceleratorSelector struct {
     // PreferredClasses in order of preference
     // +optional
     PreferredClasses []string `json:"preferredClasses,omitempty"`
-    
+
     // RequiredCapabilities that must be met
     // +optional
     RequiredCapabilities *AcceleratorCapabilities `json:"requiredCapabilities,omitempty"`
-    
+
     // Strategy for selection (performance, cost, balanced)
     // +kubebuilder:default="balanced"
     // +optional
     Strategy AcceleratorSelectionStrategy `json:"strategy,omitempty"`
-    
+
     // NodeSelector for specific node targeting
     // +optional
     NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-    
+
     // Strategy for selection (performance, cost, balanced)
     // +kubebuilder:default="balanced"
     // +optional
@@ -1086,7 +1086,7 @@ type EngineSpec struct {
     Runner                 *RunnerSpec `json:"runner,omitempty"`
     Leader                 *LeaderSpec `json:"leader,omitempty"`
     Worker                 *WorkerSpec `json:"worker,omitempty"`
-    
+
     // NEW: Accelerator-specific configuration overrides
     // Applied based on selected accelerator class
     // +optional
@@ -1096,15 +1096,15 @@ type EngineSpec struct {
 type AcceleratorConfiguration struct {
     // Selector for which accelerator classes this applies to
     Selector AcceleratorConfigSelector `json:"selector"`
-    
+
     // Environment variables to set
     // +optional
     Env []v1.EnvVar `json:"env,omitempty"`
-    
+
     // Resources to request/limit
     // +optional
     Resources v1.ResourceRequirements `json:"resources,omitempty"`
-    
+
     // Runner overrides
     // +optional
     Runner *RunnerSpec `json:"runner,omitempty"`
@@ -1123,7 +1123,7 @@ type ServingRuntimeSpec struct {
     RouterConfig         *RouterSpec             `json:"routerConfig,omitempty"`
     EngineConfig         *EngineSpec             `json:"engineConfig,omitempty"`
     DecoderConfig        *DecoderSpec            `json:"decoderConfig,omitempty"`
-    
+
     // NEW: Accelerator requirements for this runtime
     // +optional
     AcceleratorRequirements *AcceleratorRequirements `json:"acceleratorRequirements,omitempty"`
@@ -1133,11 +1133,11 @@ type AcceleratorRequirements struct {
     // SupportedClasses explicitly lists supported accelerator classes
     // +optional
     SupportedClasses []string `json:"supportedClasses,omitempty"`
-    
+
     // RequiredCapabilities that any accelerator must meet
     // +optional
     RequiredCapabilities *AcceleratorCapabilities `json:"requiredCapabilities,omitempty"`
-    
+
     // PreferenceOrder for accelerator selection
     // +optional
     PreferenceOrder []AcceleratorPreference `json:"preferenceOrder,omitempty"`
@@ -1146,12 +1146,12 @@ type AcceleratorRequirements struct {
 type AcceleratorPreference struct {
     // Class name or capability matcher
     Class string `json:"class,omitempty"`
-    
+
     // Score for this preference (higher is better)
     // +kubebuilder:validation:Minimum=0
     // +kubebuilder:validation:Maximum=100
     Score int32 `json:"score"`
-    
+
     // Conditions when this preference applies
     // +optional
     Conditions []PreferenceCondition `json:"conditions,omitempty"`
@@ -1174,18 +1174,18 @@ func (r *AcceleratorClassReconciler) Reconcile(ctx context.Context, req ctrl.Req
             return r.syncFromResourceFlavor(ctx, rf)
         }
     }
-    
+
     // Normal AcceleratorClass reconciliation
     ac := &omev1beta1.AcceleratorClass{}
     if err := r.Get(ctx, req.NamespacedName, ac); err != nil {
         return ctrl.Result{}, client.IgnoreNotFound(err)
     }
-    
+
     // If linked to Kueue, ensure ResourceFlavor exists
     if ac.Spec.Integration != nil && ac.Spec.Integration.KueueResourceFlavor != "" {
         return r.ensureResourceFlavor(ctx, ac)
     }
-    
+
     return r.updateAcceleratorStatus(ctx, ac)
 }
 
@@ -1197,7 +1197,7 @@ func (r *AcceleratorClassReconciler) discoverAcceleratorCapabilities(
     capabilities := &AcceleratorCapabilities{
         Features: []string{},
     }
-    
+
     for _, node := range nodes {
         // Extract GPU information from node labels
         if memory, ok := node.Labels["nvidia.com/gpu.memory"]; ok {
@@ -1205,21 +1205,21 @@ func (r *AcceleratorClassReconciler) discoverAcceleratorCapabilities(
                 capabilities.MemoryGB = &mem
             }
         }
-        
+
         if cc, ok := node.Labels["nvidia.com/gpu.compute"]; ok {
             capabilities.ComputeCapability = cc
         }
-        
+
         // Check for specific features
         if _, ok := node.Labels["nvidia.com/mig.capable"]; ok {
             capabilities.Features = append(capabilities.Features, "mig")
         }
-        
+
         if _, ok := node.Labels["nvidia.com/nvlink"]; ok {
             capabilities.Features = append(capabilities.Features, "nvlink")
         }
     }
-    
+
     return capabilities, nil
 }
 ```
@@ -1246,20 +1246,20 @@ func (s *RuntimeSelector) SelectRuntimeWithAccelerator(
     if err != nil {
         return nil, err
     }
-    
+
     // 2. Build effective accelerator requirements (with overrides)
     requirements := s.buildEffectiveRequirements(
         runtime.Spec.AcceleratorRequirements,           // Base from runtime
         inferenceService.Spec.AcceleratorSelector,      // Override from InferenceService
         inferenceService.Annotations,                   // Final overrides from annotations
     )
-    
+
     // 3. Find matching accelerators
     accelerators, err := s.findMatchingAccelerators(ctx, requirements)
     if err != nil {
         return nil, err
     }
-    
+
     // 4. Score and select best option
     selection := s.selectBestOption(
         runtime,
@@ -1267,10 +1267,10 @@ func (s *RuntimeSelector) SelectRuntimeWithAccelerator(
         model,
         requirements.Strategy,
     )
-    
+
     // 5. Apply accelerator-specific configuration
     s.applyAcceleratorConfig(selection, runtime, accelerators[0])
-    
+
     return selection, nil
 }
 
@@ -1283,13 +1283,13 @@ func (s *RuntimeSelector) buildEffectiveRequirements(
     req := &EffectiveRequirements{
         Strategy: s.defaultStrategy,
     }
-    
+
     // Layer 1: Runtime defaults
     if runtimeReq != nil {
         req.SupportedClasses = runtimeReq.SupportedClasses
         req.RequiredCapabilities = runtimeReq.RequiredCapabilities
     }
-    
+
     // Layer 2: InferenceService overrides
     if serviceSelector != nil {
         if len(serviceSelector.PreferredClasses) > 0 {
@@ -1305,7 +1305,7 @@ func (s *RuntimeSelector) buildEffectiveRequirements(
             req.Strategy = serviceSelector.Strategy
         }
     }
-    
+
     // Layer 3: Annotation overrides (highest priority)
     if class, ok := annotations["ome.io/accelerator-class"]; ok {
         req.PreferredClasses = []string{class}
@@ -1313,7 +1313,7 @@ func (s *RuntimeSelector) buildEffectiveRequirements(
     if strategy, ok := annotations["ome.io/selection-strategy"]; ok {
         req.Strategy = AcceleratorSelectionStrategy(strategy)
     }
-    
+
     return req
 }
 
@@ -1325,7 +1325,7 @@ func (s *RuntimeSelector) mergeNodeSelectors(
     inferenceService *InferenceService,
 ) map[string]string {
     merged := make(map[string]string)
-    
+
     // Router component doesn't get accelerator constraints
     if component == "router" {
         // Only use router-specific nodeSelector
@@ -1336,23 +1336,23 @@ func (s *RuntimeSelector) mergeNodeSelectors(
         }
         return merged
     }
-    
+
     // For engine and decoder components, apply accelerator constraints
-    
+
     // 1. Start with AcceleratorClass nodeSelector
     if acceleratorClass != nil && acceleratorClass.Spec.Discovery.NodeSelector != nil {
         for k, v := range acceleratorClass.Spec.Discovery.NodeSelector {
             merged[k] = v
         }
     }
-    
+
     // 2. Merge Runtime nodeSelector (runtime can override accelerator)
     if runtime != nil && runtime.Spec.NodeSelector != nil {
         for k, v := range runtime.Spec.NodeSelector {
             merged[k] = v
         }
     }
-    
+
     // 3. Merge component-specific nodeSelector (highest priority)
     var componentNodeSelector map[string]string
     switch component {
@@ -1365,19 +1365,19 @@ func (s *RuntimeSelector) mergeNodeSelectors(
             componentNodeSelector = inferenceService.Spec.Decoder.NodeSelector
         }
     }
-    
+
     if componentNodeSelector != nil {
         for k, v := range componentNodeSelector {
             merged[k] = v
         }
     }
-    
+
     return merged
 }
 
 // Example: How nodeSelectors are merged
 // AcceleratorClass nodeSelector: {"nvidia.com/gpu.product": "A100-SXM4-40GB"}
-// Runtime nodeSelector: {"node-pool": "gpu-pool"}  
+// Runtime nodeSelector: {"node-pool": "gpu-pool"}
 // InferenceService nodeSelector: {"dedicated": "team-alpha"}
 // Result: {"nvidia.com/gpu.product": "A100-SXM4-40GB", "node-pool": "gpu-pool", "dedicated": "team-alpha"}
 
@@ -1387,7 +1387,7 @@ func (s *RuntimeSelector) mergeContainerConfig(
     acceleratorConfig *AcceleratorConfiguration,
 ) *v1.Container {
     result := userContainer.DeepCopy()
-    
+
     // Rule 1: If user specified command, don't touch args
     if len(userContainer.Command) > 0 {
         // User has full control, skip arg merging
@@ -1396,28 +1396,28 @@ func (s *RuntimeSelector) mergeContainerConfig(
         // Rule 2: Append accelerator args to user args
         result.Args = append(result.Args, acceleratorConfig.Runner.Args...)
     }
-    
+
     // Rule 3: Merge environment variables (user values take precedence)
     if len(acceleratorConfig.Env) > 0 {
         envMap := make(map[string]v1.EnvVar)
-        
+
         // Start with accelerator env vars
         for _, env := range acceleratorConfig.Env {
             envMap[env.Name] = env
         }
-        
+
         // Override with user env vars
         for _, env := range userContainer.Env {
             envMap[env.Name] = env
         }
-        
+
         // Convert back to slice
         result.Env = make([]v1.EnvVar, 0, len(envMap))
         for _, env := range envMap {
             result.Env = append(result.Env, env)
         }
     }
-    
+
     // Rule 4: Merge resources (take maximum)
     if acceleratorConfig.Resources.Limits != nil {
         if result.Resources.Limits == nil {
@@ -1434,7 +1434,7 @@ func (s *RuntimeSelector) mergeContainerConfig(
             }
         }
     }
-    
+
     return result
 }
 ```
@@ -1448,36 +1448,36 @@ graph TB
         SR[ServingRuntime]
         AC[AcceleratorClass]
     end
-    
+
     subgraph "Controllers"
         ISC[InferenceService Controller]
         ACC[AcceleratorClass Controller]
         KIC[Kueue Integration Controller]
     end
-    
+
     subgraph "Selection Engine"
         RS[Runtime Selector]
         AS[Accelerator Matcher]
         SC[Score Calculator]
     end
-    
+
     subgraph "External Systems"
         K8S[Kubernetes Nodes]
         KQ[Kueue ResourceFlavors]
         GPU[GPU Operators]
     end
-    
+
     IS --> ISC
     ISC --> RS
     RS --> AS
     AS --> AC
     RS --> SC
-    
+
     ACC --> K8S
     ACC <--> KQ
     KIC --> KQ
     KIC --> AC
-    
+
     K8S --> GPU
 ```
 
@@ -1489,7 +1489,7 @@ graph TB
   - Test AcceleratorClass CRUD operations
   - Test capability matching logic
   - Test Kueue ResourceFlavor synchronization
-  
+
 - `pkg/controller/inferenceservice/utils`: 2024-12-01 - Current coverage
   - Add tests for accelerator-aware runtime selection
   - Test override hierarchy

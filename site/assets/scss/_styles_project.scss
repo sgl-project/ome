@@ -49,7 +49,7 @@ footer {
 
     .navbar-logo {
       margin-left: 1.5rem;
-      
+
       svg {
         display: inline-block;
         position: relative;
@@ -164,7 +164,7 @@ pre[class*="language-"] {
 // Ensure code blocks have proper positioning for toolbar
 div.code-toolbar {
   position: relative;
-  
+
   // Override any conflicting styles from Hugo's highlighter
   > pre[class*="language-"] {
     margin: 0;
@@ -196,7 +196,7 @@ div.code-toolbar > .toolbar > .toolbar-item > button {
   border-radius: 0.5em;
   box-shadow: 0 2px 0 0 rgba(0,0,0,0.2);
   font-size: 0.8em;
-  
+
   &:hover {
     background: rgba(224, 224, 224, 0.4);
     color: #333;
@@ -295,14 +295,14 @@ div.feature-state-notice {
   border-collapse: collapse;
   width: 100%;
   font-size: 0.9rem;
-  
+
   th, td {
     border: 1px solid #dee2e6;
     padding: 0.75rem;
     vertical-align: top;
     line-height: 1.5;
   }
-  
+
   th {
     background-color: #f8f9fa;
     font-weight: 600;
@@ -310,20 +310,20 @@ div.feature-state-notice {
     color: #495057;
     font-size: 0.875rem;
   }
-  
+
   tbody tr:nth-of-type(odd) {
     background-color: rgba(0, 0, 0, 0.025);
   }
-  
+
   tbody tr:hover {
     background-color: rgba(0, 123, 255, 0.05);
   }
-  
+
   // Field column styling
   td:first-child {
     width: 30%;
     font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-    
+
     code {
       font-weight: 600;
       background-color: transparent;
@@ -331,7 +331,7 @@ div.feature-state-notice {
       font-size: 0.875em;
       padding: 0;
     }
-    
+
     // Required badge styling
     B {
       color: #dc3545;
@@ -340,11 +340,11 @@ div.feature-state-notice {
       font-weight: 700;
     }
   }
-  
-  // Description column styling  
+
+  // Description column styling
   td:last-child {
     width: 70%;
-    
+
     // Code blocks in descriptions
     code {
       background-color: #f8f9fa;
@@ -354,42 +354,42 @@ div.feature-state-notice {
       font-size: 0.875em;
       border: 1px solid #e9ecef;
     }
-    
+
     // Links in type references
     a code {
       color: #0056b3;
       text-decoration: none;
       background-color: #e3f2fd;
       border-color: #bbdefb;
-      
+
       &:hover {
         text-decoration: underline;
         background-color: #bbdefb;
       }
     }
-    
+
     // Muted text for missing descriptions
     .text-muted {
       color: #6c757d;
       font-style: italic;
       font-size: 0.875em;
     }
-    
+
     // Embedded type descriptions
     p {
       margin-bottom: 0.5rem;
       line-height: 1.6;
-      
+
       &:last-child {
         margin-bottom: 0;
       }
     }
-    
+
     // Improve list formatting in descriptions
     ul, ol {
       margin-bottom: 0.5rem;
       padding-left: 1.25rem;
-      
+
       li {
         margin-bottom: 0.25rem;
       }
@@ -401,10 +401,10 @@ div.feature-state-notice {
 .td-content ul {
   li {
     margin-bottom: 0.25rem;
-    
+
     a {
       text-decoration: none;
-      
+
       &:hover {
         text-decoration: underline;
       }
