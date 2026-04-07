@@ -141,5 +141,4 @@ func (cds *OCIOSDataStore) adjustMetadataForStreamUpload(uploadRequest *transfer
 		uploadRequest.Metadata = RemoveOpcMetaPrefix(uploadRequest.Metadata)
 		cds.logger.Debugf("Stream is empty, removed 'opc-meta-' prefix from metadata keys: %v", uploadRequest.Metadata)
 	}
-	return
 }

@@ -130,43 +130,6 @@ func TestResolveVaultPrefix(t *testing.T) {
 	}
 }
 
-func TestCFBEncryptDecrypt(t *testing.T) {
-	// Generate a test key (32 bytes for AES-256, base64 encoded)
-	testKey := B64Encode(strings.Repeat("a", 32))
-	testPlaintext := "Hello, World! This is a test message."
-
-	t.Run("successful encryption and decryption", func(t *testing.T) {
-		// Test encryption
-		ciphertext, err := CFBEncrypt(testPlaintext, testKey)
-		require.NoError(t, err)
-		assert.NotEmpty(t, ciphertext)
-		assert.NotEqual(t, testPlaintext, ciphertext)
-
-		// Test decryption
-		decrypted, err := CFBDecrypt(ciphertext, testKey)
-		require.NoError(t, err)
-		assert.Equal(t, testPlaintext, decrypted)
-	})
-
-	t.Run("encryption with invalid key", func(t *testing.T) {
-		invalidKey := B64Encode("short")
-		_, err := CFBEncrypt(testPlaintext, invalidKey)
-		assert.Error(t, err)
-	})
-
-	t.Run("decryption with invalid ciphertext", func(t *testing.T) {
-		_, err := CFBDecrypt("invalid-ciphertext", testKey)
-		assert.Error(t, err)
-	})
-
-	t.Run("decryption with short ciphertext", func(t *testing.T) {
-		shortCiphertext := B64Encode("short")
-		_, err := CFBDecrypt(shortCiphertext, testKey)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "ciphertext too short")
-	})
-}
-
 func TestGCMEncryptDecrypt(t *testing.T) {
 	// Generate a test key (32 bytes for AES-256, base64 encoded)
 	testKey := B64Encode(strings.Repeat("b", 32))
@@ -369,55 +332,6 @@ func TestGCMEncryptDecryptRoundTrip(t *testing.T) {
 	}
 }
 
-func TestCFBEncryptDecryptEdgeCases(t *testing.T) {
-	key := B64Encode("0123456789abcdef0123456789abcdef")
-
-	tests := []struct {
-		name        string
-		text        string
-		expectError bool
-	}{
-		{
-			name:        "very long text",
-			text:        strings.Repeat("This is a very long text for testing CFB encryption. ", 1000),
-			expectError: false,
-		},
-		{
-			name:        "text with special characters",
-			text:        "Special chars: !@#$%^&*()_+-=[]{}|;':\",./<>?`~",
-			expectError: false,
-		},
-		{
-			name:        "unicode text",
-			text:        "Unicode: 你好世界 🌍 🚀 ñáéíóú",
-			expectError: false,
-		},
-		{
-			name:        "newlines and tabs",
-			text:        "Line 1\nLine 2\tTabbed\r\nWindows newline",
-			expectError: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			encrypted, err := CFBEncrypt(tt.text, key)
-			if tt.expectError {
-				assert.Error(t, err)
-				return
-			}
-
-			assert.NoError(t, err)
-			assert.NotEmpty(t, encrypted)
-			assert.NotEqual(t, tt.text, encrypted)
-
-			decrypted, err := CFBDecrypt(encrypted, key)
-			assert.NoError(t, err)
-			assert.Equal(t, tt.text, decrypted)
-		})
-	}
-}
-
 func TestResolveVaultPrefixEdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -529,19 +443,8 @@ func TestEncryptionKeyValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			key := tt.keyFunc()
 
-			// Test CFB encryption
-			_, err := CFBEncrypt(plaintext, key)
-			if tt.expectError {
-				assert.Error(t, err)
-				if tt.errorMsg != "" {
-					assert.Contains(t, err.Error(), tt.errorMsg)
-				}
-			} else {
-				assert.NoError(t, err)
-			}
-
 			// Test GCM encryption
-			_, err = GCMEncrypt(plaintext, key)
+			_, err := GCMEncrypt(plaintext, key)
 			if tt.expectError {
 				assert.Error(t, err)
 				if tt.errorMsg != "" {

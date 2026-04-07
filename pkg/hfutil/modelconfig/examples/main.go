@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -73,7 +72,7 @@ func createExampleConfig(tmpDir string, modelType string) (string, error) {
 	}
 
 	// Write to file
-	if err := ioutil.WriteFile(filename, data, 0644); err != nil {
+	if err := os.WriteFile(filename, data, 0644); err != nil {
 		return "", fmt.Errorf("failed to write config file: %v", err)
 	}
 
@@ -82,7 +81,7 @@ func createExampleConfig(tmpDir string, modelType string) (string, error) {
 
 func main() {
 	// Create a temporary directory for the example configs
-	tmpDir, err := ioutil.TempDir("", "huggingface-config-examples")
+	tmpDir, err := os.MkdirTemp("", "huggingface-config-examples")
 	if err != nil {
 		fmt.Printf("Error creating temporary directory: %v\n", err)
 		os.Exit(1)

@@ -27,7 +27,7 @@ func newMetricsAggregator(configMap *v1.ConfigMap) (*MetricsAggregator, error) {
 	if maConfigVal, ok := configMap.Data[MetricsAggregatorConfigMapKeyName]; ok {
 		err := json.Unmarshal([]byte(maConfigVal), &ma)
 		if err != nil {
-			panic(fmt.Errorf("Unable to unmarshall %v json string due to %w ", MetricsAggregatorConfigMapKeyName, err))
+			return nil, fmt.Errorf("unable to unmarshall %v json string due to %w ", MetricsAggregatorConfigMapKeyName, err)
 		}
 	}
 
