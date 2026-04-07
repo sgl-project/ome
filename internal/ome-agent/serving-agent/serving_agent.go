@@ -52,18 +52,18 @@ func (s *ServingSidecar) Start() error {
 	}
 	defer watcher.Close()
 
-	// ConfigMap never update the file. It creats as a tmp file and delete the old file, and then being renamed.
+	// ConfigMap never update the file. It creates as a tmp file and delete the old file, and then being renamed.
 	// Use the mount dir to work around
 	fileChangeDetected := s.watchFileChanges(watcher, filepath.Dir(s.Config.FineTunedWeightInfoFilePath))
 
-	// Create the channle to receive termination signals
-	teminationSignalCh := make(chan os.Signal, 1)
-	signal.Notify(teminationSignalCh, os.Interrupt, syscall.SIGTERM)
+	// Create the channel to receive termination signals
+	terminationSignalCh := make(chan os.Signal, 1)
+	signal.Notify(terminationSignalCh, os.Interrupt, syscall.SIGTERM)
 
 OuterLoop:
 	for {
 		select {
-		case <-teminationSignalCh:
+		case <-terminationSignalCh:
 			close(fileChangeDetected)
 			s.logger.Infof("Termination signal received, exiting serving sidecar ...")
 			break OuterLoop
@@ -142,7 +142,7 @@ func (s *ServingSidecar) applyFinetunedModelChanges() {
 			}
 			s.logger.Infof("Model '%s' unzipped\n", uri.ObjectName)
 
-			// Downloaded ft modle zip file will be kept in the target folder
+			// Downloaded ft model zip file will be kept in the target folder
 		}
 	}
 
