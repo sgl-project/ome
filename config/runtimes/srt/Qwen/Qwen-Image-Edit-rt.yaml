@@ -162,4 +162,3 @@ spec:
         successThreshold: 1
         periodSeconds: 20
         timeoutSeconds: 10
-
