@@ -134,7 +134,7 @@ func (c *ConfigMapReconciler) Reconcile(ctx context.Context, isvc *v1beta1.Infer
 
 func (c *ConfigMapReconciler) createModelConfig(ctx context.Context, isvc *v1beta1.InferenceService, modelConfigName string, jsonData []byte) (ctrl.Result, error) {
 	// Use the package-level logger or a logger derived from context if specific context is needed.
-	// For now, let's ensure we are not re-declaring if 'log' is already the package-level one.
+	// For now, let's ensure we are not redeclaring if 'log' is already the package-level one.
 	// If we want a context-specific logger:
 	// createLog := logf.FromContext(ctx).WithName("createModelConfig")
 	// And then use createLog instead of log.

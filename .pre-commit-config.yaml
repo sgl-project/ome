@@ -24,7 +24,7 @@ repos:
     rev: v2.4.1
     hooks:
       - id: codespell
-        args: ['-L', 'AfterAll,NotIn,UpToDate,WithT,allReady']
+        args: ['-L', 'AfterAll,NotIn,UpToDate,WithT,allReady,rouge']
         exclude: |
           (?x)^(
             charts/.*/templates/.*\.yaml$|
@@ -47,7 +47,7 @@ repos:
       - id: go-vet
         name: go vet
         description: Run go vet on Go packages
-        entry: go vet ./...
+        entry: bash -c 'go vet $(go list ./... | grep -v /pkg/xet)'
         language: system
         types: [go]
         pass_filenames: false

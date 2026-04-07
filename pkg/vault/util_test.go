@@ -306,7 +306,7 @@ func TestGCMEncryptDecryptRoundTrip(t *testing.T) {
 		[]byte("Hello, World!"),                  // Short text
 		[]byte(strings.Repeat("test", 100)),      // Medium text
 		[]byte(strings.Repeat("longtext", 1000)), // Long text
-		[]byte{0, 1, 2, 3, 255, 254, 253},        // Binary data
+		{0, 1, 2, 3, 255, 254, 253},              // Binary data
 	}
 
 	for i, plaintext := range testCases {

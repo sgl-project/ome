@@ -1173,7 +1173,7 @@ based on the BaseModel's download policy and artifacts previously recorded in th
 node-scoped ConfigMap.
 
 any error thrown in the process of searching for matched parent model, will be ignored, the process will proceed
-to download artifact. Will let model cr reconciliation process handel searching for matched model to avoid impact
+to download artifact. Will let model cr reconciliation process handle searching for matched model to avoid impact
 model creation process
 
 Returns:
