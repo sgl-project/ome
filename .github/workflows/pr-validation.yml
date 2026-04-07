@@ -16,8 +16,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quick-checks:
-    name: Quick Checks
+  pre-commit-checks:
+    name: Pre-commit Checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -47,15 +47,21 @@ jobs:
           make controller-gen
           make envtest
 
-      - name: Run fmt and vet
-        run: |
-          make fmt
-          make vet
-          git diff --exit-code || (echo "::error::Code is not formatted. Please run 'make fmt'" && exit 1)
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
 
-      # - name: Run linter
-      #   run: make ci-lint
-      # TODO: Re-enable linting once fixed
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Install pre-commit
+        run: pip install pre-commit
+
+      - name: Run pre-commit
+        run: pre-commit run --all-files --show-diff-on-failure
 
   test-and-build:
     name: Test and Build
@@ -123,7 +129,7 @@ jobs:
     name: Docker Build Validation
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: quick-checks
+    needs: pre-commit-checks
     strategy:
       matrix:
         image: [ome-image, model-agent-image, multinode-prober-image, ome-agent-image]
@@ -175,7 +181,7 @@ jobs:
     name: Docker Multi-Arch Build Validation
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: quick-checks
+    needs: pre-commit-checks
     if: contains(github.event.pull_request.labels.*.name, 'test-multiarch')
     steps:
       - name: Checkout code
@@ -230,34 +236,10 @@ jobs:
             -t local/model-agent:pr-test
           echo "✅ Multi-arch build validation successful"
 
-  helm-validation:
-    name: Helm Chart Validation
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: quick-checks
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Setup Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: 'latest'
-
-      - name: Lint Helm charts
-        run: make helm-lint
-
-      - name: Test Helm chart rendering
-        run: |
-          helm template test-crd ./charts/ome-crd --debug
-          helm template test-resources ./charts/ome-resources --debug
-
   summary:
     name: PR Validation Summary
     runs-on: ubuntu-latest
-    needs: [quick-checks, test-and-build, docker-validation, helm-validation]
+    needs: [pre-commit-checks, test-and-build, docker-validation]
     if: always()
     steps:
       - name: PR Status Summary
@@ -269,10 +251,9 @@ jobs:
               context.issue.number;
 
             const jobs = {
-              'quick-checks': '${{ needs.quick-checks.result }}',
+              'pre-commit-checks': '${{ needs.pre-commit-checks.result }}',
               'test-and-build': '${{ needs.test-and-build.result }}',
-              'docker-validation': '${{ needs.docker-validation.result }}',
-              'helm-validation': '${{ needs.helm-validation.result }}'
+              'docker-validation': '${{ needs.docker-validation.result }}'
             };
 
             let allPassed = true;
