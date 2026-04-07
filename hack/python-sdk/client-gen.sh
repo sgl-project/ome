@@ -35,7 +35,7 @@ download_openapi_generator() {
 generate_python_sdk() {
     echo >&2 "Generating Python SDK for OME ..."
     java -jar ${SWAGGER_CODEGEN_JAR} generate -i ${SWAGGER_CODEGEN_FILE} -g python -o ${SDK_OUTPUT_PATH} -c ${SWAGGER_CODEGEN_CONF} 2>&1 || handle_error "Failed to generate Python SDK"
-    
+
     # Revert following files since they are diverged from generated ones
     git checkout python/ome/README.md || handle_error "Failed to checkout README.md"
     git checkout python/ome/.gitignore || handle_error "Failed to checkout .gitignore"
@@ -47,7 +47,7 @@ update_k8s_doc_links() {
     echo >&2 "Updating Kubernetes documentation links ..."
     K8S_IMPORT_LIST=$(cat hack/python-sdk/swagger_config.json | grep "V1" | awk -F"\"" '{print $2}')
     K8S_DOC_LINK="https://github.com/kubernetes-client/python/blob/master/kubernetes/docs"
-    
+
     for item in $K8S_IMPORT_LIST; do
         sed -i'.bak' -e "s@($item.md)@($K8S_DOC_LINK/$item.md)@g" python/ome/docs/* || handle_error "Failed to update Kubernetes docs link"
         rm -rf python/ome/docs/*.bak
@@ -73,7 +73,7 @@ ensure_npm_installed() {
             handle_error "Could not install npm. Please install it manually and run this script again."
         fi
     fi
-    
+
     # Configure npm registry
     echo >&2 "Configuring npm registry..."
     npm config set registry $NPM_REGISTRY 2>&1 || handle_error "Failed to set npm registry"
@@ -83,13 +83,13 @@ ensure_npm_installed() {
 # Function to install and setup npm tools
 setup_npm_tools() {
     ensure_npm_installed
-    
+
     echo >&2 "Checking if prettier and markdown-table-formatter are installed..."
     if ! npm list -g prettier &> /dev/null; then
         echo >&2 "Installing prettier..."
         npm install -g prettier 2>&1 || handle_error "Failed to install prettier"
     fi
-    
+
     if ! npm list -g markdown-table-formatter &> /dev/null; then
         echo >&2 "Installing markdown-table-formatter..."
         npm install -g markdown-table-formatter 2>&1 || handle_error "Failed to install markdown-table-formatter"
@@ -129,19 +129,19 @@ install_uv() {
 # Function to format Python code
 format_python_code() {
     local current_dir=$(pwd)
-    
+
     # First sync dependencies
     echo >&2 "Syncing dependencies with uv..."
     cd ${SDK_OUTPUT_PATH} || handle_error "Failed to change to ${SDK_OUTPUT_PATH} directory"
     uv sync 2>&1 || handle_error "Failed to sync dependencies with uv"
-    
+
     # Format code
     echo >&2 "Running ruff format on Python code..."
     uv run ruff format . 2>&1 || handle_error "Failed to run ruff format on Python code"
-    
+
     echo >&2 "Running isort on Python code..."
     uv run isort . 2>&1 || handle_error "Failed to run isort on Python code"
-    
+
     # Return to original directory
     cd ${current_dir} || handle_error "Failed to return to original directory"
 }
@@ -155,7 +155,7 @@ main() {
     format_markdown_files
     install_uv
     format_python_code
-    
+
     echo >&2 "OME Python SDK is generated successfully to folder ${SDK_OUTPUT_PATH}/."
     echo >&2 "All Markdown files have been formatted with Prettier."
     echo >&2 "Python code has been formatted with ruff and isort."

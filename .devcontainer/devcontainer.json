@@ -13,15 +13,15 @@
                 "premparihar.gotestexplorer",
                 "766b.go-outliner",
                 "enkia.tokyo-night",
-                
+
                 // Python development
                 "ms-python.python",
                 "ms-python.vscode-pylance",
                 "ms-python.black-formatter",
-                
+
                 // Kubernetes
                 "ms-kubernetes-tools.vscode-kubernetes-tools",
-                
+
                 // General development
                 "streetsidesoftware.code-spell-checker",
                 "eamodio.gitlens",

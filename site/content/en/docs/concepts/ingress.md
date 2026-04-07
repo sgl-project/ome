@@ -109,7 +109,7 @@ spec:
         - name: router
           image: custom-router:latest
 ```
-**Routing**: 
+**Routing**:
 - Top-level requests → Router service
 - Router processes and forwards → Engine service
 
@@ -126,7 +126,7 @@ spec:
           image: custom-decoder:latest
 ```
 **Routing**:
-- Top-level requests → Engine service  
+- Top-level requests → Engine service
 - Decoder-specific requests (`/v1/decoder/...`) → Decoder service
 
 ### Full Pipeline (Engine + Router + Decoder)
@@ -149,7 +149,7 @@ spec:
 ```
 **Routing**:
 - Top-level requests → Router service
-- Router-specific requests (`/v1/router/...`) → Router service  
+- Router-specific requests (`/v1/router/...`) → Router service
 - Decoder-specific requests (`/v1/decoder/...`) → Decoder service
 
 ## Making API Calls
@@ -195,7 +195,7 @@ curl -X POST https://llama-chat.your-namespace.example.com/v1/router/route \
   -H "Content-Type: application/json" \
   -d '{"request": "route this to the best model"}'
 
-# Decoder-specific endpoint  
+# Decoder-specific endpoint
 curl -X POST https://llama-chat.your-namespace.example.com/v1/decoder/decode \
   -H "Content-Type: application/json" \
   -d '{"tokens": [1, 2, 3, 4], "decode_format": "text"}'
@@ -359,7 +359,7 @@ curl -X POST https://llama-chat.your-namespace.example.com/v1/completions \
     "max_tokens": 100
   }'
 
-# Using basic auth (if configured)  
+# Using basic auth (if configured)
 curl -X POST https://llama-chat.your-namespace.example.com/v1/completions \
   -u username:password \
   -H "Content-Type: application/json" \

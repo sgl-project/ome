@@ -69,7 +69,7 @@ jobs:
         with:
           # Upload the built public directory
           path: './site/public'
-  
+
   # Deployment job
   deploy:
     environment:

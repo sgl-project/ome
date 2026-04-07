@@ -80,7 +80,7 @@ As a data scientist, I have models stored on high-performance block storage expo
 
 ### Notes/Constraints/Caveats
 
-1. **Model Agent Bypass**: 
+1. **Model Agent Bypass**:
    - Model agent ignores PVC storage types completely
    - No node labeling by model agent for PVC storage
    - Scheduling handled by Kubernetes based on PVC accessibility
@@ -90,7 +90,7 @@ As a data scientist, I have models stored on high-performance block storage expo
    - Job creation and monitoring by controller
    - Status updates based on job completion
 
-3. **PVC Access Modes**: 
+3. **PVC Access Modes**:
    - RWX PVCs can be mounted by multiple pods simultaneously
    - RWO PVCs can only be mounted by one pod at a time
    - Kubernetes scheduler handles placement constraints automatically
@@ -126,15 +126,15 @@ The architecture is designed to minimize complexity by having the model agent sk
 ```mermaid
 flowchart TD
     BM[BaseModel<br/>PVC Storage] --> BMC[BaseModel<br/>Controller]
-    
+
     BMC --> |Creates| MJ[Metadata Job]
-    
+
     MA[Model Agent<br/>DaemonSet]
-    
+
     MJ --> |Updates| BMU[BaseModel<br/>Updated CR]
     BMU --> ISC[InferenceService<br/>Controller]
     ISC --> |Creates| ISP[InferenceService<br/>Pods]
-    
+
     %% Component details
     BMC -.- BMCD[- Detect PVC URI<br/>- Validate PVC<br/>- Create Job<br/>- Monitor Job<br/>- Update Status]
     MA -.- MAD[- Skip PVC types<br/>- Handle other<br/>storage types]
@@ -171,21 +171,21 @@ In `pkg/modelagent/gopher.go`, simply skip PVC storage:
 ```go
 func (s *Gopher) downloadModel(ctx context.Context, task *GopherTask, modelInfo *ModelInfo) error {
     // ... existing code ...
-    
+
     storageType, err := storage.GetStorageType(*baseModelSpec.Storage.StorageUri)
     if err != nil {
         return fmt.Errorf("failed to determine storage type: %w", err)
     }
-    
+
     switch storageType {
     case storage.StorageTypePVC:
         // Skip PVC storage - handled by controller
         s.logger.Infof("Skipping PVC storage type for model %s (handled by BaseModel controller)", modelInfo)
         return nil
-        
+
     case storage.StorageTypeOCI:
         // ... existing OCI handling ...
-    
+
     // ... other storage types ...
     }
 }
@@ -198,18 +198,18 @@ In `pkg/controller/v1beta1/basemodel/controller.go`, add complete PVC handling:
 ```go
 func (r *BaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
     // ... existing code ...
-    
+
     // Check if this is a PVC storage model
     if r.isPVCStorage(baseModel) {
         return r.reconcilePVCStorage(ctx, baseModel, log)
     }
-    
+
     // For non-PVC storage, use existing ConfigMap-based logic
     if err := r.updateModelStatus(ctx, baseModel); err != nil {
         log.Error(err, "Failed to update BaseModel status")
         return ctrl.Result{RequeueAfter: time.Minute}, err
     }
-    
+
     return ctrl.Result{}, nil
 }
 
@@ -219,36 +219,36 @@ func (r *BaseModelReconciler) reconcilePVCStorage(ctx context.Context, baseModel
     if err != nil {
         return r.updateFailedStatus(ctx, baseModel, fmt.Sprintf("Invalid PVC URI: %v", err))
     }
-    
+
     // Determine namespace for PVC
     pvcNamespace := baseModel.Namespace
     if isClusterScoped(baseModel) && pvcComponents.Namespace != "" {
         pvcNamespace = pvcComponents.Namespace
     }
-    
+
     // Validate PVC exists and is bound
     pvc := &corev1.PersistentVolumeClaim{}
     err = r.Get(ctx, types.NamespacedName{
         Namespace: pvcNamespace,
         Name:     pvcComponents.PVCName,
     }, pvc)
-    
+
     if err != nil {
         if errors.IsNotFound(err) {
             return r.updateFailedStatus(ctx, baseModel, fmt.Sprintf("PVC %s not found", pvcComponents.PVCName))
         }
         return ctrl.Result{}, err
     }
-    
+
     if pvc.Status.Phase != corev1.ClaimBound {
         return r.updateFailedStatus(ctx, baseModel, fmt.Sprintf("PVC %s not bound (phase: %s)", pvcComponents.PVCName, pvc.Status.Phase))
     }
-    
+
     // Check if metadata already extracted
     if r.isMetadataComplete(baseModel) {
         return r.updateReadyStatus(ctx, baseModel)
     }
-    
+
     // Create metadata extraction job if needed
     return r.ensureMetadataJob(ctx, baseModel, pvcComponents, pvc, log)
 }
@@ -268,13 +268,13 @@ func (m *ModelMetadataAgent) Start() error {
     modelPath := m.viper.GetString("model-path")
     baseModelName := m.viper.GetString("basemodel-name")
     baseModelNamespace := m.viper.GetString("basemodel-namespace")
-    
+
     // Extract model configuration
     config, err := m.extractModelConfig(modelPath)
     if err != nil {
         return fmt.Errorf("failed to extract model config: %w", err)
     }
-    
+
     // Update BaseModel CR with metadata
     ctx := context.Background()
     return m.updateBaseModel(ctx, baseModelNamespace, baseModelName, config)
@@ -290,10 +290,10 @@ In `pkg/controller/v1beta1/inferenceservice/components/base.go`:
 func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, objectMeta *metav1.ObjectMeta) {
     if b.BaseModel != nil && b.BaseModel.Storage != nil {
         storageType, _ := storage.GetStorageType(*b.BaseModel.Storage.StorageUri)
-        
+
         if storageType == storage.StorageTypePVC {
             pvcComponents, _ := storage.ParsePVCStorageURI(*b.BaseModel.Storage.StorageUri)
-            
+
             modelVolume := corev1.Volume{
                 Name: b.BaseModelMeta.Name,
                 VolumeSource: corev1.VolumeSource{
@@ -304,7 +304,7 @@ func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService
                 },
             }
             podSpec.Volumes = append(podSpec.Volumes, modelVolume)
-            
+
             // Set model path for volume mounts
             modelPath := constants.ModelDefaultMountPath
             b.BaseModel.Storage.Path = &modelPath
@@ -320,20 +320,20 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
     if b.BaseModel == nil || b.BaseModelMeta == nil {
         return
     }
-    
+
     // Check storage type
     if b.BaseModel.Storage != nil && b.BaseModel.Storage.StorageUri != nil {
         storageType, _ := storage.GetStorageType(*b.BaseModel.Storage.StorageUri)
-        
+
         if storageType == storage.StorageTypePVC {
             // Skip node selector for PVC storage
             b.Log.Info("Using PVC storage, skipping node selector",
-                "inferenceService", isvc.Name, 
+                "inferenceService", isvc.Name,
                 "storageUri", *b.BaseModel.Storage.StorageUri)
             return
         }
     }
-    
+
     // Existing node selector logic for downloaded models
     // ...
 }
@@ -422,7 +422,7 @@ spec:
 
 ## Alternatives
 
-1. **Model Agent Handles Everything**: 
+1. **Model Agent Handles Everything**:
    - Rejected: DaemonSet can't effectively mount PVCs, especially RWO
    - Would require complex coordination between model agents
 

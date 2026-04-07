@@ -36,9 +36,9 @@ Throw a compile error or print an error on the page if the file is not found */}
   {{ else }}
     {{- $.Scratch.Get "filepath" | os.ReadFile | .Page.RenderString | safeHTML -}}
   {{ end }}
- </div> 
+ </div>
 {{ else if eq (.Get "draft") "true" }}
 
-  <p style="color: #D74848"><b><i>The file <code>{{ $.Scratch.Get "filepath" }}</code> was not found.</i></b></p> 
+  <p style="color: #D74848"><b><i>The file <code>{{ $.Scratch.Get "filepath" }}</code> was not found.</i></b></p>
 
 {{ else }}{{- errorf "Shortcode %q: file %q not found at %s" .Name ($.Scratch.Get "filepath") .Position -}}{{ end }}

@@ -32,16 +32,16 @@ This resource has both namespace-scoped and cluster-scoped which can be used to 
 
 ### [Inference Service](/ome/docs/concepts/inference_service)
 
-The InferenceService CRD manages the entire lifecycle of model-serving workloads, including model versioning, scaling, and traffic routing. 
+The InferenceService CRD manages the entire lifecycle of model-serving workloads, including model versioning, scaling, and traffic routing.
 It supports real-time inference for both single-node and multi-node deployments, ensuring seamless model updates and efficient scaling.
 
 ### [Ingress](/ome/docs/concepts/ingress)
 
-OME supports a range of ingress controllers for external access to model serving workloads. 
+OME supports a range of ingress controllers for external access to model serving workloads.
 This section provides an overview of the available ingress controller options, including their capabilities, configuration, and features.
 
 
 ### [Benchmark](/ome/docs/concepts/benchmark)
 
-OME integrates with the latest GenAI-Bench to provide real-time benchmarking capabilities for AI models. 
+OME integrates with the latest GenAI-Bench to provide real-time benchmarking capabilities for AI models.
 This section provides an overview of the GenAI-Bench benchmarks, how they work, and how to use them with OME.

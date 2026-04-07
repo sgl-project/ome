@@ -137,20 +137,20 @@ jobs:
           SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-7)
           TIMESTAMP=$(date -u +'%Y%m%d%H%M%S')
           DEV_VERSION="0.0.0-dev.${TIMESTAMP}+${SHORT_SHA}"
-          
+
           # Update chart versions with dev version
           for chart in charts/*/; do
             chart_name=$(basename ${chart})
             dev_chart="charts/${chart_name}-dev"
-            
+
             # Create a copy of the chart for dev
             cp -r ${chart} ${dev_chart}/
 
-            
+
             # Update versions in the dev copy
             yq eval -i ".version = \"${DEV_VERSION}\"" ${dev_chart}/Chart.yaml
             yq eval -i ".appVersion = \"dev\"" ${dev_chart}/Chart.yaml
-            
+
             # Update image tags in values.yaml for ome-resources chart
             if [[ -f ${dev_chart}/values.yaml ]] && [[ $chart_name == "ome-resources" ]]; then
               # Update all image tags to use dev
@@ -167,13 +167,13 @@ jobs:
           for chart in charts/*-dev/; do
             # Package the dev chart
             helm package ${chart}
-            
+
             # Get the chart name from the packaged file
             CHART_FILE=$(ls -1 *.tgz | tail -n1)
-            
+
             # Push to OCI registry with dev tag
             helm push ${CHART_FILE} oci://${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/charts
-            
+
             # Clean up
             rm ${CHART_FILE}
             rm -rf ${chart}

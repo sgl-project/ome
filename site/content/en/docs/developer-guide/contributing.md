@@ -7,7 +7,7 @@ description: >
   Learn how to contribute to the OME project, set up your development environment, and follow our coding guidelines.
 ---
 
-Thank you for your interest in contributing to OME! This repository is open to everyone and welcomes all kinds of contributions, no matter how small or large. 
+Thank you for your interest in contributing to OME! This repository is open to everyone and welcomes all kinds of contributions, no matter how small or large.
 
 ## Ways to Contribute
 
@@ -140,7 +140,7 @@ Use [nvkind](https://github.com/NVIDIA/nvkind/tree/main?tab=readme-ov-file#setup
 2. Install cert-manager (required by OME):
    ```bash
    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
-   
+
    ```
 3. Deploy OME via Helm:
    ```bash
@@ -422,7 +422,7 @@ kubectl get inferenceservice -A
    ```bash
    # Check service deployment
    kubectl get pods -n e5-mistral-7b-instruct
-   
+
    # Test inference
    curl -X POST "http://e5-mistral-7b-instruct.e5-mistral-7b-instruct:8080/v1/embeddings" \
      -H "Content-Type: application/json" \
@@ -500,4 +500,4 @@ After setting up your development environment:
 3. **Join Discussions**: Participate in community discussions
 4. **Ask Questions**: Don't hesitate to ask for clarification
 
-Happy contributing! 🚀 
+Happy contributing! 🚀

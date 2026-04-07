@@ -128,7 +128,7 @@ All environment variables ***must*** start the prefix `OME_AGENT_` to be recogni
 | `model.bucket_name`                           | `OME_AGENT_MODEL_BUCKET_NAME`                           | fine-tuned-model-weights  | no                                                                                   |
 | `model.namespace`                             | `OME_AGENT_MODEL_NAMESPACE`                             |                           | yes                                                                                  |
 | `model.object_name`                           | `OME_AGENT_MODEL_OBJECT_NAME`                           | equals to `training_name` | no                                                                                   |
-| 
+|
 
 ### Usage
 OME-Agent uses subcommands to run specific tasks. Use the following commands:=
@@ -152,7 +152,7 @@ OME-Agent comes with several Makefile commands to simplify development, building
 ```bash
 # Builds the OME-Agent CLI.
 make ome-agent
-# Builds the Docker image for OME-Agent, tagging it with the specified REGISTRY and TAG variables. 
+# Builds the Docker image for OME-Agent, tagging it with the specified REGISTRY and TAG variables.
 make ome-agent-image
 # Pushes the OME-Agent Docker image to the specified REGISTRY.
 make push-ome-agent-image
@@ -234,7 +234,7 @@ Each subcommand has its own main application module, implemented as an Fx Option
 - HuggingFace Download Agent (hf_download.Module): Handles the logic for downloading models from HuggingFace, validating checksums, resuming interrupted downloads, and managing access tokens.
 - Replica Agent (replica.Module): Manages replication of model weights across OCI buckets, handling cross-region and cross-tenancy replication.
 - Enigma Agent (enigma.Module): Manages encryption and decryption of model weights using OCI Vault and KMS.
-- Training Agent (training_agent.Module): Manages the training sidecar initialization, which includes its config and client setup required to manage the training lifecycle. 
+- Training Agent (training_agent.Module): Manages the training sidecar initialization, which includes its config and client setup required to manage the training lifecycle.
 Each module includes the main agent logic and is registered as a dependency in the fx.Options list for that subcommand.
 
 #### Lifecycle Hooks

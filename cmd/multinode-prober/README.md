@@ -9,7 +9,7 @@ and startup endpoints that Kubernetes can use to determine the health and status
 
 - Liveness Probe (/healthz): Check whether the vLLM and its services are running and responsive.
 - Readiness Probe (/readyz): Ensures that the vLLM is ready to accept traffic, typically after the model is fully initialized.
-- Startup Probe (/startupz): Verifies that the vLLM has started correctly, useful for containers with long startup times. 
+- Startup Probe (/startupz): Verifies that the vLLM has started correctly, useful for containers with long startup times.
 - Configurable endpoints for monitoring the health of the vLLM services.
 
 ### Requirements

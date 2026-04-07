@@ -117,7 +117,7 @@ graph TB
             GitHubFactory[GitHub Factory]
         end
     end
-    
+
     subgraph "Credential Providers"
         subgraph "OCI"
             UserPrincipal[User Principal]
@@ -134,21 +134,21 @@ graph TB
             ADC[Application Default]
         end
     end
-    
+
     AF --> OCIFactory
     AF --> AWSFactory
     AF --> GCPFactory
     AF --> AzureFactory
     AF --> GitHubFactory
-    
+
     OCIFactory --> UserPrincipal
     OCIFactory --> InstancePrincipal
     OCIFactory --> ResourcePrincipal
-    
+
     AWSFactory --> AccessKeys
     AWSFactory --> IAMRole
     AWSFactory --> InstanceProfile
-    
+
     GCPFactory --> ServiceAccount
     GCPFactory --> ADC
 ```
@@ -194,7 +194,7 @@ classDiagram
         +Stat(ctx, uri) (*Metadata, error)
         +Copy(ctx, source, target) error
     }
-    
+
     class MultipartCapable {
         <<interface>>
         +InitiateMultipartUpload(ctx, uri, opts) (string, error)
@@ -202,13 +202,13 @@ classDiagram
         +CompleteMultipartUpload(ctx, uri, uploadID, parts) error
         +AbortMultipartUpload(ctx, uri, uploadID) error
     }
-    
+
     class BulkStorage {
         <<interface>>
         +BulkDownload(ctx, downloads, opts, progress) (BulkDownloadResult, error)
         +BulkUpload(ctx, uploads, opts, progress) (BulkUploadResult, error)
     }
-    
+
     class OCIStorage {
         -client ObjectStorageClient
         -namespace string
@@ -216,14 +216,14 @@ classDiagram
         +Download(ctx, source, target, opts) error
         ...
     }
-    
+
     class S3Storage {
         -client S3Client
         +Provider() Provider
         +Download(ctx, source, target, opts) error
         ...
     }
-    
+
     Storage <|-- MultipartCapable
     Storage <|-- BulkStorage
     Storage <|.. OCIStorage

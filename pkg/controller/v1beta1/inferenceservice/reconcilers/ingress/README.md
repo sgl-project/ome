@@ -45,32 +45,32 @@ graph TB
     subgraph "Ingress Reconciler Flow"
         A[InferenceService Spec] --> B[Deployment Mode Detection]
         B --> C{Deployment Mode}
-        
+
         C -->|Serverless| D[ServerlessStrategy]
         C -->|RawDeployment/MultiNode| E{Gateway API Enabled?}
-        
+
         E -->|Yes| F[GatewayAPIStrategy]
         E -->|No| G[KubernetesIngressStrategy]
-        
+
         D --> H[Istio VirtualService]
         F --> I[Gateway API HTTPRoute]
         G --> J[Kubernetes Ingress]
-        
+
         H --> K[External Access]
         I --> K
         J --> K
     end
-    
+
     subgraph "Service Architecture"
         L[Engine Component] --> M[engine-service]
         N[Router Component] --> O[router-service]
         P[Decoder Component] --> Q[decoder-service]
-        
+
         M --> R[Ingress Rules]
         O --> R
         Q --> R
     end
-    
+
     subgraph "Fallback Service"
         S{Ingress Disabled?} -->|Yes| T[External Service Reconciler]
         S -->|No| U[Skip External Service]
@@ -88,7 +88,7 @@ The ingress reconciler determines the deployment mode based on the **entrypoint 
 // From reconciler.go
 func (r *IngressReconciler) determineDeploymentMode(isvc *v1beta1.InferenceService) string {
     entrypointComponent := controllerconfig.GetEntrypointComponent(isvc.Spec)
-    
+
     switch entrypointComponent {
     case constants.Engine:
         if isvc.Spec.Engine != nil && isvc.Spec.Engine.DeploymentMode != nil {
@@ -103,7 +103,7 @@ func (r *IngressReconciler) determineDeploymentMode(isvc *v1beta1.InferenceServi
             return string(*isvc.Spec.Decoder.DeploymentMode)
         }
     }
-    
+
     return string(constants.Serverless) // Default fallback
 }
 ```
@@ -133,7 +133,7 @@ func (f *Factory) CreateIngressStrategy(deploymentMode string) (interfaces.Ingre
 
 ### 1. Serverless Strategy - Istio VirtualService
 
-**Used for:** `Serverless` deployment mode  
+**Used for:** `Serverless` deployment mode
 **Resource Type:** `istio.io/api/networking/v1beta1.VirtualService`
 
 **Key Features:**
@@ -154,7 +154,7 @@ if isvc.Spec.Router != nil {
 
 ### 2. Kubernetes Ingress Strategy
 
-**Used for:** `RawDeployment` and `MultiNode` deployment modes (when Gateway API disabled)  
+**Used for:** `RawDeployment` and `MultiNode` deployment modes (when Gateway API disabled)
 **Resource Type:** `networking.k8s.io/v1.Ingress`
 
 **Key Features:**
@@ -165,7 +165,7 @@ if isvc.Spec.Router != nil {
 
 ### 3. Gateway API Strategy
 
-**Used for:** `RawDeployment` and `MultiNode` deployment modes (when Gateway API enabled)  
+**Used for:** `RawDeployment` and `MultiNode` deployment modes (when Gateway API enabled)
 **Resource Type:** `gateway.networking.k8s.io/v1.HTTPRoute`
 
 **Key Features:**
@@ -212,7 +212,7 @@ rules:
           name: "{service-name}"            # router service
           port: 80
 
-- host: "{router-component}.{domain}"      # router.example.com  
+- host: "{router-component}.{domain}"      # router.example.com
   http:
     paths:
     - path: "/"
@@ -231,7 +231,7 @@ rules:
     - path: "/"
       backend:
         service:
-          name: "{service-name}-engine"     # engine service  
+          name: "{service-name}-engine"     # engine service
           port: 80
 
 - host: "{decoder-component}.{domain}"     # decoder.example.com
@@ -279,7 +279,7 @@ spec:
 #### Router HTTPRoute (if present):
 ```yaml
 metadata:
-  name: "{service-name}-router"  
+  name: "{service-name}-router"
 spec:
   rules:
   - matches:
@@ -302,7 +302,7 @@ spec:
         type: PathPrefix
         value: "/"
     backendRefs:
-    - name: "{service-name}"           # decoder service  
+    - name: "{service-name}"           # decoder service
       port: 8080
 ```
 
@@ -339,16 +339,16 @@ case isvc.Spec.Router != nil:
         // Skip ingress creation
         return nil, nil
     }
-    
+
 case isvc.Spec.Decoder != nil:
     if !isvc.Status.IsConditionReady(v1beta1.DecoderReady) {
         // Skip ingress creation
         return nil, nil
     }
-    
+
 default: // Engine only
     if !isvc.Status.IsConditionReady(v1beta1.EngineReady) {
-        // Skip ingress creation  
+        // Skip ingress creation
         return nil, nil
     }
 }
@@ -367,17 +367,17 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
     if err := r.reconcileComponents(ctx, isvc); err != nil {
         return ctrl.Result{}, err
     }
-    
+
     // 2. Reconcile ingress (targets existing services)
     if err := r.reconcileIngress(ctx, isvc); err != nil {
         return ctrl.Result{}, err
     }
-    
+
     // 3. Reconcile external service (fallback when ingress disabled)
     if err := r.reconcileExternalService(ctx, isvc); err != nil {
         return ctrl.Result{}, err
     }
-    
+
     return ctrl.Result{}, nil
 }
 ```
@@ -387,12 +387,12 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 ```mermaid
 sequenceDiagram
     participant C as Controller
-    participant IR as IngressReconciler  
+    participant IR as IngressReconciler
     participant F as StrategyFactory
     participant S as Strategy
     participant B as Builder
     participant K as Kubernetes API
-    
+
     C->>IR: Reconcile(ctx, isvc)
     IR->>IR: determineDeploymentMode(isvc)
     IR->>F: CreateIngressStrategy(deploymentMode)
@@ -418,12 +418,12 @@ func (r *ExternalServiceReconciler) shouldCreateExternalService(isvc *v1beta1.In
     if !r.ingressConfig.DisableIngressCreation {
         return false
     }
-    
+
     // Skip for cluster-local services
     if utils.IsClusterLocal(isvc) {
         return false
     }
-    
+
     return true
 }
 ```
@@ -446,7 +446,7 @@ func (r *IngressReconciler) ReconcileWithDeploymentMode(ctx context.Context, isv
     if err != nil {
         return fmt.Errorf("failed to create ingress strategy for deployment mode %s: %w", deploymentMode, err)
     }
-    
+
     // Execute strategy reconciliation
     return strategy.Reconcile(ctx, isvc)
 }
@@ -480,7 +480,7 @@ func (f *Factory) CreateIngressStrategy(deploymentMode string) (interfaces.Ingre
 
 ### 3. Serverless Strategy (`strategies/serverless_strategy.go`)
 
-**Creates:** Istio VirtualService resources  
+**Creates:** Istio VirtualService resources
 **Integration:** Knative networking and Istio service mesh
 
 **Key Features:**
@@ -490,7 +490,7 @@ func (f *Factory) CreateIngressStrategy(deploymentMode string) (interfaces.Ingre
 
 ### 4. Kubernetes Ingress Strategy (`strategies/raw_ingress_strategy.go`)
 
-**Creates:** Standard Kubernetes Ingress resources  
+**Creates:** Standard Kubernetes Ingress resources
 **Target:** RawDeployment and MultiNode modes
 
 **Key Logic:**
@@ -500,18 +500,18 @@ func (s *KubernetesIngressStrategy) Reconcile(ctx context.Context, isvc *v1beta1
     if utils.IsClusterLocal(isvc) {
         return nil
     }
-    
+
     // Build ingress resource
     ingress, err := s.ingressBuilder.Build(ctx, isvc)
     if err != nil {
         return err
     }
-    
+
     // Handle nil return (component not ready)
     if ingress == nil {
         return nil
     }
-    
+
     // Create or update ingress
     return s.reconcileIngress(ctx, ingress, isvc)
 }
@@ -519,7 +519,7 @@ func (s *KubernetesIngressStrategy) Reconcile(ctx context.Context, isvc *v1beta1
 
 ### 5. Gateway API Strategy (`strategies/gateway_api_strategy.go`)
 
-**Creates:** Gateway API HTTPRoute resources  
+**Creates:** Gateway API HTTPRoute resources
 **Target:** RawDeployment and MultiNode modes (when Gateway API enabled)
 
 **Multi-Component Approach:**
@@ -543,15 +543,15 @@ func (b *IngressBuilder) BuildIngress(ctx context.Context, isvc *v1beta1.Inferen
         }
         routerRules, err := b.buildRouterRules(isvc)
         rules = append(rules, routerRules...)
-        
+
     case isvc.Spec.Decoder != nil:
-        // Decoder present (no router) - create decoder rules  
+        // Decoder present (no router) - create decoder rules
         if !isvc.Status.IsConditionReady(v1beta1.DecoderReady) {
             return nil, nil  // Skip if decoder not ready
         }
         decoderRules, err := b.buildDecoderRules(isvc)
         rules = append(rules, decoderRules...)
-        
+
     default:
         // Engine only - create engine rules
         if !isvc.Status.IsConditionReady(v1beta1.EngineReady) {
@@ -560,7 +560,7 @@ func (b *IngressBuilder) BuildIngress(ctx context.Context, isvc *v1beta1.Inferen
         engineRules, err := b.buildEngineOnlyRules(isvc)
         rules = append(rules, engineRules...)
     }
-    
+
     // Build final ingress resource
     return &netv1.Ingress{
         ObjectMeta: metav1.ObjectMeta{
@@ -581,22 +581,22 @@ func (b *IngressBuilder) BuildIngress(ctx context.Context, isvc *v1beta1.Inferen
 func (b *IngressBuilder) buildRouterRules(isvc *v1beta1.InferenceService) ([]netv1.IngressRule, error) {
     routerName := constants.RouterServiceName(isvc.Name)    // "service-name"
     engineName := constants.EngineServiceName(isvc.Name)    // "service-name-engine"
-    
+
     // Top-level host routes to router
     host, _ := b.generateIngressHost(string(constants.Router), true, routerName, isvc)
     rules = append(rules, b.generateRule(host, routerName, "/", 80))
-    
+
     // Component-specific host routes to engine
     routerHost, _ := b.generateIngressHost(string(constants.Router), false, routerName, isvc)
     rules = append(rules, b.generateRule(routerHost, engineName, "/", 80))
-    
+
     // Decoder rules if present
     if isvc.Spec.Decoder != nil {
         decoderName := constants.DecoderServiceName(isvc.Name)  // "service-name"
         decoderHost, _ := b.generateIngressHost(string(constants.Decoder), false, routerName, isvc)
         rules = append(rules, b.generateRule(decoderHost, decoderName, "/", 80))
     }
-    
+
     return rules, nil
 }
 ```
@@ -611,7 +611,7 @@ func (b *IngressBuilder) buildRouterRules(isvc *v1beta1.InferenceService) ([]net
 - **Effect:** Triggers external service reconciler to create fallback service
 
 **EnableGatewayAPI:**
-- **Type:** `bool`  
+- **Type:** `bool`
 - **Purpose:** Switches between Kubernetes Ingress and Gateway API for non-serverless modes
 - **Default:** `false` (uses Kubernetes Ingress)
 

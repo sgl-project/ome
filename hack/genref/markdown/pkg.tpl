@@ -15,7 +15,7 @@ weight: 1
   {{- end -}}
 {{- end }}
 
-## Resource Types 
+## Resource Types
 
 {{ range .packages -}}
   {{ $isConfig := (eq .GroupName "") }}
@@ -44,4 +44,4 @@ weight: 1
     {{- end }}
   {{- end }}
 {{- end }}
-{{- end }} 
+{{- end }}

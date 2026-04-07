@@ -38,7 +38,7 @@ process_yaml() {
   local helm_prefix="${3:-}"
   local use_common_image="${4:-false}"
   local run_time="${5:-}"
-  
+
   [[ -z "$helm_prefix" ]] && {
     log "ERROR" "Failed to extract metadata.name from input"
     exit 1
@@ -48,7 +48,7 @@ process_yaml() {
     log "ERROR" "Failed to obtain runtime from input"
     exit 1
   }
-  
+
   log "INFO" "Using Helm values prefix: .Values.$helm_prefix"
 
   log "INFO" "Image template: $([ "$use_common_image" = true ] && echo "common" || echo "prefix-based")"
@@ -66,7 +66,7 @@ process_yaml() {
     /annotations:/ { handle_conditional("Annotations") }
     /labels:/ { handle_conditional("Labels") }
     /tolerations:/ { handle_conditional("Tolerations") }
-    
+
     /affinity:/ {
       print "  {{ with .Values." hp " }}"
       print "  affinity: {{ .affinity | toYaml | nindent 6 }}"
@@ -97,7 +97,7 @@ process_yaml() {
       while (getline && /^    /) { continue }
     }
   ' "$input_file" > "$output_file"
-  
+
   log "INFO" "Generated Helm template: $output_file"
 }
 
@@ -106,7 +106,7 @@ main() {
   local helm_prefix=""
   local use_common_image=false
   local run_time=""
-  
+
   # Parse arguments
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -138,16 +138,16 @@ main() {
 
   local input_file="$1"
   local output_file="$2"
-  
+
   # Validate input file
   if [[ ! -f "$input_file" || ! -r "$input_file" ]]; then
     log "ERROR" "Input file not found or not readable: $input_file"
     exit 1
   fi
-  
+
   # Process the YAML
   process_yaml "$input_file" "$output_file" "$helm_prefix" "$use_common_image" "$run_time"
-  
+
   log "INFO" "Conversion completed successfully"
 }
 

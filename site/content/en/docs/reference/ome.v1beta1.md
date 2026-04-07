@@ -9,7 +9,7 @@ weight: 1
 <p>Package v1beta1 contains API Schema definitions for the serving v1beta1 API group</p>
 
 
-## Resource Types 
+## Resource Types
 
 
 - [BaseModel](#ome-io-v1beta1-BaseModel)
@@ -19,10 +19,10 @@ weight: 1
 - [FineTunedWeight](#ome-io-v1beta1-FineTunedWeight)
 - [InferenceService](#ome-io-v1beta1-InferenceService)
 - [ServingRuntime](#ome-io-v1beta1-ServingRuntime)
-  
+
 
 ## `BaseModel`     {#ome-io-v1beta1-BaseModel}
-    
+
 
 **Appears in:**
 
@@ -35,8 +35,8 @@ weight: 1
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody><tr><td><code>apiVersion</code><br/>string</td><td><code>ome.io/v1beta1</code></td></tr>
 <tr><td><code>kind</code><br/>string</td><td><code>BaseModel</code></td></tr>
-    
-  
+
+
 <tr><td><code>spec</code> <B>[Required]</B><br/>
 <a href="#ome-io-v1beta1-BaseModelSpec"><code>BaseModelSpec</code></a>
 </td>
@@ -53,7 +53,7 @@ weight: 1
 </table>
 
 ## `BenchmarkJob`     {#ome-io-v1beta1-BenchmarkJob}
-    
+
 
 **Appears in:**
 
@@ -66,8 +66,8 @@ weight: 1
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody><tr><td><code>apiVersion</code><br/>string</td><td><code>ome.io/v1beta1</code></td></tr>
 <tr><td><code>kind</code><br/>string</td><td><code>BenchmarkJob</code></td></tr>
-    
-  
+
+
 <tr><td><code>spec</code> <B>[Required]</B><br/>
 <a href="#ome-io-v1beta1-BenchmarkJobSpec"><code>BenchmarkJobSpec</code></a>
 </td>
@@ -84,7 +84,7 @@ weight: 1
 </table>
 
 ## `ClusterBaseModel`     {#ome-io-v1beta1-ClusterBaseModel}
-    
+
 
 **Appears in:**
 
@@ -97,8 +97,8 @@ weight: 1
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody><tr><td><code>apiVersion</code><br/>string</td><td><code>ome.io/v1beta1</code></td></tr>
 <tr><td><code>kind</code><br/>string</td><td><code>ClusterBaseModel</code></td></tr>
-    
-  
+
+
 <tr><td><code>spec</code> <B>[Required]</B><br/>
 <a href="#ome-io-v1beta1-BaseModelSpec"><code>BaseModelSpec</code></a>
 </td>
@@ -115,7 +115,7 @@ weight: 1
 </table>
 
 ## `ClusterServingRuntime`     {#ome-io-v1beta1-ClusterServingRuntime}
-    
+
 
 **Appears in:**
 
@@ -128,8 +128,8 @@ weight: 1
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody><tr><td><code>apiVersion</code><br/>string</td><td><code>ome.io/v1beta1</code></td></tr>
 <tr><td><code>kind</code><br/>string</td><td><code>ClusterServingRuntime</code></td></tr>
-    
-  
+
+
 <tr><td><code>spec</code> <B>[Required]</B><br/>
 <a href="#ome-io-v1beta1-ServingRuntimeSpec"><code>ServingRuntimeSpec</code></a>
 </td>
@@ -146,7 +146,7 @@ weight: 1
 </table>
 
 ## `FineTunedWeight`     {#ome-io-v1beta1-FineTunedWeight}
-    
+
 
 **Appears in:**
 
@@ -159,8 +159,8 @@ weight: 1
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody><tr><td><code>apiVersion</code><br/>string</td><td><code>ome.io/v1beta1</code></td></tr>
 <tr><td><code>kind</code><br/>string</td><td><code>FineTunedWeight</code></td></tr>
-    
-  
+
+
 <tr><td><code>spec</code> <B>[Required]</B><br/>
 <a href="#ome-io-v1beta1-FineTunedWeightSpec"><code>FineTunedWeightSpec</code></a>
 </td>
@@ -177,7 +177,7 @@ weight: 1
 </table>
 
 ## `InferenceService`     {#ome-io-v1beta1-InferenceService}
-    
+
 
 **Appears in:**
 
@@ -190,8 +190,8 @@ weight: 1
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody><tr><td><code>apiVersion</code><br/>string</td><td><code>ome.io/v1beta1</code></td></tr>
 <tr><td><code>kind</code><br/>string</td><td><code>InferenceService</code></td></tr>
-    
-  
+
+
 <tr><td><code>spec</code> <B>[Required]</B><br/>
 <a href="#ome-io-v1beta1-InferenceServiceSpec"><code>InferenceServiceSpec</code></a>
 </td>
@@ -208,7 +208,7 @@ weight: 1
 </table>
 
 ## `ServingRuntime`     {#ome-io-v1beta1-ServingRuntime}
-    
+
 
 **Appears in:**
 
@@ -221,8 +221,8 @@ weight: 1
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody><tr><td><code>apiVersion</code><br/>string</td><td><code>ome.io/v1beta1</code></td></tr>
 <tr><td><code>kind</code><br/>string</td><td><code>ServingRuntime</code></td></tr>
-    
-  
+
+
 <tr><td><code>spec</code> <B>[Required]</B><br/>
 <a href="#ome-io-v1beta1-ServingRuntimeSpec"><code>ServingRuntimeSpec</code></a>
 </td>
@@ -239,7 +239,7 @@ weight: 1
 </table>
 
 ## `BaseModelSpec`     {#ome-io-v1beta1-BaseModelSpec}
-    
+
 
 **Appears in:**
 
@@ -254,7 +254,7 @@ weight: 1
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>modelFormat</code><br/>
 <a href="#ome-io-v1beta1-ModelFormat"><code>ModelFormat</code></a>
 </td>
@@ -357,7 +357,7 @@ This can be used for scheduling or runtime selection.</p>
 </table>
 
 ## `BenchmarkJobSpec`     {#ome-io-v1beta1-BenchmarkJobSpec}
-    
+
 
 **Appears in:**
 
@@ -372,7 +372,7 @@ state and configuration of a BenchmarkJob.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>huggingFaceSecretReference</code><br/>
 <a href="#ome-io-v1beta1-HuggingFaceSecretReference"><code>HuggingFaceSecretReference</code></a>
 </td>
@@ -476,7 +476,7 @@ It is optional and only required for tasks other than &quot;text-to-<!-- raw HTM
 </table>
 
 ## `BenchmarkJobStatus`     {#ome-io-v1beta1-BenchmarkJobStatus}
-    
+
 
 **Appears in:**
 
@@ -490,7 +490,7 @@ will be set and updated by the controller.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>state</code> <B>[Required]</B><br/>
 <code>string</code>
 </td>
@@ -537,7 +537,7 @@ will be set and updated by the controller.</p>
 </table>
 
 ## `ComponentExtensionSpec`     {#ome-io-v1beta1-ComponentExtensionSpec}
-    
+
 
 **Appears in:**
 
@@ -556,7 +556,7 @@ will be set and updated by the controller.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>minReplicas</code><br/>
 <code>int</code>
 </td>
@@ -644,7 +644,7 @@ More info: http://kubernetes.io/docs/user-guide/annotations</p>
 </table>
 
 ## `ComponentStatusSpec`     {#ome-io-v1beta1-ComponentStatusSpec}
-    
+
 
 **Appears in:**
 
@@ -657,7 +657,7 @@ More info: http://kubernetes.io/docs/user-guide/annotations</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>latestReadyRevision</code><br/>
 <code>string</code>
 </td>
@@ -720,7 +720,7 @@ It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-leve
 </table>
 
 ## `DecoderSpec`     {#ome-io-v1beta1-DecoderSpec}
-    
+
 
 **Appears in:**
 
@@ -738,7 +738,7 @@ but is specifically used for the decode phase when separating prefill and decode
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>PodSpec</code><br/>
 <a href="#ome-io-v1beta1-PodSpec"><code>PodSpec</code></a>
 </td>
@@ -788,7 +788,7 @@ distributed token generation tasks as directed by the leader.</p>
 </table>
 
 ## `Endpoint`     {#ome-io-v1beta1-Endpoint}
-    
+
 
 **Appears in:**
 
@@ -801,7 +801,7 @@ distributed token generation tasks as directed by the leader.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>url</code> <B>[Required]</B><br/>
 <code>string</code>
 </td>
@@ -829,7 +829,7 @@ for openai API, this is a required field in the payload</p>
 </table>
 
 ## `EndpointSpec`     {#ome-io-v1beta1-EndpointSpec}
-    
+
 
 **Appears in:**
 
@@ -844,7 +844,7 @@ Cross-namespace references are supported for InferenceService but require approp
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>inferenceService</code><br/>
 <a href="#ome-io-v1beta1-InferenceServiceReference"><code>InferenceServiceReference</code></a>
 </td>
@@ -863,7 +863,7 @@ Cross-namespace references are supported for InferenceService but require approp
 </table>
 
 ## `EngineSpec`     {#ome-io-v1beta1-EngineSpec}
-    
+
 
 **Appears in:**
 
@@ -882,7 +882,7 @@ For distributed deployments, it supports leader-worker architecture configuratio
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>PodSpec</code><br/>
 <a href="#ome-io-v1beta1-PodSpec"><code>PodSpec</code></a>
 </td>
@@ -932,7 +932,7 @@ distributed processing tasks as directed by the leader.</p>
 </table>
 
 ## `FailureInfo`     {#ome-io-v1beta1-FailureInfo}
-    
+
 
 **Appears in:**
 
@@ -943,7 +943,7 @@ distributed processing tasks as directed by the leader.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>location</code><br/>
 <code>string</code>
 </td>
@@ -990,7 +990,7 @@ distributed processing tasks as directed by the leader.</p>
 </table>
 
 ## `FailureReason`     {#ome-io-v1beta1-FailureReason}
-    
+
 (Alias of `string`)
 
 **Appears in:**
@@ -1004,7 +1004,7 @@ distributed processing tasks as directed by the leader.</p>
 
 
 ## `FineTunedWeightSpec`     {#ome-io-v1beta1-FineTunedWeightSpec}
-    
+
 
 **Appears in:**
 
@@ -1017,7 +1017,7 @@ distributed processing tasks as directed by the leader.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>baseModelRef</code> <B>[Required]</B><br/>
 <a href="#ome-io-v1beta1-ObjectReference"><code>ObjectReference</code></a>
 </td>
@@ -1071,7 +1071,7 @@ distributed processing tasks as directed by the leader.</p>
 </table>
 
 ## `HuggingFaceSecretReference`     {#ome-io-v1beta1-HuggingFaceSecretReference}
-    
+
 
 **Appears in:**
 
@@ -1086,7 +1086,7 @@ Cross-namespace references are not allowed for security and simplicity.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>name</code> <B>[Required]</B><br/>
 <code>string</code>
 </td>
@@ -1099,7 +1099,7 @@ The secret must reside in the same namespace as the BenchmarkJob.</p>
 </table>
 
 ## `InferenceServiceReference`     {#ome-io-v1beta1-InferenceServiceReference}
-    
+
 
 **Appears in:**
 
@@ -1112,7 +1112,7 @@ The secret must reside in the same namespace as the BenchmarkJob.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>name</code> <B>[Required]</B><br/>
 <code>string</code>
 </td>
@@ -1132,7 +1132,7 @@ Cross-namespace references are allowed but require appropriate RBAC permissions.
 </table>
 
 ## `InferenceServiceSpec`     {#ome-io-v1beta1-InferenceServiceSpec}
-    
+
 
 **Appears in:**
 
@@ -1145,7 +1145,7 @@ Cross-namespace references are allowed but require appropriate RBAC permissions.
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>predictor</code><br/>
 <a href="#ome-io-v1beta1-PredictorSpec"><code>PredictorSpec</code></a>
 </td>
@@ -1215,7 +1215,7 @@ allowing the service to scale based on custom metrics or event sources.</p>
 </table>
 
 ## `InferenceServiceStatus`     {#ome-io-v1beta1-InferenceServiceStatus}
-    
+
 
 **Appears in:**
 
@@ -1228,7 +1228,7 @@ allowing the service to scale based on custom metrics or event sources.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>Status</code> <B>[Required]</B><br/>
 <a href="https://pkg.go.dev/knative.dev/pkg/apis/duck/v1#Status"><code>knative.dev/pkg/apis/duck/v1.Status</code></a>
 </td>
@@ -1277,7 +1277,7 @@ It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-leve
 </table>
 
 ## `KedaConfig`     {#ome-io-v1beta1-KedaConfig}
-    
+
 
 **Appears in:**
 
@@ -1293,7 +1293,7 @@ It includes fields like the Prometheus server address, custom query, scaling thr
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>enableKeda</code> <B>[Required]</B><br/>
 <code>bool</code>
 </td>
@@ -1358,7 +1358,7 @@ the evaluated metric.</p>
 </table>
 
 ## `LeaderSpec`     {#ome-io-v1beta1-LeaderSpec}
-    
+
 
 **Appears in:**
 
@@ -1375,7 +1375,7 @@ token generation setups, handling task distribution and result aggregation.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>PodSpec</code><br/>
 <a href="#ome-io-v1beta1-PodSpec"><code>PodSpec</code></a>
 </td>
@@ -1398,7 +1398,7 @@ Provides fine-grained control over the container that executes the leader node's
 </table>
 
 ## `LifeCycleState`     {#ome-io-v1beta1-LifeCycleState}
-    
+
 (Alias of `string`)
 
 **Appears in:**
@@ -1412,7 +1412,7 @@ Provides fine-grained control over the container that executes the leader node's
 
 
 ## `ModelCopies`     {#ome-io-v1beta1-ModelCopies}
-    
+
 
 **Appears in:**
 
@@ -1423,7 +1423,7 @@ Provides fine-grained control over the container that executes the leader node's
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>failedCopies</code> <B>[Required]</B><br/>
 <code>int</code>
 </td>
@@ -1442,7 +1442,7 @@ Provides fine-grained control over the container that executes the leader node's
 </table>
 
 ## `ModelExtensionSpec`     {#ome-io-v1beta1-ModelExtensionSpec}
-    
+
 
 **Appears in:**
 
@@ -1455,7 +1455,7 @@ Provides fine-grained control over the container that executes the leader node's
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>displayName</code><br/>
 <code>string</code>
 </td>
@@ -1494,7 +1494,7 @@ Provides fine-grained control over the container that executes the leader node's
 </table>
 
 ## `ModelFormat`     {#ome-io-v1beta1-ModelFormat}
-    
+
 
 **Appears in:**
 
@@ -1507,7 +1507,7 @@ Provides fine-grained control over the container that executes the leader node's
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>name</code> <B>[Required]</B><br/>
 <code>string</code>
 </td>
@@ -1528,7 +1528,7 @@ It Can be &quot;major&quot;, &quot;major.minor&quot; or &quot;major.minor.patch&
 </table>
 
 ## `ModelFrameworkSpec`     {#ome-io-v1beta1-ModelFrameworkSpec}
-    
+
 
 **Appears in:**
 
@@ -1541,7 +1541,7 @@ It Can be &quot;major&quot;, &quot;major.minor&quot; or &quot;major.minor.patch&
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>name</code> <B>[Required]</B><br/>
 <code>string</code>
 </td>
@@ -1562,7 +1562,7 @@ It Can be &quot;major&quot;, &quot;major.minor&quot; or &quot;major.minor.patch&
 </table>
 
 ## `ModelQuantization`     {#ome-io-v1beta1-ModelQuantization}
-    
+
 (Alias of `string`)
 
 **Appears in:**
@@ -1576,7 +1576,7 @@ It Can be &quot;major&quot;, &quot;major.minor&quot; or &quot;major.minor.patch&
 
 
 ## `ModelRef`     {#ome-io-v1beta1-ModelRef}
-    
+
 
 **Appears in:**
 
@@ -1587,7 +1587,7 @@ It Can be &quot;major&quot;, &quot;major.minor&quot; or &quot;major.minor.patch&
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>name</code> <B>[Required]</B><br/>
 <code>string</code>
 </td>
@@ -1626,7 +1626,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 </table>
 
 ## `ModelRevisionStates`     {#ome-io-v1beta1-ModelRevisionStates}
-    
+
 
 **Appears in:**
 
@@ -1637,7 +1637,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>activeModelState</code> <B>[Required]</B><br/>
 <a href="#ome-io-v1beta1-ModelState"><code>ModelState</code></a>
 </td>
@@ -1655,7 +1655,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 </table>
 
 ## `ModelSizeRangeSpec`     {#ome-io-v1beta1-ModelSizeRangeSpec}
-    
+
 
 **Appears in:**
 
@@ -1668,7 +1668,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>min</code><br/>
 <code>string</code>
 </td>
@@ -1687,7 +1687,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 </table>
 
 ## `ModelSpec`     {#ome-io-v1beta1-ModelSpec}
-    
+
 
 **Appears in:**
 
@@ -1698,7 +1698,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>runtime</code><br/>
 <code>string</code>
 </td>
@@ -1728,7 +1728,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 </table>
 
 ## `ModelState`     {#ome-io-v1beta1-ModelState}
-    
+
 (Alias of `string`)
 
 **Appears in:**
@@ -1742,7 +1742,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 
 
 ## `ModelStatus`     {#ome-io-v1beta1-ModelStatus}
-    
+
 
 **Appears in:**
 
@@ -1753,7 +1753,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>transitionStatus</code> <B>[Required]</B><br/>
 <a href="#ome-io-v1beta1-TransitionStatus"><code>TransitionStatus</code></a>
 </td>
@@ -1786,7 +1786,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 </table>
 
 ## `ModelStatusSpec`     {#ome-io-v1beta1-ModelStatusSpec}
-    
+
 
 **Appears in:**
 
@@ -1803,7 +1803,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>lifecycle</code> <B>[Required]</B><br/>
 <code>string</code>
 </td>
@@ -1834,7 +1834,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 </table>
 
 ## `ObjectReference`     {#ome-io-v1beta1-ObjectReference}
-    
+
 
 **Appears in:**
 
@@ -1847,7 +1847,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>name</code> <B>[Required]</B><br/>
 <code>string</code>
 </td>
@@ -1866,7 +1866,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 </table>
 
 ## `PodOverride`     {#ome-io-v1beta1-PodOverride}
-    
+
 
 **Appears in:**
 
@@ -1877,7 +1877,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>image</code><br/>
 <code>string</code>
 </td>
@@ -1950,7 +1950,7 @@ More info: https://kubernetes.io/docs/concepts/storage/volumes</p>
 </table>
 
 ## `PodSpec`     {#ome-io-v1beta1-PodSpec}
-    
+
 
 **Appears in:**
 
@@ -1973,7 +1973,7 @@ More info: https://kubernetes.io/docs/concepts/storage/volumes</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>volumes</code><br/>
 <a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#volume-v1-core"><code>[]k8s.io/api/core/v1.Volume</code></a>
 </td>
@@ -2391,7 +2391,7 @@ DynamicResourceAllocation feature gate.</p>
 </table>
 
 ## `PredictorExtensionSpec`     {#ome-io-v1beta1-PredictorExtensionSpec}
-    
+
 
 **Appears in:**
 
@@ -2404,7 +2404,7 @@ DynamicResourceAllocation feature gate.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>storageUri</code><br/>
 <code>string</code>
 </td>
@@ -2438,7 +2438,7 @@ Each framework will have different defaults that are populated in the underlying
 </table>
 
 ## `PredictorSpec`     {#ome-io-v1beta1-PredictorSpec}
-    
+
 
 **Appears in:**
 
@@ -2452,7 +2452,7 @@ The following fields follow a &quot;1-of&quot; semantic. Users must specify exac
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>model</code> <B>[Required]</B><br/>
 <a href="#ome-io-v1beta1-ModelSpec"><code>ModelSpec</code></a>
 </td>
@@ -2491,7 +2491,7 @@ overrides, you must not provide PodSpec.Containers in this case. <!-- raw HTML o
 </table>
 
 ## `RouterSpec`     {#ome-io-v1beta1-RouterSpec}
-    
+
 
 **Appears in:**
 
@@ -2506,7 +2506,7 @@ overrides, you must not provide PodSpec.Containers in this case. <!-- raw HTML o
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>PodSpec</code> <B>[Required]</B><br/>
 <a href="#ome-io-v1beta1-PodSpec"><code>PodSpec</code></a>
 </td>
@@ -2540,7 +2540,7 @@ This can include framework-specific settings</p>
 </table>
 
 ## `RunnerSpec`     {#ome-io-v1beta1-RunnerSpec}
-    
+
 
 **Appears in:**
 
@@ -2562,7 +2562,7 @@ The Runner is the primary container that executes the model serving or token gen
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>Container</code><br/>
 <a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#container-v1-core"><code>k8s.io/api/core/v1.Container</code></a>
 </td>
@@ -2575,7 +2575,7 @@ Provides complete Kubernetes container configuration for the primary execution c
 </table>
 
 ## `ScaleMetric`     {#ome-io-v1beta1-ScaleMetric}
-    
+
 (Alias of `string`)
 
 **Appears in:**
@@ -2589,7 +2589,7 @@ Provides complete Kubernetes container configuration for the primary execution c
 
 
 ## `ServiceMetadata`     {#ome-io-v1beta1-ServiceMetadata}
-    
+
 
 **Appears in:**
 
@@ -2603,7 +2603,7 @@ This information helps track experiment context, enabling users to filter and qu
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>engine</code> <B>[Required]</B><br/>
 <code>string</code>
 </td>
@@ -2638,7 +2638,7 @@ Supported values: &quot;H100&quot;, &quot;A100&quot;, &quot;MI300&quot;, &quot;A
 </table>
 
 ## `ServingRuntimePodSpec`     {#ome-io-v1beta1-ServingRuntimePodSpec}
-    
+
 
 **Appears in:**
 
@@ -2651,7 +2651,7 @@ Supported values: &quot;H100&quot;, &quot;A100&quot;, &quot;MI300&quot;, &quot;A
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>containers</code><br/>
 <a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#container-v1-core"><code>[]k8s.io/api/core/v1.Container</code></a>
 </td>
@@ -2758,7 +2758,7 @@ Default to false.</p>
 </table>
 
 ## `ServingRuntimeRef`     {#ome-io-v1beta1-ServingRuntimeRef}
-    
+
 
 **Appears in:**
 
@@ -2769,7 +2769,7 @@ Default to false.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>name</code> <B>[Required]</B><br/>
 <code>string</code>
 </td>
@@ -2801,7 +2801,7 @@ Specifies the Kubernetes API group of the referenced runtime.</p>
 </table>
 
 ## `ServingRuntimeSpec`     {#ome-io-v1beta1-ServingRuntimeSpec}
-    
+
 
 **Appears in:**
 
@@ -2819,7 +2819,7 @@ are hammered out.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>supportedModelFormats</code> <B>[Required]</B><br/>
 <a href="#ome-io-v1beta1-SupportedModelFormat"><code>[]SupportedModelFormat</code></a>
 </td>
@@ -2887,7 +2887,7 @@ are hammered out.</p>
 </table>
 
 ## `ServingRuntimeStatus`     {#ome-io-v1beta1-ServingRuntimeStatus}
-    
+
 
 **Appears in:**
 
@@ -2902,7 +2902,7 @@ are hammered out.</p>
 
 
 ## `StorageSpec`     {#ome-io-v1beta1-StorageSpec}
-    
+
 
 **Appears in:**
 
@@ -2917,7 +2917,7 @@ are hammered out.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>path</code><br/>
 <code>string</code>
 </td>
@@ -2983,7 +2983,7 @@ are eligible to download and store this model, based on advanced scheduling poli
 </table>
 
 ## `SupportedModelFormat`     {#ome-io-v1beta1-SupportedModelFormat}
-    
+
 
 **Appears in:**
 
@@ -2994,7 +2994,7 @@ are eligible to download and store this model, based on advanced scheduling poli
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>name</code><br/>
 <code>string</code>
 </td>
@@ -3070,7 +3070,7 @@ Priority can be overridden by specifying the runtime in the InferenceService.</p
 </table>
 
 ## `TransitionStatus`     {#ome-io-v1beta1-TransitionStatus}
-    
+
 (Alias of `string`)
 
 **Appears in:**
@@ -3084,7 +3084,7 @@ Priority can be overridden by specifying the runtime in the InferenceService.</p
 
 
 ## `WorkerPodSpec`     {#ome-io-v1beta1-WorkerPodSpec}
-    
+
 
 **Appears in:**
 
@@ -3095,7 +3095,7 @@ Priority can be overridden by specifying the runtime in the InferenceService.</p
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>size</code><br/>
 <code>int</code>
 </td>
@@ -3114,7 +3114,7 @@ Priority can be overridden by specifying the runtime in the InferenceService.</p
 </table>
 
 ## `WorkerSpec`     {#ome-io-v1beta1-WorkerSpec}
-    
+
 
 **Appears in:**
 
@@ -3133,7 +3133,7 @@ enabling horizontal scaling for compute-intensive workloads.</p>
 <table class="table">
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
-  
+
 <tr><td><code>PodSpec</code><br/>
 <a href="#ome-io-v1beta1-PodSpec"><code>PodSpec</code></a>
 </td>
@@ -3161,4 +3161,3 @@ Provides fine-grained control over the container that executes the worker node's
 </tr>
 </tbody>
 </table>
-  

@@ -59,25 +59,25 @@ package main
 import (
     "context"
     "log"
-    
+
     "github.com/sgl-project/ome/pkg/hfutil/hub"
 )
 
 func main() {
     ctx := context.Background()
-    
+
     // Simple file download
     config := &hub.DownloadConfig{
         RepoID:   "microsoft/DialoGPT-medium",
         Filename: "config.json",
         Token:    "your_hf_token_here",
     }
-    
+
     filePath, err := hub.HfHubDownload(ctx, config)
     if err != nil {
         log.Fatal(err)
     }
-    
+
     log.Printf("Downloaded to: %s", filePath)
 }
 ```
@@ -90,7 +90,7 @@ package main
 import (
     "context"
     "time"
-    
+
     "github.com/sgl-project/ome/pkg/hfutil/hub"
 )
 
@@ -106,15 +106,15 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    
+
     // Create client
     client, err := hub.NewHubClient(config)
     if err != nil {
         log.Fatal(err)
     }
-    
+
     ctx := context.Background()
-    
+
     // Download with options
     filePath, err := client.Download(
         ctx,
@@ -126,7 +126,7 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    
+
     // Snapshot download
     downloadPath, err := client.SnapshotDownload(
         ctx,
@@ -147,7 +147,7 @@ func main() {
 #### Environment Variables
 ```bash
 export HF_TOKEN=hf_your_token_here          # Authentication token
-export HF_HUB_CACHE=/custom/cache/path      # Custom cache directory  
+export HF_HUB_CACHE=/custom/cache/path      # Custom cache directory
 export HF_HUB_OFFLINE=1                     # Enable offline mode
 export HF_HUB_DISABLE_PROGRESS_BARS=1       # Disable progress bars
 export HF_PROGRESS_MODE=log                 # Progress display mode (auto/bars/log)
@@ -158,22 +158,22 @@ export HF_PROGRESS_MODE=log                 # Progress display mode (auto/bars/l
 config, err := hub.NewHubConfig(
     // Authentication
     hub.WithToken("hf_token"),
-    
+
     // Network settings
     hub.WithEndpoint("https://huggingface.co"),
     hub.WithTimeouts(30*time.Second, 10*time.Second, 10*time.Minute),
     hub.WithRetryConfig(5, 2*time.Second),
-    
+
     // Performance
     hub.WithConcurrency(8, 20*1024*1024),  // workers, chunk size
     hub.WithSymlinks(true),
-    
+
     // UI and logging
     hub.WithProgressBars(true),
     hub.WithDetailedLogs(true),
     hub.WithLogLevel("info"),
     hub.WithLogger(yourLogger),
-    
+
     // Storage
     hub.WithCacheDir("./cache"),
     hub.WithLocalFilesOnly(false),
@@ -194,7 +194,7 @@ filePath, err := hub.HfHubDownload(ctx, &hub.DownloadConfig{
 
 // Download to specific directory
 filePath, err := hub.HfHubDownload(ctx, &hub.DownloadConfig{
-    RepoID:   "microsoft/DialoGPT-medium", 
+    RepoID:   "microsoft/DialoGPT-medium",
     Filename: "config.json",
     LocalDir: "./downloads/",
     Token:    token,
@@ -267,7 +267,7 @@ files, err := client.ListFiles(ctx, repoID,
 ```go
 // Supported repository types
 hub.RepoTypeModel    // "model" - AI models
-hub.RepoTypeDataset  // "dataset" - Training datasets  
+hub.RepoTypeDataset  // "dataset" - Training datasets
 hub.RepoTypeSpace    // "space" - Gradio/Streamlit apps
 ```
 
@@ -384,7 +384,7 @@ Sample log output:
 ```json
 {
   "level": "info",
-  "msg": "Download completed successfully", 
+  "msg": "Download completed successfully",
   "repo_id": "microsoft/DialoGPT-medium",
   "filename": "config.json",
   "duration_ms": 1250,
@@ -483,7 +483,7 @@ cache/
 
 ### Optimization Tips
 
-1. **Tune Concurrency**: 
+1. **Tune Concurrency**:
    ```go
    hub.WithConcurrency(8, 20*1024*1024) // 8 workers, 20MB chunks
    ```
@@ -513,7 +513,7 @@ cd pkg/hfutil/hub/samples
 # Basic functionality
 go run basic_download.go
 
-# Enterprise features  
+# Enterprise features
 go run enhanced_client.go
 
 # Progress and logging
@@ -606,4 +606,4 @@ This project follows the same license as the parent repository.
 
 ---
 
-**Ready to get started?** Check out the [examples](samples/README.md) directory for hands-on tutorials! 🚀 
+**Ready to get started?** Check out the [examples](samples/README.md) directory for hands-on tutorials! 🚀

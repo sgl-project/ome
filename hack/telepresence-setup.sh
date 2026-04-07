@@ -77,5 +77,5 @@ done
 cat <<EOF
 ===============================
 Telepresence up and ready.
-You can run and debug cmd/manager/main.go locally now. 
+You can run and debug cmd/manager/main.go locally now.
 EOF

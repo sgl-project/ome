@@ -346,7 +346,7 @@ metadata:
   name: hf-credentials
 data:
   access-token: <base64-encoded-token>
-  
+
 ---
 # Reference it in your BaseModel
 apiVersion: ome.io/v1beta1
@@ -387,7 +387,7 @@ spec:
   version: "3.1"
   disabled: false
   displayName: "Llama 3.1 70B Instruct"
-  
+
   # Model identification
   modelType: "llama"
   modelArchitecture: "LlamaForCausalLM"
@@ -395,7 +395,7 @@ spec:
   maxTokens: 8192
   modelCapabilities:
     - text-to-text
-  
+
   # Model format and framework
   modelFormat:
     name: "safetensors"
@@ -404,23 +404,23 @@ spec:
     name: "transformers"
     version: "4.36.0"
   quantization: "fp8"
-  
+
   # Storage configuration
   storage:
     storageUri: "oci://n/ai-models/b/llm-store/o/meta/llama-3.1-70b-instruct/"
     path: "/raid/models/llama-3.1-70b-instruct"
     schemaPath: "config.json"
     storageKey: "oci-model-credentials"
-    
+
     parameters:
       region: "us-phoenix-1"
       auth_type: "InstancePrincipal"
-    
+
     # Target appropriate hardware
     nodeSelector:
       node.kubernetes.io/instance-type: "GPU.A100.4"
       models.ome.io/storage-tier: "nvme"
-    
+
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
         nodeSelectorTerms:
@@ -431,7 +431,7 @@ spec:
           - key: "models.ome.io/available-storage"
             operator: Gt
             values: ["200Gi"]
-  
+
   # Model-specific configuration
   modelConfiguration: |
     {
@@ -439,7 +439,7 @@ spec:
       "top_p": 0.9,
       "max_new_tokens": 2048
     }
-  
+
   # Additional metadata
   additionalMetadata:
     license: "Llama 3.1 Community License"
@@ -465,7 +465,7 @@ spec:
   baseModelRef:
     name: llama-3-70b-instruct
     namespace: default
-  
+
   # Fine-tuning configuration
   modelType: LoRA
   hyperParameters: |
@@ -474,12 +474,12 @@ spec:
       "lora_alpha": 32,
       "learning_rate": 1e-4
     }
-  
+
   # Storage for fine-tuned weights
   storage:
     storageUri: oci://n/mycompany/b/fine-tuned/o/llama-70b-finance-lora/
     path: /raid/fine-tuned/llama-70b-finance-lora
-  
+
   # Training job reference
   trainingJobRef:
     name: llama-finance-training-job

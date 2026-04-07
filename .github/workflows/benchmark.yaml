@@ -484,13 +484,13 @@ jobs:
               echo "Deleting Argo Workflow: $wf"
               kubectl delete workflow "$wf" -n $NAMESPACE --ignore-not-found=true 2>/dev/null || echo "Failed to delete workflow $wf"
             done
-          
+
             # Try to delete BenchmarkJob
             kubectl delete benchmarkjob benchmark-$MODEL_NAME -n $NAMESPACE 2>/dev/null || echo "No BenchmarkJob benchmark-$MODEL_NAME in $NAMESPACE to cleanup"
-          
+
             # Try to delete InferenceService
             kubectl delete inferenceservice $MODEL_NAME -n $NAMESPACE 2>/dev/null || echo "No InferenceService $MODEL_NAME in $NAMESPACE to cleanup"
-          
+
             # Clean up any manifest files
             rm -f argo-workflow-$MODEL_NAME.yaml /tmp/argo-output-$MODEL_NAME.log
           done

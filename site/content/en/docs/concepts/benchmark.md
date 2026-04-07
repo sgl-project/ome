@@ -304,18 +304,18 @@ status:
 
 
 ## Usage Guide
-1. Make sure an InferenceService is running in the cluster. 
+1. Make sure an InferenceService is running in the cluster.
 
 ```shell
 # Follow CONTRIBUTING.md to start OME manager
 # Create a Llama-3.1-70b-Instruct iscv if there is not one
-kubectl apply -f config/samples/iscv/meta/llama3-1-70b-instruct.yaml 
+kubectl apply -f config/samples/iscv/meta/llama3-1-70b-instruct.yaml
 ```
 
 2. Start a benchmark
 
 ```shell
 # If there is a secret reference, apply the sceret resource first
-kubectl apply -f config/samples/benchmark/huggingface-secret.yaml 
-kubectl apply -f config/samples/benchmark/llama3-1-70b-instruct.yaml 
+kubectl apply -f config/samples/benchmark/huggingface-secret.yaml
+kubectl apply -f config/samples/benchmark/llama3-1-70b-instruct.yaml
 ```

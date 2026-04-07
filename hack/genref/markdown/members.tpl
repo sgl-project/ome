@@ -29,4 +29,4 @@ Refer to the Kubernetes API documentation for the fields of the <code>metadata</
 </tr>
     {{- end }}
   {{- end }}
-{{ end }} 
+{{ end }}

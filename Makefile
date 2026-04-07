@@ -114,15 +114,15 @@ include Makefile-deps.mk
 .PHONY: manifests
 manifests: controller-gen yq ## 📄 Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	@echo "\n📦 Kubernetes Manifest Generation Starting..."
-	
+
 	@echo "\n🔧 Step 1: Generating CRD manifests..."
 	@$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=./pkg/apis/ome/... output:crd:dir=config/crd/full
 	@echo "✅ CRD manifests generated"
-	
+
 	@echo "\n🔑 Step 2: Generating RBAC manifests..."
 	@$(CONTROLLER_GEN) rbac:roleName=ome-manager-role paths=./pkg/controller/... output:rbac:artifacts:config=config/rbac
 	@echo "✅ RBAC manifests generated"
-	
+
 	@echo "\n📝 Step 3: Generating object boilerplate..."
 	@$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths=./pkg/apis/ome/v1beta1
 	@echo "✅ Object boilerplate generated"
@@ -167,7 +167,7 @@ generate: controller-gen ## 🔄 Generate code containing DeepCopy, DeepCopyInto
 	@echo "\n🔧 Step 1: Setting up Go environment..."
 	@go env -w GOFLAGS=-mod=mod
 	@echo "✅ Go environment configured"
-	
+
 	@echo "\n🔄 Step 2: Generating Kubernetes client-go code..."
 	@if ! hack/update-codegen.sh 2>generate.err; then \
 		echo "❌ Error during code generation:"; \
@@ -177,7 +177,7 @@ generate: controller-gen ## 🔄 Generate code containing DeepCopy, DeepCopyInto
 	fi
 	@rm -f generate.err
 	@echo "✅ Client-go code generation complete"
-	
+
 	@echo "\n📝 Step 3: Generating OpenAPI specifications..."
 	@if ! hack/update-openapigen.sh 2>openapi.err; then \
 		echo "❌ Error during OpenAPI generation:"; \
@@ -187,7 +187,7 @@ generate: controller-gen ## 🔄 Generate code containing DeepCopy, DeepCopyInto
 	fi
 	@rm -f openapi.err
 	@echo "✅ OpenAPI generation complete"
-	
+
 	@echo "\n🎉 Code generation process completed successfully!\n"
 
 .PHONY: generate-python-sdk
@@ -441,7 +441,7 @@ install: kustomize ## 🚀 Deploy controller in the configured Kubernetes cluste
 	@echo "Are you really sure you want to completely re-install in [$(value KUBECONFIG)] environment ?"
 	@echo "## 💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥 ##"
 	@read -p "Press enter to continue" var
-	
+
 	@echo "\n🔧 Step 1: Configuring certificates..."
 	@cd config/default && if [ ${OME_ENABLE_SELF_SIGNED_CA} != false ]; then \
 		echo "  • Using self-signed CA"; \
@@ -456,28 +456,28 @@ install: kustomize ## 🚀 Deploy controller in the configured Kubernetes cluste
 	kubectl -n cert-manager rollout restart deployment cert-manager
 	kubectl -n cert-manager rollout restart deployment cert-manager-webhook
 	kubectl -n cert-manager rollout restart deployment cert-manager-cainjector
-	
+
 	@echo "\n🚀 Step 3: Deploying OME components..."
 	@echo "  • Applying kustomize configuration..."
 	kubectl apply --server-side --force-conflicts -k config/default
-	
+
 	@if [ ${OME_ENABLE_SELF_SIGNED_CA} != false ]; then \
 		echo "  • Setting up self-signed CA..."; \
 		./hack/self-signed-ca.sh; \
 	fi
-	
+
 	@if [ ${WAIT_FOR_CONTROLLER} = true ]; then \
 		echo "\n⏳ Step 4: Waiting for OME controller to be ready..."; \
 		kubectl wait --for=condition=ready pod -l control-plane=ome-controller-manager -n ome --timeout=300s; \
 	fi
-	
+
 	@echo "\n🔄 Step 5: Applying cluster resources..."
 	kubectl apply --server-side --force-conflicts -k config/clusterresources
-	
+
 	@echo "\n🧹 Step 6: Cleanup..."
 	@git checkout HEAD -- config/certmanager/certificate.yaml
 	@echo "✅ Cleanup complete"
-	
+
 	@echo "\n🎉 OME deployment completed successfully!\n"
 
 .PHONY: uninstall
