@@ -61,7 +61,21 @@ jobs:
         run: pip install pre-commit
 
       - name: Run pre-commit
+        id: pre-commit
         run: pre-commit run --all-files --show-diff-on-failure
+
+      - name: Post failure comment on PR
+        if: failure() && steps.pre-commit.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `⚠️ **Pre-commit checks failed**\n\nPlease run the following locally and commit the fixes:\n\`\`\`bash\npre-commit run --all-files\ngit add -u && git commit\n\`\`\`\nSee [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md#pre-commit-check) for setup instructions.`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
 
   test-and-build:
     name: Test and Build
