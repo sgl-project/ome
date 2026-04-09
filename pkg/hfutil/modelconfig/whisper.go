@@ -36,11 +36,11 @@ type WhisperConfig struct {
 	MaxTargetPositions int `json:"max_target_positions"`
 
 	// Special tokens
-	BosTokenId           int `json:"bos_token_id"`
-	EosTokenId           int `json:"eos_token_id"`
-	PadTokenId           int `json:"pad_token_id"`
-	DecoderStartTokenId  int `json:"decoder_start_token_id"`
-	ClassifierProjSize   int `json:"classifier_proj_size"`
+	BosTokenId          int `json:"bos_token_id"`
+	EosTokenId          int `json:"eos_token_id"`
+	PadTokenId          int `json:"pad_token_id"`
+	DecoderStartTokenId int `json:"decoder_start_token_id"`
+	ClassifierProjSize  int `json:"classifier_proj_size"`
 
 	// Activation / regularization
 	ActivationFunction string  `json:"activation_function"`
