@@ -1,0 +1,29 @@
+{{- if index .Values "grok-4-30-reasoning" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: grok-4-30-reasoning
+  labels:
+    {{ include "proxy-models-importer.genaiModelLabels" (dict "root" $ "model" "grok-4-30-reasoning") | nindent 4 }}
+  annotations:
+    {{ include "proxy-models-importer.genaiModelAnnotations" (dict "root" $ "model" "grok-4-30-reasoning") | nindent 4 }}
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: xai.grok-4.30-reasoning
+  storage:
+    storageUri: "vendor://xai/models/{{ index .Values "grok-4-30-reasoning" "osPrefixOverride" }}"
+  vendor: {{ index .Values "grok-4-30-reasoning" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelArchitecture: xAiForCausalLM
+  modelParameterSize: 1.7T
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 2000000
+{{- end }}

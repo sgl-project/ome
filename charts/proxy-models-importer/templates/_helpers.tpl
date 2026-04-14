@@ -4,6 +4,7 @@
 */}}
 
 {{- define "proxy-models-importer.genaiModelLabels" -}}
+genai-managed-base-model-v1beta1: "true"
 genai-model-deprecated-date: "{{ index .root.Values .model "timeDeprecated" }}"
 genai-model-on-demand-retired-date: "{{ index .root.Values .model "timeOnDemandRetired" }}"
 genai-model-dedicated-retired-date: "{{ index .root.Values .model "timeDedicatedRetired" }}"
@@ -18,4 +19,6 @@ genai-model-dedicated-retired-date: "{{ index .root.Values .model "timeDedicated
 models.ome.io/experimental: "false"
 models.ome.io/internal: "false"
 models.ome.io/lifecycle-phase: "{{ index .root.Values .model "lifecyclePhase" }}"
+models.ome.io/runtime: ""
+models.ome.io/category: ""
 {{- end -}}

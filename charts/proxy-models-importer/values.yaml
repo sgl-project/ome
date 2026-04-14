@@ -1,3 +1,6 @@
 compartmentID: ocid1.compartment.oc1..aaaaaaaazq
 
+grok-4-30-reasoning:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
 # New proxy model entries will be added here as they are onboarded.
