@@ -1560,6 +1560,27 @@ grok_4_self_hosted:
     timeoutSeconds: 30
     initialDelaySeconds: 100
 
+grok_4_1_fast_self_hosted:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+  readinessProbe:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - |
+          curl -s -f http://localhost:8080/v1/chat/completions \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"model":"grok-4-1-fast-non-reasoning","messages":[{"role":"user","content":"hi"}],"max_tokens":10}' \
+            --max-time 25
+    failureThreshold: 5
+    successThreshold: 1
+    periodSeconds: 10
+    timeoutSeconds: 30
+    initialDelaySeconds: 100
+
 gemma_2_2b_it:
   enabled: false
   annotations: { }

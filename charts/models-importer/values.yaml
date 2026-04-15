@@ -972,6 +972,12 @@ grok-tts:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+grok-4-1-fast-self-hosted:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+  nodeAffinity:
+    - BM.GPU.H100.8
+
 grok-4-fast-self-hosted:
   enabled: false
   lifecyclePhase: "ACTIVE"
