@@ -48,6 +48,24 @@ type GopherTask struct {
 	TensorRTLLMShapeFilter *TensorRTLLMShapeFilter
 }
 
+// ModelLayout describes the expected file layout of a HuggingFace model repo,
+// determined by querying the HF API. Used to prevent false-positive readiness
+// checks when the fallback heuristic would otherwise accept an incomplete
+// download on shared storage.
+type ModelLayout int
+
+const (
+	// ModelLayoutUnknown means the layout could not be determined (API failure).
+	// Falls back to the existing heuristic for backward compatibility.
+	ModelLayoutUnknown ModelLayout = iota
+	// ModelLayoutSafetensorsSharded means the repo contains model.safetensors.index.json.
+	ModelLayoutSafetensorsSharded
+	// ModelLayoutDiffusion means the repo contains model_index.json (diffusion pipeline).
+	ModelLayoutDiffusion
+	// ModelLayoutSingleFile means the repo has no index file; the fallback heuristic is safe.
+	ModelLayoutSingleFile
+)
+
 type Gopher struct {
 	modelConfigParser      *ModelConfigParser
 	configMapReconciler    *ConfigMapReconciler
@@ -80,6 +98,13 @@ type Gopher struct {
 	// Prevents stuck downloads (e.g., xet retrying 403 errors forever) from
 	// blocking workers indefinitely.
 	downloadTimeout time.Duration
+
+	// repoLayoutCache caches the expected file layout (ModelLayout) for HuggingFace
+	// repos, keyed by "modelID@revision". Prevents redundant HF API calls and
+	// ensures the layout-aware readiness check does not use the weak fallback
+	// heuristic for sharded or diffusion models whose index file hasn't been
+	// written to disk yet.
+	repoLayoutCache sync.Map
 }
 
 const (
@@ -1034,7 +1059,18 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 	// Only for fresh Download tasks — DownloadOverride indicates a spec change
 	// or failed retry that must re-evaluate the model files.
 	if task.TaskType == Download {
-		if s.isModelAlreadyDownloaded(destPath) {
+		// On shared storage, query the HF API for the expected model layout so
+		// isModelAlreadyDownloaded can avoid the false-positive fallback heuristic
+		// when the index file hasn't been written to disk yet by a concurrent
+		// downloader on another node. On non-shared storage there's no concurrent
+		// writer, so the extra API call is unnecessary.
+		var expectedLayout ModelLayout
+		if s.isSharedStorage {
+			hfToken := s.getHuggingFaceToken(task, baseModelSpec, modelInfo)
+			expectedLayout = s.fetchModelLayout(ctx, hfComponents.ModelID, hfComponents.Branch, hfToken)
+		}
+
+		if s.isModelAlreadyDownloadedWithLayout(destPath, expectedLayout) {
 			s.logger.Infof("Model %s already exists at %s (shared storage), skipping HuggingFace download", modelInfo, destPath)
 			return s.skipDownloadAndUpdateConfig(destPath, task)
 		}
@@ -1042,7 +1078,7 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 		// On shared storage, only the download leader should proceed. Non-leaders
 		// wait for the leader to finish and then recheck for files on disk.
 		if s.isSharedStorage && !s.isDownloadLeader(ctx, modelInfo) {
-			if s.waitForSharedStorageModel(ctx, destPath, modelInfo) {
+			if s.waitForSharedStorageModel(ctx, destPath, modelInfo, expectedLayout) {
 				s.logger.Infof("Model %s appeared on shared storage at %s after waiting for leader", modelInfo, destPath)
 				return s.skipDownloadAndUpdateConfig(destPath, task)
 			}
@@ -1394,6 +1430,103 @@ func (s *Gopher) fetchSha(ctx context.Context, modelId string, modelName string)
 	return shaStr, isShaAvailable
 }
 
+// fetchModelLayout queries the HuggingFace API to determine the expected file layout
+// of a model repo. The result is cached in repoLayoutCache so subsequent calls
+// for the same model (e.g., when multiple download tasks target the same model)
+// don't hit the API again.
+// On any error (network, auth, rate limit, timeout), returns ModelLayoutUnknown
+// so the caller falls back to the existing heuristic.
+func (s *Gopher) fetchModelLayout(ctx context.Context, modelID, revision, hfToken string) ModelLayout {
+	cacheKey := modelID + "@" + revision
+	if cached, ok := s.repoLayoutCache.Load(cacheKey); ok {
+		if layout, isLayout := cached.(ModelLayout); isLayout {
+			return layout
+		}
+		s.logger.Warnf("fetchModelLayout(%s): unexpected type in cache, refetching", cacheKey)
+	}
+
+	// Use a short timeout — this is a lightweight metadata query, not a download.
+	// Prevents a hanging HF API call from blocking a worker goroutine indefinitely.
+	fetchCtx, fetchCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer fetchCancel()
+
+	type fetchResult struct {
+		layout ModelLayout
+	}
+	ch := make(chan fetchResult, 1)
+	go func() {
+		ch <- fetchResult{layout: s.fetchModelLayoutFromAPI(modelID, revision, hfToken)}
+	}()
+
+	select {
+	case result := <-ch:
+		return result.layout
+	case <-fetchCtx.Done():
+		s.logger.Warnf("fetchModelLayout(%s): timed out after 30s — layout unknown", cacheKey)
+		return ModelLayoutUnknown
+	}
+}
+
+// fetchModelLayoutFromAPI does the actual HF API call. Called by fetchModelLayout
+// inside a timeout-guarded goroutine.
+func (s *Gopher) fetchModelLayoutFromAPI(modelID, revision, hfToken string) ModelLayout {
+	cacheKey := modelID + "@" + revision
+
+	xetConfig := &xet.Config{
+		Endpoint:               s.xetConfig.Endpoint,
+		Token:                  hfToken,
+		CacheDir:               s.xetConfig.CacheDir,
+		MaxConcurrentDownloads: s.xetConfig.MaxConcurrentDownloads,
+		EnableDedup:            true,
+	}
+	if xetConfig.Endpoint == "" {
+		xetConfig.Endpoint = "https://huggingface.co"
+	}
+	if xetConfig.MaxConcurrentDownloads == 0 {
+		xetConfig.MaxConcurrentDownloads = 4
+	}
+
+	client, err := xet.NewClient(xetConfig)
+	if err != nil {
+		s.logger.Warnf("fetchModelLayout(%s): failed to create xet client: %v — layout unknown", cacheKey, err)
+		return ModelLayoutUnknown
+	}
+	defer client.Close()
+
+	rev := revision
+	if rev == "" {
+		rev = "main"
+	}
+	files, err := client.ListFiles(modelID, rev)
+	if err != nil {
+		s.logger.Warnf("fetchModelLayout(%s): ListFiles failed: %v — layout unknown", cacheKey, err)
+		return ModelLayoutUnknown
+	}
+
+	layout := ModelLayoutSingleFile
+	for _, f := range files {
+		switch f.Path {
+		case "model.safetensors.index.json":
+			layout = ModelLayoutSafetensorsSharded
+			// Safetensors sharded takes highest priority — stop scanning.
+			s.logger.Infof("fetchModelLayout(%s): detected sharded safetensors layout", cacheKey)
+			s.repoLayoutCache.Store(cacheKey, layout)
+			return layout
+		case "model_index.json":
+			layout = ModelLayoutDiffusion
+			// Don't return yet — a model.safetensors.index.json might appear later in the list.
+		}
+	}
+
+	if layout == ModelLayoutDiffusion {
+		s.logger.Infof("fetchModelLayout(%s): detected diffusion pipeline layout", cacheKey)
+	} else {
+		s.logger.Infof("fetchModelLayout(%s): no index file found — single-file layout", cacheKey)
+	}
+	s.repoLayoutCache.Store(cacheKey, layout)
+	return layout
+}
+
 /*
 isEligibleForOptimization determines whether a Hugging Face model can reuse an existing artifact.
 
@@ -1559,24 +1692,35 @@ func (s *Gopher) skipDownloadAndUpdateConfig(destPath string, task *GopherTask) 
 	return nil
 }
 
-// isModelAlreadyDownloaded checks whether the model files are already present at
-// destPath. This handles the shared-storage case: when multiple nodes mount the
-// same filesystem (e.g., NFS at /storage/models), the first node that finishes an
-// HF download writes the files once. Subsequent nodes should detect the existing
-// files and skip re-downloading.
+// isModelAlreadyDownloaded checks whether model files are present at destPath.
+// This is the backward-compatible entry point used by the OCI download path,
+// where no HF repo metadata is available.
+func (s *Gopher) isModelAlreadyDownloaded(destPath string) bool {
+	return s.isModelAlreadyDownloadedWithLayout(destPath, ModelLayoutUnknown)
+}
+
+// isModelAlreadyDownloadedWithLayout checks whether the model files are already
+// present at destPath, using expectedLayout (from the HF API) to avoid false
+// positives from the fallback heuristic.
+//
+// On shared storage, the xet downloader writes files concurrently with no ordering
+// guarantee. When config.json + one shard exist but model.safetensors.index.json
+// hasn't been written yet, the fallback heuristic would incorrectly report the
+// model as complete. The expectedLayout hint prevents this: if HF says the model
+// should have an index file but it's not on disk yet, we return false instead of
+// falling through to the weak fallback.
 //
 // Supports three model layouts:
 //  1. Sharded safetensors: model.safetensors.index.json lists all expected shards.
 //  2. Diffusion pipelines: model_index.json lists component subdirectories, each
 //     containing its own config and weight files.
 //  3. Single-file models: no index file, but config.json + at least one weight
-//     file (.safetensors, .bin, .pt, .gguf) present. Note: this fallback cannot
-//     verify shard completeness for multi-shard models without an index file.
+//     file (.safetensors, .bin, .pt, .gguf) present.
 //
 // All filesystem checks treat errors conservatively as "not present" so that
 // NFS I/O or permission errors fall through to the normal download path rather
 // than silently skipping the download.
-func (s *Gopher) isModelAlreadyDownloaded(destPath string) bool {
+func (s *Gopher) isModelAlreadyDownloadedWithLayout(destPath string, expectedLayout ModelLayout) bool {
 	// Check if directory exists
 	info, err := os.Stat(destPath)
 	if err != nil {
@@ -1608,7 +1752,27 @@ func (s *Gopher) isModelAlreadyDownloaded(destPath string) bool {
 		return s.checkDiffusionIndex(destPath)
 	}
 
-	// 3. Fallback: config.json + at least one weight file
+	// If the HF API told us this model should have an index file but it's not on
+	// disk yet, the download is still in progress. Don't fall through to the weak
+	// fallback heuristic which would accept config.json + one shard as "complete".
+	switch expectedLayout {
+	case ModelLayoutSafetensorsSharded:
+		s.logger.Infof("isModelAlreadyDownloaded(%s): HF API indicates sharded safetensors "+
+			"but model.safetensors.index.json not on disk yet — not complete", destPath)
+		return false
+	case ModelLayoutDiffusion:
+		s.logger.Infof("isModelAlreadyDownloaded(%s): HF API indicates diffusion pipeline "+
+			"but model_index.json not on disk yet — not complete", destPath)
+		return false
+	case ModelLayoutUnknown, ModelLayoutSingleFile:
+		// Fall through to the fallback heuristic.
+		// Unknown: API failed, preserve backward-compatible behavior.
+		// SingleFile: model genuinely has no index file, fallback is safe.
+	default:
+		s.logger.Warnf("isModelAlreadyDownloaded(%s): unhandled layout %d, falling through to heuristic", destPath, expectedLayout)
+	}
+
+	// 3. Fallback: config.json + at least one weight file.
 	if s.checkConfigAndWeights(destPath) {
 		return true
 	}
@@ -1952,7 +2116,7 @@ func (s *Gopher) releaseDownloadLease(ctx context.Context, modelInfo string) {
 // with jitter and periodic rechecks. Returns true if the model appeared (another
 // node downloaded it), false if the context was cancelled or max wait exceeded.
 // Maximum wait time is downloadLeaderLeaseDuration + 30s (currently 5m30s).
-func (s *Gopher) waitForSharedStorageModel(ctx context.Context, destPath string, modelInfo string) bool {
+func (s *Gopher) waitForSharedStorageModel(ctx context.Context, destPath string, modelInfo string, expectedLayout ModelLayout) bool {
 	maxWait := downloadLeaderLeaseDuration + 30*time.Second
 	deadline := time.Now().Add(maxWait)
 
@@ -1970,7 +2134,7 @@ func (s *Gopher) waitForSharedStorageModel(ctx context.Context, destPath string,
 		case <-timer.C:
 		}
 
-		if s.isModelAlreadyDownloaded(destPath) {
+		if s.isModelAlreadyDownloadedWithLayout(destPath, expectedLayout) {
 			s.logger.Infof("Shared storage: model %s appeared at %s (downloaded by leader)", modelInfo, destPath)
 			return true
 		}

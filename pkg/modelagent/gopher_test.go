@@ -1188,6 +1188,77 @@ func TestIsModelAlreadyDownloaded(t *testing.T) {
 	})
 }
 
+func TestIsModelAlreadyDownloadedWithLayout(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	sugaredLogger := logger.Sugar()
+	defer func() { _ = sugaredLogger.Sync() }()
+
+	gopher := &Gopher{logger: sugaredLogger}
+
+	t.Run("sharded layout hint blocks fallback when index not on disk", func(t *testing.T) {
+		// Simulates the race condition: config.json + one shard exist but
+		// model.safetensors.index.json hasn't been written yet by the concurrent downloader.
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"glm"}`), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00001-of-00010.safetensors"), []byte("data"), 0644))
+		// Without layout hint, the fallback would return true (false positive)
+		assert.True(t, gopher.isModelAlreadyDownloadedWithLayout(dir, ModelLayoutUnknown))
+		// With sharded layout hint, we know the index file should exist — return false
+		assert.False(t, gopher.isModelAlreadyDownloadedWithLayout(dir, ModelLayoutSafetensorsSharded))
+	})
+
+	t.Run("diffusion layout hint blocks fallback when index not on disk", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"flux"}`), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "unet.safetensors"), []byte("data"), 0644))
+		// Without layout hint, the fallback would return true
+		assert.True(t, gopher.isModelAlreadyDownloadedWithLayout(dir, ModelLayoutUnknown))
+		// With diffusion layout hint, we know model_index.json should exist — return false
+		assert.False(t, gopher.isModelAlreadyDownloadedWithLayout(dir, ModelLayoutDiffusion))
+	})
+
+	t.Run("single-file layout hint allows fallback", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"bert"}`), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors"), []byte("data"), 0644))
+		// SingleFile layout: fallback is legitimate, model genuinely has no index
+		assert.True(t, gopher.isModelAlreadyDownloadedWithLayout(dir, ModelLayoutSingleFile))
+	})
+
+	t.Run("unknown layout preserves backward-compat behavior", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"llama"}`), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors"), []byte("data"), 0644))
+		// Unknown layout (API failed): same as before the fix — fallback returns true
+		assert.True(t, gopher.isModelAlreadyDownloadedWithLayout(dir, ModelLayoutUnknown))
+	})
+
+	t.Run("sharded layout with index present and all shards returns true", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model_type":"glm"}`), 0644))
+		index := `{"metadata":{"total_size":100},"weight_map":{"w1":"model-00001-of-00002.safetensors","w2":"model-00002-of-00002.safetensors"}}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors.index.json"), []byte(index), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00001-of-00002.safetensors"), []byte("data"), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00002-of-00002.safetensors"), []byte("data"), 0644))
+		// Layout hint doesn't matter when index file is on disk — authoritative check succeeds
+		assert.True(t, gopher.isModelAlreadyDownloadedWithLayout(dir, ModelLayoutSafetensorsSharded))
+	})
+
+	t.Run("sharded layout with index present but missing shard returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		index := `{"metadata":{"total_size":100},"weight_map":{"w1":"model-00001-of-00002.safetensors","w2":"model-00002-of-00002.safetensors"}}`
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model.safetensors.index.json"), []byte(index), 0644))
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, "model-00001-of-00002.safetensors"), []byte("data"), 0644))
+		// Index is on disk but shard 2 is missing — authoritative check correctly returns false
+		assert.False(t, gopher.isModelAlreadyDownloadedWithLayout(dir, ModelLayoutSafetensorsSharded))
+	})
+
+	t.Run("nonexistent directory returns false regardless of layout", func(t *testing.T) {
+		assert.False(t, gopher.isModelAlreadyDownloadedWithLayout("/nonexistent/path", ModelLayoutSafetensorsSharded))
+		assert.False(t, gopher.isModelAlreadyDownloadedWithLayout("/nonexistent/path", ModelLayoutUnknown))
+	})
+}
+
 func TestIsEligibleForOptimization_AlwaysDownloadNotEligible(t *testing.T) {
 	nodeName := "node-1"
 	sha := "123abc"
