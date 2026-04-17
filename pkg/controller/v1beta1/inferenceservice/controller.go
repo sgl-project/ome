@@ -11,7 +11,7 @@ import (
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	"knative.dev/pkg/network"
 
-	v1beta2 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
@@ -109,7 +109,7 @@ type InferenceServiceReconciler struct {
 
 func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// Fetch the InferenceService instance
-	isvc := &v1beta2.InferenceService{}
+	isvc := &opensourcev1beta1.InferenceService{}
 	if err := r.Get(ctx, req.NamespacedName, isvc); err != nil {
 		if apierr.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
@@ -204,9 +204,9 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if deploymentMode == constants.Serverless {
-		componentList := []v1beta2.ComponentType{v1beta2.PredictorComponent}
-		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta2.RoutesReady)
-		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta2.LatestDeploymentReady)
+		componentList := []opensourcev1beta1.ComponentType{opensourcev1beta1.PredictorComponent}
+		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, opensourcev1beta1.RoutesReady)
+		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, opensourcev1beta1.LatestDeploymentReady)
 	}
 
 	// Reconcile ingress
@@ -240,7 +240,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return ctrl.Result{}, nil
 }
 
-func (r *InferenceServiceReconciler) handleVirtualDeployment(isvc *v1beta2.InferenceService) (ctrl.Result, error) {
+func (r *InferenceServiceReconciler) handleVirtualDeployment(isvc *opensourcev1beta1.InferenceService) (ctrl.Result, error) {
 	// We directly set URL and inference service status to Ready in VirtualDeployment mode
 
 	// Set URL across all Status components
@@ -254,8 +254,8 @@ func (r *InferenceServiceReconciler) handleVirtualDeployment(isvc *v1beta2.Infer
 	}
 	isvc.Status.URL = openAIURL
 	isvc.Status.Address = addressURL
-	isvc.Status.Components = map[v1beta2.ComponentType]v1beta2.ComponentStatusSpec{
-		v1beta2.PredictorComponent: {
+	isvc.Status.Components = map[opensourcev1beta1.ComponentType]opensourcev1beta1.ComponentStatusSpec{
+		opensourcev1beta1.PredictorComponent: {
 			URL: openAIURL,
 		},
 	}
@@ -276,7 +276,7 @@ func (r *InferenceServiceReconciler) handleVirtualDeployment(isvc *v1beta2.Infer
 	return ctrl.Result{}, nil
 }
 
-func (r *InferenceServiceReconciler) handleServerlessPrerequisites(isvc *v1beta2.InferenceService) (ctrl.Result, error) {
+func (r *InferenceServiceReconciler) handleServerlessPrerequisites(isvc *opensourcev1beta1.InferenceService) (ctrl.Result, error) {
 	// Abort early if the resolved deployment mode is Serverless, but Knative Services are not available
 	ksvcAvailable, err := utils.IsCrdAvailable(r.ClientConfig, knservingv1.SchemeGroupVersion.String(), constants.KnativeServiceKind)
 	if err != nil {
@@ -293,8 +293,8 @@ func (r *InferenceServiceReconciler) handleServerlessPrerequisites(isvc *v1beta2
 	return ctrl.Result{}, nil
 }
 
-func (r *InferenceServiceReconciler) updateStatus(desiredService *v1beta2.InferenceService, deploymentMode constants.DeploymentModeType) error {
-	existingService := &v1beta2.InferenceService{}
+func (r *InferenceServiceReconciler) updateStatus(desiredService *opensourcev1beta1.InferenceService, deploymentMode constants.DeploymentModeType) error {
+	existingService := &opensourcev1beta1.InferenceService{}
 	namespacedName := types.NamespacedName{Name: desiredService.Name, Namespace: desiredService.Namespace}
 	if err := r.Get(context.TODO(), namespacedName, existingService); err != nil {
 		return err
@@ -324,13 +324,13 @@ func (r *InferenceServiceReconciler) updateStatus(desiredService *v1beta2.Infere
 	return nil
 }
 
-func inferenceServiceReadiness(status v1beta2.InferenceServiceStatus) bool {
+func inferenceServiceReadiness(status opensourcev1beta1.InferenceServiceStatus) bool {
 	return status.Conditions != nil &&
 		status.GetCondition(knapis.ConditionReady) != nil &&
 		status.GetCondition(knapis.ConditionReady).Status == v1.ConditionTrue
 }
 
-func inferenceServiceStatusEqual(s1, s2 v1beta2.InferenceServiceStatus) bool {
+func inferenceServiceStatusEqual(s1, s2 opensourcev1beta1.InferenceServiceStatus) bool {
 	return equality.Semantic.DeepEqual(s1, s2)
 }
 
@@ -366,7 +366,7 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 	}
 
 	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
-		For(&v1beta2.InferenceService{}).
+		For(&opensourcev1beta1.InferenceService{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&v1.Service{}).
 		Owns(&v1.ConfigMap{}).

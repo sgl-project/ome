@@ -15,6 +15,7 @@ import (
 	schedulerpluginsv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
 
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 func TestClusterTrainingRuntimeNewObjects(t *testing.T) {
@@ -26,7 +27,7 @@ func TestClusterTrainingRuntimeNewObjects(t *testing.T) {
 	cases := map[string]struct {
 		trainJob               *omev1beta1.TrainingJob
 		clusterTrainingRuntime *omev1beta1.ClusterTrainingRuntime
-		baseModelSpec          *omev1beta1.BaseModelSpec
+		baseModelSpec          *opensourcev1beta1.BaseModelSpec
 		wantObjs               []client.Object
 		wantError              error
 	}{
@@ -51,7 +52,7 @@ func TestClusterTrainingRuntimeNewObjects(t *testing.T) {
 				).
 				ModelConfig(testing2.MakeTrainJobModelConfigWrapper().
 					InputModel("test-input-model").
-					OutputModel(&omev1beta1.StorageSpec{}).
+					OutputModel(&opensourcev1beta1.StorageSpec{}).
 					Obj(),
 				).
 				HyperParameterTuningConfig(testing2.MakeTrainJobHyperparameterTuningConfigWrapper().

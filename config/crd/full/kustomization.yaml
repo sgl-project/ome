@@ -2,17 +2,30 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - ome.io_inferenceservices.yaml
-  - ome.io_clusterservingruntimes.yaml
-  - ome.io_servingruntimes.yaml
-  - ome.io_basemodels.yaml
-  - ome.io_clusterbasemodels.yaml
-  - ome.io_dedicatedaiclusters.yaml
-  - ome.io_dedicatedaiclusterprofiles.yaml
-  - ome.io_capacityreservations.yaml
-  - ome.io_clustercapacityreservations.yaml
-  - ome.io_clustertrainingruntimes.yaml
-  - ome.io_trainingruntimes.yaml
-  - ome.io_trainingjobs.yaml
-  - ome.io_benchmarkjobs.yaml
-  - ome.io_replicationjobs.yaml
+  # Opensource CRDs
+  - opensource-ome/ome.io_inferenceservices.yaml
+  - opensource-ome/ome.io_clusterservingruntimes.yaml
+  - opensource-ome/ome.io_servingruntimes.yaml
+  - opensource-ome/ome.io_basemodels.yaml
+  - opensource-ome/ome.io_clusterbasemodels.yaml
+  - opensource-ome/ome.io_benchmarkjobs.yaml
+  - opensource-ome/ome.io_acceleratorclasses.yaml
+  - opensource-ome/ome.io_finetunedweights.yaml
+  # Local CRDs
+  - ome/ome.io_dedicatedaiclusters.yaml
+  - ome/ome.io_dedicatedaiclusterprofiles.yaml
+  - ome/ome.io_capacityreservations.yaml
+  - ome/ome.io_clustercapacityreservations.yaml
+  - ome/ome.io_clustertrainingruntimes.yaml
+  - ome/ome.io_trainingruntimes.yaml
+  - ome/ome.io_trainingjobs.yaml
+  - ome/ome.io_replicationjobs.yaml
+  - ome/ome.io_inferencegraphs.yaml
+  - ome/ome.io_organizations.yaml
+  - ome/ome.io_projects.yaml
+  - ome/ome.io_serviceaccounts.yaml
+  - ome/ome.io_users.yaml
+  - ome/ome.io_ratelimits.yaml
+  - ome/ome.io_ocicaches.yaml
+  - ome/ome.io_ocipostgres.yaml
+  - ome/ome.io_ocipostgresdbinstances.yaml

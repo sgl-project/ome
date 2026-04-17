@@ -17,6 +17,7 @@ import (
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	jobsetplugin "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/framework/plugins/jobset"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 type JobSetWrapper struct {
@@ -489,9 +490,9 @@ func (t *TrainJobWrapper) Trainer(trainer *omev1beta1.TrainerSpec) *TrainJobWrap
 	return t
 }
 
-func (t *TrainJobWrapper) DatasetConfig(datasetConfig *omev1beta1.StorageSpec) *TrainJobWrapper {
+func (t *TrainJobWrapper) DatasetConfig(datasetConfig *opensourcev1beta1.StorageSpec) *TrainJobWrapper {
 	if t.Spec.Datasets == nil {
-		t.Spec.Datasets = &omev1beta1.StorageSpec{}
+		t.Spec.Datasets = &opensourcev1beta1.StorageSpec{}
 	}
 	t.Spec.Datasets = datasetConfig
 	return t
@@ -551,12 +552,12 @@ func (t *TrainJobTrainerWrapper) Obj() *omev1beta1.TrainerSpec {
 }
 
 type TrainJobDatasetConfigWrapper struct {
-	omev1beta1.StorageSpec
+	opensourcev1beta1.StorageSpec
 }
 
 func MakeTrainJobDatasetConfigWrapper() *TrainJobDatasetConfigWrapper {
 	return &TrainJobDatasetConfigWrapper{
-		StorageSpec: omev1beta1.StorageSpec{},
+		StorageSpec: opensourcev1beta1.StorageSpec{},
 	}
 }
 
@@ -580,7 +581,7 @@ func (t *TrainJobDatasetConfigWrapper) Parameters(params map[string]string) *Tra
 	return t
 }
 
-func (t *TrainJobDatasetConfigWrapper) Obj() *omev1beta1.StorageSpec {
+func (t *TrainJobDatasetConfigWrapper) Obj() *opensourcev1beta1.StorageSpec {
 	return &t.StorageSpec
 }
 
@@ -599,7 +600,7 @@ func (t *TrainJobModelConfigWrapper) InputModel(inputModel string) *TrainJobMode
 	return t
 }
 
-func (t *TrainJobModelConfigWrapper) OutputModel(outputModel *omev1beta1.StorageSpec) *TrainJobModelConfigWrapper {
+func (t *TrainJobModelConfigWrapper) OutputModel(outputModel *opensourcev1beta1.StorageSpec) *TrainJobModelConfigWrapper {
 	t.ModelConfig.OutputModel = outputModel
 	return t
 }

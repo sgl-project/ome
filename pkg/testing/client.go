@@ -13,12 +13,14 @@ import (
 	schedulerpluginsv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
 
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 func NewClientBuilder(addToSchemes ...func(s *runtime.Scheme) error) *fake.ClientBuilder {
 	scm := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scm))
 	utilruntime.Must(omev1beta1.AddToScheme(scm))
+	utilruntime.Must(opensourcev1beta1.AddToScheme(scm))
 	utilruntime.Must(jobsetv1alpha2.AddToScheme(scm))
 	utilruntime.Must(schedulerpluginsv1alpha1.AddToScheme(scm))
 	for i := range addToSchemes {

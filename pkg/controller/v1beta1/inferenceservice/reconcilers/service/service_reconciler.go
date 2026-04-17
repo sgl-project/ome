@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	corev1 "k8s.io/api/core/v1"

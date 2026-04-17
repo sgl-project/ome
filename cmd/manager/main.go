@@ -34,6 +34,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/training"
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	zaplog "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	istionetworking "istio.io/api/networking/v1beta1"
@@ -96,6 +97,7 @@ func init() {
 	istionetworking.GatewayUnmarshaler.AllowUnknownFields = true
 
 	utilruntime.Must(v1beta1.AddToScheme(scheme))
+	utilruntime.Must(opensourcev1beta1.AddToScheme(scheme))
 	utilruntime.Must(schedulerpluginsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))

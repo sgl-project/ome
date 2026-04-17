@@ -12,28 +12,12 @@ type FakeOmeV1beta1 struct {
 	*testing.Fake
 }
 
-func (c *FakeOmeV1beta1) BaseModels(namespace string) v1beta1.BaseModelInterface {
-	return newFakeBaseModels(c, namespace)
-}
-
-func (c *FakeOmeV1beta1) BenchmarkJobs(namespace string) v1beta1.BenchmarkJobInterface {
-	return newFakeBenchmarkJobs(c, namespace)
-}
-
 func (c *FakeOmeV1beta1) CapacityReservations(namespace string) v1beta1.CapacityReservationInterface {
 	return newFakeCapacityReservations(c, namespace)
 }
 
-func (c *FakeOmeV1beta1) ClusterBaseModels() v1beta1.ClusterBaseModelInterface {
-	return newFakeClusterBaseModels(c)
-}
-
 func (c *FakeOmeV1beta1) ClusterCapacityReservations() v1beta1.ClusterCapacityReservationInterface {
 	return newFakeClusterCapacityReservations(c)
-}
-
-func (c *FakeOmeV1beta1) ClusterServingRuntimes() v1beta1.ClusterServingRuntimeInterface {
-	return newFakeClusterServingRuntimes(c)
 }
 
 func (c *FakeOmeV1beta1) ClusterTrainingRuntimes() v1beta1.ClusterTrainingRuntimeInterface {
@@ -48,16 +32,8 @@ func (c *FakeOmeV1beta1) DedicatedAIClusterProfiles() v1beta1.DedicatedAICluster
 	return newFakeDedicatedAIClusterProfiles(c)
 }
 
-func (c *FakeOmeV1beta1) FineTunedWeights() v1beta1.FineTunedWeightInterface {
-	return newFakeFineTunedWeights(c)
-}
-
 func (c *FakeOmeV1beta1) InferenceGraphs(namespace string) v1beta1.InferenceGraphInterface {
 	return newFakeInferenceGraphs(c, namespace)
-}
-
-func (c *FakeOmeV1beta1) InferenceServices(namespace string) v1beta1.InferenceServiceInterface {
-	return newFakeInferenceServices(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) OciCaches(namespace string) v1beta1.OciCacheInterface {
@@ -90,10 +66,6 @@ func (c *FakeOmeV1beta1) ReplicationJobs(namespace string) v1beta1.ReplicationJo
 
 func (c *FakeOmeV1beta1) ServiceAccounts(namespace string) v1beta1.ServiceAccountInterface {
 	return newFakeServiceAccounts(c, namespace)
-}
-
-func (c *FakeOmeV1beta1) ServingRuntimes(namespace string) v1beta1.ServingRuntimeInterface {
-	return newFakeServingRuntimes(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) TrainingJobs(namespace string) v1beta1.TrainingJobInterface {

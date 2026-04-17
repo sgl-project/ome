@@ -2,22 +2,6 @@
 
 package v1beta1
 
-// BaseModelListerExpansion allows custom methods to be added to
-// BaseModelLister.
-type BaseModelListerExpansion interface{}
-
-// BaseModelNamespaceListerExpansion allows custom methods to be added to
-// BaseModelNamespaceLister.
-type BaseModelNamespaceListerExpansion interface{}
-
-// BenchmarkJobListerExpansion allows custom methods to be added to
-// BenchmarkJobLister.
-type BenchmarkJobListerExpansion interface{}
-
-// BenchmarkJobNamespaceListerExpansion allows custom methods to be added to
-// BenchmarkJobNamespaceLister.
-type BenchmarkJobNamespaceListerExpansion interface{}
-
 // CapacityReservationListerExpansion allows custom methods to be added to
 // CapacityReservationLister.
 type CapacityReservationListerExpansion interface{}
@@ -26,17 +10,9 @@ type CapacityReservationListerExpansion interface{}
 // CapacityReservationNamespaceLister.
 type CapacityReservationNamespaceListerExpansion interface{}
 
-// ClusterBaseModelListerExpansion allows custom methods to be added to
-// ClusterBaseModelLister.
-type ClusterBaseModelListerExpansion interface{}
-
 // ClusterCapacityReservationListerExpansion allows custom methods to be added to
 // ClusterCapacityReservationLister.
 type ClusterCapacityReservationListerExpansion interface{}
-
-// ClusterServingRuntimeListerExpansion allows custom methods to be added to
-// ClusterServingRuntimeLister.
-type ClusterServingRuntimeListerExpansion interface{}
 
 // ClusterTrainingRuntimeListerExpansion allows custom methods to be added to
 // ClusterTrainingRuntimeLister.
@@ -50,10 +26,6 @@ type DedicatedAIClusterListerExpansion interface{}
 // DedicatedAIClusterProfileLister.
 type DedicatedAIClusterProfileListerExpansion interface{}
 
-// FineTunedWeightListerExpansion allows custom methods to be added to
-// FineTunedWeightLister.
-type FineTunedWeightListerExpansion interface{}
-
 // InferenceGraphListerExpansion allows custom methods to be added to
 // InferenceGraphLister.
 type InferenceGraphListerExpansion interface{}
@@ -61,14 +33,6 @@ type InferenceGraphListerExpansion interface{}
 // InferenceGraphNamespaceListerExpansion allows custom methods to be added to
 // InferenceGraphNamespaceLister.
 type InferenceGraphNamespaceListerExpansion interface{}
-
-// InferenceServiceListerExpansion allows custom methods to be added to
-// InferenceServiceLister.
-type InferenceServiceListerExpansion interface{}
-
-// InferenceServiceNamespaceListerExpansion allows custom methods to be added to
-// InferenceServiceNamespaceLister.
-type InferenceServiceNamespaceListerExpansion interface{}
 
 // OciCacheListerExpansion allows custom methods to be added to
 // OciCacheLister.
@@ -121,14 +85,6 @@ type ServiceAccountListerExpansion interface{}
 // ServiceAccountNamespaceListerExpansion allows custom methods to be added to
 // ServiceAccountNamespaceLister.
 type ServiceAccountNamespaceListerExpansion interface{}
-
-// ServingRuntimeListerExpansion allows custom methods to be added to
-// ServingRuntimeLister.
-type ServingRuntimeListerExpansion interface{}
-
-// ServingRuntimeNamespaceListerExpansion allows custom methods to be added to
-// ServingRuntimeNamespaceLister.
-type ServingRuntimeNamespaceListerExpansion interface{}
 
 // TrainingJobListerExpansion allows custom methods to be added to
 // TrainingJobLister.

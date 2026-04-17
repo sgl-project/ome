@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"github.com/onsi/gomega"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

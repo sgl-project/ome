@@ -7,13 +7,13 @@ import (
 
 	"knative.dev/pkg/kmp"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 
-	omev1beta1informers "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions"
-	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/ome/v1beta1"
-	omev1beta1lister "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/listers/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
+	omev1beta1informers "github.com/sgl-project/ome/pkg/client/informers/externalversions"
+	omev1beta1 "github.com/sgl-project/ome/pkg/client/informers/externalversions/ome/v1beta1"
+	omev1beta1lister "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"

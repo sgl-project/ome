@@ -10,11 +10,11 @@ import (
 	kubeapiserver "k8s.io/apiserver/pkg/server"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	omev1beta1client "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
-	omev1beta1informers "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/hub"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/modelagent"
+	omev1beta1client "github.com/sgl-project/ome/pkg/client/clientset/versioned"
+	omev1beta1informers "github.com/sgl-project/ome/pkg/client/informers/externalversions"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
@@ -28,13 +28,13 @@ type DeploymentReconciler struct {
 	client       kclient.Client
 	scheme       *runtime.Scheme
 	Deployment   *appsv1.Deployment
-	componentExt *v1beta1.ComponentExtensionSpec
+	componentExt *opensourcev1beta1.ComponentExtensionSpec
 }
 
 func NewDeploymentReconciler(client kclient.Client,
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
-	componentExt *v1beta1.ComponentExtensionSpec,
+	componentExt *opensourcev1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec) *DeploymentReconciler {
 	return &DeploymentReconciler{
 		client:       client,
@@ -45,7 +45,7 @@ func NewDeploymentReconciler(client kclient.Client,
 }
 
 func createRawDeployment(componentMeta metav1.ObjectMeta,
-	componentExt *v1beta1.ComponentExtensionSpec,
+	componentExt *opensourcev1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec) *appsv1.Deployment {
 
 	podMetadata := componentMeta

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"

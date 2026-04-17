@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/onsi/gomega"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	opensourceconstants "github.com/sgl-project/ome/pkg/constants"
 	"google.golang.org/protobuf/proto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,8 +43,8 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 						},
 					},
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -75,8 +76,8 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 						},
 					},
 					Disabled: proto.Bool(true),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -111,8 +112,8 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 						},
 					},
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -144,8 +145,8 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 						},
 					},
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -181,9 +182,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -216,9 +217,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -254,9 +255,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -289,9 +290,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -326,9 +327,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -361,9 +362,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -399,9 +400,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -434,9 +435,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -471,9 +472,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -505,9 +506,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -542,9 +543,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -576,9 +577,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -613,9 +614,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -648,9 +649,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -686,9 +687,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -720,9 +721,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -758,9 +759,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 						},
 					},
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -793,9 +794,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 						},
 					},
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -831,9 +832,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 						},
 					},
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -866,9 +867,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 						},
 					},
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -906,9 +907,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 						},
 					},
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -943,9 +944,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 						},
 					},
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -981,9 +982,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 						},
 					},
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
 						Min: proto.String("100B"),
@@ -1024,9 +1025,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 						Min: proto.String("300B"),
 						Max: proto.String("600B"),
 					},
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -1062,9 +1063,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -1097,9 +1098,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -1135,9 +1136,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -1170,9 +1171,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -1207,9 +1208,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -1241,9 +1242,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -1278,9 +1279,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -1313,9 +1314,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -1351,9 +1352,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -1385,9 +1386,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -1640,9 +1641,9 @@ func TestValidateModelFormatPrioritySame(t *testing.T) {
 					},
 
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
@@ -1681,9 +1682,9 @@ func TestValidateModelFormatPrioritySame(t *testing.T) {
 						},
 					},
 					Disabled: proto.Bool(false),
-					ProtocolVersions: []constants.InferenceServiceProtocol{
-						constants.OpenAIProtocol,
-						constants.OpenAIProtocol,
+					ProtocolVersions: []opensourceconstants.InferenceServiceProtocol{
+						opensourceconstants.OpenAIProtocol,
+						opensourceconstants.OpenAIProtocol,
 					},
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{

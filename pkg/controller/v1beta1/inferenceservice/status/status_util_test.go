@@ -13,8 +13,8 @@ import (
 	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	lwsspec "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 func TestInitializeComponentStatus(t *testing.T) {

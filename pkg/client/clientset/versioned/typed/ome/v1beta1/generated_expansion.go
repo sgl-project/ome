@@ -2,17 +2,9 @@
 
 package v1beta1
 
-type BaseModelExpansion interface{}
-
-type BenchmarkJobExpansion interface{}
-
 type CapacityReservationExpansion interface{}
 
-type ClusterBaseModelExpansion interface{}
-
 type ClusterCapacityReservationExpansion interface{}
-
-type ClusterServingRuntimeExpansion interface{}
 
 type ClusterTrainingRuntimeExpansion interface{}
 
@@ -20,11 +12,7 @@ type DedicatedAIClusterExpansion interface{}
 
 type DedicatedAIClusterProfileExpansion interface{}
 
-type FineTunedWeightExpansion interface{}
-
 type InferenceGraphExpansion interface{}
-
-type InferenceServiceExpansion interface{}
 
 type OciCacheExpansion interface{}
 
@@ -41,8 +29,6 @@ type RateLimitExpansion interface{}
 type ReplicationJobExpansion interface{}
 
 type ServiceAccountExpansion interface{}
-
-type ServingRuntimeExpansion interface{}
 
 type TrainingJobExpansion interface{}
 

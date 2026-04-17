@@ -12,18 +12,12 @@ import (
 
 type OmeV1beta1Interface interface {
 	RESTClient() rest.Interface
-	BaseModelsGetter
-	BenchmarkJobsGetter
 	CapacityReservationsGetter
-	ClusterBaseModelsGetter
 	ClusterCapacityReservationsGetter
-	ClusterServingRuntimesGetter
 	ClusterTrainingRuntimesGetter
 	DedicatedAIClustersGetter
 	DedicatedAIClusterProfilesGetter
-	FineTunedWeightsGetter
 	InferenceGraphsGetter
-	InferenceServicesGetter
 	OciCachesGetter
 	OciPostgresesGetter
 	OciPostgresDBInstancesGetter
@@ -32,7 +26,6 @@ type OmeV1beta1Interface interface {
 	RateLimitsGetter
 	ReplicationJobsGetter
 	ServiceAccountsGetter
-	ServingRuntimesGetter
 	TrainingJobsGetter
 	TrainingRuntimesGetter
 	UsersGetter
@@ -43,28 +36,12 @@ type OmeV1beta1Client struct {
 	restClient rest.Interface
 }
 
-func (c *OmeV1beta1Client) BaseModels(namespace string) BaseModelInterface {
-	return newBaseModels(c, namespace)
-}
-
-func (c *OmeV1beta1Client) BenchmarkJobs(namespace string) BenchmarkJobInterface {
-	return newBenchmarkJobs(c, namespace)
-}
-
 func (c *OmeV1beta1Client) CapacityReservations(namespace string) CapacityReservationInterface {
 	return newCapacityReservations(c, namespace)
 }
 
-func (c *OmeV1beta1Client) ClusterBaseModels() ClusterBaseModelInterface {
-	return newClusterBaseModels(c)
-}
-
 func (c *OmeV1beta1Client) ClusterCapacityReservations() ClusterCapacityReservationInterface {
 	return newClusterCapacityReservations(c)
-}
-
-func (c *OmeV1beta1Client) ClusterServingRuntimes() ClusterServingRuntimeInterface {
-	return newClusterServingRuntimes(c)
 }
 
 func (c *OmeV1beta1Client) ClusterTrainingRuntimes() ClusterTrainingRuntimeInterface {
@@ -79,16 +56,8 @@ func (c *OmeV1beta1Client) DedicatedAIClusterProfiles() DedicatedAIClusterProfil
 	return newDedicatedAIClusterProfiles(c)
 }
 
-func (c *OmeV1beta1Client) FineTunedWeights() FineTunedWeightInterface {
-	return newFineTunedWeights(c)
-}
-
 func (c *OmeV1beta1Client) InferenceGraphs(namespace string) InferenceGraphInterface {
 	return newInferenceGraphs(c, namespace)
-}
-
-func (c *OmeV1beta1Client) InferenceServices(namespace string) InferenceServiceInterface {
-	return newInferenceServices(c, namespace)
 }
 
 func (c *OmeV1beta1Client) OciCaches(namespace string) OciCacheInterface {
@@ -121,10 +90,6 @@ func (c *OmeV1beta1Client) ReplicationJobs(namespace string) ReplicationJobInter
 
 func (c *OmeV1beta1Client) ServiceAccounts(namespace string) ServiceAccountInterface {
 	return newServiceAccounts(c, namespace)
-}
-
-func (c *OmeV1beta1Client) ServingRuntimes(namespace string) ServingRuntimeInterface {
-	return newServingRuntimes(c, namespace)
 }
 
 func (c *OmeV1beta1Client) TrainingJobs(namespace string) TrainingJobInterface {

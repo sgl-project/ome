@@ -11,6 +11,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"github.com/go-logr/logr"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	batchv1 "k8s.io/api/batch/v1"
@@ -115,10 +116,10 @@ func createTestReplicationJob(name string, deletionTimestamp *metav1.Time) *v1be
 			Finalizers:        []string{constants.ReplicationJobFinalizer},
 		},
 		Spec: v1beta1.ReplicationJobSpec{
-			Source: &v1beta1.StorageSpec{
+			Source: &opensourcev1beta1.StorageSpec{
 				StorageUri: utils.Ptr(validSrc),
 			},
-			Destination: &v1beta1.StorageSpec{
+			Destination: &opensourcev1beta1.StorageSpec{
 				StorageUri: utils.Ptr(validDest),
 			},
 		},
@@ -427,10 +428,10 @@ func createTestReplicationJobWithPodOverride(name string, deletionTimestamp *met
 			Finalizers:        []string{constants.ReplicationJobFinalizer},
 		},
 		Spec: v1beta1.ReplicationJobSpec{
-			Source: &v1beta1.StorageSpec{
+			Source: &opensourcev1beta1.StorageSpec{
 				StorageUri: utils.Ptr(validSrc),
 			},
-			Destination: &v1beta1.StorageSpec{
+			Destination: &opensourcev1beta1.StorageSpec{
 				StorageUri: utils.Ptr(validDest),
 			},
 			ContainerOverride: &corev1.Container{

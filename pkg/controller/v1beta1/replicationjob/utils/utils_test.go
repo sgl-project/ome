@@ -7,6 +7,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,7 +21,7 @@ const (
 
 func TestBuildEnvVars_SuccessOCI(t *testing.T) {
 	spec := v1beta1.ReplicationJobSpec{
-		Source: &v1beta1.StorageSpec{
+		Source: &opensourcev1beta1.StorageSpec{
 			StorageUri: utils.Ptr("oci://n/source_namespace/b/source_bucket/o/source_prefix"),
 			Path:       utils.Ptr("/source/path"),
 			Parameters: utils.Ptr(map[string]string{
@@ -28,7 +29,7 @@ func TestBuildEnvVars_SuccessOCI(t *testing.T) {
 				oboTokenParamKey: "oboToken",
 			}),
 		},
-		Destination: &v1beta1.StorageSpec{
+		Destination: &opensourcev1beta1.StorageSpec{
 			StorageUri: utils.Ptr("oci://n/dest_namespace/b/dest_bucket/o/dest_prefix"),
 			Path:       utils.Ptr("/dest/path"),
 			Parameters: utils.Ptr(map[string]string{
@@ -94,11 +95,11 @@ func TestBuildEnvVars_SuccessOCI(t *testing.T) {
 
 func TestBuildEnvVars_UnsupportedStorageType(t *testing.T) {
 	spec := v1beta1.ReplicationJobSpec{
-		Source: &v1beta1.StorageSpec{
+		Source: &opensourcev1beta1.StorageSpec{
 			StorageUri: utils.Ptr("unsupported://source"),
 			Path:       utils.Ptr(""),
 		},
-		Destination: &v1beta1.StorageSpec{
+		Destination: &opensourcev1beta1.StorageSpec{
 			StorageUri: utils.Ptr("unsupported://dest"),
 		},
 	}
@@ -115,8 +116,8 @@ func TestValidateStorageUris(t *testing.T) {
 
 	testCases := []struct {
 		name           string
-		source         *v1beta1.StorageSpec
-		destination    *v1beta1.StorageSpec
+		source         *opensourcev1beta1.StorageSpec
+		destination    *opensourcev1beta1.StorageSpec
 		wantErr        bool
 		wantErrMessage string
 	}{
@@ -130,56 +131,56 @@ func TestValidateStorageUris(t *testing.T) {
 		{
 			name:           "Source nil",
 			source:         nil,
-			destination:    &(v1beta1.StorageSpec{StorageUri: utils.Ptr(validDest)}),
+			destination:    &(opensourcev1beta1.StorageSpec{StorageUri: utils.Ptr(validDest)}),
 			wantErr:        true,
 			wantErrMessage: "storageSpec cannot be nil",
 		},
 		{
 			name:           "Destination nil",
-			source:         &(v1beta1.StorageSpec{StorageUri: utils.Ptr(validSrc)}),
+			source:         &(opensourcev1beta1.StorageSpec{StorageUri: utils.Ptr(validSrc)}),
 			destination:    nil,
 			wantErr:        true,
 			wantErrMessage: "storageSpec cannot be nil",
 		},
 		{
 			name:           "Source StorageUri nil",
-			source:         &(v1beta1.StorageSpec{StorageUri: nil}),
-			destination:    &(v1beta1.StorageSpec{StorageUri: utils.Ptr(validDest)}),
+			source:         &(opensourcev1beta1.StorageSpec{StorageUri: nil}),
+			destination:    &(opensourcev1beta1.StorageSpec{StorageUri: utils.Ptr(validDest)}),
 			wantErr:        true,
 			wantErrMessage: "storageUri cannot be nil",
 		},
 		{
 			name:           "Destination StorageUri nil",
-			source:         &(v1beta1.StorageSpec{StorageUri: utils.Ptr(validSrc)}),
-			destination:    &(v1beta1.StorageSpec{StorageUri: nil}),
+			source:         &(opensourcev1beta1.StorageSpec{StorageUri: utils.Ptr(validSrc)}),
+			destination:    &(opensourcev1beta1.StorageSpec{StorageUri: nil}),
 			wantErr:        true,
 			wantErrMessage: "storageUri cannot be nil",
 		},
 		{
 			name:           "Invalid source URI",
-			source:         &(v1beta1.StorageSpec{StorageUri: utils.Ptr(invalidSrc)}),
-			destination:    &(v1beta1.StorageSpec{StorageUri: utils.Ptr(validDest)}),
+			source:         &(opensourcev1beta1.StorageSpec{StorageUri: utils.Ptr(invalidSrc)}),
+			destination:    &(opensourcev1beta1.StorageSpec{StorageUri: utils.Ptr(validDest)}),
 			wantErr:        true,
 			wantErrMessage: "unknown storage type for URI",
 		},
 		{
 			name:           "Invalid destination URI",
-			source:         &(v1beta1.StorageSpec{StorageUri: utils.Ptr(validSrc)}),
-			destination:    &(v1beta1.StorageSpec{StorageUri: utils.Ptr(invalidDest)}),
+			source:         &(opensourcev1beta1.StorageSpec{StorageUri: utils.Ptr(validSrc)}),
+			destination:    &(opensourcev1beta1.StorageSpec{StorageUri: utils.Ptr(invalidDest)}),
 			wantErr:        true,
 			wantErrMessage: "unknown storage type for URI",
 		},
 		{
 			name:           "Unsupported destination URI",
-			source:         &(v1beta1.StorageSpec{StorageUri: utils.Ptr(validSrc)}),
-			destination:    &(v1beta1.StorageSpec{StorageUri: utils.Ptr(unsupportedDest)}),
+			source:         &(opensourcev1beta1.StorageSpec{StorageUri: utils.Ptr(validSrc)}),
+			destination:    &(opensourcev1beta1.StorageSpec{StorageUri: utils.Ptr(unsupportedDest)}),
 			wantErr:        true,
 			wantErrMessage: "destination storageType HUGGINGFACE is not supported for replication",
 		},
 		{
 			name:        "Valid source and destination types",
-			source:      &(v1beta1.StorageSpec{StorageUri: utils.Ptr(validSrc)}),
-			destination: &(v1beta1.StorageSpec{StorageUri: utils.Ptr(validDest)}),
+			source:      &(opensourcev1beta1.StorageSpec{StorageUri: utils.Ptr(validSrc)}),
+			destination: &(opensourcev1beta1.StorageSpec{StorageUri: utils.Ptr(validDest)}),
 			wantErr:     false,
 		},
 	}

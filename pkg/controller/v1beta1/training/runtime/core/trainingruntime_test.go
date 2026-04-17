@@ -13,6 +13,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,7 +58,7 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 				).
 				ModelConfig(testing2.MakeTrainJobModelConfigWrapper().
 					InputModel("test-input-model").
-					OutputModel(&omev1beta1.StorageSpec{}).
+					OutputModel(&opensourcev1beta1.StorageSpec{}).
 					Obj(),
 				).
 				HyperParameterTuningConfig(testing2.MakeTrainJobHyperparameterTuningConfigWrapper().
@@ -140,7 +141,7 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 				).
 				ModelConfig(testing2.MakeTrainJobModelConfigWrapper().
 					InputModel("test-input-model").
-					OutputModel(&omev1beta1.StorageSpec{}).
+					OutputModel(&opensourcev1beta1.StorageSpec{}).
 					Obj(),
 				).
 				HyperParameterTuningConfig(testing2.MakeTrainJobHyperparameterTuningConfigWrapper().
@@ -216,7 +217,7 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 				ModelConfig(
 					testing2.MakeTrainJobModelConfigWrapper().
 						InputModel("test-input-model").
-						OutputModel(&omev1beta1.StorageSpec{
+						OutputModel(&opensourcev1beta1.StorageSpec{
 							StorageUri: ptr.String("hf://output-model"),
 							StorageKey: ptr.String("model-key"),
 							Parameters: &map[string]string{
@@ -307,7 +308,7 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 				).
 				ModelConfig(testing2.MakeTrainJobModelConfigWrapper().
 					InputModel("test-input-model").
-					OutputModel(&omev1beta1.StorageSpec{}).
+					OutputModel(&opensourcev1beta1.StorageSpec{}).
 					Obj(),
 				).
 				HyperParameterTuningConfig(testing2.MakeTrainJobHyperparameterTuningConfigWrapper().
@@ -410,7 +411,7 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 				).
 				ModelConfig(testing2.MakeTrainJobModelConfigWrapper().
 					InputModel("test-input-model").
-					OutputModel(&omev1beta1.StorageSpec{}).
+					OutputModel(&opensourcev1beta1.StorageSpec{}).
 					Obj(),
 				).
 				HyperParameterTuningConfig(testing2.MakeTrainJobHyperparameterTuningConfigWrapper().

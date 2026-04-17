@@ -4,7 +4,7 @@ package modelagent
 import (
 	"encoding/json"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 // ModelStatus represents the status of a model on a node

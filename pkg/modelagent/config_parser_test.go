@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/modelconfig"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/client/clientset/versioned"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

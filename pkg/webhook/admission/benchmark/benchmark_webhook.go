@@ -11,8 +11,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	storageutil "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
+	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 

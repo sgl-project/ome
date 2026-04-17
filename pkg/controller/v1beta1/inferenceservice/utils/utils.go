@@ -14,7 +14,7 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 
 	goerrors "github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -52,7 +52,7 @@ func IsOriginalModelVolumeMountNecessary(annotations map[string]string) bool {
 		annotations[constants.FTServingWithMergedWeightsAnnotationKey] != "true"
 }
 
-func LoadingMergedFineTunedWeight(fineTunedWeights []*v1beta1.FineTunedWeight) (bool, error) {
+func LoadingMergedFineTunedWeight(fineTunedWeights []*opensourcev1beta1.FineTunedWeight) (bool, error) {
 	mergedFineTunedWeights, err := IsMergedFineTunedWeight(fineTunedWeights[0])
 	if err != nil {
 		return false, err
@@ -60,7 +60,7 @@ func LoadingMergedFineTunedWeight(fineTunedWeights []*v1beta1.FineTunedWeight) (
 	return len(fineTunedWeights) == 1 && mergedFineTunedWeights, nil
 }
 
-func IsMergedFineTunedWeight(fineTunedWeight *v1beta1.FineTunedWeight) (bool, error) {
+func IsMergedFineTunedWeight(fineTunedWeight *opensourcev1beta1.FineTunedWeight) (bool, error) {
 	if fineTunedWeight != nil {
 		var configMap map[string]interface{}
 		if err := json.Unmarshal(fineTunedWeight.Spec.Configuration.Raw, &configMap); err != nil {
@@ -158,7 +158,7 @@ func MergeRuntimeContainers(runtimeContainer *v1.Container, predictorContainer *
 
 // MergePodSpec Merge the predictor PodSpec struct with the runtime PodSpec struct, allowing users
 // to override runtime PodSpec settings from the predictor spec.
-func MergePodSpec(runtimePodSpec *v1beta1.ServingRuntimePodSpec, predictorPodSpec *v1beta1.PodSpec) (*v1.PodSpec, error) {
+func MergePodSpec(runtimePodSpec *opensourcev1beta1.ServingRuntimePodSpec, predictorPodSpec *opensourcev1beta1.PodSpec) (*v1.PodSpec, error) {
 	runtimePodSpecJson, err := json.Marshal(v1.PodSpec{
 		NodeSelector:     runtimePodSpec.NodeSelector,
 		Affinity:         runtimePodSpec.Affinity,
@@ -194,8 +194,8 @@ func MergePodSpec(runtimePodSpec *v1beta1.ServingRuntimePodSpec, predictorPodSpe
 
 // GetServingRuntime Get a ServingRuntime by name. First, ServingRuntimes in the given namespace will be checked.
 // If a resource of the specified name is not found, then ClusterServingRuntimes will be checked.
-func GetServingRuntime(cl client.Client, name string, namespace string) (*v1beta1.ServingRuntimeSpec, error) {
-	runtime := &v1beta1.ServingRuntime{}
+func GetServingRuntime(cl client.Client, name string, namespace string) (*opensourcev1beta1.ServingRuntimeSpec, error) {
+	runtime := &opensourcev1beta1.ServingRuntime{}
 	err := cl.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, runtime)
 	if err == nil {
 		return &runtime.Spec, nil
@@ -203,7 +203,7 @@ func GetServingRuntime(cl client.Client, name string, namespace string) (*v1beta
 		return nil, err
 	}
 
-	clusterRuntime := &v1beta1.ClusterServingRuntime{}
+	clusterRuntime := &opensourcev1beta1.ClusterServingRuntime{}
 	err = cl.Get(context.TODO(), client.ObjectKey{Name: name}, clusterRuntime)
 	if err == nil {
 		return &clusterRuntime.Spec, nil
@@ -214,8 +214,8 @@ func GetServingRuntime(cl client.Client, name string, namespace string) (*v1beta
 }
 
 // GetFineTunedWeight Get the fine-tuned weight from the given fine-tuned weight name.
-func GetFineTunedWeight(cl client.Client, name string) (*v1beta1.FineTunedWeight, error) {
-	fineTunedWeight := &v1beta1.FineTunedWeight{}
+func GetFineTunedWeight(cl client.Client, name string) (*opensourcev1beta1.FineTunedWeight, error) {
+	fineTunedWeight := &opensourcev1beta1.FineTunedWeight{}
 	err := cl.Get(context.TODO(), client.ObjectKey{Name: name}, fineTunedWeight)
 	if err == nil {
 		return fineTunedWeight, nil
@@ -364,7 +364,7 @@ func GetOmeContainerIndex(containers []v1.Container) int {
 	return -1
 }
 
-func GetBaseModelVendor(baseModel v1beta1.BaseModelSpec) string {
+func GetBaseModelVendor(baseModel opensourcev1beta1.BaseModelSpec) string {
 	baseModelVendor := "Unknown"
 	if baseModel.Vendor != nil {
 		baseModelVendor = *baseModel.Vendor
@@ -392,6 +392,6 @@ func GetValueFromRawExtension(raw runtime.RawExtension, key string) (interface{}
 	return val, nil
 }
 
-func IsEngineOrRouterEnabled(isvcSpec *v1beta1.InferenceServiceSpec) bool {
+func IsEngineOrRouterEnabled(isvcSpec *opensourcev1beta1.InferenceServiceSpec) bool {
 	return isvcSpec.Engine != nil || isvcSpec.Router != nil
 }

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -350,7 +350,7 @@ func TestCreateRawDeployment(t *testing.T) {
 	tests := []struct {
 		name          string
 		componentMeta metav1.ObjectMeta
-		componentExt  *v1beta1.ComponentExtensionSpec
+		componentExt  *opensourcev1beta1.ComponentExtensionSpec
 		hasStrategy   bool
 	}{
 		{
@@ -365,7 +365,7 @@ func TestCreateRawDeployment(t *testing.T) {
 					"annotation": "value",
 				},
 			},
-			componentExt: &v1beta1.ComponentExtensionSpec{},
+			componentExt: &opensourcev1beta1.ComponentExtensionSpec{},
 			hasStrategy:  false,
 		},
 		{
@@ -377,7 +377,7 @@ func TestCreateRawDeployment(t *testing.T) {
 					"app": "test-isvc-custom",
 				},
 			},
-			componentExt: &v1beta1.ComponentExtensionSpec{
+			componentExt: &opensourcev1beta1.ComponentExtensionSpec{
 				DeploymentStrategy: &appsv1.DeploymentStrategy{
 					Type: appsv1.RecreateDeploymentStrategyType,
 				},
@@ -396,7 +396,7 @@ func TestCreateRawDeployment(t *testing.T) {
 					constants.DedicatedAICluster: "true",
 				},
 			},
-			componentExt: &v1beta1.ComponentExtensionSpec{},
+			componentExt: &opensourcev1beta1.ComponentExtensionSpec{},
 			hasStrategy:  false,
 		},
 	}
@@ -456,7 +456,7 @@ func TestNewDeploymentReconciler(t *testing.T) {
 		},
 	}
 
-	componentExt := &v1beta1.ComponentExtensionSpec{}
+	componentExt := &opensourcev1beta1.ComponentExtensionSpec{}
 
 	reconciler := NewDeploymentReconciler(client, scheme, componentMeta, componentExt, podSpec)
 
@@ -496,7 +496,7 @@ func TestCheckDeploymentExist(t *testing.T) {
 		},
 	}
 
-	componentExt := &v1beta1.ComponentExtensionSpec{}
+	componentExt := &opensourcev1beta1.ComponentExtensionSpec{}
 
 	// 1. Test case: Deployment doesn't exist (should return CheckResultCreate)
 	t.Run("Deployment doesn't exist", func(t *testing.T) {
@@ -601,7 +601,7 @@ func TestReconcile(t *testing.T) {
 		},
 	}
 
-	componentExt := &v1beta1.ComponentExtensionSpec{}
+	componentExt := &opensourcev1beta1.ComponentExtensionSpec{}
 
 	// 1. Test case: Create a new Deployment when it doesn't exist
 	t.Run("Create new Deployment", func(t *testing.T) {

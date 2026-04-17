@@ -98,67 +98,62 @@ include Makefile-deps.mk
 ##@ 🛠️  Development
 
 .PHONY: manifests
-manifests: controller-gen yq ## 📄 Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+manifests: controller-gen yq## 📄 Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	@echo "\n📦 Kubernetes Manifest Generation Starting..."
 
-	@echo "\n🔧 Step 1: Generating CRD manifests..."
-	@echo "  • Generating CRDs from internal APIs (all resources)..."
-	@$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=./pkg/apis/ome/... output:crd:dir=config/crd/full
-	@echo "  • Generating opensource CRDs to temporary directory..."
-	@mkdir -p config/crd/opensource-temp
-	@$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=github.com/sgl-project/ome/pkg/apis/ome/v1beta1 output:crd:dir=config/crd/opensource-temp
-	@echo "  • Overwriting model and runtime CRDs with opensource definitions..."
-	@echo "    (BaseModel, ClusterBaseModel, FineTunedWeight, ServingRuntime, ClusterServingRuntime, AcceleratorClass, InferenceService)"
-	@if [ -f config/crd/opensource-temp/ome.io_basemodels.yaml ]; then cp config/crd/opensource-temp/ome.io_basemodels.yaml config/crd/full/; fi
-	@if [ -f config/crd/opensource-temp/ome.io_clusterbasemodels.yaml ]; then cp config/crd/opensource-temp/ome.io_clusterbasemodels.yaml config/crd/full/; fi
-	@if [ -f config/crd/opensource-temp/ome.io_finetunedweights.yaml ]; then cp config/crd/opensource-temp/ome.io_finetunedweights.yaml config/crd/full/; fi
-	@if [ -f config/crd/opensource-temp/ome.io_servingruntimes.yaml ]; then cp config/crd/opensource-temp/ome.io_servingruntimes.yaml config/crd/full/; fi
-	@if [ -f config/crd/opensource-temp/ome.io_clusterservingruntimes.yaml ]; then cp config/crd/opensource-temp/ome.io_clusterservingruntimes.yaml config/crd/full/; fi
-	@if [ -f config/crd/opensource-temp/ome.io_acceleratorclasses.yaml ]; then cp config/crd/opensource-temp/ome.io_acceleratorclasses.yaml config/crd/full/; fi
-	@if [ -f config/crd/opensource-temp/ome.io_inferenceservices.yaml ]; then cp config/crd/opensource-temp/ome.io_inferenceservices.yaml config/crd/full/; fi
-	@echo "  • Cleaning up temporary directory..."
-	@rm -rf config/crd/opensource-temp
-	@echo "✅ CRD manifests generated (model, runtime , acceleratorClass and inferenceService CRDs from opensource, all others from internal)"
+	@echo "\n🔧 Step 1: Generating opensource CRD manifests..."
+	@mkdir -p config/crd/full/opensource-ome
+	@OPENSOURCE_DIR=$$(go list -m -f '{{.Dir}}' github.com/sgl-project/ome) && \
+		$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=$${OPENSOURCE_DIR}/pkg/apis/ome/... output:crd:dir=config/crd/full/opensource-ome
+	@echo "✅ Opensource CRD manifests generated"
 
-	@echo "\n🔑 Step 2: Generating RBAC manifests..."
+	@echo "\n🔧 Step 2: Generating local CRD manifests..."
+	@mkdir -p config/crd/full/ome
+	@$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=./pkg/apis/ome/... output:crd:dir=config/crd/full/ome
+	@echo "✅ Local CRD manifests generated"
+
+	@echo "\n🔑 Step 3: Generating RBAC manifests..."
 	@$(CONTROLLER_GEN) rbac:roleName=ome-manager-role paths=./pkg/controller/... output:rbac:artifacts:config=config/rbac
 	@$(CONTROLLER_GEN) rbac:roleName=opensource-ome-manager-role paths=github.com/sgl-project/ome/pkg/controller/... output:rbac:artifacts:config=config/opensource-rbac
 	@echo "✅ RBAC manifests generated"
 
-	@echo "\n📝 Step 3: Generating object boilerplate..."
+	@echo "\n📝 Step 4: Generating object boilerplate..."
 	@$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths=./pkg/apis/ome/v1beta1
 	@echo "✅ Object boilerplate generated"
 
-	@echo "\n🔄 Step 4: Applying CRD fixes and modifications..."
+	@echo "\n🔄 Step 5: Applying CRD fixes and modifications..."
 	@echo "  • Fixing stored versions..."
-	@perl -pi -e 's/storedVersions: null/storedVersions: []/g' config/crd/full/ome.io_inferenceservices.yaml
+	@perl -pi -e 's/storedVersions: null/storedVersions: []/g' config/crd/full/opensource-ome/ome.io_inferenceservices.yaml
 	@echo "  • Fixing conditions..."
-	@perl -pi -e 's/conditions: null/conditions: []/g' config/crd/full/ome.io_inferenceservices.yaml
+	@perl -pi -e 's/conditions: null/conditions: []/g' config/crd/full/opensource-ome/ome.io_inferenceservices.yaml
 	@echo "  • Updating type definitions..."
-	@perl -pi -e 's/Any/string/g' config/crd/full/ome.io_inferenceservices.yaml
+	@perl -pi -e 's/Any/string/g' config/crd/full/opensource-ome/ome.io_inferenceservices.yaml
 	@echo "  • Updating framework properties..."
-	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.*.required)' -i config/crd/full/ome.io_inferenceservices.yaml
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.*.required)' -i config/crd/full/opensource-ome/ome.io_inferenceservices.yaml
 	@echo "  • Optimizing CRD size..."
-	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.ephemeralContainers)' -i config/crd/full/ome.io_inferenceservices.yaml
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.ephemeralContainers)' -i config/crd/full/opensource-ome/ome.io_inferenceservices.yaml
 	@echo "  • Updating probe configurations..."
-	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.*.properties.readinessProbe.properties.httpGet.required)' -i config/crd/full/ome.io_inferenceservices.yaml
-	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.*.properties.livenessProbe.properties.httpGet.required)' -i config/crd/full/ome.io_inferenceservices.yaml
-	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.*.properties.readinessProbe.properties.tcpSocket.required)' -i config/crd/full/ome.io_inferenceservices.yaml
-	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.*.properties.livenessProbe.properties.tcpSocket.required)' -i config/crd/full/ome.io_inferenceservices.yaml
-	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.containers.items.properties.livenessProbe.properties.httpGet.required)' -i config/crd/full/ome.io_inferenceservices.yaml
-	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.containers.items.properties.readinessProbe.properties.httpGet.required)' -i config/crd/full/ome.io_inferenceservices.yaml
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.*.properties.readinessProbe.properties.httpGet.required)' -i config/crd/full/opensource-ome/ome.io_inferenceservices.yaml
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.*.properties.livenessProbe.properties.httpGet.required)' -i config/crd/full/opensource-ome/ome.io_inferenceservices.yaml
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.*.properties.readinessProbe.properties.tcpSocket.required)' -i config/crd/full/opensource-ome/ome.io_inferenceservices.yaml
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.*.properties.livenessProbe.properties.tcpSocket.required)' -i config/crd/full/opensource-ome/ome.io_inferenceservices.yaml
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.containers.items.properties.livenessProbe.properties.httpGet.required)' -i config/crd/full/opensource-ome/ome.io_inferenceservices.yaml
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.containers.items.properties.readinessProbe.properties.httpGet.required)' -i config/crd/full/opensource-ome/ome.io_inferenceservices.yaml
 	@echo "  • Setting protocol defaults..."
-	@$(YQ) '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties | .. | select(has("protocol")) | path' config/crd/full/ome.io_inferenceservices.yaml -o j | jq -r '. | map(select(numbers)="["+tostring+"]") | join(".")' | awk '{print "."$$0".protocol.default"}' | xargs -n1 -I{} $(YQ) '{} = "TCP"' -i config/crd/full/ome.io_inferenceservices.yaml
-	@$(YQ) '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties | .. | select(has("protocol")) | path' config/crd/full/ome.io_clusterservingruntimes.yaml -o j | jq -r '. | map(select(numbers)="["+tostring+"]") | join(".")' | awk '{print "."$$0".protocol.default"}' | xargs -n1 -I{} $(YQ) '{} = "TCP"' -i config/crd/full/ome.io_clusterservingruntimes.yaml
-	@$(YQ) '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties | .. | select(has("protocol")) | path' config/crd/full/ome.io_servingruntimes.yaml -o j | jq -r '. | map(select(numbers)="["+tostring+"]") | join(".")' | awk '{print "."$$0".protocol.default"}' | xargs -n1 -I{} $(YQ) '{} = "TCP"' -i config/crd/full/ome.io_servingruntimes.yaml
+	@$(YQ) '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties | .. | select(has("protocol")) | path' config/crd/full/opensource-ome/ome.io_inferenceservices.yaml -o j | jq -r '. | map(select(numbers)="["+tostring+"]") | join(".")' | awk '{print "."$$0".protocol.default"}' | xargs -n1 -I{} $(YQ) '{} = "TCP"' -i config/crd/full/opensource-ome/ome.io_inferenceservices.yaml
+	@$(YQ) '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties | .. | select(has("protocol")) | path' config/crd/full/opensource-ome/ome.io_clusterservingruntimes.yaml -o j | jq -r '. | map(select(numbers)="["+tostring+"]") | join(".")' | awk '{print "."$$0".protocol.default"}' | xargs -n1 -I{} $(YQ) '{} = "TCP"' -i config/crd/full/opensource-ome/ome.io_clusterservingruntimes.yaml
+	@$(YQ) '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties | .. | select(has("protocol")) | path' config/crd/full/opensource-ome/ome.io_servingruntimes.yaml -o j | jq -r '. | map(select(numbers)="["+tostring+"]") | join(".")' | awk '{print "."$$0".protocol.default"}' | xargs -n1 -I{} $(YQ) '{} = "TCP"' -i config/crd/full/opensource-ome/ome.io_servingruntimes.yaml
 	@echo "✅ CRD modifications complete"
 
-	@echo "\n📋 Step 5: Generating minimal CRDs..."
+	@echo "\n📋 Step 6: Generating minimal CRDs..."
 	@./hack/minimal-crdgen.sh
 	@echo "✅ Minimal CRDs generated"
 
-	@echo "\n📁 Step 6: Copying manifests to Helm charts..."
-	@cp config/crd/full/ome* charts/ome-crd/templates/ 
+	@echo "\n📁 Step 7: Copying manifests to Helm charts..."
+	@mkdir -p charts/ome-crd/templates/opensource-ome
+	@mkdir -p charts/ome-crd/templates/ome
+	@cp config/crd/full/opensource-ome/ome* charts/ome-crd/templates/opensource-ome/
+	@cp config/crd/full/ome/ome* charts/ome-crd/templates/ome/
 	@cp config/rbac/role.yaml charts/ome-resources/templates/ome-controller/rbac/role.yaml
 	@cp config/opensource-rbac/role.yaml charts/ome-resources/templates/opensource-ome-controller/rbac/role.yaml
 	@echo "✅ Manifests copied to Helm charts"

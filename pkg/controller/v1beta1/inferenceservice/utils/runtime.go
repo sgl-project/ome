@@ -9,8 +9,8 @@ import (
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	goerrors "github.com/pkg/errors"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"

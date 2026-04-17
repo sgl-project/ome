@@ -10,8 +10,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -43,7 +44,7 @@ func NewInferenceServiceACMutator(c client.Client, decoder admission.Decoder) *I
 
 // Handle implements admission.Handler interface
 func (m *InferenceServiceACMutator) Handle(ctx context.Context, req admission.Request) admission.Response {
-	isvc := &v1beta1.InferenceService{}
+	isvc := &opensourcev1beta1.InferenceService{}
 	if err := m.Decoder.Decode(req, isvc); err != nil {
 		acMutatorLogger.Error(err, "Failed to decode InferenceService")
 		return admission.Errored(400, err)
@@ -147,10 +148,10 @@ func mapDACProfileToAcceleratorClass(profileName string) string {
 }
 
 // setAcceleratorClass sets the AcceleratorSelector.AcceleratorClass field on the InferenceService
-func (m *InferenceServiceACMutator) setAcceleratorClass(isvc *v1beta1.InferenceService, acName string) error {
+func (m *InferenceServiceACMutator) setAcceleratorClass(isvc *opensourcev1beta1.InferenceService, acName string) error {
 	// Initialize AcceleratorSelector if nil
 	if isvc.Spec.AcceleratorSelector == nil {
-		isvc.Spec.AcceleratorSelector = &v1beta1.AcceleratorSelector{}
+		isvc.Spec.AcceleratorSelector = &opensourcev1beta1.AcceleratorSelector{}
 	}
 
 	// Only set if not already set (don't override user-specified value)

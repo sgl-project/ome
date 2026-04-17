@@ -5,6 +5,7 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -32,7 +33,7 @@ func NewTrainingPVReconciler(client client.Client, clientset kubernetes.Interfac
 	}
 }
 
-func (c *PVReconciler) Reconcile(trainjob *v1beta1.TrainingJob, baseModelSpec *v1beta1.BaseModelSpec) (ctrl.Result, error) {
+func (c *PVReconciler) Reconcile(trainjob *v1beta1.TrainingJob, baseModelSpec *opensourcev1beta1.BaseModelSpec) (ctrl.Result, error) {
 	log.Info("Reconciling PersistentVolume", "trainjob", trainjob.Name, "namespace", trainjob.Namespace)
 
 	// Reconcile primary PersistentVolume

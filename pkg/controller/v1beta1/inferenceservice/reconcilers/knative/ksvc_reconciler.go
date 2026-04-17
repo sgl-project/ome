@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
@@ -38,16 +38,16 @@ type KsvcReconciler struct {
 	client          client.Client
 	scheme          *runtime.Scheme
 	Service         *knservingv1.Service
-	componentExt    *v1beta1.ComponentExtensionSpec
-	componentStatus v1beta1.ComponentStatusSpec
+	componentExt    *opensourcev1beta1.ComponentExtensionSpec
+	componentStatus opensourcev1beta1.ComponentStatusSpec
 }
 
 func NewKsvcReconciler(client client.Client,
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
-	componentExt *v1beta1.ComponentExtensionSpec,
+	componentExt *opensourcev1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec,
-	componentStatus v1beta1.ComponentStatusSpec) *KsvcReconciler {
+	componentStatus opensourcev1beta1.ComponentStatusSpec) *KsvcReconciler {
 	return &KsvcReconciler{
 		client:          client,
 		scheme:          scheme,
@@ -58,9 +58,9 @@ func NewKsvcReconciler(client client.Client,
 }
 
 func createKnativeService(componentMeta metav1.ObjectMeta,
-	componentExtension *v1beta1.ComponentExtensionSpec,
+	componentExtension *opensourcev1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec,
-	componentStatus v1beta1.ComponentStatusSpec) *knservingv1.Service {
+	componentStatus opensourcev1beta1.ComponentStatusSpec) *knservingv1.Service {
 	annotations := componentMeta.GetAnnotations()
 
 	if componentExtension.MinReplicas == nil {

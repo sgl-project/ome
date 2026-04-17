@@ -8,30 +8,18 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
-	// BaseModels returns a BaseModelInformer.
-	BaseModels() BaseModelInformer
-	// BenchmarkJobs returns a BenchmarkJobInformer.
-	BenchmarkJobs() BenchmarkJobInformer
 	// CapacityReservations returns a CapacityReservationInformer.
 	CapacityReservations() CapacityReservationInformer
-	// ClusterBaseModels returns a ClusterBaseModelInformer.
-	ClusterBaseModels() ClusterBaseModelInformer
 	// ClusterCapacityReservations returns a ClusterCapacityReservationInformer.
 	ClusterCapacityReservations() ClusterCapacityReservationInformer
-	// ClusterServingRuntimes returns a ClusterServingRuntimeInformer.
-	ClusterServingRuntimes() ClusterServingRuntimeInformer
 	// ClusterTrainingRuntimes returns a ClusterTrainingRuntimeInformer.
 	ClusterTrainingRuntimes() ClusterTrainingRuntimeInformer
 	// DedicatedAIClusters returns a DedicatedAIClusterInformer.
 	DedicatedAIClusters() DedicatedAIClusterInformer
 	// DedicatedAIClusterProfiles returns a DedicatedAIClusterProfileInformer.
 	DedicatedAIClusterProfiles() DedicatedAIClusterProfileInformer
-	// FineTunedWeights returns a FineTunedWeightInformer.
-	FineTunedWeights() FineTunedWeightInformer
 	// InferenceGraphs returns a InferenceGraphInformer.
 	InferenceGraphs() InferenceGraphInformer
-	// InferenceServices returns a InferenceServiceInformer.
-	InferenceServices() InferenceServiceInformer
 	// OciCaches returns a OciCacheInformer.
 	OciCaches() OciCacheInformer
 	// OciPostgreses returns a OciPostgresInformer.
@@ -48,8 +36,6 @@ type Interface interface {
 	ReplicationJobs() ReplicationJobInformer
 	// ServiceAccounts returns a ServiceAccountInformer.
 	ServiceAccounts() ServiceAccountInformer
-	// ServingRuntimes returns a ServingRuntimeInformer.
-	ServingRuntimes() ServingRuntimeInformer
 	// TrainingJobs returns a TrainingJobInformer.
 	TrainingJobs() TrainingJobInformer
 	// TrainingRuntimes returns a TrainingRuntimeInformer.
@@ -69,34 +55,14 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
 }
 
-// BaseModels returns a BaseModelInformer.
-func (v *version) BaseModels() BaseModelInformer {
-	return &baseModelInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
-}
-
-// BenchmarkJobs returns a BenchmarkJobInformer.
-func (v *version) BenchmarkJobs() BenchmarkJobInformer {
-	return &benchmarkJobInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
-}
-
 // CapacityReservations returns a CapacityReservationInformer.
 func (v *version) CapacityReservations() CapacityReservationInformer {
 	return &capacityReservationInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// ClusterBaseModels returns a ClusterBaseModelInformer.
-func (v *version) ClusterBaseModels() ClusterBaseModelInformer {
-	return &clusterBaseModelInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
-}
-
 // ClusterCapacityReservations returns a ClusterCapacityReservationInformer.
 func (v *version) ClusterCapacityReservations() ClusterCapacityReservationInformer {
 	return &clusterCapacityReservationInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
-}
-
-// ClusterServingRuntimes returns a ClusterServingRuntimeInformer.
-func (v *version) ClusterServingRuntimes() ClusterServingRuntimeInformer {
-	return &clusterServingRuntimeInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // ClusterTrainingRuntimes returns a ClusterTrainingRuntimeInformer.
@@ -114,19 +80,9 @@ func (v *version) DedicatedAIClusterProfiles() DedicatedAIClusterProfileInformer
 	return &dedicatedAIClusterProfileInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
-// FineTunedWeights returns a FineTunedWeightInformer.
-func (v *version) FineTunedWeights() FineTunedWeightInformer {
-	return &fineTunedWeightInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
-}
-
 // InferenceGraphs returns a InferenceGraphInformer.
 func (v *version) InferenceGraphs() InferenceGraphInformer {
 	return &inferenceGraphInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
-}
-
-// InferenceServices returns a InferenceServiceInformer.
-func (v *version) InferenceServices() InferenceServiceInformer {
-	return &inferenceServiceInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // OciCaches returns a OciCacheInformer.
@@ -167,11 +123,6 @@ func (v *version) ReplicationJobs() ReplicationJobInformer {
 // ServiceAccounts returns a ServiceAccountInformer.
 func (v *version) ServiceAccounts() ServiceAccountInformer {
 	return &serviceAccountInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
-}
-
-// ServingRuntimes returns a ServingRuntimeInformer.
-func (v *version) ServingRuntimes() ServingRuntimeInformer {
-	return &servingRuntimeInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // TrainingJobs returns a TrainingJobInformer.

@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 // AddToSchemes may be used to add all resources defined in the project to a Scheme
@@ -21,4 +22,5 @@ func AddToScheme(s *runtime.Scheme) error {
 func init() {
 	// Register the types with the Scheme so the components can map objects to GroupVersionKinds and back
 	AddToSchemes = append(AddToSchemes, v1beta1.SchemeBuilder.AddToScheme)
+	AddToSchemes = append(AddToSchemes, opensourcev1beta1.SchemeBuilder.AddToScheme)
 }

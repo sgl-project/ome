@@ -30,7 +30,7 @@ require (
 	github.com/ray-project/kuberay/ray-operator v1.2.2
 	github.com/satori/go.uuid v1.2.0
 	github.com/schollz/progressbar/v3 v3.18.0
-	github.com/sgl-project/ome v0.1.5-0.20251215204915-f9f913bd454e
+	github.com/sgl-project/ome v0.1.5
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.15.0
 	github.com/spf13/cobra v1.8.1
@@ -42,19 +42,19 @@ require (
 	go.uber.org/fx v1.22.2
 	go.uber.org/zap v1.27.0
 	golang.org/x/oauth2 v0.29.0
-	golang.org/x/sys v0.38.0
+	golang.org/x/sys v0.39.0
 	gomodules.xyz/jsonpatch/v2 v2.4.0
 	google.golang.org/api v0.231.0
 	google.golang.org/genproto v0.0.0-20250303144028-a0af3efb3deb
 	google.golang.org/grpc v1.72.0
-	google.golang.org/protobuf v1.36.10
+	google.golang.org/protobuf v1.36.11
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	istio.io/api v1.19.4
 	istio.io/client-go v1.19.4
-	k8s.io/api v0.33.6
-	k8s.io/apimachinery v0.33.6
-	k8s.io/apiserver v0.33.6
-	k8s.io/client-go v0.33.6
+	k8s.io/api v0.33.7
+	k8s.io/apimachinery v0.33.7
+	k8s.io/apiserver v0.33.7
+	k8s.io/client-go v0.33.7
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff
 	k8s.io/utils v0.0.0-20241210054802-24370beab758
@@ -204,7 +204,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.32.3 // indirect
-	k8s.io/component-base v0.33.6 // indirect
+	k8s.io/component-base v0.33.7 // indirect
 	knative.dev/networking v0.0.0-20231115015815-3af9769712cd // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.2 // indirect
 	sigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect

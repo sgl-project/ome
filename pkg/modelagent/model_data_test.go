@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 func TestConvertMetadataToModelConfig(t *testing.T) {
