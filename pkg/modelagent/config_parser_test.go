@@ -362,6 +362,42 @@ func TestDetermineModelCapabilitiesFromHF(t *testing.T) {
 				string(v1beta1.ModelCapabilityAudioToAudio),
 			},
 		},
+		{
+			name: "Whisper ASR Model",
+			mockModel: &mockHuggingFaceModel{
+				modelType:    "whisper",
+				architecture: "WhisperForConditionalGeneration",
+				hasVision:    false,
+			},
+			expectedCapabilities: []string{string(v1beta1.ModelCapabilityAudioToText)},
+		},
+		{
+			name: "Wav2Vec2 ASR Model",
+			mockModel: &mockHuggingFaceModel{
+				modelType:    "wav2vec2",
+				architecture: "Wav2Vec2ForCTC",
+				hasVision:    false,
+			},
+			expectedCapabilities: []string{string(v1beta1.ModelCapabilityAudioToText)},
+		},
+		{
+			name: "HuBERT ASR Model",
+			mockModel: &mockHuggingFaceModel{
+				modelType:    "hubert",
+				architecture: "HubertForCTC",
+				hasVision:    false,
+			},
+			expectedCapabilities: []string{string(v1beta1.ModelCapabilityAudioToText)},
+		},
+		{
+			name: "Generic ForSpeechToText Model",
+			mockModel: &mockHuggingFaceModel{
+				modelType:    "seamless_m4t",
+				architecture: "SeamlessM4TForSpeechToText",
+				hasVision:    false,
+			},
+			expectedCapabilities: []string{string(v1beta1.ModelCapabilityAudioToText)},
+		},
 	}
 
 	for _, tc := range testCases {
