@@ -557,6 +557,15 @@ func (p *ModelConfigParser) determineModelCapabilitiesFromHF(hfModel modelconfig
 			string(v1beta1.ModelCapabilityAudioToAudio))
 	}
 
+	// Check for audio-to-text capability (ASR/transcription models e.g. Whisper, Wav2Vec2, HuBERT)
+	if strings.Contains(normalizedArchitecture, "whisper") ||
+		strings.Contains(normalizedArchitecture, "wav2vec2") ||
+		strings.Contains(normalizedArchitecture, "hubert") ||
+		strings.Contains(normalizedArchitecture, "fortc") ||
+		strings.Contains(normalizedArchitecture, "forspeechtotext") {
+		return append(capabilities, string(v1beta1.ModelCapabilityAudioToText))
+	}
+
 	// Check for text embedding capability
 	if hfModel.IsEmbedding() ||
 		strings.Contains(normalizedArchitecture, "embedding") ||
