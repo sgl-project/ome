@@ -1,0 +1,24 @@
+{{- if .Values.command_north_01_2026.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: command-north-01-2026
+  namespace: command-north-01-2026
+spec:
+  engine:
+    minReplicas: {{ .Values.command_north_01_2026.minReplicas }}
+    maxReplicas: {{ .Values.command_north_01_2026.maxReplicas }}
+  model:
+    apiGroup: ome.io
+    kind: ClusterBaseModel
+    name: command-north-01-2026
+  runtime:
+    apiGroup: ome.io
+    kind: ClusterServingRuntime
+    name: {{ default "cohere-command-north-h100" .Values.command_north_01_2026.runtime | quote }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: command-north-01-2026
+{{- end }}

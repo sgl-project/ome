@@ -51,6 +51,12 @@ command_a_vision_drcc:
   minReplicas: 1
   maxReplicas: 1
 
+command_north_01_2026:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+  runtime: cohere-command-north-h100
+
 command_a_reasoning:
   enabled: false
   minReplicas: 1
@@ -251,9 +257,21 @@ cohere:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.12.1-03022026"
 
+  commandNorthImage:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.12.1-03022026"
+
   commandAReasoningImage:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.10.7-07312025"
+
+  commandNorthH100Image:
+    repository: eu-frankfurt-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.12.1-03022026"
+
+  commandNorthB200Image:
+    repository: eu-frankfurt-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.12.1-03022026"
 
   embedMultiModalImage:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
