@@ -1,3 +1,21 @@
+gemma_4_31b_it:
+  enabled: false
+  router:
+    image:
+      repository: fra.ocir.io/idqj093njucb/smg
+      tag: "1.4.1"
+  image:
+    vllm:
+      repository: fra.ocir.io/idqj093njucb/vllm-openai
+      tag: "v0.19.1"
+  annotations: { }
+  tolerations: [ ]
+  labels: { }
+  volumes: [ ]
+  topologySpreadConstraints: [ ]
+  minReplicas: 1
+  maxReplicas: 1
+  scaleMetric: {}
 vllm:
   port: 8080
   serveModelName: vllm-model # served model name for non-fine-tuned vllm serving
