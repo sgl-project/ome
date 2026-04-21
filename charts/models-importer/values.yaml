@@ -296,6 +296,12 @@ command-a-reasoning:
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "LARGE_COHERE_V2_2"
 
+command-north-01-2026:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+  runtime: "cohere-command-north-h100"
+  compatibleDACShapes: "LARGE_COHERE_V2_2"
+
 cohere-command-r-082024-v1-6-tp4-128k:
   enabled: false 
   lifecyclePhase: "ACTIVE"

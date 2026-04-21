@@ -1,0 +1,51 @@
+{{- if index .Values "command-north-01-2026" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: command-north-01-2026
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "command-north-01-2026" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "command-north-01-2026" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "command-north-01-2026" "timeDedicatedRetired" }}"
+  annotations:
+    models.ome.io/runtime: "{{ default "cohere-command-north-h100" (index .Values "command-north-01-2026" "runtime") }}"
+    models.ome.io/category: "LARGE"
+    models.ome.io/experimental: "{{ index .Values "command-north-01-2026" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "command-north-01-2026" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "command-north-01-2026" "lifecyclePhase" }}"
+    ome.io/base-model-decryption-key-name: "command_n"
+    ome.io/base-model-decryption-secret-name: "command_n-dek"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: cohere.command-north-01-2026
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "command-north-01-2026" "osBucket" }}/o/{{ index .Values "command-north-01-2026" "vendor" }}/{{ index .Values "command-north-01-2026" "osPrefixOverride" }}"
+    path: "/mnt/data/models/{{ index .Values "command-north-01-2026" "vendor" }}/{{ index .Values "command-north-01-2026" "osPrefixOverride" }}"
+  vendor: {{ index .Values "command-north-01-2026" "vendor" }}
+  version: "1.0"
+  modelFormat:
+    name: safetensors
+    version: '1.0.0'
+  modelFramework:
+    name: transformers
+    version: '5.5.3'
+  modelArchitecture: CohereForCausalLM
+  modelParameterSize: 218B
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 65536
+  additionalMetadata:
+    {{/* target profile: 4x H100(80G) / 2x B200(192G) */}}
+    {{- $cfg := default "LARGE_COHERE_V2_2" (index .Values "command-north-01-2026" "compatibleDACShapes") }}
+    {{- if $cfg }}
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: {{ $cfg }}
+          quotaUnit: 1
+          default: true
+    {{ end }}
+    internalName: "command-north-01-2026"
+    type: "Serving"
+{{- end }}
