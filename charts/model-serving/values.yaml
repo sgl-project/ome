@@ -2781,6 +2781,25 @@ qwen_3_8b:
     repository:
     tag:
 
+qwen_3_5_9b:
+  enabled: false
+  router:
+    image:
+      repository: fra.ocir.io/idqj093njucb/smg
+      tag: "1.4.1"
+  image:
+    vllm:
+      repository: fra.ocir.io/idqj093njucb/vllm-openai
+      tag: "v0.19.0"
+  annotations: { }
+  tolerations: [ ]
+  labels: { }
+  volumes: [ ]
+  topologySpreadConstraints: [ ]
+  minReplicas: 1
+  maxReplicas: 1
+  scaleMetric: {}
+
 qwen_3_6_35b_a3b:
   enabled: false
   router:
