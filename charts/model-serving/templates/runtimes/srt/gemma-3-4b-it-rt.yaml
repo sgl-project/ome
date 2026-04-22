@@ -159,6 +159,7 @@ spec:
           --model-path "$MODEL_PATH" \
           --tp-size 1 \
           --mem-fraction-static 0.75 \
+          --context-length 131072 \
           --log-requests \
           --attention-backend=triton \
           --sampling-backend=pytorch \
@@ -266,6 +267,7 @@ spec:
           --model-path "$MODEL_PATH" \
           --tp-size 1 \
           --mem-fraction-static 0.75 \
+          --context-length 131072 \
           --log-requests \
           --attention-backend=triton \
           --sampling-backend=pytorch \

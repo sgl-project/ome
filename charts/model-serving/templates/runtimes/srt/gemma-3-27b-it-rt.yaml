@@ -17,8 +17,6 @@ spec:
       - nvidia-h100-2
       - nvidia-h100-4
       - nvidia-h100-8
-      - nvidia-a10-1
-      - nvidia-a10-2
       - nvidia-a10-4
       - nvidia-h200-1
       - nvidia-h200-2
@@ -113,12 +111,6 @@ spec:
         nvidia-h100-8:
           tensorParallelismOverride:
             tensorParallelSize: 8
-        nvidia-a10-1:
-          tensorParallelismOverride:
-            tensorParallelSize: 1
-        nvidia-a10-2:
-          tensorParallelismOverride:
-            tensorParallelSize: 2
         nvidia-a10-4:
           tensorParallelismOverride:
             tensorParallelSize: 4
@@ -159,6 +151,7 @@ spec:
           --model-path "$MODEL_PATH" \
           --tp-size 2 \
           --mem-fraction-static 0.75 \
+          --context-length 131072 \
           --log-requests \
           --attention-backend=triton \
           --sampling-backend=pytorch \
@@ -266,6 +259,7 @@ spec:
           --model-path "$MODEL_PATH" \
           --tp-size 2 \
           --mem-fraction-static 0.75 \
+          --context-length 131072 \
           --log-requests \
           --attention-backend=triton \
           --sampling-backend=pytorch \
