@@ -74,8 +74,8 @@ func (c *Qwen2Config) GetParameterCount() int64 {
 	fmt.Printf("Warning: failed to get parameter count from safetensors: %v\n", err)
 
 	// Hard-coded parameter counts based on model size
-	if c.HiddenSize == 4096 && c.NumHiddenLayers == 32 {
-		return 7_000_000_000 // 7B parameters
+	if c.HiddenSize == 3584 && c.NumHiddenLayers == 28 {
+		return 7_000_000_000 // 7B parameters (Qwen2-7B, Qwen2.5-7B)
 	} else if c.HiddenSize == 8192 && c.NumHiddenLayers == 40 {
 		return 34_000_000_000 // 34B parameters
 	} else if c.HiddenSize == 7680 && c.NumHiddenLayers == 64 {
