@@ -50,6 +50,7 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - pods/log
   - serviceaccounts
   verbs:
   - get

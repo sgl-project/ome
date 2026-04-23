@@ -1030,6 +1030,12 @@ spec:
                 type: string
               message:
                 type: string
+              observed:
+                properties:
+                  sourceArtifactSizeBytes:
+                    format: int64
+                    type: integer
+                type: object
               retryCount:
                 type: integer
               startTime:

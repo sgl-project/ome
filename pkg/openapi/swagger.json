@@ -2035,6 +2035,17 @@
         }
       }
     },
+    "v1beta1.ReplicationJobObservedStatus": {
+      "description": "ReplicationJobObservedStatus contains controller-observed metadata for a ReplicationJob.",
+      "type": "object",
+      "properties": {
+        "sourceArtifactSizeBytes": {
+          "description": "SourceArtifactSizeBytes is the total size in bytes of the source artifacts being replicated.",
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
     "v1beta1.ReplicationJobSpec": {
       "description": "ReplicationJobSpec defines the desired state of ReplicationJob.",
       "type": "object",
@@ -2088,6 +2099,10 @@
         "message": {
           "description": "Message is a human-readable message indicating details about the job status.",
           "type": "string"
+        },
+        "observed": {
+          "description": "Observed contains runtime metadata discovered while executing the replication job.",
+          "$ref": "#/definitions/v1beta1.ReplicationJobObservedStatus"
         },
         "retryCount": {
           "description": "RetryCount represents the number of retries the replication job has performed.",

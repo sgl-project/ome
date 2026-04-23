@@ -542,6 +542,7 @@ func TestReplicationJobReconciler_updateStatus(t *testing.T) {
 					Namespace: "default",
 				},
 				Status: batchv1.JobStatus{
+					CompletionTime: &metav1.Time{Time: time.Now()},
 					Conditions: []batchv1.JobCondition{
 						{
 							Type:   batchv1.JobComplete,
@@ -550,7 +551,28 @@ func TestReplicationJobReconciler_updateStatus(t *testing.T) {
 					},
 				},
 			},
-			existingPod:   nil,
+			existingPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+					Labels: map[string]string{
+						"job-name": "test-job",
+					},
+				},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name: "test-container",
+							State: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{
+									ExitCode:   0,
+									FinishedAt: metav1.Now(),
+								},
+							},
+						},
+					},
+				},
+			},
 			expectedError: false,
 		},
 		{
@@ -673,6 +695,11 @@ func TestReplicationJobReconciler_updateStatus(t *testing.T) {
 				Client: client,
 				Scheme: scheme,
 			}
+			if tt.name == "job exists and completed" {
+				r.PodLogReader = func(ctx context.Context, namespace, podName, containerName string) (string, error) {
+					return `{"level":"info","ts":1775704325.9316795,"caller":"replica/replica.go:91","msg":"Total model size: 123456789 bytes"}`, nil
+				}
+			}
 
 			err := r.updateStatus(context.Background(), replicationJobCopy, logr.Logger{})
 			if tt.expectedError {
@@ -720,6 +747,61 @@ func TestReplicationJobReconciler_updateStatus(t *testing.T) {
 				}
 				assert.True(t, found, "Expected a status condition with Type NodeError and Status True")
 			}
+
+			if tt.name == "job exists and completed" {
+				updated := &v1beta1.ReplicationJob{}
+				err := client.Get(context.Background(), ctrlclient.ObjectKey{
+					Name:      replicationJobCopy.Name,
+					Namespace: replicationJobCopy.Namespace,
+				}, updated)
+				assert.NoError(t, err)
+				require.NotNil(t, updated.Status.Observed)
+				require.NotNil(t, updated.Status.Observed.SourceArtifactSizeBytes)
+				assert.Equal(t, int64(123456789), *updated.Status.Observed.SourceArtifactSizeBytes)
+			}
+		})
+	}
+}
+
+func TestParseSourceArtifactSizeBytesFromLog(t *testing.T) {
+	tests := []struct {
+		name      string
+		logs      string
+		want      *int64
+		wantError bool
+	}{
+		{
+			name: "parses size from json log line",
+			logs: `{"level":"info","ts":1775704325.9316795,"caller":"replica/replica.go:91","msg":"Total model size: 230162590339 bytes"}`,
+			want: utils.Ptr(int64(230162590339)),
+		},
+		{
+			name: "uses the last matching line",
+			logs: strings.Join([]string{
+				`{"msg":"Total model size: 111 bytes"}`,
+				`{"msg":"Total model size: 222 bytes"}`,
+			}, "\n"),
+			want: utils.Ptr(int64(222)),
+		},
+		{
+			name:      "returns error when no size is present",
+			logs:      `{"msg":"Replication completed"}`,
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseSourceArtifactSizeBytesFromLog(tt.logs)
+			if tt.wantError {
+				require.Error(t, err)
+				assert.Nil(t, got)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, got)
+			assert.Equal(t, *tt.want, *got)
 		})
 	}
 }

@@ -43,6 +43,9 @@ type ReplicationJobStatus struct {
 	// Status represents the overall phase of the replication job.
 	Status ReplicationJobPhase `json:"status,omitempty"`
 
+	// Observed contains runtime metadata discovered while executing the replication job.
+	Observed *ReplicationJobObservedStatus `json:"observed,omitempty"`
+
 	// Conditions is an array of current observed job conditions.
 	// +listType=map
 	// +listMapKey=type
@@ -63,6 +66,13 @@ type ReplicationJobStatus struct {
 
 	// Message is a human-readable message indicating details about the job status.
 	Message string `json:"message,omitempty"`
+}
+
+// ReplicationJobObservedStatus contains controller-observed metadata for a ReplicationJob.
+// +k8s:openapi-gen=true
+type ReplicationJobObservedStatus struct {
+	// SourceArtifactSizeBytes is the total size in bytes of the source artifacts being replicated.
+	SourceArtifactSizeBytes *int64 `json:"sourceArtifactSizeBytes,omitempty"`
 }
 
 // ReplicationJob is the Schema for the replicationjobs API

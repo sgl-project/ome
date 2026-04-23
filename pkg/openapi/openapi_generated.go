@@ -84,6 +84,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RateLimitStatus":                  schema_pkg_apis_ome_v1beta1_RateLimitStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicationJob":                   schema_pkg_apis_ome_v1beta1_ReplicationJob(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicationJobList":               schema_pkg_apis_ome_v1beta1_ReplicationJobList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicationJobObservedStatus":     schema_pkg_apis_ome_v1beta1_ReplicationJobObservedStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicationJobSpec":               schema_pkg_apis_ome_v1beta1_ReplicationJobSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicationJobStatus":             schema_pkg_apis_ome_v1beta1_ReplicationJobStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RuntimeRef":                       schema_pkg_apis_ome_v1beta1_RuntimeRef(ref),
@@ -3691,6 +3692,26 @@ func schema_pkg_apis_ome_v1beta1_ReplicationJobList(ref common.ReferenceCallback
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_ReplicationJobObservedStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ReplicationJobObservedStatus contains controller-observed metadata for a ReplicationJob.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"sourceArtifactSizeBytes": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SourceArtifactSizeBytes is the total size in bytes of the source artifacts being replicated.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_ReplicationJobSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -3744,6 +3765,12 @@ func schema_pkg_apis_ome_v1beta1_ReplicationJobStatus(ref common.ReferenceCallba
 							Description: "Status represents the overall phase of the replication job.",
 							Type:        []string{"string"},
 							Format:      "",
+						},
+					},
+					"observed": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Observed contains runtime metadata discovered while executing the replication job.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicationJobObservedStatus"),
 						},
 					},
 					"conditions": {
@@ -3804,7 +3831,7 @@ func schema_pkg_apis_ome_v1beta1_ReplicationJobStatus(ref common.ReferenceCallba
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicationJobObservedStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
 	}
 }
 

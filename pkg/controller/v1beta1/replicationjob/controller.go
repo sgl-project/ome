@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
@@ -31,10 +34,13 @@ const (
 	omeAgentConfigFilePath = "/ome-agent.yaml"
 )
 
+var totalModelSizeLogPattern = regexp.MustCompile(`Total model size:\s*([0-9]+)\s+bytes`)
+
 // +kubebuilder:rbac:groups=ome.io,resources=replicationjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ome.io,resources=replicationjobs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ome.io,resources=replicationjobs/finalizers,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=pods/log,verbs=get
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;create;update;patch;delete
@@ -45,10 +51,11 @@ const (
 // ReplicationJobReconciler reconciles a ReplicationJob object.
 type ReplicationJobReconciler struct {
 	client.Client
-	Clientset kubernetes.Interface
-	Log       logr.Logger
-	Scheme    *runtime.Scheme
-	Recorder  record.EventRecorder
+	Clientset    kubernetes.Interface
+	PodLogReader func(ctx context.Context, namespace, podName, containerName string) (string, error)
+	Log          logr.Logger
+	Scheme       *runtime.Scheme
+	Recorder     record.EventRecorder
 }
 
 // Reconcile is the entry point for the reconciliation logic.
@@ -318,6 +325,10 @@ func (r *ReplicationJobReconciler) updateStatus(
 
 		// Retrieve detailed error from pod (exit code and termination log)
 		rawMsg := r.getPodErrorInfo(ctx, replicationJob.Namespace, job.Name, log)
+		observedStatus := r.getObservedStatus(ctx, replicationJob.Namespace, job.Name, log)
+		if observedStatus != nil {
+			status.Observed = observedStatus
+		}
 
 		if job.Status.CompletionTime != nil && rawMsg == "" {
 			isComplete = true
@@ -499,6 +510,81 @@ func (r *ReplicationJobReconciler) getPodErrorInfo(ctx context.Context, namespac
 	}
 
 	return ""
+}
+
+// getObservedStatus retrieves observed metadata from successful replica pod logs.
+func (r *ReplicationJobReconciler) getObservedStatus(ctx context.Context, namespace, jobName string, log logr.Logger) *v1beta1.ReplicationJobObservedStatus {
+	podList := &v1.PodList{}
+	labelSelector := client.MatchingLabels{
+		"job-name": jobName,
+	}
+	if err := r.List(ctx, podList, client.InNamespace(namespace), labelSelector); err != nil {
+		log.Error(err, "Failed to list pods for observed replication status", "job", jobName)
+		return nil
+	}
+
+	for _, pod := range podList.Items {
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			terminated := containerStatus.State.Terminated
+			if terminated == nil || terminated.ExitCode != 0 {
+				continue
+			}
+
+			podLogs, err := r.readPodLogs(ctx, namespace, pod.Name, containerStatus.Name)
+			if err != nil {
+				log.Error(err, "Failed to read pod logs for observed replication status", "pod", pod.Name, "container", containerStatus.Name)
+				continue
+			}
+			sourceArtifactSizeBytes, err := parseSourceArtifactSizeBytesFromLog(podLogs)
+			if err != nil {
+				log.V(1).Info("Unable to parse source artifact size from pod logs", "pod", pod.Name, "container", containerStatus.Name)
+				continue
+			}
+
+			return &v1beta1.ReplicationJobObservedStatus{
+				SourceArtifactSizeBytes: sourceArtifactSizeBytes,
+			}
+		}
+	}
+
+	return nil
+}
+
+func (r *ReplicationJobReconciler) readPodLogs(ctx context.Context, namespace, podName, containerName string) (string, error) {
+	if r.PodLogReader != nil {
+		return r.PodLogReader(ctx, namespace, podName, containerName)
+	}
+	if r.Clientset == nil {
+		return "", errors.New("kubernetes clientset is not configured for pod log reads")
+	}
+
+	stream, err := r.Clientset.CoreV1().Pods(namespace).GetLogs(podName, &v1.PodLogOptions{
+		Container: containerName,
+	}).Stream(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer stream.Close()
+
+	logBytes, err := io.ReadAll(stream)
+	if err != nil {
+		return "", err
+	}
+	return string(logBytes), nil
+}
+
+func parseSourceArtifactSizeBytesFromLog(logContent string) (*int64, error) {
+	matches := totalModelSizeLogPattern.FindAllStringSubmatch(logContent, -1)
+	if len(matches) == 0 {
+		return nil, errors.New("source artifact size not found in pod logs")
+	}
+
+	sizeStr := matches[len(matches)-1][1]
+	size, err := strconv.ParseInt(sizeStr, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	return &size, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
