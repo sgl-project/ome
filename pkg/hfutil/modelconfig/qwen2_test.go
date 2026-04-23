@@ -27,25 +27,25 @@ func TestQwen2Config(t *testing.T) {
 	}
 
 	// Check key fields
-	if qwen2Config.HiddenSize != 4096 {
-		t.Errorf("Expected hidden size to be 4096, but got %d", qwen2Config.HiddenSize)
+	if qwen2Config.HiddenSize != 3584 {
+		t.Errorf("Expected hidden size to be 3584, but got %d", qwen2Config.HiddenSize)
 	}
 
-	if qwen2Config.NumHiddenLayers != 32 {
-		t.Errorf("Expected hidden layers to be 32, but got %d", qwen2Config.NumHiddenLayers)
+	if qwen2Config.NumHiddenLayers != 28 {
+		t.Errorf("Expected hidden layers to be 28, but got %d", qwen2Config.NumHiddenLayers)
 	}
 
-	if qwen2Config.NumAttentionHeads != 32 {
-		t.Errorf("Expected attention heads to be 32, but got %d", qwen2Config.NumAttentionHeads)
+	if qwen2Config.NumAttentionHeads != 28 {
+		t.Errorf("Expected attention heads to be 28, but got %d", qwen2Config.NumAttentionHeads)
 	}
 
 	if qwen2Config.NumKeyValueHeads != 4 {
 		t.Errorf("Expected key-value heads to be 4, but got %d", qwen2Config.NumKeyValueHeads)
 	}
 
-	// Check context length (should use seq_length)
+	// Check context length (should use max_position_embeddings)
 	contextLength := config.GetContextLength()
-	expectedLength := 65536
+	expectedLength := 131072
 	if contextLength != expectedLength {
 		t.Errorf("Expected context length to be %d, but got %d", expectedLength, contextLength)
 	}
@@ -63,8 +63,8 @@ func TestQwen2Config(t *testing.T) {
 	}
 
 	// Check sliding window
-	if qwen2Config.SlidingWindow != 65536 {
-		t.Errorf("Expected sliding window to be 65536, but got %d", qwen2Config.SlidingWindow)
+	if qwen2Config.SlidingWindow != 131072 {
+		t.Errorf("Expected sliding window to be 131072, but got %d", qwen2Config.SlidingWindow)
 	}
 
 	// Check vision capability (should be false for this model)

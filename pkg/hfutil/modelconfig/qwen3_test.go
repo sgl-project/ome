@@ -42,14 +42,14 @@ func TestQwen3Config(t *testing.T) {
 		t.Errorf("Expected key-value heads to be 8, but got %d", qwen3Config.NumKeyValueHeads)
 	}
 
-	// Check context length (should use seq_length)
+	// Check context length (should use max_position_embeddings)
 	contextLength := config.GetContextLength()
-	expectedLength := 262144
+	expectedLength := 40960
 	if contextLength != expectedLength {
 		t.Errorf("Expected context length to be %d, but got %d", expectedLength, contextLength)
 	}
 
-	// Check parameter count (should be approximately 7B)
+	// Check parameter count (should be approximately 4B)
 	paramCount := config.GetParameterCount()
 	expectedCount := int64(4_000_000_000) // 4B parameters
 	if paramCount != expectedCount {
@@ -57,8 +57,8 @@ func TestQwen3Config(t *testing.T) {
 	}
 
 	// Check RoPE theta value (specific to Qwen3)
-	if qwen3Config.RopeTheta != 5000000.0 {
-		t.Errorf("Expected RoPE theta to be 5000000.0, but got %f", qwen3Config.RopeTheta)
+	if qwen3Config.RopeTheta != 1000000.0 {
+		t.Errorf("Expected RoPE theta to be 1000000.0, but got %f", qwen3Config.RopeTheta)
 	}
 
 	// Check vision capability (should be false for this model)
