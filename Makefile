@@ -124,7 +124,7 @@ manifests: controller-gen yq ## 📄 Generate WebhookConfiguration, ClusterRole 
 	@echo "✅ RBAC manifests generated"
 
 	@echo "\n📝 Step 3: Generating object boilerplate..."
-	@$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths=./pkg/apis/ome/v1beta1
+	@$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths=./pkg/apis/ome/...
 	@echo "✅ Object boilerplate generated"
 
 	@echo "\n🔄 Step 4: Applying CRD fixes and modifications..."
