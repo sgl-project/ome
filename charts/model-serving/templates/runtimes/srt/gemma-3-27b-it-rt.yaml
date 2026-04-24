@@ -9,7 +9,6 @@ spec:
       - nvidia-a100-80gb-2
       - nvidia-a100-80gb-4
       - nvidia-a100-80gb-8
-      - nvidia-a100-40gb-1
       - nvidia-a100-40gb-2
       - nvidia-a100-40gb-4
       - nvidia-a100-40gb-8
@@ -87,9 +86,6 @@ spec:
         nvidia-a100-80gb-8:
           tensorParallelismOverride:
             tensorParallelSize: 8
-        nvidia-a100-40gb-1:
-          tensorParallelismOverride:
-            tensorParallelSize: 1
         nvidia-a100-40gb-2:
           tensorParallelismOverride:
             tensorParallelSize: 2
