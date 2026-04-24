@@ -1,6 +1,16 @@
 compartmentID: ocid1.compartment.oc1..aaaaaaaazq
 
+# New proxy model entries will be added here as they are onboarded.
 grok-4-3-reasoning:
   enabled: false
   lifecyclePhase: "ACTIVE"
-# New proxy model entries will be added here as they are onboarded.
+
+gpt-5-5:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-5-pro:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
