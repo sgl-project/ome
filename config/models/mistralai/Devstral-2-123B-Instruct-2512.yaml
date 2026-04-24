@@ -1,0 +1,24 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: devstral-2-123b-instruct-2512
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: mistralai
+  displayName: mistralai.devstral-2-123b-instruct-2512
+  modelArchitecture: Ministral3ForCausalLM
+  disabled: false
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "5.0.0.dev0"
+  modelParameterSize: 123B
+  quantization: fp8
+  storage:
+    storageUri: hf://mistralai/Devstral-2-123B-Instruct-2512
+    path: /raid/models/mistralai/Devstral-2-123B-Instruct-2512
+    key: hf-token

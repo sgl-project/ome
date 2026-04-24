@@ -1,24 +1,25 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-glm-4-5v
+  name: vllm-devstral-2-123b-fp8-tp4
 spec:
   disabled: false
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.57.1"
+        version: "5.0.0.dev0"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: Glm4vMoeForConditionalGeneration
-      autoSelect: false
+      modelArchitecture: Ministral3ForCausalLM
+      quantization: fp8
+      autoSelect: true
       priority: 1
   protocolVersions:
     - openAI
   modelSizeRange:
-    min: 8B
-    max: 10B
+    min: 115B
+    max: 130B
   engineConfig:
     annotations:
       prometheus.io/scrape: "true"
@@ -36,7 +37,7 @@ spec:
           medium: Memory
     runner:
       name: ome-container
-      image: docker.io/lmsysorg/sglang:v0.5.5.post3-cu129-amd64
+      image: ghcr.io/lightseekorg/smg:1.3.2-vllm-v0.17.0
       ports:
         - containerPort: 8080
           name: http1
@@ -44,42 +45,41 @@ spec:
       command:
         - python3
         - -m
-        - sglang.launch_server
+        - vllm.entrypoints.openai.api_server
         - --host
         - "0.0.0.0"
         - --port
         - "8080"
-        - --enable-metrics
-        - --log-requests
-        - --model-path
+        - --model
         - $(MODEL_PATH)
-        - --tp-size
-        - "1"
-        - --mem-frac
+        - --tensor-parallel-size
+        - "4"
+        - --gpu-memory-utilization
         - "0.9"
-        - --served-model-name
-        - zai-org/GLM-4.5V
+        - --enable-auto-tool-choice
+        - --tool-call-parser
+        - mistral
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 10
-          memory: 30Gi
-          nvidia.com/gpu: 1
+          cpu: 20
+          memory: 320Gi
+          nvidia.com/gpu: 4
         limits:
-          cpu: 10
-          memory: 30Gi
-          nvidia.com/gpu: 1
+          cpu: 20
+          memory: 320Gi
+          nvidia.com/gpu: 4
 
       readinessProbe:
         httpGet:
-          path: /health_generate
+          path: /health
           port: 8080
         failureThreshold: 3
         successThreshold: 1
-        periodSeconds: 60
-        timeoutSeconds: 200
+        periodSeconds: 90
+        timeoutSeconds: 20
 
       livenessProbe:
         httpGet:
@@ -92,7 +92,7 @@ spec:
 
       startupProbe:
         httpGet:
-          path: /health_generate
+          path: /health
           port: 8080
         failureThreshold: 150
         successThreshold: 1

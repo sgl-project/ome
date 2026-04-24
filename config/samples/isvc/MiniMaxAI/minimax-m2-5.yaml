@@ -2,16 +2,16 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: glm
+  name: minimax
 ---
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
-  name: glm-4-5v
-  namespace: glm
+  name: minimax-m2-5
+  namespace: minimax
 spec:
   model:
-    name: glm-4-5v
+    name: minimax-m2-5
   engine:
     minReplicas: 1
     maxReplicas: 1
