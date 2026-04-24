@@ -35,6 +35,7 @@ import (
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/runtimeselector"
 	zaplog "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	istionetworking "istio.io/api/networking/v1beta1"
@@ -436,6 +437,15 @@ func main() {
 		setupLog.Info("Registering inference service mutator webhook for ac updating")
 		hookServer.Register("/inferenceservice-ac-mutator", &webhook.Admission{
 			Handler: &isvc.InferenceServiceACMutator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
+
+		setupLog.Info("Registering inference service mutator webhook for router injection")
+		hookServer.Register("/inferenceservice-router-mutator", &webhook.Admission{
+			Handler: &isvc.InferenceServiceRouterMutator{
+				Client:          mgr.GetClient(),
+				Decoder:         admission.NewDecoder(mgr.GetScheme()),
+				RuntimeSelector: runtimeselector.New(mgr.GetClient()),
+			},
 		})
 
 		if err = ctrl.NewWebhookManagedBy(mgr).

@@ -134,40 +134,12 @@ func DefaultInferenceService(isvc *v1beta1.InferenceService, deployConfig *contr
 	}
 }
 
-// isPredictorUsed checks if the Predictor field is used in the InferenceService
 // shouldEnableMigration checks if Predictor migration is enabled via environment variable
 func shouldEnableMigration() bool {
 	// Check the environment variable - only enable migration if explicitly set to "true"
 	value := os.Getenv(EnablePredictorMigrationEnvVar)
 	// Migration is enabled only when the environment variable is explicitly set to "true"
 	return value == "true"
-}
-
-func isPredictorUsed(isvc *v1beta1.InferenceService) bool {
-	// Check if the Predictor has any fields set
-	predictor := isvc.Spec.Predictor
-
-	// Check if Model is defined in Predictor
-	if predictor.Model != nil && predictor.Model.BaseModel != nil {
-		return true
-	}
-
-	// Check if MinReplicas or MaxReplicas are set
-	if predictor.MinReplicas != nil {
-		return true
-	}
-
-	// Check other significant fields
-	if predictor.ServiceAccountName != "" ||
-		len(predictor.Containers) > 0 ||
-		len(predictor.Volumes) > 0 ||
-		len(predictor.NodeSelector) > 0 ||
-		len(predictor.Tolerations) > 0 ||
-		predictor.Affinity != nil {
-		return true
-	}
-
-	return false
 }
 
 // migrateFromPredictorToNewArchitecture moves fields from Predictor to Engine and top-level Model/Runtime
