@@ -30,5 +30,7 @@ spec:
   modelCapabilities:
     - "REALTIME"
     - "AUDIO_TO_AUDIO"
+  apiCapabilities:
+    - "OPENAI_V1_REALTIME"
   maxTokens: 128000
 {{- end }}

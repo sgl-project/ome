@@ -29,5 +29,8 @@ spec:
   modelParameterSize: 8B
   modelCapabilities:
     - "TEXT_TO_AUDIO"
+  apiCapabilities:
+    - "XAI_V1_TTS"
+    - "OPENAI_V1_AUDIO_SPEECH"
   maxTokens: 128000
 {{- end }}
