@@ -200,27 +200,6 @@ func (c *DeepSeekVLConfig) GetArchitecture() string {
 	return "DeepseekVLForCausalLM"
 }
 
-// Helper function to estimate MoE model parameters
-func estimateMoEParams(hiddenSize, numLayers, intermediateSize, moeIntermediateSize, nRoutedExperts, nSharedExperts, vocabSize int) int64 {
-	// Embeddings
-	params := int64(hiddenSize * vocabSize)
-
-	// For each layer
-	params += int64(numLayers) * (
-	// Self-attention
-	int64(4*hiddenSize*hiddenSize) +
-		// Shared experts
-		int64(nSharedExperts*2*hiddenSize*intermediateSize) +
-		// Routed experts
-		int64(nRoutedExperts*2*hiddenSize*moeIntermediateSize) +
-		// Router
-		int64(hiddenSize*nRoutedExperts) +
-		// Layer norms
-		int64(2*hiddenSize))
-
-	return params
-}
-
 // Register the DeepSeek VL model handlers
 func init() {
 	RegisterModelLoader("deepseek_vl_v2", func(configPath string) (HuggingFaceModel, error) {
