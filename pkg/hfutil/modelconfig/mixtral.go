@@ -117,11 +117,6 @@ func (c *MixtralConfig) GetTransformerVersion() string {
 	return c.TransformerVersion
 }
 
-// GetQuantizationType returns the quantization method used (if any)
-func (c *MixtralConfig) GetQuantizationType() string {
-	return "" // No quantization config for Mixtral by default
-}
-
 // GetArchitecture returns the model architecture
 func (c *MixtralConfig) GetArchitecture() string {
 	if len(c.Architectures) > 0 {

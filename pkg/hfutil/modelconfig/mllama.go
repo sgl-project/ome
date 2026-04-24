@@ -145,11 +145,6 @@ func (c *MLlamaConfig) GetTransformerVersion() string {
 	return c.TransformerVersion
 }
 
-// GetQuantizationType returns the quantization method used (if any)
-func (c *MLlamaConfig) GetQuantizationType() string {
-	return "" // MLlama models don't have quantization by default
-}
-
 // GetArchitecture returns the model architecture
 func (c *MLlamaConfig) GetArchitecture() string {
 	if len(c.Architectures) > 0 {

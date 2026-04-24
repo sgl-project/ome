@@ -67,6 +67,9 @@ type BaseModelConfig struct {
 	TorchDtype         string   `json:"torch_dtype"`
 	TransformerVersion string   `json:"transformers_version"`
 
+	// Quantization config (optional, shared across all model types)
+	QuantizationConfig *QuantizationConfig `json:"quantization_config,omitempty"`
+
 	// Internal fields (not in JSON)
 	ConfigPath string `json:"-"`
 }
@@ -89,6 +92,14 @@ func (c *BaseModelConfig) GetArchitecture() string {
 
 func (c *BaseModelConfig) GetTorchDtype() string {
 	return c.TorchDtype
+}
+
+// GetQuantizationType returns the quantization method used (if any)
+func (c *BaseModelConfig) GetQuantizationType() string {
+	if c.QuantizationConfig != nil && c.QuantizationConfig.QuantMethod != "" {
+		return c.QuantizationConfig.QuantMethod
+	}
+	return ""
 }
 
 // Default implementation for HasVision - most models don't have vision capabilities
@@ -238,9 +249,6 @@ type GenericModelConfig struct {
 	IntermediateSize      int `json:"intermediate_size"`
 	MaxPositionEmbeddings int `json:"max_position_embeddings"`
 	VocabSize             int `json:"vocab_size"`
-
-	// Quantization config (optional)
-	QuantizationConfig *QuantizationConfig `json:"quantization_config,omitempty"`
 }
 
 // GetParameterCount attempts to get parameter count from safetensors, falls back to estimation
@@ -276,13 +284,6 @@ func estimateGenericParams(hiddenSize, numLayers, intermediateSize, vocabSize in
 	totalLayerParams := int64(numLayers) * perLayerParams
 
 	return embeddingParams + totalLayerParams
-}
-
-func (c *GenericModelConfig) GetQuantizationType() string {
-	if c.QuantizationConfig != nil && c.QuantizationConfig.QuantMethod != "" {
-		return c.QuantizationConfig.QuantMethod
-	}
-	return ""
 }
 
 func (c *GenericModelConfig) GetContextLength() int {
@@ -378,11 +379,6 @@ func (c *GenericDiffusionModelConfig) GetParameterCount() int64 {
 	}
 
 	return total
-}
-
-func (c *GenericDiffusionModelConfig) GetQuantizationType() string {
-	// Not supported. Doesn't seem to be standardized in HF.
-	return ""
 }
 
 func (c *GenericDiffusionModelConfig) GetContextLength() int {

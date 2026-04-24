@@ -130,11 +130,6 @@ func (c *DBRXConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), c.TorchDtype)
 }
 
-// GetQuantizationType returns the quantization method used (if any)
-func (c *DBRXConfig) GetQuantizationType() string {
-	return "" // No quantization by default
-}
-
 // HasVision returns false for DBRX base models
 func (c *DBRXConfig) HasVision() bool {
 	return false

@@ -116,11 +116,6 @@ func (c *PhiMoEConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), c.TorchDtype)
 }
 
-// GetQuantizationType returns the quantization method used (if any)
-func (c *PhiMoEConfig) GetQuantizationType() string {
-	return "" // No quantization by default
-}
-
 // HasVision returns false since this is not a multimodal vision model
 func (c *PhiMoEConfig) HasVision() bool {
 	return false

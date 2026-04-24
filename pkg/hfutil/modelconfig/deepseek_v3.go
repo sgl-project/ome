@@ -64,9 +64,6 @@ type DeepseekV3Config struct {
 	// RoPE scaling
 	RopeScaling RopeScalingConfig `json:"rope_scaling"`
 
-	// Quantization settings
-	QuantizationConfig *QuantizationConfig `json:"quantization_config,omitempty"`
-
 	// Misc options
 	TieWordEmbeddings bool    `json:"tie_word_embeddings"`
 	UseCache          bool    `json:"use_cache"`
@@ -144,14 +141,6 @@ func (c *DeepseekV3Config) GetParameterCount() int64 {
 // GetTransformerVersion returns the transformers library version
 func (c *DeepseekV3Config) GetTransformerVersion() string {
 	return c.BaseModelConfig.TransformerVersion
-}
-
-// GetQuantizationType returns the quantization method used (if any)
-func (c *DeepseekV3Config) GetQuantizationType() string {
-	if c.QuantizationConfig != nil && c.QuantizationConfig.QuantMethod != "" {
-		return c.QuantizationConfig.QuantMethod
-	}
-	return ""
 }
 
 // GetArchitecture returns the model architecture

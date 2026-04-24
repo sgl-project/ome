@@ -8,9 +8,8 @@ import (
 
 // PhiModelConfig represents the configuration for a Phi model
 type PhiModelConfig struct {
-	ConfigPath                string    `json:"-"`
-	Architectures             []string  `json:"architectures"`
-	ModelType                 string    `json:"model_type"`
+	BaseModelConfig
+
 	AttentionDropout          float64   `json:"attention_dropout"`
 	AttentionProbsDropoutProb float64   `json:"attention_probs_dropout_prob"`
 	BosTokenId                int       `json:"bos_token_id"`
@@ -33,8 +32,6 @@ type PhiModelConfig struct {
 	RopeScaling               *struct{} `json:"rope_scaling"`
 	RopeTheta                 float64   `json:"rope_theta"`
 	TieWordEmbeddings         bool      `json:"tie_word_embeddings"`
-	TorchDtype                string    `json:"torch_dtype"`
-	TransformersVersion       string    `json:"transformers_version"`
 	TypeVocabSize             int       `json:"type_vocab_size"`
 	UseCache                  bool      `json:"use_cache"`
 	VocabSize                 int       `json:"vocab_size"`
@@ -72,30 +69,6 @@ func (c *PhiModelConfig) GetParameterCount() int64 {
 	return 0
 }
 
-// GetTransformerVersion returns the transformers library version
-func (c *PhiModelConfig) GetTransformerVersion() string {
-	return c.TransformersVersion
-}
-
-// GetQuantizationType returns the quantization method used (if any)
-// Phi models typically don't have quantization config directly in the config file
-func (c *PhiModelConfig) GetQuantizationType() string {
-	return ""
-}
-
-// GetArchitecture returns the model architecture
-func (c *PhiModelConfig) GetArchitecture() string {
-	if len(c.Architectures) > 0 {
-		return c.Architectures[0]
-	}
-	return ""
-}
-
-// GetModelType returns the model type
-func (c *PhiModelConfig) GetModelType() string {
-	return c.ModelType
-}
-
 // GetContextLength returns the maximum context length
 func (c *PhiModelConfig) GetContextLength() int {
 	return c.MaxPositionEmbeddings
@@ -104,11 +77,6 @@ func (c *PhiModelConfig) GetContextLength() int {
 // GetModelSizeBytes returns the estimated size of the model in bytes
 func (c *PhiModelConfig) GetModelSizeBytes() int64 {
 	return EstimateModelSizeBytes(c.GetParameterCount(), c.GetTorchDtype())
-}
-
-// GetTorchDtype returns the torch data type used by the model
-func (c *PhiModelConfig) GetTorchDtype() string {
-	return c.TorchDtype
 }
 
 // HasVision returns false since this is not a multimodal vision model
