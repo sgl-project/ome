@@ -1,0 +1,308 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-nomic-embed
+spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-a100-80gb-1
+      - nvidia-a100-80gb-2
+      - nvidia-a100-80gb-4
+      - nvidia-a100-80gb-8
+      - nvidia-a100-40gb-1
+      - nvidia-a100-40gb-2
+      - nvidia-a100-40gb-4
+      - nvidia-a100-40gb-8
+      - nvidia-h100-1
+      - nvidia-h100-2
+      - nvidia-h100-4
+      - nvidia-h100-8
+      - nvidia-a10-1
+      - nvidia-a10-2
+      - nvidia-a10-4
+      - nvidia-h200-1
+      - nvidia-h200-2
+      - nvidia-h200-4
+      - nvidia-h200-8
+  disabled: false
+  {{- if or .Values.commonAnnotations .Values.nomic_embed.annotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{ toYaml .Values.commonAnnotations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.nomic_embed.annotations }}
+    {{ toYaml .Values.nomic_embed.annotations | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonLabels .Values.nomic_embed.labels }}
+  labels:
+    {{- if .Values.commonLabels }}
+    {{ toYaml .Values.commonLabels | nindent 4 }}
+    {{- end }}
+    {{- if .Values.nomic_embed.labels }}
+    {{ toYaml .Values.nomic_embed.labels | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonTolerations .Values.nomic_embed.tolerations }}
+  tolerations:
+    {{- if .Values.commonTolerations }}
+    {{ toYaml .Values.commonTolerations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.nomic_embed.tolerations }}
+    {{ toYaml .Values.nomic_embed.tolerations | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
+    {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+    - name: etc-pki
+      hostPath:
+        path: /etc/pki
+        type: Directory
+    {{- end }}
+  {{ with .Values.nomic_embed }}
+  affinity: {{ .affinity | toYaml | nindent 4 }}
+  {{ end }}
+  supportedModelFormats:
+    - acceleratorConfig:
+        nvidia-a10-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a10-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a10-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-a100-40gb-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a100-40gb-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a100-40gb-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-a100-40gb-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-a100-80gb-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a100-80gb-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a100-80gb-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-a100-80gb-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-h100-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-h100-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-h100-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h100-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-h200-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-h200-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-h200-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h200-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        autoSelect: true
+        modelArchitecture: NomicBertModel
+        modelFormat:
+          name: safetensors
+          operator: Equal
+          version: 1.0.0
+          weight: 1
+        modelFramework:
+          name: transformers
+          operator: Equal
+          version: 4.37.2
+          weight: 1
+        priority: 1
+        version: 1.0.0
+  modelSizeRange:
+    max: 150M
+    min: 120M
+  protocolVersions:
+    - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
+  containers:
+    - name: ome-container
+      image: {{ .Values.nomic_embed.image.vllm.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.nomic_embed.image.vllm.tag | default .Values.vllm.latestImage.tag }}
+      ports:
+        - containerPort: {{ .Values.vllm.port }}
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m vllm.entrypoints.openai.api_server \
+          --port={{ .Values.vllm.port }} \
+          --model="$MODEL_PATH" \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
+          --max-log-len=0 \
+          --served-model-name={{ .Values.vllm.serveModelName }} \
+          --tensor-parallel-size=1 \
+          --task embed \
+          --gpu-memory-utilization=0.4 \
+          --trust-remote-code
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
+        limits:
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
+  engineConfig:
+    {{- if or .Values.commonAnnotations .Values.nomic_embed.annotations }}
+    annotations:
+      {{- if .Values.commonAnnotations }}
+      {{ toYaml .Values.commonAnnotations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.nomic_embed.annotations }}
+      {{ toYaml .Values.nomic_embed.annotations | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.commonLabels .Values.nomic_embed.labels }}
+    labels:
+      {{- if .Values.commonLabels }}
+      {{ toYaml .Values.commonLabels | nindent 6 }}
+      {{- end }}
+      {{- if .Values.nomic_embed.labels }}
+      {{ toYaml .Values.nomic_embed.labels | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.commonTolerations .Values.nomic_embed.tolerations }}
+    tolerations:
+      {{- if .Values.commonTolerations }}
+      {{ toYaml .Values.commonTolerations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.nomic_embed.tolerations }}
+      {{ toYaml .Values.nomic_embed.tolerations | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+      {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+      - name: etc-pki
+        hostPath:
+          path: /etc/pki
+          type: Directory
+      {{- end }}
+    {{ with .Values.nomic_embed }}
+    affinity: {{ .affinity | toYaml | nindent 6 }}
+    {{ end }}
+    schedulerName: {{ .Values.commonSchedulerName }}
+    runner:
+      name: ome-container
+      image: {{ .Values.nomic_embed.image.vllm.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.nomic_embed.image.vllm.tag | default .Values.vllm.latestImage.tag }}
+      ports:
+        - containerPort: {{ .Values.vllm.port }}
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m vllm.entrypoints.openai.api_server \
+          --port={{ .Values.vllm.port }} \
+          --model="$MODEL_PATH" \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
+          --max-log-len=0 \
+          --served-model-name={{ .Values.vllm.serveModelName }} \
+          --tensor-parallel-size=1 \
+          --task embed \
+          --gpu-memory-utilization=0.4 \
+          --trust-remote-code
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
+        limits:
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
