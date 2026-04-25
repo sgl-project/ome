@@ -228,6 +228,8 @@ var (
 // GenericModelConfig is a fallback configuration for unsupported model types.
 // It provides basic functionality by parsing common fields from the config.json
 // and attempting to get parameter count from safetensors files.
+// For multimodal models with nested configs (text_config, llm_config, language_config),
+// loadGenericModelConfig probes nested sub-configs to fill zero-valued fields.
 type GenericModelConfig struct {
 	BaseModelConfig
 
@@ -237,10 +239,19 @@ type GenericModelConfig struct {
 	NumAttentionHeads     int `json:"num_attention_heads"`
 	IntermediateSize      int `json:"intermediate_size"`
 	MaxPositionEmbeddings int `json:"max_position_embeddings"`
+	MaxSequenceLength     int `json:"max_sequence_length"`
 	VocabSize             int `json:"vocab_size"`
+
+	// MoE fields (populated from top-level or nested config)
+	NRoutedExperts      int `json:"n_routed_experts"`
+	NSharedExperts      int `json:"n_shared_experts"`
+	MoeIntermediateSize int `json:"moe_intermediate_size"`
 
 	// Quantization config (optional)
 	QuantizationConfig *QuantizationConfig `json:"quantization_config,omitempty"`
+
+	// Set during loading when vision sub-config is detected
+	hasVisionConfig bool
 }
 
 // GetParameterCount attempts to get parameter count from safetensors, falls back to estimation
@@ -255,6 +266,10 @@ func (c *GenericModelConfig) GetParameterCount() int64 {
 
 	// Fallback: estimate from architecture if we have the necessary fields
 	if c.HiddenSize > 0 && c.NumHiddenLayers > 0 {
+		if c.NRoutedExperts > 0 {
+			return estimateMoEParams(c.HiddenSize, c.NumHiddenLayers, c.IntermediateSize,
+				c.MoeIntermediateSize, c.NRoutedExperts, c.NSharedExperts, c.VocabSize)
+		}
 		return estimateGenericParams(c.HiddenSize, c.NumHiddenLayers, c.IntermediateSize, c.VocabSize)
 	}
 
@@ -278,6 +293,139 @@ func estimateGenericParams(hiddenSize, numLayers, intermediateSize, vocabSize in
 	return embeddingParams + totalLayerParams
 }
 
+// estimateMoEParams estimates parameter count for Mixture-of-Experts models.
+// It accounts for per-expert FFN weights, shared experts, and the router.
+func estimateMoEParams(hiddenSize, numLayers, intermediateSize, moeIntermediateSize, nRoutedExperts, nSharedExperts, vocabSize int) int64 {
+	if moeIntermediateSize == 0 {
+		moeIntermediateSize = intermediateSize
+	}
+
+	// Embeddings
+	params := int64(hiddenSize * vocabSize)
+
+	// For each layer
+	params += int64(numLayers) * (
+	// Self-attention
+	int64(4*hiddenSize*hiddenSize) +
+		// Shared experts
+		int64(nSharedExperts*2*hiddenSize*intermediateSize) +
+		// Routed experts
+		int64(nRoutedExperts*2*hiddenSize*moeIntermediateSize) +
+		// Router
+		int64(hiddenSize*nRoutedExperts) +
+		// Layer norms
+		int64(2*hiddenSize))
+
+	return params
+}
+
+// nestedLLMConfigKeys lists the JSON keys under which multimodal models
+// commonly store their language/LLM sub-configuration.
+var nestedLLMConfigKeys = []string{"text_config", "llm_config", "language_config"}
+
+// probeNestedConfig attempts to fill zero-valued fields in config from
+// nested sub-configurations commonly found in multimodal model configs.
+// It only fills fields that are zero/empty, so it is safe to call unconditionally.
+func probeNestedConfig(data []byte, config *GenericModelConfig) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return
+	}
+
+	// Probe for nested LLM/text config
+	for _, key := range nestedLLMConfigKeys {
+		sub, ok := raw[key]
+		if !ok {
+			continue
+		}
+		var nested struct {
+			HiddenSize            int    `json:"hidden_size"`
+			NumHiddenLayers       int    `json:"num_hidden_layers"`
+			NumAttentionHeads     int    `json:"num_attention_heads"`
+			IntermediateSize      int    `json:"intermediate_size"`
+			MaxPositionEmbeddings int    `json:"max_position_embeddings"`
+			VocabSize             int    `json:"vocab_size"`
+			TransformersVersion   string `json:"transformers_version"`
+			TorchDtype            string `json:"torch_dtype"`
+			// MoE fields — try all common JSON key names via multiple fields
+			NRoutedExperts      int `json:"n_routed_experts"`
+			NumLocalExperts     int `json:"num_local_experts"`
+			NumExperts          int `json:"num_experts"`
+			NSharedExperts      int `json:"n_shared_experts"`
+			MoeIntermediateSize int `json:"moe_intermediate_size"`
+		}
+		if err := json.Unmarshal(sub, &nested); err != nil {
+			continue
+		}
+
+		// Fill zero-valued fields from nested config
+		if config.HiddenSize == 0 {
+			config.HiddenSize = nested.HiddenSize
+		}
+		if config.NumHiddenLayers == 0 {
+			config.NumHiddenLayers = nested.NumHiddenLayers
+		}
+		if config.NumAttentionHeads == 0 {
+			config.NumAttentionHeads = nested.NumAttentionHeads
+		}
+		if config.IntermediateSize == 0 {
+			config.IntermediateSize = nested.IntermediateSize
+		}
+		if config.MaxPositionEmbeddings == 0 {
+			config.MaxPositionEmbeddings = nested.MaxPositionEmbeddings
+		}
+		if config.VocabSize == 0 {
+			config.VocabSize = nested.VocabSize
+		}
+		if config.TransformerVersion == "" {
+			config.TransformerVersion = nested.TransformersVersion
+		}
+		if config.TorchDtype == "" {
+			config.TorchDtype = nested.TorchDtype
+		}
+
+		// MoE fields — resolve the different JSON key names
+		if config.NRoutedExperts == 0 {
+			if nested.NRoutedExperts > 0 {
+				config.NRoutedExperts = nested.NRoutedExperts
+			} else if nested.NumLocalExperts > 0 {
+				config.NRoutedExperts = nested.NumLocalExperts
+			} else if nested.NumExperts > 0 {
+				config.NRoutedExperts = nested.NumExperts
+			}
+		}
+		if config.NSharedExperts == 0 {
+			config.NSharedExperts = nested.NSharedExperts
+		}
+		if config.MoeIntermediateSize == 0 {
+			config.MoeIntermediateSize = nested.MoeIntermediateSize
+		}
+
+		break // Use the first matching nested config
+	}
+
+	// Resolve top-level MoE field name variants (num_local_experts, num_experts)
+	// that don't match the GenericModelConfig JSON tags
+	if config.NRoutedExperts == 0 {
+		var topLevel struct {
+			NumLocalExperts int `json:"num_local_experts"`
+			NumExperts      int `json:"num_experts"`
+		}
+		if err := json.Unmarshal(data, &topLevel); err == nil {
+			if topLevel.NumLocalExperts > 0 {
+				config.NRoutedExperts = topLevel.NumLocalExperts
+			} else if topLevel.NumExperts > 0 {
+				config.NRoutedExperts = topLevel.NumExperts
+			}
+		}
+	}
+
+	// Detect vision config presence
+	if _, ok := raw["vision_config"]; ok {
+		config.hasVisionConfig = true
+	}
+}
+
 func (c *GenericModelConfig) GetQuantizationType() string {
 	if c.QuantizationConfig != nil && c.QuantizationConfig.QuantMethod != "" {
 		return c.QuantizationConfig.QuantMethod
@@ -286,7 +434,15 @@ func (c *GenericModelConfig) GetQuantizationType() string {
 }
 
 func (c *GenericModelConfig) GetContextLength() int {
-	return c.MaxPositionEmbeddings
+	if c.MaxPositionEmbeddings > 0 {
+		return c.MaxPositionEmbeddings
+	}
+	return c.MaxSequenceLength
+}
+
+// HasVision returns true if a vision sub-config was detected during loading
+func (c *GenericModelConfig) HasVision() bool {
+	return c.hasVisionConfig
 }
 
 func (c *GenericModelConfig) GetModelSizeBytes() int64 {
@@ -462,6 +618,11 @@ func loadGenericModelConfig(configPath string) (HuggingFaceModel, error) {
 	}
 
 	config.ConfigPath = configPath
+
+	// Probe nested sub-configs (text_config, llm_config, language_config)
+	// to fill zero-valued fields for multimodal models
+	probeNestedConfig(data, &config)
+
 	return &config, nil
 }
 
