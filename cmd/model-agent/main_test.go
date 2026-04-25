@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/cobra"
@@ -113,6 +114,7 @@ func TestDefaultConfig(t *testing.T) {
 	testCmd.Flags().StringVar(&cfg.downloadAuthType, "download-auth-type", "instance-principal", "authentication method for model download")
 	testCmd.Flags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 3, "number of download workers")
 	testCmd.Flags().StringVar(&cfg.namespace, "namespace", "ome", "the namespace of the ome model agents daemon set")
+	testCmd.Flags().DurationVar(&cfg.downloadTimeout, "download-timeout", 6*time.Hour, "maximum time for a single model download")
 
 	// Call initConfig to set cfg.nodeName
 	initConfig(nil, nil)
@@ -127,6 +129,7 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, "instance-principal", cfg.downloadAuthType)
 	assert.Equal(t, 3, cfg.numDownloadWorker)
 	assert.Equal(t, "ome", cfg.namespace)
+	assert.Equal(t, 6*time.Hour, cfg.downloadTimeout)
 }
 
 func TestInitializeLogger(t *testing.T) {
