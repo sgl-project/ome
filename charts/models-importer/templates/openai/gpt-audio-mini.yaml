@@ -33,5 +33,6 @@ spec:
     - "TEXT_TO_AUDIO"
   apiCapabilities:
     - "OPENAI_V1_CHAT_COMPLETIONS"
+    - "OCI_GENERIC_CHAT_REQUEST"
   maxTokens: 128000
 {{- end }}
