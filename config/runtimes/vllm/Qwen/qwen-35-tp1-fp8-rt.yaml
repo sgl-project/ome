@@ -27,6 +27,28 @@ spec:
       modelArchitecture: Qwen3_5MoeForConditionalGeneration
       version: "1.0.0"
       priority: 1
+    - modelFramework:
+        name: transformers
+        version: "4.57.1"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      quantization: fp8
+      autoSelect: true
+      modelArchitecture: Qwen3_5ForConditionalGeneration
+      version: "1.0.0"
+      priority: 1
+    - modelFramework:
+        name: transformers
+        version: "4.57.1"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      quantization: fp8
+      autoSelect: true
+      modelArchitecture: Qwen3_5MoeForConditionalGeneration
+      version: "1.0.0"
+      priority: 1
   modelSizeRange:
     min: 0.5B
     max: 35.2B
@@ -159,8 +181,6 @@ spec:
         - qwen_coder
         - --reasoning-parser
         - qwen3_thinking
-        - --backend
-        - vllm
       env:
         - name: NAMESPACE
           valueFrom:

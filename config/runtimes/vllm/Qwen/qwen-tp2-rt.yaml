@@ -268,8 +268,6 @@ spec:
         - qwen
         - --reasoning-parser
         - qwen3
-        - --backend
-        - vllm
       env:
         - name: NAMESPACE
           valueFrom:

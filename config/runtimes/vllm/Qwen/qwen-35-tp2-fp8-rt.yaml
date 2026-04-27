@@ -160,8 +160,6 @@ spec:
         - qwen_coder
         - --reasoning-parser
         - qwen3_thinking
-        - --backend
-        - vllm
       env:
         - name: NAMESPACE
           valueFrom:
