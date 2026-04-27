@@ -123,7 +123,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       autoSelect: true
-      modelArchitecture: Qwen3_6ForConditionalGeneration
+      modelArchitecture: Qwen3_5MoeForConditionalGeneration
       version: "1.0.0"
       priority: 1
       acceleratorConfig:
