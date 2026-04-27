@@ -189,35 +189,37 @@ spec:
                     - BM.GPU.H200.8
     runner:
       name: ome-container
-      image: fra.ocir.io/idqj093njucb/smg:1.4.0-vllm-v0.18.0
+      image: fra.ocir.io/idqj093njucb/smg:1.4.1-vllm-v0.18.0
       ports:
         - containerPort: 8080
-          name: http1
+          name: grpc1
           protocol: TCP
       command:
-        - /bin/bash
-        - '-lc'
-        - --
+        - vllm
+        - serve
       args:
-        - |
-          smg serve \
-          --host 0.0.0.0 \
-          --model $(MODEL_PATH) \
-          --port 8080 \
-          --tensor-parallel-size 4 \
-          --served-model-name vllm-model \
-          --limit-mm-per-prompt '{"video": {"count": 1}, "image": {"count": 10}}' \
-          --generation-config vllm \
-          --max-model-len -1 \
-          --router-tool-call-parser qwen \
-          --router-reasoning-parser qwen3 \
-          --backend vllm \
-          --router-log-json \
-          --worker-startup-timeout 600 \
-          --router-request-id-headers "opc-request-id"
+        - "$(MODEL_PATH)"
+        - --port
+        - "8080"
+        - --tensor-parallel-size
+        - "4"
+        - --served-model-name
+        - "vllm-model"
+        - --limit-mm-per-prompt
+        - '{"video": {"count": 1}, "image": {"count": 10}}'
+        - --generation-config
+        - auto
+        - --enable-prefix-caching
+        - --enable-chunked-prefill
+        - --max-model-len
+        - "-1"
+        - --no-scheduler-reserve-full-isl
+        - --grpc
       env:
         - name: VLLM_LOGGING_LEVEL
           value: "INFO"
+        - name: VLLM_ENGINE_READY_TIMEOUT_S
+          value: "3600"
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -232,29 +234,90 @@ spec:
           nvidia.com/gpu: 4
 
       readinessProbe:
-        httpGet:
-          path: /readiness
+        tcpSocket:
           port: 8080
         failureThreshold: 3
         successThreshold: 1
         periodSeconds: 90
-        timeoutSeconds: 20
-
+        timeoutSeconds: 60
       livenessProbe:
-        httpGet:
-          path: /readiness
+        tcpSocket:
           port: 8080
         failureThreshold: 5
         successThreshold: 1
         periodSeconds: 60
         timeoutSeconds: 60
-
       startupProbe:
-        httpGet:
-          path: /health
+        tcpSocket:
           port: 8080
         failureThreshold: 150
         successThreshold: 1
         periodSeconds: 6
         initialDelaySeconds: 60
         timeoutSeconds: 30
+  routerConfig:
+    runner:
+      name: router
+      image: fra.ocir.io/idqj093njucb/smg:1.4.1
+      ports:
+        - containerPort: 8080
+          name: http
+      resources:
+        limits:
+          cpu: "8"
+          memory: 16Gi
+      args:
+        - --host
+        - 0.0.0.0
+        - --port
+        - "8080"
+        - --service-discovery
+        - --service-discovery-namespace
+        - $(NAMESPACE)
+        - --service-discovery-port
+        - "8080"
+        - --selector
+        - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+        - --enable-igw
+        - --request-id-headers
+        - opc-request-id
+        - --log-json
+        - --disable-retries
+        - --disable-circuit-breaker
+        - --tool-call-parser
+        - qwen
+        - --reasoning-parser
+        - qwen3
+        - --backend
+        - vllm
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: INFERENCESERVICE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['ome.io/inferenceservice']
+      readinessProbe:
+        httpGet:
+          path: /readiness
+          port: 8080
+        failureThreshold: 5
+        periodSeconds: 30
+        timeoutSeconds: 10
+      livenessProbe:
+        httpGet:
+          path: /liveness
+          port: 8080
+        failureThreshold: 5
+        periodSeconds: 30
+        timeoutSeconds: 10
+      startupProbe:
+        httpGet:
+          path: /readiness
+          port: 8080
+        failureThreshold: 60
+        periodSeconds: 10
+        timeoutSeconds: 10
+        initialDelaySeconds: 60
