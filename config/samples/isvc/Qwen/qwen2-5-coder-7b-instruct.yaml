@@ -9,6 +9,9 @@ spec:
   engine:
     minReplicas: 1
     maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
   runtime:
     name: srt-qwen2-5-coder-7b-instruct
   # router:
