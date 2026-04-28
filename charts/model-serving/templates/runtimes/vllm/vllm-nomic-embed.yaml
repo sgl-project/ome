@@ -66,7 +66,21 @@ spec:
   affinity: {{ .affinity | toYaml | nindent 4 }}
   {{ end }}
   supportedModelFormats:
-    - acceleratorConfig:
+    - modelFormat:
+        name: safetensors
+        operator: Equal
+        version: 1.0.0
+        weight: 1
+      modelFramework:
+        name: transformers
+        operator: Equal
+        version: 4.37.2
+        weight: 1
+      autoSelect: true
+      modelArchitecture: NomicBertModel
+      priority: 1
+      version: 1.0.0
+      acceleratorConfig:
         nvidia-a10-1:
           tensorParallelismOverride:
             tensorParallelSize: 1
@@ -124,20 +138,6 @@ spec:
         nvidia-h200-8:
           tensorParallelismOverride:
             tensorParallelSize: 8
-        autoSelect: true
-        modelArchitecture: NomicBertModel
-        modelFormat:
-          name: safetensors
-          operator: Equal
-          version: 1.0.0
-          weight: 1
-        modelFramework:
-          name: transformers
-          operator: Equal
-          version: 4.37.2
-          weight: 1
-        priority: 1
-        version: 1.0.0
   modelSizeRange:
     max: 150M
     min: 120M
