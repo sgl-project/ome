@@ -3,7 +3,7 @@ ENV GOPROXY="https://artifactory-builds.oci.oraclecorp.com/api/go/go-proxy"
 ENV GOPATH=/gopath GOROOT=/usr/local/go
 
 # Use commit hash artifact for testing; can switch to released version by clearing COMMIT_HASH and setting OME_VERSION
-ARG COMMIT_HASH=fb1ff8c4718f2c0f08df52b5cb64e1903c5a1160
+ARG COMMIT_HASH=1f49ae89e5d625a6f3d2ed06a214aac008841e7c
 ARG OME_VERSION=0.1.3
 ARG BUILD_CGO_ENABLED=1
 
