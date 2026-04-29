@@ -8,22 +8,18 @@ spec:
       - nvidia-a100-80gb-1
       - nvidia-a100-80gb-2
       - nvidia-a100-80gb-4
-      - nvidia-a100-80gb-8
       - nvidia-a100-40gb-1
       - nvidia-a100-40gb-2
       - nvidia-a100-40gb-4
-      - nvidia-a100-40gb-8
       - nvidia-h100-1
       - nvidia-h100-2
       - nvidia-h100-4
-      - nvidia-h100-8
       - nvidia-a10-1
       - nvidia-a10-2
       - nvidia-a10-4
       - nvidia-h200-1
       - nvidia-h200-2
       - nvidia-h200-4
-      - nvidia-h200-8
   disabled: false
   {{- if or .Values.commonAnnotations .Values.gemma_3_1b_it.annotations }}
   annotations:
@@ -86,9 +82,6 @@ spec:
         nvidia-a100-80gb-4:
           tensorParallelismOverride:
             tensorParallelSize: 4
-        nvidia-a100-80gb-8:
-          tensorParallelismOverride:
-            tensorParallelSize: 8
         nvidia-a100-40gb-1:
           tensorParallelismOverride:
             tensorParallelSize: 1
@@ -98,9 +91,6 @@ spec:
         nvidia-a100-40gb-4:
           tensorParallelismOverride:
             tensorParallelSize: 4
-        nvidia-a100-40gb-8:
-          tensorParallelismOverride:
-            tensorParallelSize: 8
         nvidia-h100-1:
           tensorParallelismOverride:
             tensorParallelSize: 1
@@ -110,9 +100,6 @@ spec:
         nvidia-h100-4:
           tensorParallelismOverride:
             tensorParallelSize: 4
-        nvidia-h100-8:
-          tensorParallelismOverride:
-            tensorParallelSize: 8
         nvidia-a10-1:
           tensorParallelismOverride:
             tensorParallelSize: 1
@@ -131,9 +118,6 @@ spec:
         nvidia-h200-4:
           tensorParallelismOverride:
             tensorParallelSize: 4
-        nvidia-h200-8:
-          tensorParallelismOverride:
-            tensorParallelSize: 8
   modelSizeRange:
     min: 0.9B
     max: 1.1B

@@ -168,11 +168,11 @@ spec:
       resources:
         requests:
           cpu: 10
-          memory: 30Gi
+          memory: 50Gi
           nvidia.com/gpu: 1
         limits:
           cpu: 10
-          memory: 30Gi
+          memory: 50Gi
           nvidia.com/gpu: 1
 
       readinessProbe:
@@ -276,11 +276,11 @@ spec:
       resources:
         requests:
           cpu: 10
-          memory: 30Gi
+          memory: 50Gi
           nvidia.com/gpu: 1
         limits:
           cpu: 10
-          memory: 30Gi
+          memory: 50Gi
           nvidia.com/gpu: 1
 
       readinessProbe:
