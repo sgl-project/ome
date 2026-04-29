@@ -1,0 +1,264 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: srt-medgemma-27b-text-it-imported-x8
+spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-a100-80gb-8
+      - nvidia-a100-40gb-8
+      - nvidia-h100-8
+      - nvidia-h200-8
+  disabled: false
+  {{- if or .Values.commonAnnotations .Values.medgemma_27b_text_it_imported.annotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{ toYaml .Values.commonAnnotations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.medgemma_27b_text_it_imported.annotations }}
+    {{ toYaml .Values.medgemma_27b_text_it_imported.annotations | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonLabels .Values.medgemma_27b_text_it_imported.labels }}
+  labels:
+    {{- if .Values.commonLabels }}
+    {{ toYaml .Values.commonLabels | nindent 4 }}
+    {{- end }}
+    {{- if .Values.medgemma_27b_text_it_imported.labels }}
+    {{ toYaml .Values.medgemma_27b_text_it_imported.labels | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonTolerations .Values.medgemma_27b_text_it_imported.tolerations }}
+  tolerations:
+    {{- if .Values.commonTolerations }}
+    {{ toYaml .Values.commonTolerations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.medgemma_27b_text_it_imported.tolerations }}
+    {{ toYaml .Values.medgemma_27b_text_it_imported.tolerations | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
+    {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+    - name: etc-pki
+      hostPath:
+        path: /etc/pki
+        type: Directory
+    {{- end }}
+  {{ with .Values.medgemma_27b_text_it_imported }}
+  affinity: {{ .affinity | toYaml | nindent 4 }}
+  {{ end }}
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.52.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      autoSelect: true
+      modelArchitecture: Gemma3ForCausalLM
+      version: "1.0.0"
+      priority: 1
+      acceleratorConfig:
+        nvidia-a100-80gb-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-a100-40gb-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-h100-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-h200-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+  modelSizeRange:
+    min: 24.3B
+    max: 29.7B
+  protocolVersions:
+    - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
+  containers:
+    - name: ome-container
+      image: {{ .Values.medgemma_27b_text_it_imported.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.medgemma_27b_text_it_imported.image.tag | default .Values.sglang.commonImage.tag }}
+      ports:
+        - containerPort: {{ .Values.sglang.port }}
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python -m sglang.launch_server \
+          --model-path "$MODEL_PATH" \
+          --host 127.0.0.1 \
+          --port 31000 \
+          --grpc-mode \
+          --served-model-name medgemma-27b-text-it \
+          --tp-size 8 \
+          --mem-fraction-static 0.75 \
+          --context-length 131072 \
+          --log-requests \
+          --attention-backend=triton \
+          --sampling-backend=pytorch \
+          --enable-metrics & sleep 120 && \
+          python -m smg.launch_router \
+          --worker-urls grpc://127.0.0.1:31000 \
+          --host 0.0.0.0 \
+          --port {{ .Values.sglang.port }}
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 40
+          memory: 240Gi
+          nvidia.com/gpu: 8
+        limits:
+          cpu: 40
+          memory: 240Gi
+          nvidia.com/gpu: 8
+
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
+  engineConfig:
+    schedulerName: {{ .Values.commonSchedulerName }}
+    {{- if or .Values.commonAnnotations .Values.medgemma_27b_text_it_imported.annotations }}
+    annotations:
+      {{- if .Values.commonAnnotations }}
+      {{ toYaml .Values.commonAnnotations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.medgemma_27b_text_it_imported.annotations }}
+      {{ toYaml .Values.medgemma_27b_text_it_imported.annotations | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.commonLabels .Values.medgemma_27b_text_it_imported.labels }}
+    labels:
+      {{- if .Values.commonLabels }}
+      {{ toYaml .Values.commonLabels | nindent 6 }}
+      {{- end }}
+      {{- if .Values.medgemma_27b_text_it_imported.labels }}
+      {{ toYaml .Values.medgemma_27b_text_it_imported.labels | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.commonTolerations .Values.medgemma_27b_text_it_imported.tolerations }}
+    tolerations:
+      {{- if .Values.commonTolerations }}
+      {{ toYaml .Values.commonTolerations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.medgemma_27b_text_it_imported.tolerations }}
+      {{ toYaml .Values.medgemma_27b_text_it_imported.tolerations | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+        {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+      - name: etc-pki
+        hostPath:
+          path: /etc/pki
+          type: Directory
+        {{- end }}
+    {{ with .Values.medgemma_27b_text_it_imported }}
+    affinity: {{ .affinity | toYaml | nindent 6 }}
+    {{ end }}
+    runner:
+      name: ome-container
+      image: {{ .Values.medgemma_27b_text_it_imported.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.medgemma_27b_text_it_imported.image.tag | default .Values.sglang.commonImage.tag }}
+      ports:
+        - containerPort: {{ .Values.sglang.port }}
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python -m sglang.launch_server \
+          --model-path "$MODEL_PATH" \
+          --host 127.0.0.1 \
+          --port 31000 \
+          --grpc-mode \
+          --served-model-name medgemma-27b-text-it \
+          --tp-size 8 \
+          --mem-fraction-static 0.75 \
+          --context-length 131072 \
+          --log-requests \
+          --attention-backend=triton \
+          --sampling-backend=pytorch \
+          --enable-metrics & sleep 120 && \
+          python -m smg.launch_router \
+          --worker-urls grpc://127.0.0.1:31000 \
+          --host 0.0.0.0 \
+          --port {{ .Values.sglang.port }}
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 40
+          memory: 240Gi
+          nvidia.com/gpu: 8
+        limits:
+          cpu: 40
+          memory: 240Gi
+          nvidia.com/gpu: 8
+
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
