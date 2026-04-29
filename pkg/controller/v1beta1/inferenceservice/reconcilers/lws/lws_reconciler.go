@@ -38,12 +38,23 @@ func NewLWSReconciler(client client.Client,
 	return &LWSReconciler{
 		client:       client,
 		scheme:       scheme,
-		LWS:          createLWS(headPod, workerPod, workerSize, componentExt, componentMeta),
+		LWS:          createLWSWithClient(client, headPod, workerPod, workerSize, componentExt, componentMeta),
 		ComponentExt: componentExt,
 	}
 }
 
-func createLWS(headPod *corev1.PodSpec,
+func createLWS(
+	headPod *corev1.PodSpec,
+	workerPod *corev1.PodSpec,
+	workerSize int32,
+	componentExt *v1beta1.ComponentExtensionSpec,
+	componentMeta metav1.ObjectMeta) *lws.LeaderWorkerSet {
+	return createLWSWithClient(nil, headPod, workerPod, workerSize, componentExt, componentMeta)
+}
+
+func createLWSWithClient(
+	cl client.Client,
+	headPod *corev1.PodSpec,
 	workerPod *corev1.PodSpec,
 	workerSize int32,
 	componentExt *v1beta1.ComponentExtensionSpec,
@@ -55,8 +66,8 @@ func createLWS(headPod *corev1.PodSpec,
 	lwsObjectMeta.Name = constants.LWSName(componentMeta.Name)
 	headPodMeta.Labels["app"] = constants.GetRawServiceLabel(componentMeta.Name)
 	headPodMeta.Labels["ray.io/node-type"] = "head"
-	utils.SetPodLabelsFromAnnotations(headPodMeta)
-	utils.SetPodLabelsFromAnnotations(workerPodMeta)
+	utils.SetPodLabelsFromAnnotationsWithClient(cl, headPodMeta)
+	utils.SetPodLabelsFromAnnotationsWithClient(cl, workerPodMeta)
 
 	// Need to remove Prometheus annotations for workerPods as workerPods don't expose endpoints
 	abandonedWorkerPodAnnotations := []string{

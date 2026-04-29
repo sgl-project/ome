@@ -51,13 +51,15 @@ func NewKsvcReconciler(client client.Client,
 	return &KsvcReconciler{
 		client:          client,
 		scheme:          scheme,
-		Service:         createKnativeService(componentMeta, componentExt, podSpec, componentStatus),
+		Service:         createKnativeService(client, componentMeta, componentExt, podSpec, componentStatus),
 		componentExt:    componentExt,
 		componentStatus: componentStatus,
 	}
 }
 
-func createKnativeService(componentMeta metav1.ObjectMeta,
+func createKnativeService(
+	cl client.Client,
+	componentMeta metav1.ObjectMeta,
 	componentExtension *v1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec,
 	componentStatus v1beta1.ComponentStatusSpec) *knservingv1.Service {
@@ -138,7 +140,7 @@ func createKnativeService(componentMeta metav1.ObjectMeta,
 		return !utils.Includes(constants.RevisionTemplateLabelDisallowedList, key)
 	})
 
-	isvcutils.SetPodLabelsFromAnnotations(&componentMeta)
+	isvcutils.SetPodLabelsFromAnnotationsWithClient(cl, &componentMeta)
 
 	service := &knservingv1.Service{
 		ObjectMeta: metav1.ObjectMeta{

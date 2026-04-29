@@ -46,7 +46,7 @@ func NewMultiNodeProberReconciler(
 			Scheme: "http",
 			Host:   fmt.Sprintf("%s.%s.svc.cluster.local", constants.DefaultRayHeadServiceName(componentMeta.Name, i), componentMeta.Namespace),
 		}
-		dply := createRawDeployment(componentMeta, multiNodeProberConfig, url, i)
+		dply := createRawDeployment(client, componentMeta, multiNodeProberConfig, url, i)
 		deployments = append(deployments, dply)
 	}
 	return &MultiNodeProberReconciler{
@@ -57,6 +57,7 @@ func NewMultiNodeProberReconciler(
 }
 
 func createRawDeployment(
+	cl kclient.Client,
 	componentMeta metav1.ObjectMeta,
 	multiNodeProberConfig *controllerconfig.MultiNodeProberConfig,
 	url *knapis.URL,
@@ -68,7 +69,7 @@ func createRawDeployment(
 		podMetadata.Labels = make(map[string]string)
 	}
 	podMetadata.Labels["app"] = constants.GetRawServiceLabel(componentMeta.Name)
-	utils.SetPodLabelsFromAnnotations(podMetadata)
+	utils.SetPodLabelsFromAnnotationsWithClient(cl, podMetadata)
 
 	podSpec := getDefaultPodSpec(multiNodeProberConfig, url)
 	deployment := &appsv1.Deployment{
