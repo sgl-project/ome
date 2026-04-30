@@ -6,9 +6,17 @@ spec:
   acceleratorRequirements:
     acceleratorClasses:
       - nvidia-a100-80gb-2
+      - nvidia-a100-80gb-4
+      - nvidia-a100-80gb-8
       - nvidia-a100-40gb-2
+      - nvidia-a100-40gb-4
+      - nvidia-a100-40gb-8
       - nvidia-h100-2
+      - nvidia-h100-4
+      - nvidia-h100-8
       - nvidia-h200-2
+      - nvidia-h200-4
+      - nvidia-h200-8
   disabled: false
   {{- if or .Values.commonAnnotations .Values.medgemma_27b_text_it_imported.annotations }}
   annotations:
@@ -60,20 +68,44 @@ spec:
       autoSelect: true
       modelArchitecture: Gemma3ForCausalLM
       version: "1.0.0"
-      priority: 3
+      priority: 1
       acceleratorConfig:
         nvidia-a100-80gb-2:
           tensorParallelismOverride:
             tensorParallelSize: 2
+        nvidia-a100-80gb-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-a100-80gb-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
         nvidia-a100-40gb-2:
           tensorParallelismOverride:
             tensorParallelSize: 2
+        nvidia-a100-40gb-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-a100-40gb-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
         nvidia-h100-2:
           tensorParallelismOverride:
             tensorParallelSize: 2
+        nvidia-h100-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h100-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
         nvidia-h200-2:
           tensorParallelismOverride:
             tensorParallelSize: 2
+        nvidia-h200-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h200-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
   modelSizeRange:
     min: 24.3B
     max: 29.7B
