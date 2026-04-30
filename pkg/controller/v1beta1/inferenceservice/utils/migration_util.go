@@ -15,6 +15,142 @@ import (
 	"github.com/sgl-project/ome/pkg/constants"
 )
 
+func translatePredictorModelRef(predictor *v1beta2.PredictorSpec) *v1beta2.ModelRef {
+	if predictor == nil || predictor.Model == nil || predictor.Model.BaseModel == nil {
+		return nil
+	}
+
+	return &v1beta2.ModelRef{
+		Name:             *predictor.Model.BaseModel,
+		FineTunedWeights: predictor.Model.FineTunedWeights,
+	}
+}
+
+func translatePredictorRuntimeRef(predictor *v1beta2.PredictorSpec) *v1beta2.ServingRuntimeRef {
+	if predictor == nil || predictor.Model == nil || predictor.Model.Runtime == nil {
+		return nil
+	}
+
+	runtimeKind := "ClusterServingRuntime"
+	runtimeAPIGroup := "ome.io"
+	return &v1beta2.ServingRuntimeRef{
+		Name:     *predictor.Model.Runtime,
+		Kind:     &runtimeKind,
+		APIGroup: &runtimeAPIGroup,
+	}
+}
+
+func translatePredictorEngineSpec(predictor *v1beta2.PredictorSpec) *v1beta2.EngineSpec {
+	if predictor == nil {
+		return nil
+	}
+
+	engine := &v1beta2.EngineSpec{
+		PodSpec:                predictor.PodSpec,
+		ComponentExtensionSpec: predictor.ComponentExtensionSpec,
+	}
+
+	// Process containers - look for ome-container or first container as Runner.
+	if len(predictor.Containers) > 0 {
+		runnerFound := false
+		var otherContainers []v1.Container
+
+		for _, container := range predictor.Containers {
+			if !runnerFound && (container.Name == "ome-container" || strings.Contains(strings.ToLower(container.Name), "ome")) {
+				runnerSpec := &v1beta2.RunnerSpec{
+					Container: container,
+				}
+
+				if predictor.Model != nil {
+					if len(predictor.Model.Env) > 0 {
+						runnerSpec.Env = append(runnerSpec.Env, predictor.Model.Env...)
+					}
+
+					if predictor.Model.StorageUri != nil {
+						runnerSpec.Env = append(runnerSpec.Env, v1.EnvVar{
+							Name:  "STORAGE_URI",
+							Value: *predictor.Model.StorageUri,
+						})
+					}
+
+					if predictor.Model.ProtocolVersion != nil {
+						runnerSpec.Env = append(runnerSpec.Env, v1.EnvVar{
+							Name:  "PROTOCOL_VERSION",
+							Value: string(*predictor.Model.ProtocolVersion),
+						})
+					}
+				}
+
+				engine.Runner = runnerSpec
+				runnerFound = true
+			} else {
+				otherContainers = append(otherContainers, container)
+			}
+		}
+
+		if !runnerFound {
+			runnerSpec := &v1beta2.RunnerSpec{
+				Container: predictor.Containers[0],
+			}
+
+			if predictor.Model != nil {
+				if len(predictor.Model.Env) > 0 {
+					runnerSpec.Env = append(runnerSpec.Env, predictor.Model.Env...)
+				}
+				if predictor.Model.StorageUri != nil {
+					runnerSpec.Env = append(runnerSpec.Env, v1.EnvVar{
+						Name:  "STORAGE_URI",
+						Value: *predictor.Model.StorageUri,
+					})
+				}
+				if predictor.Model.ProtocolVersion != nil {
+					runnerSpec.Env = append(runnerSpec.Env, v1.EnvVar{
+						Name:  "PROTOCOL_VERSION",
+						Value: string(*predictor.Model.ProtocolVersion),
+					})
+				}
+			}
+
+			engine.Runner = runnerSpec
+			if len(predictor.Containers) > 1 {
+				engine.Containers = predictor.Containers[1:]
+			}
+		} else {
+			engine.Containers = otherContainers
+		}
+	} else if predictor.Model != nil {
+		runnerSpec := &v1beta2.RunnerSpec{
+			Container: predictor.Model.Container,
+		}
+
+		if predictor.Model.StorageUri != nil {
+			runnerSpec.Env = append(runnerSpec.Env, v1.EnvVar{
+				Name:  "STORAGE_URI",
+				Value: *predictor.Model.StorageUri,
+			})
+		}
+
+		if predictor.Model.ProtocolVersion != nil {
+			runnerSpec.Env = append(runnerSpec.Env, v1.EnvVar{
+				Name:  "PROTOCOL_VERSION",
+				Value: string(*predictor.Model.ProtocolVersion),
+			})
+		}
+
+		if runnerSpec.Container.Name == "" {
+			runnerSpec = nil
+		}
+
+		engine.Runner = runnerSpec
+	}
+
+	if predictor.Worker != nil {
+		engine.Worker = predictor.Worker
+	}
+
+	return engine
+}
+
 // MigratePredictorToNewArchitecture migrates existing predictor resources to new engine/model architecture
 func MigratePredictorToNewArchitecture(ctx context.Context, c client.Client, log logr.Logger, isvc *v1beta2.InferenceService) error {
 	// Check if predictor is being used and migration hasn't happened yet
@@ -80,15 +216,15 @@ func IsPredictorUsed(isvc *v1beta2.InferenceService) bool {
 
 // MigratePredictor performs the actual migration from predictor to engine/model
 func MigratePredictor(ctx context.Context, c client.Client, isvc *v1beta2.InferenceService) error {
-	// Migrate Model
-	if isvc.Spec.Predictor.Model != nil && isvc.Spec.Predictor.Model.BaseModel != nil {
-		isvc.Spec.Model = &v1beta2.ModelRef{
-			Name:             *isvc.Spec.Predictor.Model.BaseModel,
-			FineTunedWeights: isvc.Spec.Predictor.Model.FineTunedWeights,
-		}
+	predictor := &isvc.Spec.Predictor
 
+	isvc.Spec.Model = translatePredictorModelRef(predictor)
+	isvc.Spec.Runtime = translatePredictorRuntimeRef(predictor)
+	isvc.Spec.Engine = translatePredictorEngineSpec(predictor)
+
+	if isvc.Spec.Model != nil {
 		// Determine the model kind dynamically
-		modelName := *isvc.Spec.Predictor.Model.BaseModel
+		modelName := isvc.Spec.Model.Name
 		kind, err := DetermineModelKind(ctx, c, modelName, isvc.Namespace)
 		if err != nil {
 			return err
@@ -98,142 +234,6 @@ func MigratePredictor(ctx context.Context, c client.Client, isvc *v1beta2.Infere
 		apiGroup := "ome.io"
 		isvc.Spec.Model.Kind = &kind
 		isvc.Spec.Model.APIGroup = &apiGroup
-
-		// Migrate Runtime reference
-		if isvc.Spec.Predictor.Model.Runtime != nil {
-			runtimeKind := "ClusterServingRuntime"
-			runtimeAPIGroup := "ome.io"
-			isvc.Spec.Runtime = &v1beta2.ServingRuntimeRef{
-				Name:     *isvc.Spec.Predictor.Model.Runtime,
-				Kind:     &runtimeKind,
-				APIGroup: &runtimeAPIGroup,
-			}
-		}
-	}
-
-	// Migrate Engine
-	isvc.Spec.Engine = &v1beta2.EngineSpec{
-		PodSpec:                isvc.Spec.Predictor.PodSpec,
-		ComponentExtensionSpec: isvc.Spec.Predictor.ComponentExtensionSpec,
-	}
-
-	// Process containers - look for ome-container or first container as Runner
-	if len(isvc.Spec.Predictor.Containers) > 0 {
-		// Look for ome-container first
-		runnerFound := false
-		var otherContainers []v1.Container
-
-		for _, container := range isvc.Spec.Predictor.Containers {
-			if !runnerFound && (container.Name == "ome-container" || strings.Contains(strings.ToLower(container.Name), "ome")) {
-				// Migrate container from PredictorExtensionSpec to Runner
-				runnerSpec := &v1beta2.RunnerSpec{
-					Container: container,
-				}
-
-				// Merge PredictorExtensionSpec container settings if present
-				if isvc.Spec.Predictor.Model != nil {
-					// Merge environment variables
-					if len(isvc.Spec.Predictor.Model.Env) > 0 {
-						runnerSpec.Env = append(runnerSpec.Env, isvc.Spec.Predictor.Model.Env...)
-					}
-
-					// Add storage URI as environment variable if present
-					if isvc.Spec.Predictor.Model.StorageUri != nil {
-						runnerSpec.Env = append(runnerSpec.Env, v1.EnvVar{
-							Name:  "STORAGE_URI",
-							Value: *isvc.Spec.Predictor.Model.StorageUri,
-						})
-					}
-
-					// Add protocol version as environment variable if present
-					if isvc.Spec.Predictor.Model.ProtocolVersion != nil {
-						runnerSpec.Env = append(runnerSpec.Env, v1.EnvVar{
-							Name:  "PROTOCOL_VERSION",
-							Value: string(*isvc.Spec.Predictor.Model.ProtocolVersion),
-						})
-					}
-				}
-
-				isvc.Spec.Engine.Runner = runnerSpec
-				runnerFound = true
-			} else {
-				otherContainers = append(otherContainers, container)
-			}
-		}
-
-		// If no ome container found, use first container as Runner
-		if !runnerFound && len(isvc.Spec.Predictor.Containers) > 0 {
-			runnerSpec := &v1beta2.RunnerSpec{
-				Container: isvc.Spec.Predictor.Containers[0],
-			}
-
-			// Apply PredictorExtensionSpec settings
-			if isvc.Spec.Predictor.Model != nil {
-				if len(isvc.Spec.Predictor.Model.Env) > 0 {
-					runnerSpec.Env = append(runnerSpec.Env, isvc.Spec.Predictor.Model.Env...)
-				}
-				if isvc.Spec.Predictor.Model.StorageUri != nil {
-					runnerSpec.Env = append(runnerSpec.Env, v1.EnvVar{
-						Name:  "STORAGE_URI",
-						Value: *isvc.Spec.Predictor.Model.StorageUri,
-					})
-				}
-				if isvc.Spec.Predictor.Model.ProtocolVersion != nil {
-					runnerSpec.Env = append(runnerSpec.Env, v1.EnvVar{
-						Name:  "PROTOCOL_VERSION",
-						Value: string(*isvc.Spec.Predictor.Model.ProtocolVersion),
-					})
-				}
-			}
-
-			isvc.Spec.Engine.Runner = runnerSpec
-
-			// Keep remaining containers
-			if len(isvc.Spec.Predictor.Containers) > 1 {
-				isvc.Spec.Engine.Containers = isvc.Spec.Predictor.Containers[1:]
-			}
-		} else {
-			isvc.Spec.Engine.Containers = otherContainers
-		}
-	} else if isvc.Spec.Predictor.Model != nil {
-		// No containers in PodSpec, but we have Model spec with container configuration
-		runnerSpec := &v1beta2.RunnerSpec{
-			Container: isvc.Spec.Predictor.Model.Container,
-		}
-
-		// Add storage URI as environment variable if present
-		if isvc.Spec.Predictor.Model.StorageUri != nil {
-			if runnerSpec.Env == nil {
-				runnerSpec.Env = []v1.EnvVar{}
-			}
-			runnerSpec.Env = append(runnerSpec.Env, v1.EnvVar{
-				Name:  "STORAGE_URI",
-				Value: *isvc.Spec.Predictor.Model.StorageUri,
-			})
-		}
-
-		// Add protocol version as environment variable if present
-		if isvc.Spec.Predictor.Model.ProtocolVersion != nil {
-			if runnerSpec.Env == nil {
-				runnerSpec.Env = []v1.EnvVar{}
-			}
-			runnerSpec.Env = append(runnerSpec.Env, v1.EnvVar{
-				Name:  "PROTOCOL_VERSION",
-				Value: string(*isvc.Spec.Predictor.Model.ProtocolVersion),
-			})
-		}
-
-		// No containers in Model spec, set runnerSpec as nil
-		if runnerSpec.Container.Name == "" {
-			runnerSpec = nil
-		}
-
-		isvc.Spec.Engine.Runner = runnerSpec
-	}
-
-	// Migrate Worker spec if present
-	if isvc.Spec.Predictor.Worker != nil {
-		isvc.Spec.Engine.Worker = isvc.Spec.Predictor.Worker
 	}
 
 	return nil

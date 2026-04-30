@@ -205,17 +205,27 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// Determine which components to reconcile based on the spec
 	var reconcilers []components.Component
 
-	// Migrate predictor spec to new architecture if needed
-	if err := r.migratePredictorToNewArchitecture(isvc); err != nil {
-		r.Log.Error(err, "Failed to migrate predictor spec", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
-		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "PredictorMigrationError", err.Error())
+	servingGraph, err := isvcutils.ResolveServingGraph(isvc)
+	if err != nil {
+		r.Log.Error(err, "Failed to resolve serving graph", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "ServingGraphError", err.Error())
 		return reconcile.Result{}, err
+	}
+	resolvedISVC := servingGraph.InferenceService
+
+	// Persist compatibility translation for predictor-only services during the rollout.
+	if servingGraph.PredictorCompatibility {
+		if err := r.migratePredictorToNewArchitecture(isvc); err != nil {
+			r.Log.Error(err, "Failed to migrate predictor spec", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "PredictorMigrationError", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	var ingressDeploymentMode constants.DeploymentModeType
 
 	// Step 1: Reconcile model first
-	baseModel, baseModelMeta, err := isvcutils.ReconcileBaseModel(r.Client, isvc)
+	baseModel, baseModelMeta, err := isvcutils.ReconcileBaseModel(r.Client, resolvedISVC)
 	if err != nil {
 		r.Log.Error(err, "Failed to reconcile base model", "Name", isvc.Name)
 		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "ModelReconcileError", err.Error())
@@ -227,14 +237,14 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	var rtName string
 	userSpecifiedRuntime := false
 
-	if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" {
+	if servingGraph.Runtime != nil && servingGraph.Runtime.Name != "" {
 		// Validate specified runtime
-		rtName = isvc.Spec.Runtime.Name
+		rtName = servingGraph.Runtime.Name
 		userSpecifiedRuntime = true
-		if err := r.RuntimeSelector.ValidateRuntime(ctx, rtName, baseModel, isvc); err != nil {
-			r.Log.Error(err, "Runtime validation failed", "runtime", rtName, "model", isvc.Spec.Model.Name)
+		if err := r.RuntimeSelector.ValidateRuntime(ctx, rtName, baseModel, resolvedISVC); err != nil {
+			r.Log.Error(err, "Runtime validation failed", "runtime", rtName, "model", resolvedISVC.Spec.Model.Name)
 			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeValidationError",
-				"Runtime %s does not support model %s: %v", rtName, isvc.Spec.Model.Name, err)
+				"Runtime %s does not support model %s: %v", rtName, resolvedISVC.Spec.Model.Name, err)
 			return reconcile.Result{}, err
 		}
 
@@ -248,33 +258,28 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		rt = rtSpec
 	} else {
 		// Auto-select runtime
-		selection, err := r.RuntimeSelector.SelectRuntime(ctx, baseModel, isvc)
+		selection, err := r.RuntimeSelector.SelectRuntime(ctx, baseModel, resolvedISVC)
 		if err != nil {
-			r.Log.Error(err, "Failed to auto-select runtime", "model", isvc.Spec.Model.Name)
+			r.Log.Error(err, "Failed to auto-select runtime", "model", resolvedISVC.Spec.Model.Name)
 			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeSelectionError",
-				"Failed to find runtime for model %s: %v", isvc.Spec.Model.Name, err)
+				"Failed to find runtime for model %s: %v", resolvedISVC.Spec.Model.Name, err)
 			return reconcile.Result{}, err
 		}
 		rt = selection.Spec
 		rtName = selection.Name
-		r.Log.Info("Auto-selected runtime", "runtime", rtName, "model", isvc.Spec.Model.Name)
+		r.Log.Info("Auto-selected runtime", "runtime", rtName, "model", resolvedISVC.Spec.Model.Name)
 	}
 
-	// Step 3: Merge rt and isvc specs to get final engine, decoder, and router specs
-	mergedEngine, mergedDecoder, mergedRouter, err := isvcutils.MergeRuntimeSpecs(isvc, rt, r.Log)
+	servingGraph, err = isvcutils.ResolveServingGraphWithRuntime(servingGraph, rt, r.Log)
 	if err != nil {
-		r.Log.Error(err, "Failed to merge specs", "Name", isvc.Name)
-		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "MergeSpecsError", err.Error())
+		r.Log.Error(err, "Failed to resolve runtime-backed serving graph", "Name", isvc.Name)
+		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "ServingGraphError", err.Error())
 		return reconcile.Result{}, err
 	}
-
-	// Step 4: Determine deployment modes based on merged specs
-	engineDeploymentMode, decoderDeploymentMode, routerDeploymentMode, err := isvcutils.DetermineDeploymentModes(mergedEngine, mergedDecoder, mergedRouter, rt)
-	if err != nil {
-		r.Log.Error(err, "Failed to determine deployment modes", "Name", isvc.Name)
-		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "DeploymentModeError", err.Error())
-		return reconcile.Result{}, err
-	}
+	mergedEngine, mergedDecoder, mergedRouter := servingGraph.Engine, servingGraph.Decoder, servingGraph.Router
+	engineDeploymentMode := servingGraph.EngineDeploymentMode
+	decoderDeploymentMode := servingGraph.DecoderDeploymentMode
+	routerDeploymentMode := servingGraph.RouterDeploymentMode
 
 	// If both engine and decoder exist, it's PD-disaggregated
 	if mergedEngine != nil && mergedDecoder != nil {
@@ -283,7 +288,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Step 5: Create reconcilers based on merged specs
 	if mergedEngine != nil {
-		engineACObj, engineAcName, err := r.AcceleratorClassSelector.GetAcceleratorClass(ctx, isvc, rt, v1beta1.EngineComponent)
+		engineACObj, engineAcName, err := r.AcceleratorClassSelector.GetAcceleratorClass(ctx, resolvedISVC, rt, v1beta1.EngineComponent)
 		if err != nil {
 			r.Log.Error(err, "Failed to get accelerator class for engine component", "Name", isvc.Name)
 			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "AcceleratorClassError", "Failed to get accelerator class for engine: %v", err)
@@ -317,7 +322,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if mergedDecoder != nil {
-		decoderACObj, decoderAcName, err := r.AcceleratorClassSelector.GetAcceleratorClass(ctx, isvc, rt, v1beta1.DecoderComponent)
+		decoderACObj, decoderAcName, err := r.AcceleratorClassSelector.GetAcceleratorClass(ctx, resolvedISVC, rt, v1beta1.DecoderComponent)
 		if err != nil {
 			r.Log.Error(err, "Failed to get accelerator class for decoder component", "Name", isvc.Name)
 			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "AcceleratorClassError", "Failed to get accelerator class for decoder: %v", err)
@@ -368,17 +373,10 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		reconcilers = append(reconcilers, routerReconciler)
 	}
 
-	// Determine the correct ingress deployment mode using the same logic as ingress reconciler
-	// but with the already-determined deployment modes to avoid inconsistency
-	if mergedRouter != nil {
-		ingressDeploymentMode = routerDeploymentMode
-	} else if mergedDecoder != nil {
-		ingressDeploymentMode = decoderDeploymentMode
-	} else {
-		ingressDeploymentMode = engineDeploymentMode
-	}
+	ingressDeploymentMode = servingGraph.EntrypointDeploymentMode
 
 	r.Log.Info("Determined ingress deployment mode",
+		"entrypointComponent", servingGraph.EntrypointComponent,
 		"ingressDeploymentMode", ingressDeploymentMode,
 		"namespace", isvc.Namespace,
 		"inferenceService", isvc.Name)
