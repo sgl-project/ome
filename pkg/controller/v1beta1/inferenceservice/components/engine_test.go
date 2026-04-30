@@ -1418,7 +1418,147 @@ func TestEngineAffinityMerging(t *testing.T) {
 	}
 }
 
+func TestEngineResourceMergingWithRuntimeOwnedEngine(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-isvc",
+			Namespace: "default",
+		},
+		Spec: v1beta1.InferenceServiceSpec{
+			Model: &v1beta1.ModelRef{},
+		},
+	}
+
+	runtimeEngine := &v1beta1.EngineSpec{
+		Runner: &v1beta1.RunnerSpec{
+			Container: v1.Container{
+				Name:  "ome-container",
+				Image: "engine:latest",
+			},
+		},
+	}
+	runtimeSpec := &v1beta1.ServingRuntimeSpec{
+		ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+			Containers: []v1.Container{
+				{
+					Name: "ome-container",
+					Resources: v1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							v1.ResourceCPU:    resource.MustParse("4"),
+							v1.ResourceMemory: resource.MustParse("8Gi"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	g.Expect(v1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	clientset := fake.NewClientset()
+	c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
+
+	engine := NewEngine(
+		c,
+		clientset,
+		scheme,
+		&controllerconfig.InferenceServicesConfig{},
+		constants.RawDeployment,
+		nil,
+		nil,
+		runtimeEngine,
+		runtimeSpec,
+		"test-runtime",
+		nil,
+		nil,
+		"",
+	).(*Engine)
+
+	objectMeta := &metav1.ObjectMeta{Name: "test", Namespace: "default"}
+	podSpec, err := engine.reconcilePodSpec(isvc, objectMeta)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Expect(podSpec.Containers).To(gomega.HaveLen(1))
+
+	cpu := podSpec.Containers[0].Resources.Requests[v1.ResourceCPU]
+	g.Expect(cpu.String()).To(gomega.Equal("4"))
+	memory := podSpec.Containers[0].Resources.Requests[v1.ResourceMemory]
+	g.Expect(memory.String()).To(gomega.Equal("8Gi"))
+}
+
+func TestEngineAffinityMergingWithRuntimeOwnedEngine(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-isvc",
+			Namespace: "default",
+		},
+		Spec: v1beta1.InferenceServiceSpec{
+			Model: &v1beta1.ModelRef{},
+		},
+	}
+
+	runtimeEngine := &v1beta1.EngineSpec{
+		PodSpec: v1beta1.PodSpec{
+			Containers: []v1.Container{
+				{Name: "ome-container", Image: "engine:latest"},
+			},
+		},
+	}
+	acceleratorClass := &v1beta1.AcceleratorClassSpec{
+		Discovery: v1beta1.AcceleratorDiscovery{
+			Affinity: &v1.Affinity{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "ac-key",
+										Operator: v1.NodeSelectorOpIn,
+										Values:   []string{"ac-value"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	g.Expect(v1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	clientset := fake.NewClientset()
+	c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
+
+	engine := NewEngine(
+		c,
+		clientset,
+		scheme,
+		&controllerconfig.InferenceServicesConfig{},
+		constants.RawDeployment,
+		nil,
+		nil,
+		runtimeEngine,
+		nil,
+		"test-runtime",
+		nil,
+		acceleratorClass,
+		"test-accel-class",
+	).(*Engine)
+
+	objectMeta := &metav1.ObjectMeta{Name: "test", Namespace: "default"}
+	podSpec, err := engine.reconcilePodSpec(isvc, objectMeta)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Expect(podSpec.Affinity).NotTo(gomega.BeNil())
+	g.Expect(podSpec.Affinity.NodeAffinity).NotTo(gomega.BeNil())
+	terms := podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+	g.Expect(terms[0].MatchExpressions[0].Key).To(gomega.Equal("ac-key"))
+}
+
 // Note: Worker resource and affinity tests are not included because MergeEngineResources and
-// UpdateEngineAffinity check isvc.Spec.Engine.Runner and isvc.Spec.Engine.PodSpec.Affinity,
-// not the worker-specific fields. This means the merging decision is based on the engine/leader
-// spec, not the worker spec. This is the current implementation behavior.
+// UpdateEngineAffinity base their override decision on the engine-level InferenceService fields,
+// not the worker-specific fields.

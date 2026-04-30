@@ -150,6 +150,25 @@ func TestExternalServiceReconciler_shouldCreateExternalService(t *testing.T) {
 			description: "should create external service for multinode deployments when ingress disabled",
 		},
 		{
+			name: "should create when runtime-driven engine status exists",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service",
+					Namespace: "default",
+				},
+				Status: v1beta1.InferenceServiceStatus{
+					Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
+						v1beta1.EngineComponent: {},
+					},
+				},
+			},
+			ingressConfig: &controllerconfig.IngressConfig{
+				DisableIngressCreation: true,
+			},
+			expected:    true,
+			description: "should create external service when a runtime-driven engine has already been reconciled",
+		},
+		{
 			name: "should not create when no components",
 			isvc: &v1beta1.InferenceService{
 				ObjectMeta: metav1.ObjectMeta{
@@ -249,6 +268,25 @@ func TestExternalServiceReconciler_determineTargetSelector(t *testing.T) {
 				constants.InferenceServicePodLabelKey: "test-service",
 			},
 			description: "predictor component should be selected as fallback",
+		},
+		{
+			name: "runtime-driven engine uses engine selector",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service",
+					Namespace: "default",
+				},
+				Status: v1beta1.InferenceServiceStatus{
+					Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
+						v1beta1.EngineComponent: {},
+					},
+				},
+			},
+			expectedSelector: map[string]string{
+				constants.InferenceServicePodLabelKey: "test-service",
+				constants.OMEComponentLabel:           string(v1beta1.EngineComponent),
+			},
+			description: "runtime-driven engine should still target the engine component",
 		},
 	}
 
@@ -353,6 +391,35 @@ func TestExternalServiceReconciler_buildExternalService(t *testing.T) {
 			internalService:    nil, // No internal service
 			expectedTargetPort: constants.CommonISVCPort,
 			description:        "should fallback to default port when internal service not found",
+		},
+		{
+			name: "runtime-driven engine uses internal engine service",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service",
+					Namespace: "default",
+				},
+				Status: v1beta1.InferenceServiceStatus{
+					Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
+						v1beta1.EngineComponent: {},
+					},
+				},
+			},
+			internalService: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service-engine",
+					Namespace: "default",
+				},
+				Spec: corev1.ServiceSpec{
+					Ports: []corev1.ServicePort{
+						{
+							Port: 8083,
+						},
+					},
+				},
+			},
+			expectedTargetPort: 8083,
+			description:        "should resolve target port from the internal engine service for runtime-driven engine deployments",
 		},
 	}
 

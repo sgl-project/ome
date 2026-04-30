@@ -105,8 +105,11 @@ func MergeRouterSpec(isvcRouter, runtimeRouter *v1beta1.RouterSpec) (*v1beta1.Ro
 func MergeEngineSpec(runtimeEngine, isvcEngine *v1beta1.EngineSpec) (*v1beta1.EngineSpec, error) {
 	switch {
 	case isvcEngine == nil:
-		// if engine is not specified in isvc, return nil
-		return nil, nil
+		// if engine is only specified in runtime, use the runtime-owned engine spec
+		if runtimeEngine == nil {
+			return nil, nil
+		}
+		return runtimeEngine.DeepCopy(), nil
 	case runtimeEngine == nil:
 		// if engine is not specified in runtime, return a copy of isvcEngine
 		return isvcEngine.DeepCopy(), nil

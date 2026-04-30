@@ -321,9 +321,9 @@ func MergeResources(b *BaseComponentFields, container *corev1.Container) {
 // resources are respected and not overridden, while providing sensible defaults from the
 // runtime and accelerator class when resources are not specified.
 func MergeEngineResources(b *BaseComponentFields, isvc *v1beta1.InferenceService, container *corev1.Container) {
-	if isvc.Spec.Engine != nil &&
-		(isvc.Spec.Engine.Runner == nil ||
-			isResourcesUnspecified(isvc.Spec.Engine.Runner.Container.Resources)) {
+	if isvc.Spec.Engine == nil ||
+		isvc.Spec.Engine.Runner == nil ||
+		isResourcesUnspecified(isvc.Spec.Engine.Runner.Container.Resources) {
 		b.Log.Info("Merging resources for engine container as user did not specify resources in InferenceService")
 		MergeResources(b, container)
 	}
@@ -346,7 +346,7 @@ func MergeDecoderResources(b *BaseComponentFields, isvc *v1beta1.InferenceServic
 // UpdateEngineAffinity merges affinity from the accelerator class into the pod spec
 // It only merges when customer didn't specify affinity in the inference service
 func UpdateEngineAffinity(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec) {
-	if isvc.Spec.Engine != nil &&
+	if isvc.Spec.Engine == nil ||
 		isvc.Spec.Engine.PodSpec.Affinity == nil {
 		if b.AcceleratorClass != nil && b.AcceleratorClass.Discovery.Affinity != nil {
 			b.Log.Info("Merging affinity from accelerator class into engine pod spec as user did not specify affinity in InferenceService")

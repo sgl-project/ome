@@ -694,6 +694,116 @@ func TestInferenceServiceReconcile(t *testing.T) {
 				g.Expect(lwsList.Items[0].Name).To(gomega.ContainSubstring("test-multinode"))
 			},
 		},
+		{
+			name: "Runtime-driven multi-node engine deployment",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-runtime-multinode",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model: &v1beta1.ModelRef{
+						Name: "base-model-5",
+						Kind: stringPtr("BaseModel"),
+					},
+					Runtime: &v1beta1.ServingRuntimeRef{
+						Name: "runtime-multinode",
+					},
+				},
+			},
+			setupMocks: func(c client.Client, cs *fake.Clientset) {
+				cm := &v1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "inferenceservice-config",
+						Namespace: "default",
+					},
+					Data: map[string]string{
+						"config": "{}",
+					},
+				}
+				err := c.Create(context.TODO(), cm)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				omeCm := &v1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "inferenceservice-config",
+						Namespace: "ome",
+					},
+					Data: map[string]string{
+						"deploy": `{"defaultDeploymentMode": "RawDeployment"}`,
+					},
+				}
+				_, err = cs.CoreV1().ConfigMaps("ome").Create(context.TODO(), omeCm, metav1.CreateOptions{})
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				baseModel := &v1beta1.BaseModel{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "base-model-5",
+						Namespace: "default",
+					},
+					Spec: v1beta1.BaseModelSpec{
+						ModelFormat: v1beta1.ModelFormat{
+							Name:    "safetensors",
+							Version: stringPtr("1.0.0"),
+						},
+					},
+				}
+				err = c.Create(context.TODO(), baseModel)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				rt := &v1beta1.ServingRuntime{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "runtime-multinode",
+						Namespace: "default",
+					},
+					Spec: v1beta1.ServingRuntimeSpec{
+						SupportedModelFormats: []v1beta1.SupportedModelFormat{
+							{
+								Name:    "safetensors",
+								Version: stringPtr("*"),
+								ModelFormat: &v1beta1.ModelFormat{
+									Name:    "safetensors",
+									Version: stringPtr("1.0.0"),
+									Weight:  int64(1),
+								},
+							},
+						},
+						EngineConfig: &v1beta1.EngineSpec{
+							Leader: &v1beta1.LeaderSpec{
+								PodSpec: v1beta1.PodSpec{
+									Containers: []v1.Container{
+										{
+											Name:  "leader",
+											Image: "leader:latest",
+										},
+									},
+								},
+							},
+							Worker: &v1beta1.WorkerSpec{
+								Size: intPtr(2),
+								PodSpec: v1beta1.PodSpec{
+									Containers: []v1.Container{
+										{
+											Name:  "worker",
+											Image: "worker:latest",
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+				err = c.Create(context.TODO(), rt)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, isvc *v1beta1.InferenceService) {
+				lwsList := &lws.LeaderWorkerSetList{}
+				err := c.List(context.TODO(), lwsList, client.InNamespace("default"))
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+				g.Expect(lwsList.Items).To(gomega.HaveLen(1))
+				g.Expect(lwsList.Items[0].Name).To(gomega.ContainSubstring("test-runtime-multinode"))
+			},
+		},
 	}
 
 	for _, tt := range tests {

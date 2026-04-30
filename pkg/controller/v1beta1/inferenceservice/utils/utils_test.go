@@ -667,9 +667,22 @@ func TestMergeEngineSpec(t *testing.T) {
 					},
 				},
 			},
-			isvcEngine:     nil,
-			expectedEngine: nil,
-			expectError:    false,
+			isvcEngine: nil,
+			expectedEngine: &v1beta1.EngineSpec{
+				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+					MinReplicas: intPtr(1),
+					MaxReplicas: 3,
+				},
+				PodSpec: v1beta1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  "ome-container",
+							Image: "runtime-engine:v1",
+						},
+					},
+				},
+			},
+			expectError: false,
 		},
 		{
 			name: "merge min/max replicas - isvc overrides",
