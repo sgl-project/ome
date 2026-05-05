@@ -114,7 +114,7 @@ spec:
           medium: Memory
     runner:
       name: ome-container
-      image: docker.io/vllm/vllm-openai:v0.20.0-cu129
+      image: docker.io/vllm/vllm-openai:v0.20.1-cu129
       ports:
         - containerPort: 8080
           name: http1
