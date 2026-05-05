@@ -34,6 +34,8 @@ resources:
 - srt/mixtral-8x7b-instruct-rt.yaml
 # vLLM runtimes
 - vllm/e5-mistral-7b-instruct-rt.yaml
+- vllm/gemma-4-tp1-rt.yaml
+- vllm/gemma-4-tp2-rt.yaml
 - vllm/llama-3-1-405b-instruct-fp8-rt.yaml
 - vllm/llama-3-1-8b-instruct-rt.yaml
 - vllm/llama-3-1-nemotron-nano-8b-v1-rt.yaml
