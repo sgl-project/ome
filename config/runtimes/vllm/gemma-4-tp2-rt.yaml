@@ -81,7 +81,7 @@ spec:
         timeoutSeconds: 10
       startupProbe:
         httpGet:
-          path: /readiness
+          path: /health
           port: 8080
         failureThreshold: 10
         periodSeconds: 20

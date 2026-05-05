@@ -51,6 +51,10 @@ resources:
   # google
   - google/gemma-3-1b-it.yaml
   - google/gemma-3-4b-it.yaml
+  - google/gemma-4-E2B-it.yaml
+  - google/gemma-4-E4B-it.yaml
+  - google/gemma-4-26B-A4B-it.yaml
+  - google/gemma-4-31B-it.yaml
 
   # HuggingFaceTB
   - HuggingFaceTB/SmolLM-1.7B.yaml
