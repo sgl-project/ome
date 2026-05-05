@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
@@ -21,6 +22,26 @@ func TestNewStatusReconciler(t *testing.T) {
 	manager := NewStatusReconciler(nil)
 
 	assert.NotNil(t, manager)
+	assert.Equal(t, defaultPodLogTailLines, manager.podLogTailLines)
+	assert.Equal(t, defaultPodLogLimitBytes, manager.podLogLimitBytes)
+	assert.Nil(t, manager.podLogFetcher)
+}
+
+func TestNewStatusReconcilerWithClientsetInitializesPodLogFetcher(t *testing.T) {
+	manager := NewStatusReconciler(fake.NewSimpleClientset())
+
+	assert.NotNil(t, manager.podLogFetcher)
+}
+
+func TestStatusReconcilerWithPodLogFetchLimits(t *testing.T) {
+	manager := NewStatusReconciler(nil).WithPodLogFetchLimits(512, 1024)
+
+	assert.Equal(t, int64(512), manager.podLogTailLines)
+	assert.Equal(t, int64(1024), manager.podLogLimitBytes)
+
+	manager = NewStatusReconciler(nil).WithPodLogFetchLimits(0, -1)
+	assert.Equal(t, defaultPodLogTailLines, manager.podLogTailLines)
+	assert.Equal(t, defaultPodLogLimitBytes, manager.podLogLimitBytes)
 }
 
 func TestPropagateRawStatus(t *testing.T) {

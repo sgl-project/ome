@@ -20,29 +20,48 @@ const (
 	FullTrafficPercent           = 100
 	RoutesReadyCondition         = "RoutesReady"
 	ConfigurationsReadyCondition = "ConfigurationsReady"
+	defaultPodLogTailLines       = int64(200)
+	defaultPodLogLimitBytes      = int64(256 * 1024)
 )
 
 // StatusReconciler handles all status-related operations for InferenceService
 type StatusReconciler struct {
-	Clientset     kubernetes.Interface
-	Log           logr.Logger
-	podLogFetcher func(namespace, podName, containerName string, previous bool) (string, error)
+	Clientset        kubernetes.Interface
+	Log              logr.Logger
+	podLogFetcher    func(namespace, podName, containerName string, previous bool) (string, error)
+	podLogTailLines  int64
+	podLogLimitBytes int64
 }
 
 // NewStatusReconciler creates a new StatusReconciler instance.
 // Pass a nil clientset when Kubernetes log fetching is not needed.
 func NewStatusReconciler(clientset kubernetes.Interface) *StatusReconciler {
 	reconciler := &StatusReconciler{
-		Clientset: clientset,
-		Log:       logf.Log.WithName("InferenceServiceStatus"),
+		Clientset:        clientset,
+		Log:              logf.Log.WithName("InferenceServiceStatus"),
+		podLogTailLines:  defaultPodLogTailLines,
+		podLogLimitBytes: defaultPodLogLimitBytes,
 	}
-	reconciler.podLogFetcher = reconciler.fetchPodLogs
+	if clientset != nil {
+		reconciler.podLogFetcher = reconciler.fetchPodLogs
+	}
 	return reconciler
 }
 
 // WithLogger overrides the default logger and returns the reconciler for chaining.
 func (sr *StatusReconciler) WithLogger(log logr.Logger) *StatusReconciler {
 	sr.Log = log
+	return sr
+}
+
+// WithPodLogFetchLimits overrides the default pod log fetch bounds used for failure inspection.
+func (sr *StatusReconciler) WithPodLogFetchLimits(tailLines, limitBytes int64) *StatusReconciler {
+	if tailLines > 0 {
+		sr.podLogTailLines = tailLines
+	}
+	if limitBytes > 0 {
+		sr.podLogLimitBytes = limitBytes
+	}
 	return sr
 }
 

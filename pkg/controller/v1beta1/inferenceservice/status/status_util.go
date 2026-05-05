@@ -381,9 +381,13 @@ func (sr *StatusReconciler) fetchPodLogs(namespace, podName, containerName strin
 		"container", containerName,
 		"previous", previous)
 
+	tailLines := sr.podLogTailLines
+	limitBytes := sr.podLogLimitBytes
 	req := sr.Clientset.CoreV1().Pods(namespace).GetLogs(podName, &v1.PodLogOptions{
-		Container: containerName,
-		Previous:  previous,
+		Container:  containerName,
+		Previous:   previous,
+		TailLines:  &tailLines,
+		LimitBytes: &limitBytes,
 	})
 	logStream, err := req.Stream(context.Background())
 	if err != nil {
