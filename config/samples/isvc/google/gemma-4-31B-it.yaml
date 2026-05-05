@@ -1,0 +1,19 @@
+# apiVersion: v1
+# kind: Namespace
+# metadata:
+#   name: gemma-4-31b-it
+---
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: gemma-4-31b-it
+  namespace: gemma-4-31b-it
+spec:
+  model:
+    name: gemma-4-31b-it
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
