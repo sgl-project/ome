@@ -1,0 +1,40 @@
+{{- if .Values.llama_3_1_8b_instruct_a100_40g_guardrails.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-1-8b-instruct-a100-40g-guardrails
+  namespace: llama-3-1-8b-instruct-a100-40g-guardrails
+spec:
+  acceleratorSelector:
+    acceleratorClass: nvidia-a100-40gb-8
+  predictor:
+    {{- with .Values.llama_3_1_8b_instruct_a100_40g_guardrails.annotations}}
+    annotations: {{toYaml . | nindent 6}}
+    {{- end }}
+    model:
+      baseModel: llama-3-1-8b-instruct
+      protocolVersion: openAI
+      runtime: vllm-llama-3-1-8b-instruct
+    minReplicas: {{ .Values.llama_3_1_8b_instruct_a100_40g_guardrails.minReplicas}}
+    maxReplicas: {{ .Values.llama_3_1_8b_instruct_a100_40g_guardrails.maxReplicas}}
+    {{- with .Values.llama_3_1_8b_instruct_a100_40g_guardrails.affinity}}
+    affinity: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_1_8b_instruct_a100_40g_guardrails.tolerations}}
+    tolerations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_1_8b_instruct_a100_40g_guardrails.topologySpreadConstraints}}
+    topologySpreadConstraints: {{ toYaml . | nindent 6 }}
+    {{- end}}
+    {{- with .Values.llama_3_1_8b_instruct_a100_40g_guardrails.volumes }}
+    volumes: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_1_8b_instruct_a100_40g_guardrails.scaleMetric }}
+    scaleMetric: {{ toYaml . | nindent 6 }}
+    {{- end }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-3-1-8b-instruct-a100-40g-guardrails
+{{- end }}

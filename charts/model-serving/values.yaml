@@ -819,6 +819,55 @@ llama_3_1_8b_instruct:
       repository:
       tag:
 
+llama_3_1_8b_instruct_a100_80g_guardrails:
+  enabled: false
+  annotations: { }
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                  - BM.GPU.A100-v2.8
+  labels: {}
+  tolerations: []
+  topologySpreadConstraints: []
+  volumes: []
+  minReplicas: 1
+  maxReplicas: 1
+  scaleMetric: {}
+  image:
+    vllm:
+      repository:
+      tag:
+
+llama_3_1_8b_instruct_a100_40g_guardrails:
+  enabled: false
+  annotations: { }
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                  - BM.GPU.B4.8
+                  - BM.GPU4.8
+  labels: {}
+  tolerations: []
+  topologySpreadConstraints: []
+  volumes: []
+  minReplicas: 1
+  maxReplicas: 1
+  scaleMetric: {}
+  image:
+    vllm:
+      repository:
+      tag:
+
 llama_3_1_nemotron_nano_8b_v1:
   enabled: false
   annotations: { }
