@@ -2,6 +2,7 @@ package status
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -22,6 +23,7 @@ const (
 	ConfigurationsReadyCondition = "ConfigurationsReady"
 	defaultPodLogTailLines       = int64(200)
 	defaultPodLogLimitBytes      = int64(32 * 1024)
+	defaultPodLogFetchTimeout    = 2 * time.Second
 )
 
 // StatusReconciler handles all status-related operations for InferenceService

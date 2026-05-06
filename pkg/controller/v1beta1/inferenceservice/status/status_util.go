@@ -389,7 +389,10 @@ func (sr *StatusReconciler) fetchPodLogs(namespace, podName, containerName strin
 		TailLines:  &tailLines,
 		LimitBytes: &limitBytes,
 	})
-	logStream, err := req.Stream(context.Background())
+	streamCtx, cancel := context.WithTimeout(context.Background(), defaultPodLogFetchTimeout)
+	defer cancel()
+
+	logStream, err := req.Stream(streamCtx)
 	if err != nil {
 		return "", err
 	}
