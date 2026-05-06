@@ -52,3 +52,5 @@ resources:
 - vllm/mixtral-8x7b-instruct-rt.yaml
 - vllm/gemma-4-tp1-rt.yaml
 - vllm/gemma-4-tp2-rt.yaml
+- vllm/deepseek-ai/deepseek-v4-flash-rt.yaml
+- vllm/deepseek-ai/deepseek-v4-pro-rt.yaml
