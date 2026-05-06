@@ -21,7 +21,7 @@ const (
 	RoutesReadyCondition         = "RoutesReady"
 	ConfigurationsReadyCondition = "ConfigurationsReady"
 	defaultPodLogTailLines       = int64(200)
-	defaultPodLogLimitBytes      = int64(256 * 1024)
+	defaultPodLogLimitBytes      = int64(32 * 1024)
 )
 
 // StatusReconciler handles all status-related operations for InferenceService
