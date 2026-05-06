@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
@@ -18,9 +19,29 @@ import (
 )
 
 func TestNewStatusReconciler(t *testing.T) {
-	manager := NewStatusReconciler()
+	manager := NewStatusReconciler(nil)
 
 	assert.NotNil(t, manager)
+	assert.Equal(t, defaultPodLogTailLines, manager.podLogTailLines)
+	assert.Equal(t, defaultPodLogLimitBytes, manager.podLogLimitBytes)
+	assert.Nil(t, manager.podLogFetcher)
+}
+
+func TestNewStatusReconcilerWithClientsetInitializesPodLogFetcher(t *testing.T) {
+	manager := NewStatusReconciler(fake.NewSimpleClientset())
+
+	assert.NotNil(t, manager.podLogFetcher)
+}
+
+func TestStatusReconcilerWithPodLogFetchLimits(t *testing.T) {
+	manager := NewStatusReconciler(nil).WithPodLogFetchLimits(512, 1024)
+
+	assert.Equal(t, int64(512), manager.podLogTailLines)
+	assert.Equal(t, int64(1024), manager.podLogLimitBytes)
+
+	manager = NewStatusReconciler(nil).WithPodLogFetchLimits(0, -1)
+	assert.Equal(t, defaultPodLogTailLines, manager.podLogTailLines)
+	assert.Equal(t, defaultPodLogLimitBytes, manager.podLogLimitBytes)
 }
 
 func TestPropagateRawStatus(t *testing.T) {
@@ -222,7 +243,7 @@ func TestPropagateRawStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager := NewStatusReconciler()
+			manager := NewStatusReconciler(nil)
 
 			manager.PropagateRawStatus(tt.status, tt.component, tt.deployment, tt.url)
 
@@ -420,7 +441,7 @@ func TestPropagateMultiNodeStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager := NewStatusReconciler()
+			manager := NewStatusReconciler(nil)
 
 			manager.PropagateMultiNodeStatus(tt.status, tt.component, tt.lws, tt.url)
 
@@ -606,7 +627,7 @@ func TestPropagateStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager := NewStatusReconciler()
+			manager := NewStatusReconciler(nil)
 
 			manager.PropagateStatus(tt.status, tt.component, tt.serviceStatus)
 
@@ -722,9 +743,9 @@ func TestPropagateModelStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager := NewStatusReconciler()
+			manager := NewStatusReconciler(nil)
 
-			manager.PropagateModelStatus(tt.status, tt.statusSpec, tt.podList, tt.rawDeployment)
+			manager.PropagateModelStatus(tt.status, v1beta1.PredictorComponent, tt.statusSpec, tt.podList, tt.rawDeployment)
 
 			if tt.status.ModelStatus.ModelRevisionStates != nil {
 				assert.Equal(t, tt.expectedState, tt.status.ModelStatus.ModelRevisionStates.TargetModelState)
@@ -770,7 +791,7 @@ func TestUpdateModelRevisionStates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager := NewStatusReconciler()
+			manager := NewStatusReconciler(nil)
 
 			manager.UpdateModelRevisionStates(tt.status, tt.modelState, tt.totalCopies, tt.info)
 
@@ -809,7 +830,7 @@ func TestUpdateModelTransitionStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager := NewStatusReconciler()
+			manager := NewStatusReconciler(nil)
 
 			manager.UpdateModelTransitionStatus(tt.status, tt.transitionStatus, tt.info)
 
@@ -913,7 +934,7 @@ func TestPropagateCrossComponentStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager := NewStatusReconciler()
+			manager := NewStatusReconciler(nil)
 			tt.setupStatus(tt.status)
 
 			manager.PropagateCrossComponentStatus(tt.status, tt.componentList, tt.conditionType)
@@ -970,7 +991,7 @@ func TestSetModelFailureInfo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager := NewStatusReconciler()
+			manager := NewStatusReconciler(nil)
 
 			changed := manager.SetModelFailureInfo(tt.status, tt.info)
 
@@ -1254,7 +1275,7 @@ func TestPropagateMultiNodeRayVLLMStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager := NewStatusReconciler()
+			manager := NewStatusReconciler(nil)
 
 			manager.PropagateMultiNodeRayVLLMStatus(tt.status, tt.component, tt.deployments, tt.url)
 
