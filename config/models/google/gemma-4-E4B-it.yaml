@@ -1,0 +1,17 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: gemma-4-e4b-it
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+    - IMAGE_TEXT_TO_TEXT
+    - VIDEO_TEXT_TO_TEXT
+    - AUDIO_TEXT_TO_TEXT
+  vendor: google
+  disabled: false
+  version: "1.0.0"
+  displayName: google.gemma-4-e4b-it
+  storage:
+    storageUri: hf://google/gemma-4-E4B-it
+    path: /raid/models/google/gemma-4-E4B-it
