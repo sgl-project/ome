@@ -3,6 +3,7 @@ package status
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1050,6 +1051,227 @@ func TestCheckContainerStatusesUsesPodLogsForGPUOOM(t *testing.T) {
 	ready := status.GetCondition(apis.ConditionReady)
 	require.NotNil(t, ready)
 	assert.Equal(t, corev1.ConditionFalse, ready.Status)
+}
+
+func TestCheckContainerStatusesUsesPodLogsForGPUConfigurationError(t *testing.T) {
+	manager := NewStatusReconciler(nil)
+	manager.podLogFetcher = func(namespace, podName, containerName string, previous bool) (string, error) {
+		assert.Equal(t, "default", namespace)
+		assert.Equal(t, "test-pod", podName)
+		assert.Equal(t, constants.MainContainerName, containerName)
+		assert.True(t, previous)
+		return "RuntimeError: No CUDA GPUs are available", nil
+	}
+
+	status := &v1beta1.InferenceServiceStatus{ModelStatus: v1beta1.ModelStatus{}}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod",
+			Namespace: "default",
+		},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: constants.MainContainerName,
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{
+							Reason: constants.StateReasonCrashLoopBackOff,
+						},
+					},
+					LastTerminationState: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							Message:  "generic startup failure",
+							ExitCode: 1,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	manager.checkContainerStatuses(status, v1beta1.EngineComponent, pod, 1)
+
+	require.NotNil(t, status.ModelStatus.LastFailureInfo)
+	assert.Equal(t, v1beta1.GPUConfigurationError, status.ModelStatus.LastFailureInfo.Reason)
+	assert.Equal(t, "RuntimeError: No CUDA GPUs are available", status.ModelStatus.LastFailureInfo.Message)
+	engineReady := status.GetCondition(v1beta1.EngineReady)
+	require.NotNil(t, engineReady)
+	assert.Equal(t, string(v1beta1.GPUConfigurationError), engineReady.Reason)
+}
+
+func TestCheckContainerStatusesClassifiesSpecificRuntimeFailures(t *testing.T) {
+	startTime := metav1.NewTime(time.Now().Add(-2 * time.Minute))
+	tests := []struct {
+		name                    string
+		pod                     *corev1.Pod
+		expectedReason          v1beta1.FailureReason
+		expectedMessageContains string
+	}{
+		{
+			name: "oom killed termination",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "oom-pod"},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name: constants.MainContainerName,
+							State: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{
+									Reason:   constants.StateReasonOOMKilled,
+									ExitCode: 137,
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedReason:          v1beta1.InsufficientGPUMemory,
+			expectedMessageContains: constants.ModelLoadGPUOOMFailureMessage,
+		},
+		{
+			name: "image pull backoff",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "image-pod"},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name: constants.MainContainerName,
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason:  constants.StateReasonImagePullBackOff,
+									Message: "failed to pull image runtime:missing",
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedReason:          v1beta1.RuntimeImageNotFound,
+			expectedMessageContains: "failed to pull image",
+		},
+		{
+			name: "tensor parallel mismatch",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "tp-pod"},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name: constants.MainContainerName,
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason: constants.StateReasonCrashLoopBackOff,
+								},
+							},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{
+									Message:  "ValueError: tensor_parallel_size (8) exceeds available CUDA devices (4)",
+									ExitCode: 1,
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedReason:          v1beta1.TPExceedsGPUCount,
+			expectedMessageContains: constants.ModelLoadTPMismatchFailureMessage,
+		},
+		{
+			name: "unsupported model architecture",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "arch-pod"},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name: constants.MainContainerName,
+							State: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{
+									Reason:   constants.StateReasonError,
+									Message:  "ValueError: Model architecture FooForCausalLM is not supported by this runtime",
+									ExitCode: 1,
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedReason:          v1beta1.UnsupportedModelArchitecture,
+			expectedMessageContains: "FooForCausalLM",
+		},
+		{
+			name: "startup probe timeout",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "timeout-pod"},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name: constants.MainContainerName,
+							State: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{
+									Reason:   constants.StateReasonError,
+									Message:  "Startup probe failed: model server did not become ready",
+									ExitCode: 1,
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedReason:          v1beta1.ModelLoadTimeout,
+			expectedMessageContains: constants.ModelLoadTimeoutFailureMessage,
+		},
+		{
+			name: "startup probe window exceeded without termination message",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "probe-timeout-pod"},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: constants.MainContainerName,
+							StartupProbe: &corev1.Probe{
+								InitialDelaySeconds: 1,
+								PeriodSeconds:       1,
+								FailureThreshold:    1,
+								TimeoutSeconds:      1,
+							},
+						},
+					},
+				},
+				Status: corev1.PodStatus{
+					StartTime: &startTime,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name: constants.MainContainerName,
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason: constants.StateReasonCrashLoopBackOff,
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedReason:          v1beta1.ModelLoadTimeout,
+			expectedMessageContains: constants.ModelLoadTimeoutFailureMessage,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := NewStatusReconciler(nil)
+			status := &v1beta1.InferenceServiceStatus{ModelStatus: v1beta1.ModelStatus{}}
+
+			manager.checkContainerStatuses(status, v1beta1.EngineComponent, tt.pod, 1)
+
+			require.NotNil(t, status.ModelStatus.LastFailureInfo)
+			assert.Equal(t, tt.expectedReason, status.ModelStatus.LastFailureInfo.Reason)
+			assert.Contains(t, status.ModelStatus.LastFailureInfo.Message, tt.expectedMessageContains)
+			assert.Equal(t, tt.pod.Name, status.ModelStatus.LastFailureInfo.Location)
+
+			engineReady := status.GetCondition(v1beta1.EngineReady)
+			require.NotNil(t, engineReady)
+			assert.Equal(t, string(tt.expectedReason), engineReady.Reason)
+		})
+	}
 }
 
 func TestCheckContainerStatusesDoesNotUsePodLogsForStorageInitializer(t *testing.T) {

@@ -58,6 +58,9 @@ func (s *defaultSelector) SelectRuntime(ctx context.Context, model *v1beta1.Base
 		// Build detailed error with exclusion reasons
 		collection, _ := s.fetcher.FetchRuntimes(ctx, namespace)
 		excludedRuntimes := make(map[string]error)
+		var closestRuntime string
+		var closestReason string
+		closestScore := -1
 
 		// Check namespace runtimes
 		for _, rt := range collection.NamespaceRuntimes {
@@ -65,6 +68,11 @@ func (s *defaultSelector) SelectRuntime(ctx context.Context, model *v1beta1.Base
 				report, _ := s.matcher.GetCompatibilityDetails(&rt.Spec, model, isvc, rt.Name)
 				if report != nil && len(report.IncompatibilityReasons) > 0 {
 					excludedRuntimes[rt.Name] = fmt.Errorf("%s", report.IncompatibilityReasons[0])
+					if score := scoreClosestExcludedRuntime(report); score > closestScore || (score == closestScore && (closestRuntime == "" || rt.Name < closestRuntime)) {
+						closestRuntime = rt.Name
+						closestReason = report.IncompatibilityReasons[0]
+						closestScore = score
+					}
 				}
 			}
 		}
@@ -75,6 +83,11 @@ func (s *defaultSelector) SelectRuntime(ctx context.Context, model *v1beta1.Base
 				report, _ := s.matcher.GetCompatibilityDetails(&rt.Spec, model, isvc, rt.Name)
 				if report != nil && len(report.IncompatibilityReasons) > 0 {
 					excludedRuntimes[rt.Name] = fmt.Errorf("%s", report.IncompatibilityReasons[0])
+					if score := scoreClosestExcludedRuntime(report); score > closestScore || (score == closestScore && (closestRuntime == "" || rt.Name < closestRuntime)) {
+						closestRuntime = rt.Name
+						closestReason = report.IncompatibilityReasons[0]
+						closestScore = score
+					}
 				}
 			}
 		}
@@ -87,6 +100,8 @@ func (s *defaultSelector) SelectRuntime(ctx context.Context, model *v1beta1.Base
 			TotalRuntimes:      len(collection.NamespaceRuntimes) + len(collection.ClusterRuntimes),
 			NamespacedRuntimes: len(collection.NamespaceRuntimes),
 			ClusterRuntimes:    len(collection.ClusterRuntimes),
+			ClosestRuntime:     closestRuntime,
+			ClosestReason:      closestReason,
 		}
 	}
 
@@ -282,6 +297,25 @@ func (s *defaultSelector) sortMatches(matches []RuntimeMatch, model *v1beta1.Bas
 		comparison := s.scorer.CompareRuntimes(matches[i], matches[j], model)
 		return comparison > 0
 	})
+}
+
+func scoreClosestExcludedRuntime(report *CompatibilityReport) int {
+	if report == nil || len(report.IncompatibilityReasons) == 0 {
+		return -1
+	}
+	reason := report.IncompatibilityReasons[0]
+	switch categorizeExclusionReason(reason) {
+	case "size mismatch":
+		return 4
+	case "format mismatch":
+		return 3
+	case "accelerator mismatch":
+		return 2
+	case "disabled":
+		return 1
+	default:
+		return 0
+	}
 }
 
 // GetRuntime fetches a specific runtime by name.

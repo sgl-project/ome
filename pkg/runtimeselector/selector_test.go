@@ -913,6 +913,11 @@ func TestSelectRuntime_NoRuntimeFoundError_Details(t *testing.T) {
 	// Should have entries for both runtimes
 	assert.Contains(t, noRt.ExcludedRuntimes, "rt-wrong-format")
 	assert.Contains(t, noRt.ExcludedRuntimes, "rt-size-too-small")
+	assert.Equal(t, "rt-size-too-small", noRt.ClosestRuntime)
+	assert.Contains(t, noRt.Error(), "Excluded runtimes by reason")
+	assert.Contains(t, noRt.Error(), "format mismatch")
+	assert.Contains(t, noRt.Error(), "size mismatch")
+	assert.Contains(t, noRt.Error(), "Closest match: rt-size-too-small")
 }
 
 func TestValidateRuntime_DisabledAndNoAutoSelect(t *testing.T) {

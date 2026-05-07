@@ -202,7 +202,7 @@ const (
 )
 
 // FailureReason enum
-// +kubebuilder:validation:Enum=BaseModelNotReady;BaseModelNotFound;ModelLoadFailed;RuntimeUnhealthy;RuntimeDisabled;NoSupportingRuntime;RuntimeNotRecognized;InvalidPredictorSpec
+// +kubebuilder:validation:Enum=BaseModelNotReady;BaseModelNotFound;ModelLoadFailed;RuntimeUnhealthy;RuntimeDisabled;NoSupportingRuntime;RuntimeNotRecognized;InvalidPredictorSpec;InsufficientGPUMemory;TPExceedsGPUCount;ModelLoadTimeout;RuntimeImageNotFound;GPUConfigurationError;UnsupportedModelArchitecture
 type FailureReason string
 
 // FailureReason enum values
@@ -235,6 +235,19 @@ const (
 	FineTunedWeightsDeprecated FailureReason = "FineTunedWeightsDeprecated"
 	// FineTuneWeightLoadFailed fine-tuned weights load failed
 	FineTuneWeightLoadFailed FailureReason = "FineTuneWeightLoadFailed"
+
+	// InsufficientGPUMemory indicates the model container ran out of GPU memory while loading.
+	InsufficientGPUMemory FailureReason = "InsufficientGPUMemory"
+	// TPExceedsGPUCount indicates the runtime tensor parallel size requires more GPUs than the selected accelerator provides.
+	TPExceedsGPUCount FailureReason = "TPExceedsGPUCount"
+	// ModelLoadTimeout indicates model loading did not complete before startup timeout/probe failure.
+	ModelLoadTimeout FailureReason = "ModelLoadTimeout"
+	// RuntimeImageNotFound indicates the runtime image could not be pulled.
+	RuntimeImageNotFound FailureReason = "RuntimeImageNotFound"
+	// GPUConfigurationError indicates the runtime failed because of GPU configuration.
+	GPUConfigurationError FailureReason = "GPUConfigurationError"
+	// UnsupportedModelArchitecture indicates the selected runtime does not support the model architecture.
+	UnsupportedModelArchitecture FailureReason = "UnsupportedModelArchitecture"
 
 	// RouterInvalidSpec router has invalid spec
 	InvalidRouterSpec FailureReason = "InvalidRouterSpec"

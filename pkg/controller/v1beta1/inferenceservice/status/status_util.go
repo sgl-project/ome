@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -272,24 +273,18 @@ func (sr *StatusReconciler) checkContainerStatuses(status *v1beta1.InferenceServ
 			case cs.State.Running != nil:
 				sr.UpdateModelRevisionStates(status, v1beta1.Loading, totalCopies, nil)
 				return
-			case cs.State.Terminated != nil && cs.State.Terminated.Reason == constants.StateReasonError:
+			case isContainerImagePullFailure(cs):
 				message, exitCode, _ := sr.safeGetTerminationMessage(cs)
-				sr.UpdateModelRevisionStates(status, v1beta1.FailedToLoad, totalCopies, &v1beta1.FailureInfo{
-					Reason:   v1beta1.ModelLoadFailed,
-					Message:  message,
-					ExitCode: exitCode,
-				})
-				sr.updateComponentFailureCondition(status, component, message)
+				sr.recordContainerFailure(status, component, firstPod.Name, totalCopies, cs, message, exitCode)
+				return
+			case cs.State.Terminated != nil && (cs.State.Terminated.Reason == constants.StateReasonError || isContainerOOMTermination(cs, cs.State.Terminated.ExitCode)):
+				message, exitCode, _ := sr.safeGetTerminationMessage(cs)
+				sr.recordContainerFailure(status, component, firstPod.Name, totalCopies, cs, message, exitCode)
 				return
 			case cs.State.Waiting != nil && cs.State.Waiting.Reason == constants.StateReasonCrashLoopBackOff:
 				message, exitCode, hasTermination := sr.safeGetTerminationMessage(cs)
 				if hasTermination {
-					sr.UpdateModelRevisionStates(status, v1beta1.FailedToLoad, totalCopies, &v1beta1.FailureInfo{
-						Reason:   v1beta1.ModelLoadFailed,
-						Message:  message,
-						ExitCode: exitCode,
-					})
-					sr.updateComponentFailureCondition(status, component, message)
+					sr.recordContainerFailure(status, component, firstPod.Name, totalCopies, cs, message, exitCode)
 				}
 				return
 			}
@@ -301,23 +296,18 @@ func (sr *StatusReconciler) checkContainerStatuses(status *v1beta1.InferenceServ
 	for _, cs := range firstPod.Status.ContainerStatuses {
 		if cs.Name == constants.MainContainerName {
 			switch {
-			case cs.State.Terminated != nil && cs.State.Terminated.Reason == constants.StateReasonError:
+			case isContainerImagePullFailure(cs):
+				message, exitCode, _ := sr.safeGetTerminationMessage(cs)
+				sr.recordContainerFailure(status, component, firstPod.Name, totalCopies, cs, message, exitCode)
+			case cs.State.Terminated != nil && (cs.State.Terminated.Reason == constants.StateReasonError || isContainerOOMTermination(cs, cs.State.Terminated.ExitCode)):
 				message, exitCode, _ := sr.getContainerFailureMessage(firstPod, cs)
-				sr.UpdateModelRevisionStates(status, v1beta1.FailedToLoad, totalCopies, &v1beta1.FailureInfo{
-					Reason:   v1beta1.ModelLoadFailed,
-					Message:  message,
-					ExitCode: exitCode,
-				})
-				sr.updateComponentFailureCondition(status, component, message)
+				sr.recordContainerFailure(status, component, firstPod.Name, totalCopies, cs, message, exitCode)
 			case cs.State.Waiting != nil && cs.State.Waiting.Reason == constants.StateReasonCrashLoopBackOff:
 				message, exitCode, hasTermination := sr.getContainerFailureMessage(firstPod, cs)
 				if hasTermination {
-					sr.UpdateModelRevisionStates(status, v1beta1.FailedToLoad, totalCopies, &v1beta1.FailureInfo{
-						Reason:   v1beta1.ModelLoadFailed,
-						Message:  message,
-						ExitCode: exitCode,
-					})
-					sr.updateComponentFailureCondition(status, component, message)
+					sr.recordContainerFailure(status, component, firstPod.Name, totalCopies, cs, message, exitCode)
+				} else if startupProbeTimeoutExceeded(firstPod, cs.Name, time.Now()) {
+					sr.recordContainerFailure(status, component, firstPod.Name, totalCopies, cs, constants.ModelLoadTimeoutFailureMessage, 0)
 				} else {
 					sr.UpdateModelRevisionStates(status, v1beta1.Pending, totalCopies, nil)
 				}
@@ -326,6 +316,17 @@ func (sr *StatusReconciler) checkContainerStatuses(status *v1beta1.InferenceServ
 			}
 		}
 	}
+}
+
+func (sr *StatusReconciler) recordContainerFailure(status *v1beta1.InferenceServiceStatus, component v1beta1.ComponentType, podName string, totalCopies int, cs v1.ContainerStatus, message string, exitCode int32) {
+	reason, classifiedMessage := classifyContainerFailure(cs, message, exitCode)
+	sr.UpdateModelRevisionStates(status, v1beta1.FailedToLoad, totalCopies, &v1beta1.FailureInfo{
+		Location: podName,
+		Reason:   reason,
+		Message:  classifiedMessage,
+		ExitCode: exitCode,
+	})
+	sr.updateComponentFailureCondition(status, component, reason, classifiedMessage)
 }
 
 // safeGetTerminationMessage safely extracts termination message from container status
@@ -343,7 +344,7 @@ func (sr *StatusReconciler) safeGetTerminationMessage(cs v1.ContainerStatus) (me
 
 func (sr *StatusReconciler) getContainerFailureMessage(pod *v1.Pod, cs v1.ContainerStatus) (message string, exitCode int32, hasTermination bool) {
 	message, exitCode, hasTermination = sr.safeGetTerminationMessage(cs)
-	if message == constants.ModelLoadGPUOOMFailureMessage {
+	if isKnownRuntimeFailureMessage(message) {
 		return message, exitCode, true
 	}
 
@@ -363,7 +364,7 @@ func (sr *StatusReconciler) getContainerFailureMessage(pod *v1.Pod, cs v1.Contai
 	}
 
 	normalizedLogMessage := normalizeFailureMessage(logs)
-	if normalizedLogMessage == constants.ModelLoadGPUOOMFailureMessage {
+	if isKnownRuntimeFailureMessage(normalizedLogMessage) {
 		return normalizedLogMessage, exitCode, true
 	}
 
@@ -417,20 +418,157 @@ func normalizeFailureMessage(message string) string {
 	if strings.Contains(lowerMessage, constants.NotEnoughGPUMemoryMessage) || strings.Contains(lowerMessage, constants.CUDAOutOfMemoryMessage) {
 		return constants.ModelLoadGPUOOMFailureMessage
 	}
+	if strings.Contains(lowerMessage, constants.TensorParallelSizeMessage) || strings.Contains(lowerMessage, constants.TensorParallelSizeAltMessage) {
+		return constants.ModelLoadTPMismatchFailureMessage
+	}
+	if strings.Contains(lowerMessage, constants.StartupProbeFailureMessage) ||
+		(strings.Contains(lowerMessage, "startup probe") && strings.Contains(lowerMessage, "failed")) {
+		return constants.ModelLoadTimeoutFailureMessage
+	}
+	if strings.Contains(lowerMessage, constants.UnsupportedModelArchitectureMessage) && strings.Contains(lowerMessage, "not supported") {
+		if line := findFailureLine(cleaned, constants.UnsupportedModelArchitectureMessage); line != "" {
+			return line
+		}
+		return constants.UnsupportedArchitectureFailureMessage
+	}
 
 	return cleaned
 }
 
-func (sr *StatusReconciler) updateComponentFailureCondition(status *v1beta1.InferenceServiceStatus, component v1beta1.ComponentType, message string) {
-	if message != constants.ModelLoadGPUOOMFailureMessage {
+func classifyContainerFailure(cs v1.ContainerStatus, message string, exitCode int32) (v1beta1.FailureReason, string) {
+	if isContainerImagePullFailure(cs) {
+		if cs.State.Waiting != nil && strings.TrimSpace(cs.State.Waiting.Message) != "" {
+			return v1beta1.RuntimeImageNotFound, strings.TrimSpace(cs.State.Waiting.Message)
+		}
+		return v1beta1.RuntimeImageNotFound, constants.RuntimeImagePullFailureMessage
+	}
+
+	if isContainerOOMTermination(cs, exitCode) || message == constants.ModelLoadGPUOOMFailureMessage {
+		return v1beta1.InsufficientGPUMemory, constants.ModelLoadGPUOOMFailureMessage
+	}
+
+	switch {
+	case message == constants.ModelLoadTPMismatchFailureMessage:
+		return v1beta1.TPExceedsGPUCount, message
+	case message == constants.ModelLoadTimeoutFailureMessage:
+		return v1beta1.ModelLoadTimeout, message
+	case isUnsupportedArchitectureFailure(message):
+		return v1beta1.UnsupportedModelArchitecture, message
+	case isGPUConfigurationFailure(message):
+		return v1beta1.GPUConfigurationError, message
+	default:
+		return v1beta1.ModelLoadFailed, message
+	}
+}
+
+func isContainerImagePullFailure(cs v1.ContainerStatus) bool {
+	if cs.State.Waiting == nil {
+		return false
+	}
+	return cs.State.Waiting.Reason == constants.StateReasonImagePullBackOff ||
+		cs.State.Waiting.Reason == constants.StateReasonErrImagePull
+}
+
+func isContainerOOMTermination(cs v1.ContainerStatus, exitCode int32) bool {
+	if exitCode == 137 {
+		return true
+	}
+	if cs.State.Terminated != nil && (cs.State.Terminated.Reason == constants.StateReasonOOMKilled || cs.State.Terminated.ExitCode == 137) {
+		return true
+	}
+	return cs.LastTerminationState.Terminated != nil &&
+		(cs.LastTerminationState.Terminated.Reason == constants.StateReasonOOMKilled || cs.LastTerminationState.Terminated.ExitCode == 137)
+}
+
+func isKnownRuntimeFailureMessage(message string) bool {
+	return message == constants.ModelLoadGPUOOMFailureMessage ||
+		message == constants.ModelLoadTPMismatchFailureMessage ||
+		message == constants.ModelLoadTimeoutFailureMessage ||
+		isUnsupportedArchitectureFailure(message) ||
+		isGPUConfigurationFailure(message)
+}
+
+func startupProbeTimeoutExceeded(pod *v1.Pod, containerName string, now time.Time) bool {
+	if pod == nil || pod.Status.StartTime == nil {
+		return false
+	}
+
+	for _, container := range pod.Spec.Containers {
+		if container.Name != containerName {
+			continue
+		}
+		if container.StartupProbe == nil {
+			return false
+		}
+		return now.Sub(pod.Status.StartTime.Time) >= startupProbeFailureWindow(container.StartupProbe)
+	}
+	return false
+}
+
+func startupProbeFailureWindow(probe *v1.Probe) time.Duration {
+	if probe == nil {
+		return 0
+	}
+
+	initialDelaySeconds := probe.InitialDelaySeconds
+	periodSeconds := probe.PeriodSeconds
+	if periodSeconds == 0 {
+		periodSeconds = 10
+	}
+	failureThreshold := probe.FailureThreshold
+	if failureThreshold == 0 {
+		failureThreshold = 3
+	}
+	timeoutSeconds := probe.TimeoutSeconds
+	if timeoutSeconds == 0 {
+		timeoutSeconds = 1
+	}
+
+	return time.Duration(initialDelaySeconds+failureThreshold*periodSeconds+timeoutSeconds) * time.Second
+}
+
+func isUnsupportedArchitectureFailure(message string) bool {
+	lowerMessage := strings.ToLower(message)
+	return strings.Contains(lowerMessage, constants.UnsupportedModelArchitectureMessage) &&
+		strings.Contains(lowerMessage, "not supported")
+}
+
+func isGPUConfigurationFailure(message string) bool {
+	lowerMessage := strings.ToLower(message)
+	return strings.Contains(lowerMessage, "cuda device") ||
+		strings.Contains(lowerMessage, "cuda devices") ||
+		strings.Contains(lowerMessage, "no cuda gpus") ||
+		strings.Contains(lowerMessage, "gpu configuration")
+}
+
+func findFailureLine(message, needle string) string {
+	for _, line := range strings.Split(message, "\n") {
+		cleaned := strings.TrimSpace(line)
+		if strings.Contains(strings.ToLower(cleaned), needle) {
+			return cleaned
+		}
+	}
+	return ""
+}
+
+func (sr *StatusReconciler) updateComponentFailureCondition(status *v1beta1.InferenceServiceStatus, component v1beta1.ComponentType, reason v1beta1.FailureReason, message string) {
+	if reason == v1beta1.ModelLoadFailed {
 		return
+	}
+
+	conditionMessage := message
+	if reason == v1beta1.InsufficientGPUMemory {
+		conditionMessage = constants.InsufficientGPUMemoryMessage
+	}
+	if conditionMessage == "" {
+		conditionMessage = string(reason)
 	}
 
 	readyCondition := sr.getReadyConditionsMap()[component]
 	sr.setCondition(status, readyCondition, &apis.Condition{
 		Type:    readyCondition,
 		Status:  v1.ConditionFalse,
-		Reason:  constants.InsufficientGPUMemoryReason,
-		Message: constants.InsufficientGPUMemoryMessage,
+		Reason:  string(reason),
+		Message: conditionMessage,
 	})
 }

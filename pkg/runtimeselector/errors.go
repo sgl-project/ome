@@ -2,6 +2,7 @@ package runtimeselector
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -38,6 +39,8 @@ type NoRuntimeFoundError struct {
 	TotalRuntimes      int
 	NamespacedRuntimes int
 	ClusterRuntimes    int
+	ClosestRuntime     string
+	ClosestReason      string
 }
 
 // Error implements the error interface.
@@ -53,15 +56,74 @@ func (e *NoRuntimeFoundError) Error() string {
 	}
 
 	if len(e.ExcludedRuntimes) > 0 {
-		sb.WriteString(". Excluded runtimes: ")
-		var excluded []string
-		for name, reason := range e.ExcludedRuntimes {
-			excluded = append(excluded, fmt.Sprintf("%s (%v)", name, reason))
+		sb.WriteString(". Excluded runtimes by reason: ")
+		categoryMap := make(map[string][]string)
+		for _, name := range sortedRuntimeNames(e.ExcludedRuntimes) {
+			reason := e.ExcludedRuntimes[name]
+			category := categorizeExclusionReason(reason.Error())
+			categoryMap[category] = append(categoryMap[category], fmt.Sprintf("%s (%v)", name, reason))
 		}
-		sb.WriteString(strings.Join(excluded, "; "))
+		sb.WriteString(formatCategorizedExclusions(categoryMap))
+	}
+
+	if e.ClosestRuntime != "" {
+		sb.WriteString(fmt.Sprintf(". Closest match: %s", e.ClosestRuntime))
+		if e.ClosestReason != "" {
+			sb.WriteString(fmt.Sprintf(" (excluded because %s)", e.ClosestReason))
+		}
 	}
 
 	return sb.String()
+}
+
+func sortedRuntimeNames(excluded map[string]error) []string {
+	names := make([]string, 0, len(excluded))
+	for name := range excluded {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func formatCategorizedExclusions(categoryMap map[string][]string) string {
+	categoryOrder := []string{
+		"accelerator mismatch",
+		"format mismatch",
+		"size mismatch",
+		"disabled",
+		"other",
+	}
+
+	var groups []string
+	for _, category := range categoryOrder {
+		exclusions := categoryMap[category]
+		if len(exclusions) == 0 {
+			continue
+		}
+		sort.Strings(exclusions)
+		groups = append(groups, fmt.Sprintf("%s: %s", category, strings.Join(exclusions, "; ")))
+	}
+	return strings.Join(groups, "; ")
+}
+
+func categorizeExclusionReason(reason string) string {
+	lowerReason := strings.ToLower(reason)
+	switch {
+	case strings.Contains(lowerReason, "accelerator"):
+		return "accelerator mismatch"
+	case strings.Contains(lowerReason, "format") ||
+		strings.Contains(lowerReason, "architecture") ||
+		strings.Contains(lowerReason, "quantization") ||
+		strings.Contains(lowerReason, "framework") ||
+		strings.Contains(lowerReason, "pipeline"):
+		return "format mismatch"
+	case strings.Contains(lowerReason, "model size"):
+		return "size mismatch"
+	case strings.Contains(lowerReason, "disabled"):
+		return "disabled"
+	default:
+		return "other"
+	}
 }
 
 // RuntimeNotFoundError indicates that a specified runtime doesn't exist.

@@ -472,6 +472,9 @@ const (
 	StateReasonCompleted        = "Completed"
 	StateReasonError            = "Error"
 	StateReasonCrashLoopBackOff = "CrashLoopBackOff"
+	StateReasonOOMKilled        = "OOMKilled"
+	StateReasonImagePullBackOff = "ImagePullBackOff"
+	StateReasonErrImagePull     = "ErrImagePull"
 )
 
 // Container log / termination message parsing
@@ -480,11 +483,19 @@ var (
 )
 
 const (
-	NotEnoughGPUMemoryMessage     = "not enough gpu memory"
-	CUDAOutOfMemoryMessage        = "cuda out of memory"
-	ModelLoadGPUOOMFailureMessage = "Model failed to load: not enough GPU memory"
-	InsufficientGPUMemoryReason   = "InsufficientGPUMemory"
-	InsufficientGPUMemoryMessage  = "Insufficient GPU memory to run the model container"
+	NotEnoughGPUMemoryMessage             = "not enough gpu memory"
+	CUDAOutOfMemoryMessage                = "cuda out of memory"
+	TensorParallelSizeMessage             = "tensor_parallel_size"
+	TensorParallelSizeAltMessage          = "tp_size must be"
+	StartupProbeFailureMessage            = "startup probe failed"
+	UnsupportedModelArchitectureMessage   = "model architecture"
+	ModelLoadGPUOOMFailureMessage         = "Model failed to load: not enough GPU memory"
+	ModelLoadTPMismatchFailureMessage     = "Model failed to load: tensor parallel size exceeds available GPU count"
+	ModelLoadTimeoutFailureMessage        = "Model failed to load before startup probe completed"
+	RuntimeImagePullFailureMessage        = "Runtime image could not be pulled"
+	UnsupportedArchitectureFailureMessage = "Model architecture is not supported by the selected runtime"
+	InsufficientGPUMemoryReason           = "InsufficientGPUMemory"
+	InsufficientGPUMemoryMessage          = "Insufficient GPU memory to run the model container"
 )
 
 // CRD Kinds

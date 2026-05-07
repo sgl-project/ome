@@ -33,12 +33,12 @@ func (m *DefaultRuntimeMatcher) IsCompatible(runtime *v1beta1.ServingRuntimeSpec
 	}
 
 	// Check accelerator class compatibility
-	if !m.compareAcceleratorClass(runtime, isvc) {
+	if mismatched, reason := m.acceleratorClassMismatch(runtime, isvc); mismatched {
 		return false, &RuntimeCompatibilityError{
 			RuntimeName: runtimeName,
 			ModelName:   "", // Will be filled by caller if available
 			ModelFormat: model.ModelFormat.Name,
-			Reason:      "runtime does not support the required accelerator class",
+			Reason:      reason,
 		}
 	}
 	// Check if any supported format matches
@@ -75,9 +75,8 @@ func (m *DefaultRuntimeMatcher) GetCompatibilityDetails(runtime *v1beta1.Serving
 	}
 
 	// Check if accelerator class is compatible
-	if !m.compareAcceleratorClass(runtime, isvc) {
-		report.IncompatibilityReasons = append(report.IncompatibilityReasons,
-			"runtime does not support the required accelerator class")
+	if mismatched, reason := m.acceleratorClassMismatch(runtime, isvc); mismatched {
+		report.IncompatibilityReasons = append(report.IncompatibilityReasons, reason)
 		return report, nil
 	}
 
@@ -98,8 +97,8 @@ func (m *DefaultRuntimeMatcher) GetCompatibilityDetails(runtime *v1beta1.Serving
 	if !formatSupported {
 		if len(formatMismatchReasons) > 0 {
 			report.IncompatibilityReasons = append(report.IncompatibilityReasons,
-				fmt.Sprintf("model format '%s' not in supported formats: %s",
-					getModelFormatLabel(model), strings.Join(formatMismatchReasons, "; ")))
+				fmt.Sprintf("model format '%s' not in supported formats. Runtime supports: %s. Mismatches: %s",
+					getModelFormatLabel(model), formatStringList(getSupportedFormatLabels(runtime)), strings.Join(formatMismatchReasons, "; ")))
 		} else {
 			report.IncompatibilityReasons = append(report.IncompatibilityReasons,
 				fmt.Sprintf("model format '%s' not in supported formats: no supported formats defined",
@@ -116,8 +115,8 @@ func (m *DefaultRuntimeMatcher) GetCompatibilityDetails(runtime *v1beta1.Serving
 
 		if modelSize < minSize || modelSize > maxSize {
 			report.IncompatibilityReasons = append(report.IncompatibilityReasons,
-				fmt.Sprintf("model size %s is outside supported range [%s, %s]",
-					*model.ModelParameterSize, *runtime.ModelSizeRange.Min, *runtime.ModelSizeRange.Max))
+				fmt.Sprintf("model size %s is outside supported range [%s, %s] for runtime %s",
+					*model.ModelParameterSize, *runtime.ModelSizeRange.Min, *runtime.ModelSizeRange.Max, runtimeName))
 			report.MatchDetails.SizeMatch = false
 			return report, nil
 		}
@@ -258,44 +257,65 @@ func (m *DefaultRuntimeMatcher) evaluateFormatMatch(model *v1beta1.BaseModelSpec
 
 // compareAcceleratorClass checks if the runtime supports the required accelerator class.
 func (m *DefaultRuntimeMatcher) compareAcceleratorClass(runtime *v1beta1.ServingRuntimeSpec, isvc *v1beta1.InferenceService) bool {
+	mismatched, _ := m.acceleratorClassMismatch(runtime, isvc)
+	return !mismatched
+}
+
+func (m *DefaultRuntimeMatcher) acceleratorClassMismatch(runtime *v1beta1.ServingRuntimeSpec, isvc *v1beta1.InferenceService) (bool, string) {
 	// if inferenceService is nil, we assume no accelerator requirement
 	if isvc == nil {
-		return true
+		return false, ""
 	}
 
-	// Collect all unique accelerator requirements from the InferenceService
-	requiredClasses := make(map[string]struct{})
-	if class, ok := isvc.Annotations["ome.io/accelerator-class"]; ok {
-		requiredClasses[class] = struct{}{}
-	}
-	if isvc.Spec.AcceleratorSelector != nil && isvc.Spec.AcceleratorSelector.AcceleratorClass != nil {
-		requiredClasses[*isvc.Spec.AcceleratorSelector.AcceleratorClass] = struct{}{}
-	}
-	if isvc.Spec.Engine != nil && isvc.Spec.Engine.AcceleratorOverride != nil && isvc.Spec.Engine.AcceleratorOverride.AcceleratorClass != nil {
-		requiredClasses[*isvc.Spec.Engine.AcceleratorOverride.AcceleratorClass] = struct{}{}
-	}
-	if isvc.Spec.Decoder != nil && isvc.Spec.Decoder.AcceleratorOverride != nil && isvc.Spec.Decoder.AcceleratorOverride.AcceleratorClass != nil {
-		requiredClasses[*isvc.Spec.Decoder.AcceleratorOverride.AcceleratorClass] = struct{}{}
-	}
+	requiredClasses := collectRequiredAcceleratorClasses(isvc)
 
 	// If ISVC has no accelerator requirements, it's compatible from this perspective.
 	if len(requiredClasses) == 0 {
-		return true
+		return false, ""
 	}
 
 	// If ISVC has requirements, the runtime must support them.
 	if runtime.AcceleratorRequirements == nil || len(runtime.AcceleratorRequirements.AcceleratorClasses) == 0 {
-		return false // Runtime supports no accelerators, but ISVC requires one.
+		return true, fmt.Sprintf("accelerator mismatch: required accelerator class(es) %s requested by InferenceService, but runtime supports no accelerator classes",
+			formatStringList(requiredClasses))
 	}
 
 	supportedClasses := runtime.AcceleratorRequirements.AcceleratorClasses
-	for reqClass := range requiredClasses {
+	var unsupported []string
+	for _, reqClass := range requiredClasses {
 		if !slices.Contains(supportedClasses, reqClass) {
-			return false
+			unsupported = append(unsupported, reqClass)
 		}
 	}
+	if len(unsupported) > 0 {
+		return true, fmt.Sprintf("accelerator mismatch: required accelerator class(es) %s requested by InferenceService, but runtime only supports %s",
+			formatStringList(unsupported), formatStringList(supportedClasses))
+	}
 
-	return true
+	return false, ""
+}
+
+func collectRequiredAcceleratorClasses(isvc *v1beta1.InferenceService) []string {
+	requiredClasses := make(map[string]struct{})
+	if class, ok := isvc.Annotations["ome.io/accelerator-class"]; ok && class != "" {
+		requiredClasses[class] = struct{}{}
+	}
+	if isvc.Spec.AcceleratorSelector != nil && isvc.Spec.AcceleratorSelector.AcceleratorClass != nil && *isvc.Spec.AcceleratorSelector.AcceleratorClass != "" {
+		requiredClasses[*isvc.Spec.AcceleratorSelector.AcceleratorClass] = struct{}{}
+	}
+	if isvc.Spec.Engine != nil && isvc.Spec.Engine.AcceleratorOverride != nil && isvc.Spec.Engine.AcceleratorOverride.AcceleratorClass != nil && *isvc.Spec.Engine.AcceleratorOverride.AcceleratorClass != "" {
+		requiredClasses[*isvc.Spec.Engine.AcceleratorOverride.AcceleratorClass] = struct{}{}
+	}
+	if isvc.Spec.Decoder != nil && isvc.Spec.Decoder.AcceleratorOverride != nil && isvc.Spec.Decoder.AcceleratorOverride.AcceleratorClass != nil && *isvc.Spec.Decoder.AcceleratorOverride.AcceleratorClass != "" {
+		requiredClasses[*isvc.Spec.Decoder.AcceleratorOverride.AcceleratorClass] = struct{}{}
+	}
+
+	classes := make([]string, 0, len(requiredClasses))
+	for class := range requiredClasses {
+		classes = append(classes, class)
+	}
+	slices.Sort(classes)
+	return classes
 }
 
 // compareSupportedModelFormats checks if a model matches a supported format.
@@ -632,8 +652,8 @@ func (m *DefaultRuntimeMatcher) checkModelSize(runtime *v1beta1.ServingRuntimeSp
 			RuntimeName: runtimeName,
 			ModelName:   "", // Will be filled by caller if available
 			ModelFormat: model.ModelFormat.Name,
-			Reason: fmt.Sprintf("model size %s is outside supported range [%s, %s]",
-				*model.ModelParameterSize, *runtime.ModelSizeRange.Min, *runtime.ModelSizeRange.Max),
+			Reason: fmt.Sprintf("model size %s is outside supported range [%s, %s] for runtime %s",
+				*model.ModelParameterSize, *runtime.ModelSizeRange.Min, *runtime.ModelSizeRange.Max, runtimeName),
 		}
 	}
 
@@ -693,4 +713,45 @@ func getModelFormatLabel(model *v1beta1.BaseModelSpec) string {
 		}
 	}
 	return label
+}
+
+func getSupportedFormatLabels(runtime *v1beta1.ServingRuntimeSpec) []string {
+	labels := make([]string, 0, len(runtime.SupportedModelFormats))
+	for _, format := range runtime.SupportedModelFormats {
+		labels = append(labels, getSupportedFormatLabel(format))
+	}
+	slices.Sort(labels)
+	return labels
+}
+
+func getSupportedFormatLabel(format v1beta1.SupportedModelFormat) string {
+	label := "mt:<unspecified>"
+	if format.ModelFormat != nil {
+		label = "mt:" + format.ModelFormat.Name
+		if format.ModelFormat.Version != nil {
+			label += ":" + *format.ModelFormat.Version
+		}
+	}
+	if format.ModelArchitecture != nil {
+		label += ":" + *format.ModelArchitecture
+	}
+	if format.Quantization != nil {
+		label += ":" + string(*format.Quantization)
+	}
+	if format.ModelFramework != nil {
+		label += ":" + format.ModelFramework.Name
+		if format.ModelFramework.Version != nil {
+			label += ":" + *format.ModelFramework.Version
+		}
+	}
+	return label
+}
+
+func formatStringList(values []string) string {
+	if len(values) == 0 {
+		return "[]"
+	}
+	sorted := append([]string(nil), values...)
+	slices.Sort(sorted)
+	return "[" + strings.Join(sorted, ", ") + "]"
 }

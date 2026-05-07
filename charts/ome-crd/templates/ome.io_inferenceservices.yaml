@@ -36404,6 +36404,12 @@ spec:
                             - NoSupportingRuntime
                             - RuntimeNotRecognized
                             - InvalidPredictorSpec
+                            - InsufficientGPUMemory
+                            - TPExceedsGPUCount
+                            - ModelLoadTimeout
+                            - RuntimeImageNotFound
+                            - GPUConfigurationError
+                            - UnsupportedModelArchitecture
                           type: string
                         time:
                           format: date-time

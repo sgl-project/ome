@@ -848,6 +848,9 @@ func TestGetCompatibilityDetails_AcceleratorClasses(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, report.IsCompatible)
 		assert.NotEmpty(t, report.IncompatibilityReasons)
+		assert.Contains(t, report.IncompatibilityReasons[0], "H100")
+		assert.Contains(t, report.IncompatibilityReasons[0], "nvidia-a100")
+		assert.Contains(t, report.IncompatibilityReasons[0], "nvidia-tesla-t4")
 		found := false
 		for _, r := range report.IncompatibilityReasons {
 			if strings.Contains(r, "required accelerator class") {
@@ -1425,6 +1428,8 @@ func TestGetCompatibilityDetails_DetailedFormatMismatch(t *testing.T) {
 		assert.Contains(t, report.IncompatibilityReasons[0], "architecture mismatch")
 		assert.Contains(t, report.IncompatibilityReasons[0], "LlamaForCausalLM")
 		assert.Contains(t, report.IncompatibilityReasons[0], "MistralForCausalLM")
+		assert.Contains(t, report.IncompatibilityReasons[0], "Runtime supports")
+		assert.Contains(t, report.IncompatibilityReasons[0], "mt:safetensors:1.0.0:MistralForCausalLM")
 	})
 
 	t.Run("empty supported formats provides clear reason", func(t *testing.T) {
