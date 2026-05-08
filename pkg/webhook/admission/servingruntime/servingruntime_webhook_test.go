@@ -2,16 +2,19 @@ package servingruntime
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/onsi/gomega"
 	"google.golang.org/protobuf/proto"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
@@ -1194,7 +1197,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 			},
 			expected: gomega.BeNil(),
 		},
-		"When priority is nil in both serving runtime then it should return nil": {
+		"When priority is nil in both serving runtimes it should collide (nil defaults to 1)": {
 			newServingRuntime: &v1beta1.ServingRuntime{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "example-runtime-1",
@@ -1263,9 +1266,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 				},
 			},
-			expected: gomega.BeNil(),
+			expected: gomega.Equal(fmt.Errorf(InvalidPriorityError, "vllm")),
 		},
-		"When priority is nil in new serving runtime and priority is specified in existing serving runtime then it should return nil": {
+		"When priority is nil in new serving runtime and priority is 1 in existing it should collide": {
 			newServingRuntime: &v1beta1.ServingRuntime{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "example-runtime-1",
@@ -1335,9 +1338,9 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 				},
 			},
-			expected: gomega.BeNil(),
+			expected: gomega.Equal(fmt.Errorf(InvalidPriorityError, "vllm")),
 		},
-		"When priority is nil in existing serving runtime and priority is specified in new serving runtime then it should return nil": {
+		"When priority is nil in existing serving runtime and priority is 1 in new it should collide": {
 			newServingRuntime: &v1beta1.ServingRuntime{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "example-runtime-1",
@@ -1407,7 +1410,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					},
 				},
 			},
-			expected: gomega.BeNil(),
+			expected: gomega.Equal(fmt.Errorf(InvalidPriorityError, "vllm")),
 		},
 	}
 
@@ -1681,6 +1684,88 @@ func TestValidateModelFormatPrioritySame(t *testing.T) {
 							Name:       "vllm",
 							AutoSelect: proto.Bool(true),
 							Priority:   proto.Int32(2),
+						},
+					},
+					Disabled: proto.Bool(false),
+					ProtocolVersions: []constants.InferenceServiceProtocol{
+						constants.OpenAIProtocol,
+						constants.OpenAIProtocol,
+					},
+					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  constants.MainContainerName,
+								Image: "ome/vllm:latest",
+								Args: []string{
+									"--model_name={{.Name}}",
+									"--model_dir=/mnt/models",
+									"--http_port=8080",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: gomega.BeNil(),
+		},
+		"When one priority is nil and the other is explicit non-1 for the same model format it should error (nil defaults to 1)": {
+			newServingRuntime: &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "example-runtime-1",
+					Namespace: "test",
+				},
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							Name:       "vllm",
+							AutoSelect: proto.Bool(true),
+							Priority:   nil,
+						},
+						{
+							Name:       "vllm",
+							AutoSelect: proto.Bool(true),
+							Priority:   proto.Int32(2),
+						},
+					},
+					Disabled: proto.Bool(false),
+					ProtocolVersions: []constants.InferenceServiceProtocol{
+						constants.OpenAIProtocol,
+						constants.OpenAIProtocol,
+					},
+					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  constants.MainContainerName,
+								Image: "ome/vllm:latest",
+								Args: []string{
+									"--model_name={{.Name}}",
+									"--model_dir=/mnt/models",
+									"--http_port=8080",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: gomega.Equal(fmt.Errorf(PriorityIsNotSameError, "vllm")),
+		},
+		"When one priority is nil and the other is explicit 1 for the same model format it should return nil (nil defaults to 1)": {
+			newServingRuntime: &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "example-runtime-1",
+					Namespace: "test",
+				},
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							Name:       "vllm",
+							AutoSelect: proto.Bool(true),
+							Priority:   nil,
+						},
+						{
+							Name:       "vllm",
+							AutoSelect: proto.Bool(true),
+							Priority:   proto.Int32(1),
 						},
 					},
 					Disabled: proto.Bool(false),
@@ -2198,4 +2283,118 @@ func TestValidateAcceleratorClasses(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestServingRuntimeValidator_Handle_CrossScopeOverlapAllowed(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = v1beta1.AddToScheme(scheme)
+
+	makeSpec := func(priority *int32) v1beta1.ServingRuntimeSpec {
+		return v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{{
+				Name:       "vllm",
+				Version:    proto.String("1"),
+				AutoSelect: proto.Bool(true),
+				Priority:   priority,
+			}},
+			Disabled: proto.Bool(false),
+			ProtocolVersions: []constants.InferenceServiceProtocol{
+				constants.OpenAIProtocol,
+			},
+			ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+				Containers: []corev1.Container{{
+					Name:  constants.MainContainerName,
+					Image: "ome/vllm:latest",
+				}},
+			},
+		}
+	}
+
+	cases := map[string]struct {
+		existingCSRPriority *int32
+		newSRPriority       *int32
+	}{
+		"explicit equal priorities allowed across scopes": {proto.Int32(1), proto.Int32(1)},
+		"nil vs explicit 1 allowed across scopes":         {nil, proto.Int32(1)},
+		"both nil allowed across scopes":                  {nil, nil},
+		"different priorities allowed across scopes":      {proto.Int32(1), proto.Int32(2)},
+		"different non-default priorities allowed":        {proto.Int32(2), proto.Int32(3)},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			g := gomega.NewGomegaWithT(t)
+
+			existingCSR := &v1beta1.ClusterServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{Name: "existing-csr"},
+				Spec:       makeSpec(tc.existingCSRPriority),
+			}
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(existingCSR).
+				Build()
+
+			validator := &ServingRuntimeValidator{
+				Client:  fakeClient,
+				Decoder: admission.NewDecoder(scheme),
+			}
+
+			newSR := &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{Name: "new-sr", Namespace: "test"},
+				Spec:       makeSpec(tc.newSRPriority),
+			}
+			raw, err := json.Marshal(newSR)
+			g.Expect(err).ToNot(gomega.HaveOccurred())
+
+			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+				Operation: admissionv1.Create,
+				Object:    runtime.RawExtension{Raw: raw},
+			}}
+
+			resp := validator.Handle(context.Background(), req)
+			g.Expect(resp.Allowed).To(gomega.BeTrue(), "cross-scope overlaps must be admitted")
+		})
+	}
+}
+
+func TestServingRuntimeValidator_Handle_SameNameAcrossScopesAllowed(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	scheme := runtime.NewScheme()
+	_ = v1beta1.AddToScheme(scheme)
+
+	spec := v1beta1.ServingRuntimeSpec{
+		SupportedModelFormats: []v1beta1.SupportedModelFormat{{
+			Name:       "vllm",
+			Version:    proto.String("1"),
+			AutoSelect: proto.Bool(true),
+			Priority:   proto.Int32(1),
+		}},
+		Disabled: proto.Bool(false),
+		ProtocolVersions: []constants.InferenceServiceProtocol{
+			constants.OpenAIProtocol,
+		},
+		ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+			Containers: []corev1.Container{{Name: constants.MainContainerName, Image: "ome/vllm:latest"}},
+		},
+	}
+
+	existingCSR := &v1beta1.ClusterServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "vllm-runtime"},
+		Spec:       spec,
+	}
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingCSR).Build()
+	validator := &ServingRuntimeValidator{Client: fakeClient, Decoder: admission.NewDecoder(scheme)}
+
+	// Same name as the CSR but different scope.
+	newSR := &v1beta1.ServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "vllm-runtime", Namespace: "test"},
+		Spec:       spec,
+	}
+	raw, err := json.Marshal(newSR)
+	g.Expect(err).ToNot(gomega.HaveOccurred())
+
+	resp := validator.Handle(context.Background(), admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Create, Object: runtime.RawExtension{Raw: raw}},
+	})
+	g.Expect(resp.Allowed).To(gomega.BeTrue(), "same-name SR and CSR are distinct objects in distinct scopes; admission must allow")
 }
