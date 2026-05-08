@@ -84,6 +84,36 @@ func TestLoadModelWithMistral(t *testing.T) {
 	t.Logf("Mistral model parameter count via generic loader: %s", FormatParamCount(paramCount))
 }
 
+// TestMistralConfigNoArchitectures verifies that when the Architectures field
+// is missing from config.json, GetArchitecture() returns an empty string rather
+// than a misleading fallback like "MistralModel" which would cause the model to
+// be misclassified as an embedding model by the config parser.
+// Regression test for https://github.com/ome-projects/ome/issues/601
+func TestMistralConfigNoArchitectures(t *testing.T) {
+	configPath := filepath.Join("testdata", "mistral_no_architectures.json")
+
+	config, err := LoadModelConfig(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load Mistral config without architectures: %v", err)
+	}
+
+	// GetArchitecture must return empty string when Architectures is absent
+	arch := config.GetArchitecture()
+	if arch != "" {
+		t.Errorf("Expected empty architecture when Architectures field is missing, got '%s'", arch)
+	}
+
+	// IsEmbedding must return false for a generic Mistral model
+	if config.IsEmbedding() {
+		t.Error("Expected IsEmbedding() to return false for a generic Mistral model without explicit embedding architecture")
+	}
+
+	// Verify it's still recognized as a Mistral model
+	if config.GetModelType() != "mistral" {
+		t.Errorf("Expected model type 'mistral', got '%s'", config.GetModelType())
+	}
+}
+
 func TestMistralInstructConfig(t *testing.T) {
 	configPath := filepath.Join("testdata", "mistral_7b_instruct.json")
 
