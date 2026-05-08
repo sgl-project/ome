@@ -1471,9 +1471,9 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 	}
 }
 
-// TestHighPriorityClusterRuntimeBeatsLowerPriorityNamespace verifies that
-// a cluster-scoped runtime with a higher priority beats a namespace-scoped runtime with a lower priority
-func TestHighPriorityClusterRuntimeBeatsLowerPriorityNamespace(t *testing.T) {
+// TestNamespaceRuntimeOverridesClusterRuntime verifies that a namespace-scoped
+// runtime hard-overrides a cluster-scoped runtime within the namespace
+func TestNamespaceRuntimeOverridesClusterRuntime(t *testing.T) {
 	fakeClient := createFakeClient()
 	ctx := context.Background()
 
@@ -1506,8 +1506,8 @@ func TestHighPriorityClusterRuntimeBeatsLowerPriorityNamespace(t *testing.T) {
 
 	selected, err := selector.SelectRuntime(ctx, model, isvc)
 	assert.NoError(t, err)
-	assert.Equal(t, "csr-high", selected.Name, "higher priority must win over lower-priority namespace runtime")
-	assert.True(t, selected.IsCluster)
+	assert.Equal(t, "sr-low", selected.Name, "namespace runtime must override cluster runtime regardless of priority")
+	assert.False(t, selected.IsCluster)
 }
 
 // TestScorerRejectsVersionAsymmetry mirrors the matcher's strict rejection when

@@ -82,7 +82,10 @@ type MatchDetails struct {
 	// Priority is the runtime's priority for this model format
 	Priority int32
 
-	// Weight is the total weight used in scoring
+	// Weight is the total weight used in scoring.
+	//
+	// Deprecated: no longer consulted by the scorer; runtime selection uses
+	// Priority only. Will be removed in a future major version.
 	Weight int64
 
 	// AutoSelectEnabled indicates if this runtime can be auto-selected
@@ -164,10 +167,18 @@ type Config struct {
 	// DefaultPriority is used when a runtime doesn't specify priority
 	DefaultPriority int32
 
-	// ModelFormatWeight is the default weight for model format matching
+	// ModelFormatWeight is no longer used by the scorer; runtime selection is
+	// driven strictly by Priority. Retained for backwards compatibility and
+	// will be removed in a future major version.
+	//
+	// Deprecated: no longer applied; runtime selection uses Priority only.
 	ModelFormatWeight int64
 
-	// ModelFrameworkWeight is the default weight for model framework matching
+	// ModelFrameworkWeight is no longer used by the scorer; runtime selection
+	// is driven strictly by Priority. Retained for backwards compatibility and
+	// will be removed in a future major version.
+	//
+	// Deprecated: no longer applied; runtime selection uses Priority only.
 	ModelFrameworkWeight int64
 }
 

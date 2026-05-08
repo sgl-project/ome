@@ -127,8 +127,8 @@ func (s *defaultSelector) GetCompatibleRuntimes(ctx context.Context, model *v1be
 		}
 	}
 
-	// Sort globally so that scope is only a tie-breaker
-	// (CompareRuntimes orders by priority -> scope -> size -> name)
+	// Sort globally
+	// CompareRuntimes orders by scope -> priority -> size -> name.
 	s.sortMatches(matches, model)
 
 	logger.Info("Found compatible runtimes",

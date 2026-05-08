@@ -62,22 +62,22 @@ func (s *DefaultRuntimeScorer) CalculateScore(runtime *v1beta1.ServingRuntimeSpe
 // Returns positive if r1 is better, negative if r2 is better, 0 if equal.
 //
 // Tie-breaking order (strict):
-//  1. Priority (higher wins).
-//  2. Scope (namespace-scoped beats cluster-scoped).
+//  1. Scope (namespace-scoped beats cluster-scoped)
+//  2. Priority (higher wins)
 //  3. Model size proximity (closer to the model size wins).
 //  4. Name (alphabetical, deterministic).
 func (s *DefaultRuntimeScorer) CompareRuntimes(r1, r2 RuntimeMatch, model *v1beta1.BaseModelSpec) int {
-	// First, compare by score
-	if r1.Score != r2.Score {
-		return int(r1.Score - r2.Score)
-	}
-
-	// If scores are equal, prefer namespace-scoped runtimes over cluster-scoped
+	// Prefer namespace-scoped runtimes over cluster-scoped
 	if r1.IsCluster != r2.IsCluster {
 		if r1.IsCluster {
 			return -1 // r2 is namespace-scoped, prefer it
 		}
 		return 1 // r1 is namespace-scoped, prefer it
+	}
+
+	// Within the same scope, compare by priority (Score is the priority).
+	if r1.Score != r2.Score {
+		return int(r1.Score - r2.Score)
 	}
 
 	// If still equal, compare by model size range if available
