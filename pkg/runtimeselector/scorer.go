@@ -63,8 +63,8 @@ func (s *DefaultRuntimeScorer) CalculateScore(runtime *v1beta1.ServingRuntimeSpe
 //
 // Tie-breaking order (strict):
 //  1. Priority (higher wins).
-//  2. Model size proximity (closer to the model size wins).
-//  3. Scope (namespace-scoped beats cluster-scoped).
+//  2. Scope (namespace-scoped beats cluster-scoped).
+//  3. Model size proximity (closer to the model size wins).
 //  4. Name (alphabetical, deterministic).
 func (s *DefaultRuntimeScorer) CompareRuntimes(r1, r2 RuntimeMatch, model *v1beta1.BaseModelSpec) int {
 	// First, compare by score
@@ -72,7 +72,15 @@ func (s *DefaultRuntimeScorer) CompareRuntimes(r1, r2 RuntimeMatch, model *v1bet
 		return int(r1.Score - r2.Score)
 	}
 
-	// If scores are equal, compare by model size range if available
+	// If scores are equal, prefer namespace-scoped runtimes over cluster-scoped
+	if r1.IsCluster != r2.IsCluster {
+		if r1.IsCluster {
+			return -1 // r2 is namespace-scoped, prefer it
+		}
+		return 1 // r1 is namespace-scoped, prefer it
+	}
+
+	// If still equal, compare by model size range if available
 	if model.ModelParameterSize != nil {
 		r1SizeScore := s.calculateSizeScore(r1, model)
 		r2SizeScore := s.calculateSizeScore(r2, model)
@@ -81,14 +89,6 @@ func (s *DefaultRuntimeScorer) CompareRuntimes(r1, r2 RuntimeMatch, model *v1bet
 			// Lower score is better (closer to model size)
 			return int(r2SizeScore - r1SizeScore)
 		}
-	}
-
-	// If still equal, prefer namespace-scoped runtimes over cluster-scoped
-	if r1.IsCluster != r2.IsCluster {
-		if r1.IsCluster {
-			return -1 // r2 is namespace-scoped, prefer it
-		}
-		return 1 // r1 is namespace-scoped, prefer it
 	}
 
 	// Finally, compare by name for deterministic ordering

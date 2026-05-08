@@ -430,23 +430,23 @@ func TestGetSupportingRuntimes(t *testing.T) {
 			name:  "small pytorch model - multiple compatible runtimes",
 			model: baseModels[0].model,
 			expectedRuntimeNames: []string{
-				"pytorch-rt",         // score: 10 * 2 = 20 (namespace-scoped, higher priority)
-				"multi-format-rt",    // score: 5 * 1 = 5 (namespace-scoped)
-				"cluster-pytorch-rt", // score: 7 * 1 = 7 (cluster-scoped)
+				"pytorch-rt",
+				"multi-format-rt",
+				"cluster-pytorch-rt",
 			},
-			expectedScores: []int64{20, 5, 7},
+			expectedScores: []int64{2, 1, 1},
 		},
 		{
 			name:                 "medium onnx model",
 			model:                baseModels[1].model,
 			expectedRuntimeNames: []string{"onnx-rt", "multi-format-rt"},
-			expectedScores:       []int64{8, 5},
+			expectedScores:       []int64{1, 1},
 		},
 		{
 			name:                 "large tensorflow model",
 			model:                baseModels[2].model,
 			expectedRuntimeNames: []string{"tensorflow-rt"},
-			expectedScores:       []int64{12},
+			expectedScores:       []int64{1},
 		},
 		{
 			name: "model with no compatible runtime",
@@ -660,7 +660,7 @@ func TestScore(t *testing.T) {
 					Version: ptr("4.0.0"),
 				},
 			},
-			expectedScore: 45, // (10 * 3) + (5 * 3) = 30 + 15 = 45
+			expectedScore: 3, // priority 3; weight is no longer applied
 		},
 		{
 			name: "format match only",
@@ -749,7 +749,7 @@ func TestScore(t *testing.T) {
 					Name: "transformers",
 				},
 			},
-			expectedScore: 36, // Best match: (10 * 2) + (8 * 2) = 20 + 16 = 36
+			expectedScore: 2, // best matching format has priority 2
 		},
 		{
 			name: "default priority when not specified",
@@ -770,7 +770,7 @@ func TestScore(t *testing.T) {
 					Name: "PyTorch",
 				},
 			},
-			expectedScore: 12, // 12 * 1 (default priority) = 12
+			expectedScore: 1, // default priority
 		},
 		{
 			name: "nil model framework in base model",
@@ -1345,21 +1345,23 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 			inferenceService: infereceServices[0],
 			expectedRuntimeNames: []string{
 				"pytorch-rt",
-				"pytorch-rt-4",
 				"pytorch-rt-1",
+				"pytorch-rt-4",
 			},
 			expectError: false,
 		},
 		{
 
+			// All four runtimes match (no AC requirement on the ISVC).
+			// p2 first, then p1s ordered by size proximity to 7B, then alphabetically.
 			name:             "select without inference service ac",
 			model:            baseModels[0].model,
 			inferenceService: infereceServices[1],
 			expectedRuntimeNames: []string{
 				"pytorch-rt",
+				"pytorch-rt-1",
 				"pytorch-rt-3",
 				"pytorch-rt-4",
-				"pytorch-rt-1",
 			},
 			expectError: false,
 		},
@@ -1381,8 +1383,8 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 			inferenceService: infereceServices[3],
 			expectedRuntimeNames: []string{
 				"pytorch-rt",
-				"pytorch-rt-4",
 				"pytorch-rt-1",
+				"pytorch-rt-4",
 			},
 			expectError: false,
 		},
@@ -1393,9 +1395,9 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 			inferenceService: infereceServices[4],
 			expectedRuntimeNames: []string{
 				"pytorch-rt",
+				"pytorch-rt-1",
 				"pytorch-rt-3",
 				"pytorch-rt-4",
-				"pytorch-rt-1",
 			},
 			expectError: false,
 		},
@@ -1406,8 +1408,8 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 			inferenceService: infereceServices[5],
 			expectedRuntimeNames: []string{
 				"pytorch-rt",
-				"pytorch-rt-4",
 				"pytorch-rt-1",
+				"pytorch-rt-4",
 			},
 			expectError: false,
 		},
@@ -1417,9 +1419,9 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 			inferenceService: infereceServices[6],
 			expectedRuntimeNames: []string{
 				"pytorch-rt",
+				"pytorch-rt-1",
 				"pytorch-rt-3",
 				"pytorch-rt-4",
-				"pytorch-rt-1",
 			},
 			expectError: false,
 		},
@@ -1440,8 +1442,8 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 			inferenceService: infereceServices[8],
 			expectedRuntimeNames: []string{
 				"pytorch-rt",
-				"pytorch-rt-4",
 				"pytorch-rt-1",
+				"pytorch-rt-4",
 			},
 			expectError: false,
 		},
@@ -1467,4 +1469,82 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestHighPriorityClusterRuntimeBeatsLowerPriorityNamespace verifies that
+// a cluster-scoped runtime with a higher priority beats a namespace-scoped runtime with a lower priority
+func TestHighPriorityClusterRuntimeBeatsLowerPriorityNamespace(t *testing.T) {
+	fakeClient := createFakeClient()
+	ctx := context.Background()
+
+	srLow := &v1beta1.ServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "sr-low", Namespace: "default"},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{{
+				ModelFormat: &v1beta1.ModelFormat{Name: "pytorch"},
+				AutoSelect:  ptr(true),
+				Priority:    ptr(int32(1)),
+			}},
+		},
+	}
+	csrHigh := &v1beta1.ClusterServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "csr-high"},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{{
+				ModelFormat: &v1beta1.ModelFormat{Name: "pytorch"},
+				AutoSelect:  ptr(true),
+				Priority:    ptr(int32(10)),
+			}},
+		},
+	}
+	assert.NoError(t, fakeClient.Create(ctx, srLow))
+	assert.NoError(t, fakeClient.Create(ctx, csrHigh))
+
+	selector := New(fakeClient)
+	model := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}}
+	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Namespace: "default"}}
+
+	selected, err := selector.SelectRuntime(ctx, model, isvc)
+	assert.NoError(t, err)
+	assert.Equal(t, "csr-high", selected.Name, "higher priority must win over lower-priority namespace runtime")
+	assert.True(t, selected.IsCluster)
+}
+
+// TestScorerRejectsVersionAsymmetry mirrors the matcher's strict rejection when
+// only one of (runtime format, model) specifies a version.
+func TestScorerRejectsVersionAsymmetry(t *testing.T) {
+	scorer := NewDefaultRuntimeScorer(NewConfig(nil))
+
+	runtime := &v1beta1.ServingRuntimeSpec{
+		SupportedModelFormats: []v1beta1.SupportedModelFormat{{
+			ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Version: ptr("2.0.0")},
+			AutoSelect:  ptr(true),
+			Priority:    ptr(int32(5)),
+		}},
+	}
+	// Model has no version — matcher would reject; scorer must too.
+	model := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}}
+
+	score, err := scorer.CalculateScore(runtime, model)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), score, "version asymmetry must yield score 0")
+}
+
+// TestScorerSkipsNilAutoSelect verifies that a SupportedModelFormat with nil
+// AutoSelect is treated as not-auto-selectable (matching IsAutoSelectEnabled).
+func TestScorerSkipsNilAutoSelect(t *testing.T) {
+	scorer := NewDefaultRuntimeScorer(NewConfig(nil))
+
+	runtime := &v1beta1.ServingRuntimeSpec{
+		SupportedModelFormats: []v1beta1.SupportedModelFormat{{
+			ModelFormat: &v1beta1.ModelFormat{Name: "pytorch"},
+			// AutoSelect intentionally nil
+			Priority: ptr(int32(7)),
+		}},
+	}
+	model := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}}
+
+	score, err := scorer.CalculateScore(runtime, model)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), score, "nil AutoSelect must be skipped, yielding score 0")
 }
