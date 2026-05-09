@@ -67,7 +67,7 @@ export default function LandingPage() {
             {/* Links */}
             <div className="mt-8 flex items-center justify-center gap-6 text-sm">
               <a
-                href="https://docs.sglang.io/ome/"
+                href="https://ome-projects.github.io/ome/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"

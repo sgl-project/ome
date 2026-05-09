@@ -433,7 +433,7 @@ kubectl get inferenceservice -A
 
 ### Community Resources
 
-- **Documentation**: [OME Documentation](https://ome.docs.example.com)
+- **Documentation**: [OME Documentation](https://ome-projects.github.io/ome/docs/)
 - **Issue Tracker**: Report bugs and request features
 - **Discussions**: Ask questions and share ideas
 

@@ -1,4 +1,4 @@
-baseURL = "https://docs.sglang.ai/ome/"
+baseURL = "https://ome-projects.github.io/ome/"
 title = "OME"
 
 enableRobotsTXT = true
@@ -99,7 +99,7 @@ github_project_repo = "https://github.com/sgl-project/ome"
 
   # A link to latest version of the docs. Used in the "version-banner" partial to
   # point people to the main doc site.
-  url_latest_version = "https://docs.sglang.ai/ome/"
+  url_latest_version = "https://ome-projects.github.io/ome/"
 
   # A variable used in various docs to determine URLs for config files etc.
   # To find occurrences, search the repo for 'params "githubbranch"'.

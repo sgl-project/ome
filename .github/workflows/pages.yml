@@ -56,10 +56,10 @@ jobs:
         working-directory: ./site
         env:
           HUGO_ENVIRONMENT: production
-          HUGO_BASEURL: https://docs.sglang.ai/ome/
+          HUGO_BASEURL: https://ome-projects.github.io/ome/
         run: |
           # Build the site with local node_modules
-          $GITHUB_WORKSPACE/bin/hugo --gc --minify --baseURL https://docs.sglang.ai/ome/
+          $GITHUB_WORKSPACE/bin/hugo --gc --minify --baseURL https://ome-projects.github.io/ome/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
