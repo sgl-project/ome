@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // MistralConfig defines the configuration for Mistral models
@@ -140,12 +141,10 @@ func (c *MistralConfig) HasVision() bool {
 	return false
 }
 
-// IsEmbedding returns true only when the architecture explicitly indicates an embedding model.
-// Genuine embedding models like intfloat/e5-mistral-7b-instruct set Architectures to
-// ["MistralModel"] in their config.json, which the config_parser recognizes via the
-// (modelType=="mistral" && architecture=="mistralmodel") special case.
+// IsEmbedding returns true when the architecture is "MistralModel", which indicates
+// an embedding model (e.g. intfloat/e5-mistral-7b-instruct).
 func (c *MistralConfig) IsEmbedding() bool {
-	return false
+	return strings.EqualFold(c.GetArchitecture(), "MistralModel")
 }
 
 // Register the Mistral model handler

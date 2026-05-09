@@ -114,6 +114,35 @@ func TestMistralConfigNoArchitectures(t *testing.T) {
 	}
 }
 
+// TestMistralConfigEmbedding verifies that a Mistral model with
+// "architectures": ["MistralModel"] is correctly identified as an embedding
+// model (e.g. intfloat/e5-mistral-7b-instruct).
+// This is the load-bearing positive case for config_parser.go's EMBEDDING classification.
+func TestMistralConfigEmbedding(t *testing.T) {
+	configPath := filepath.Join("testdata", "mistral_embedding.json")
+
+	config, err := LoadModelConfig(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load Mistral embedding config: %v", err)
+	}
+
+	// GetArchitecture must return "MistralModel"
+	arch := config.GetArchitecture()
+	if arch != "MistralModel" {
+		t.Errorf("Expected architecture 'MistralModel', got '%s'", arch)
+	}
+
+	// GetModelType must return "mistral"
+	if config.GetModelType() != "mistral" {
+		t.Errorf("Expected model type 'mistral', got '%s'", config.GetModelType())
+	}
+
+	// IsEmbedding must return true for MistralModel architecture
+	if !config.IsEmbedding() {
+		t.Error("Expected IsEmbedding() to return true for a model with 'MistralModel' architecture")
+	}
+}
+
 func TestMistralInstructConfig(t *testing.T) {
 	configPath := filepath.Join("testdata", "mistral_7b_instruct.json")
 
