@@ -18,7 +18,7 @@ to the pool.
   - [Naming](#naming)
   - [Deployment Modes](#deployment-modes)
   - [Provider and Backend Model](#provider-and-backend-model)
-  - [External Provider Inputs](#external-provider-inputs)
+  - [Provider Design Inputs](#provider-design-inputs)
   - [User Stories](#user-stories)
     - [Story 1: Pre-create a Node-local LMCache Pool](#story-1-pre-create-a-node-local-lmcache-pool)
     - [Story 2: Bind an InferenceService to an Existing Pool](#story-2-bind-an-inferenceservice-to-an-existing-pool)
@@ -95,11 +95,12 @@ The initial alpha supports four `KVCachePool` deployment modes:
 3. `DistributedStore`
 4. `ProviderManaged`
 
-`NodeLocal` covers LMCache-style one-cache-server-per-node deployments.
+`RawDeployment` covers simple OME-managed Kubernetes Deployment-backed pool
+workloads. `NodeLocal` covers LMCache-style one-cache-server-per-node
+deployments.
 `DistributedStore` covers coordinated store systems such as Mooncake
 master/store deployments. `ProviderManaged` covers providers that expose their
-own controller and CRD, such as LMCache's `LMCacheEngine`. `External` binding
-to infrastructure that OME does not manage is intentionally deferred.
+own controller and CRD, such as LMCache's `LMCacheEngine`.
 
 ## Motivation
 
@@ -137,8 +138,10 @@ namespace.
    support.
 5. Keep the pool API provider-neutral and extensible to LMCache, Mooncake,
    NIXL-backed configurations, and future providers.
-6. Reuse existing OME workload configuration types where appropriate,
-   including `PodSpec`, `RunnerSpec`, and `ComponentExtensionSpec`.
+6. Reuse existing OME workload configuration patterns where appropriate,
+   especially `PodSpec` and Kubernetes container fields, without embedding
+   `InferenceService` component-only abstractions such as `RunnerSpec` or
+   `ComponentExtensionSpec`.
 7. Keep all pool pod/container configuration under `spec.workloads[]`.
 8. Publish normalized connection information in `KVCachePool.status`.
 9. Preserve existing `InferenceService` behavior when `spec.kvCachePool` is
@@ -244,9 +247,6 @@ Mode meanings:
 - `ProviderManaged`: OME owns the `KVCachePool` intent but delegates provider
   implementation resources to a provider controller or provider CRD.
 
-`External` is deferred until OME defines a clear status, ownership, and
-validation contract for infrastructure it does not manage.
-
 ### Provider and Backend Model
 
 The API distinguishes provider from backend.
@@ -263,7 +263,7 @@ Provider-specific configuration belongs under `provider.config`.
 Backend-specific configuration belongs under `provider.backends[].config`.
 There is no giant top-level `providerConfig` bag.
 
-### External Provider Inputs
+### Provider Design Inputs
 
 The API shape is influenced by these provider designs:
 
@@ -510,17 +510,63 @@ type KVCachePoolWorkloadSpec struct {
     Name string `json:"name"`
 
     // PodSpec provides pod-level customization for this pool workload.
+    // Container configuration is expressed through PodSpec.Containers.
     // +optional
     PodSpec `json:",inline"`
 
-    // ComponentExtensionSpec reuses OME workload knobs such as replicas,
-    // autoscaling, labels, annotations, PDB, and deployment strategy.
+    // Replicas is the desired number of pods for this workload when autoscaling
+    // is not enabled.
     // +optional
-    ComponentExtensionSpec `json:",inline"`
+    Replicas *int32 `json:"replicas,omitempty"`
 
-    // Runner customizes the primary container for this workload.
+    // MinReplicas is the lower bound for autoscaled workloads.
     // +optional
-    Runner *RunnerSpec `json:"runner,omitempty"`
+    MinReplicas *int32 `json:"minReplicas,omitempty"`
+
+    // MaxReplicas is the upper bound for autoscaled workloads.
+    // +optional
+    MaxReplicas *int32 `json:"maxReplicas,omitempty"`
+
+    // Scaling configures provider workload autoscaling when supported by the
+    // selected deployment mode.
+    // +optional
+    Scaling *KVCachePoolWorkloadScalingSpec `json:"scaling,omitempty"`
+
+    // Labels added to pods and workload objects for this role.
+    // +optional
+    Labels map[string]string `json:"labels,omitempty"`
+
+    // Annotations added to pods and workload objects for this role.
+    // +optional
+    Annotations map[string]string `json:"annotations,omitempty"`
+
+    // MinAvailable configures the workload PodDisruptionBudget.
+    // +optional
+    MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
+
+    // MaxUnavailable configures the workload PodDisruptionBudget.
+    // +optional
+    MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
+
+    // DeploymentStrategy configures rollout behavior for Deployment-backed
+    // workloads.
+    // +optional
+    DeploymentStrategy *appsv1.DeploymentStrategy `json:"deploymentStrategy,omitempty"`
+}
+
+type KVCachePoolWorkloadScalingSpec struct {
+    // Metric identifies the autoscaling metric.
+    // +optional
+    Metric *ScaleMetric `json:"metric,omitempty"`
+
+    // Target is the target value for the selected metric.
+    // +optional
+    Target *int32 `json:"target,omitempty"`
+
+    // KedaConfig reuses OME's KEDA trigger configuration when KEDA-based
+    // autoscaling is selected.
+    // +optional
+    KedaConfig *KedaConfig `json:"kedaConfig,omitempty"`
 }
 ```
 
@@ -731,33 +777,34 @@ spec:
         - name: shm
           hostPath:
             path: /dev/shm
-      runner:
-        image: lmcache/standalone:nightly
-        command:
-          - /opt/venv/bin/lmcache
-        args:
-          - server
-        ports:
-          - name: transfer
-            containerPort: 6555
-            hostPort: 6555
-          - name: http
-            containerPort: 8080
-            hostPort: 8080
-          - name: metrics
-            containerPort: 9090
-            hostPort: 9090
-        readinessProbe:
-          httpGet:
-            path: /healthcheck
-            port: http
-        resources:
-          requests:
-            cpu: "4"
-            memory: 64Gi
-          limits:
-            cpu: "8"
-            memory: 80Gi
+      containers:
+        - name: server
+          image: lmcache/standalone:nightly
+          command:
+            - /opt/venv/bin/lmcache
+          args:
+            - server
+          ports:
+            - name: transfer
+              containerPort: 6555
+              hostPort: 6555
+            - name: http
+              containerPort: 8080
+              hostPort: 8080
+            - name: metrics
+              containerPort: 9090
+              hostPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+          resources:
+            requests:
+              cpu: "4"
+              memory: 64Gi
+            limits:
+              cpu: "8"
+              memory: 80Gi
 ```
 
 #### LMCache ProviderManaged Pool
@@ -783,12 +830,13 @@ spec:
     - name: server
       nodeSelector:
         node-type: gpu
-      runner:
-        image: lmcache/standalone:nightly
-        resources:
-          requests:
-            cpu: "4"
-            memory: 64Gi
+      containers:
+        - name: server
+          image: lmcache/standalone:nightly
+          resources:
+            requests:
+              cpu: "4"
+              memory: 64Gi
 ```
 
 The provider adapter translates the generic pool and workload intent into the
@@ -816,40 +864,42 @@ spec:
   workloads:
     - name: master
       minReplicas: 1
-      runner:
-        image: mooncake/mooncake-transfer-engine:latest
-        command:
-          - mooncake_master
-        args:
-          - --enable_http_metadata_server=true
-          - --http_metadata_server_host=0.0.0.0
-          - --http_metadata_server_port=8080
-          - --rpc_port=50051
-          - --metrics_port=9003
-        ports:
-          - name: rpc
-            containerPort: 50051
-          - name: metadata
-            containerPort: 8080
-          - name: metrics
-            containerPort: 9003
-        resources:
-          requests:
-            cpu: "4"
-            memory: 8Gi
+      containers:
+        - name: master
+          image: mooncake/mooncake-transfer-engine:latest
+          command:
+            - mooncake_master
+          args:
+            - --enable_http_metadata_server=true
+            - --http_metadata_server_host=0.0.0.0
+            - --http_metadata_server_port=8080
+            - --rpc_port=50051
+            - --metrics_port=9003
+          ports:
+            - name: rpc
+              containerPort: 50051
+            - name: metadata
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9003
+          resources:
+            requests:
+              cpu: "4"
+              memory: 8Gi
     - name: store
       minReplicas: 4
-      runner:
-        image: mooncake/mooncake-transfer-engine:latest
-        command:
-          - mooncake_client
-        ports:
-          - name: rpc
-            containerPort: 50052
-        resources:
-          requests:
-            cpu: "8"
-            memory: 180Gi
+      containers:
+        - name: store
+          image: mooncake/mooncake-transfer-engine:latest
+          command:
+            - mooncake_client
+          ports:
+            - name: rpc
+              containerPort: 50052
+          resources:
+            requests:
+              cpu: "8"
+              memory: 180Gi
       volumes:
         - name: cache-data
           emptyDir: {}
@@ -911,8 +961,6 @@ spec:
     name: vllm-lmcache
   kvCachePool:
     name: lmcache-node-pool
-    kind: KVCachePool
-    apiGroup: ome.io
   engine:
     minReplicas: 2
 ```
@@ -1044,7 +1092,7 @@ Provider validation should fail fast for:
 2. unsupported deployment mode for provider;
 3. duplicate workload names;
 4. missing required workload roles for a mode;
-5. missing runner image when a workload requires one;
+5. missing container image when OME must create a workload;
 6. provider config that cannot be decoded by the selected adapter; and
 7. missing connection status from provider-managed resources.
 
@@ -1060,7 +1108,7 @@ Controller-level metrics:
 6. `ome_kvcache_provider_errors_total`
 
 Pool workloads should preserve provider metrics ports configured in
-`workloads[].runner.ports`.
+`workloads[].containers[].ports`.
 
 Recommended labels:
 
@@ -1267,14 +1315,15 @@ OME could add both namespaced and cluster-scoped variants.
 This proposal defers cluster scope. The initial resource is namespaced to keep
 ownership, RBAC, service discovery, and connection status straightforward.
 
-### Top-level Runner Fields
+### Top-level Pod or Container Fields
 
-OME could put `runner`, `PodSpec`, and scaling fields directly on
-`KVCachePoolSpec`.
+OME could put pod, container, and scaling fields directly on
+`KVCachePoolSpec`, or reuse the `InferenceService` `runner` shape.
 
 This proposal rejects that shape because it conflicts with multi-role providers
 such as Mooncake. All pod and container configuration lives under
-`spec.workloads[]`.
+`spec.workloads[]`, and pool workloads use Kubernetes `containers` rather than
+the serving-component-specific `runner` field.
 
 ### Separate `managementMode`
 
