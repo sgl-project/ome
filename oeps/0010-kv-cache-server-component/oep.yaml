@@ -1,4 +1,4 @@
-title: KV Cache Server Component for InferenceService
+title: KVCachePool Custom Resource
 oep-number: 0010
 authors:
   - "@YouNeedCryDear"
@@ -14,8 +14,9 @@ stage: alpha
 
 # The following PRR answers are required at beta release
 metrics:
-  - ome_kvcache_reconcile_total
-  - ome_kvcache_reconcile_duration_seconds
-  - ome_kvcache_ready
+  - ome_kvcachepool_reconcile_total
+  - ome_kvcachepool_reconcile_duration_seconds
+  - ome_kvcachepool_ready
+  - ome_kvcachepool_connection_ready
   - ome_kvcache_connector_injection_total
   - ome_kvcache_provider_errors_total

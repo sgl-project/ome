@@ -1,10 +1,11 @@
-# OEP-0010: KV Cache Server Component for InferenceService
+# OEP-0010: KVCachePool Custom Resource
 
 <!--
-This OEP proposes a new provider-neutral KV cache component for OME
-InferenceServices. The component is implemented as a Deployment and Service
-owned by the InferenceService, and is reconciled alongside engine, decoder, and
-router.
+This OEP proposes a provider-neutral KVCachePool custom resource for OME. A
+KVCachePool is an independently managed, namespace-scoped resource parallel to
+model and runtime in the InferenceService dependency model. InferenceService
+references the pool; ServingRuntime declares how its serving engine can connect
+to the pool.
 -->
 
 <!-- toc -->
@@ -13,27 +14,36 @@ router.
   - [Goals](#goals)
   - [Non-Goals](#non-goals)
 - [Proposal](#proposal)
+  - [Resource Model](#resource-model)
   - [Naming](#naming)
+  - [Deployment Modes](#deployment-modes)
+  - [Provider and Backend Model](#provider-and-backend-model)
+  - [External Provider Inputs](#external-provider-inputs)
   - [User Stories](#user-stories)
-    - [Story 1: Enable LMCache MP for One Model Endpoint](#story-1-enable-lmcache-mp-for-one-model-endpoint)
-    - [Story 2: Platform Runtime Defaults with Per-Service Opt-In](#story-2-platform-runtime-defaults-with-per-service-opt-in)
-    - [Story 3: Shared Cache Across Engine Replicas](#story-3-shared-cache-across-engine-replicas)
-    - [Story 4: Prefill-Decode Disaggregation](#story-4-prefill-decode-disaggregation)
-    - [Story 5: Independent Cache Operations](#story-5-independent-cache-operations)
+    - [Story 1: Pre-create a Node-local LMCache Pool](#story-1-pre-create-a-node-local-lmcache-pool)
+    - [Story 2: Bind an InferenceService to an Existing Pool](#story-2-bind-an-inferenceservice-to-an-existing-pool)
+    - [Story 3: Use a Provider-managed LMCache Pool](#story-3-use-a-provider-managed-lmcache-pool)
+    - [Story 4: Deploy a Mooncake Distributed Store](#story-4-deploy-a-mooncake-distributed-store)
+    - [Story 5: Configure Runtime-side Connector Behavior](#story-5-configure-runtime-side-connector-behavior)
   - [Notes/Constraints/Caveats](#notesconstraintscaveats)
   - [Risks and Mitigations](#risks-and-mitigations)
 - [Design Details](#design-details)
   - [API Specifications](#api-specifications)
-    - [InferenceService Extensions](#inferenceservice-extensions)
-    - [ServingRuntime Extensions](#servingruntime-extensions)
-    - [Status Extensions](#status-extensions)
+    - [KVCachePool](#kvcachepool)
+    - [InferenceService Extension](#inferenceservice-extension)
+    - [ServingRuntime Extension](#servingruntime-extension)
+    - [Status](#status)
   - [Example Configuration](#example-configuration)
-    - [InferenceService with LMCache](#inferenceservice-with-lmcache)
-    - [ServingRuntime Defaults](#servingruntime-defaults)
-  - [Component Lifecycle](#component-lifecycle)
+    - [LMCache NodeLocal Pool](#lmcache-nodelocal-pool)
+    - [LMCache ProviderManaged Pool](#lmcache-providermanaged-pool)
+    - [Mooncake DistributedStore Pool](#mooncake-distributedstore-pool)
+    - [ServingRuntime with KV Cache Connectors](#servingruntime-with-kv-cache-connectors)
+    - [InferenceService Reference](#inferenceservice-reference)
   - [Reconciliation Flow](#reconciliation-flow)
-  - [Provider Adapter Contract](#provider-adapter-contract)
-  - [Connector Injection](#connector-injection)
+    - [KVCachePool Controller](#kvcachepool-controller)
+    - [InferenceService Controller](#inferenceservice-controller)
+  - [Connector Merge Rules](#connector-merge-rules)
+  - [Provider Adapter Contracts](#provider-adapter-contracts)
   - [Scheduling and Resource Management](#scheduling-and-resource-management)
   - [Readiness, Status, and Failure Behavior](#readiness-status-and-failure-behavior)
   - [Observability](#observability)
@@ -52,806 +62,1084 @@ router.
 
 ## Summary
 
-This OEP introduces a new `kvCache` component to `InferenceService`. The
-component provides a per-service distributed KV cache pool for a single model
-endpoint and is reconciled in parallel with the existing `engine`, `decoder`,
-and `router` components. The component is backed by a Kubernetes Deployment and
-ClusterIP Service owned by the `InferenceService`; deleting the
-`InferenceService` deletes the cache workload through normal owner references
-and component cleanup.
+This OEP introduces `KVCachePool`, a namespace-scoped OME custom resource for
+managing distributed KV cache capacity and transfer services. A `KVCachePool`
+is not an `InferenceService` component. It is parallel to model and runtime in
+the serving dependency model:
 
-The API is provider-neutral. Users configure `spec.kvCache` with common cache
-intent such as provider, resources, cache policy, replicas, service ports,
-scheduling, and connector policy. Provider-specific options live behind a
-`providerConfig` escape hatch. The first implementation targets LMCache in
-multiprocess mode, where a cache server runs as a standalone process and vLLM
-engine or decoder pods attach to it through a KV transfer connector. The API is
-designed to also support providers such as MoonCake without introducing
-provider-specific fields into the top-level OME API.
+```text
+InferenceService
+  -> model
+  -> runtime
+  -> kvCachePool
+```
 
-This design deliberately does not introduce an independently managed
-`CacheServer` custom resource. Cross-model cache sharing can cause unexpected
-behavior, and OME already models serving endpoints as an `InferenceService`
-composed of components. Therefore, the cache server should be owned by the same
-`InferenceService` as the model-serving engine, decoder, and router.
+Users create a `KVCachePool` independently. An `InferenceService` can later
+reference the pool through `spec.kvCachePool`, which is reference-only in
+alpha. The selected `ServingRuntime` declares `spec.kvCacheConnectors`, which
+describes how that runtime's engine and decoder components can attach to pools
+provided by LMCache, Mooncake, or future providers.
+
+The `KVCachePool` API is provider-neutral. It separates:
+
+1. pool-wide cache intent, such as capacity and eviction policy;
+2. provider identity and provider-scoped configuration;
+3. backend identity and backend-scoped configuration;
+4. pool workloads, where pod and container configuration lives; and
+5. status connection information consumed by runtime-side connector injection.
+
+The initial alpha supports four `KVCachePool` deployment modes:
+
+1. `RawDeployment`
+2. `NodeLocal`
+3. `DistributedStore`
+4. `ProviderManaged`
+
+`NodeLocal` covers LMCache-style one-cache-server-per-node deployments.
+`DistributedStore` covers coordinated store systems such as Mooncake
+master/store deployments. `ProviderManaged` covers providers that expose their
+own controller and CRD, such as LMCache's `LMCacheEngine`. `External` binding
+to infrastructure that OME does not manage is intentionally deferred.
 
 ## Motivation
 
-LLM inference systems increasingly rely on KV cache reuse, prefill reuse, and
-prefix-aware scheduling to improve latency and throughput. The serving SLO is to
-continuously improve inference speed, but a single engine pod's local KV cache
-is insufficient when requests are distributed across replicas, prefill and
-decode are separated, or workloads need to survive engine restarts without
-losing all reusable cache state.
+LLM serving systems increasingly rely on KV cache reuse, prefix reuse,
+prefill-decode transfer, and cache-aware runtime integration to improve latency
+and throughput. A single serving pod's local KV cache is not sufficient when
+requests are distributed across replicas, when prefill and decode are
+separated, or when serving pods restart and lose reusable state.
 
-Providers such as LMCache and MoonCake address this by running a cache service
-that serving engines connect to. LMCache's recommended multiprocess mode is a
-standalone service with management, metrics, and connector endpoints. vLLM's
-production-stack follows the same operational split: it runs a cache server as
-a separate Deployment and Service, then injects LMCache connector configuration
-into the vLLM runtime. OME needs the same separation of concerns, but with an
-API boundary that matches OME's component model and avoids a provider-specific
-or independently shared cache resource.
+Early design work treated KV cache as another `InferenceService` component
+beside engine, decoder, and router. That was too narrow. Real KV cache systems
+are often deployed and operated independently from any one inference endpoint:
+
+1. LMCache multiprocess deployments can provide node-local cache services that
+   serving pods attach to.
+2. LMCache also provides an operator and `LMCacheEngine` API that can own
+   provider-native resources.
+3. Mooncake provides a distributed store model with master and store/client
+   roles.
+4. NIXL can appear as a transfer or storage backend below another provider
+   rather than as an OME-managed server process.
+
+OME therefore needs a pool-level resource that can be created first, managed
+independently, and referenced by any compatible `InferenceService` in the same
+namespace.
 
 ### Goals
 
-1. Add `kvCache` as a first-class `InferenceService` component parallel to
-   `engine`, `decoder`, and `router`.
-2. Keep the `spec.kvCache` API provider-neutral while supporting LMCache as the
-   first provider.
-3. Run the cache server as a Deployment per `InferenceService` in alpha.
-4. Ensure cache capacity is not shared across different models or different
-   `InferenceService` objects by default.
-5. Let `ServingRuntime` provide reusable KV cache defaults while requiring
-   per-`InferenceService` opt-in.
-6. Reconcile the cache server Service before injecting cache endpoint settings
-   into engine and decoder pods.
-7. Support independent cache sizing, scheduling, health, status, and metrics.
-8. Preserve existing `InferenceService` behavior when `spec.kvCache` is absent.
+1. Add a namespace-scoped `KVCachePool` CRD.
+2. Make `KVCachePool` independently managed and not owned by
+   `InferenceService`.
+3. Add `InferenceService.spec.kvCachePool` as a reference-only binding in
+   alpha.
+4. Add `ServingRuntime.spec.kvCacheConnectors` for runtime-side connector
+   support.
+5. Keep the pool API provider-neutral and extensible to LMCache, Mooncake,
+   NIXL-backed configurations, and future providers.
+6. Reuse existing OME workload configuration types where appropriate,
+   including `PodSpec`, `RunnerSpec`, and `ComponentExtensionSpec`.
+7. Keep all pool pod/container configuration under `spec.workloads[]`.
+8. Publish normalized connection information in `KVCachePool.status`.
+9. Preserve existing `InferenceService` behavior when `spec.kvCachePool` is
+   absent.
 
 ### Non-Goals
 
-1. Introduce a standalone OME `CacheServer` or `KVCacheServer` CRD.
-2. Share a cache pool across different models or different `InferenceService`
-   objects.
-3. Run the cache component as a DaemonSet.
-4. Make the cache component required for all inference workloads.
-5. Implement a provider-specific top-level API such as `spec.lmCache`.
-6. Replace local engine prefix caching or provider-native local cache features.
-7. Provide router-level KV-cache-aware routing in the initial alpha.
-8. Guarantee durable persistence of KV entries across cache server replacement.
-9. Change BaseModel, model download, or node-local model cache semantics.
+1. Add `kvCache` as an `InferenceService` component parallel to engine,
+   decoder, and router.
+2. Add `ClusterKVCachePool` in the initial design.
+3. Add externally managed pool binding in alpha.
+4. Add router-level KV-cache-aware routing in alpha.
+5. Guarantee durable KV entry persistence across provider workload replacement.
+6. Validate model-level compatibility between a pool and an
+   `InferenceService`.
+7. Make every runtime automatically use a KV cache pool.
+8. Replace engine-local prefix caching or provider-native local cache features.
+9. Copy provider-native APIs such as LMCache `LMCacheEngineSpec` directly into
+   OME top-level fields.
 
 ## Proposal
 
-Add a `spec.kvCache` field to `InferenceServiceSpec` and a matching
-`spec.kvCacheConfig` field to `ServingRuntimeSpec`. `spec.kvCache` enables a
-cache component for that service. `spec.kvCacheConfig` supplies runtime defaults
-only when the service has opted in with `spec.kvCache`; it does not create a
-cache component by itself. This matches the existing engine, decoder, and router
-merge model, where a runtime provides defaults for a component that the
-`InferenceService` chooses to use.
+### Resource Model
 
-The new component reconciler creates a Deployment, Service, HPA, and PDB using
-the existing raw Kubernetes component reconcilers where possible. In alpha,
-`kvCache` only supports `RawDeployment` because the cache server is a
-state-bearing service dependency for engine and decoder pods. Knative
-serverless, LeaderWorkerSet, Ray, and DaemonSet support are out of scope for the
-initial implementation.
+`KVCachePool` is a namespace-scoped resource:
 
-When `kvCache` is enabled, the controller derives a stable in-cluster endpoint
-for the cache server and uses a provider adapter to inject connector settings
-into the selected target components. For LMCache with vLLM, this means adding
-the appropriate `--kv-transfer-config` argument and LMCache environment
-variables to the engine and, when present, decoder containers. The exact
-connector class and provider-specific keys are owned by the LMCache adapter and
-can be overridden through `providerConfig`.
+```yaml
+apiVersion: ome.io/v1beta1
+kind: KVCachePool
+metadata:
+  name: shared-kv-cache
+  namespace: llm
+spec:
+  provider:
+    name: LMCache
+  deploymentMode: NodeLocal
+```
+
+`InferenceService` references the pool:
+
+```yaml
+spec:
+  model:
+    name: qwen3-14b
+  runtime:
+    name: vllm-lmcache
+  kvCachePool:
+    name: shared-kv-cache
+```
+
+The pool does not know which serving engine will use it. Runtime-side connector
+metadata lives in `ServingRuntime.spec.kvCacheConnectors`.
 
 ### Naming
 
-The API field should be named `kvCache`, not `cacheServer`.
+Use `KVCachePool`, not `KVCacheServer`.
 
-`kvCache` describes the user intent: provide distributed KV cache capacity for
-this inference endpoint. `cacheServer` describes one implementation detail.
-Using `kvCache` keeps the API aligned with the model-serving domain and leaves
-room for providers whose architecture is more complex than a single server
-process.
+`KVCachePool` describes the user-facing resource: a managed pool of distributed
+KV cache capacity and transfer endpoints. `KVCacheServer` sounds like one
+process or one Kubernetes Service, which does not fit node-local deployments,
+distributed stores, or provider-managed CRDs.
 
 Recommended names:
 
-- API field: `spec.kvCache`
-- Runtime default field: `spec.kvCacheConfig`
-- Go spec type: `KVCacheSpec`
-- Component type: `KVCacheComponent`
-- Status key: `status.components.kvCache`
-- Ready condition: `KVCacheReady`
-- Kubernetes resource suffix: `-kv-cache`
-- Internal reconciler name: `KVCacheReconciler`
+- CRD kind: `KVCachePool`
+- API field on `InferenceService`: `spec.kvCachePool`
+- Go ref type: `KVCachePoolRef`
+- Go spec type: `KVCachePoolSpec`
+- Status condition: `KVCachePoolReady`
+- Runtime connector field: `ServingRuntime.spec.kvCacheConnectors`
+- Internal controller name: `KVCachePoolReconciler`
 
-The term `KVCacheServer` may be used internally for helpers that build the
-Deployment-backed server workload, but it should not be the top-level user API.
+The term "cache server" may be used only when describing a provider workload
+that actually runs a server process.
+
+### Deployment Modes
+
+`KVCachePool` uses the JSON field name `deploymentMode`, following OME API
+vocabulary. It uses a separate enum from `InferenceService` because the valid
+pool modes differ from serving endpoint modes.
+
+```go
+// +kubebuilder:validation:Enum=RawDeployment;NodeLocal;DistributedStore;ProviderManaged
+type KVCachePoolDeploymentMode string
+
+const (
+    KVCachePoolRawDeployment    KVCachePoolDeploymentMode = "RawDeployment"
+    KVCachePoolNodeLocal        KVCachePoolDeploymentMode = "NodeLocal"
+    KVCachePoolDistributedStore KVCachePoolDeploymentMode = "DistributedStore"
+    KVCachePoolProviderManaged  KVCachePoolDeploymentMode = "ProviderManaged"
+)
+```
+
+Mode meanings:
+
+- `RawDeployment`: OME directly reconciles simple Kubernetes Deployment-backed
+  pool workloads.
+- `NodeLocal`: OME directly reconciles one pool workload per selected node.
+  The implementation may use a DaemonSet, but the API names the pool semantics,
+  not the Kubernetes object.
+- `DistributedStore`: OME directly reconciles coordinated store roles such as
+  master and store/client workloads.
+- `ProviderManaged`: OME owns the `KVCachePool` intent but delegates provider
+  implementation resources to a provider controller or provider CRD.
+
+`External` is deferred until OME defines a clear status, ownership, and
+validation contract for infrastructure it does not manage.
+
+### Provider and Backend Model
+
+The API distinguishes provider from backend.
+
+`provider.name` identifies the primary integration layer used by the pool. A
+provider may expose connection metadata, create provider workloads, or translate
+pool intent into a provider-native CR.
+
+`provider.backends[]` identifies storage or transfer backends used underneath
+the provider. For example, LMCache may be the provider while Mooncake or NIXL
+is configured as a backend.
+
+Provider-specific configuration belongs under `provider.config`.
+Backend-specific configuration belongs under `provider.backends[].config`.
+There is no giant top-level `providerConfig` bag.
+
+### External Provider Inputs
+
+The API shape is influenced by these provider designs:
+
+1. [LMCache multiprocess deployment](https://docs.lmcache.ai/mp/index.html)
+   motivates `NodeLocal` and node-local connection discovery.
+2. [LMCache operator](https://docs.lmcache.ai/mp/operator.html) motivates
+   `ProviderManaged`, where OME reconciles provider-native resources and
+   reflects their connection status.
+3. [LMCache storage backends](https://docs.lmcache.ai/kv_cache/storage_backends/mooncake.html)
+   motivate separating **provider** from **backend** because LMCache can use
+   Mooncake or NIXL beneath the LMCache integration layer.
+4. [Mooncake Store](https://kvcache-ai.github.io/Mooncake/design/mooncake-store.html)
+   motivates `DistributedStore` and named pool workloads such as `master` and
+   `store`.
+5. NIXL motivates backend extensibility without assuming every KV cache
+   capability is a standalone OME-managed server process.
 
 ### User Stories
 
-#### Story 1: Enable LMCache MP for One Model Endpoint
+#### Story 1: Pre-create a Node-local LMCache Pool
 
-Alice deploys a vLLM-backed model and wants repeated prompts to reuse KV cache
-across engine replicas. She enables `spec.kvCache` with provider `LMCache`.
-OME creates `<isvc>-kv-cache` as a Deployment and Service, then injects the
-LMCache MP connector settings into the engine pods.
+Alice is a platform operator. She creates a namespace-scoped LMCache-backed
+`KVCachePool` with `deploymentMode: NodeLocal` before any
+`InferenceService` exists. OME reconciles node-local pool workloads and
+publishes connection information in `status.connection`.
 
-Alice does not create a separate cache CRD, does not manually wire a Service
-DNS name into vLLM arguments, and does not risk another model attaching to the
-same cache pool.
+#### Story 2: Bind an InferenceService to an Existing Pool
 
-#### Story 2: Platform Runtime Defaults with Per-Service Opt-In
+Bob owns a model endpoint. He selects a runtime that advertises LMCache
+connector support and references Alice's pool from `spec.kvCachePool`. He does
+not configure provider workloads or connector args on the `InferenceService`.
+The inference controller derives connector injection from the pool status and
+the selected runtime.
 
-Bob owns cluster-wide `ClusterServingRuntime` objects. He wants a standard
-LMCache image, default ports, and default connector behavior for all vLLM
-runtimes, but he does not want every service to launch a cache server
-automatically.
+#### Story 3: Use a Provider-managed LMCache Pool
 
-Bob defines `spec.kvCacheConfig` on the runtime. A model owner opts in by
-adding `spec.kvCache.provider: LMCache` to an `InferenceService`. OME merges the
-runtime defaults with the service's overrides and reconciles the cache component
-only for that service.
+Carol already uses the LMCache operator. She creates a `KVCachePool` with
+`deploymentMode: ProviderManaged`. OME reconciles the provider CR and reflects
+its connection information through `KVCachePool.status`, while provider-owned
+controllers manage the implementation workloads.
 
-#### Story 3: Shared Cache Across Engine Replicas
+#### Story 4: Deploy a Mooncake Distributed Store
 
-Carol scales an `InferenceService` from one engine replica to four engine
-replicas. All engine replicas attach to the same `kvCache` Service for that
-`InferenceService`, so prefix reuse is not limited to the pod that saw the
-original prompt.
+Dave deploys a Mooncake-backed `KVCachePool` with
+`deploymentMode: DistributedStore`. The pool declares named workloads such as
+`master` and `store`. OME reconciles those workloads and publishes the master
+RPC and metadata endpoints in status.
 
-The cache is still scoped to one model endpoint. A different `InferenceService`
-for a different model gets a different cache Deployment and Service.
+#### Story 5: Configure Runtime-side Connector Behavior
 
-#### Story 4: Prefill-Decode Disaggregation
-
-Dave uses OME's engine and decoder components for prefill-decode disaggregated
-serving. He enables `kvCache` once on the `InferenceService`. OME injects the
-provider connector into both engine and decoder, with component-specific roles
-where required.
-
-For example, an LMCache provider adapter may default the engine to `kv_both` in
-non-disaggregated mode, and allow explicit prefill/decode roles for
-disaggregated deployments.
-
-#### Story 5: Independent Cache Operations
-
-Emma is a platform operator. She needs to scale cache capacity, allocate cache
-pods to CPU or memory-optimized nodes, scrape cache metrics, and inspect cache
-readiness independently of engine readiness.
-
-The `kvCache` component has its own resources, replicas, scheduling fields,
-Service ports, status entry, and ready condition. Emma can tune it without
-changing GPU scheduling for the engine or decoder.
+Emma owns a `ServingRuntime` for vLLM. She declares
+`spec.kvCacheConnectors` with component-specific connector settings for engine
+and decoder. In prefill-decode serving, engine and decoder can receive
+different connector roles, args, and environment variables.
 
 ### Notes/Constraints/Caveats
 
-1. **Per-service scope:** A `kvCache` component belongs to exactly one
-   `InferenceService`. OME does not share the cache component across models.
-
-2. **Deployment in alpha:** The cache component runs as a Deployment per
-   `InferenceService`. DaemonSet semantics fit cluster-level or node-level cache
-   infrastructure better than a service-local component, so DaemonSet support is
-   not included.
-
-3. **Explicit opt-in:** `ServingRuntime.spec.kvCacheConfig` provides defaults,
-   but does not enable the component unless `InferenceService.spec.kvCache` is
-   present.
-
-4. **RawDeployment only:** The first implementation supports only raw
-   Kubernetes Deployment mode for the cache component. Engine, decoder, and
-   router keep their existing deployment modes.
-
-5. **Cache before serving:** The reconciler should create the cache Service
-   before creating or updating engine and decoder pods that reference it.
-
-6. **No model volume by default:** The cache server should not inherit model
-   volume mounts or model-ready node affinity. It is a serving dependency, not a
-   model loader.
-
-7. **Provider adapter required:** OME should not hard-code LMCache arguments in
-   generic component code. Provider-specific translation belongs in a provider
-   adapter.
-
-8. **Router integration deferred:** The alpha does not configure KV-cache-aware
-   routing. A later enhancement can add router integration once OME's router
-   semantics are clear.
+1. **Independent lifecycle:** Deleting an `InferenceService` does not delete a
+   referenced `KVCachePool`.
+2. **Namespace scope:** `KVCachePool` is namespace-scoped in alpha.
+3. **Reference-only binding:** `InferenceService.spec.kvCachePool` carries only
+   reference fields in alpha.
+4. **Engine-agnostic pool:** `KVCachePool` does not mention vLLM, SGLang,
+   engine, decoder, or router. Runtime-side integration belongs to
+   `ServingRuntime`.
+5. **OME-managed alpha:** Initial deployment modes manage pool infrastructure
+   through OME directly or through provider-managed child resources. Pure
+   external pools are future work.
+6. **Workloads only:** Pod and container configuration for a pool lives only in
+   `spec.workloads[]`.
+7. **Compatibility responsibility:** The user is responsible for choosing a
+   `ServingRuntime` compatible with the referenced `KVCachePool`.
+8. **Controller validation:** OME validates that the referenced pool exists,
+   is ready, exposes usable connection information, and has a matching runtime
+   connector. It does not prove model-level safety.
 
 ### Risks and Mitigations
 
-**Risk 1: Provider-specific fields leak into the OME API**
+**Risk 1: Provider APIs leak into the portable OME API**
 
-- *Mitigation:* Keep common cache intent in structured fields and move
-  provider-specific values to `providerConfig`. Add provider adapters behind a
-  stable interface.
+- *Mitigation:* Keep common pool intent in typed fields. Keep provider-native
+  settings scoped under `provider.config` or `backends[].config`.
 
-**Risk 2: Users accidentally share cache across incompatible models**
+**Risk 2: Users select an incompatible runtime and pool**
 
-- *Mitigation:* Do not provide an independent cache CRD in this proposal. Name,
-  own, label, and garbage collect cache resources through the `InferenceService`.
+- *Mitigation:* Keep `InferenceService.spec.kvCachePool` reference-only, but
+  require the selected `ServingRuntime` to advertise a matching
+  `kvCacheConnectors` entry. Surface clear events and readiness conditions when
+  no matching connector exists.
 
-**Risk 3: Cache readiness blocks otherwise functional inference**
+**Risk 3: Connector injection overrides user service configuration**
 
-- *Mitigation:* If users configure `spec.kvCache`, treat it as part of desired
-  service readiness. Operators can remove `spec.kvCache` if cache is optional
-  for a workload. Future work can add a degraded-but-serving status mode if this
-  becomes necessary.
+- *Mitigation:* Define an explicit merge order:
+  runtime component config, generated connector config, connector overrides,
+  then `InferenceService` component config. Service values remain highest
+  precedence.
 
-**Risk 4: Engine pods start before the cache Service is available**
+**Risk 4: Pool deployment modes become Kubernetes-object names**
 
-- *Mitigation:* Reconcile the cache component first, derive a deterministic
-  endpoint, and requeue on cache reconcile changes before reconciling target
-  serving components when needed.
+- *Mitigation:* Use semantic mode names where appropriate. For example,
+  `NodeLocal` rather than `DaemonSet`, and `DistributedStore` rather than
+  `StatefulSet`.
 
-**Risk 5: Cache server resource sizing competes with engine GPUs**
+**Risk 5: Provider-managed mode hides operational status**
 
-- *Mitigation:* Do not apply engine or decoder accelerator selection to
-  `kvCache`. Users can independently set node selectors, affinity, tolerations,
-  resources, and priority for the cache component.
-
-**Risk 6: Connector injection conflicts with user-provided runner args**
-
-- *Mitigation:* Follow explicit merge rules. If the user provides a full
-  `command`, OME should not rewrite the command. If the user provides `args`,
-  OME can append or prepend provider-generated args according to the provider
-  adapter contract, with user values taking precedence for environment
-  variables.
+- *Mitigation:* Normalize connection information and readiness through
+  `KVCachePool.status`, even when provider-owned resources are reconciled by a
+  provider controller.
 
 ## Design Details
 
 ### API Specifications
 
-#### InferenceService Extensions
+#### KVCachePool
 
-Add `KVCache *KVCacheSpec` to `InferenceServiceSpec`:
+Add a namespace-scoped `KVCachePool` resource:
+
+```go
+// KVCachePool is the Schema for distributed KV cache pools.
+// +k8s:openapi-gen=true
+// +genclient
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Provider",type="string",JSONPath=".spec.provider.name"
+// +kubebuilder:printcolumn:name="Mode",type="string",JSONPath=".spec.deploymentMode"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:resource:path=kvcachepools,shortName=kvcp
+type KVCachePool struct {
+    metav1.TypeMeta   `json:",inline"`
+    metav1.ObjectMeta `json:"metadata,omitempty"`
+
+    Spec   KVCachePoolSpec   `json:"spec,omitempty"`
+    Status KVCachePoolStatus `json:"status,omitempty"`
+}
+```
+
+Pool spec:
+
+```go
+type KVCachePoolSpec struct {
+    // Provider identifies the primary KV cache integration layer.
+    // +required
+    Provider KVCacheProviderSpec `json:"provider"`
+
+    // DeploymentMode describes how OME reconciles this pool.
+    // +required
+    DeploymentMode KVCachePoolDeploymentMode `json:"deploymentMode"`
+
+    // Cache describes provider-neutral cache policy.
+    // +optional
+    Cache *KVCachePolicySpec `json:"cache,omitempty"`
+
+    // Workloads contains pod and container configuration for OME-managed pool
+    // roles. This is the only place where pool pod/container config appears.
+    // +optional
+    // +listType=map
+    // +listMapKey=name
+    Workloads []KVCachePoolWorkloadSpec `json:"workloads,omitempty"`
+}
+```
+
+Provider and backend specs:
+
+```go
+// +kubebuilder:validation:Enum=LMCache;Mooncake;NIXL
+type KVCacheProvider string
+
+type KVCacheProviderSpec struct {
+    // Name identifies the primary provider.
+    // +required
+    Name KVCacheProvider `json:"name"`
+
+    // Version optionally constrains the provider implementation version.
+    // +optional
+    Version *string `json:"version,omitempty"`
+
+    // Backends identifies storage or transfer backends used by the provider.
+    // +optional
+    // +listType=map
+    // +listMapKey=name
+    Backends []KVCacheBackendSpec `json:"backends,omitempty"`
+
+    // Config contains provider-scoped settings that are not portable OME API.
+    // +optional
+    Config *runtime.RawExtension `json:"config,omitempty"`
+}
+
+// +kubebuilder:validation:Enum=Local;Mooncake;NIXL;Redis;Filesystem
+type KVCacheBackendType string
+
+type KVCacheBackendSpec struct {
+    // Name identifies this backend entry.
+    // +required
+    Name string `json:"name"`
+
+    // Type identifies the backend implementation.
+    // +required
+    Type KVCacheBackendType `json:"type"`
+
+    // Config contains backend-scoped settings that are not portable OME API.
+    // +optional
+    Config *runtime.RawExtension `json:"config,omitempty"`
+}
+```
+
+Cache policy:
+
+```go
+// +kubebuilder:validation:Enum=LRU;LFU;FIFO;ProviderDefault
+type KVCacheEvictionPolicy string
+
+type KVCachePolicySpec struct {
+    // Capacity is the intended total pool capacity. Providers translate it to
+    // native size, memory, segment, or storage settings.
+    // +optional
+    Capacity *resource.Quantity `json:"capacity,omitempty"`
+
+    // TTLSeconds optionally limits cache entry lifetime.
+    // +optional
+    TTLSeconds *int64 `json:"ttlSeconds,omitempty"`
+
+    // EvictionPolicy is the desired eviction behavior.
+    // +optional
+    EvictionPolicy *KVCacheEvictionPolicy `json:"evictionPolicy,omitempty"`
+
+    // ChunkSize is a provider-neutral chunk/page/block size hint.
+    // +optional
+    ChunkSize *resource.Quantity `json:"chunkSize,omitempty"`
+
+    // Keyspace optionally scopes generated cache keys.
+    // +optional
+    Keyspace *string `json:"keyspace,omitempty"`
+}
+```
+
+Workload spec:
+
+```go
+type KVCachePoolWorkloadSpec struct {
+    // Name identifies the provider or backend role, such as server, master, or
+    // store.
+    // +required
+    Name string `json:"name"`
+
+    // PodSpec provides pod-level customization for this pool workload.
+    // +optional
+    PodSpec `json:",inline"`
+
+    // ComponentExtensionSpec reuses OME workload knobs such as replicas,
+    // autoscaling, labels, annotations, PDB, and deployment strategy.
+    // +optional
+    ComponentExtensionSpec `json:",inline"`
+
+    // Runner customizes the primary container for this workload.
+    // +optional
+    Runner *RunnerSpec `json:"runner,omitempty"`
+}
+```
+
+#### InferenceService Extension
+
+Add `KVCachePool *KVCachePoolRef` to `InferenceServiceSpec`:
 
 ```go
 type InferenceServiceSpec struct {
     // Existing fields omitted.
 
-    // KVCache defines a per-InferenceService distributed KV cache component.
-    // If omitted, no cache component is reconciled.
+    // KVCachePool references a namespace-scoped KVCachePool. In alpha this is
+    // reference-only; connector behavior is derived from the pool and runtime.
     // +optional
-    KVCache *KVCacheSpec `json:"kvCache,omitempty"`
+    KVCachePool *KVCachePoolRef `json:"kvCachePool,omitempty"`
 }
-```
 
-Add a new provider-neutral spec type:
-
-```go
-// KVCacheProvider identifies the provider used to implement the cache pool.
-// +kubebuilder:validation:Enum=LMCache;MoonCake
-type KVCacheProvider string
-
-const (
-    LMCacheProvider  KVCacheProvider = "LMCache"
-    MoonCakeProvider KVCacheProvider = "MoonCake"
-)
-
-// KVCacheSpec defines a per-InferenceService cache component.
-type KVCacheSpec struct {
-    // PodSpec provides pod-level customization for the cache component.
-    // +optional
-    PodSpec `json:",inline"`
-
-    // ComponentExtensionSpec controls replicas, scaling, PDB, labels,
-    // annotations, and raw Deployment strategy.
-    ComponentExtensionSpec `json:",inline"`
-
-    // Provider selects the cache provider implementation.
+type KVCachePoolRef struct {
+    // Name of the KVCachePool being referenced.
     // +required
-    Provider KVCacheProvider `json:"provider"`
+    Name string `json:"name"`
 
-    // Runner overrides the primary cache server container.
+    // Kind of the referenced resource. Defaults to KVCachePool.
     // +optional
-    Runner *RunnerSpec `json:"runner,omitempty"`
+    // +kubebuilder:default="KVCachePool"
+    Kind *string `json:"kind,omitempty"`
 
-    // Cache describes provider-neutral cache policy intent.
+    // APIGroup of the referenced resource. Defaults to ome.io.
     // +optional
-    Cache *KVCachePolicySpec `json:"cache,omitempty"`
-
-    // Connector describes how serving components attach to this cache.
-    // +optional
-    Connector *KVCacheConnectorSpec `json:"connector,omitempty"`
-
-    // ProviderConfig contains provider-specific configuration that is not part
-    // of the portable OME API. The selected provider adapter interprets it.
-    // +optional
-    ProviderConfig *runtime.RawExtension `json:"providerConfig,omitempty"`
+    // +kubebuilder:default="ome.io"
+    APIGroup *string `json:"apiGroup,omitempty"`
 }
-
-// KVCachePolicySpec describes common cache behavior across providers.
-type KVCachePolicySpec struct {
-    // Capacity is the intended cache capacity. Providers translate this to
-    // their native size flags or environment variables.
-    // +optional
-    Capacity *resource.Quantity `json:"capacity,omitempty"`
-
-    // EvictionPolicy is the desired eviction policy, such as LRU.
-    // +optional
-    EvictionPolicy string `json:"evictionPolicy,omitempty"`
-
-    // ChunkSize is the provider-neutral chunk size hint.
-    // +optional
-    ChunkSize *int32 `json:"chunkSize,omitempty"`
-}
-
-// KVCacheConnectorSpec controls connector injection into serving components.
-type KVCacheConnectorSpec struct {
-    // TargetComponents lists serving components that should attach to the cache.
-    // Defaults to engine and decoder when present.
-    // +optional
-    // +listType=atomic
-    TargetComponents []ComponentType `json:"targetComponents,omitempty"`
-
-    // Roles maps component names to provider-neutral KV roles.
-    // Examples: engine: Both, decoder: Both, engine: Prefill, decoder: Decode.
-    // +optional
-    Roles map[ComponentType]KVCacheRole `json:"roles,omitempty"`
-
-    // Env provides additional connector environment variables.
-    // User-provided component env values take precedence on name conflicts.
-    // +optional
-    // +listType=map
-    // +listMapKey=name
-    Env []corev1.EnvVar `json:"env,omitempty"`
-
-    // Args provides additional connector args.
-    // Provider-generated args are applied before user component args unless the
-    // provider adapter documents otherwise.
-    // +optional
-    // +listType=atomic
-    Args []string `json:"args,omitempty"`
-}
-
-// +kubebuilder:validation:Enum=Prefill;Decode;Both
-type KVCacheRole string
 ```
 
-The initial provider enum can include only `LMCache` if the first
-implementation does not yet support MoonCake. The type should be shaped to add
-MoonCake later without changing the field name or component model.
+`KVCachePoolRef` does not contain connector args, target components, roles, or
+provider config in alpha.
 
-#### ServingRuntime Extensions
+#### ServingRuntime Extension
 
-Add `KVCacheConfig *KVCacheSpec` to `ServingRuntimeSpec`:
+Add `KVCacheConnectors []KVCacheConnectorSpec` to `ServingRuntimeSpec`:
 
 ```go
 type ServingRuntimeSpec struct {
     // Existing fields omitted.
 
-    // KVCacheConfig provides runtime defaults for the InferenceService kvCache
-    // component. This field does not enable kvCache by itself.
+    // KVCacheConnectors describes runtime-side support for attaching serving
+    // components to referenced KVCachePools.
     // +optional
-    KVCacheConfig *KVCacheSpec `json:"kvCacheConfig,omitempty"`
+    // +listType=map
+    // +listMapKey=provider
+    KVCacheConnectors []KVCacheConnectorSpec `json:"kvCacheConnectors,omitempty"`
 }
 ```
 
-Merge behavior should match the intent of existing component defaults:
-
-1. If `InferenceService.spec.kvCache` is nil, the merged KV cache spec is nil.
-2. If runtime `kvCacheConfig` is nil, use a deep copy of service `kvCache`.
-3. If both are present, strategic-merge runtime defaults with service overrides.
-4. Service values win over runtime values.
-
-This keeps runtime authors in control of default images, ports, and connector
-behavior while keeping cache creation a service-owner decision.
-
-#### Status Extensions
-
-Add a new component type and condition:
+Connector spec:
 
 ```go
-const (
-    KVCacheComponent ComponentType = "kvCache"
-)
+type KVCacheConnectorSpec struct {
+    // Provider identifies the pool provider this connector supports.
+    // +required
+    Provider KVCacheProvider `json:"provider"`
 
-const (
-    KVCacheReady apis.ConditionType = "KVCacheReady"
-)
+    // DeploymentModes lists supported pool deployment modes. Empty means all
+    // modes supported by this provider adapter.
+    // +optional
+    // +listType=atomic
+    DeploymentModes []KVCachePoolDeploymentMode `json:"deploymentModes,omitempty"`
+
+    // Components provides component-specific connector configuration.
+    // +optional
+    Components map[ComponentType]KVCacheConnectorComponentSpec `json:"components,omitempty"`
+}
+
+type KVCacheConnectorComponentSpec struct {
+    // ConnectorConfig is typed connector intent interpreted by the
+    // provider/runtime adapter.
+    // +optional
+    ConnectorConfig *KVCacheConnectorConfig `json:"connectorConfig,omitempty"`
+
+    // RuntimeArgsOverride provides connector-specific runtime args. Matching
+    // args replace existing values; missing args are appended.
+    // +optional
+    // +listType=atomic
+    RuntimeArgsOverride []string `json:"runtimeArgsOverride,omitempty"`
+
+    // EnvironmentOverride provides connector-specific environment variables.
+    // +optional
+    EnvironmentOverride map[string]string `json:"environmentOverride,omitempty"`
+}
+
+type KVCacheConnectorConfig struct {
+    // ConnectorClass names the runtime connector implementation, such as
+    // LMCacheConnectorV1.
+    // +optional
+    ConnectorClass *string `json:"connectorClass,omitempty"`
+
+    // Role describes the component role understood by the runtime adapter, such
+    // as kv_both, kv_producer, or kv_consumer.
+    // +optional
+    Role *string `json:"role,omitempty"`
+
+    // ConnectionRefName optionally selects a named connection entry published
+    // by KVCachePool status.
+    // +optional
+    ConnectionRefName *string `json:"connectionRefName,omitempty"`
+}
 ```
 
-When `spec.kvCache` is present, `status.components.kvCache` should report the
-cache component URL and revision details consistently with other raw
-Deployment-backed components.
+`KVCacheConnectorConfig` is intentionally typed. It is not a
+`runtime.RawExtension`. Provider-specific escaping remains on the pool provider
+and backend specs.
 
-For raw deployment mode, the service `Ready` condition should require
-`KVCacheReady=True` when `kvCache` is configured. The component should also be
-included in cleanup and status pruning when it is removed from the spec.
+#### Status
+
+`KVCachePool` publishes normalized connection information in status:
+
+```go
+type KVCachePoolStatus struct {
+    duckv1.Status `json:",inline"`
+
+    // Phase is a coarse lifecycle summary.
+    // +optional
+    Phase KVCachePoolPhase `json:"phase,omitempty"`
+
+    // Connection contains normalized connection information consumed by
+    // ServingRuntime connector adapters.
+    // +optional
+    Connection *KVCachePoolConnectionStatus `json:"connection,omitempty"`
+
+    // Workloads reports provider workload status.
+    // +optional
+    // +listType=map
+    // +listMapKey=name
+    Workloads []KVCachePoolWorkloadStatus `json:"workloads,omitempty"`
+}
+
+type KVCachePoolConnectionStatus struct {
+    // Endpoint is the primary in-cluster endpoint when one exists.
+    // +optional
+    Endpoint *apis.URL `json:"endpoint,omitempty"`
+
+    // Ports lists named connection ports.
+    // +optional
+    // +listType=map
+    // +listMapKey=name
+    Ports []KVCachePoolPortStatus `json:"ports,omitempty"`
+
+    // ConfigMapRef points to provider-generated connection config when needed.
+    // +optional
+    ConfigMapRef *corev1.LocalObjectReference `json:"configMapRef,omitempty"`
+
+    // SecretRef points to provider-generated credentials when needed.
+    // +optional
+    SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+
+    // ProviderStatus contains provider-scoped observed state, not desired
+    // configuration.
+    // +optional
+    ProviderStatus *runtime.RawExtension `json:"providerStatus,omitempty"`
+}
+
+type KVCachePoolPortStatus struct {
+    Name string `json:"name"`
+    Port int32  `json:"port"`
+}
+
+type KVCachePoolWorkloadStatus struct {
+    Name string `json:"name"`
+    ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+    DesiredReplicas int32 `json:"desiredReplicas,omitempty"`
+}
+```
+
+The controller should set the standard `Ready` condition and a
+`KVCachePoolReady` condition alias if OME wants a domain-specific condition.
 
 ### Example Configuration
 
-#### InferenceService with LMCache
+#### LMCache NodeLocal Pool
+
+```yaml
+apiVersion: ome.io/v1beta1
+kind: KVCachePool
+metadata:
+  name: lmcache-node-pool
+  namespace: llm
+spec:
+  provider:
+    name: LMCache
+    backends:
+      - name: local-memory
+        type: Local
+    config:
+      mode: Multiprocess
+      endpointDiscovery: NodeHostIP
+  deploymentMode: NodeLocal
+  cache:
+    capacity: 60Gi
+    chunkSize: 256
+    evictionPolicy: LRU
+  workloads:
+    - name: server
+      hostNetwork: true
+      hostIPC: true
+      nodeSelector:
+        node-type: gpu
+      volumes:
+        - name: shm
+          hostPath:
+            path: /dev/shm
+      runner:
+        image: lmcache/standalone:nightly
+        command:
+          - /opt/venv/bin/lmcache
+        args:
+          - server
+        ports:
+          - name: transfer
+            containerPort: 6555
+            hostPort: 6555
+          - name: http
+            containerPort: 8080
+            hostPort: 8080
+          - name: metrics
+            containerPort: 9090
+            hostPort: 9090
+        readinessProbe:
+          httpGet:
+            path: /healthcheck
+            port: http
+        resources:
+          requests:
+            cpu: "4"
+            memory: 64Gi
+          limits:
+            cpu: "8"
+            memory: 80Gi
+```
+
+#### LMCache ProviderManaged Pool
+
+```yaml
+apiVersion: ome.io/v1beta1
+kind: KVCachePool
+metadata:
+  name: lmcache-provider-managed
+  namespace: llm
+spec:
+  provider:
+    name: LMCache
+    config:
+      providerResource:
+        apiVersion: cache.lmcache.ai/v1alpha1
+        kind: LMCacheEngine
+  deploymentMode: ProviderManaged
+  cache:
+    capacity: 60Gi
+    evictionPolicy: LRU
+  workloads:
+    - name: server
+      nodeSelector:
+        node-type: gpu
+      runner:
+        image: lmcache/standalone:nightly
+        resources:
+          requests:
+            cpu: "4"
+            memory: 64Gi
+```
+
+The provider adapter translates the generic pool and workload intent into the
+provider-managed resource. `KVCachePool.status.connection` reflects the
+provider-generated connection information.
+
+#### Mooncake DistributedStore Pool
+
+```yaml
+apiVersion: ome.io/v1beta1
+kind: KVCachePool
+metadata:
+  name: mooncake-store
+  namespace: llm
+spec:
+  provider:
+    name: Mooncake
+    config:
+      metadata:
+        mode: http
+  deploymentMode: DistributedStore
+  cache:
+    capacity: 640Gi
+    chunkSize: 256
+  workloads:
+    - name: master
+      minReplicas: 1
+      runner:
+        image: mooncake/mooncake-transfer-engine:latest
+        command:
+          - mooncake_master
+        args:
+          - --enable_http_metadata_server=true
+          - --http_metadata_server_host=0.0.0.0
+          - --http_metadata_server_port=8080
+          - --rpc_port=50051
+          - --metrics_port=9003
+        ports:
+          - name: rpc
+            containerPort: 50051
+          - name: metadata
+            containerPort: 8080
+          - name: metrics
+            containerPort: 9003
+        resources:
+          requests:
+            cpu: "4"
+            memory: 8Gi
+    - name: store
+      minReplicas: 4
+      runner:
+        image: mooncake/mooncake-transfer-engine:latest
+        command:
+          - mooncake_client
+        ports:
+          - name: rpc
+            containerPort: 50052
+        resources:
+          requests:
+            cpu: "8"
+            memory: 180Gi
+      volumes:
+        - name: cache-data
+          emptyDir: {}
+```
+
+#### ServingRuntime with KV Cache Connectors
+
+```yaml
+apiVersion: ome.io/v1beta1
+kind: ServingRuntime
+metadata:
+  name: vllm-lmcache
+  namespace: llm
+spec:
+  supportedModelFormats:
+    - name: safetensors
+      modelFormat:
+        name: SafeTensors
+      modelFramework:
+        name: Transformers
+      autoSelect: true
+  engineConfig:
+    runner:
+      image: vllm/vllm-openai:latest
+  decoderConfig:
+    runner:
+      image: vllm/vllm-openai:latest
+  kvCacheConnectors:
+    - provider: LMCache
+      deploymentModes:
+        - NodeLocal
+        - ProviderManaged
+      components:
+        engine:
+          connectorConfig:
+            connectorClass: LMCacheConnectorV1
+            role: kv_producer
+          runtimeArgsOverride:
+            - --lmcache-log-level
+            - INFO
+        decoder:
+          connectorConfig:
+            connectorClass: LMCacheConnectorV1
+            role: kv_consumer
+```
+
+#### InferenceService Reference
 
 ```yaml
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
-  name: qwen3-8b
+  name: qwen3-14b
+  namespace: llm
 spec:
   model:
-    name: qwen3-8b
+    name: qwen3-14b
   runtime:
-    name: vllm-qwen
-
+    name: vllm-lmcache
+  kvCachePool:
+    name: lmcache-node-pool
+    kind: KVCachePool
+    apiGroup: ome.io
   engine:
     minReplicas: 2
-    runner:
-      resources:
-        limits:
-          nvidia.com/gpu: "1"
-
-  kvCache:
-    provider: LMCache
-    minReplicas: 1
-    maxReplicas: 2
-    cache:
-      capacity: 20Gi
-      evictionPolicy: LRU
-      chunkSize: 256
-    runner:
-      image: lmcache/lmcache:latest
-      command:
-        - lmcache
-      args:
-        - server
-      ports:
-        - name: transfer
-          containerPort: 5555
-        - name: http
-          containerPort: 8080
-      resources:
-        requests:
-          cpu: "4"
-          memory: 24Gi
-        limits:
-          cpu: "8"
-          memory: 32Gi
-    nodeSelector:
-      node-type: memory-optimized
-    connector:
-      targetComponents:
-        - engine
-      roles:
-        engine: Both
-    providerConfig:
-      lmcache:
-        mode: MP
-        connector: LMCacheMPConnector
-        httpPortName: http
-        transferPortName: transfer
 ```
-
-Expected owned resources:
-
-```text
-Deployment/qwen3-8b-kv-cache
-Service/qwen3-8b-kv-cache
-HorizontalPodAutoscaler/qwen3-8b-kv-cache
-PodDisruptionBudget/qwen3-8b-kv-cache
-```
-
-Expected status shape:
-
-```yaml
-status:
-  components:
-    kvCache:
-      url: http://qwen3-8b-kv-cache.default.svc.cluster.local
-  conditions:
-    - type: KVCacheReady
-      status: "True"
-```
-
-#### ServingRuntime Defaults
-
-```yaml
-apiVersion: ome.io/v1beta1
-kind: ClusterServingRuntime
-metadata:
-  name: vllm-qwen
-spec:
-  supportedModelFormats:
-    - name: safetensors
-      autoSelect: true
-  engineConfig:
-    runner:
-      image: vllm/vllm-openai:latest
-  kvCacheConfig:
-    provider: LMCache
-    cache:
-      evictionPolicy: LRU
-      chunkSize: 256
-    runner:
-      image: lmcache/lmcache:latest
-      command:
-        - lmcache
-      args:
-        - server
-      ports:
-        - name: transfer
-          containerPort: 5555
-        - name: http
-          containerPort: 8080
-    connector:
-      targetComponents:
-        - engine
-      roles:
-        engine: Both
-```
-
-The runtime default above does not create a cache server unless the
-`InferenceService` includes `spec.kvCache`.
-
-### Component Lifecycle
-
-The `kvCache` component lifecycle is bound to the `InferenceService`:
-
-1. Creating an `InferenceService` with `spec.kvCache` creates cache resources.
-2. Updating `spec.kvCache` updates the cache Deployment, Service, autoscaling,
-   and connector injection into target components.
-3. Removing `spec.kvCache` deletes cache resources through component cleanup and
-   removes connector settings from target components on the next rollout.
-4. Deleting the `InferenceService` deletes the cache resources through owner
-   references and finalizer cleanup.
-
-The cache component should not own or outlive the model endpoint. If users need
-long-lived, node-local, or cross-service cache infrastructure, that should be a
-separate future proposal.
 
 ### Reconciliation Flow
 
-The `InferenceService` reconciler should extend the existing component path:
+#### KVCachePool Controller
 
-1. Reconcile the BaseModel and select or validate the ServingRuntime.
-2. Merge runtime and service specs:
-   - `mergedEngine`
-   - `mergedDecoder`
-   - `mergedRouter`
-   - `mergedKVCache`
-3. Determine deployment modes:
-   - engine: existing logic
-   - decoder: existing logic
-   - router: existing logic
-   - kvCache: `RawDeployment` in alpha
-4. Build a deterministic cache endpoint from `<isvc>-kv-cache` and the
-   configured Service ports.
-5. If `mergedKVCache` is present, reconcile the cache component first.
-6. Use the provider adapter to inject connector settings into merged engine and
-   decoder specs.
-7. Reconcile engine, decoder, and router through the selected workload strategy.
-8. Reconcile ingress and external service using the existing entrypoint rules.
-9. Propagate status for all configured components, including `kvCache`.
-10. Cleanup removed components, including `kvCache`.
+1. Watch `KVCachePool` resources.
+2. Validate provider, deployment mode, backend entries, cache policy, and
+   workload names.
+3. Select a provider adapter based on `spec.provider.name`.
+4. Validate provider and deployment-mode compatibility.
+5. Reconcile implementation resources:
+   - `RawDeployment`: Deployment, Service, HPA, PDB as needed.
+   - `NodeLocal`: node-local workload implementation, likely DaemonSet-backed.
+   - `DistributedStore`: provider role workloads such as master and store.
+   - `ProviderManaged`: provider CRs and provider-owned status refs.
+6. Build normalized `status.connection`.
+7. Update `Ready` and workload status.
 
-The `WorkloadReconcileRequest` should add:
+#### InferenceService Controller
 
-```go
-MergedKVCache *v1beta1.KVCacheSpec
-KVCacheDeploymentMode constants.DeploymentModeType
-KVCacheEndpoint *components.KVCacheEndpoint
+When `spec.kvCachePool` is absent, existing behavior is unchanged.
+
+When `spec.kvCachePool` is present:
+
+1. Reconcile model as today.
+2. Select or validate `ServingRuntime` as today.
+3. Fetch the referenced namespaced `KVCachePool`.
+4. Require `KVCachePool` to be ready and to publish usable connection status.
+5. Find a `ServingRuntime.spec.kvCacheConnectors` entry matching:
+   - pool provider;
+   - pool deployment mode; and
+   - target serving component.
+6. Generate connector args and env from typed `connectorConfig` plus
+   `KVCachePool.status.connection`.
+7. Apply connector merge rules.
+8. Reconcile engine, decoder, and router through existing workload paths.
+9. Surface clear conditions and events when connector injection cannot be
+   derived.
+
+### Connector Merge Rules
+
+Connector injection uses a three-way merge:
+
+```text
+ServingRuntime component config
+  -> generated connector config
+  -> connector runtimeArgsOverride / environmentOverride
+  -> InferenceService component config
 ```
 
-The `ComponentDeploymentModes` struct should add:
+`InferenceService` component values have highest precedence, matching OME's
+existing runtime/service merge model.
+
+`RuntimeArgsOverride` follows the existing OME argument merge behavior:
+
+1. If an argument key exists, override its value.
+2. If an argument key does not exist, append it.
+
+Environment merge should preserve the same precedence. Generated connector env
+and connector `EnvironmentOverride` should not overwrite explicit
+`InferenceService` component env values.
+
+### Provider Adapter Contracts
+
+Introduce two internal adapter boundaries.
+
+Pool provider adapter:
 
 ```go
-KVCache constants.DeploymentModeType
-```
-
-The `SingleComponentStrategy` should reconcile `kvCache` before engine and
-decoder. This ordering ensures the Service exists before serving pods start with
-connector configuration.
-
-### Provider Adapter Contract
-
-Introduce an internal provider adapter interface, for example:
-
-```go
-type KVCacheProviderAdapter interface {
+type KVCachePoolProviderAdapter interface {
     Provider() v1beta1.KVCacheProvider
-    DefaultPorts(spec *v1beta1.KVCacheSpec) []corev1.ContainerPort
-    BuildServerContainer(spec *v1beta1.KVCacheSpec) (*corev1.Container, error)
-    BuildEndpoint(isvc *v1beta1.InferenceService, spec *v1beta1.KVCacheSpec) (*KVCacheEndpoint, error)
-    InjectConnector(target v1beta1.ComponentType, spec *v1beta1.KVCacheSpec, endpoint *KVCacheEndpoint, podSpec *v1beta1.PodSpec, runner *v1beta1.RunnerSpec) error
-    Validate(spec *v1beta1.KVCacheSpec) field.ErrorList
+    ValidatePool(pool *v1beta1.KVCachePool) field.ErrorList
+    ReconcilePool(ctx context.Context, pool *v1beta1.KVCachePool) (*KVCachePoolConnectionStatus, error)
 }
 ```
 
-Provider adapters translate portable OME intent into provider-specific command
-args, environment variables, ports, and connector configuration. The generic
-`KVCacheReconciler` owns Kubernetes resources and status. Provider adapters own
-provider semantics.
+Runtime connector adapter:
 
-For LMCache alpha support, the adapter should:
+```go
+type KVCacheRuntimeConnectorAdapter interface {
+    Provider() v1beta1.KVCacheProvider
+    BuildConnectorPatch(
+        connector v1beta1.KVCacheConnectorSpec,
+        component v1beta1.ComponentType,
+        pool *v1beta1.KVCachePool,
+    ) (*KVCacheConnectorPatch, error)
+}
+```
 
-1. Default transfer and HTTP ports when not explicitly provided.
-2. Translate `cache.capacity`, `cache.evictionPolicy`, and `cache.chunkSize`
-   into LMCache server args or environment variables.
-3. Generate the cache server endpoint consumed by vLLM.
-4. Inject the vLLM KV transfer config for the selected connector.
-5. Support provider-specific overrides through `providerConfig.lmcache`.
-
-### Connector Injection
-
-Connector injection is the bridge between the cache server component and the
-serving components.
-
-The initial LMCache adapter should support vLLM engine and decoder components.
-For vLLM, injection can include:
-
-1. A `--kv-transfer-config` argument with the provider-selected connector and
-   component role.
-2. Environment variables for LMCache endpoint, serde, logging, timeouts, or
-   experimental mode when required by the chosen LMCache version.
-3. Optional component-specific roles for prefill-decode deployments.
-
-Merge rules:
-
-1. User-provided component env values win on name conflicts.
-2. Provider-generated env is added only when missing.
-3. If the component runner has a full `command`, OME does not attempt to parse
-   and rewrite shell command strings.
-4. If the component runner uses structured `args`, provider-generated connector
-   args are applied in a deterministic order.
-5. ProviderConfig may override the default connector class or extra connector
-   JSON when the serving runtime requires a specific vLLM or LMCache version.
-
-The adapter should mutate only the target components listed in
-`spec.kvCache.connector.targetComponents`. If the list is empty, default targets
-are:
-
-1. `engine` when only engine is present.
-2. `engine` and `decoder` when decoder is present.
-3. `router` is not targeted in alpha.
+The pool adapter owns provider resource reconciliation and pool status. The
+runtime connector adapter owns serving-runtime-specific injection details.
 
 ### Scheduling and Resource Management
 
-`kvCache` should use the same PodSpec and ComponentExtensionSpec patterns as
-other components, but it should not inherit model-specific or accelerator-
-specific placement by default.
+`KVCachePool` reuses OME workload configuration patterns inside
+`spec.workloads[]`.
 
-The cache server:
+Pool workloads:
 
-1. Uses its own `resources`, `nodeSelector`, `affinity`, `tolerations`,
-   `schedulerName`, `priorityClassName`, and `imagePullSecrets`.
-2. Does not receive BaseModel hostPath mounts unless the user explicitly adds
-   volumes and mounts.
-3. Does not receive engine or decoder `AcceleratorClass` placement.
-4. Can run on CPU or memory-optimized nodes while engine and decoder run on GPU
-   nodes.
-5. Uses `minReplicas`, `maxReplicas`, deployment strategy, PDB, and autoscaler
-   behavior available through the existing raw deployment reconciler.
-
-This keeps cache sizing independent from model-serving GPU sizing.
+1. use their own resources, node selectors, affinity, tolerations,
+   scheduler name, priority class, security context, volumes, and image pull
+   secrets;
+2. do not inherit `InferenceService` model volume mounts;
+3. do not inherit engine or decoder accelerator placement by default;
+4. may run on CPU, memory-optimized, GPU, or RDMA-capable nodes depending on
+   provider needs and user scheduling config; and
+5. may use OME scaling, PDB, and deployment strategy fields where applicable.
 
 ### Readiness, Status, and Failure Behavior
 
-When `spec.kvCache` is present, the controller should create and update:
+`KVCachePool` is ready when:
 
-1. `status.components.kvCache`
-2. `KVCacheReady`
-3. Cache component events for validation, provider adapter, and reconcile
-   failures
-4. Controller metrics for cache reconciliation and provider adapter errors
+1. provider resources are successfully reconciled;
+2. required workloads are available;
+3. provider health checks pass where available; and
+4. `status.connection` contains the data required for runtime connector
+   injection.
 
-The service should be considered not ready if `KVCacheReady=False` when
-`spec.kvCache` is configured. This makes cache configuration an explicit part of
-the desired service state. Silent fallback to no distributed cache would be hard
-to detect and would undermine the performance SLO.
+An `InferenceService` that references an unready pool should be marked not ready
+with an actionable event. It should not silently serve without the requested
+pool, because the reference declares a desired serving dependency.
 
-Provider adapter validation should fail fast for invalid configurations such as:
+Provider validation should fail fast for:
 
-1. Unsupported provider.
-2. Missing runner image when no runtime default provides one.
-3. Connector targets that are not present in the `InferenceService`.
-4. Required provider ports missing or duplicated.
-5. ProviderConfig that cannot be decoded by the selected adapter.
+1. unsupported provider;
+2. unsupported deployment mode for provider;
+3. duplicate workload names;
+4. missing required workload roles for a mode;
+5. missing runner image when a workload requires one;
+6. provider config that cannot be decoded by the selected adapter; and
+7. missing connection status from provider-managed resources.
 
 ### Observability
 
-OME should expose controller-level metrics for the new component:
+Controller-level metrics:
 
-1. `ome_kvcache_reconcile_total`
-2. `ome_kvcache_reconcile_duration_seconds`
-3. `ome_kvcache_ready`
-4. `ome_kvcache_connector_injection_total`
-5. `ome_kvcache_provider_errors_total`
+1. `ome_kvcachepool_reconcile_total`
+2. `ome_kvcachepool_reconcile_duration_seconds`
+3. `ome_kvcachepool_ready`
+4. `ome_kvcachepool_connection_ready`
+5. `ome_kvcache_connector_injection_total`
+6. `ome_kvcache_provider_errors_total`
 
-The cache server Service should preserve provider metrics ports when configured
-on the runner. For LMCache, the HTTP management or metrics endpoint can be
-exposed as a named Service port and scraped by the platform's metrics stack.
+Pool workloads should preserve provider metrics ports configured in
+`workloads[].runner.ports`.
 
-The component should also use standard OME labels:
+Recommended labels:
 
 ```text
-component=kvCache
-ome.io/inferenceservice=<isvc-name>
+ome.io/kvcachepool=<pool-name>
+ome.io/kvcachepool-workload=<workload-name>
+ome.io/kvcache-provider=<provider-name>
 ```
 
 ### Security
 
-The cache Service should default to `ClusterIP`. It should not be exposed
-through the top-level inference ingress. Cache traffic is internal service
-traffic between serving components and the cache component.
-
-Security considerations:
-
-1. Do not expose provider management endpoints externally by default.
-2. Preserve pod security context and container security context overrides.
-3. Allow NetworkPolicy integration through labels.
-4. Avoid writing secrets into providerConfig; use Kubernetes Secret references
-   if providers require credentials in future iterations.
-5. Do not share a cache Service across namespaces or across `InferenceService`
-   objects.
+1. Pool services should default to internal cluster access.
+2. Provider management endpoints should not be exposed through inference
+   ingress by default.
+3. Provider credentials should use Kubernetes Secret references, not inline
+   provider config values.
+4. NetworkPolicy integration should be possible through stable labels.
+5. Cross-namespace pool references are not supported in alpha.
+6. `ProviderManaged` adapters must not blindly copy arbitrary user config into
+   privileged provider CR fields without validation.
 
 ### Backward Compatibility
 
 This proposal is backward compatible:
 
-1. Existing `InferenceService` objects omit `spec.kvCache` and behave the same.
-2. Existing `ServingRuntime` objects omit `spec.kvCacheConfig` and behave the
+1. Existing `InferenceService` objects omit `spec.kvCachePool` and behave the
    same.
-3. Existing engine, decoder, and router specs continue to use the current merge
-   and deployment mode logic.
-4. New status fields appear only when the component is configured.
-5. No existing CRD is removed or renamed.
-
-The feature should be guarded by normal API review and can optionally be gated
-by a controller feature flag during alpha if the project wants staged rollout.
+2. Existing `ServingRuntime` objects omit `spec.kvCacheConnectors` and behave
+   the same.
+3. No existing component spec is removed or renamed.
+4. No existing deployment mode enum is changed.
+5. `KVCachePoolDeploymentMode` is a separate enum from
+   `constants.DeploymentModeType`.
 
 ### Implementation Plan
 
 1. Add API types:
-   - `InferenceServiceSpec.KVCache`
-   - `ServingRuntimeSpec.KVCacheConfig`
-   - `KVCacheSpec`, `KVCachePolicySpec`, `KVCacheConnectorSpec`, `KVCacheRole`
-   - `KVCacheComponent`, `KVCacheReady`
+   - `KVCachePool`
+   - `KVCachePoolSpec`
+   - `KVCacheProviderSpec`
+   - `KVCacheBackendSpec`
+   - `KVCachePolicySpec`
+   - `KVCachePoolWorkloadSpec`
+   - `KVCachePoolStatus`
+   - `KVCachePoolRef`
+   - `KVCacheConnectorSpec`
 
 2. Add code generation updates:
    - `make generate`
    - `make manifests`
 
-3. Add merge and deployment mode utilities:
-   - `MergeKVCacheSpec`
-   - `MergeRuntimeSpecs` returns `mergedKVCache`
-   - `DetermineDeploymentModes` or a companion method returns `RawDeployment`
-     for `kvCache`
+3. Add `KVCachePool` controller:
+   - provider adapter registry
+   - direct workload reconciliation
+   - provider-managed reconciliation
+   - status connection normalization
 
-4. Add provider adapter package:
-   - generic adapter registry
-   - LMCache adapter
-   - validation helpers
-   - connector injection helpers
+4. Add `InferenceService` integration:
+   - fetch referenced pool
+   - validate readiness and connection status
+   - match runtime connector
+   - apply connector merge rules
 
-5. Add `KVCache` component reconciler:
-   - build metadata using `<isvc>-kv-cache`
-   - process labels and annotations
-   - build pod spec from `KVCacheSpec`
-   - call raw Deployment reconciler
-   - update `status.components.kvCache`
+5. Add provider adapters:
+   - LMCache `NodeLocal`
+   - LMCache `ProviderManaged`
+   - Mooncake `DistributedStore` design/validation
 
-6. Extend workload reconciliation:
-   - add merged `kvCache` to `WorkloadReconcileRequest`
-   - reconcile cache before engine and decoder
-   - inject connector settings before creating serving component reconcilers
+6. Add samples:
+   - LMCache NodeLocal
+   - LMCache ProviderManaged
+   - Mooncake DistributedStore
+   - vLLM runtime with `kvCacheConnectors`
+   - InferenceService referencing a pool
 
-7. Extend status and cleanup:
-   - condition maps include `KVCacheComponent`
-   - status cleanup removes `kvCache`
-   - resource cleanup treats `kvCache` as an active component when present
-
-8. Add samples:
-   - LMCache MP with vLLM engine
-   - LMCache with engine and decoder
-   - runtime default plus service opt-in
-
-9. Add documentation:
+7. Add docs:
    - API reference
-   - operational guidance
-   - troubleshooting for connector injection and cache readiness
+   - operational guide
+   - troubleshooting for readiness and connector injection
 
 ### Test Plan
 
@@ -860,157 +1148,148 @@ before accepting changes necessary for this enhancement.
 
 ##### Prerequisite Testing Updates
 
-Existing component tests assume the component set is engine, decoder, router,
-and predictor. Tests for status maps, cleanup, and workload reconciliation must
-be updated to include `kvCache` without changing behavior when it is absent.
+Existing `InferenceService` tests assume the dependency model only includes
+model and runtime. Tests must be updated to cover optional `kvCachePool`
+references without changing behavior when the field is absent.
 
 #### Unit Tests
 
-- `pkg/apis/ome/v1beta1`: verify defaults, validation markers, deep copy, and
-  OpenAPI generation for new KV cache fields.
-- `pkg/controller/v1beta1/inferenceservice/utils`: test `MergeKVCacheSpec`,
-  nil semantics, runtime default merging, and service override precedence.
-- `pkg/controller/v1beta1/inferenceservice/utils`: test cache deployment mode
-  selection and validation.
-- `pkg/controller/v1beta1/inferenceservice/components`: test KV cache metadata,
-  labels, annotations, pod spec construction, default ports, and raw deployment
-  reconciliation calls.
-- `pkg/controller/v1beta1/inferenceservice/components`: test that cache pods do
-  not inherit model volume mounts or accelerator node selectors by default.
-- `pkg/controller/v1beta1/inferenceservice/status`: test `KVCacheReady` mapping,
-  status component initialization, and ready aggregation.
-- `pkg/controller/v1beta1/inferenceservice`: test cleanup when `spec.kvCache`
-  is removed.
-- Provider adapter package: test LMCache server args, endpoint construction,
-  connector env injection, connector args injection, providerConfig overrides,
-  and invalid providerConfig errors.
-- `pkg/controller/v1beta1/inferenceservice/workload`: test that
-  `SingleComponentStrategy` reconciles `kvCache` before engine and decoder.
+- API validation for `KVCachePool` required fields, enum values, workload list
+  semantics, and deepcopy generation.
+- API validation for `InferenceService.spec.kvCachePool`.
+- API validation for `ServingRuntime.spec.kvCacheConnectors`.
+- Provider adapter selection and validation.
+- LMCache `NodeLocal` resource construction.
+- LMCache `ProviderManaged` child-resource construction.
+- Mooncake `DistributedStore` workload validation.
+- Status connection normalization.
+- Runtime connector matching by provider and deployment mode.
+- Connector merge order:
+  runtime config -> generated connector -> connector overrides -> service
+  config.
+- Argument merge behavior where missing args are appended.
+- Environment merge behavior where service env has highest precedence.
 
 #### Integration Tests
 
-1. Create an `InferenceService` with `spec.kvCache.provider: LMCache` and verify
-   that the controller creates Deployment, Service, HPA, and PDB with owner
-   references to the `InferenceService`.
-2. Verify engine Deployment contains provider-injected connector args and env
-   when `kvCache` targets engine.
-3. Verify engine and decoder both receive connector settings in a
-   prefill-decode service.
-4. Verify deleting the `InferenceService` deletes the cache resources.
-5. Verify removing `spec.kvCache` deletes only the cache component and rolls out
-   serving components without connector injection.
-6. Verify runtime `kvCacheConfig` does not enable cache by itself.
-7. Verify `KVCacheReady=False` blocks service readiness when the cache
-   Deployment is unavailable.
+1. Create `KVCachePool` with `deploymentMode: NodeLocal` and verify OME creates
+   provider workloads and status connection.
+2. Create `InferenceService` referencing a ready pool and a compatible runtime;
+   verify engine connector injection.
+3. Create engine and decoder runtime connector config with different roles;
+   verify component-specific args/env.
+4. Reference a missing pool; verify actionable warning and not-ready status.
+5. Reference an unready pool; verify serving reconciliation waits or reports
+   not-ready.
+6. Reference a ready pool with a runtime lacking matching
+   `kvCacheConnectors`; verify clear error condition.
+7. Delete an `InferenceService`; verify referenced `KVCachePool` remains.
+8. Delete a `KVCachePool`; verify implementation resources are cleaned up.
 
 ### Graduation Criteria
 
 #### Alpha
 
-1. `spec.kvCache` and `spec.kvCacheConfig` are available in the v1beta1 API.
-2. LMCache provider adapter supports a Deployment-backed cache server.
-3. Engine connector injection works for vLLM single-component deployments.
-4. Component status and cleanup work correctly.
-5. Samples and basic documentation are available.
+1. `KVCachePool` CRD is available.
+2. `InferenceService.spec.kvCachePool` reference is available.
+3. `ServingRuntime.spec.kvCacheConnectors` is available.
+4. LMCache `NodeLocal` or `ProviderManaged` path works end-to-end for vLLM.
+5. Pool status publishes connection information.
+6. Connector injection respects merge precedence.
+7. Samples and basic troubleshooting documentation exist.
 
 #### Beta
 
-1. Prefill-decode engine and decoder connector roles are validated with
-   integration tests.
-2. Cache metrics and readiness are documented and surfaced consistently.
-3. ProviderConfig validation produces actionable user errors.
-4. Operational feedback from at least one real model deployment is incorporated.
-5. Optional MoonCake provider design is validated or explicitly deferred.
+1. Both LMCache `NodeLocal` and `ProviderManaged` paths are validated.
+2. Mooncake `DistributedStore` design is implemented or explicitly deferred
+   with a validated sample.
+3. Engine and decoder role injection is covered by integration tests.
+4. Provider status and metrics are documented.
+5. Upgrade and rollback behavior is documented.
 
 #### Stable
 
-1. The API has proven sufficient for at least two provider implementations or
-   one provider plus a well-reviewed second-provider design.
-2. Upgrade and rollback behavior is documented.
-3. Performance and failure-mode guidance is documented for production use.
-4. The feature is enabled by default, if it was feature-gated during alpha.
+1. At least two provider or provider/backend combinations are validated.
+2. Failure-mode guidance is documented for production use.
+3. API fields have proven sufficient for direct and provider-managed pool
+   reconciliation.
+4. External pool binding is either added in a follow-up OEP or explicitly left
+   out of scope.
 
 ## Implementation History
 
-- 2026-05-09: Initial OEP drafted.
+- 2026-05-09: Initial OEP drafted as an `InferenceService` `kvCache`
+  component.
+- 2026-05-10: Reworked design to introduce namespace-scoped `KVCachePool` CRD,
+  reference-only `InferenceService.spec.kvCachePool`, and runtime-side
+  `ServingRuntime.spec.kvCacheConnectors`.
 
 ## Drawbacks
 
-Adding a new component increases the size of the `InferenceService` API and the
-number of resources reconciled per service. Operators must now reason about
-cache server sizing, readiness, and failure modes in addition to engine,
-decoder, and router.
+Adding a separate CRD increases the number of resources users must understand.
+Users now need to manage the lifecycle of a pool and choose compatible runtimes.
+The upside is a cleaner ownership model and the ability to create pools before
+serving endpoints exist.
 
-Connector injection also introduces provider-specific complexity into the
-controller, even if that complexity is isolated behind an adapter. Provider
-versions and serving runtime versions may require different connector names or
-configuration payloads, so tests and documentation must track those
-compatibility constraints.
+Runtime connector injection adds complexity to the inference controller. The
+merge order must be carefully tested to avoid overwriting user-provided engine
+or decoder settings.
 
-Finally, making cache readiness part of service readiness may block an inference
-endpoint that could technically serve without distributed cache. This is
-intentional for the initial design because a configured cache is a declared
-performance dependency, but it may need a more nuanced degraded mode later.
+Provider-managed mode adds another ownership boundary. OME owns the
+`KVCachePool`, while the provider controller owns implementation resources. The
+status contract must be clear enough for users to diagnose failures without
+knowing every provider internals.
 
 ## Alternatives
 
-### Standalone CacheServer CRD
+### Inline `InferenceService.spec.kvCache`
 
-A separate `CacheServer` or `KVCacheServer` CRD would allow independent cache
-lifecycle management and could support shared cache infrastructure. This matches
-some external operator designs.
+The initial design added `kvCache` as a component parallel to engine, decoder,
+and router.
 
-This proposal does not choose that approach because OME's desired cache scope is
-per `InferenceService`. A standalone CRD invites cross-model sharing and adds a
-second ownership boundary that users must manage. It also complicates deletion:
-removing an `InferenceService` might leave a cache server running unless extra
-ownership or reference tracking is added.
+This proposal rejects that approach because KV cache pools may be created and
+operated independently, may be shared by multiple serving instances, and may be
+implemented by provider-managed controllers or distributed stores that do not
+fit the `InferenceService` component lifecycle.
 
-### DaemonSet Per InferenceService
+### `KVCacheServer` CRD
 
-A DaemonSet could place cache pods on every selected node, making cache capacity
-node-local. This can be attractive for infrastructure-level cache layers.
+OME could expose a `KVCacheServer` resource.
 
-This proposal does not choose that approach because a DaemonSet is a poor fit
-for a service-local optional component. If an `InferenceService` is deleted, its
-DaemonSet disappears, and nodes no longer have that cache process. That behavior
-is correct for service ownership but wasteful and confusing for node-level cache
-semantics. DaemonSet is better suited to an independently managed cluster or
-node cache resource, which is out of scope.
+This proposal rejects that name because many valid implementations are not one
+server process. `KVCachePool` better describes node-local deployments,
+distributed stores, and provider-managed resources.
 
-### Sidecar in Engine or Decoder Pods
+### Cluster-scoped `ClusterKVCachePool`
 
-The cache provider could run as a sidecar in each engine or decoder pod. This
-keeps lifecycle local to serving pods and avoids another Service.
+OME could add both namespaced and cluster-scoped variants.
 
-This proposal does not choose that approach because it does not provide a shared
-cache pool across engine replicas. It also makes independent cache scaling and
-observability harder.
+This proposal defers cluster scope. The initial resource is namespaced to keep
+ownership, RBAC, service discovery, and connection status straightforward.
 
-### Runtime-Only LMCache Configuration
+### Top-level Runner Fields
 
-OME could add LMCache-specific fields to `ServingRuntime` and only inject vLLM
-arguments, leaving users to deploy the cache server separately.
+OME could put `runner`, `PodSpec`, and scaling fields directly on
+`KVCachePoolSpec`.
 
-This proposal does not choose that approach because it splits responsibility
-between OME and manual Kubernetes resources. It also fails to give users a
-single `InferenceService` view of cache readiness, ownership, and cleanup.
+This proposal rejects that shape because it conflicts with multi-role providers
+such as Mooncake. All pod and container configuration lives under
+`spec.workloads[]`.
 
-### Provider-Specific `lmCache` Field
+### Separate `managementMode`
 
-OME could add `spec.lmCache` with fields that directly mirror LMCache server
-and connector settings.
+OME could add a `managementMode` field with values like native, delegated, and
+external.
 
-This proposal does not choose that approach because it hard-codes one provider
-into the API and would force either duplicate fields or breaking changes when
-MoonCake or another provider is added.
+This proposal rejects that field. Following the existing `InferenceService`
+pattern, `deploymentMode` carries the reconciliation strategy. The
+`ProviderManaged` deployment mode covers provider-controller-backed resources.
 
-### Router-Only KV-Aware Routing
+### External Pools in Alpha
 
-OME could start by adding KV-cache-aware routing to the router instead of
-reconciling a cache component.
+OME could allow `InferenceService` to bind to arbitrary existing endpoints or
+ConfigMaps.
 
-This proposal does not choose that approach for alpha because the cache server
-lifecycle and connector wiring are prerequisites. Router-aware routing can be a
-later enhancement once the component exists and exposes provider status or
-metrics that the router can consume.
+This proposal defers that. External pools need a clear ownership, readiness,
+and validation contract, and should be added only after OME-managed pools are
+well understood.
