@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
@@ -60,6 +61,10 @@ func IsCohereCommand1TFewFTServing(servingPodObjectMeta *metav1.ObjectMeta) bool
 }
 
 func SetPodLabelsFromAnnotations(metadata *metav1.ObjectMeta) {
+	SetPodLabelsFromAnnotationsWithClient(nil, metadata)
+}
+
+func SetPodLabelsFromAnnotationsWithClient(cl client.Client, metadata *metav1.ObjectMeta) {
 	// Check if the VolcanoQueue annotation exists and set the label if it does.
 	if volcanoQueue, ok := metadata.Annotations[constants.VolcanoQueue]; ok {
 		metadata.Labels[constants.VolcanoQueueName] = volcanoQueue
@@ -67,7 +72,7 @@ func SetPodLabelsFromAnnotations(metadata *metav1.ObjectMeta) {
 	} else if dac, ok := metadata.Annotations[constants.DedicatedAICluster]; ok {
 		if _, ok = metadata.Annotations[constants.KueueEnabledLabelKey]; ok {
 			// Kueue case
-			metadata.Labels[constants.KueueQueueLabelKey] = dac
+			metadata.Labels[constants.KueueQueueLabelKey] = resolveKueueQueueNameForDedicatedAICluster(cl, metadata, dac)
 			metadata.Labels[constants.KueueWorkloadPriorityClassLabelKey] = constants.DedicatedAiClusterPreemptionWorkloadPriorityClass
 		} else {
 			// Volcano case
@@ -80,6 +85,18 @@ func SetPodLabelsFromAnnotations(metadata *metav1.ObjectMeta) {
 	if _, ok := metadata.Annotations[constants.VolcanoScheduler]; ok {
 		metadata.Labels[constants.RayScheduler] = constants.VolcanoScheduler
 	}
+}
+
+func resolveKueueQueueNameForDedicatedAICluster(_ client.Client, metadata *metav1.ObjectMeta, dacName string) string {
+	if metadata != nil {
+		if queueName, ok := metadata.Annotations[constants.DACQueueNameLabelKey]; ok {
+			queueName = strings.TrimSpace(queueName)
+			if queueName != "" {
+				return queueName
+			}
+		}
+	}
+	return dacName
 }
 
 func RemovePodAnnotations(metadata *metav1.ObjectMeta, annotationsToRemove []string) {

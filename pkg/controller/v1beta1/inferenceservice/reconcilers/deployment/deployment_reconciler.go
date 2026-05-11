@@ -38,18 +38,27 @@ func NewDeploymentReconciler(client kclient.Client,
 	return &DeploymentReconciler{
 		client:       client,
 		scheme:       scheme,
-		Deployment:   createRawDeployment(componentMeta, componentExt, podSpec),
+		Deployment:   createRawDeploymentWithClient(client, componentMeta, componentExt, podSpec),
 		componentExt: componentExt,
 	}
 }
 
-func createRawDeployment(componentMeta metav1.ObjectMeta,
+func createRawDeployment(
+	componentMeta metav1.ObjectMeta,
+	componentExt *v1beta1.ComponentExtensionSpec,
+	podSpec *corev1.PodSpec) *appsv1.Deployment {
+	return createRawDeploymentWithClient(nil, componentMeta, componentExt, podSpec)
+}
+
+func createRawDeploymentWithClient(
+	cl kclient.Client,
+	componentMeta metav1.ObjectMeta,
 	componentExt *v1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec) *appsv1.Deployment {
 
 	podMetadata := componentMeta
 	podMetadata.Labels["app"] = constants.TruncateNameWithMaxLength(componentMeta.Name, 63)
-	utils.SetPodLabelsFromAnnotations(&podMetadata)
+	utils.SetPodLabelsFromAnnotationsWithClient(cl, &podMetadata)
 	setDefaultPodSpec(podSpec)
 
 	deployment := &appsv1.Deployment{

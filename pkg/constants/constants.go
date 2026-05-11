@@ -497,6 +497,7 @@ const (
 	KueueQueueLabelKey                 = "kueue.x-k8s.io/queue-name"
 	KueueWorkloadPriorityClassLabelKey = "kueue.x-k8s.io/priority-class"
 	KueueEnabledLabelKey               = "kueue-enabled"
+	DACQueueNameLabelKey               = "ome.io/dac-queue-name"
 )
 
 // Model Agent & Model Controller

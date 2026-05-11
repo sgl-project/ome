@@ -48,7 +48,7 @@ func NewRayReconciler(client client.Client,
 
 	rayClusters := make([]*ray.RayCluster, 0, int(*componentExt.MinReplicas))
 	for i := 0; i < int(*componentExt.MinReplicas); i++ {
-		rayCluster := createRayCluster(&componentMeta, podSpec, i)
+		rayCluster := createRayCluster(client, &componentMeta, podSpec, i)
 		rayClusters = append(rayClusters, rayCluster)
 	}
 
@@ -249,10 +249,10 @@ func (r *RayReconciler) deleteExtraRayClusters(existingRayClusters *ray.RayClust
 	return nil
 }
 
-func createRayCluster(meta *metav1.ObjectMeta, spec *corev1.PodSpec, index int) *ray.RayCluster {
+func createRayCluster(cl client.Client, meta *metav1.ObjectMeta, spec *corev1.PodSpec, index int) *ray.RayCluster {
 	clusterName := fmt.Sprintf("%s-%d", meta.Name, index)
 
-	utils.SetPodLabelsFromAnnotations(meta)
+	utils.SetPodLabelsFromAnnotationsWithClient(cl, meta)
 	workerReplicas := int32(constants.DefaultMinReplicas)
 
 	setLifecycleHooks(spec)
