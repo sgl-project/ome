@@ -231,8 +231,7 @@ spec:
           --mm-attention-backend=fa3 \
           --disable-fast-image-processor \
           --cuda-graph-max-bs=256 \
-          --max-running-requests=300 \
-          --limit-mm-data-per-request='{"image": 10}'
+          --max-running-requests=300
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -348,8 +347,7 @@ spec:
           --mm-attention-backend=fa3 \
           --disable-fast-image-processor \
           --cuda-graph-max-bs=256 \
-          --max-running-requests=300 \
-          --limit-mm-data-per-request='{"image": 10}'
+          --max-running-requests=300
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
