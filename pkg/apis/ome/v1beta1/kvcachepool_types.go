@@ -31,26 +31,26 @@ const (
 )
 
 // KVCacheBackendType identifies a storage or transfer backend used underneath a provider.
-// +kubebuilder:validation:Enum=Local;Mooncake;NIXL;Redis;Filesystem
+// +kubebuilder:validation:Enum=Local;CPURAM;Mooncake;NIXL;Redis
 type KVCacheBackendType string
 
 const (
-	KVCacheBackendLocal      KVCacheBackendType = "Local"
-	KVCacheBackendMooncake   KVCacheBackendType = "Mooncake"
-	KVCacheBackendNIXL       KVCacheBackendType = "NIXL"
-	KVCacheBackendRedis      KVCacheBackendType = "Redis"
-	KVCacheBackendFilesystem KVCacheBackendType = "Filesystem"
+	KVCacheBackendLocal    KVCacheBackendType = "Local"
+	KVCacheBackendCPURAM   KVCacheBackendType = "CPURAM"
+	KVCacheBackendMooncake KVCacheBackendType = "Mooncake"
+	KVCacheBackendNIXL     KVCacheBackendType = "NIXL"
+	KVCacheBackendRedis    KVCacheBackendType = "Redis"
 )
 
 // KVCacheEvictionPolicy is the desired cache eviction behavior. Leaving the
 // field unset selects the provider's default policy.
-// +kubebuilder:validation:Enum=LRU;LFU;FIFO
+// +kubebuilder:validation:Enum=LRU;IsolatedLRU;noop
 type KVCacheEvictionPolicy string
 
 const (
-	KVCacheEvictionLRU  KVCacheEvictionPolicy = "LRU"
-	KVCacheEvictionLFU  KVCacheEvictionPolicy = "LFU"
-	KVCacheEvictionFIFO KVCacheEvictionPolicy = "FIFO"
+	KVCacheEvictionLRU         KVCacheEvictionPolicy = "LRU"
+	KVCacheEvictionIsolatedLRU KVCacheEvictionPolicy = "IsolatedLRU"
+	KVCacheEvictionNoop        KVCacheEvictionPolicy = "noop"
 )
 
 // KVCachePoolSpec defines the desired state of a KVCachePool.
@@ -117,6 +117,7 @@ type KVCachePolicySpec struct {
 
 	// EvictionPolicy is the desired eviction behavior.
 	// +optional
+	// +kubebuilder:default=LRU
 	EvictionPolicy *KVCacheEvictionPolicy `json:"evictionPolicy,omitempty"`
 
 	// ChunkSize is a provider-neutral chunk/page/block size hint.
@@ -179,7 +180,7 @@ type KVCacheConnectorSpec struct {
 	// must be one of the InferenceService ComponentType values (engine,
 	// decoder, router, predictor); other keys are rejected at admission.
 	// +optional
-	// +kubebuilder:validation:XValidation:rule="self.all(k, k in ['engine','decoder','router','predictor'])",message="components key must be one of engine, decoder, router, predictor"
+	// +kubebuilder:validation:XValidation:rule="self.all(k, k in ['engine','decoder','router'])",message="components key must be one of engine, decoder, router, predictor"
 	Components map[ComponentType]KVCacheConnectorComponentSpec `json:"components,omitempty"`
 }
 

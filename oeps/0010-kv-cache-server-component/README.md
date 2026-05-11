@@ -136,8 +136,8 @@ namespace.
    alpha.
 4. Add `ServingRuntime.spec.kvCacheConnectors` for runtime-side connector
    support.
-5. Keep the pool API provider-neutral and extensible to LMCache, Mooncake,
-   NIXL-backed configurations, and future providers.
+5. Keep the pool API provider-neutral and extensible to LMCache CPU RAM,
+   Mooncake, NIXL-backed configurations, and future providers.
 6. Reuse existing OME workload configuration patterns where appropriate,
    especially `PodSpec`, `ComponentExtensionSpec`, and Kubernetes container
    fields, without embedding serving-runner-only abstractions such as
@@ -256,8 +256,8 @@ provider may expose connection metadata, create provider workloads, or translate
 pool intent into a provider-native CR.
 
 `provider.backends[]` identifies storage or transfer backends used underneath
-the provider. For example, LMCache may be the provider while Mooncake or NIXL
-is configured as a backend.
+the provider. For example, LMCache may be the provider while CPU RAM, Mooncake,
+or NIXL is configured as a backend.
 
 Provider-specific configuration belongs under `provider.config`.
 Backend-specific configuration belongs under `provider.backends[].config`.
@@ -272,9 +272,9 @@ The API shape is influenced by these provider designs:
 2. [LMCache operator](https://docs.lmcache.ai/mp/operator.html) motivates
    `ProviderManaged`, where OME reconciles provider-native resources and
    reflects their connection status.
-3. [LMCache storage backends](https://docs.lmcache.ai/kv_cache/storage_backends/mooncake.html)
+3. [LMCache storage backends](https://docs.lmcache.ai/kv_cache/storage_backends/local_storage.html)
    motivate separating **provider** from **backend** because LMCache can use
-   Mooncake or NIXL beneath the LMCache integration layer.
+   CPU RAM, Mooncake, or NIXL beneath the LMCache integration layer.
 4. [Mooncake Store](https://kvcache-ai.github.io/Mooncake/design/mooncake-store.html)
    motivates `DistributedStore` and named pool workloads such as `master` and
    `store`.
@@ -448,7 +448,7 @@ type KVCacheProviderSpec struct {
     Config *runtime.RawExtension `json:"config,omitempty"`
 }
 
-// +kubebuilder:validation:Enum=Local;Mooncake;NIXL;Redis;Filesystem
+// +kubebuilder:validation:Enum=Local;CPURAM;Mooncake;NIXL;Redis
 type KVCacheBackendType string
 
 type KVCacheBackendSpec struct {
@@ -711,7 +711,7 @@ spec:
     name: LMCache
     backends:
       - name: local-memory
-        type: Local
+        type: CPURAM
     config:
       mode: Multiprocess
       endpointDiscovery: NodeHostIP
