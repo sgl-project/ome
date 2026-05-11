@@ -139,9 +139,9 @@ namespace.
 5. Keep the pool API provider-neutral and extensible to LMCache, Mooncake,
    NIXL-backed configurations, and future providers.
 6. Reuse existing OME workload configuration patterns where appropriate,
-   especially `PodSpec` and Kubernetes container fields, without embedding
-   `InferenceService` component-only abstractions such as `RunnerSpec` or
-   `ComponentExtensionSpec`.
+   especially `PodSpec`, `ComponentExtensionSpec`, and Kubernetes container
+   fields, without embedding serving-runner-only abstractions such as
+   `RunnerSpec`.
 7. Keep all pool pod/container configuration under `spec.workloads[]`.
 8. Publish normalized connection information in `KVCachePool.status`.
 9. Preserve existing `InferenceService` behavior when `spec.kvCachePool` is
@@ -437,10 +437,6 @@ type KVCacheProviderSpec struct {
     // +required
     Name KVCacheProvider `json:"name"`
 
-    // Version optionally constrains the provider implementation version.
-    // +optional
-    Version *string `json:"version,omitempty"`
-
     // Backends identifies storage or transfer backends used by the provider.
     // +optional
     // +listType=map
@@ -473,7 +469,9 @@ type KVCacheBackendSpec struct {
 Cache policy:
 
 ```go
-// +kubebuilder:validation:Enum=LRU;LFU;FIFO;ProviderDefault
+// KVCacheEvictionPolicy is the desired cache eviction behavior. Leaving the
+// field unset selects the provider's default policy.
+// +kubebuilder:validation:Enum=LRU;LFU;FIFO
 type KVCacheEvictionPolicy string
 
 type KVCachePolicySpec struct {
@@ -482,10 +480,6 @@ type KVCachePolicySpec struct {
     // +optional
     Capacity *resource.Quantity `json:"capacity,omitempty"`
 
-    // TTLSeconds optionally limits cache entry lifetime.
-    // +optional
-    TTLSeconds *int64 `json:"ttlSeconds,omitempty"`
-
     // EvictionPolicy is the desired eviction behavior.
     // +optional
     EvictionPolicy *KVCacheEvictionPolicy `json:"evictionPolicy,omitempty"`
@@ -493,10 +487,6 @@ type KVCachePolicySpec struct {
     // ChunkSize is a provider-neutral chunk/page/block size hint.
     // +optional
     ChunkSize *resource.Quantity `json:"chunkSize,omitempty"`
-
-    // Keyspace optionally scopes generated cache keys.
-    // +optional
-    Keyspace *string `json:"keyspace,omitempty"`
 }
 ```
 
@@ -514,61 +504,18 @@ type KVCachePoolWorkloadSpec struct {
     // +optional
     PodSpec `json:",inline"`
 
-    // Replicas is the desired number of pods for this workload when autoscaling
-    // is not enabled.
-    // +optional
-    Replicas *int32 `json:"replicas,omitempty"`
-
-    // MinReplicas is the lower bound for autoscaled workloads.
-    // +optional
-    MinReplicas *int32 `json:"minReplicas,omitempty"`
-
-    // MaxReplicas is the upper bound for autoscaled workloads.
-    // +optional
-    MaxReplicas *int32 `json:"maxReplicas,omitempty"`
-
-    // Scaling configures provider workload autoscaling when supported by the
-    // selected deployment mode.
-    // +optional
-    Scaling *KVCachePoolWorkloadScalingSpec `json:"scaling,omitempty"`
-
-    // Labels added to pods and workload objects for this role.
-    // +optional
-    Labels map[string]string `json:"labels,omitempty"`
-
-    // Annotations added to pods and workload objects for this role.
-    // +optional
-    Annotations map[string]string `json:"annotations,omitempty"`
-
-    // MinAvailable configures the workload PodDisruptionBudget.
-    // +optional
-    MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
-
-    // MaxUnavailable configures the workload PodDisruptionBudget.
-    // +optional
-    MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
-
-    // DeploymentStrategy configures rollout behavior for Deployment-backed
-    // workloads.
-    // +optional
-    DeploymentStrategy *appsv1.DeploymentStrategy `json:"deploymentStrategy,omitempty"`
-}
-
-type KVCachePoolWorkloadScalingSpec struct {
-    // Metric identifies the autoscaling metric.
-    // +optional
-    Metric *ScaleMetric `json:"metric,omitempty"`
-
-    // Target is the target value for the selected metric.
-    // +optional
-    Target *int32 `json:"target,omitempty"`
-
-    // KedaConfig reuses OME's KEDA trigger configuration when KEDA-based
-    // autoscaling is selected.
-    // +optional
-    KedaConfig *KedaConfig `json:"kedaConfig,omitempty"`
+    // ComponentExtensionSpec provides replicas, autoscaling, labels,
+    // annotations, and PodDisruptionBudget configuration for this workload.
+    ComponentExtensionSpec `json:",inline"`
 }
 ```
+
+`KVCachePoolWorkloadSpec` intentionally composes the existing
+`ComponentExtensionSpec` instead of adding a parallel pool-specific scaling
+shape. That keeps `minReplicas`, `maxReplicas`, `scaleMetric`, `scaleTarget`,
+`kedaConfig`, labels, annotations, PDB, and deployment strategy behavior aligned
+with OME's existing component API. Provider adapters remain responsible for
+validating which extension fields are meaningful for each deployment mode.
 
 #### InferenceService Extension
 
@@ -635,8 +582,11 @@ type KVCacheConnectorSpec struct {
     // +listType=atomic
     DeploymentModes []KVCachePoolDeploymentMode `json:"deploymentModes,omitempty"`
 
-    // Components provides component-specific connector configuration.
+    // Components provides component-specific connector configuration. Keys
+    // must be one of the InferenceService ComponentType values (engine,
+    // decoder, router, predictor); other keys are rejected at admission.
     // +optional
+    // +kubebuilder:validation:XValidation:rule="self.all(k, k in ['engine','decoder','router','predictor'])",message="components key must be one of engine, decoder, router, predictor"
     Components map[ComponentType]KVCacheConnectorComponentSpec `json:"components,omitempty"`
 }
 
@@ -658,26 +608,33 @@ type KVCacheConnectorComponentSpec struct {
 }
 
 type KVCacheConnectorConfig struct {
-    // ConnectorClass names the runtime connector implementation, such as
-    // LMCacheConnectorV1.
+    // ConnectorClass maps to "kv_connector".
     // +optional
     ConnectorClass *string `json:"connectorClass,omitempty"`
 
-    // Role describes the component role understood by the runtime adapter, such
-    // as kv_both, kv_producer, or kv_consumer.
+    // Role maps to "kv_role".
     // +optional
     Role *string `json:"role,omitempty"`
 
-    // ConnectionRefName optionally selects a named connection entry published
-    // by KVCachePool status.
+    // ExtraConfig maps to "kv_connector_extra_config".
     // +optional
-    ConnectionRefName *string `json:"connectionRefName,omitempty"`
+    // +kubebuilder:pruning:PreserveUnknownFields
+    ExtraConfig *runtime.RawExtension `json:"extraConfig,omitempty"`
+
+    // ConfigMapRef sources the full --kv-transfer-config JSON from a
+    // ConfigMap; when set, the inline fields are ignored.
+    // +optional
+    ConfigMapRef *corev1.LocalObjectReference `json:"configMapRef,omitempty"`
 }
 ```
 
-`KVCacheConnectorConfig` is intentionally typed. It is not a
-`runtime.RawExtension`. Provider-specific escaping remains on the pool provider
-and backend specs.
+`KVCacheConnectorConfig` keeps common runtime connector intent typed while
+allowing narrowly scoped escape hatches for runtime-native transfer config.
+`extraConfig` is limited to the nested connector extra-config payload.
+`configMapRef` is for advanced runtimes that need to own the complete
+`--kv-transfer-config` JSON; when it is set, the inline fields are ignored.
+Provider-specific pool configuration still belongs under `provider.config` or
+`provider.backends[].config`.
 
 #### Status
 
@@ -686,10 +643,6 @@ and backend specs.
 ```go
 type KVCachePoolStatus struct {
     duckv1.Status `json:",inline"`
-
-    // Phase is a coarse lifecycle summary.
-    // +optional
-    Phase KVCachePoolPhase `json:"phase,omitempty"`
 
     // Connection contains normalized connection information consumed by
     // ServingRuntime connector adapters.
@@ -735,8 +688,8 @@ type KVCachePoolPortStatus struct {
 
 type KVCachePoolWorkloadStatus struct {
     Name string `json:"name"`
-    ReadyReplicas int32 `json:"readyReplicas,omitempty"`
-    DesiredReplicas int32 `json:"desiredReplicas,omitempty"`
+    ReadyReplicas int32 `json:"readyReplicas"`
+    DesiredReplicas int32 `json:"desiredReplicas"`
 }
 ```
 
@@ -1005,7 +958,7 @@ When `spec.kvCachePool` is present:
 
 ### Connector Merge Rules
 
-Connector injection uses a three-way merge:
+Connector injection uses this ordered merge:
 
 ```text
 ServingRuntime component config
@@ -1025,6 +978,11 @@ existing runtime/service merge model.
 Environment merge should preserve the same precedence. Generated connector env
 and connector `EnvironmentOverride` should not overwrite explicit
 `InferenceService` component env values.
+
+When `connectorConfig.configMapRef` is set, the runtime connector adapter uses
+that referenced full transfer-config payload instead of generating one from
+`connectorClass`, `role`, and `extraConfig`. The adapter still merges
+`runtimeArgsOverride` and `environmentOverride` with the same precedence rules.
 
 ### Provider Adapter Contracts
 
@@ -1271,6 +1229,10 @@ references without changing behavior when the field is absent.
 - 2026-05-10: Reworked design to introduce namespace-scoped `KVCachePool` CRD,
   reference-only `InferenceService.spec.kvCachePool`, and runtime-side
   `ServingRuntime.spec.kvCacheConnectors`.
+- 2026-05-11: Aligned the OEP with the alpha implementation by trimming
+  speculative cache-policy fields, using provider defaults by omission,
+  composing `ComponentExtensionSpec` for workload extensions, and adding
+  runtime connector `extraConfig`/`configMapRef` escape hatches.
 
 ## Drawbacks
 

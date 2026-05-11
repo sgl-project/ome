@@ -20,6 +20,8 @@ func RegisterDefaults(scheme *runtime.Scheme) error {
 	scheme.AddTypeDefaultingFunc(&ClusterServingRuntimeList{}, func(obj interface{}) { SetObjectDefaults_ClusterServingRuntimeList(obj.(*ClusterServingRuntimeList)) })
 	scheme.AddTypeDefaultingFunc(&InferenceService{}, func(obj interface{}) { SetObjectDefaults_InferenceService(obj.(*InferenceService)) })
 	scheme.AddTypeDefaultingFunc(&InferenceServiceList{}, func(obj interface{}) { SetObjectDefaults_InferenceServiceList(obj.(*InferenceServiceList)) })
+	scheme.AddTypeDefaultingFunc(&KVCachePool{}, func(obj interface{}) { SetObjectDefaults_KVCachePool(obj.(*KVCachePool)) })
+	scheme.AddTypeDefaultingFunc(&KVCachePoolList{}, func(obj interface{}) { SetObjectDefaults_KVCachePoolList(obj.(*KVCachePoolList)) })
 	scheme.AddTypeDefaultingFunc(&ServingRuntime{}, func(obj interface{}) { SetObjectDefaults_ServingRuntime(obj.(*ServingRuntime)) })
 	scheme.AddTypeDefaultingFunc(&ServingRuntimeList{}, func(obj interface{}) { SetObjectDefaults_ServingRuntimeList(obj.(*ServingRuntimeList)) })
 	return nil
@@ -3103,6 +3105,163 @@ func SetObjectDefaults_InferenceServiceList(in *InferenceServiceList) {
 	for i := range in.Items {
 		a := &in.Items[i]
 		SetObjectDefaults_InferenceService(a)
+	}
+}
+
+func SetObjectDefaults_KVCachePool(in *KVCachePool) {
+	for i := range in.Spec.Workloads {
+		a := &in.Spec.Workloads[i]
+		for j := range a.PodSpec.Volumes {
+			b := &a.PodSpec.Volumes[j]
+			if b.VolumeSource.ISCSI != nil {
+				if b.VolumeSource.ISCSI.ISCSIInterface == "" {
+					b.VolumeSource.ISCSI.ISCSIInterface = "default"
+				}
+			}
+			if b.VolumeSource.RBD != nil {
+				if b.VolumeSource.RBD.RBDPool == "" {
+					b.VolumeSource.RBD.RBDPool = "rbd"
+				}
+				if b.VolumeSource.RBD.RadosUser == "" {
+					b.VolumeSource.RBD.RadosUser = "admin"
+				}
+				if b.VolumeSource.RBD.Keyring == "" {
+					b.VolumeSource.RBD.Keyring = "/etc/ceph/keyring"
+				}
+			}
+			if b.VolumeSource.AzureDisk != nil {
+				if b.VolumeSource.AzureDisk.CachingMode == nil {
+					ptrVar1 := v1.AzureDataDiskCachingMode(v1.AzureDataDiskCachingReadWrite)
+					b.VolumeSource.AzureDisk.CachingMode = &ptrVar1
+				}
+				if b.VolumeSource.AzureDisk.FSType == nil {
+					var ptrVar1 string = "ext4"
+					b.VolumeSource.AzureDisk.FSType = &ptrVar1
+				}
+				if b.VolumeSource.AzureDisk.ReadOnly == nil {
+					var ptrVar1 bool = false
+					b.VolumeSource.AzureDisk.ReadOnly = &ptrVar1
+				}
+				if b.VolumeSource.AzureDisk.Kind == nil {
+					ptrVar1 := v1.AzureDataDiskKind(v1.AzureSharedBlobDisk)
+					b.VolumeSource.AzureDisk.Kind = &ptrVar1
+				}
+			}
+			if b.VolumeSource.ScaleIO != nil {
+				if b.VolumeSource.ScaleIO.StorageMode == "" {
+					b.VolumeSource.ScaleIO.StorageMode = "ThinProvisioned"
+				}
+				if b.VolumeSource.ScaleIO.FSType == "" {
+					b.VolumeSource.ScaleIO.FSType = "xfs"
+				}
+			}
+		}
+		for j := range a.PodSpec.InitContainers {
+			b := &a.PodSpec.InitContainers[j]
+			for k := range b.Ports {
+				c := &b.Ports[k]
+				if c.Protocol == "" {
+					c.Protocol = "TCP"
+				}
+			}
+			if b.LivenessProbe != nil {
+				if b.LivenessProbe.ProbeHandler.GRPC != nil {
+					if b.LivenessProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.LivenessProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+			if b.ReadinessProbe != nil {
+				if b.ReadinessProbe.ProbeHandler.GRPC != nil {
+					if b.ReadinessProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.ReadinessProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+			if b.StartupProbe != nil {
+				if b.StartupProbe.ProbeHandler.GRPC != nil {
+					if b.StartupProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.StartupProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+		}
+		for j := range a.PodSpec.Containers {
+			b := &a.PodSpec.Containers[j]
+			for k := range b.Ports {
+				c := &b.Ports[k]
+				if c.Protocol == "" {
+					c.Protocol = "TCP"
+				}
+			}
+			if b.LivenessProbe != nil {
+				if b.LivenessProbe.ProbeHandler.GRPC != nil {
+					if b.LivenessProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.LivenessProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+			if b.ReadinessProbe != nil {
+				if b.ReadinessProbe.ProbeHandler.GRPC != nil {
+					if b.ReadinessProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.ReadinessProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+			if b.StartupProbe != nil {
+				if b.StartupProbe.ProbeHandler.GRPC != nil {
+					if b.StartupProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.StartupProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+		}
+		for j := range a.PodSpec.EphemeralContainers {
+			b := &a.PodSpec.EphemeralContainers[j]
+			for k := range b.EphemeralContainerCommon.Ports {
+				c := &b.EphemeralContainerCommon.Ports[k]
+				if c.Protocol == "" {
+					c.Protocol = "TCP"
+				}
+			}
+			if b.EphemeralContainerCommon.LivenessProbe != nil {
+				if b.EphemeralContainerCommon.LivenessProbe.ProbeHandler.GRPC != nil {
+					if b.EphemeralContainerCommon.LivenessProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.EphemeralContainerCommon.LivenessProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+			if b.EphemeralContainerCommon.ReadinessProbe != nil {
+				if b.EphemeralContainerCommon.ReadinessProbe.ProbeHandler.GRPC != nil {
+					if b.EphemeralContainerCommon.ReadinessProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.EphemeralContainerCommon.ReadinessProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+			if b.EphemeralContainerCommon.StartupProbe != nil {
+				if b.EphemeralContainerCommon.StartupProbe.ProbeHandler.GRPC != nil {
+					if b.EphemeralContainerCommon.StartupProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.EphemeralContainerCommon.StartupProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+		}
+	}
+}
+
+func SetObjectDefaults_KVCachePoolList(in *KVCachePoolList) {
+	for i := range in.Items {
+		a := &in.Items[i]
+		SetObjectDefaults_KVCachePool(a)
 	}
 }
 

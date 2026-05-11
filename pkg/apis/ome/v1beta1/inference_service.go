@@ -53,6 +53,13 @@ type InferenceServiceSpec struct {
 	// AcceleratorSelector specifies accelerator selection preferences
 	// +optional
 	AcceleratorSelector *AcceleratorSelector `json:"acceleratorSelector,omitempty"`
+
+	// KVCachePool references a namespace-scoped KVCachePool that this service
+	// should attach to for distributed KV cache reuse. In alpha this is
+	// reference-only; connector behavior is derived from the referenced pool
+	// and from the selected ServingRuntime's kvCacheConnectors.
+	// +optional
+	KVCachePool *KVCachePoolRef `json:"kvCachePool,omitempty"`
 }
 
 // AcceleratorSelector defines how to select accelerators for the InferenceService

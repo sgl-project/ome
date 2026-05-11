@@ -14,4 +14,6 @@ type FineTunedWeightExpansion interface{}
 
 type InferenceServiceExpansion interface{}
 
+type KVCachePoolExpansion interface{}
+
 type ServingRuntimeExpansion interface{}
