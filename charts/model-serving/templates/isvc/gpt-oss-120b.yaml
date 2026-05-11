@@ -9,9 +9,12 @@ spec:
     acceleratorClass: nvidia-h100-2
   predictor:
     model:
-      runtime: srt-gpt-oss-120b-mxfp4
+      runtime: vllm-gpt-oss-120b-mxfp4
       baseModel: gpt-oss-120b
       protocolVersion: openai
+    minReplicas: {{ .Values.gpt_oss_120b.minReplicas}}
+    maxReplicas: {{ .Values.gpt_oss_120b.maxReplicas}}
+  router:
     minReplicas: {{ .Values.gpt_oss_120b.minReplicas}}
     maxReplicas: {{ .Values.gpt_oss_120b.maxReplicas}}
 ---

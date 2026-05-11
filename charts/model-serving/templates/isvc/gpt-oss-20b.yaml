@@ -9,9 +9,12 @@ spec:
     acceleratorClass: nvidia-h100-1
   predictor:
     model:
-      runtime: srt-gpt-oss-20b
+      runtime: vllm-gpt-oss-20b
       baseModel: gpt-oss-20b
       protocolVersion: openai
+    minReplicas: {{ .Values.gpt_oss_20b.minReplicas}}
+    maxReplicas: {{ .Values.gpt_oss_20b.maxReplicas}}
+  router:
     minReplicas: {{ .Values.gpt_oss_20b.minReplicas}}
     maxReplicas: {{ .Values.gpt_oss_20b.maxReplicas}}
 ---

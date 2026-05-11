@@ -1,0 +1,261 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-gpt-oss-120b-mxfp4
+spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-a100-80gb-2
+      - nvidia-a100-40gb-4
+      - nvidia-h100-2
+      - nvidia-h200-1
+      - nvidia-b200-1
+  disabled: false
+  routerConfig:
+    annotations:
+      prometheus.io/path: /metrics
+      prometheus.io/port: '29000'
+      prometheus.io/scrape: 'true'
+    labels:
+      logging-forward: enabled
+    runner:
+      name: router
+      image: {{ .Values.gpt_oss_120b.router.image.repository }}:{{ .Values.gpt_oss_120b.router.image.tag }}
+      ports:
+        - containerPort: 8080
+          name: http
+      resources:
+        requests:
+          cpu: "2"
+          memory: 8Gi
+        limits:
+          cpu: "8"
+          memory: 16Gi
+      args:
+        - --host
+        - 0.0.0.0
+        - --port
+        - "8080"
+        - --service-discovery
+        - --service-discovery-namespace
+        - $(NAMESPACE)
+        - --service-discovery-port
+        - "{{ .Values.vllm.port }}"
+        - --selector
+        - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+        - --enable-igw
+        - --request-id-headers
+        - opc-request-id
+        - --log-json
+        - --disable-retries
+        - --disable-circuit-breaker
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: INFERENCESERVICE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['ome.io/inferenceservice']
+      readinessProbe:
+        httpGet:
+          path: /readiness
+          port: 8080
+        failureThreshold: 5
+        periodSeconds: 30
+        timeoutSeconds: 10
+      livenessProbe:
+        httpGet:
+          path: /liveness
+          port: 8080
+        failureThreshold: 5
+        periodSeconds: 30
+        timeoutSeconds: 10
+      startupProbe:
+        httpGet:
+          path: /readiness
+          port: 8080
+        failureThreshold: 10
+        periodSeconds: 20
+        timeoutSeconds: 10
+  {{- if or .Values.commonAnnotations .Values.gpt_oss_120b.annotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{ toYaml .Values.commonAnnotations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.gpt_oss_120b.annotations }}
+    {{ toYaml .Values.gpt_oss_120b.annotations | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonLabels .Values.gpt_oss_120b.labels }}
+  labels:
+    {{- if .Values.commonLabels }}
+    {{ toYaml .Values.commonLabels | nindent 4 }}
+    {{- end }}
+    {{- if .Values.gpt_oss_120b.labels }}
+    {{ toYaml .Values.gpt_oss_120b.labels | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonTolerations .Values.gpt_oss_120b.tolerations }}
+  tolerations:
+    {{- if .Values.commonTolerations }}
+    {{ toYaml .Values.commonTolerations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.gpt_oss_120b.tolerations }}
+    {{ toYaml .Values.gpt_oss_120b.tolerations | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
+    {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+    - name: etc-pki
+      hostPath:
+        path: /etc/pki
+        type: Directory
+    {{- end }}
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.55.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: GptOssForCausalLM
+      autoSelect: false
+      priority: 1
+      quantization: mxfp4
+      acceleratorConfig:
+        nvidia-a100-80gb-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a100-40gb-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h100-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+          runtimeArgsOverride:
+            - --kv-cache-dtype=fp8
+        nvidia-h200-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+          runtimeArgsOverride:
+            - --kv-cache-dtype=fp8
+        nvidia-b200-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+          runtimeArgsOverride:
+            - --kv-cache-dtype=fp8
+          environmentOverride:
+            VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8: "1"
+  modelSizeRange:
+    min: 115B
+    max: 125B
+  protocolVersions:
+    - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
+  engineConfig:
+    schedulerName: {{ .Values.commonSchedulerName }}
+    {{- if or .Values.commonAnnotations .Values.gpt_oss_120b.annotations }}
+    annotations:
+      {{- if .Values.commonAnnotations }}
+      {{ toYaml .Values.commonAnnotations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.gpt_oss_120b.annotations }}
+      {{ toYaml .Values.gpt_oss_120b.annotations | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.commonLabels .Values.gpt_oss_120b.labels }}
+    labels:
+      {{- if .Values.commonLabels }}
+      {{ toYaml .Values.commonLabels | nindent 6 }}
+      {{- end }}
+      {{- if .Values.gpt_oss_120b.labels }}
+      {{ toYaml .Values.gpt_oss_120b.labels | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.commonTolerations .Values.gpt_oss_120b.tolerations }}
+    tolerations:
+      {{- if .Values.commonTolerations }}
+      {{ toYaml .Values.commonTolerations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.gpt_oss_120b.tolerations }}
+      {{ toYaml .Values.gpt_oss_120b.tolerations | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+      {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+      - name: etc-pki
+        hostPath:
+          path: /etc/pki
+          type: Directory
+      {{- end }}
+    runner:
+      name: ome-container
+      image: {{ .Values.gpt_oss_120b.image.vllm.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.gpt_oss_120b.image.vllm.tag | default .Values.vllm.commonImage.tag }}
+      ports:
+        - containerPort: 8080
+          name: grpc1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m vllm.entrypoints.grpc_server \
+          --host=0.0.0.0 \
+          --port=8080 \
+          --model="$MODEL_PATH" \
+          --served-model-name={{ .Values.vllm.serveModelName }} \
+          --max-model-len=131072 \
+          --tensor-parallel-size=1 \
+          --async-scheduling \
+          --max-cudagraph-capture-size=256
+      env:
+        - name: VLLM_RPC_TIMEOUT
+          value: '30000'
+        - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
+          value: '120'
+        - name: VLLM_WORKER_MULTIPROC_METHOD
+          value: 'spawn'
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 25
+          memory: 100Gi
+          nvidia.com/gpu: 2
+        limits:
+          cpu: 25
+          memory: 100Gi
+          nvidia.com/gpu: 2
+      readinessProbe:
+        grpc:
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+      livenessProbe:
+        grpc:
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        grpc:
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30

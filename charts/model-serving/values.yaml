@@ -1025,6 +1025,10 @@ llama_guard_4_12b:
 gpt_oss_20b:
   enabled: false
   enableRDMA: false
+  router:
+    image:
+      repository: fra.ocir.io/idqj093njucb/smg
+      tag: "v1.4.1.post2"
   labels: { }
   annotations: { }
   affinity:
@@ -1044,6 +1048,9 @@ gpt_oss_20b:
   image:
     repository:
     tag:
+    vllm:
+      repository: fra.ocir.io/idqj093njucb/official-vllm-openai
+      tag: v0.20.0-grpc
 
 gpt_oss_20b_imported:
   enabled: false
@@ -1071,6 +1078,10 @@ gpt_oss_20b_imported:
 gpt_oss_120b:
   enabled: false
   enableRDMA: false
+  router:
+    image:
+      repository: fra.ocir.io/idqj093njucb/smg
+      tag: "v1.4.1.post2"
   labels: { }
   annotations: { }
   affinity:
@@ -1090,6 +1101,9 @@ gpt_oss_120b:
   image:
     repository:
     tag:
+    vllm:
+      repository: fra.ocir.io/idqj093njucb/official-vllm-openai
+      tag: v0.20.0-grpc
 
 gpt_oss_120b_imported:
   enabled: false
