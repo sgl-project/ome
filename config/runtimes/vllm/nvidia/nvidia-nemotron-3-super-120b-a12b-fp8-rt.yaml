@@ -34,10 +34,6 @@ spec:
         - "8080"
         - --selector
         - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
-        - --model-path
-        - $(MODEL_PATH)
-        - --chat-template
-        - $(MODEL_PATH)/chat_template.jinja
         - --request-id-headers
         - opc-request-id
         - --log-json
@@ -56,7 +52,7 @@ spec:
         httpGet:
           path: /readiness
           port: 8080
-        failureThreshold: 5
+        failureThreshold: 10
         periodSeconds: 30
         timeoutSeconds: 10
       livenessProbe:
@@ -83,6 +79,15 @@ spec:
         version: "1.0.0"
       modelArchitecture: NemotronHForCausalLM
       quantization: fp8
+      autoSelect: true
+      priority: 1
+    - modelFramework:
+        name: transformers
+        version: "4.57.6"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: NemotronHForCausalLM
       autoSelect: true
       priority: 1
   modelSizeRange:
@@ -122,11 +127,9 @@ spec:
           name: http1
           protocol: TCP
       command:
-        - python3
+        - vllm
+        - serve
       args:
-        - -m
-        - vllm.entrypoints.openai.api_server
-        - --model
         - $(MODEL_PATH)
         - --host
         - 0.0.0.0
@@ -186,7 +189,7 @@ spec:
         httpGet:
           path: /health
           port: 8080
-        failureThreshold: 3
+        failureThreshold: 10
         successThreshold: 1
         periodSeconds: 90
         timeoutSeconds: 60
