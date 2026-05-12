@@ -1,0 +1,22 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: nvidia-nemotron-3-super-120b-a12b-fp8
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: nvidia
+  disabled: false
+  version: "1.0.0"
+  displayName: nvidia.NVIDIA-Nemotron-3-Super-120B-A12B-FP8
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.57.6"
+  modelArchitecture: NemotronHForCausalLM
+  storage:
+    storageUri: hf://nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8
+    path: /raid/models/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8
+    key: "hf-token"
