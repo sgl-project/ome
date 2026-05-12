@@ -81,6 +81,17 @@ spec:
       modelArchitecture: Qwen3_5MoeForConditionalGeneration
       version: "1.0.0"
       priority: 1
+    - modelFramework:
+        name: transformers
+        version: "4.57.1"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      autoSelect: true
+      modelArchitecture: Qwen3_5MoeForConditionalGeneration
+      quantization: fp8
+      version: "1.0.0"
+      priority: 1
   modelSizeRange:
     min: 34B
     max: 36B
@@ -104,6 +115,7 @@ spec:
         - --max-log-len=0
         - --served-model-name=vllm-model
         - --tensor-parallel-size=2
+        - --data-parallel-size=1
         - --gpu-memory-utilization=0.9
         - --max-model-len=1010000
         - --no-scheduler-reserve-full-isl
