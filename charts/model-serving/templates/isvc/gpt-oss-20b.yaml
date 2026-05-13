@@ -7,16 +7,20 @@ metadata:
 spec:
   acceleratorSelector:
     acceleratorClass: nvidia-h100-1
-  predictor:
-    model:
-      runtime: vllm-gpt-oss-20b
-      baseModel: gpt-oss-20b
-      protocolVersion: openai
+  engine:
     minReplicas: {{ .Values.gpt_oss_20b.minReplicas}}
     maxReplicas: {{ .Values.gpt_oss_20b.maxReplicas}}
+  model:
+    apiGroup: ome.io
+    kind: ClusterBaseModel
+    name: gpt-oss-20b
+  runtime:
+    apiGroup: ome.io
+    kind: ClusterServingRuntime
+    name: vllm-gpt-oss-20b
   router:
-    minReplicas: {{ .Values.gpt_oss_20b.minReplicas}}
-    maxReplicas: {{ .Values.gpt_oss_20b.maxReplicas}}
+    minReplicas: {{ .Values.gpt_oss_20b.router.minReplicas}}
+    maxReplicas: {{ .Values.gpt_oss_20b.router.maxReplicas}}
 ---
 apiVersion: v1
 kind: Namespace

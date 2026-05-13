@@ -1026,6 +1026,8 @@ gpt_oss_20b:
   enabled: false
   enableRDMA: false
   router:
+    minReplicas: 1
+    maxReplicas: 1
     image:
       repository: fra.ocir.io/idqj093njucb/smg
       tag: "v1.4.1.post2"
@@ -1079,6 +1081,8 @@ gpt_oss_120b:
   enabled: false
   enableRDMA: false
   router:
+    minReplicas: 1
+    maxReplicas: 1
     image:
       repository: fra.ocir.io/idqj093njucb/smg
       tag: "v1.4.1.post2"
