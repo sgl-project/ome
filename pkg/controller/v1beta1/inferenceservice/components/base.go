@@ -270,16 +270,22 @@ func MergeRuntimeArgumentsOverride(b *BaseComponentFields, container *corev1.Con
 				tensorParallelismConfig := acceleratorModelConfig.TensorParallelismOverride
 
 				// Override tensor parallel size if specified
-				// --tp-size and --tp are parameters used in sglang
-				// --tensor-parallel-size is the parameter used in vllm
+				// --tp-size and --tp are used in sglang
+				// --tensor-parallel-size and -tp are used in vllm
 				if tensorParallelismConfig.TensorParallelSize != nil && *tensorParallelismConfig.TensorParallelSize > 0 {
-					overrideParam(container, []string{"--tp-size", "--tp", "--tensor-parallel-size"}, *tensorParallelismConfig.TensorParallelSize)
+					overrideParam(container, []string{"--tp-size", "--tp", "--tensor-parallel-size", "-tp"}, *tensorParallelismConfig.TensorParallelSize)
 				}
 				// Override pipeline parallel size if specified
-				// --pp-size and --pp are parameters used in sglang
-				// --pipeline-parallel-size is parameter used in vllm
+				// --pp-size and --pp are used in sglang
+				// --pipeline-parallel-size and -pp used in vllm
 				if tensorParallelismConfig.PipelineParallelSize != nil && *tensorParallelismConfig.PipelineParallelSize > 0 {
-					overrideParam(container, []string{"--pp-size", "--pp", "--pipeline-parallel-size"}, *tensorParallelismConfig.PipelineParallelSize)
+					overrideParam(container, []string{"--pp-size", "--pp", "--pipeline-parallel-size", "-pp"}, *tensorParallelismConfig.PipelineParallelSize)
+				}
+				// Override data parallel size if specified.
+				// --dp-size, --dp used in sglang
+				// --data-parallel-size, -dp used in vllm
+				if tensorParallelismConfig.DataParallelSize != nil && *tensorParallelismConfig.DataParallelSize > 0 {
+					overrideParam(container, []string{"--dp-size", "--dp", "--data-parallel-size", "-dp"}, *tensorParallelismConfig.DataParallelSize)
 				}
 			}
 		}

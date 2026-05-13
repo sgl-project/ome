@@ -330,3 +330,67 @@ func TestShouldReportContainerStartupFailure(t *testing.T) {
 		})
 	}
 }
+
+func TestMergeRuntimeArgumentsOverride(t *testing.T) {
+	tp, pp, dp := int64(4), int64(2), int64(8)
+	baseFields := &BaseComponentFields{
+		SupportedModelFormat: &v1beta1.SupportedModelFormat{
+			AcceleratorConfig: map[string]*v1beta1.AcceleratorModelConfig{
+				"nvidia-h100": {
+					TensorParallelismOverride: &v1beta1.TensorParallelismConfig{
+						TensorParallelSize:   &tp,
+						PipelineParallelSize: &pp,
+						DataParallelSize:     &dp,
+					},
+				},
+			},
+		},
+		AcceleratorClassName: "nvidia-h100",
+	}
+
+	tests := []struct {
+		name            string
+		container       v1.Container
+		expectedArgs    []string
+		expectedCommand []string
+	}{
+		{
+			name: "vllm long flags",
+			container: v1.Container{Args: []string{
+				"--tensor-parallel-size=1", "--pipeline-parallel-size=1", "--data-parallel-size=1",
+			}},
+			expectedArgs: []string{"--tensor-parallel-size=4", "--pipeline-parallel-size=2", "--data-parallel-size=8"},
+		},
+		{
+			name: "sglang size flags",
+			container: v1.Container{Args: []string{
+				"--tp-size", "1", "--pp-size", "1", "--dp-size", "1",
+			}},
+			expectedArgs: []string{"--tp-size", "4", "--pp-size", "2", "--dp-size", "8"},
+		},
+		{
+			name: "sglang shorthand flags in command",
+			container: v1.Container{Command: []string{
+				"python3", "-m", "sglang.launch_server", "--tp", "1", "--pp", "1", "--dp", "1",
+			}},
+			expectedCommand: []string{"python3", "-m", "sglang.launch_server", "--tp", "4", "--pp", "2", "--dp", "8"},
+		},
+		{
+			name:         "single dash flags",
+			container:    v1.Container{Args: []string{"-tp", "1", "-pp", "1", "-dp", "1"}},
+			expectedArgs: []string{"-tp", "4", "-pp", "2", "-dp", "8"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewGomegaWithT(t)
+			container := tt.container
+
+			MergeRuntimeArgumentsOverride(baseFields, &container)
+
+			g.Expect(container.Args).To(gomega.Equal(tt.expectedArgs))
+			g.Expect(container.Command).To(gomega.Equal(tt.expectedCommand))
+		})
+	}
+}
