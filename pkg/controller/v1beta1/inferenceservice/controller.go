@@ -128,6 +128,10 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		return reconcile.Result{}, err
 	}
+	if err := r.backfillLifecycleState(ctx, isvc); err != nil {
+		r.Log.Error(err, "Failed to backfill InferenceService lifecycle state", "InferenceService", isvc.Name)
+		return reconcile.Result{}, err
+	}
 	// get annotations from isvc
 	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
@@ -556,6 +560,35 @@ func (r *InferenceServiceReconciler) handleServerlessPrerequisites(isvc *v1beta1
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *InferenceServiceReconciler) backfillLifecycleState(ctx context.Context, desiredService *v1beta1.InferenceService) error {
+	if desiredService.Status.LifecycleState != "" {
+		return nil
+	}
+
+	namespacedName := types.NamespacedName{Name: desiredService.Name, Namespace: desiredService.Namespace}
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		existingService := &v1beta1.InferenceService{}
+		if err := r.Get(ctx, namespacedName, existingService); err != nil {
+			return err
+		}
+		if existingService.Status.LifecycleState != "" {
+			desiredService.Status = existingService.Status
+			return nil
+		}
+
+		serviceToUpdate := existingService.DeepCopy()
+		serviceToUpdate.Status.LifecycleState = status.DeriveLifecycleState(existingService, existingService.Status.LifecycleState)
+		if err := r.Status().Update(ctx, serviceToUpdate); err != nil {
+			if !apierrors.IsConflict(err) {
+				r.Log.Error(err, "Failed to backfill InferenceService lifecycle state", "InferenceService", desiredService.Name)
+			}
+			return err
+		}
+		desiredService.Status = serviceToUpdate.Status
+		return nil
+	})
 }
 
 func (r *InferenceServiceReconciler) updateStatus(desiredService *v1beta1.InferenceService, deploymentMode constants.DeploymentModeType) error {
