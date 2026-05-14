@@ -36381,6 +36381,14 @@ spec:
                       - type
                     type: object
                   type: array
+                lifecycleState:
+                  enum:
+                    - READY
+                    - CREATING
+                    - UPDATING
+                    - DELETING
+                    - FAILED
+                  type: string
                 modelStatus:
                   properties:
                     lastFailureInfo:

@@ -3893,6 +3893,13 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref common.ReferenceCall
 							},
 						},
 					},
+					"lifecycleState": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LifecycleState is a high-level summary of the InferenceService state.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"address": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Addressable endpoint for the InferenceService",
