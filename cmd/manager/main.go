@@ -47,6 +47,7 @@ import (
 	"github.com/sgl-project/ome/pkg/runtimeselector"
 	"github.com/sgl-project/ome/pkg/utils"
 	"github.com/sgl-project/ome/pkg/version"
+	"github.com/sgl-project/ome/pkg/webhook/admission/basemodel"
 	"github.com/sgl-project/ome/pkg/webhook/admission/benchmark"
 	"github.com/sgl-project/ome/pkg/webhook/admission/isvc"
 	"github.com/sgl-project/ome/pkg/webhook/admission/pod"
@@ -342,6 +343,28 @@ func main() {
 			}).
 			Complete(); err != nil {
 			setupLog.Error(err, "Failed to create InferenceService webhook", "webhook", "v1beta1")
+			os.Exit(1)
+		}
+
+		setupLog.Info("Registering BaseModel webhook to the webhook server")
+		if err = ctrl.NewWebhookManagedBy(mgr).
+			For(&v1beta1.BaseModel{}).
+			WithValidator(&basemodel.BaseModelValidator{
+				RuntimeSelector: runtimeselector.New(mgr.GetClient()),
+			}).
+			Complete(); err != nil {
+			setupLog.Error(err, "Failed to create BaseModel webhook", "webhook", "v1beta1")
+			os.Exit(1)
+		}
+
+		setupLog.Info("Registering ClusterBaseModel webhook to the webhook server")
+		if err = ctrl.NewWebhookManagedBy(mgr).
+			For(&v1beta1.ClusterBaseModel{}).
+			WithValidator(&basemodel.ClusterBaseModelValidator{
+				RuntimeSelector: runtimeselector.New(mgr.GetClient()),
+			}).
+			Complete(); err != nil {
+			setupLog.Error(err, "Failed to create ClusterBaseModel webhook", "webhook", "v1beta1")
 			os.Exit(1)
 		}
 	}

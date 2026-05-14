@@ -16,6 +16,11 @@ type Selector interface {
 	// If no compatible runtime is found, it returns an error.
 	SelectRuntime(ctx context.Context, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) (*RuntimeSelection, error)
 
+	// SelectRuntimeForModel finds the best runtime using only model metadata.
+	// It ignores InferenceService-specific constraints like accelerator class.
+	// If namespace is empty, only cluster-scoped runtimes are considered.
+	SelectRuntimeForModel(ctx context.Context, model *v1beta1.BaseModelSpec, namespace string) (*RuntimeSelection, error)
+
 	// GetCompatibleRuntimes returns all compatible runtimes sorted by priority.
 	// This is useful for debugging and for showing available options.
 	GetCompatibleRuntimes(ctx context.Context, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, namespace string) ([]RuntimeMatch, error)

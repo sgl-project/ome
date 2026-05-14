@@ -37,7 +37,19 @@ func NewWithConfig(config *Config) Selector {
 
 // SelectRuntime finds the best runtime for a given model.
 func (s *defaultSelector) SelectRuntime(ctx context.Context, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) (*RuntimeSelection, error) {
-	namespace := isvc.Namespace
+	namespace := ""
+	if isvc != nil {
+		namespace = isvc.Namespace
+	}
+	return s.selectRuntime(ctx, model, isvc, namespace)
+}
+
+// SelectRuntimeForModel finds the best runtime using only model metadata.
+func (s *defaultSelector) SelectRuntimeForModel(ctx context.Context, model *v1beta1.BaseModelSpec, namespace string) (*RuntimeSelection, error) {
+	return s.selectRuntime(ctx, model, nil, namespace)
+}
+
+func (s *defaultSelector) selectRuntime(ctx context.Context, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, namespace string) (*RuntimeSelection, error) {
 	logger := log.FromContext(ctx)
 	logger.Info("Selecting runtime for model",
 		"model", model.ModelFormat.Name,

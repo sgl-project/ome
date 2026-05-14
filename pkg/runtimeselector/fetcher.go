@@ -29,11 +29,13 @@ func NewDefaultRuntimeFetcher(client client.Client) RuntimeFetcher {
 func (f *DefaultRuntimeFetcher) FetchRuntimes(ctx context.Context, namespace string) (*RuntimeCollection, error) {
 	logger := log.FromContext(ctx)
 
-	// Fetch namespace-scoped runtimes
-	logger.V(1).Info("Fetching namespace-scoped runtimes", "namespace", namespace)
 	runtimes := &v1beta1.ServingRuntimeList{}
-	if err := f.client.List(ctx, runtimes, client.InNamespace(namespace)); err != nil {
-		return nil, err
+	if namespace != "" {
+		// Fetch namespace-scoped runtimes only when there is a namespace context.
+		logger.V(1).Info("Fetching namespace-scoped runtimes", "namespace", namespace)
+		if err := f.client.List(ctx, runtimes, client.InNamespace(namespace)); err != nil {
+			return nil, err
+		}
 	}
 
 	// Fetch cluster-scoped runtimes
