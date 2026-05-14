@@ -283,7 +283,7 @@ func (r *ReplicationJobReconciler) patchContainer(base, override v1.Container) (
 func (r *ReplicationJobReconciler) buildJobArgs() []string {
 	var args []string
 	args = append(args, replicaCommand)
-	args = append(args, "--config", omeAgentConfigFilePath, "--debug")
+	args = append(args, "--config", omeAgentConfigFilePath)
 	return args
 }
 

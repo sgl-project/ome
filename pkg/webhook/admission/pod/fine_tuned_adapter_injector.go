@@ -119,7 +119,7 @@ func (fa *FineTunedAdapterInjector) createInitContainer(envs []v1.EnvVar, mounts
 		TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 		Env:                      envs,
 		VolumeMounts:             mounts,
-		Args:                     []string{"fine-tuned-adapter", "--config", "/ome-agent.yaml", "--debug"},
+		Args:                     []string{"fine-tuned-adapter", "--config", "/ome-agent.yaml"},
 		Resources: v1.ResourceRequirements{
 			Limits: map[v1.ResourceName]resource.Quantity{
 				v1.ResourceCPU:    resource.MustParse(fa.CpuLimit),

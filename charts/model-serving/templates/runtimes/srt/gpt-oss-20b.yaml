@@ -206,7 +206,7 @@ spec:
             --policy cache_aware \
             --worker-urls "grpc://127.0.0.1:18080" \
             --model-path "$MODEL_PATH" \
-            --log-level "debug" \
+            --log-level "info" \
             --health-check-endpoint "/HealthCheck" \
             2>&1 &
 
@@ -377,7 +377,7 @@ spec:
             --policy cache_aware \
             --worker-urls "grpc://127.0.0.1:18080" \
             --model-path "$MODEL_PATH" \
-            --log-level "debug" \
+            --log-level "info" \
             --health-check-endpoint "/HealthCheck" \
             2>&1 &
 

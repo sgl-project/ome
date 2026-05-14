@@ -166,7 +166,7 @@ func (ss *ServingSidecarInjector) createServingSidecarContainer(envs []v1.EnvVar
 		TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 		Env:                      envs,
 		VolumeMounts:             mounts,
-		Args:                     []string{"serving-agent", "--config", "/ome-agent.yaml", "--debug"},
+		Args:                     []string{"serving-agent", "--config", "/ome-agent.yaml"},
 		Resources: v1.ResourceRequirements{
 			Limits: map[v1.ResourceName]resource.Quantity{
 				v1.ResourceCPU:    resource.MustParse(ss.CpuLimit),

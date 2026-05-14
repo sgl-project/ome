@@ -449,7 +449,7 @@ func (tsi *TrainingSidecarInjector) createTrainingSidecarContainer(trainingSidec
 		Image:                    tsi.Image,
 		TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 		Env:                      *trainingSidecarEnvs,
-		Args:                     []string{"training-agent", "--config", "/ome-agent.yaml", "--debug"},
+		Args:                     []string{"training-agent", "--config", "/ome-agent.yaml"},
 		VolumeMounts:             trainingSidecarMounts,
 		SecurityContext:          securityContext,
 	}

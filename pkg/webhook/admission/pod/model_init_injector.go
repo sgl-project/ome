@@ -155,7 +155,7 @@ func (mi *ModelInitInjector) createInitContainer(envs []v1.EnvVar, mounts []v1.V
 		TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 		Env:                      envs,
 		VolumeMounts:             mounts,
-		Args:                     []string{"enigma", "--config", "/ome-agent.yaml", "--debug"},
+		Args:                     []string{"enigma", "--config", "/ome-agent.yaml"},
 		Resources: v1.ResourceRequirements{
 			Limits: map[v1.ResourceName]resource.Quantity{
 				v1.ResourceCPU:    resource.MustParse(mi.CpuLimit),
