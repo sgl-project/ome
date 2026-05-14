@@ -13,6 +13,8 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 )
 
+const containerStartupFailureRestartThreshold int32 = 3
+
 // Helper functions for StatusReconciler
 
 // initializeComponentStatus ensures component status is properly initialized
@@ -59,6 +61,25 @@ func (sr *StatusReconciler) getDeploymentCondition(deployment *appsv1.Deployment
 		}
 	}
 	return &condition
+}
+
+func (sr *StatusReconciler) isDeploymentRolloutComplete(deployment *appsv1.Deployment) bool {
+	if deployment == nil {
+		return false
+	}
+
+	desiredReplicas := deployment.Status.Replicas
+	if deployment.Spec.Replicas != nil {
+		desiredReplicas = *deployment.Spec.Replicas
+	}
+	if desiredReplicas == 0 {
+		return false
+	}
+
+	return deployment.Status.ObservedGeneration >= deployment.Generation &&
+		deployment.Status.UpdatedReplicas == desiredReplicas &&
+		deployment.Status.Replicas == desiredReplicas &&
+		deployment.Status.AvailableReplicas == desiredReplicas
 }
 
 // getLWSConditions extracts condition from LeaderWorkerSet
@@ -259,9 +280,14 @@ func (sr *StatusReconciler) propagateServiceConditions(
 }
 
 // checkContainerStatuses checks the status of containers in a pod
-func (sr *StatusReconciler) checkContainerStatuses(status *v1beta1.InferenceServiceStatus, firstPod *v1.Pod, totalCopies int) {
+func (sr *StatusReconciler) checkContainerStatuses(
+	status *v1beta1.InferenceServiceStatus,
+	firstPod *v1.Pod,
+	totalCopies int,
+	currentModelRevisionName string,
+	reportContainerStartupFailure bool) {
 	// Update model state to 'Loading' if storage initializer is running.
-	// If the storage initializer is terminated due to error or crashloopbackoff, update model
+	// If the storage initializer is terminated due to error, update model
 	// state to 'ModelLoadFailed' with failure info.
 	for _, cs := range firstPod.Status.InitContainerStatuses {
 		if cs.Name == constants.StorageInitializerContainerName {
@@ -285,13 +311,15 @@ func (sr *StatusReconciler) checkContainerStatuses(status *v1beta1.InferenceServ
 						Message:  message,
 						ExitCode: exitCode,
 					})
+				} else {
+					sr.UpdateModelRevisionStates(status, v1beta1.Pending, totalCopies, nil)
 				}
 				return
 			}
 		}
 	}
 
-	// If the ome container is terminated due to error or crashloopbackoff, update model
+	// If the ome container is terminated due to error, update model
 	// state to 'ModelLoadFailed' with failure info.
 	for _, cs := range firstPod.Status.ContainerStatuses {
 		if cs.Name == constants.MainContainerName {
@@ -304,13 +332,32 @@ func (sr *StatusReconciler) checkContainerStatuses(status *v1beta1.InferenceServ
 					ExitCode: exitCode,
 				})
 			case cs.State.Waiting != nil && cs.State.Waiting.Reason == constants.StateReasonCrashLoopBackOff:
+				var startupFailureInfo *v1beta1.FailureInfo
+				if reportContainerStartupFailure {
+					startupFailureInfo = sr.getCrashLoopBackOffStartupFailure(firstPod, cs, currentModelRevisionName)
+				}
+
 				message, exitCode, hasTermination := sr.safeGetTerminationMessage(cs)
 				if hasTermination {
-					sr.UpdateModelRevisionStates(status, v1beta1.FailedToLoad, totalCopies, &v1beta1.FailureInfo{
+					failureInfo := &v1beta1.FailureInfo{
 						Reason:   v1beta1.ModelLoadFailed,
 						Message:  message,
 						ExitCode: exitCode,
-					})
+					}
+					if startupFailureInfo != nil {
+						failureInfo.Reason = startupFailureInfo.Reason
+						failureInfo.Location = startupFailureInfo.Location
+						failureInfo.ModelRevisionName = startupFailureInfo.ModelRevisionName
+						if failureInfo.Message == "" {
+							failureInfo.Message = startupFailureInfo.Message
+						}
+						if failureInfo.ExitCode == 0 {
+							failureInfo.ExitCode = startupFailureInfo.ExitCode
+						}
+					}
+					sr.UpdateModelRevisionStates(status, v1beta1.FailedToLoad, totalCopies, failureInfo)
+				} else if startupFailureInfo != nil {
+					sr.UpdateModelRevisionStates(status, v1beta1.FailedToLoad, totalCopies, startupFailureInfo)
 				} else {
 					sr.UpdateModelRevisionStates(status, v1beta1.Pending, totalCopies, nil)
 				}
@@ -319,6 +366,39 @@ func (sr *StatusReconciler) checkContainerStatuses(status *v1beta1.InferenceServ
 			}
 		}
 	}
+}
+
+func (sr *StatusReconciler) getCrashLoopBackOffStartupFailure(
+	pod *v1.Pod,
+	cs v1.ContainerStatus,
+	currentModelRevisionName string) *v1beta1.FailureInfo {
+	if cs.State.Waiting == nil || cs.State.Waiting.Reason != constants.StateReasonCrashLoopBackOff {
+		return nil
+	}
+	if cs.Ready || cs.RestartCount <= containerStartupFailureRestartThreshold {
+		return nil
+	}
+
+	failureInfo := &v1beta1.FailureInfo{
+		Location: fmt.Sprintf("%s/%s", pod.Name, cs.Name),
+		Reason:   v1beta1.ContainerStartupFailed,
+	}
+	message, exitCode, hasTermination := sr.safeGetTerminationMessage(cs)
+	if hasTermination {
+		failureInfo.Message = message
+		failureInfo.ExitCode = exitCode
+	} else {
+		failureInfo.Message = fmt.Sprintf("Container %q in pod %q never became ready: %s after %d restarts",
+			cs.Name, pod.Name, cs.State.Waiting.Reason, cs.RestartCount)
+		if cs.State.Waiting.Message != "" {
+			failureInfo.Message = fmt.Sprintf("%s: %s", failureInfo.Message, cs.State.Waiting.Message)
+		}
+	}
+	if currentModelRevisionName != "" {
+		failureInfo.ModelRevisionName = currentModelRevisionName
+	}
+
+	return failureInfo
 }
 
 // safeGetTerminationMessage safely extracts termination message from container status

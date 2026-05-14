@@ -202,13 +202,15 @@ const (
 )
 
 // FailureReason enum
-// +kubebuilder:validation:Enum=BaseModelNotReady;BaseModelNotFound;ModelLoadFailed;RuntimeUnhealthy;RuntimeDisabled;NoSupportingRuntime;RuntimeNotRecognized;InvalidPredictorSpec
+// +kubebuilder:validation:Enum=BaseModelNotReady;BaseModelNotFound;ModelLoadFailed;ContainerStartupFailed;RuntimeUnhealthy;RuntimeDisabled;NoSupportingRuntime;RuntimeNotRecognized;InvalidPredictorSpec
 type FailureReason string
 
 // FailureReason enum values
 const (
 	// ModelLoadFailed The model failed to load within a ServingRuntime container
 	ModelLoadFailed FailureReason = "ModelLoadFailed"
+	// ContainerStartupFailed Serving container failed to start before becoming ready
+	ContainerStartupFailed FailureReason = "ContainerStartupFailed"
 	// RuntimeUnhealthy Corresponding ServingRuntime containers failed to start or are unhealthy
 	RuntimeUnhealthy FailureReason = "RuntimeUnhealthy"
 	// RuntimeDisabled The ServingRuntime is disabled

@@ -218,3 +218,115 @@ func TestProcessBaseLabels(t *testing.T) {
 	g.Expect(labels).To(gomega.HaveKeyWithValue(constants.BaseModelTypeLabelKey, string(constants.ServingBaseModel)))
 	g.Expect(labels).To(gomega.HaveKeyWithValue(constants.BaseModelVendorLabelKey, "meta"))
 }
+
+func TestShouldReportContainerStartupFailure(t *testing.T) {
+	tests := []struct {
+		name          string
+		baseModelMeta *metav1.ObjectMeta
+		modelRef      *v1beta1.ModelRef
+		isvcNamespace string
+		componentType v1beta1.ComponentType
+		expected      bool
+	}{
+		{
+			name:          "engine component with resolved BaseModel",
+			baseModelMeta: &metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
+			modelRef:      &v1beta1.ModelRef{Name: "test-model", Kind: stringPtr(constants.BaseModel)},
+			isvcNamespace: "default",
+			componentType: v1beta1.EngineComponent,
+			expected:      true,
+		},
+		{
+			name:          "decoder component with resolved ClusterBaseModel",
+			baseModelMeta: &metav1.ObjectMeta{Name: "test-model"},
+			modelRef:      &v1beta1.ModelRef{Name: "test-model", Kind: stringPtr(constants.ClusterBaseModel)},
+			isvcNamespace: "default",
+			componentType: v1beta1.DecoderComponent,
+			expected:      true,
+		},
+		{
+			name:          "default model kind still reports when resolved model is BaseModel",
+			baseModelMeta: &metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
+			modelRef:      &v1beta1.ModelRef{Name: "test-model"},
+			isvcNamespace: "default",
+			componentType: v1beta1.EngineComponent,
+			expected:      true,
+		},
+		{
+			name:          "requested BaseModel kind still reports when resolved model is ClusterBaseModel",
+			baseModelMeta: &metav1.ObjectMeta{Name: "test-model"},
+			modelRef:      &v1beta1.ModelRef{Name: "test-model", Kind: stringPtr(constants.BaseModel)},
+			isvcNamespace: "default",
+			componentType: v1beta1.EngineComponent,
+			expected:      true,
+		},
+		{
+			name:          "requested ClusterBaseModel kind still reports when resolved model is BaseModel",
+			baseModelMeta: &metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
+			modelRef:      &v1beta1.ModelRef{Name: "test-model", Kind: stringPtr(constants.ClusterBaseModel)},
+			isvcNamespace: "default",
+			componentType: v1beta1.EngineComponent,
+			expected:      true,
+		},
+		{
+			name:          "router component is not model-serving status",
+			baseModelMeta: &metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
+			modelRef:      &v1beta1.ModelRef{Name: "test-model", Kind: stringPtr(constants.ClusterBaseModel)},
+			isvcNamespace: "default",
+			componentType: v1beta1.RouterComponent,
+			expected:      false,
+		},
+		{
+			name:          "mismatched BaseModel",
+			baseModelMeta: &metav1.ObjectMeta{Name: "other-model", Namespace: "default"},
+			modelRef:      &v1beta1.ModelRef{Name: "test-model", Kind: stringPtr(constants.ClusterBaseModel)},
+			isvcNamespace: "default",
+			componentType: v1beta1.EngineComponent,
+			expected:      false,
+		},
+		{
+			name:          "missing BaseModel metadata",
+			baseModelMeta: nil,
+			modelRef:      &v1beta1.ModelRef{Name: "test-model", Kind: stringPtr(constants.ClusterBaseModel)},
+			isvcNamespace: "default",
+			componentType: v1beta1.EngineComponent,
+			expected:      false,
+		},
+		{
+			name:          "missing model ref",
+			baseModelMeta: &metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
+			modelRef:      nil,
+			isvcNamespace: "default",
+			componentType: v1beta1.EngineComponent,
+			expected:      false,
+		},
+		{
+			name:          "non-BaseModel model ref still does not report",
+			baseModelMeta: &metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
+			modelRef:      &v1beta1.ModelRef{Name: "test-model", Kind: stringPtr("CustomModel")},
+			isvcNamespace: "default",
+			componentType: v1beta1.EngineComponent,
+			expected:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &BaseComponentFields{BaseModelMeta: tt.baseModelMeta}
+			isvc := &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: tt.isvcNamespace,
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model: tt.modelRef,
+				},
+			}
+
+			result := shouldReportContainerStartupFailure(b, isvc, tt.componentType)
+
+			if result != tt.expected {
+				t.Fatalf("expected %v, got %v", tt.expected, result)
+			}
+		})
+	}
+}

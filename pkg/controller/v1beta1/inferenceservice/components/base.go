@@ -494,7 +494,26 @@ func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceServic
 	if err != nil {
 		return errors.Wrapf(err, "failed to list %s pods by label", componentType)
 	}
-	b.StatusManager.PropagateModelStatus(&isvc.Status, statusSpec, pods, rawDeployment)
+	reportContainerStartupFailure := shouldReportContainerStartupFailure(b, isvc, componentType)
+	b.StatusManager.PropagateModelStatus(&isvc.Status, statusSpec, pods, rawDeployment, reportContainerStartupFailure)
 
 	return nil
+}
+
+func shouldReportContainerStartupFailure(b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType) bool {
+	if componentType != v1beta1.EngineComponent && componentType != v1beta1.DecoderComponent {
+		return false
+	}
+	if b == nil || b.BaseModelMeta == nil || isvc == nil || isvc.Spec.Model == nil {
+		return false
+	}
+	if isvc.Spec.Model.Kind != nil &&
+		*isvc.Spec.Model.Kind != constants.BaseModel &&
+		*isvc.Spec.Model.Kind != constants.ClusterBaseModel {
+		return false
+	}
+	if b.BaseModelMeta.Name != isvc.Spec.Model.Name {
+		return false
+	}
+	return b.BaseModelMeta.Namespace == "" || b.BaseModelMeta.Namespace == isvc.Namespace
 }

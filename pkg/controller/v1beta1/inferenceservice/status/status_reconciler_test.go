@@ -15,6 +15,7 @@ import (
 	lwsspec "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 func TestNewStatusReconciler(t *testing.T) {
@@ -66,6 +67,7 @@ func TestPropagateRawStatus(t *testing.T) {
 			},
 			url: &apis.URL{Scheme: "http", Host: "test-service.default.svc.cluster.local"},
 			expectedStatus: v1beta1.ComponentStatusSpec{
+				LatestReadyRevision:   "1",
 				LatestCreatedRevision: "1",
 				URL:                   &apis.URL{Scheme: "http", Host: "test-service.default.svc.cluster.local"},
 			},
@@ -104,6 +106,7 @@ func TestPropagateRawStatus(t *testing.T) {
 			},
 			url: &apis.URL{Scheme: "http", Host: "test-engine-service.default.svc.cluster.local"},
 			expectedStatus: v1beta1.ComponentStatusSpec{
+				LatestReadyRevision:   "2",
 				LatestCreatedRevision: "2",
 				URL:                   &apis.URL{Scheme: "http", Host: "test-engine-service.default.svc.cluster.local"},
 			},
@@ -185,6 +188,103 @@ func TestPropagateRawStatus(t *testing.T) {
 			},
 		},
 		{
+			name: "available rollout preserves previous ready revision until new deployment revision is complete",
+			status: &v1beta1.InferenceServiceStatus{
+				Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
+					v1beta1.PredictorComponent: {
+						LatestReadyRevision:   "1",
+						LatestCreatedRevision: "1",
+					},
+				},
+			},
+			component: v1beta1.PredictorComponent,
+			deployment: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-deployment",
+					Namespace:  "default",
+					Generation: 2,
+					Annotations: map[string]string{
+						"deployment.kubernetes.io/revision": "2",
+					},
+				},
+				Status: appsv1.DeploymentStatus{
+					Replicas:           4,
+					ReadyReplicas:      3,
+					AvailableReplicas:  3,
+					UpdatedReplicas:    2,
+					ObservedGeneration: 2,
+					Conditions: []appsv1.DeploymentCondition{
+						{
+							Type:   appsv1.DeploymentAvailable,
+							Status: corev1.ConditionTrue,
+							Reason: "MinimumReplicasAvailable",
+						},
+						{
+							Type:   appsv1.DeploymentProgressing,
+							Status: corev1.ConditionTrue,
+							Reason: "ReplicaSetUpdated",
+						},
+					},
+				},
+			},
+			url: &apis.URL{Scheme: "http", Host: "test-service.default.svc.cluster.local"},
+			expectedStatus: v1beta1.ComponentStatusSpec{
+				LatestReadyRevision:   "1",
+				LatestCreatedRevision: "2",
+				URL:                   &apis.URL{Scheme: "http", Host: "test-service.default.svc.cluster.local"},
+			},
+		},
+		{
+			name: "scale to zero rollout preserves previous ready revision until a new pod becomes available",
+			status: &v1beta1.InferenceServiceStatus{
+				Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
+					v1beta1.PredictorComponent: {
+						LatestReadyRevision:   "1",
+						LatestCreatedRevision: "1",
+					},
+				},
+			},
+			component: v1beta1.PredictorComponent,
+			deployment: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-deployment",
+					Namespace:  "default",
+					Generation: 2,
+					Annotations: map[string]string{
+						"deployment.kubernetes.io/revision": "2",
+					},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: ptr.To[int32](0),
+				},
+				Status: appsv1.DeploymentStatus{
+					Replicas:           0,
+					ReadyReplicas:      0,
+					AvailableReplicas:  0,
+					UpdatedReplicas:    0,
+					ObservedGeneration: 2,
+					Conditions: []appsv1.DeploymentCondition{
+						{
+							Type:   appsv1.DeploymentAvailable,
+							Status: corev1.ConditionTrue,
+							Reason: "MinimumReplicasAvailable",
+						},
+						{
+							Type:   appsv1.DeploymentProgressing,
+							Status: corev1.ConditionTrue,
+							Reason: "NewReplicaSetAvailable",
+						},
+					},
+				},
+			},
+			url: &apis.URL{Scheme: "http", Host: "test-service.default.svc.cluster.local"},
+			expectedStatus: v1beta1.ComponentStatusSpec{
+				LatestReadyRevision:   "1",
+				LatestCreatedRevision: "2",
+				URL:                   &apis.URL{Scheme: "http", Host: "test-service.default.svc.cluster.local"},
+			},
+		},
+		{
 			name:      "deployment with replica failure",
 			status:    &v1beta1.InferenceServiceStatus{},
 			component: v1beta1.PredictorComponent,
@@ -227,6 +327,7 @@ func TestPropagateRawStatus(t *testing.T) {
 			manager.PropagateRawStatus(tt.status, tt.component, tt.deployment, tt.url)
 
 			actualStatus := tt.status.Components[tt.component]
+			assert.Equal(t, tt.expectedStatus.LatestReadyRevision, actualStatus.LatestReadyRevision)
 			assert.Equal(t, tt.expectedStatus.LatestCreatedRevision, actualStatus.LatestCreatedRevision)
 			assert.Equal(t, tt.expectedStatus.URL, actualStatus.URL)
 			assert.Equal(t, tt.deployment.Status.ObservedGeneration, tt.status.ObservedGeneration)
@@ -637,12 +738,15 @@ func TestPropagateStatus(t *testing.T) {
 
 func TestPropagateModelStatus(t *testing.T) {
 	tests := []struct {
-		name          string
-		status        *v1beta1.InferenceServiceStatus
-		statusSpec    v1beta1.ComponentStatusSpec
-		podList       *corev1.PodList
-		rawDeployment bool
-		expectedState v1beta1.ModelState
+		name                  string
+		status                *v1beta1.InferenceServiceStatus
+		statusSpec            v1beta1.ComponentStatusSpec
+		podList               *corev1.PodList
+		rawDeployment         bool
+		reportStartup         bool
+		expectedState         v1beta1.ModelState
+		expectedReason        *v1beta1.FailureReason
+		expectedModelRevision string
 	}{
 		{
 			name:   "no pods available",
@@ -660,7 +764,8 @@ func TestPropagateModelStatus(t *testing.T) {
 			status: &v1beta1.InferenceServiceStatus{
 				Status: duckv1.Status{
 					Conditions: duckv1.Conditions{
-						{Type: v1beta1.PredictorReady, Status: corev1.ConditionTrue},
+						{Type: v1beta1.IngressReady, Status: corev1.ConditionTrue},
+						{Type: v1beta1.EngineReady, Status: corev1.ConditionTrue},
 					},
 				},
 				ModelStatus: v1beta1.ModelStatus{},
@@ -696,7 +801,8 @@ func TestPropagateModelStatus(t *testing.T) {
 			status: &v1beta1.InferenceServiceStatus{
 				Status: duckv1.Status{
 					Conditions: duckv1.Conditions{
-						{Type: v1beta1.PredictorReady, Status: corev1.ConditionTrue},
+						{Type: v1beta1.IngressReady, Status: corev1.ConditionTrue},
+						{Type: v1beta1.EngineReady, Status: corev1.ConditionTrue},
 					},
 				},
 				ModelStatus: v1beta1.ModelStatus{},
@@ -718,16 +824,201 @@ func TestPropagateModelStatus(t *testing.T) {
 			rawDeployment: true,
 			expectedState: v1beta1.Loaded,
 		},
+		{
+			name: "rollout crash loop surfaces startup failure after previous revision was loaded",
+			status: &v1beta1.InferenceServiceStatus{
+				ModelStatus: v1beta1.ModelStatus{
+					ModelRevisionStates: &v1beta1.ModelRevisionStates{
+						ActiveModelState: v1beta1.Loaded,
+					},
+				},
+			},
+			statusSpec: v1beta1.ComponentStatusSpec{
+				LatestReadyRevision:   "rev-1",
+				LatestCreatedRevision: "rev-2",
+			},
+			podList: &corev1.PodList{
+				Items: []corev1.Pod{
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-pod-1"},
+						Status: corev1.PodStatus{
+							ContainerStatuses: []corev1.ContainerStatus{
+								{
+									Name:         constants.MainContainerName,
+									RestartCount: 4,
+									State: corev1.ContainerState{
+										Waiting: &corev1.ContainerStateWaiting{
+											Reason: constants.StateReasonCrashLoopBackOff,
+										},
+									},
+									LastTerminationState: corev1.ContainerState{
+										Terminated: &corev1.ContainerStateTerminated{
+											Message:  "container exited during startup",
+											ExitCode: 2,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			rawDeployment:         false,
+			reportStartup:         true,
+			expectedState:         v1beta1.FailedToLoad,
+			expectedReason:        ptr.To(v1beta1.ContainerStartupFailed),
+			expectedModelRevision: "rev-2",
+		},
+		{
+			name: "same ready revision crash loop stays pending after service was previously loaded",
+			status: &v1beta1.InferenceServiceStatus{
+				ModelStatus: v1beta1.ModelStatus{
+					ModelRevisionStates: &v1beta1.ModelRevisionStates{
+						ActiveModelState: v1beta1.Loaded,
+					},
+				},
+			},
+			statusSpec: v1beta1.ComponentStatusSpec{
+				LatestReadyRevision:   "rev-1",
+				LatestCreatedRevision: "rev-1",
+			},
+			podList: &corev1.PodList{
+				Items: []corev1.Pod{
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-pod-1"},
+						Status: corev1.PodStatus{
+							ContainerStatuses: []corev1.ContainerStatus{
+								{
+									Name:         constants.MainContainerName,
+									RestartCount: 4,
+									State: corev1.ContainerState{
+										Waiting: &corev1.ContainerStateWaiting{
+											Reason: constants.StateReasonCrashLoopBackOff,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			rawDeployment: false,
+			reportStartup: true,
+			expectedState: v1beta1.Pending,
+		},
+		{
+			name: "raw rollout crash loop keeps prior failure behavior after previous revision was loaded",
+			status: &v1beta1.InferenceServiceStatus{
+				Status: duckv1.Status{
+					Conditions: duckv1.Conditions{
+						{Type: v1beta1.IngressReady, Status: corev1.ConditionTrue},
+						{Type: v1beta1.EngineReady, Status: corev1.ConditionTrue},
+					},
+				},
+				ModelStatus: v1beta1.ModelStatus{
+					ModelRevisionStates: &v1beta1.ModelRevisionStates{
+						ActiveModelState: v1beta1.Loaded,
+					},
+				},
+			},
+			statusSpec: v1beta1.ComponentStatusSpec{
+				LatestReadyRevision:   "rev-1",
+				LatestCreatedRevision: "rev-2",
+			},
+			podList: &corev1.PodList{
+				Items: []corev1.Pod{
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-pod-1"},
+						Status: corev1.PodStatus{
+							ContainerStatuses: []corev1.ContainerStatus{
+								{
+									Name:         constants.MainContainerName,
+									RestartCount: 4,
+									State: corev1.ContainerState{
+										Waiting: &corev1.ContainerStateWaiting{
+											Reason: constants.StateReasonCrashLoopBackOff,
+										},
+									},
+									LastTerminationState: corev1.ContainerState{
+										Terminated: &corev1.ContainerStateTerminated{
+											Message:  "container exited after becoming ready",
+											ExitCode: 2,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			rawDeployment:  true,
+			reportStartup:  true,
+			expectedState:  v1beta1.FailedToLoad,
+			expectedReason: ptr.To(v1beta1.ModelLoadFailed),
+		},
+		{
+			name: "multi-node style status without ready revision keeps prior failure behavior after service was previously loaded",
+			status: &v1beta1.InferenceServiceStatus{
+				ModelStatus: v1beta1.ModelStatus{
+					ModelRevisionStates: &v1beta1.ModelRevisionStates{
+						ActiveModelState: v1beta1.Loaded,
+					},
+				},
+			},
+			statusSpec: v1beta1.ComponentStatusSpec{
+				LatestCreatedRevision: "rev-2",
+			},
+			podList: &corev1.PodList{
+				Items: []corev1.Pod{
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-pod-1"},
+						Status: corev1.PodStatus{
+							ContainerStatuses: []corev1.ContainerStatus{
+								{
+									Name:         constants.MainContainerName,
+									RestartCount: 4,
+									State: corev1.ContainerState{
+										Waiting: &corev1.ContainerStateWaiting{
+											Reason: constants.StateReasonCrashLoopBackOff,
+										},
+									},
+									LastTerminationState: corev1.ContainerState{
+										Terminated: &corev1.ContainerStateTerminated{
+											Message:  "container exited after becoming ready",
+											ExitCode: 2,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			rawDeployment:  false,
+			reportStartup:  true,
+			expectedState:  v1beta1.FailedToLoad,
+			expectedReason: ptr.To(v1beta1.ModelLoadFailed),
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			manager := NewStatusReconciler()
 
-			manager.PropagateModelStatus(tt.status, tt.statusSpec, tt.podList, tt.rawDeployment)
+			manager.PropagateModelStatus(tt.status, tt.statusSpec, tt.podList, tt.rawDeployment, tt.reportStartup)
 
 			if tt.status.ModelStatus.ModelRevisionStates != nil {
 				assert.Equal(t, tt.expectedState, tt.status.ModelStatus.ModelRevisionStates.TargetModelState)
+			}
+			if tt.expectedReason != nil {
+				if assert.NotNil(t, tt.status.ModelStatus.LastFailureInfo) {
+					assert.Equal(t, *tt.expectedReason, tt.status.ModelStatus.LastFailureInfo.Reason)
+				}
+			}
+			if tt.expectedModelRevision != "" {
+				if assert.NotNil(t, tt.status.ModelStatus.LastFailureInfo) {
+					assert.Equal(t, tt.expectedModelRevision, tt.status.ModelStatus.LastFailureInfo.ModelRevisionName)
+				}
 			}
 		})
 	}

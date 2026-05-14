@@ -750,11 +750,17 @@ func TestPropagateServiceConditions(t *testing.T) {
 
 func TestCheckContainerStatuses(t *testing.T) {
 	tests := []struct {
-		name          string
-		status        *v1beta1.InferenceServiceStatus
-		pod           *corev1.Pod
-		totalCopies   int
-		expectedState v1beta1.ModelState
+		name                  string
+		status                *v1beta1.InferenceServiceStatus
+		pod                   *corev1.Pod
+		totalCopies           int
+		modelRevision         string
+		expectedState         v1beta1.ModelState
+		expectedReason        *v1beta1.FailureReason
+		expectedMsg           string
+		expectedModelRevision string
+		expectedExitCode      *int32
+		reportStartup         bool
 	}{
 		{
 			name:   "storage initializer running",
@@ -797,7 +803,7 @@ func TestCheckContainerStatuses(t *testing.T) {
 			expectedState: v1beta1.FailedToLoad,
 		},
 		{
-			name:   "storage initializer crash loop back off",
+			name:   "storage initializer crash loop back off with termination",
 			status: &v1beta1.InferenceServiceStatus{ModelStatus: v1beta1.ModelStatus{}},
 			pod: &corev1.Pod{
 				Status: corev1.PodStatus{
@@ -819,8 +825,62 @@ func TestCheckContainerStatuses(t *testing.T) {
 					},
 				},
 			},
+			totalCopies:    1,
+			expectedState:  v1beta1.FailedToLoad,
+			expectedReason: ptr.To(v1beta1.ModelLoadFailed),
+			expectedMsg:    "Failed to download model",
+		},
+		{
+			name:   "storage initializer crash loop back off with termination keeps prior failure behavior when startup reporting is enabled",
+			status: &v1beta1.InferenceServiceStatus{ModelStatus: v1beta1.ModelStatus{}},
+			pod: &corev1.Pod{
+				Status: corev1.PodStatus{
+					InitContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name: constants.StorageInitializerContainerName,
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason: constants.StateReasonCrashLoopBackOff,
+								},
+							},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{
+									Message:  "Failed to download model",
+									ExitCode: 1,
+								},
+							},
+						},
+					},
+				},
+			},
+			totalCopies:    1,
+			expectedState:  v1beta1.FailedToLoad,
+			expectedReason: ptr.To(v1beta1.ModelLoadFailed),
+			expectedMsg:    "Failed to download model",
+			reportStartup:  true,
+		},
+		{
+			name:   "storage initializer crash loop back off after restart threshold without termination",
+			status: &v1beta1.InferenceServiceStatus{ModelStatus: v1beta1.ModelStatus{}},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-pod"},
+				Status: corev1.PodStatus{
+					InitContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:         constants.StorageInitializerContainerName,
+							RestartCount: 3,
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason:  constants.StateReasonCrashLoopBackOff,
+									Message: "back-off restarting failed container",
+								},
+							},
+						},
+					},
+				},
+			},
 			totalCopies:   1,
-			expectedState: v1beta1.FailedToLoad,
+			expectedState: v1beta1.Pending,
 		},
 		{
 			name:   "main container terminated with error",
@@ -845,7 +905,102 @@ func TestCheckContainerStatuses(t *testing.T) {
 			expectedState: v1beta1.FailedToLoad,
 		},
 		{
-			name:   "main container crash loop back off with termination",
+			name:   "main container crash loop back off with termination keeps original failure below startup threshold when startup reporting is enabled",
+			status: &v1beta1.InferenceServiceStatus{ModelStatus: v1beta1.ModelStatus{}},
+			pod: &corev1.Pod{
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:         constants.MainContainerName,
+							RestartCount: 2,
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason: constants.StateReasonCrashLoopBackOff,
+								},
+							},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{
+									Message:  "Model loading failed",
+									ExitCode: 1,
+								},
+							},
+						},
+					},
+				},
+			},
+			totalCopies:      1,
+			expectedState:    v1beta1.FailedToLoad,
+			expectedReason:   ptr.To(v1beta1.ModelLoadFailed),
+			expectedMsg:      "Model loading failed",
+			expectedExitCode: ptr.To(int32(1)),
+			reportStartup:    true,
+		},
+		{
+			name:   "main container crash loop back off at startup threshold keeps original failure when startup reporting is enabled",
+			status: &v1beta1.InferenceServiceStatus{ModelStatus: v1beta1.ModelStatus{}},
+			pod: &corev1.Pod{
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:         constants.MainContainerName,
+							RestartCount: containerStartupFailureRestartThreshold,
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason: constants.StateReasonCrashLoopBackOff,
+								},
+							},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{
+									Message:  "Model loading failed at threshold",
+									ExitCode: 2,
+								},
+							},
+						},
+					},
+				},
+			},
+			totalCopies:      1,
+			expectedState:    v1beta1.FailedToLoad,
+			expectedReason:   ptr.To(v1beta1.ModelLoadFailed),
+			expectedMsg:      "Model loading failed at threshold",
+			expectedExitCode: ptr.To(int32(2)),
+			reportStartup:    true,
+		},
+		{
+			name:   "main container crash loop back off with termination reports container startup failure when startup reporting is enabled",
+			status: &v1beta1.InferenceServiceStatus{ModelStatus: v1beta1.ModelStatus{}},
+			pod: &corev1.Pod{
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:         constants.MainContainerName,
+							RestartCount: 4,
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason: constants.StateReasonCrashLoopBackOff,
+								},
+							},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{
+									Message:  "Model loading failed",
+									ExitCode: 1,
+								},
+							},
+						},
+					},
+				},
+			},
+			totalCopies:           1,
+			modelRevision:         "rev-2",
+			expectedState:         v1beta1.FailedToLoad,
+			expectedReason:        ptr.To(v1beta1.ContainerStartupFailed),
+			expectedMsg:           "Model loading failed",
+			expectedModelRevision: "rev-2",
+			expectedExitCode:      ptr.To(int32(1)),
+			reportStartup:         true,
+		},
+		{
+			name:   "main container crash loop back off with termination keeps prior failure behavior when startup reporting disabled",
 			status: &v1beta1.InferenceServiceStatus{ModelStatus: v1beta1.ModelStatus{}},
 			pod: &corev1.Pod{
 				Status: corev1.PodStatus{
@@ -867,8 +1022,59 @@ func TestCheckContainerStatuses(t *testing.T) {
 					},
 				},
 			},
+			totalCopies:    1,
+			expectedState:  v1beta1.FailedToLoad,
+			expectedReason: ptr.To(v1beta1.ModelLoadFailed),
+			expectedMsg:    "Model loading failed",
+		},
+		{
+			name:   "main container crash loop back off after restart threshold",
+			status: &v1beta1.InferenceServiceStatus{ModelStatus: v1beta1.ModelStatus{}},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-pod"},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:         constants.MainContainerName,
+							RestartCount: 4,
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason: constants.StateReasonCrashLoopBackOff,
+								},
+							},
+						},
+					},
+				},
+			},
+			totalCopies:           1,
+			modelRevision:         "rev-2",
+			expectedState:         v1beta1.FailedToLoad,
+			expectedReason:        ptr.To(v1beta1.ContainerStartupFailed),
+			expectedMsg:           constants.StateReasonCrashLoopBackOff,
+			expectedModelRevision: "rev-2",
+			reportStartup:         true,
+		},
+		{
+			name:   "main container crash loop back off after restart threshold with startup reporting disabled",
+			status: &v1beta1.InferenceServiceStatus{ModelStatus: v1beta1.ModelStatus{}},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-pod"},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:         constants.MainContainerName,
+							RestartCount: 4,
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason: constants.StateReasonCrashLoopBackOff,
+								},
+							},
+						},
+					},
+				},
+			},
 			totalCopies:   1,
-			expectedState: v1beta1.FailedToLoad,
+			expectedState: v1beta1.Pending,
 		},
 		{
 			name:   "main container crash loop back off without termination",
@@ -913,10 +1119,30 @@ func TestCheckContainerStatuses(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			manager := NewStatusReconciler()
-			manager.checkContainerStatuses(tt.status, tt.pod, tt.totalCopies)
+			manager.checkContainerStatuses(tt.status, tt.pod, tt.totalCopies, tt.modelRevision, tt.reportStartup)
 
 			if tt.status.ModelStatus.ModelRevisionStates != nil {
 				assert.Equal(t, tt.expectedState, tt.status.ModelStatus.ModelRevisionStates.TargetModelState)
+			}
+			if tt.expectedReason != nil {
+				if assert.NotNil(t, tt.status.ModelStatus.LastFailureInfo) {
+					assert.Equal(t, *tt.expectedReason, tt.status.ModelStatus.LastFailureInfo.Reason)
+				}
+			}
+			if tt.expectedMsg != "" {
+				if assert.NotNil(t, tt.status.ModelStatus.LastFailureInfo) {
+					assert.Contains(t, tt.status.ModelStatus.LastFailureInfo.Message, tt.expectedMsg)
+				}
+			}
+			if tt.expectedModelRevision != "" {
+				if assert.NotNil(t, tt.status.ModelStatus.LastFailureInfo) {
+					assert.Equal(t, tt.expectedModelRevision, tt.status.ModelStatus.LastFailureInfo.ModelRevisionName)
+				}
+			}
+			if tt.expectedExitCode != nil {
+				if assert.NotNil(t, tt.status.ModelStatus.LastFailureInfo) {
+					assert.Equal(t, *tt.expectedExitCode, tt.status.ModelStatus.LastFailureInfo.ExitCode)
+				}
 			}
 		})
 	}
