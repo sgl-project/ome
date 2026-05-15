@@ -213,9 +213,9 @@ spec:
           --host=0.0.0.0 \
           --port=8080 \
           --model="$MODEL_PATH" \
-          --served-model-name={{ .Values.vllm.serveModelName }} \
+          --served-model-name=gpt-oss-120b \
           --max-model-len=131072 \
-          --tensor-parallel-size=1 \
+          --tensor-parallel-size=2 \
           --async-scheduling \
           --max-cudagraph-capture-size=256
       env:
