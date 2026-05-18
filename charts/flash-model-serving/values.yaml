@@ -1,0 +1,81 @@
+
+# OCI configurations
+oci:
+  realm: oc1
+  region: us-chicago-1
+  # Required environment variables for ONSR
+  ociRegionMetadata: ""
+  requestsCaBundle: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+
+
+# Runtime common configurations
+serveModelName: vllm-model # served model name for project flash models
+schedulerName: "genai-kube-scheduler"
+
+engine:
+  port: 8080
+  annotations:
+    # DO NOT ADD chainsaw.k8s-integration.oracle.com/inject: "enabled" in serving runtime, this must be set in each isvc
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+    chainsaw.k8s-integration.oracle.com/compartmentId: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva" # hardcode to dev tenancy compartment id
+    chainsaw.k8s-integration.oracle.com/logPath: "vllm"
+    chainsaw.k8s-integration.oracle.com/namespace: "vllm"
+  labels:
+    logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+router:
+  port: 8080
+  annotations:
+    prometheus.io/path: /metrics
+    prometheus.io/port: '29000'
+    prometheus.io/scrape: 'true'
+  labels:
+    logging-forward: enabled
+
+
+
+
+
+# Flash model configurations
+deepseek_v4_flash:
+  router:
+    image:
+      repository: fra.ocir.io/idqj093njucb/smg
+      tag: "1.4.1"
+  engine:
+    image:
+      repository: fra.ocir.io/idqj093njucb/vllm-openai
+      tag: "v0.20.1-cu129"
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: [ ]
+  minReplicas: 1
+  maxReplicas: 1
+  scaleMetric: {}
+
+deepseek_v4_pro:
+  router:
+    image:
+      repository: fra.ocir.io/idqj093njucb/smg
+      tag: "1.4.1"
+  engine:
+    image:
+      repository: fra.ocir.io/idqj093njucb/vllm-openai
+      tag: "v0.20.1-cu129"
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: [ ]
+  minReplicas: 1
+  maxReplicas: 1
+  scaleMetric: {}

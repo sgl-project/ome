@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flash-model-serving-validated-hf-models
+  namespace: ome
+data:
+  # Curated catalog of Flash models tested and claimed as supported.
+  # Model ids are exact HuggingFace model ids with vendor prefixes.
+  # Runtime references point to the serving contract; accelerator classes must be read
+  # from the referenced ClusterServingRuntime resources.
+  validated_hf_models.yaml: |-
+    schemaVersion: v1
+    models:
+      - id: deepseek-ai/DeepSeek-V4-Pro
+        runtimes:
+          - apiVersion: ome.io/v1beta1
+            kind: ClusterServingRuntime
+            name: vllm-deepseek-v4-pro
+      - id: deepseek-ai/DeepSeek-V4-Flash
+        runtimes:
+          - apiVersion: ome.io/v1beta1
+            kind: ClusterServingRuntime
+            name: vllm-deepseek-v4-flash

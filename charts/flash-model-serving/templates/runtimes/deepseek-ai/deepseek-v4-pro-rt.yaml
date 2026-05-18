@@ -1,0 +1,231 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-deepseek-v4-pro
+spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-h200-8
+  disabled: false
+  routerConfig:
+    annotations:
+      {{- .Values.router.annotations | toYaml | nindent 6 }}
+    labels:
+      {{- .Values.router.labels | toYaml | nindent 6 }}
+    runner:
+      name: router
+      image: {{ .Values.deepseek_v4_pro.router.image.repository }}:{{ .Values.deepseek_v4_pro.router.image.tag }}
+      terminationMessagePolicy: FallbackToLogsOnError
+      ports:
+        - containerPort: {{ .Values.router.port }}
+          name: http
+          protocol: TCP
+      resources:
+        limits:
+          cpu: "8"
+          memory: 16Gi
+      args:
+        - --host
+        - 0.0.0.0
+        - --port
+        - "{{ .Values.router.port }}"
+        - --service-discovery
+        - --service-discovery-namespace
+        - $(NAMESPACE)
+        - --service-discovery-port
+        - "{{ .Values.engine.port }}"
+        - --selector
+        - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+        - --enable-igw
+        - --request-id-headers
+        - opc-request-id
+        - --log-json
+        - --disable-retries
+        - --disable-circuit-breaker
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: INFERENCESERVICE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['ome.io/inferenceservice']
+      readinessProbe:
+        httpGet:
+          path: /readiness
+          port: {{ .Values.router.port }}
+        failureThreshold: 5
+        periodSeconds: 30
+        timeoutSeconds: 10
+      livenessProbe:
+        httpGet:
+          path: /liveness
+          port: {{ .Values.router.port }}
+        failureThreshold: 5
+        periodSeconds: 30
+        timeoutSeconds: 10
+      startupProbe:
+        httpGet:
+          path: /health
+          port: {{ .Values.router.port }}
+        failureThreshold: 5
+        periodSeconds: 20
+        timeoutSeconds: 10
+        initialDelaySeconds: 30
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.57.1"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: DeepseekV4ForCausalLM
+      quantization: fp8
+      autoSelect: true
+      priority: 1
+      acceleratorConfig:
+        nvidia-h200-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+  modelSizeRange:
+    min: 800B
+    max: 900B
+  protocolVersions:
+    - openAI
+  engineConfig:
+    schedulerName: {{ .Values.schedulerName }}
+    minReplicas: {{ .Values.deepseek_v4_pro.minReplicas }}
+    maxReplicas: {{ .Values.deepseek_v4_pro.maxReplicas }}
+    {{- if or .Values.engine.annotations .Values.deepseek_v4_pro.annotations }}
+    annotations:
+      {{- if .Values.engine.annotations }}
+      {{- .Values.engine.annotations | toYaml | nindent 6 }}
+      {{- end }}
+      {{- if .Values.deepseek_v4_pro.annotations }}
+      {{- .Values.deepseek_v4_pro.annotations | toYaml | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.engine.labels .Values.deepseek_v4_pro.labels }}
+    labels:
+      {{- if .Values.engine.labels }}
+      {{- .Values.engine.labels | toYaml | nindent 6 }}
+      {{- end }}
+      {{- if .Values.deepseek_v4_pro.labels }}
+      {{- .Values.deepseek_v4_pro.labels | toYaml | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.engine.tolerations .Values.deepseek_v4_pro.tolerations }}
+    tolerations:
+      {{- if .Values.engine.tolerations }}
+      {{- .Values.engine.tolerations | toYaml | nindent 6 }}
+      {{- end }}
+      {{- if .Values.deepseek_v4_pro.tolerations }}
+      {{- .Values.deepseek_v4_pro.tolerations | toYaml | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.deepseek_v4_pro.topologySpreadConstraints }}
+    topologySpreadConstraints:
+      {{- .Values.deepseek_v4_pro.topologySpreadConstraints | toYaml | nindent 6 }}
+    {{- end }}
+    {{- $scaleConfig := .Values.deepseek_v4_pro.scaleMetric }}
+    {{- if $scaleConfig }}
+    {{- if kindIs "map" $scaleConfig }}
+    {{- with (coalesce (get $scaleConfig "type") (get $scaleConfig "metric")) }}
+    scaleMetric: {{ . }}
+    {{- end }}
+    {{- with (coalesce (get $scaleConfig "target") (get $scaleConfig "scaleTarget")) }}
+    scaleTarget: {{ . }}
+    {{- end }}
+    {{- else }}
+    scaleMetric: {{ $scaleConfig }}
+    {{- end }}
+    {{- end }}
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+      {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+      - name: etc-pki
+        hostPath:
+          path: /etc/pki
+          type: Directory
+      {{- end }}
+      {{- if .Values.deepseek_v4_pro.volumes }}
+      {{- .Values.deepseek_v4_pro.volumes | toYaml | nindent 6 }}
+      {{- end }}
+    runner:
+      name: ome-container
+      image: {{ .Values.deepseek_v4_pro.engine.image.repository }}:{{ .Values.deepseek_v4_pro.engine.image.tag }}
+      terminationMessagePolicy: FallbackToLogsOnError
+      ports:
+        - containerPort: {{ .Values.engine.port }}
+          name: http1
+          protocol: TCP
+      command:
+        - vllm
+        - serve
+      args:
+        - $(MODEL_PATH)
+        - --trust-remote-code
+        - --tensor-parallel-size=8
+        - --enable-expert-parallel
+        - --kv-cache-dtype=fp8
+        - --block-size=256
+        - --no-enable-flashinfer-autotune
+        - '--compilation-config={"mode": 0, "cudagraph_mode": "FULL_DECODE_ONLY"}'
+        - --tokenizer-mode=deepseek_v4
+        - --tool-call-parser=deepseek_v4
+        - --enable-auto-tool-choice
+        - --reasoning-parser=deepseek_v4
+        - --served-model-name={{ .Values.serveModelName }}
+        - --max-model-len=-1
+        - --enable-chunked-prefill
+        - --no-scheduler-reserve-full-isl
+        - '--speculative-config={"method":"mtp","num_speculative_tokens":1}'
+        - --enable-log-requests
+        - --port={{ .Values.engine.port }}
+      env:
+        - name: VLLM_ENGINE_READY_TIMEOUT_S
+          value: '3600'
+        - name: VLLM_LOGGING_LEVEL
+          value: 'INFO'
+        - name: VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS
+          value: '0'
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 128
+          memory: 512Gi
+          nvidia.com/gpu: 8
+        limits:
+          cpu: 128
+          memory: 512Gi
+          nvidia.com/gpu: 8
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: {{ .Values.engine.port }}
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 90
+        timeoutSeconds: 60
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: {{ .Values.engine.port }}
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /health
+          port: {{ .Values.engine.port }}
+        failureThreshold: 190
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
