@@ -1,0 +1,33 @@
+{{- if index .Values "gemini-default" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: gemini-default
+  labels:
+    {{ include "proxy-models-importer.genaiModelLabels" (dict "root" $ "model" "gemini-default") | nindent 4 }}
+  annotations:
+    {{ include "proxy-models-importer.genaiModelAnnotations" (dict "root" $ "model" "gemini-default") | nindent 4 }}
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: google.gemini-default
+  storage:
+    storageUri: "vendor://google/models/{{ index .Values "gemini-default" "osPrefixOverride" }}"
+  vendor: {{ index .Values "gemini-default" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelArchitecture: GeminiForCausalLM
+  modelParameterSize: 1.8T
+  modelCapabilities:
+    - "CHAT"
+  apiCapabilities:
+    - "API_CAPABILITIES_PLACEHODER"
+  maxTokens: 1048576
+  additionalMetadata:
+    image-text-to-text: "{{ index .Values "gemini-default" "enableImageInput" }}"
+{{- end }}

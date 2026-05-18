@@ -1,8 +1,27 @@
 compartmentID: ocid1.compartment.oc1..aaaaaaaazq
 
 # New proxy model entries will be added here as they are onboarded.
+claude-default:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gemini-default:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+grok-default:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 grok-4-3:
   enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-default:
+  enabled: false
+  enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
 gpt-5-5:

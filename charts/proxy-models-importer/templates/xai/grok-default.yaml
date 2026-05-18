@@ -1,0 +1,31 @@
+{{- if index .Values "grok-default" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: grok-default
+  labels:
+    {{ include "proxy-models-importer.genaiModelLabels" (dict "root" $ "model" "grok-default") | nindent 4 }}
+  annotations:
+    {{ include "proxy-models-importer.genaiModelAnnotations" (dict "root" $ "model" "grok-default") | nindent 4 }}
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: xai.grok-default
+  storage:
+    storageUri: "vendor://xai/models/{{ index .Values "grok-default" "osPrefixOverride" }}"
+  vendor: {{ index .Values "grok-default" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelArchitecture: xAiForCausalLM
+  modelParameterSize: 1.7T
+  modelCapabilities:
+    - "CHAT"
+  apiCapabilities:
+    - "API_CAPABILITIES_PLACEHODER"
+  maxTokens: 256000
+{{- end }}

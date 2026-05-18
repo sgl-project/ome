@@ -1,0 +1,33 @@
+{{- if index .Values "gpt-default" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: gpt-default
+  labels:
+    {{ include "proxy-models-importer.genaiModelLabels" (dict "root" $ "model" "gpt-default") | nindent 4 }}
+  annotations:
+    {{ include "proxy-models-importer.genaiModelAnnotations" (dict "root" $ "model" "gpt-default") | nindent 4 }}
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: openai.gpt-default
+  storage:
+    storageUri: "vendor://openai/models/{{ index .Values "gpt-default" "osPrefixOverride" }}"
+  vendor: {{ index .Values "gpt-default" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelArchitecture: OpenAIForCausalLM
+  modelParameterSize: 1.8T
+  modelCapabilities:
+    - "CHAT"
+  apiCapabilities:
+    - "API_CAPABILITIES_PLACEHODER"
+  maxTokens: 128000
+  additionalMetadata:
+    image-text-to-text: "{{ index .Values "gpt-default" "enableImageInput" }}"
+{{- end }}
