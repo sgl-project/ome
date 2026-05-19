@@ -224,8 +224,10 @@ func TestConvertMetadataToModelConfig(t *testing.T) {
 func TestModelEntryMarshaling(t *testing.T) {
 	// Test model entry JSON marshaling and unmarshaling
 	modelEntry := ModelEntry{
-		Name:   "llama-70b",
-		Status: ModelStatusReady,
+		Name:        "llama-70b",
+		Status:      ModelStatusReady,
+		StorageURI:  "hf://meta-llama/llama-70b",
+		StoragePath: "/raid/models/meta-llama/llama-70b",
 		Config: &ModelConfig{
 			ModelType:          "llama",
 			ModelArchitecture:  "LlamaModel",
@@ -255,8 +257,64 @@ func TestModelEntryMarshaling(t *testing.T) {
 	if unmarshaled.Status != modelEntry.Status {
 		t.Errorf("Status mismatch: got %s, want %s", unmarshaled.Status, modelEntry.Status)
 	}
+	if unmarshaled.StorageURI != modelEntry.StorageURI {
+		t.Errorf("StorageURI mismatch: got %s, want %s", unmarshaled.StorageURI, modelEntry.StorageURI)
+	}
+	if unmarshaled.StoragePath != modelEntry.StoragePath {
+		t.Errorf("StoragePath mismatch: got %s, want %s", unmarshaled.StoragePath, modelEntry.StoragePath)
+	}
 	if !reflect.DeepEqual(unmarshaled.Config, modelEntry.Config) {
 		t.Errorf("ConfigAttr mismatch: got %+v, want %+v", unmarshaled.Config, modelEntry.Config)
+	}
+}
+
+func TestStorageIdentityForSpec(t *testing.T) {
+	storageURI := "hf://google/gemma-4-31B-it"
+	storagePath := "/raid/models/google/gemma-4-31B-it"
+	spec := &v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			StorageUri: &storageURI,
+			Path:       &storagePath,
+		},
+	}
+
+	actualURI, actualPath, ok := StorageIdentityForSpec(spec)
+	if !ok {
+		t.Fatal("expected storage identity to exist")
+	}
+	if actualURI != storageURI {
+		t.Fatalf("storage URI mismatch: got %s, want %s", actualURI, storageURI)
+	}
+	if actualPath != storagePath {
+		t.Fatalf("storage path mismatch: got %s, want %s", actualPath, storagePath)
+	}
+
+	entry := &ModelEntry{}
+	entry.ApplyStorageIdentity(spec)
+	if entry.StorageURI != storageURI {
+		t.Fatalf("entry storage URI mismatch: got %s, want %s", entry.StorageURI, storageURI)
+	}
+	if entry.StoragePath != storagePath {
+		t.Fatalf("entry storage path mismatch: got %s, want %s", entry.StoragePath, storagePath)
+	}
+	if !entry.MatchesStorageIdentity(spec) {
+		t.Fatal("expected entry to match its source spec")
+	}
+
+	updatedPath := "/raid/models/google/gemma-4-31b-it"
+	updatedSpec := &v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			StorageUri: &storageURI,
+			Path:       &updatedPath,
+		},
+	}
+	if entry.MatchesStorageIdentity(updatedSpec) {
+		t.Fatal("expected entry not to match a spec with a different storage path")
+	}
+
+	legacyEntry := &ModelEntry{}
+	if !legacyEntry.MatchesStorageIdentity(spec) {
+		t.Fatal("expected legacy entry without storage identity to match for upgrade compatibility")
 	}
 }
 

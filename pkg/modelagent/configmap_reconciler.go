@@ -34,6 +34,8 @@ const (
 type CacheEntry struct {
 	ModelName     string         // Name of the model
 	ModelStatus   ModelStatus    // Current status of the model
+	StorageURI    string         // Source URI used for the local artifact
+	StoragePath   string         // Local path used for the artifact
 	ModelMetadata *ModelMetadata // Model metadata if available
 }
 
@@ -224,8 +226,10 @@ func (c *ConfigMapReconciler) recreateConfigMap(ctx context.Context) {
 	for modelID, cacheEntry := range c.modelCache {
 		// Create model entry from cache data
 		modelEntry := &ModelEntry{
-			Name:   cacheEntry.ModelName,
-			Status: cacheEntry.ModelStatus,
+			Name:        cacheEntry.ModelName,
+			Status:      cacheEntry.ModelStatus,
+			StorageURI:  cacheEntry.StorageURI,
+			StoragePath: cacheEntry.StoragePath,
 		}
 
 		// Convert metadata to ModelConfig if available
@@ -278,8 +282,10 @@ func (c *ConfigMapReconciler) recreateConfigMap(ctx context.Context) {
 func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry *CacheEntry) {
 	// Construct model entry from cache data
 	modelEntry := &ModelEntry{
-		Name:   cacheEntry.ModelName,
-		Status: cacheEntry.ModelStatus,
+		Name:        cacheEntry.ModelName,
+		Status:      cacheEntry.ModelStatus,
+		StorageURI:  cacheEntry.StorageURI,
+		StoragePath: cacheEntry.StoragePath,
 	}
 
 	// Convert metadata to ModelConfig if available
@@ -403,6 +409,7 @@ func (c *ConfigMapReconciler) ReconcileModelStatus(ctx context.Context, statusOp
 	}
 
 	// Get existing cache entry or create a new one
+	spec := getModelSpec(statusOp.BaseModel, statusOp.ClusterBaseModel)
 	cacheEntry, exists := c.modelCache[modelID]
 	if !exists {
 		// Extract model name for the cache entry
@@ -419,9 +426,13 @@ func (c *ConfigMapReconciler) ReconcileModelStatus(ctx context.Context, statusOp
 		}
 		c.modelCache[modelID] = cacheEntry
 	} else {
+		if !cacheEntry.matchesStorageIdentity(spec) || (statusOp.ModelStatus == ModelStatusUpdating && !cacheEntry.hasStorageIdentity()) {
+			cacheEntry.ModelMetadata = nil
+		}
 		// Just update the status in existing entry
 		cacheEntry.ModelStatus = statusOp.ModelStatus
 	}
+	cacheEntry.applyStorageIdentity(spec)
 	c.cacheMutex.Unlock()
 
 	c.logger.Infof("Successfully updated ConfigMap and cache for %s with status: %s", modelInfo, statusOp.ModelStatus)
@@ -460,6 +471,48 @@ func getModelID(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterB
 	}
 
 	return constants.GetModelConfigMapKey(namespace, modelName, isClusterBaseModel)
+}
+
+func getModelSpec(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) *v1beta1.BaseModelSpec {
+	if baseModel != nil {
+		return &baseModel.Spec
+	}
+	if clusterBaseModel != nil {
+		return &clusterBaseModel.Spec
+	}
+	return nil
+}
+
+func (entry *CacheEntry) applyStorageIdentity(spec *v1beta1.BaseModelSpec) {
+	if entry == nil {
+		return
+	}
+	storageURI, storagePath, ok := StorageIdentityForSpec(spec)
+	if !ok {
+		entry.StorageURI = ""
+		entry.StoragePath = ""
+		return
+	}
+	entry.StorageURI = storageURI
+	entry.StoragePath = storagePath
+}
+
+func (entry *CacheEntry) hasStorageIdentity() bool {
+	return entry != nil && (entry.StorageURI != "" || entry.StoragePath != "")
+}
+
+func (entry *CacheEntry) matchesStorageIdentity(spec *v1beta1.BaseModelSpec) bool {
+	if entry == nil {
+		return false
+	}
+	storageURI, storagePath, ok := StorageIdentityForSpec(spec)
+	if !ok {
+		return true
+	}
+	if !entry.hasStorageIdentity() {
+		return true
+	}
+	return entry.StorageURI == storageURI && entry.StoragePath == storagePath
 }
 
 // ReconcileModelMetadata updates the ConfigMap with model metadata
@@ -507,6 +560,7 @@ func (c *ConfigMapReconciler) ReconcileModelMetadata(ctx context.Context, op *Co
 		// Update the metadata
 		cacheEntry.ModelMetadata = &op.ModelMetadata
 	}
+	cacheEntry.applyStorageIdentity(getModelSpec(op.BaseModel, op.ClusterBaseModel))
 	c.cacheMutex.Unlock()
 
 	c.logger.Infof("Successfully updated ConfigMap and cache for %s with metadata", modelInfo)
@@ -584,7 +638,15 @@ func (c *ConfigMapReconciler) updateModelProgressInConfigMap(ctx context.Context
 	}
 
 	// Update the progress (can be nil to clear it)
+	if !modelEntry.MatchesStorageIdentity(getModelSpec(op.BaseModel, op.ClusterBaseModel)) ||
+		(op.Progress != nil && !modelEntry.hasStorageIdentity()) {
+		modelEntry.Config = nil
+	}
+	if op.Progress != nil {
+		modelEntry.Status = ModelStatusUpdating
+	}
 	modelEntry.Progress = op.Progress
+	modelEntry.ApplyStorageIdentity(getModelSpec(op.BaseModel, op.ClusterBaseModel))
 
 	// Marshal the model entry back to JSON
 	entryJSON, err := json.Marshal(modelEntry)
@@ -768,6 +830,11 @@ func (c *ConfigMapReconciler) updateModelStatusInConfigMap(ctx context.Context, 
 				Config: nil,
 			}
 		} else {
+			if !modelEntry.MatchesStorageIdentity(getModelSpec(op.BaseModel, op.ClusterBaseModel)) ||
+				(op.ModelStatus == ModelStatusUpdating && !modelEntry.hasStorageIdentity()) {
+				modelEntry.Config = nil
+				modelEntry.Progress = nil
+			}
 			// Update just the status, preserving the config
 			modelEntry.Status = op.ModelStatus
 			// Clear progress when status becomes Ready or Failed (download complete)
@@ -784,6 +851,7 @@ func (c *ConfigMapReconciler) updateModelStatusInConfigMap(ctx context.Context, 
 			Config: nil,
 		}
 	}
+	modelEntry.ApplyStorageIdentity(getModelSpec(op.BaseModel, op.ClusterBaseModel))
 
 	// For 'ModelStatusDeleted' status, we might want to entirely remove the entry
 	if op.ModelStatus == ModelStatusDeleted {
@@ -851,6 +919,7 @@ func (c *ConfigMapReconciler) updateModelMetadataInConfigMap(ctx context.Context
 
 	// Update the config in the model entry
 	modelEntry.Config = modelConfig
+	modelEntry.ApplyStorageIdentity(getModelSpec(op.BaseModel, op.ClusterBaseModel))
 
 	// Marshal the model entry back to JSON
 	entryJSON, err := json.Marshal(modelEntry)

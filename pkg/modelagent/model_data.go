@@ -99,10 +99,12 @@ func (p *DownloadProgress) Percentage() float64 {
 // ModelEntry represents an entry in the node model ConfigMap
 // This is the top-level structure stored for each model in the ConfigMap
 type ModelEntry struct {
-	Name     string            `json:"name"`               // Name of the model
-	Status   ModelStatus       `json:"status"`             // Current status of the model on this node
-	Config   *ModelConfig      `json:"config,omitempty"`   // Model configuration, may be nil if just tracking status
-	Progress *DownloadProgress `json:"progress,omitempty"` // Download progress, nil when not downloading
+	Name        string            `json:"name"`                  // Name of the model
+	Status      ModelStatus       `json:"status"`                // Current status of the model on this node
+	StorageURI  string            `json:"storageUri,omitempty"`  // Source URI used for the local artifact
+	StoragePath string            `json:"storagePath,omitempty"` // Local path used for the artifact
+	Config      *ModelConfig      `json:"config,omitempty"`      // Model configuration, may be nil if just tracking status
+	Progress    *DownloadProgress `json:"progress,omitempty"`    // Download progress, nil when not downloading
 }
 
 // ConvertMetadataToModelConfig converts internal ModelMetadata to a client-facing ModelConfig
@@ -182,4 +184,57 @@ func ConvertMetadataToModelConfig(metadata ModelMetadata) *ModelConfig {
 		Quantization:              quantization,
 		Artifact:                  artifact,
 	}
+}
+
+// StorageIdentityForSpec returns the storage fields that identify the model artifact on disk.
+func StorageIdentityForSpec(spec *v1beta1.BaseModelSpec) (storageURI string, storagePath string, ok bool) {
+	if spec == nil || spec.Storage == nil {
+		return "", "", false
+	}
+
+	if spec.Storage.StorageUri != nil {
+		storageURI = *spec.Storage.StorageUri
+	}
+	if spec.Storage.Path != nil {
+		storagePath = *spec.Storage.Path
+	}
+
+	if storageURI == "" && storagePath == "" {
+		return "", "", false
+	}
+	return storageURI, storagePath, true
+}
+
+// ApplyStorageIdentity records the current storage identity on a ConfigMap entry.
+func (entry *ModelEntry) ApplyStorageIdentity(spec *v1beta1.BaseModelSpec) {
+	if entry == nil {
+		return
+	}
+	storageURI, storagePath, ok := StorageIdentityForSpec(spec)
+	if !ok {
+		entry.StorageURI = ""
+		entry.StoragePath = ""
+		return
+	}
+	entry.StorageURI = storageURI
+	entry.StoragePath = storagePath
+}
+
+func (entry *ModelEntry) hasStorageIdentity() bool {
+	return entry != nil && (entry.StorageURI != "" || entry.StoragePath != "")
+}
+
+// MatchesStorageIdentity reports whether a ConfigMap entry describes the current storage source and path.
+func (entry *ModelEntry) MatchesStorageIdentity(spec *v1beta1.BaseModelSpec) bool {
+	if entry == nil {
+		return false
+	}
+	storageURI, storagePath, ok := StorageIdentityForSpec(spec)
+	if !ok {
+		return true
+	}
+	if !entry.hasStorageIdentity() {
+		return true
+	}
+	return entry.StorageURI == storageURI && entry.StoragePath == storagePath
 }

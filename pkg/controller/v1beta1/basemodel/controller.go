@@ -250,6 +250,7 @@ func handleModelDeletion(ctx context.Context, kubeClient client.Client, obj clie
 // updateModelStatus updates BaseModel status based on ConfigMap data
 func (r *BaseModelReconciler) updateModelStatus(ctx context.Context, baseModel *v1beta1.BaseModel) error {
 	return processModelStatus(ctx, r.Client, r.Log, baseModel.Namespace, baseModel.Name, false,
+		&baseModel.Spec,
 		func(ctx context.Context, config *modelagent.ModelConfig) error {
 			return r.updateModelSpecWithRetry(ctx, baseModel, config)
 		},
@@ -261,6 +262,7 @@ func (r *BaseModelReconciler) updateModelStatus(ctx context.Context, baseModel *
 // updateModelStatus updates ClusterBaseModel status based on ConfigMap data
 func (r *ClusterBaseModelReconciler) updateModelStatus(ctx context.Context, clusterBaseModel *v1beta1.ClusterBaseModel) error {
 	return processModelStatus(ctx, r.Client, r.Log, "", clusterBaseModel.Name, true,
+		&clusterBaseModel.Spec,
 		func(ctx context.Context, config *modelagent.ModelConfig) error {
 			return r.updateModelSpecWithRetry(ctx, clusterBaseModel, config)
 		},
@@ -271,6 +273,7 @@ func (r *ClusterBaseModelReconciler) updateModelStatus(ctx context.Context, clus
 
 // processModelStatus is a shared utility function for processing ConfigMaps and updating model status
 func processModelStatus(ctx context.Context, kubeClient client.Client, log logr.Logger, namespace, name string, isClusterScope bool,
+	spec *v1beta1.BaseModelSpec,
 	specUpdateFunc func(context.Context, *modelagent.ModelConfig) error,
 	statusUpdateFunc func(context.Context, []string, []string) error) error {
 
@@ -331,6 +334,17 @@ func processModelStatus(ctx context.Context, kubeClient client.Client, log logr.
 		}
 
 		log.V(1).Info("Processing model entry", "node", configMap.Name, "status", modelEntry.Status, "hasConfig", modelEntry.Config != nil, "hasProgress", modelEntry.Progress != nil)
+
+		if !modelEntry.MatchesStorageIdentity(spec) {
+			currentStorageURI, currentStoragePath, _ := modelagent.StorageIdentityForSpec(spec)
+			log.Info("Skipping stale model status entry",
+				"node", configMap.Name,
+				"entryStorageUri", modelEntry.StorageURI,
+				"currentStorageUri", currentStorageURI,
+				"entryStoragePath", modelEntry.StoragePath,
+				"currentStoragePath", currentStoragePath)
+			continue
+		}
 
 		// Update model spec with config if available
 		if modelEntry.Config != nil {
