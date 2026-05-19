@@ -477,7 +477,7 @@ func ProcessBaseLabels(b *BaseComponentFields, isvc *v1beta1.InferenceService, c
 
 // UpdateComponentStatus updates component status based on deployment mode
 // This method provides a systematic way to handle status updates across all components
-func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, objectMeta metav1.ObjectMeta, getPodLabelInfo func(bool, metav1.ObjectMeta, v1beta1.ComponentStatusSpec) (string, string)) error {
+func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, objectMeta metav1.ObjectMeta) error {
 	// Always initialize the component ready condition to ensure it's visible from the start
 	// The deployment reconciler will update the condition based on the actual deployment status:
 	// - MultiNode: Updates when LWS becomes available
@@ -498,6 +498,14 @@ func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceServic
 	b.StatusManager.PropagateModelStatus(&isvc.Status, statusSpec, pods, rawDeployment, reportContainerStartupFailure)
 
 	return nil
+}
+
+// getPodLabelInfo returns the pod label key and value based on the deployment mode.
+func getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMeta, statusSpec v1beta1.ComponentStatusSpec) (string, string) {
+	if rawDeployment {
+		return constants.RawDeploymentAppLabel, constants.TruncateNameWithMaxLength(objectMeta.Name, 63)
+	}
+	return constants.RevisionLabel, statusSpec.LatestCreatedRevision
 }
 
 func shouldReportContainerStartupFailure(b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType) bool {

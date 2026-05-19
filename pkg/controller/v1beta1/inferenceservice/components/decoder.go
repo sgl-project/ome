@@ -165,15 +165,7 @@ func (d *Decoder) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta
 
 // updateDecoderStatus updates the status of the decoder
 func (d *Decoder) updateDecoderStatus(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta) error {
-	return UpdateComponentStatus(&d.BaseComponentFields, isvc, v1beta1.DecoderComponent, objectMeta, d.getPodLabelInfo)
-}
-
-// getPodLabelInfo returns the pod label key and value based on the deployment mode
-func (d *Decoder) getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMeta, statusSpec v1beta1.ComponentStatusSpec) (string, string) {
-	if rawDeployment {
-		return constants.RawDeploymentAppLabel, constants.GetRawServiceLabel(objectMeta.Name)
-	}
-	return constants.RevisionLabel, statusSpec.LatestCreatedRevision
+	return UpdateComponentStatus(&d.BaseComponentFields, isvc, v1beta1.DecoderComponent, objectMeta)
 }
 
 // reconcileObjectMeta creates the object metadata for the decoder component

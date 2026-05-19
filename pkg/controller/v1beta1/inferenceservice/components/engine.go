@@ -166,15 +166,7 @@ func (e *Engine) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta 
 
 // updateEngineStatus updates the status of the engine
 func (e *Engine) updateEngineStatus(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta) error {
-	return UpdateComponentStatus(&e.BaseComponentFields, isvc, v1beta1.EngineComponent, objectMeta, e.getPodLabelInfo)
-}
-
-// getPodLabelInfo returns the pod label key and value based on the deployment mode
-func (e *Engine) getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMeta, statusSpec v1beta1.ComponentStatusSpec) (string, string) {
-	if rawDeployment {
-		return constants.RawDeploymentAppLabel, constants.GetRawServiceLabel(objectMeta.Name)
-	}
-	return constants.RevisionLabel, statusSpec.LatestCreatedRevision
+	return UpdateComponentStatus(&e.BaseComponentFields, isvc, v1beta1.EngineComponent, objectMeta)
 }
 
 // reconcileObjectMeta creates the object metadata for the engine component

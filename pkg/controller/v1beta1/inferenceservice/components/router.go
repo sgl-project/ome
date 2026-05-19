@@ -140,15 +140,7 @@ func (r *Router) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta 
 
 // updateRouterStatus updates the status of the router component
 func (r *Router) updateRouterStatus(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta) error {
-	return UpdateComponentStatus(&r.BaseComponentFields, isvc, v1beta1.RouterComponent, objectMeta, r.getPodLabelInfo)
-}
-
-// getPodLabelInfo returns the pod label key and value based on the deployment mode
-func (r *Router) getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMeta, statusSpec v1beta1.ComponentStatusSpec) (string, string) {
-	if rawDeployment {
-		return constants.RawDeploymentAppLabel, constants.GetRawServiceLabel(objectMeta.Name)
-	}
-	return constants.RevisionLabel, statusSpec.LatestCreatedRevision
+	return UpdateComponentStatus(&r.BaseComponentFields, isvc, v1beta1.RouterComponent, objectMeta)
 }
 
 // reconcileObjectMeta creates the object metadata for the router component
