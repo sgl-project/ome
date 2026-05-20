@@ -7,13 +7,13 @@ import (
 	sync "sync"
 	time "time"
 
-	versioned "github.com/sgl-project/ome/pkg/client/clientset/versioned"
-	internalinterfaces "github.com/sgl-project/ome/pkg/client/informers/externalversions/internalinterfaces"
-	ome "github.com/sgl-project/ome/pkg/client/informers/externalversions/ome"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
+	versioned "sigs.k8s.io/ome/pkg/client/clientset/versioned"
+	internalinterfaces "sigs.k8s.io/ome/pkg/client/informers/externalversions/internalinterfaces"
+	ome "sigs.k8s.io/ome/pkg/client/informers/externalversions/ome"
 )
 
 // SharedInformerOption defines the functional option type for SharedInformerFactory.

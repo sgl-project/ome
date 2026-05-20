@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	utilstorage "github.com/sgl-project/ome/pkg/utils/storage"
+	utilstorage "sigs.k8s.io/ome/pkg/utils/storage"
 )
 
 // Provider represents the storage provider type

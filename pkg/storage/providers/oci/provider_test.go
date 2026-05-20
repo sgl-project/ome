@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sgl-project/ome/pkg/storage"
+	"sigs.k8s.io/ome/pkg/storage"
 )
 
 func TestParseOCIURI(t *testing.T) {

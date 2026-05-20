@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	listers "k8s.io/client-go/listers"
 	cache "k8s.io/client-go/tools/cache"
+	omev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // FineTunedWeightLister helps list FineTunedWeights.

@@ -3,8 +3,8 @@ package replica
 import (
 	"fmt"
 
-	"github.com/sgl-project/ome/internal/ome-agent/replica/replicator"
-	"github.com/sgl-project/ome/pkg/utils/storage"
+	"sigs.k8s.io/ome/internal/ome-agent/replica/replicator"
+	"sigs.k8s.io/ome/pkg/utils/storage"
 )
 
 func NewReplicator(r *ReplicaAgent) (replicator.Replicator, error) {

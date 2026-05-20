@@ -76,7 +76,7 @@ export default function LandingPage() {
                 <span>Documentation</span>
               </a>
               <a
-                href="https://github.com/sgl-project/ome"
+                href="https://github.com/ome-projects/ome"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"

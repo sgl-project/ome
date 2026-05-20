@@ -17,15 +17,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	omev1beta1lister "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/constants"
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/ociobjectstore"
-	"github.com/sgl-project/ome/pkg/principals"
-	"github.com/sgl-project/ome/pkg/utils"
-	"github.com/sgl-project/ome/pkg/utils/storage"
-	"github.com/sgl-project/ome/pkg/xet"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	omev1beta1lister "sigs.k8s.io/ome/pkg/client/listers/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/ociobjectstore"
+	"sigs.k8s.io/ome/pkg/principals"
+	"sigs.k8s.io/ome/pkg/utils"
+	"sigs.k8s.io/ome/pkg/utils/storage"
+	"sigs.k8s.io/ome/pkg/xet"
 )
 
 type GopherTaskType string

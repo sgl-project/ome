@@ -23,11 +23,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/constants"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/components"
-	omeTesting "github.com/sgl-project/ome/pkg/testing"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/components"
+	omeTesting "sigs.k8s.io/ome/pkg/testing"
 )
 
 // Helper function to create a basic test InferenceService.

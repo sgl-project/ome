@@ -7,7 +7,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/sgl-project/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 func TestRDMAInjector_InjectRDMA(t *testing.T) {

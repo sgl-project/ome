@@ -1,7 +1,7 @@
 package interfaces
 
 import (
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 )
 
 // ConfigValidator validates ingress configurations

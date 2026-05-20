@@ -1,4 +1,4 @@
-module github.com/sgl-project/ome
+module sigs.k8s.io/ome
 
 go 1.25
 

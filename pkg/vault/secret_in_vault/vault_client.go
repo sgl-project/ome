@@ -6,7 +6,7 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/vault"
 
-	"github.com/sgl-project/ome/pkg/principals"
+	"sigs.k8s.io/ome/pkg/principals"
 )
 
 func NewVaultClient(configProvider common.ConfigurationProvider) (*vault.VaultsClient, error) {

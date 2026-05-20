@@ -9,8 +9,8 @@ import (
 
 	"go.uber.org/zap/zaptest"
 
-	"github.com/sgl-project/ome/pkg/auth"
-	"github.com/sgl-project/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/auth"
+	"sigs.k8s.io/ome/pkg/logging"
 )
 
 func TestNewFactory(t *testing.T) {

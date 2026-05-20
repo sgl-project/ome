@@ -159,16 +159,16 @@ docker login <your-registry-url> -u <username>
 
 ### Clone OME Repository
 
-The Go tools require that you clone the repository to the `src/github.com/sgl-project/ome` directory in your [`GOPATH`](https://github.com/golang/go/wiki/SettingGOPATH).
+The Go tools require that you clone the repository to the `src/sigs.k8s.io/ome` directory in your [`GOPATH`](https://github.com/golang/go/wiki/SettingGOPATH).
 
 To check out this repository:
 
 1. Create your own [clone this repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository)
 2. Clone it to your machine:
 ```shell
-mkdir -p ${GOPATH}/src/github.com/sgl-project/ome
-cd ${GOPATH}/src/github.com/sgl-project/ome
-git clone https://github.com/sgl-project/ome.git
+mkdir -p ${GOPATH}/src/sigs.k8s.io/ome
+cd ${GOPATH}/src/sigs.k8s.io/ome
+git clone https://github.com/ome-projects/ome.git
 cd ome
 ```
 
@@ -269,7 +269,7 @@ Goland IDE is recommended for running the OME manager in the IDE. After cloning 
 * You can also create a run configuration by clicking on the `Edit Configurations` option in the top right corner of the IDE and adding a new Go configuration with the following settings:
     * Name: `ome-controller-manager`
     * Run Kind: `File`
-    * Files: `${GOPATH}/src/github.com/sgl-project/ome/cmd/manager/main.go`
+    * Files: `${GOPATH}/src/sigs.k8s.io/ome/cmd/manager/main.go`
     * Environment Variables: `KUBECONFIG=<path to kubeconfig file>`
     * Program Arguments: `--zap-encoder console --health-probe-addr 127.0.0.1:8081 --metrics-bind-address 127.0.0.1:8080 --leader-elect`
     * Module: `ome`
@@ -332,8 +332,8 @@ For VSCode or Cursor, follow these steps to set up the development environment:
 As you make changes to the code-base, there are two special cases to be aware of:
 
 * **If you change an input to generated code**, then you must run `make manifests`. Inputs include:
-  * API type definitions in [pkg/apis](https://github.com/sgl-project/ome/tree/main/pkg/apis)
-  * Manifests or kustomize patches stored in [config](https://github.com/sgl-project/ome/tree/main/config).
+  * API type definitions in [pkg/apis](https://github.com/ome-projects/ome/tree/main/pkg/apis)
+  * Manifests or kustomize patches stored in [config](https://github.com/ome-projects/ome/tree/main/config).
 
   To generate the OME go clients, you should run `make generate`.
 

@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sgl-project/ome/web-console/backend/internal/k8s"
-	"github.com/sgl-project/ome/web-console/backend/internal/services"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/ome/web-console/backend/internal/k8s"
+	"sigs.k8s.io/ome/web-console/backend/internal/services"
 )
 
 // Allowed hosts for YAML fetching - only trusted code hosting platforms.

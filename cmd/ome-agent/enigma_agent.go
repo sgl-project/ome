@@ -4,14 +4,14 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 
-	"github.com/sgl-project/ome/internal/ome-agent/enigma"
-	"github.com/sgl-project/ome/pkg/afero"
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/vault/kmscrypto"
-	"github.com/sgl-project/ome/pkg/vault/kmsmgm"
-	"github.com/sgl-project/ome/pkg/vault/kmsvault"
-	ocisecret "github.com/sgl-project/ome/pkg/vault/secret"
-	ocivault "github.com/sgl-project/ome/pkg/vault/vault"
+	"sigs.k8s.io/ome/internal/ome-agent/enigma"
+	"sigs.k8s.io/ome/pkg/afero"
+	"sigs.k8s.io/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/vault/kmscrypto"
+	"sigs.k8s.io/ome/pkg/vault/kmsmgm"
+	"sigs.k8s.io/ome/pkg/vault/kmsvault"
+	ocisecret "sigs.k8s.io/ome/pkg/vault/secret"
+	ocivault "sigs.k8s.io/ome/pkg/vault/vault"
 )
 
 // EnigmaAgent implements the AgentModule interface for enigma agent

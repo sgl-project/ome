@@ -1,13 +1,13 @@
 # OME (Open Model Engine) — Kubernetes Operator for LLM Serving
 
-[![Go Report](https://goreportcard.com/badge/github.com/sgl-project/ome)](https://goreportcard.com/report/github.com/sgl-project/ome)
-[![Latest Release](https://img.shields.io/github/v/release/sgl-project/ome?include_prereleases)](https://github.com/sgl-project/ome/releases/latest)
+[![Go Report](https://goreportcard.com/badge/sigs.k8s.io/ome)](https://goreportcard.com/report/sigs.k8s.io/ome)
+[![Latest Release](https://img.shields.io/github/v/release/ome-projects/ome?include_prereleases)](https://github.com/ome-projects/ome/releases/latest)
 [![API Reference](https://img.shields.io/badge/API-v1beta1-blue)](https://ome-projects.github.io/ome/docs/reference/ome.v1beta1/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/sgl-project/ome)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ome-projects/ome)
 
 <div align="center">
-  <a href="https://github.com/sgl-project/ome">
+  <a href="https://github.com/ome-projects/ome">
     <img src="site/assets/icons/logo-clear-background.png" alt="OME Logo" width="300" height="auto" style="max-width: 100%;">
   </a>
 </div>
@@ -85,7 +85,7 @@ For development or customization:
 
 ```bash
 # Clone the repository
-git clone https://github.com/sgl-project/ome.git
+git clone https://github.com/ome-projects/ome.git
 cd ome
 
 # Install from local charts
@@ -127,7 +127,7 @@ High-level overview of the main priorities:
 
 ## Community and Support
 
-- [GitHub Issues](https://github.com/sgl-project/ome/issues) for bug reports and feature requests
+- [GitHub Issues](https://github.com/ome-projects/ome/issues) for bug reports and feature requests
 - [Documentation](https://ome-projects.github.io/ome/docs/) for guides and reference
 
 ## License

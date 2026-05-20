@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sgl-project/ome/web-console/backend/internal/k8s"
 	"go.uber.org/zap"
+	"sigs.k8s.io/ome/web-console/backend/internal/k8s"
 )
 
 // defaultAllowedOrigins is used when CORS_ALLOWED_ORIGINS is not set

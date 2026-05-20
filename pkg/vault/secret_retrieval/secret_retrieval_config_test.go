@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sgl-project/ome/pkg/principals"
-	testingPkg "github.com/sgl-project/ome/pkg/testing"
+	"sigs.k8s.io/ome/pkg/principals"
+	testingPkg "sigs.k8s.io/ome/pkg/testing"
 )
 
 func TestNewSecretRetrievalConfig(t *testing.T) {

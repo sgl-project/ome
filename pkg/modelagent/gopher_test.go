@@ -16,9 +16,9 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	omev1beta1lister "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/utils/storage"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	omev1beta1lister "sigs.k8s.io/ome/pkg/client/listers/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/storage"
 )
 
 // TestHandleTaskPVCSkip tests that PVC storage types are properly skipped

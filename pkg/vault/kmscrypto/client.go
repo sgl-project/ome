@@ -8,9 +8,9 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/keymanagement"
 
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/principals"
-	"github.com/sgl-project/ome/pkg/vault"
+	"sigs.k8s.io/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/principals"
+	"sigs.k8s.io/ome/pkg/vault"
 )
 
 type KmsCrypto struct {

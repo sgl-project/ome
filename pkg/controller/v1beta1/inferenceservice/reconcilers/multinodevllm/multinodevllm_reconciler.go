@@ -13,12 +13,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/constants"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/services"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/istiosidecar"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/services"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/istiosidecar"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
 )
 
 type MultiNodeVllmReconciler struct {

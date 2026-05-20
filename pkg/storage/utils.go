@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	utilstorage "github.com/sgl-project/ome/pkg/utils/storage"
+	utilstorage "sigs.k8s.io/ome/pkg/utils/storage"
 )
 
 // NormalizePath normalizes a storage path

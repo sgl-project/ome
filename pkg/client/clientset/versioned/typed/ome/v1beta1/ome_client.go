@@ -5,9 +5,9 @@ package v1beta1
 import (
 	http "net/http"
 
-	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	scheme "github.com/sgl-project/ome/pkg/client/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
+	omev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	scheme "sigs.k8s.io/ome/pkg/client/clientset/versioned/scheme"
 )
 
 type OmeV1beta1Interface interface {

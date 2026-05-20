@@ -11,8 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 
-	"github.com/sgl-project/ome/pkg/auth"
-	"github.com/sgl-project/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/auth"
+	"sigs.k8s.io/ome/pkg/logging"
 )
 
 // AWSCredentials implements auth.Credentials for AWS

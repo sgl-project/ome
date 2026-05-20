@@ -1,7 +1,7 @@
 package principals
 
 import (
-	"github.com/sgl-project/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/logging"
 )
 
 // Opts contains various dependencies used to construct principals.

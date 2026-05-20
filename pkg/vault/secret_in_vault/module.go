@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 
-	"github.com/sgl-project/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/logging"
 )
 
 func ProvideSecretInVaultConfig(v *viper.Viper, logger logging.Interface) (*SecretInVaultConfig, error) {

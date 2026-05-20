@@ -8,8 +8,8 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/vault"
 
-	"github.com/sgl-project/ome/pkg/logging"
-	util "github.com/sgl-project/ome/pkg/vault"
+	"sigs.k8s.io/ome/pkg/logging"
+	util "sigs.k8s.io/ome/pkg/vault"
 )
 
 type SecretInVault struct {

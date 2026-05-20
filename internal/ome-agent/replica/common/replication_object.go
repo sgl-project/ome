@@ -2,10 +2,10 @@ package common
 
 import (
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
-	"github.com/sgl-project/ome/pkg/afero"
-	"github.com/sgl-project/ome/pkg/ociobjectstore"
-	"github.com/sgl-project/ome/pkg/utils/storage"
-	"github.com/sgl-project/ome/pkg/xet"
+	"sigs.k8s.io/ome/pkg/afero"
+	"sigs.k8s.io/ome/pkg/ociobjectstore"
+	"sigs.k8s.io/ome/pkg/utils/storage"
+	"sigs.k8s.io/ome/pkg/xet"
 )
 
 type ReplicationInput struct {

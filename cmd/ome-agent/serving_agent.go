@@ -4,10 +4,10 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 
-	servingAgent "github.com/sgl-project/ome/internal/ome-agent/serving-agent"
-	"github.com/sgl-project/ome/pkg/afero"
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/ociobjectstore"
+	servingAgent "sigs.k8s.io/ome/internal/ome-agent/serving-agent"
+	"sigs.k8s.io/ome/pkg/afero"
+	"sigs.k8s.io/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/ociobjectstore"
 )
 
 // ServingAgent implements the AgentModule interface for serving sidecar agent

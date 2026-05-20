@@ -55,7 +55,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     PKG_CONFIG_ALL_STATIC=1 \
     CGO_ENABLED=1 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     go build -a \
-    -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${GIT_TAG} -X github.com/sgl-project/ome/pkg/version.GitCommit=${GIT_COMMIT}" \
+    -ldflags "-X sigs.k8s.io/ome/pkg/version.GitVersion=${GIT_TAG} -X sigs.k8s.io/ome/pkg/version.GitCommit=${GIT_COMMIT}" \
     -o model-agent ./cmd/model-agent
 
 # Use the base image specified at the top of the file

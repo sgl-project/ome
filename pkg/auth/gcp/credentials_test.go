@@ -13,8 +13,8 @@ import (
 	"go.uber.org/zap/zaptest"
 	"golang.org/x/oauth2"
 
-	"github.com/sgl-project/ome/pkg/auth"
-	"github.com/sgl-project/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/auth"
+	"sigs.k8s.io/ome/pkg/logging"
 )
 
 func TestGCPCredentials_Provider(t *testing.T) {

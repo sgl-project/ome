@@ -3,8 +3,8 @@
 package ome
 
 import (
-	internalinterfaces "github.com/sgl-project/ome/pkg/client/informers/externalversions/internalinterfaces"
-	v1beta1 "github.com/sgl-project/ome/pkg/client/informers/externalversions/ome/v1beta1"
+	internalinterfaces "sigs.k8s.io/ome/pkg/client/informers/externalversions/internalinterfaces"
+	v1beta1 "sigs.k8s.io/ome/pkg/client/informers/externalversions/ome/v1beta1"
 )
 
 // Interface provides access to each of this group's versions.

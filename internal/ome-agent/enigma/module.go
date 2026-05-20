@@ -6,10 +6,10 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/vault/kmscrypto"
-	"github.com/sgl-project/ome/pkg/vault/kmsmgm"
-	ocisecret "github.com/sgl-project/ome/pkg/vault/secret"
+	"sigs.k8s.io/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/vault/kmscrypto"
+	"sigs.k8s.io/ome/pkg/vault/kmsmgm"
+	ocisecret "sigs.k8s.io/ome/pkg/vault/secret"
 )
 
 type enigmaParams struct {

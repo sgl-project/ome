@@ -6,10 +6,10 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/sgl-project/ome/web-console/backend/internal/handlers"
-	"github.com/sgl-project/ome/web-console/backend/internal/k8s"
-	"github.com/sgl-project/ome/web-console/backend/internal/middleware"
 	"go.uber.org/zap"
+	"sigs.k8s.io/ome/web-console/backend/internal/handlers"
+	"sigs.k8s.io/ome/web-console/backend/internal/k8s"
+	"sigs.k8s.io/ome/web-console/backend/internal/middleware"
 )
 
 // Server wraps the HTTP server and dependencies

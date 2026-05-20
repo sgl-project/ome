@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/sgl-project/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 // JobReconciler reconciles batch/v1 Job resources for benchmarks

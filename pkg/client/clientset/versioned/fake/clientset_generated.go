@@ -3,15 +3,15 @@
 package fake
 
 import (
-	clientset "github.com/sgl-project/ome/pkg/client/clientset/versioned"
-	omev1beta1 "github.com/sgl-project/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
-	fakeomev1beta1 "github.com/sgl-project/ome/pkg/client/clientset/versioned/typed/ome/v1beta1/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/testing"
+	clientset "sigs.k8s.io/ome/pkg/client/clientset/versioned"
+	omev1beta1 "sigs.k8s.io/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
+	fakeomev1beta1 "sigs.k8s.io/ome/pkg/client/clientset/versioned/typed/ome/v1beta1/fake"
 )
 
 // NewSimpleClientset returns a clientset that will respond with the provided objects.

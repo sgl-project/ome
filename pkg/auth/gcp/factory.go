@@ -8,8 +8,8 @@ import (
 
 	"golang.org/x/oauth2/google"
 
-	"github.com/sgl-project/ome/pkg/auth"
-	"github.com/sgl-project/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/auth"
+	"sigs.k8s.io/ome/pkg/logging"
 )
 
 // Factory creates GCP credentials

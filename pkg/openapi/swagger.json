@@ -395,7 +395,7 @@
       "type": "object",
       "properties": {
         "acceleratorClasses": {
-          "description": "AcceleratorClasses lists the names of AcceleratorClasses this runtime supports If empty, the runtime supports any accelerator",
+          "description": "AcceleratorClasses lists the names of AcceleratorClasses this runtime supports",
           "type": "array",
           "items": {
             "type": "string",

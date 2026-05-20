@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sgl-project/ome/pkg/acceleratorclassselector"
+	"sigs.k8s.io/ome/pkg/acceleratorclassselector"
 
 	policyv1 "k8s.io/api/policy/v1"
 
@@ -35,18 +35,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
-	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/constants"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/components"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/external_service"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
-	multimodelconfig "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/status"
-	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/workload"
-	"github.com/sgl-project/ome/pkg/runtimeselector"
-	"github.com/sgl-project/ome/pkg/utils"
+	v1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/components"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/external_service"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
+	multimodelconfig "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/status"
+	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/workload"
+	"sigs.k8s.io/ome/pkg/runtimeselector"
+	"sigs.k8s.io/ome/pkg/utils"
 )
 
 // +kubebuilder:rbac:groups=ome.io,resources=inferenceservices;inferenceservices/finalizers,verbs=get;list;watch;create;update;patch;delete

@@ -4,10 +4,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/sgl-project/ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 func TestNewModelInitInjector(t *testing.T) {

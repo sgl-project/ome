@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
+	"sigs.k8s.io/ome/pkg/logging"
 )
 
 // HubParams represents the parameters that can be injected into the Hub client

@@ -8,7 +8,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	omev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // NewK8sClient creates a new Kubernetes client using controller-runtime

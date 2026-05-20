@@ -18,8 +18,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/sgl-project/ome/pkg/hfutil/hub"
-	"github.com/sgl-project/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/hfutil/hub"
+	"sigs.k8s.io/ome/pkg/logging"
 )
 
 func main() {

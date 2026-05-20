@@ -1,7 +1,7 @@
 package replicator
 
 import (
-	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
+	"sigs.k8s.io/ome/internal/ome-agent/replica/common"
 )
 
 type Replicator interface {

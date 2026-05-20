@@ -6,8 +6,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/sgl-project/ome/pkg/imds"
-	"github.com/sgl-project/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/imds"
+	"sigs.k8s.io/ome/pkg/logging"
 )
 
 const (

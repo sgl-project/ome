@@ -11,7 +11,7 @@ import (
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 
-	"github.com/sgl-project/ome/pkg/storage"
+	"sigs.k8s.io/ome/pkg/storage"
 )
 
 const (

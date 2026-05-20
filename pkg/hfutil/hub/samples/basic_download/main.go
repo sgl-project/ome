@@ -18,7 +18,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/sgl-project/ome/pkg/hfutil/hub"
+	"sigs.k8s.io/ome/pkg/hfutil/hub"
 )
 
 func main() {

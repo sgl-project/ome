@@ -53,7 +53,7 @@ ARG GIT_COMMIT
 # Build the ome-agent binary (CGO must be enabled for XET library)
 RUN CGO_ENABLED=1 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     go build -a \
-    -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${GIT_TAG} -X github.com/sgl-project/ome/pkg/version.GitCommit=${GIT_COMMIT}" \
+    -ldflags "-X sigs.k8s.io/ome/pkg/version.GitVersion=${GIT_TAG} -X sigs.k8s.io/ome/pkg/version.GitCommit=${GIT_COMMIT}" \
     -o ome-agent ./cmd/ome-agent
 
 # Use the base image specified at the top of the file

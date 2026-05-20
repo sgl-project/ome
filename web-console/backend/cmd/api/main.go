@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sgl-project/ome/web-console/backend/internal/api"
-	"github.com/sgl-project/ome/web-console/backend/internal/k8s"
 	"go.uber.org/zap"
+	"sigs.k8s.io/ome/web-console/backend/internal/api"
+	"sigs.k8s.io/ome/web-console/backend/internal/k8s"
 )
 
 func main() {

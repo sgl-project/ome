@@ -27,7 +27,7 @@ jobs:
       - name: Generate VEX document
         uses: openvex/generate-vex@c59881b41451d7ccba5c3b74cd195382b8971fcd
         with:
-          product: pkg:github/sgl-project/ome@${{ github.event.release.tag_name || inputs.tag }}
+          product: pkg:github/ome-projects/ome@${{ github.event.release.tag_name || inputs.tag }}
           file: /tmp/ome-${{ github.event.release.tag_name || inputs.tag }}.vex.json
 
       - name: Upload VEX to release

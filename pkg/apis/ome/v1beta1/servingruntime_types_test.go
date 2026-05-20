@@ -6,7 +6,7 @@ import (
 	"github.com/onsi/gomega"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/sgl-project/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 func TestSupportedModelFormat_GetAcceleratorConfig(t *testing.T) {

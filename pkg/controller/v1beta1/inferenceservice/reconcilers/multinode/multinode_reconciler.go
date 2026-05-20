@@ -11,13 +11,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	lwsSpec "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/constants"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/services"
-	raycluster "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/istiosidecar"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/lws"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/services"
+	raycluster "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/istiosidecar"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/lws"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
 )
 
 type MultiNodeReconciler struct {

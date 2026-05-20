@@ -9,8 +9,8 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/sgl-project/ome/pkg/auth"
-	"github.com/sgl-project/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/auth"
+	"sigs.k8s.io/ome/pkg/logging"
 )
 
 // mockConfigProvider is a mock implementation of common.ConfigurationProvider

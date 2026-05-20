@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/sgl-project/ome/pkg/principals"
-	testingPkg "github.com/sgl-project/ome/pkg/testing"
+	"sigs.k8s.io/ome/pkg/principals"
+	testingPkg "sigs.k8s.io/ome/pkg/testing"
 )
 
 // MockSecretsClientInterface defines the interface for mocking secrets client

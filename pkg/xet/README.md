@@ -244,7 +244,7 @@ import (
     "fmt"
     "os"
 
-    xet "github.com/sgl-project/ome/pkg/xet"
+    xet "sigs.k8s.io/ome/pkg/xet"
 )
 
 func main() {

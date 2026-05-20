@@ -32,7 +32,7 @@ A production-ready Go implementation of the Hugging Face Hub client, providing s
 ## 📦 Installation
 
 ```bash
-go get github.com/sgl-project/ome/pkg/hfutil/hub
+go get sigs.k8s.io/ome/pkg/hfutil/hub
 ```
 
 ### Dependencies
@@ -45,8 +45,8 @@ github.com/spf13/viper  // Configuration management
 go.uber.org/fx  // Dependency injection support
 
 // Internal dependencies
-github.com/sgl-project/ome/pkg/logging
-github.com/sgl-project/ome/pkg/configutils
+sigs.k8s.io/ome/pkg/logging
+sigs.k8s.io/ome/pkg/configutils
 ```
 
 ## 🎯 Quick Start
@@ -60,7 +60,7 @@ import (
     "context"
     "log"
 
-    "github.com/sgl-project/ome/pkg/hfutil/hub"
+    "sigs.k8s.io/ome/pkg/hfutil/hub"
 )
 
 func main() {
@@ -91,7 +91,7 @@ import (
     "context"
     "time"
 
-    "github.com/sgl-project/ome/pkg/hfutil/hub"
+    "sigs.k8s.io/ome/pkg/hfutil/hub"
 )
 
 func main() {

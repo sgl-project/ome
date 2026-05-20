@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/sgl-project/ome/pkg/storage"
+	"sigs.k8s.io/ome/pkg/storage"
 )
 
 // MultipartUpload represents an active multipart upload

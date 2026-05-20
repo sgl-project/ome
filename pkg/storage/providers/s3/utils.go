@@ -5,7 +5,7 @@ import (
 	"mime"
 	"strings"
 
-	utilstorage "github.com/sgl-project/ome/pkg/utils/storage"
+	utilstorage "sigs.k8s.io/ome/pkg/utils/storage"
 )
 
 // parseS3URI parses an S3 URI and returns bucket and key

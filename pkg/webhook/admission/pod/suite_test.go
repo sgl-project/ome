@@ -10,8 +10,8 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	pkgtest "github.com/sgl-project/ome/pkg/testing"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	pkgtest "sigs.k8s.io/ome/pkg/testing"
 )
 
 var cfg *rest.Config

@@ -8,9 +8,9 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/secrets"
 
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/principals"
-	"github.com/sgl-project/ome/pkg/utils"
+	"sigs.k8s.io/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/principals"
+	"sigs.k8s.io/ome/pkg/utils"
 )
 
 type Secret struct {

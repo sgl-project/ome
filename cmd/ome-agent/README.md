@@ -42,9 +42,9 @@ OME-Agent offers the following capabilities:
 Clone the repository and install the OME-Agent CLI.
 
 ```bash
-mkdir -p ${GOPATH}/src/github.com/sgl-project/ome
-cd ${GOPATH}/src/github.com/sgl-project/ome
-git clone https://github.com/sgl-project/ome.git
+mkdir -p ${GOPATH}/src/sigs.k8s.io/ome
+cd ${GOPATH}/src/sigs.k8s.io/ome
+git clone https://github.com/ome-projects/ome.git
 cd ome
 make ome-agent
 ```

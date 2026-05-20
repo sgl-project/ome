@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sgl-project/ome/web-console/backend/pkg/huggingface"
 	"go.uber.org/zap"
+	"sigs.k8s.io/ome/web-console/backend/pkg/huggingface"
 )
 
 // HuggingFaceHandler handles HTTP requests for HuggingFace API integration

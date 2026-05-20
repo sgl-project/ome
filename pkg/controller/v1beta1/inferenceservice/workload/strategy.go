@@ -3,9 +3,9 @@ package workload
 import (
 	"context"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/constants"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 // WorkloadStrategy defines the unified interface for workload strategies.

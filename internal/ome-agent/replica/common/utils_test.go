@@ -7,8 +7,8 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/sgl-project/ome/pkg/afero"
-	"github.com/sgl-project/ome/pkg/xet"
+	"sigs.k8s.io/ome/pkg/afero"
+	"sigs.k8s.io/ome/pkg/xet"
 )
 
 func TestConvertToReplicationObjectsFromObjectSummary(t *testing.T) {

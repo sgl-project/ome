@@ -1,3 +1,3 @@
-module github.com/sgl-project/ome/site
+module sigs.k8s.io/ome/site
 
 go 1.21

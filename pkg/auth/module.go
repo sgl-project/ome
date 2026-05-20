@@ -3,7 +3,7 @@ package auth
 import (
 	"go.uber.org/fx"
 
-	"github.com/sgl-project/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/logging"
 )
 
 // Module provides auth functionality with fx

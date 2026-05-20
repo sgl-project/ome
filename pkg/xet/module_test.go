@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sgl-project/ome/pkg/logging"
-	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
+	"sigs.k8s.io/ome/pkg/logging"
+	testingPkg "sigs.k8s.io/ome/pkg/testing"
 )
 
 func TestHubParams(t *testing.T) {

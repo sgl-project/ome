@@ -4,19 +4,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sgl-project/ome/pkg/xet"
+	"sigs.k8s.io/ome/pkg/xet"
 
-	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
+	"sigs.k8s.io/ome/internal/ome-agent/replica/common"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/sgl-project/ome/pkg/afero"
-	"github.com/sgl-project/ome/pkg/ociobjectstore"
-	"github.com/sgl-project/ome/pkg/principals"
-	testingPkg "github.com/sgl-project/ome/pkg/testing"
-	"github.com/sgl-project/ome/pkg/utils/storage"
+	"sigs.k8s.io/ome/pkg/afero"
+	"sigs.k8s.io/ome/pkg/ociobjectstore"
+	"sigs.k8s.io/ome/pkg/principals"
+	testingPkg "sigs.k8s.io/ome/pkg/testing"
+	"sigs.k8s.io/ome/pkg/utils/storage"
 )
 
 type TestReplicaAgent struct {

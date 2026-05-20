@@ -7,8 +7,8 @@ import (
 
 	"go.uber.org/zap/zaptest"
 
-	"github.com/sgl-project/ome/pkg/auth"
-	"github.com/sgl-project/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/auth"
+	"sigs.k8s.io/ome/pkg/logging"
 )
 
 func TestFactory_SupportedAuthTypes(t *testing.T) {

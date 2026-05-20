@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sgl-project/ome/web-console/backend/internal/k8s"
 	"go.uber.org/zap"
+	"sigs.k8s.io/ome/web-console/backend/internal/k8s"
 )
 
 // AcceleratorsHandler handles HTTP requests for AcceleratorClass resources

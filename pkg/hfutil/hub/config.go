@@ -9,8 +9,8 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 
-	"github.com/sgl-project/ome/pkg/configutils"
-	"github.com/sgl-project/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/configutils"
+	"sigs.k8s.io/ome/pkg/logging"
 )
 
 // ProgressDisplayMode defines how download progress is displayed

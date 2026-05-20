@@ -3,10 +3,10 @@ package xet
 import (
 	"testing"
 
-	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	testingPkg "sigs.k8s.io/ome/pkg/testing"
 )
 
 func TestConfig_Apply(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 
 	"go.uber.org/zap/zaptest"
 
-	"github.com/sgl-project/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/logging"
 )
 
 func TestDefaultFactory(t *testing.T) {

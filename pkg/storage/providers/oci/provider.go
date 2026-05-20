@@ -13,10 +13,10 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 
-	"github.com/sgl-project/ome/pkg/auth"
-	ociauth "github.com/sgl-project/ome/pkg/auth/oci" // Register OCI auth provider
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/storage"
+	"sigs.k8s.io/ome/pkg/auth"
+	ociauth "sigs.k8s.io/ome/pkg/auth/oci" // Register OCI auth provider
+	"sigs.k8s.io/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/storage"
 )
 
 const (

@@ -1,4 +1,4 @@
-module github.com/sgl-project/ome/web-console/backend
+module sigs.k8s.io/ome/web-console/backend
 
 go 1.24.1
 

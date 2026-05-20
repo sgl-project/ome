@@ -58,9 +58,9 @@ export ARCH="linux/arm64"  # Only needed for Apple Silicon
 Clone OME to the correct location in your GOPATH:
 
 ```bash
-mkdir -p ${GOPATH}/src/github.com/sgl-project
-cd ${GOPATH}/src/github.com/sgl-project
-git clone https://github.com/sgl-project/ome.git
+mkdir -p ${GOPATH}/src/github.com/ome-projects
+cd ${GOPATH}/src/github.com/ome-projects
+git clone https://github.com/ome-projects/ome.git
 cd ome
 ```
 
@@ -226,7 +226,7 @@ Create `.vscode/launch.json`:
 2. **Edit Configuration:**
    - Name: `ome-controller-manager`
    - Run Kind: `File`
-   - Files: `${GOPATH}/src/github.com/sgl-project/ome/cmd/manager/main.go`
+   - Files: `${GOPATH}/src/sigs.k8s.io/ome/cmd/manager/main.go`
    - Environment Variables: `KUBECONFIG=/path/to/kubeconfig`
    - Program Arguments: `--zap-encoder console --health-probe-addr 127.0.0.1:8081 --metrics-bind-address 127.0.0.1:8080 --leader-elect`
 

@@ -183,7 +183,7 @@ jobs:
 
       - name: Create chart index for GitHub Pages
         run: |
-          helm repo index .charts --url https://github.com/sgl-project/ome/releases/download/${{ needs.prepare.outputs.tag }}
+          helm repo index .charts --url https://github.com/ome-projects/ome/releases/download/${{ needs.prepare.outputs.tag }}
 
       - name: Upload charts
         uses: actions/upload-artifact@v7
@@ -293,7 +293,7 @@ jobs:
 
           \`\`\`bash
           # Add the OME Helm repository
-          helm repo add ome https://github.com/sgl-project/ome/releases/download/${{ needs.prepare.outputs.tag }}
+          helm repo add ome https://github.com/ome-projects/ome/releases/download/${{ needs.prepare.outputs.tag }}
           helm repo update
 
           # Install OME
@@ -317,7 +317,7 @@ jobs:
 
           \`\`\`bash
           cosign verify ghcr.io/moirai-internal/ome-manager:${{ needs.prepare.outputs.tag }} \
-            --certificate-identity-regexp=https://github.com/sgl-project/ome/.github/workflows/release.yaml@refs/tags/.* \
+            --certificate-identity-regexp=https://github.com/ome-projects/ome/.github/workflows/release.yaml@refs/tags/.* \
             --certificate-oidc-issuer=https://token.actions.githubusercontent.com
           \`\`\`
           EOF

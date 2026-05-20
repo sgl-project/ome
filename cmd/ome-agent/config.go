@@ -9,8 +9,8 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 
-	"github.com/sgl-project/ome/pkg/configutils"
-	"github.com/sgl-project/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/configutils"
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 func configProvider(cli *cobra.Command, module AgentModule) fx.Option {

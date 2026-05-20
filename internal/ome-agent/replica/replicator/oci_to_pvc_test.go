@@ -6,11 +6,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
-	"github.com/sgl-project/ome/pkg/ociobjectstore"
-	testingPkg "github.com/sgl-project/ome/pkg/testing"
-	"github.com/sgl-project/ome/pkg/utils/storage"
 	"github.com/stretchr/testify/assert"
+	"sigs.k8s.io/ome/internal/ome-agent/replica/common"
+	"sigs.k8s.io/ome/pkg/ociobjectstore"
+	testingPkg "sigs.k8s.io/ome/pkg/testing"
+	"sigs.k8s.io/ome/pkg/utils/storage"
 )
 
 // TestOCIToPVCReplicator_Replicate_Success tests successful replication

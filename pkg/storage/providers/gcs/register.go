@@ -3,8 +3,8 @@ package gcs
 import (
 	"context"
 
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/storage"
+	"sigs.k8s.io/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/storage"
 )
 
 func init() {

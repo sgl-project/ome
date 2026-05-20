@@ -151,7 +151,7 @@ Please refer to [Kueue installation guide](https://kueue.sigs.k8s.io/docs/instal
 ### 8. Clone OME repository
 
 The Go tools require that you clone the repository to the
-`src/github.com/sgl-project/ome` directory in your
+`src/sigs.k8s.io/ome` directory in your
 [`GOPATH`](https://github.com/golang/go/wiki/SettingGOPATH).
 
 To check out this repository:
@@ -161,9 +161,9 @@ To check out this repository:
 1. Clone it to your machine:
 
 ```shell
-mkdir -p ${GOPATH}/src/github.com/sgl-project
-cd ${GOPATH}/src/github.com/sgl-project
-git clone https://github.com/sgl-project/ome.git
+mkdir -p ${GOPATH}/src/github.com/ome-projects
+cd ${GOPATH}/src/github.com/ome-projects
+git clone https://github.com/ome-projects/ome.git
 cd ome
 ```
 

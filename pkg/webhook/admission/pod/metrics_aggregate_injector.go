@@ -7,8 +7,8 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 
-	"github.com/sgl-project/ome/pkg/constants"
-	"github.com/sgl-project/ome/pkg/utils"
+	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils"
 )
 
 const (

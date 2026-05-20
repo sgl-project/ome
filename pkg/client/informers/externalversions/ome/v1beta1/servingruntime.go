@@ -6,14 +6,14 @@ import (
 	context "context"
 	time "time"
 
-	apisomev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	versioned "github.com/sgl-project/ome/pkg/client/clientset/versioned"
-	internalinterfaces "github.com/sgl-project/ome/pkg/client/informers/externalversions/internalinterfaces"
-	omev1beta1 "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
 	cache "k8s.io/client-go/tools/cache"
+	apisomev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	versioned "sigs.k8s.io/ome/pkg/client/clientset/versioned"
+	internalinterfaces "sigs.k8s.io/ome/pkg/client/informers/externalversions/internalinterfaces"
+	omev1beta1 "sigs.k8s.io/ome/pkg/client/listers/ome/v1beta1"
 )
 
 // ServingRuntimeInformer provides access to a shared informer and lister for

@@ -16,13 +16,13 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"knative.dev/pkg/kmp"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	omev1beta1informers "github.com/sgl-project/ome/pkg/client/informers/externalversions"
-	omev1beta1 "github.com/sgl-project/ome/pkg/client/informers/externalversions/ome/v1beta1"
-	omev1beta1lister "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/constants"
-	"github.com/sgl-project/ome/pkg/utils"
-	"github.com/sgl-project/ome/pkg/utils/storage"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	omev1beta1informers "sigs.k8s.io/ome/pkg/client/informers/externalversions"
+	omev1beta1 "sigs.k8s.io/ome/pkg/client/informers/externalversions/ome/v1beta1"
+	omev1beta1lister "sigs.k8s.io/ome/pkg/client/listers/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils"
+	"sigs.k8s.io/ome/pkg/utils/storage"
 )
 
 type Scout struct {

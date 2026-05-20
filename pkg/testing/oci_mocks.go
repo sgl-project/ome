@@ -10,8 +10,8 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/vault"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/principals"
+	"sigs.k8s.io/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/principals"
 )
 
 // MockConfigurationProvider implements common.ConfigurationProvider for testing

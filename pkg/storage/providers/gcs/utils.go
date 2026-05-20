@@ -3,7 +3,7 @@ package gcs
 import (
 	"fmt"
 
-	utilstorage "github.com/sgl-project/ome/pkg/utils/storage"
+	utilstorage "sigs.k8s.io/ome/pkg/utils/storage"
 )
 
 // parseGCSURI parses a GCS URI in the format gs://bucket/object/path

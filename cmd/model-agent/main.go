@@ -21,12 +21,12 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	omev1beta1client "github.com/sgl-project/ome/pkg/client/clientset/versioned"
-	omev1beta1informers "github.com/sgl-project/ome/pkg/client/informers/externalversions"
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/modelagent"
-	"github.com/sgl-project/ome/pkg/version"
-	"github.com/sgl-project/ome/pkg/xet"
+	omev1beta1client "sigs.k8s.io/ome/pkg/client/clientset/versioned"
+	omev1beta1informers "sigs.k8s.io/ome/pkg/client/informers/externalversions"
+	"sigs.k8s.io/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/modelagent"
+	"sigs.k8s.io/ome/pkg/version"
+	"sigs.k8s.io/ome/pkg/xet"
 )
 
 // config holds all configuration parameters for the model agent

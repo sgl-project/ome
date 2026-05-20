@@ -6,11 +6,11 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/sgl-project/ome/pkg/constants"
-	testingPkg "github.com/sgl-project/ome/pkg/testing"
-	"github.com/sgl-project/ome/pkg/vault/kmscrypto"
-	"github.com/sgl-project/ome/pkg/vault/kmsmgm"
-	ocisecret "github.com/sgl-project/ome/pkg/vault/secret"
+	"sigs.k8s.io/ome/pkg/constants"
+	testingPkg "sigs.k8s.io/ome/pkg/testing"
+	"sigs.k8s.io/ome/pkg/vault/kmscrypto"
+	"sigs.k8s.io/ome/pkg/vault/kmsmgm"
+	ocisecret "sigs.k8s.io/ome/pkg/vault/secret"
 )
 
 func TestNewConfig(t *testing.T) {

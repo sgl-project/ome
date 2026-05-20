@@ -19,10 +19,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
 
-	"github.com/sgl-project/ome/pkg/auth"
-	awsauth "github.com/sgl-project/ome/pkg/auth/aws"
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/storage"
+	"sigs.k8s.io/ome/pkg/auth"
+	awsauth "sigs.k8s.io/ome/pkg/auth/aws"
+	"sigs.k8s.io/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/storage"
 )
 
 const (
