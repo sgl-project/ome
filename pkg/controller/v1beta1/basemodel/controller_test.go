@@ -882,8 +882,8 @@ func TestProcessModelStatusSkipsStaleStorageIdentity(t *testing.T) {
 	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 
 	storageURI := "hf://Qwen/Qwen2.5-0.5B"
-	oldPath := "/raid/models/codex-repro/qwen2-5-0-5B-good"
-	currentPath := "/raid/models/codex-repro/qwen2-5-0-5b-caseflip"
+	oldPath := "/raid/models/storage-identity/qwen2-5-0-5B-good"
+	currentPath := "/raid/models/storage-identity/qwen2-5-0-5b-caseflip"
 	currentSpec := &v1beta1.BaseModelSpec{
 		Storage: &v1beta1.StorageSpec{
 			StorageUri: &storageURI,
@@ -954,6 +954,80 @@ func TestProcessModelStatusSkipsStaleStorageIdentity(t *testing.T) {
 	g.Expect(nodesFailed).To(gomega.BeEmpty())
 }
 
+func TestProcessModelStatusSkipsStaleFailedStorageIdentity(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	storageURI := "hf://Qwen/Qwen2.5-0.5B"
+	oldPath := "/raid/models/storage-identity/qwen2-5-0-5B-old"
+	currentPath := "/raid/models/storage-identity/qwen2-5-0-5b-current"
+	currentSpec := &v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			StorageUri: &storageURI,
+			Path:       &currentPath,
+		},
+	}
+	oldSpec := &v1beta1.BaseModelSpec{
+		Storage: &v1beta1.StorageSpec{
+			StorageUri: &storageURI,
+			Path:       &oldPath,
+		},
+	}
+
+	staleEntry := modelagent.ModelEntry{
+		Name:   "stale-model",
+		Status: modelagent.ModelStatusFailed,
+	}
+	staleEntry.ApplyStorageIdentity(oldSpec)
+	staleEntryData, err := json.Marshal(staleEntry)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	c := ctrlclientfake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: constants.OMENamespace}},
+			&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "worker-node-1"}},
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "worker-node-1",
+					Namespace: constants.OMENamespace,
+					Labels: map[string]string{
+						constants.ModelStatusConfigMapLabel: "true",
+					},
+				},
+				Data: map[string]string{
+					"clusterbasemodel.stale-model": string(staleEntryData),
+				},
+			},
+		).
+		Build()
+
+	var nodesReady, nodesFailed []string
+	err = processModelStatus(
+		context.Background(),
+		c,
+		ctrl.Log.WithName("test"),
+		"",
+		"stale-model",
+		true,
+		currentSpec,
+		func(context.Context, *modelagent.ModelConfig) error {
+			return nil
+		},
+		func(_ context.Context, ready, failed []string) error {
+			nodesReady = ready
+			nodesFailed = failed
+			return nil
+		},
+	)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Expect(nodesReady).To(gomega.BeEmpty())
+	g.Expect(nodesFailed).To(gomega.BeEmpty())
+}
+
 func TestProcessModelStatusAcceptsLegacyStorageIdentity(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
@@ -962,7 +1036,7 @@ func TestProcessModelStatusAcceptsLegacyStorageIdentity(t *testing.T) {
 	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 
 	storageURI := "hf://Qwen/Qwen2.5-0.5B"
-	storagePath := "/raid/models/codex-repro/qwen2-5-0-5b"
+	storagePath := "/raid/models/storage-identity/qwen2-5-0-5b"
 	currentSpec := &v1beta1.BaseModelSpec{
 		Storage: &v1beta1.StorageSpec{
 			StorageUri: &storageURI,

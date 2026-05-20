@@ -221,7 +221,7 @@ func (entry *ModelEntry) ApplyStorageIdentity(spec *v1beta1.BaseModelSpec) {
 }
 
 func (entry *ModelEntry) hasStorageIdentity() bool {
-	return entry != nil && (entry.StorageURI != "" || entry.StoragePath != "")
+	return entry != nil && hasStorageIdentityFields(entry.StorageURI, entry.StoragePath)
 }
 
 // MatchesStorageIdentity reports whether a ConfigMap entry describes the current storage source and path.
@@ -229,12 +229,20 @@ func (entry *ModelEntry) MatchesStorageIdentity(spec *v1beta1.BaseModelSpec) boo
 	if entry == nil {
 		return false
 	}
+	return matchesStorageIdentityFields(entry.StorageURI, entry.StoragePath, spec)
+}
+
+func hasStorageIdentityFields(storageURI, storagePath string) bool {
+	return storageURI != "" || storagePath != ""
+}
+
+func matchesStorageIdentityFields(entryStorageURI, entryStoragePath string, spec *v1beta1.BaseModelSpec) bool {
 	storageURI, storagePath, ok := StorageIdentityForSpec(spec)
 	if !ok {
 		return true
 	}
-	if !entry.hasStorageIdentity() {
+	if !hasStorageIdentityFields(entryStorageURI, entryStoragePath) {
 		return true
 	}
-	return entry.StorageURI == storageURI && entry.StoragePath == storagePath
+	return entryStorageURI == storageURI && entryStoragePath == storagePath
 }

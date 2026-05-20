@@ -58,6 +58,12 @@ spec:
         - {{ .Values.modelAgent.hostPath }}
         - --num-download-worker
         - '2'
+        - --integrity-check-interval
+        - {{ .Values.modelAgent.integrity.checkInterval | quote }}
+        - --integrity-deep-check-interval
+        - {{ .Values.modelAgent.integrity.deepCheckInterval | quote }}
+        - --integrity-startup-jitter
+        - {{ .Values.modelAgent.integrity.startupJitter | quote }}
         env:
         - name: NODE_NAME
           valueFrom:

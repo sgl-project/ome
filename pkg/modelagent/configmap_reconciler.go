@@ -498,21 +498,14 @@ func (entry *CacheEntry) applyStorageIdentity(spec *v1beta1.BaseModelSpec) {
 }
 
 func (entry *CacheEntry) hasStorageIdentity() bool {
-	return entry != nil && (entry.StorageURI != "" || entry.StoragePath != "")
+	return entry != nil && hasStorageIdentityFields(entry.StorageURI, entry.StoragePath)
 }
 
 func (entry *CacheEntry) matchesStorageIdentity(spec *v1beta1.BaseModelSpec) bool {
 	if entry == nil {
 		return false
 	}
-	storageURI, storagePath, ok := StorageIdentityForSpec(spec)
-	if !ok {
-		return true
-	}
-	if !entry.hasStorageIdentity() {
-		return true
-	}
-	return entry.StorageURI == storageURI && entry.StoragePath == storagePath
+	return matchesStorageIdentityFields(entry.StorageURI, entry.StoragePath, spec)
 }
 
 // ReconcileModelMetadata updates the ConfigMap with model metadata

@@ -107,6 +107,14 @@ For models using SafeTensors format:
 - **Node Labeling**: Apply labels to nodes indicating model availability
 - **Metric Emission**: Update Prometheus metrics for monitoring
 
+### 7. Post-Ready Integrity Reconciliation
+
+The Model Agent periodically rechecks models that are already marked `Ready` on the local node. Each pass reads the node-scoped model status ConfigMap, validates only current `Ready` entries, and marks the node `Failed` for that model when required artifacts are missing or corrupted.
+
+Basic checks validate the model path, required config files, model weight presence, and persisted manifest file sizes. Deep checks run less frequently and compare SHA256 manifest hashes; OCI-backed models also reuse Object Storage metadata validation, including MD5 checks where available.
+
+For legacy Ready models without an existing manifest, the agent first performs conservative path/config/weight validation and then writes the baseline manifest during a deep check. Same-size corruption that already exists before that first baseline cannot be detected by the manifest.
+
 ## Configuration Reference
 
 ### Command Line Arguments
@@ -140,6 +148,9 @@ The Model Agent supports extensive configuration through command-line arguments:
 | `--node-name`        | `$NODE_NAME` | Name of the current node (usually from environment)     |
 | `--namespace`        | `ome`        | Kubernetes namespace for ConfigMaps and status tracking |
 | `--node-label-retry` | 5            | Number of retries for updating node labels              |
+| `--integrity-check-interval` | `10m` | Interval for periodic Ready model artifact checks; set `<=0` to disable |
+| `--integrity-deep-check-interval` | `6h` | Interval for checksum validation; set `<=0` to disable deep scans |
+| `--integrity-startup-jitter` | `30s` | Maximum deterministic startup jitter before the first integrity check |
 
 #### Logging and Monitoring
 
@@ -169,6 +180,9 @@ The Model Agent also supports configuration through environment variables:
 | `OCI_CONFIG_FILE` | Path to OCI configuration file |
 | `HUGGINGFACE_TOKEN` | Default Hugging Face access token |
 | `INSTANCE_TYPE_MAP` | JSON mapping of cloud instance types to GPU short names (e.g., `{"BM.GPU.H100.8": "H100"}`) |
+| `INTEGRITY_CHECK_INTERVAL` | Periodic Ready model artifact check interval |
+| `INTEGRITY_DEEP_CHECK_INTERVAL` | Deep checksum validation interval |
+| `INTEGRITY_STARTUP_JITTER` | Maximum startup jitter before the first integrity check |
 
 ## Advanced Download Features
 
@@ -402,6 +416,12 @@ model_agent_verification_duration_seconds 12.34
 
 # MD5 checksum failures
 model_agent_md5_checksum_failed_total{model_type="llama", namespace="default", name="llama-70b"} 0
+
+# Periodic artifact integrity checks
+model_agent_integrity_checks_total{model_type="basemodel", namespace="default", name="llama-70b", storage_type="HUGGINGFACE", check_type="basic", result="success", reason="ok"} 1
+
+# Deep integrity bytes scanned
+model_agent_integrity_bytes_scanned_total{model_type="basemodel", namespace="default", name="llama-70b", storage_type="HUGGINGFACE", check_type="deep"} 140737488355328
 ```
 
 #### Runtime Metrics

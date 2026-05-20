@@ -1,19 +1,56 @@
 package ociobjectstore
 
 import (
+	"crypto/md5"
+	"encoding/base64"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/oracle/oci-go-sdk/v65/common"
+	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/principals"
 	testingPkg "github.com/sgl-project/ome/pkg/testing"
 )
+
+type noopRequestSigner struct{}
+
+func (noopRequestSigner) Sign(_ *http.Request) error {
+	return nil
+}
+
+type fakeHeadObjectDispatcher struct {
+	contentLength int64
+	contentMD5    string
+}
+
+func (f fakeHeadObjectDispatcher) Do(req *http.Request) (*http.Response, error) {
+	header := http.Header{}
+	header.Set("Content-Length", fmt.Sprintf("%d", f.contentLength))
+	if f.contentMD5 != "" {
+		header.Set("Content-MD5", f.contentMD5)
+	}
+	return &http.Response{
+		StatusCode:    http.StatusOK,
+		Status:        "200 OK",
+		Header:        header,
+		Body:          io.NopCloser(strings.NewReader("")),
+		ContentLength: f.contentLength,
+		Request:       req,
+		Proto:         "HTTP/1.1",
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+	}, nil
+}
 
 func TestNewOCIOSDataStore(t *testing.T) {
 	t.Run("Nil config", func(t *testing.T) {
@@ -44,6 +81,86 @@ func TestNewOCIOSDataStore(t *testing.T) {
 		err := config.Validate()
 		assert.NoError(t, err)
 	})
+}
+
+func TestValidateLocalCopy(t *testing.T) {
+	localPath := filepath.Join(t.TempDir(), "model.safetensors")
+	content := []byte("model-data")
+	require.NoError(t, os.WriteFile(localPath, content, 0644))
+
+	t.Run("Valid", func(t *testing.T) {
+		sum := md5.Sum(content)
+		store := newValidationTestStore(t, int64(len(content)), base64.StdEncoding.EncodeToString(sum[:]))
+
+		result, err := store.ValidateLocalCopy(testObjectURI(), localPath)
+		require.NoError(t, err)
+		assert.Equal(t, LocalCopyValidationValid, result.State)
+		assert.Equal(t, LocalCopyValidationReasonOK, result.Reason)
+	})
+
+	t.Run("Missing", func(t *testing.T) {
+		store := newValidationTestStore(t, int64(len(content)), "")
+
+		result, err := store.ValidateLocalCopy(testObjectURI(), filepath.Join(t.TempDir(), "missing"))
+		require.NoError(t, err)
+		assert.Equal(t, LocalCopyValidationInvalid, result.State)
+		assert.Equal(t, LocalCopyValidationReasonMissing, result.Reason)
+	})
+
+	t.Run("SizeMismatch", func(t *testing.T) {
+		store := newValidationTestStore(t, int64(len(content)+1), "")
+
+		result, err := store.ValidateLocalCopy(testObjectURI(), localPath)
+		require.NoError(t, err)
+		assert.Equal(t, LocalCopyValidationInvalid, result.State)
+		assert.Equal(t, LocalCopyValidationReasonSizeMismatch, result.Reason)
+	})
+
+	t.Run("ChecksumMismatch", func(t *testing.T) {
+		sum := md5.Sum([]byte("different"))
+		store := newValidationTestStore(t, int64(len(content)), base64.StdEncoding.EncodeToString(sum[:]))
+
+		result, err := store.ValidateLocalCopy(testObjectURI(), localPath)
+		require.NoError(t, err)
+		assert.Equal(t, LocalCopyValidationInvalid, result.State)
+		assert.Equal(t, LocalCopyValidationReasonChecksumMismatch, result.Reason)
+	})
+
+	t.Run("ChecksumMissing", func(t *testing.T) {
+		store := newValidationTestStore(t, int64(len(content)), "")
+
+		result, err := store.ValidateLocalCopy(testObjectURI(), localPath)
+		require.NoError(t, err)
+		assert.Equal(t, LocalCopyValidationInconclusive, result.State)
+		assert.Equal(t, LocalCopyValidationReasonChecksumMissing, result.Reason)
+	})
+}
+
+func newValidationTestStore(t *testing.T, contentLength int64, contentMD5 string) *OCIOSDataStore {
+	t.Helper()
+	client := objectstorage.ObjectStorageClient{
+		BaseClient: common.BaseClient{
+			HTTPClient: fakeHeadObjectDispatcher{
+				contentLength: contentLength,
+				contentMD5:    contentMD5,
+			},
+			Signer:    noopRequestSigner{},
+			Host:      "https://objectstorage.test",
+			UserAgent: "ome-test",
+		},
+	}
+	return &OCIOSDataStore{
+		logger: logging.Discard(),
+		Client: &client,
+	}
+}
+
+func testObjectURI() ObjectURI {
+	return ObjectURI{
+		Namespace:  "namespace",
+		BucketName: "bucket",
+		ObjectName: "model.safetensors",
+	}
 }
 
 func TestIsMultipartMd5(t *testing.T) {
