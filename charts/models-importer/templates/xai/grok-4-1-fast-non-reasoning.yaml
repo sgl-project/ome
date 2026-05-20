@@ -5,6 +5,7 @@ metadata:
   name: grok-4-1-fast-non-reasoning
   labels:
     genai-managed-base-model-v1beta1: "true"
+{{ include "models-importer.genaiModelLabels" (dict "root" $ "model" "grok-4-1-fast-non-reasoning") | nindent 4 }}
   annotations:
     models.ome.io/runtime: ""
     models.ome.io/category: "SMALL"

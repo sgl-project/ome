@@ -5,6 +5,7 @@ metadata:
   name: grok-code-fast-1
   labels:
     genai-managed-base-model-v1beta1: "true"
+{{ include "models-importer.genaiModelLabels" (dict "root" $ "model" "grok-code-fast-1") | nindent 4 }}
   annotations:
     models.ome.io/runtime: ""
     models.ome.io/category: "SMALL"
