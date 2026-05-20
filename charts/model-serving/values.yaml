@@ -2945,6 +2945,24 @@ qwen_3_6_35b_a3b:
   minReplicas: 1
   maxReplicas: 1
   scaleMetric: {}
+qwen_3_next_80b_a3b_instruct:
+  enabled: false
+  router:
+    image:
+      repository: fra.ocir.io/idqj093njucb/smg
+      tag: "1.4.1"
+  image:
+    vllm:
+      repository: fra.ocir.io/idqj093njucb/vllm-openai
+      tag: "v0.19.0"
+  annotations: { }
+  tolerations: [ ]
+  labels: { }
+  volumes: [ ]
+  topologySpreadConstraints: [ ]
+  minReplicas: 1
+  maxReplicas: 1
+  scaleMetric: {}
 qwen_3_235b_a22b_instruct:
   enabled: false
   annotations: { }
