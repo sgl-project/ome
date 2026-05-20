@@ -4,16 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 	ktesting "k8s.io/client-go/testing"
@@ -159,89 +159,72 @@ func TestGetNodeLabelModelInfo(t *testing.T) {
 	assert.Equal(t, "unknown model", info)
 }
 
-// TestGetNodeLabelPatchPayloadBytes tests the getNodeLabelPatchPayloadBytes function
-func TestGetNodeLabelPatchPayloadBytes(t *testing.T) {
-	// Test with BaseModel and Ready state
+func TestGetNodeLabelMergePatchPayloadBytes(t *testing.T) {
 	baseModel := createTestBaseModel()
-	op := &NodeLabelOp{
-		BaseModel:        baseModel,
-		ClusterBaseModel: nil,
-		ModelStateOnNode: Ready,
-	}
-
-	payload, err := getNodeLabelPatchPayloadBytes(op)
-	assert.NoError(t, err)
-
-	// Verify JSON patch structure
-	var patches []patchStringValue
-	err = json.Unmarshal(payload, &patches)
-	assert.NoError(t, err)
-	assert.Len(t, patches, 1)
-
-	labelKey := constants.GetBaseModelLabel(baseModel.Namespace, baseModel.Name)
-	expectedPath := fmt.Sprintf("/metadata/labels/%s", strings.ReplaceAll(labelKey, "/", "~1"))
-
-	assert.Equal(t, "add", patches[0].Op)
-	assert.Equal(t, expectedPath, patches[0].Path)
-	assert.Equal(t, "Ready", patches[0].Value)
-
-	// Test with ClusterBaseModel and Updating state
 	clusterBaseModel := createTestClusterBaseModel()
-	op = &NodeLabelOp{
-		BaseModel:        nil,
-		ClusterBaseModel: clusterBaseModel,
-		ModelStateOnNode: Updating,
+
+	tests := []struct {
+		name          string
+		op            *NodeLabelOp
+		labelKey      string
+		expectedValue interface{}
+	}{
+		{
+			name: "BaseModel Ready",
+			op: &NodeLabelOp{
+				BaseModel:        baseModel,
+				ClusterBaseModel: nil,
+				ModelStateOnNode: Ready,
+			},
+			labelKey:      constants.GetBaseModelLabel(baseModel.Namespace, baseModel.Name),
+			expectedValue: string(Ready),
+		},
+		{
+			name: "BaseModel Failed",
+			op: &NodeLabelOp{
+				BaseModel:        baseModel,
+				ClusterBaseModel: nil,
+				ModelStateOnNode: Failed,
+			},
+			labelKey:      constants.GetBaseModelLabel(baseModel.Namespace, baseModel.Name),
+			expectedValue: string(Failed),
+		},
+		{
+			name: "ClusterBaseModel Updating",
+			op: &NodeLabelOp{
+				BaseModel:        nil,
+				ClusterBaseModel: clusterBaseModel,
+				ModelStateOnNode: Updating,
+			},
+			labelKey:      constants.GetClusterBaseModelLabel(clusterBaseModel.Name),
+			expectedValue: string(Updating),
+		},
+		{
+			name: "ClusterBaseModel Deleted",
+			op: &NodeLabelOp{
+				BaseModel:        nil,
+				ClusterBaseModel: clusterBaseModel,
+				ModelStateOnNode: Deleted,
+			},
+			labelKey:      constants.GetClusterBaseModelLabel(clusterBaseModel.Name),
+			expectedValue: nil,
+		},
 	}
 
-	payload, err = getNodeLabelPatchPayloadBytes(op)
-	assert.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload, err := getNodeLabelMergePatchPayloadBytes(tt.op)
+			assert.NoError(t, err)
 
-	err = json.Unmarshal(payload, &patches)
-	assert.NoError(t, err)
-	assert.Len(t, patches, 1)
-
-	labelKey = constants.GetClusterBaseModelLabel(clusterBaseModel.Name)
-	expectedPath = fmt.Sprintf("/metadata/labels/%s", strings.ReplaceAll(labelKey, "/", "~1"))
-
-	assert.Equal(t, "add", patches[0].Op)
-	assert.Equal(t, expectedPath, patches[0].Path)
-	assert.Equal(t, "Updating", patches[0].Value)
-
-	// Test with Failed state
-	op.ModelStateOnNode = Failed
-	payload, err = getNodeLabelPatchPayloadBytes(op)
-	assert.NoError(t, err)
-
-	err = json.Unmarshal(payload, &patches)
-	assert.NoError(t, err)
-	assert.Len(t, patches, 1)
-	assert.Equal(t, "add", patches[0].Op)
-	// The Failed enum is converted to a string, so we need to compare with "Failed"
-	assert.Equal(t, "Failed", patches[0].Value)
-
-	// Test with Deleted state (should be "remove" operation)
-	op.ModelStateOnNode = Deleted
-	payload, err = getNodeLabelPatchPayloadBytes(op)
-	assert.NoError(t, err)
-
-	// For a remove operation, let's verify the raw JSON doesn't contain a value field
-	var jsonMap []map[string]interface{}
-	err = json.Unmarshal(payload, &jsonMap)
-	assert.NoError(t, err)
-	assert.Len(t, jsonMap, 1)
-	assert.Equal(t, "remove", jsonMap[0]["op"])
-	// In a remove operation, the value field should not exist in the JSON at all
-	_, valueExists := jsonMap[0]["value"]
-	assert.False(t, valueExists, "value field should not exist in remove operation")
-
-	// Test with no model (should return error)
-	op = &NodeLabelOp{
-		BaseModel:        nil,
-		ClusterBaseModel: nil,
-		ModelStateOnNode: Ready,
+			var patch map[string]map[string]map[string]interface{}
+			err = json.Unmarshal(payload, &patch)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedValue, patch["metadata"]["labels"][tt.labelKey])
+			assert.Len(t, patch["metadata"]["labels"], 1)
+		})
 	}
 
-	_, err = getNodeLabelPatchPayloadBytes(op)
+	_, err := getNodeLabelMergePatchPayloadBytes(&NodeLabelOp{ModelStateOnNode: Ready})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "empty op without any models")
 }
@@ -256,7 +239,7 @@ func TestApplyNodeLabelOperation(t *testing.T) {
 		// Let the default reactor handle the action, but capture the patch for verification
 		patchAction := action.(ktesting.PatchAction)
 		assert.Equal(t, "test-node", patchAction.GetName())
-		assert.Equal(t, types.JSONPatchType, patchAction.GetPatchType())
+		assert.Equal(t, types.MergePatchType, patchAction.GetPatchType())
 
 		// Return default reactor response
 		return false, nil, nil
@@ -283,6 +266,27 @@ func TestApplyNodeLabelOperation(t *testing.T) {
 	err = reconciler.applyNodeLabelOperation(op)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "test error")
+}
+
+func TestApplyNodeLabelOperationWithMissingLabels(t *testing.T) {
+	logger := zaptest.NewLogger(t).Sugar()
+	kubeClient := fake.NewSimpleClientset(&corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node-without-labels",
+		},
+	})
+	reconciler := NewNodeLabelReconciler("node-without-labels", kubeClient, 1, logger)
+	baseModel := createTestBaseModel()
+
+	err := reconciler.applyNodeLabelOperation(&NodeLabelOp{
+		BaseModel:        baseModel,
+		ModelStateOnNode: Failed,
+	})
+	assert.NoError(t, err)
+
+	node, err := kubeClient.CoreV1().Nodes().Get(context.TODO(), "node-without-labels", metav1.GetOptions{})
+	assert.NoError(t, err)
+	assert.Equal(t, string(Failed), node.Labels[constants.GetBaseModelLabel(baseModel.Namespace, baseModel.Name)])
 }
 
 // TestReconcileNodeLabels tests the ReconcileNodeLabels method
@@ -400,16 +404,15 @@ func TestIdempotentOperations(t *testing.T) {
 	err = reconciler.applyNodeLabelOperation(op)
 	assert.NoError(t, err)
 
-	// Test case 3: Empty patch payloads
-	// Create a mock NodeLabelOp that will result in an empty patch
-	emptyPatchOp := &NodeLabelOp{
+	// Test case 3: invalid model refs are ignored before patching
+	invalidModelOp := &NodeLabelOp{
 		BaseModel:        nil,
-		ClusterBaseModel: nil, // This will cause an empty patch
+		ClusterBaseModel: nil,
 		ModelStateOnNode: Ready,
 	}
 	reconciler.nodeName = "test-node"
-	err = reconciler.applyNodeLabelOperation(emptyPatchOp)
-	assert.NoError(t, err) // Should gracefully handle empty patch
+	err = reconciler.applyNodeLabelOperation(invalidModelOp)
+	assert.NoError(t, err)
 }
 
 // TestNodeLabelErrorHandling tests error handling in applyNodeLabelOperation
@@ -419,20 +422,17 @@ func TestNodeLabelErrorHandling(t *testing.T) {
 
 	// Prepare a model for tests
 	clusterBaseModel := createTestClusterBaseModel()
-	// Setup a delete operation for a label that will fail with "not found" error
+	// Setup a delete operation for a label that will fail with a non-retryable request error
 	op := &NodeLabelOp{
 		ClusterBaseModel: clusterBaseModel,
 		ModelStateOnNode: Deleted,
 	}
 
-	// Mock the patch to fail with a "not found" error
+	// Mock the patch to fail with a bad request error
 	kubeClient.PrependReactor("patch", "nodes", func(action ktesting.Action) (bool, runtime.Object, error) {
 		patchAction := action.(ktesting.PatchAction)
 		if patchAction.GetName() == "test-node" {
-			// Return a "not found" error for delete operations
-			if string(patchAction.GetPatch()) != "" && strings.Contains(string(patchAction.GetPatch()), "remove") {
-				return true, nil, errors.New("the server rejected our request: path not found")
-			}
+			return true, nil, apierrors.NewBadRequest("patch rejected")
 		}
 		return false, nil, nil
 	})
@@ -445,7 +445,7 @@ func TestNodeLabelErrorHandling(t *testing.T) {
 	kubeClient.PrependReactor("patch", "nodes", func(action ktesting.Action) (bool, runtime.Object, error) {
 		patchAction := action.(ktesting.PatchAction)
 		if patchAction.GetName() == "test-node" {
-			return true, nil, errors.New("Operation cannot be fulfilled on nodes \"test-node\": the object has been modified")
+			return true, nil, apierrors.NewConflict(schema.GroupResource{Resource: "nodes"}, "test-node", errors.New("object modified"))
 		}
 		return false, nil, nil
 	})

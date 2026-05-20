@@ -144,6 +144,11 @@ modelAgent:
   health:
     port: 8080
 
+  integrity:
+    checkInterval: 10m
+    deepCheckInterval: 6h
+    startupJitter: 30s
+
   # Additional environment variables for the model-agent container
   # Examples:
   # env:

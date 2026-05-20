@@ -20,12 +20,15 @@ type Metrics struct {
 	modelVerificationsTotal    *prometheus.CounterVec
 	mdChecksumsFailedTotal     *prometheus.CounterVec
 	rateLimitCounter           *prometheus.CounterVec
+	integrityChecksTotal       *prometheus.CounterVec
+	integrityBytesScannedTotal *prometheus.CounterVec
 
 	// Histogram metrics
 	modelDownloadDuration         *prometheus.HistogramVec
 	modelVerificationDuration     prometheus.Histogram
 	modelDownloadBytesTransferred *prometheus.CounterVec
 	rateLimitWaitDuration         *prometheus.HistogramVec
+	integrityCheckDuration        *prometheus.HistogramVec
 
 	// Go runtime metrics
 	goGoroutines      prometheus.Gauge
@@ -172,6 +175,20 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 			},
 			[]string{"model_type", "namespace", "name"},
 		),
+		integrityChecksTotal: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "model_agent_integrity_checks_total",
+				Help: "The total number of periodic model artifact integrity checks",
+			},
+			[]string{"model_type", "namespace", "name", "storage_type", "check_type", "result", "reason"},
+		),
+		integrityBytesScannedTotal: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "model_agent_integrity_bytes_scanned_total",
+				Help: "The total bytes scanned by periodic model artifact integrity checks",
+			},
+			[]string{"model_type", "namespace", "name", "storage_type", "check_type"},
+		),
 		modelDownloadDuration: promauto.With(registerer).NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name:    "model_agent_download_duration_seconds",
@@ -199,6 +216,14 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 				Buckets: prometheus.ExponentialBuckets(1, 2, 10), // From 1s to ~17m
 			},
 			[]string{"model_type", "namespace", "name"},
+		),
+		integrityCheckDuration: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "model_agent_integrity_check_duration_seconds",
+				Help:    "The duration of periodic model artifact integrity checks in seconds",
+				Buckets: prometheus.ExponentialBuckets(0.1, 2, 12),
+			},
+			[]string{"model_type", "namespace", "name", "storage_type", "check_type", "result"},
 		),
 		// Store Go runtime metrics
 		goGoroutines:      goGoroutines,
@@ -257,6 +282,18 @@ func (m *Metrics) RecordGCDuration(duration time.Duration) {
 func (m *Metrics) RecordRateLimit(modelType, namespace, name string, waitDuration time.Duration) {
 	m.rateLimitCounter.WithLabelValues(modelType, namespace, name).Inc()
 	m.rateLimitWaitDuration.WithLabelValues(modelType, namespace, name).Observe(waitDuration.Seconds())
+}
+
+// RecordIntegrityCheck records a periodic model artifact integrity check.
+func (m *Metrics) RecordIntegrityCheck(modelType, namespace, name, storageType, checkType, result, reason string, duration time.Duration, bytesScanned int64) {
+	if m == nil {
+		return
+	}
+	m.integrityChecksTotal.WithLabelValues(modelType, namespace, name, storageType, checkType, result, reason).Inc()
+	m.integrityCheckDuration.WithLabelValues(modelType, namespace, name, storageType, checkType, result).Observe(duration.Seconds())
+	if bytesScanned > 0 {
+		m.integrityBytesScannedTotal.WithLabelValues(modelType, namespace, name, storageType, checkType).Add(float64(bytesScanned))
+	}
 }
 
 // RegisterMetricsHandler registers the metrics HTTP handler

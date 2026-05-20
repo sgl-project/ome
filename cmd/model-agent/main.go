@@ -31,18 +31,21 @@ import (
 
 // config holds all configuration parameters for the model agent
 type config struct {
-	port                 int
-	modelsRootDir        string
-	modelsRootDirOnHost  string
-	nodeName             string
-	nodeLabelRetry       int
-	concurrency          int
-	multipartConcurrency int
-	downloadRetry        int
-	downloadAuthType     string
-	numDownloadWorker    int
-	namespace            string
-	logLevel             string
+	port                   int
+	modelsRootDir          string
+	modelsRootDirOnHost    string
+	nodeName               string
+	nodeLabelRetry         int
+	concurrency            int
+	multipartConcurrency   int
+	downloadRetry          int
+	downloadAuthType       string
+	numDownloadWorker      int
+	namespace              string
+	logLevel               string
+	integrityCheckInterval time.Duration
+	integrityDeepInterval  time.Duration
+	integrityStartupJitter time.Duration
 }
 
 // Logger type alias for zap.SugaredLogger
@@ -73,6 +76,10 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 5, "Number of download workers")
 	rootCmd.PersistentFlags().StringVar(&cfg.namespace, "namespace", "ome", "Kubernetes namespace to use")
 	rootCmd.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
+	defaultIntegrityConfig := modelagent.DefaultIntegrityConfig()
+	rootCmd.PersistentFlags().DurationVar(&cfg.integrityCheckInterval, "integrity-check-interval", defaultIntegrityConfig.CheckInterval, "Interval for periodic Ready model artifact integrity checks; set <=0 to disable")
+	rootCmd.PersistentFlags().DurationVar(&cfg.integrityDeepInterval, "integrity-deep-check-interval", defaultIntegrityConfig.DeepCheckInterval, "Interval for deep checksum validation; set <=0 to disable checksum scans")
+	rootCmd.PersistentFlags().DurationVar(&cfg.integrityStartupJitter, "integrity-startup-jitter", defaultIntegrityConfig.StartupJitter, "Maximum deterministic startup jitter before the first integrity check")
 
 	_ = v.BindPFlags(rootCmd.PersistentFlags())
 	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
@@ -268,6 +275,14 @@ func initializeComponents(
 		logger,
 		baseModelInformer.Lister(),
 		clusterBaseModelInformer.Lister(),
+		baseModelInformer.Informer().HasSynced,
+		clusterBaseModelInformer.Informer().HasSynced,
+		scout.NodeShapeAlias(),
+		modelagent.IntegrityConfig{
+			CheckInterval:     v.GetDuration("integrity-check-interval"),
+			DeepCheckInterval: v.GetDuration("integrity-deep-check-interval"),
+			StartupJitter:     v.GetDuration("integrity-startup-jitter"),
+		},
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gopher: %w", err)

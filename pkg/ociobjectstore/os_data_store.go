@@ -27,6 +27,30 @@ import (
  * OCIOSDataStore used to perform data store operations with Object Storage
  */
 
+type LocalCopyValidationState string
+
+const (
+	LocalCopyValidationValid        LocalCopyValidationState = "Valid"
+	LocalCopyValidationInvalid      LocalCopyValidationState = "Invalid"
+	LocalCopyValidationInconclusive LocalCopyValidationState = "Inconclusive"
+)
+
+type LocalCopyValidationReason string
+
+const (
+	LocalCopyValidationReasonOK               LocalCopyValidationReason = "OK"
+	LocalCopyValidationReasonMissing          LocalCopyValidationReason = "Missing"
+	LocalCopyValidationReasonSizeMismatch     LocalCopyValidationReason = "SizeMismatch"
+	LocalCopyValidationReasonChecksumMismatch LocalCopyValidationReason = "ChecksumMismatch"
+	LocalCopyValidationReasonChecksumMissing  LocalCopyValidationReason = "ChecksumMissing"
+)
+
+type LocalCopyValidationResult struct {
+	State   LocalCopyValidationState
+	Reason  LocalCopyValidationReason
+	Message string
+}
+
 // OCIOSDataStore performs data store operations against Oracle Object Storage.
 // It provides file upload, download, listing, and validation methods.
 type OCIOSDataStore struct {
@@ -449,19 +473,35 @@ func (cds *OCIOSDataStore) ListObjects(target ObjectURI) ([]objectstorage.Object
 // IsLocalCopyValid checks whether a local file matches the expected object in size and MD5 checksum.
 // If the object was uploaded via multipart and lacks a standard MD5, it attempts to verify via custom metadata.
 //
-// Returns true if the local file is a valid, verified copy of the object.
+// Returns true for valid and checksum-inconclusive local copies to preserve the
+// existing download skip behavior. Use ValidateLocalCopy when callers need to
+// distinguish valid from inconclusive.
 func (cds *OCIOSDataStore) IsLocalCopyValid(source ObjectURI, localFilePath string) (bool, error) {
+	result, err := cds.ValidateLocalCopy(source, localFilePath)
+	if err != nil {
+		return false, err
+	}
+	return result.State != LocalCopyValidationInvalid, nil
+}
+
+// ValidateLocalCopy checks whether a local file matches the expected object and reports
+// whether the result is valid, invalid, or inconclusive when the remote checksum is unavailable.
+func (cds *OCIOSDataStore) ValidateLocalCopy(source ObjectURI, localFilePath string) (LocalCopyValidationResult, error) {
 	fileInfo, err := os.Stat(localFilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return false, nil
+			return LocalCopyValidationResult{
+				State:   LocalCopyValidationInvalid,
+				Reason:  LocalCopyValidationReasonMissing,
+				Message: "local file does not exist",
+			}, nil
 		}
-		return false, err
+		return LocalCopyValidationResult{}, err
 	}
 
 	headResponse, err := cds.HeadObject(source)
 	if err != nil {
-		return false, fmt.Errorf("failed to get object metadata: %w", err)
+		return LocalCopyValidationResult{}, fmt.Errorf("failed to get object metadata: %w", err)
 	}
 	objectMd5 := headResponse.ContentMd5
 	objectLength := headResponse.ContentLength
@@ -470,7 +510,11 @@ func (cds *OCIOSDataStore) IsLocalCopyValid(source ObjectURI, localFilePath stri
 		cds.logger.Warnf("File size mismatch for %s: expected %d, got %d",
 			localFilePath, *objectLength, fileInfo.Size())
 		// File size mismatch should always return false
-		return false, nil
+		return LocalCopyValidationResult{
+			State:   LocalCopyValidationInvalid,
+			Reason:  LocalCopyValidationReasonSizeMismatch,
+			Message: fmt.Sprintf("file size mismatch: expected %d got %d", *objectLength, fileInfo.Size()),
+		}, nil
 	}
 
 	if objectMd5 == nil && headResponse.OpcMultipartMd5 != nil && isMultipartMd5(*headResponse.OpcMultipartMd5) {
@@ -481,13 +525,24 @@ func (cds *OCIOSDataStore) IsLocalCopyValid(source ObjectURI, localFilePath stri
 			objectMd5 = &realMd5
 		} else {
 			cds.logger.Warnf("No MD5 in metadata for multipart object %s; skipping integrity check", source.ObjectName)
-			return true, nil
+			return LocalCopyValidationResult{
+				State:   LocalCopyValidationInconclusive,
+				Reason:  LocalCopyValidationReasonChecksumMissing,
+				Message: "multipart object does not expose a comparable MD5 checksum",
+			}, nil
 		}
+	}
+	if objectMd5 == nil {
+		return LocalCopyValidationResult{
+			State:   LocalCopyValidationInconclusive,
+			Reason:  LocalCopyValidationReasonChecksumMissing,
+			Message: "object does not expose a comparable MD5 checksum",
+		}, nil
 	}
 
 	file, err := os.Open(localFilePath)
 	if err != nil {
-		return false, err
+		return LocalCopyValidationResult{}, err
 	}
 	defer func(file *os.File) {
 		err := file.Close()
@@ -498,18 +553,25 @@ func (cds *OCIOSDataStore) IsLocalCopyValid(source ObjectURI, localFilePath stri
 
 	hash := md5.New()
 	if _, err := io.Copy(hash, file); err != nil {
-		return false, err
+		return LocalCopyValidationResult{}, err
 	}
 
 	localMd5 := base64.StdEncoding.EncodeToString(hash.Sum(nil))
 	if *objectMd5 == localMd5 {
-		return true, nil
+		return LocalCopyValidationResult{
+			State:  LocalCopyValidationValid,
+			Reason: LocalCopyValidationReasonOK,
+		}, nil
 	}
 
 	cds.logger.Warnf("MD5 mismatch for %s: expected %s, got %s",
 		localFilePath, *objectMd5, localMd5)
 
-	return false, nil
+	return LocalCopyValidationResult{
+		State:   LocalCopyValidationInvalid,
+		Reason:  LocalCopyValidationReasonChecksumMismatch,
+		Message: fmt.Sprintf("MD5 mismatch: expected %s got %s", *objectMd5, localMd5),
+	}, nil
 }
 
 // isMultipartMd5 determines if the given object MD5 string represents a multipart upload checksum.

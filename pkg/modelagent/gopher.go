@@ -12,10 +12,10 @@ import (
 
 	"k8s.io/apimachinery/pkg/labels"
 
-	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	omev1beta1lister "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
@@ -59,6 +59,10 @@ type Gopher struct {
 	configMapMutex         sync.Mutex // Mutex to coordinate ConfigMap access
 	baseModelLister        omev1beta1lister.BaseModelLister
 	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister
+	baseModelSynced        cache.InformerSynced
+	clusterBaseModelSynced cache.InformerSynced
+	nodeShapeAlias         string
+	integrityConfig        IntegrityConfig
 
 	// Track active downloads for cancellation
 	activeDownloads      map[string]context.CancelFunc // key: model UID
@@ -83,11 +87,16 @@ func NewGopher(
 	metrics *Metrics,
 	logger *zap.SugaredLogger,
 	baseModelLister omev1beta1lister.BaseModelLister,
-	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister) (*Gopher, error) {
+	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister,
+	baseModelSynced cache.InformerSynced,
+	clusterBaseModelSynced cache.InformerSynced,
+	nodeShapeAlias string,
+	integrityConfig IntegrityConfig) (*Gopher, error) {
 
 	if xetConfig == nil {
 		return nil, fmt.Errorf("xet hugging face config cannot be nil")
 	}
+	normalizedIntegrityConfig := integrityConfig.normalized()
 
 	return &Gopher{
 		modelConfigParser:      modelConfigParser,
@@ -105,6 +114,10 @@ func NewGopher(
 		activeDownloads:        make(map[string]context.CancelFunc),
 		baseModelLister:        baseModelLister,
 		clusterBaseModelLister: clusterBaseModelLister,
+		baseModelSynced:        baseModelSynced,
+		clusterBaseModelSynced: clusterBaseModelSynced,
+		nodeShapeAlias:         nodeShapeAlias,
+		integrityConfig:        normalizedIntegrityConfig,
 	}, nil
 }
 
@@ -112,6 +125,9 @@ func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int) {
 	// Start the ConfigMap reconciliation service
 	s.configMapReconciler.StartReconciliation()
 	s.logger.Info("Started ConfigMap reconciliation service")
+
+	// Start artifact integrity reconciliation for models already marked Ready on this node.
+	go s.runIntegrityReconciliationLoop(stopCh)
 
 	// Start worker goroutines
 	for i := 0; i < numWorker; i++ {
@@ -316,14 +332,21 @@ func (s *Gopher) processTask(task *GopherTask) error {
 
 		// Record time for metrics
 		downloadStartTime := time.Now()
+		artifactPath := ""
 		switch storageType {
 		case storage.StorageTypeOCI:
 			osUri, err := getTargetDirPath(&baseModelSpec)
-			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
 			if err != nil {
 				s.logger.Errorf("Failed to get target directory path for model %s: %v", modelInfo, err)
 				return err
 			}
+			destPath, err := resolveArtifactPath(&baseModelSpec, s.modelRootDir)
+			if err != nil {
+				s.logger.Errorf("Failed to resolve artifact path for model %s: %v", modelInfo, err)
+				s.markModelOnNodeFailed(task)
+				return err
+			}
+			artifactPath = destPath
 			err = utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
 				downloadErr := s.downloadModel(ctx, osUri, destPath, task)
 				if downloadErr != nil {
@@ -373,6 +396,11 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			s.logger.Infof("Skipping download for model %s", modelInfo)
 		case storage.StorageTypeHuggingFace:
 			s.logger.Infof("Starting Hugging Face download for model %s", modelInfo)
+			artifactPath, err = resolveArtifactPath(&baseModelSpec, s.modelRootDir)
+			if err != nil {
+				s.markModelOnNodeFailed(task)
+				return err
+			}
 
 			// Handle Hugging Face model download
 			if err := s.processHuggingFaceModel(ctx, task, baseModelSpec, modelInfo, modelType, namespace, name); err != nil {
@@ -386,12 +414,23 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			return nil
 		case storage.StorageTypeLocal:
 			s.logger.Infof("Processing local storage type for model %s", modelInfo)
+			artifactPath, err = resolveArtifactPath(&baseModelSpec, s.modelRootDir)
+			if err != nil {
+				s.markModelOnNodeFailed(task)
+				return err
+			}
 			// For local storage, we just need to validate the path exists and parse model config
 			if err := s.processLocalStorageModel(ctx, task, baseModelSpec, modelInfo, modelType, namespace, name); err != nil {
 				return err
 			}
 		default:
 			return fmt.Errorf("unknown storage type %s", storageType)
+		}
+		if err := s.ensureArtifactManifest(ctx, task, &baseModelSpec, storageType, artifactPath); err != nil {
+			s.logger.Errorf("Failed to create or validate artifact manifest for model %s: %v", modelInfo, err)
+			s.metrics.RecordFailedDownload(modelType, namespace, name, "integrity_manifest_error")
+			s.markModelOnNodeFailed(task)
+			return err
 		}
 		// Calculate download duration
 		downloadDuration := time.Since(downloadStartTime)
@@ -435,7 +474,10 @@ func (s *Gopher) processTask(task *GopherTask) error {
 		switch storageType {
 		case storage.StorageTypeOCI:
 			s.logger.Infof("Starting deletion for model %s", modelInfo)
-			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
+			destPath, err := resolveArtifactPath(&baseModelSpec, s.modelRootDir)
+			if err != nil {
+				return err
+			}
 			// check if it needs to skip artifact deletion
 			isSkippingDeletion, _, _, _ := s.isSkippingArtifactDeletion(ctx, task, destPath, false)
 			if !isSkippingDeletion {
@@ -454,8 +496,10 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			s.logger.Infof("Skipping deletion for model %s", modelInfo)
 		case storage.StorageTypeHuggingFace:
 			s.logger.Infof("Removing Hugging Face model %s", modelInfo)
-			// Use getDestPath to get the same path used during download
-			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
+			destPath, err := resolveArtifactPath(&baseModelSpec, s.modelRootDir)
+			if err != nil {
+				return err
+			}
 
 			// check if it needs to skip artifact deletion
 			isSkippingDeletion, isRemoveParent, parentName, parentDir := s.isSkippingArtifactDeletion(ctx, task, destPath, true)
@@ -661,22 +705,6 @@ func (s *Gopher) getHuggingFaceToken(task *GopherTask, baseModelSpec v1beta1.Bas
 	return hfToken
 }
 
-func getDestPath(baseModel *v1beta1.BaseModelSpec, modelRootDir string) string {
-
-	storagePath := *baseModel.Storage.StorageUri
-	destPath := *baseModel.Storage.Path
-
-	if len(destPath) == 0 {
-		if strings.HasSuffix(modelRootDir, "/") {
-			return modelRootDir + storagePath
-		} else {
-			return modelRootDir + "/" + storagePath
-		}
-	}
-
-	return destPath
-}
-
 // getTargetDirPath determines the target directory path for a model based on its storage configuration
 func getTargetDirPath(baseModel *v1beta1.BaseModelSpec) (*ociobjectstore.ObjectURI, error) {
 
@@ -778,22 +806,12 @@ func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectUR
 
 	s.logger.Infof("Done with list all %d objects in model bucket folder", len(objects))
 
-	// Shape filtering for TensorRTLLM
-	if task.TensorRTLLMShapeFilter != nil && task.TensorRTLLMShapeFilter.IsTensorrtLLMModel && task.TensorRTLLMShapeFilter.ModelType == string(constants.ServingBaseModel) {
+	objects, filtered, err := filterObjectsForTensorRTLLM(objects, task.TensorRTLLMShapeFilter)
+	if err != nil {
+		return err
+	}
+	if filtered {
 		s.logger.Infof("TensorRTLLM Serving model detected. Start filtering model files that doesn't belong to the node shape %s in model bucket folder", task.TensorRTLLMShapeFilter.ShapeAlias)
-		shapeFilteredObjects := make([]objectstorage.ObjectSummary, 0)
-		for _, object := range objects {
-			if object.Name != nil {
-				if strings.Contains(*object.Name, fmt.Sprintf("/%s/", task.TensorRTLLMShapeFilter.ShapeAlias)) {
-					shapeFilteredObjects = append(shapeFilteredObjects, object)
-				}
-			}
-		}
-		objects = shapeFilteredObjects
-
-		if len(objects) == 0 {
-			return fmt.Errorf("no suitable objects found for shape %s", task.TensorRTLLMShapeFilter.ShapeAlias)
-		}
 		s.logger.Infof("Found %d objects applicable for shape %s", len(objects), task.TensorRTLLMShapeFilter.ShapeAlias)
 	}
 
@@ -969,7 +987,13 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 	}
 
 	// Create destination path
-	destPath := getDestPath(&baseModelSpec, s.modelRootDir)
+	destPath, err := resolveArtifactPath(&baseModelSpec, s.modelRootDir)
+	if err != nil {
+		s.logger.Errorf("Failed to resolve destination path for model %s: %v", modelInfo, err)
+		s.metrics.RecordFailedDownload(modelType, namespace, name, "invalid_storage_path")
+		s.markModelOnNodeFailed(task)
+		return err
+	}
 
 	// fetch sha value based on model ID from Huggingface model API
 	shaStr, isShaAvailable := s.fetchSha(ctx, hfComponents.ModelID, name)

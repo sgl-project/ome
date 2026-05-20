@@ -256,6 +256,187 @@ func TestUpdateModelStatusInConfigMap(t *testing.T) {
 
 }
 
+func TestUpdateModelStatusInConfigMapStoresStorageIdentity(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-node",
+			Namespace: "test-namespace",
+		},
+		Data: make(map[string]string),
+	}
+
+	storageURI := "hf://google/gemma-4-31B-it"
+	storagePath := "/raid/models/google/gemma-4-31B-it"
+	baseModel := createTestBaseModelCM()
+	baseModel.Spec.Storage = &v1beta1.StorageSpec{
+		StorageUri: &storageURI,
+		Path:       &storagePath,
+	}
+
+	op := &ConfigMapStatusOp{
+		BaseModel:   baseModel,
+		ModelStatus: ModelStatusReady,
+	}
+
+	err := reconciler.updateModelStatusInConfigMap(context.Background(), configMap, op, true)
+	assert.NoError(t, err)
+
+	key := reconciler.getModelConfigMapKey(baseModel, nil)
+	var modelEntry ModelEntry
+	err = json.Unmarshal([]byte(configMap.Data[key]), &modelEntry)
+	assert.NoError(t, err)
+	assert.Equal(t, storageURI, modelEntry.StorageURI)
+	assert.Equal(t, storagePath, modelEntry.StoragePath)
+}
+
+func TestUpdateModelStatusInConfigMapClearsConfigOnStorageIdentityChange(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+
+	oldStorageURI := "hf://google/gemma-4-31B-it"
+	oldStoragePath := "/raid/models/google/gemma-4-31B-it"
+	newStorageURI := "hf://google/gemma-4-31b-it"
+	newStoragePath := "/raid/models/google/gemma-4-31b-it"
+	baseModel := createTestBaseModelCM()
+	baseModel.Spec.Storage = &v1beta1.StorageSpec{
+		StorageUri: &newStorageURI,
+		Path:       &newStoragePath,
+	}
+
+	existingEntry := ModelEntry{
+		Name:        baseModel.Name,
+		Status:      ModelStatusReady,
+		StorageURI:  oldStorageURI,
+		StoragePath: oldStoragePath,
+		Config: &ModelConfig{
+			ModelType: "gemma",
+		},
+		Progress: &DownloadProgress{
+			Phase: "Downloading",
+		},
+	}
+	existingEntryJSON, err := json.Marshal(existingEntry)
+	assert.NoError(t, err)
+
+	key := reconciler.getModelConfigMapKey(baseModel, nil)
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-node",
+			Namespace: "test-namespace",
+		},
+		Data: map[string]string{
+			key: string(existingEntryJSON),
+		},
+	}
+
+	op := &ConfigMapStatusOp{
+		BaseModel:   baseModel,
+		ModelStatus: ModelStatusUpdating,
+	}
+	err = reconciler.updateModelStatusInConfigMap(context.Background(), configMap, op, true)
+	assert.NoError(t, err)
+
+	var modelEntry ModelEntry
+	err = json.Unmarshal([]byte(configMap.Data[key]), &modelEntry)
+	assert.NoError(t, err)
+	assert.Equal(t, ModelStatusUpdating, modelEntry.Status)
+	assert.Equal(t, newStorageURI, modelEntry.StorageURI)
+	assert.Equal(t, newStoragePath, modelEntry.StoragePath)
+	assert.Nil(t, modelEntry.Config)
+	assert.Nil(t, modelEntry.Progress)
+}
+
+func TestUpdateModelProgressInConfigMapStoresStorageIdentity(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+
+	storageURI := "hf://google/gemma-4-31b-it"
+	storagePath := "/raid/models/google/gemma-4-31b-it"
+	baseModel := createTestBaseModelCM()
+	baseModel.Spec.Storage = &v1beta1.StorageSpec{
+		StorageUri: &storageURI,
+		Path:       &storagePath,
+	}
+
+	key := reconciler.getModelConfigMapKey(baseModel, nil)
+	existingEntry := ModelEntry{
+		Name:   baseModel.Name,
+		Status: ModelStatusReady,
+		Config: &ModelConfig{
+			ModelType: "gemma",
+		},
+	}
+	existingEntryJSON, err := json.Marshal(existingEntry)
+	assert.NoError(t, err)
+
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-node",
+			Namespace: "test-namespace",
+		},
+		Data: map[string]string{
+			key: string(existingEntryJSON),
+		},
+	}
+
+	progress := &DownloadProgress{
+		Phase:          "Downloading",
+		TotalFiles:     10,
+		CompletedFiles: 1,
+	}
+	op := &ConfigMapProgressOp{
+		BaseModel: baseModel,
+		Progress:  progress,
+	}
+
+	err = reconciler.updateModelProgressInConfigMap(context.Background(), configMap, op, true)
+	assert.NoError(t, err)
+
+	var modelEntry ModelEntry
+	err = json.Unmarshal([]byte(configMap.Data[key]), &modelEntry)
+	assert.NoError(t, err)
+	assert.Equal(t, ModelStatusUpdating, modelEntry.Status)
+	assert.Equal(t, storageURI, modelEntry.StorageURI)
+	assert.Equal(t, storagePath, modelEntry.StoragePath)
+	assert.Nil(t, modelEntry.Config)
+	assert.Equal(t, progress, modelEntry.Progress)
+}
+
+func TestReconcileModelStatusClearsCachedMetadataOnStorageIdentityChange(t *testing.T) {
+	reconciler, _, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+
+	oldStorageURI := "hf://google/gemma-4-31B-it"
+	oldStoragePath := "/raid/models/google/gemma-4-31B-it"
+	newStorageURI := "hf://google/gemma-4-31b-it"
+	newStoragePath := "/raid/models/google/gemma-4-31b-it"
+	baseModel := createTestBaseModelCM()
+	baseModel.Spec.Storage = &v1beta1.StorageSpec{
+		StorageUri: &newStorageURI,
+		Path:       &newStoragePath,
+	}
+	modelID := reconciler.getModelConfigMapKey(baseModel, nil)
+
+	reconciler.modelCache[modelID] = &CacheEntry{
+		ModelName:     baseModel.Name,
+		ModelStatus:   ModelStatusReady,
+		StorageURI:    oldStorageURI,
+		StoragePath:   oldStoragePath,
+		ModelMetadata: &ModelMetadata{ModelType: "gemma"},
+	}
+
+	err := reconciler.ReconcileModelStatus(ctx, &ConfigMapStatusOp{
+		BaseModel:   baseModel,
+		ModelStatus: ModelStatusUpdating,
+	})
+	assert.NoError(t, err)
+
+	cacheEntry := reconciler.modelCache[modelID]
+	assert.Equal(t, ModelStatusUpdating, cacheEntry.ModelStatus)
+	assert.Equal(t, newStorageURI, cacheEntry.StorageURI)
+	assert.Equal(t, newStoragePath, cacheEntry.StoragePath)
+	assert.Nil(t, cacheEntry.ModelMetadata)
+}
+
 // TestUpdateModelMetadataInConfigMap tests the updateModelMetadataInConfigMap method
 func TestUpdateModelMetadataInConfigMap(t *testing.T) {
 	// Setup test environment

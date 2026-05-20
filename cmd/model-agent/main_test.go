@@ -14,6 +14,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 	"k8s.io/client-go/rest"
+
+	"github.com/sgl-project/ome/pkg/modelagent"
 )
 
 func setupTestEnv(t *testing.T) {
@@ -113,6 +115,10 @@ func TestDefaultConfig(t *testing.T) {
 	testCmd.Flags().StringVar(&cfg.downloadAuthType, "download-auth-type", "instance-principal", "authentication method for model download")
 	testCmd.Flags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 3, "number of download workers")
 	testCmd.Flags().StringVar(&cfg.namespace, "namespace", "ome", "the namespace of the ome model agents daemon set")
+	defaultIntegrityConfig := modelagent.DefaultIntegrityConfig()
+	testCmd.Flags().DurationVar(&cfg.integrityCheckInterval, "integrity-check-interval", defaultIntegrityConfig.CheckInterval, "Model artifact integrity check interval")
+	testCmd.Flags().DurationVar(&cfg.integrityDeepInterval, "integrity-deep-check-interval", defaultIntegrityConfig.DeepCheckInterval, "Model artifact deep integrity check interval")
+	testCmd.Flags().DurationVar(&cfg.integrityStartupJitter, "integrity-startup-jitter", defaultIntegrityConfig.StartupJitter, "Model artifact integrity startup jitter")
 
 	// Call initConfig to set cfg.nodeName
 	initConfig(nil, nil)
@@ -127,6 +133,9 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, "instance-principal", cfg.downloadAuthType)
 	assert.Equal(t, 3, cfg.numDownloadWorker)
 	assert.Equal(t, "ome", cfg.namespace)
+	assert.Equal(t, defaultIntegrityConfig.CheckInterval, cfg.integrityCheckInterval)
+	assert.Equal(t, defaultIntegrityConfig.DeepCheckInterval, cfg.integrityDeepInterval)
+	assert.Equal(t, defaultIntegrityConfig.StartupJitter, cfg.integrityStartupJitter)
 }
 
 func TestInitializeLogger(t *testing.T) {

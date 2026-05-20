@@ -51,6 +51,12 @@ spec:
         - '2'
         - --concurrency
         - '2'
+        - --integrity-check-interval
+        - 10m
+        - --integrity-deep-check-interval
+        - 6h
+        - --integrity-startup-jitter
+        - 30s
         env:
         - name: NODE_NAME
           valueFrom:

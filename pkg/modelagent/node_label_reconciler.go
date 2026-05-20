@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -33,13 +32,6 @@ type NodeLabelReconciler struct {
 	kubeClient kubernetes.Interface // Kubernetes client for node operations
 	nodeName   string               // The name of the node
 	logger     *zap.SugaredLogger   // Logger for recording operations
-}
-
-// patchStringValue represents a JSON patch operation for node labels
-type patchStringValue struct {
-	Op    string `json:"op,omitempty"`
-	Path  string `json:"path"`
-	Value string `json:"value,omitempty"`
 }
 
 // ModelStateOnNode represents the model state in legacy format
@@ -121,24 +113,18 @@ func (n *NodeLabelReconciler) applyNodeLabelOperation(op *NodeLabelOp) error {
 	}
 
 	// Generate patch payload
-	payloadBytes, err := getNodeLabelPatchPayloadBytes(op)
+	payloadBytes, err := getNodeLabelMergePatchPayloadBytes(op)
 	if err != nil {
 		n.logger.Errorf("Failed to get node label patch payload for %s: %v", modelInfo, err)
 		return nil // Don't retry for payload generation issues
 	}
 	n.logger.Debugf("Generated node label patch payload for %s: %s", modelInfo, string(payloadBytes))
 
-	// Skip empty patch operations
-	if len(payloadBytes) <= 2 { // Just "[]" for empty patch
-		n.logger.Infof("Empty patch payload for %s, skipping operation", modelInfo)
-		return nil
-	}
-
 	// Apply the patch
 	_, err = n.kubeClient.CoreV1().Nodes().Patch(
 		context.TODO(),
 		n.nodeName,
-		types.JSONPatchType,
+		types.MergePatchType,
 		payloadBytes,
 		metav1.PatchOptions{},
 	)
@@ -153,14 +139,6 @@ func (n *NodeLabelReconciler) applyNodeLabelOperation(op *NodeLabelOp) error {
 			n.logger.Warnf("Conflict during patch operation for node %s and model %s, will retry: %v", n.nodeName, modelInfo, err)
 			return err // Return error to trigger retry
 		} else if errors.IsInvalid(err) || errors.IsBadRequest(err) {
-			// For delete operations that fail with "not found" patch path errors, consider it already done
-			if op.ModelStateOnNode == Deleted && strings.Contains(err.Error(), "not found") {
-				n.logger.Infof("Label %s already removed from node %s for %s - considering delete operation successful",
-					labelKey, n.nodeName, modelInfo)
-				return nil
-			}
-
-			// Other invalid request, could be malformed patch, log but don't retry
 			n.logger.Warnf("Invalid patch request for node %s and model %s: %v", n.nodeName, modelInfo, err)
 			return nil // Don't retry for bad requests
 		}
@@ -205,45 +183,26 @@ func getModelLabelKey(op *NodeLabelOp) (string, error) {
 	return labelKey, nil
 }
 
-// getNodeLabelPatchPayloadBytes generates the JSON patch for node labels
-func getNodeLabelPatchPayloadBytes(op *NodeLabelOp) ([]byte, error) {
+func getNodeLabelMergePatchPayloadBytes(op *NodeLabelOp) ([]byte, error) {
 	labelKey, err := getModelLabelKey(op)
 	if err != nil {
 		return []byte{}, err
 	}
 
-	var payload []patchStringValue
+	labels := map[string]interface{}{}
 	switch op.ModelStateOnNode {
-	case Ready:
-		payload = []patchStringValue{{
-			Op:    "add",
-			Path:  fmt.Sprintf("/metadata/labels/%s", strings.ReplaceAll(labelKey, "/", "~1")),
-			Value: string(Ready),
-		}}
-	case Updating:
-		payload = []patchStringValue{{
-			Op:    "add",
-			Path:  fmt.Sprintf("/metadata/labels/%s", strings.ReplaceAll(labelKey, "/", "~1")),
-			Value: string(Updating),
-		}}
-	case Failed:
-		payload = []patchStringValue{{
-			Op:    "add",
-			Path:  fmt.Sprintf("/metadata/labels/%s", strings.ReplaceAll(labelKey, "/", "~1")),
-			Value: string(Failed),
-		}}
+	case Ready, Updating, Failed:
+		labels[labelKey] = string(op.ModelStateOnNode)
 	case Deleted:
-		payload = []patchStringValue{{
-			Op:   "remove",
-			Path: fmt.Sprintf("/metadata/labels/%s", strings.ReplaceAll(labelKey, "/", "~1")),
-		}}
+		labels[labelKey] = nil
 	default:
 		break
 	}
 
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
+	payload := map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"labels": labels,
+		},
 	}
-	return payloadBytes, nil
+	return json.Marshal(payload)
 }

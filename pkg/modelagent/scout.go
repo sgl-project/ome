@@ -132,6 +132,10 @@ func NewScout(ctx context.Context, nodeName string,
 	return scout, nil
 }
 
+func (w *Scout) NodeShapeAlias() string {
+	return w.nodeShapeAlias
+}
+
 func (w *Scout) Run(stopCh <-chan struct{}) error {
 	defer runtime.HandleCrash()
 

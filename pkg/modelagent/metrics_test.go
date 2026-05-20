@@ -29,6 +29,14 @@ func TestNewMetrics_RegistersMetrics(t *testing.T) {
 	if count == 0 {
 		t.Error("modelDownloadDuration did not record observation")
 	}
+
+	metrics.RecordIntegrityCheck("testtype", "testns", "testmodel", "HUGGINGFACE", "deep", "success", "ok", time.Second, 1024)
+	if got := testutil.ToFloat64(metrics.integrityChecksTotal.WithLabelValues("testtype", "testns", "testmodel", "HUGGINGFACE", "deep", "success", "ok")); got != 1 {
+		t.Errorf("integrityChecksTotal did not increment, got = %v, want = 1", got)
+	}
+	if got := testutil.ToFloat64(metrics.integrityBytesScannedTotal.WithLabelValues("testtype", "testns", "testmodel", "HUGGINGFACE", "deep")); got != 1024 {
+		t.Errorf("integrityBytesScannedTotal did not record bytes, got = %v, want = 1024", got)
+	}
 }
 
 func TestGoRuntimeMetrics_AreSet(t *testing.T) {
