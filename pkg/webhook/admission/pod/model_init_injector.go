@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 
 	"sigs.k8s.io/ome/pkg/constants"
 	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
@@ -33,14 +32,14 @@ type ModelInitInjector struct {
 }
 
 // newModelInitInjector initializes a ModelInitInjector from a ConfigMap.
-func newModelInitInjector(configMap *v1.ConfigMap) *ModelInitInjector {
+func newModelInitInjector(configMap *v1.ConfigMap) (*ModelInitInjector, error) {
 	modelInitInjector := &ModelInitInjector{}
 	if modelInitConfigVal, ok := configMap.Data[modelInitConfigMapKeyName]; ok {
 		if err := json.Unmarshal([]byte(modelInitConfigVal), modelInitInjector); err != nil {
-			panic(fmt.Errorf("unable to unmarshal %v json string: %w", modelInitConfigMapKeyName, err))
+			return nil, fmt.Errorf("unable to unmarshal %v json string: %w", modelInitConfigMapKeyName, err)
 		}
 	}
-	return modelInitInjector
+	return modelInitInjector, nil
 }
 
 // InjectModelInit injects the model initialization container into the pod if necessary.
@@ -78,7 +77,10 @@ func (mi *ModelInitInjector) injectModelInit(pod *v1.Pod) error {
 		return err
 	}
 
-	initContainer := mi.createInitContainer(initEnvs, modelInitMounts, securityContext)
+	initContainer, err := mi.createInitContainer(initEnvs, modelInitMounts, securityContext)
+	if err != nil {
+		return err
+	}
 	pod.Spec.InitContainers = append(pod.Spec.InitContainers, *initContainer)
 	return nil
 }
@@ -148,7 +150,12 @@ func (mi *ModelInitInjector) getMainContainerSecurityContext(pod *v1.Pod) (*v1.S
 }
 
 // createInitContainer constructs the init container configuration.
-func (mi *ModelInitInjector) createInitContainer(envs []v1.EnvVar, mounts []v1.VolumeMount, securityContext *v1.SecurityContext) *v1.Container {
+func (mi *ModelInitInjector) createInitContainer(envs []v1.EnvVar, mounts []v1.VolumeMount, securityContext *v1.SecurityContext) (*v1.Container, error) {
+	resources, err := newResourceRequirements(mi.CpuLimit, mi.MemoryLimit, mi.CpuRequest, mi.MemoryRequest)
+	if err != nil {
+		return nil, err
+	}
+
 	return &v1.Container{
 		Name:                     constants.ModelInitContainerName,
 		Image:                    mi.Image,
@@ -156,18 +163,9 @@ func (mi *ModelInitInjector) createInitContainer(envs []v1.EnvVar, mounts []v1.V
 		Env:                      envs,
 		VolumeMounts:             mounts,
 		Args:                     []string{"enigma", "--config", "/ome-agent.yaml", "--debug"},
-		Resources: v1.ResourceRequirements{
-			Limits: map[v1.ResourceName]resource.Quantity{
-				v1.ResourceCPU:    resource.MustParse(mi.CpuLimit),
-				v1.ResourceMemory: resource.MustParse(mi.MemoryLimit),
-			},
-			Requests: map[v1.ResourceName]resource.Quantity{
-				v1.ResourceCPU:    resource.MustParse(mi.CpuRequest),
-				v1.ResourceMemory: resource.MustParse(mi.MemoryRequest),
-			},
-		},
-		SecurityContext: securityContext,
-	}
+		Resources:                resources,
+		SecurityContext:          securityContext,
+	}, nil
 }
 
 // getModelInitEnvs generates environment variables for the Model Init container.
@@ -188,9 +186,13 @@ func (mi *ModelInitInjector) getModelInitEnvs(pod *v1.Pod) ([]v1.EnvVar, error) 
 
 	modelFormat := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(pod.ObjectMeta.Annotations[constants.BaseModelFormat], "_", ""), "-", ""))
 	if modelFormat == strings.ToLower(strings.ReplaceAll(constants.TensorRTLLM, "_", "")) {
+		gpuCount, err := mi.getGPUCount(pod)
+		if err != nil {
+			return nil, err
+		}
 		envVars = append(envVars, v1.EnvVar{Name: constants.AgentModelFrameworkEnvVarKey, Value: constants.TensorRTLLM})
 		envVars = append(envVars, v1.EnvVar{Name: constants.AgentTensorRTLLMVersionsEnvVarKey, Value: pod.ObjectMeta.Annotations[constants.BaseModelFormatVersion]})
-		envVars = append(envVars, v1.EnvVar{Name: constants.AgentNumOfGPUEnvVarKey, Value: mi.getGPUCount(pod)})
+		envVars = append(envVars, v1.EnvVar{Name: constants.AgentNumOfGPUEnvVarKey, Value: gpuCount})
 	} else {
 		envVars = append(envVars, v1.EnvVar{Name: constants.AgentModelFrameworkEnvVarKey, Value: modelFormat})
 	}
@@ -204,15 +206,16 @@ func (mi *ModelInitInjector) getModelInitEnvs(pod *v1.Pod) ([]v1.EnvVar, error) 
 }
 
 // getGPUCount retrieves the GPU count for the main container.
-func (mi *ModelInitInjector) getGPUCount(pod *v1.Pod) string {
+func (mi *ModelInitInjector) getGPUCount(pod *v1.Pod) (string, error) {
 	for _, container := range pod.Spec.Containers {
 		if container.Name == constants.MainContainerName {
 			if gpus, exists := container.Resources.Limits[constants.NvidiaGPUResourceType]; exists {
-				return gpus.String()
+				return gpus.String(), nil
 			}
+			return "", fmt.Errorf("%s resource not set for main container %s", constants.NvidiaGPUResourceType, constants.MainContainerName)
 		}
 	}
-	panic("NVIDIA GPU resource not set for main container")
+	return "", fmt.Errorf("main container %s not found while reading %s resource", constants.MainContainerName, constants.NvidiaGPUResourceType)
 }
 
 // getAnnotationOrDefault retrieves the value from the pod's annotations if it exists;

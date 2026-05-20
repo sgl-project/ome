@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 
 	"sigs.k8s.io/ome/pkg/constants"
 )
@@ -30,14 +29,14 @@ type ServingSidecarInjector struct {
 }
 
 // newServingSidecarInjector initializes a ServingSidecarInjector from a ConfigMap.
-func newServingSidecarInjector(configMap *v1.ConfigMap) *ServingSidecarInjector {
+func newServingSidecarInjector(configMap *v1.ConfigMap) (*ServingSidecarInjector, error) {
 	servingSidecarInjector := &ServingSidecarInjector{}
 	if servingSidecarConfigVal, ok := configMap.Data[servingSidecarConfigMapKeyName]; ok {
 		if err := json.Unmarshal([]byte(servingSidecarConfigVal), servingSidecarInjector); err != nil {
-			panic(fmt.Errorf("unable to unmarshal %v json string: %w", servingSidecarConfigMapKeyName, err))
+			return nil, fmt.Errorf("unable to unmarshal %v json string: %w", servingSidecarConfigMapKeyName, err)
 		}
 	}
-	return servingSidecarInjector
+	return servingSidecarInjector, nil
 }
 
 // InjectServingSidecar injects the serving sidecar container into the pod if necessary.
@@ -77,7 +76,10 @@ func (ss *ServingSidecarInjector) injectServingSidecar(pod *v1.Pod) error {
 		return err
 	}
 
-	sidecarContainer := ss.createServingSidecarContainer(initEnvs, servingSidecarMounts, securityContext)
+	sidecarContainer, err := ss.createServingSidecarContainer(initEnvs, servingSidecarMounts, securityContext)
+	if err != nil {
+		return err
+	}
 	pod.Spec.Containers = append(pod.Spec.Containers, *sidecarContainer)
 	return nil
 }
@@ -159,7 +161,12 @@ func (ss *ServingSidecarInjector) getServingSidecarEnvs(fineTunedWeightFTStrateg
 }
 
 // createServingSidecarContainer constructs the serving sidecar configuration.
-func (ss *ServingSidecarInjector) createServingSidecarContainer(envs []v1.EnvVar, mounts []v1.VolumeMount, securityContext *v1.SecurityContext) *v1.Container {
+func (ss *ServingSidecarInjector) createServingSidecarContainer(envs []v1.EnvVar, mounts []v1.VolumeMount, securityContext *v1.SecurityContext) (*v1.Container, error) {
+	resources, err := newResourceRequirements(ss.CpuLimit, ss.MemoryLimit, ss.CpuRequest, ss.MemoryRequest)
+	if err != nil {
+		return nil, err
+	}
+
 	return &v1.Container{
 		Name:                     constants.ServingSidecarContainerName,
 		Image:                    ss.Image,
@@ -167,18 +174,9 @@ func (ss *ServingSidecarInjector) createServingSidecarContainer(envs []v1.EnvVar
 		Env:                      envs,
 		VolumeMounts:             mounts,
 		Args:                     []string{"serving-agent", "--config", "/ome-agent.yaml", "--debug"},
-		Resources: v1.ResourceRequirements{
-			Limits: map[v1.ResourceName]resource.Quantity{
-				v1.ResourceCPU:    resource.MustParse(ss.CpuLimit),
-				v1.ResourceMemory: resource.MustParse(ss.MemoryLimit),
-			},
-			Requests: map[v1.ResourceName]resource.Quantity{
-				v1.ResourceCPU:    resource.MustParse(ss.CpuRequest),
-				v1.ResourceMemory: resource.MustParse(ss.MemoryRequest),
-			},
-		},
-		SecurityContext: securityContext,
-	}
+		Resources:                resources,
+		SecurityContext:          securityContext,
+	}, nil
 }
 
 // getMainContainerSecurityContext finds and returns the security context of the main container.

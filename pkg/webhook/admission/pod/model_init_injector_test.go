@@ -35,11 +35,30 @@ func TestNewModelInitInjector(t *testing.T) {
 				"VaultId":       "test-vault-id",
 			},
 		},
+		{
+			name: "invalid config map json",
+			configMap: &v1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-configmap",
+				},
+				Data: map[string]string{
+					modelInitConfigMapKeyName: `{"image":`,
+				},
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			modelInitInjector := newModelInitInjector(tt.configMap)
+			modelInitInjector, err := newModelInitInjector(tt.configMap)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("newModelInitInjector() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				return
+			}
 
 			if modelInitInjector.Image != tt.wantImage {
 				t.Errorf("expected image to be '%s', but got '%s'", tt.wantImage, modelInitInjector.Image)
@@ -544,6 +563,31 @@ func TestModelInitInjector_getModelInitEnvs(t *testing.T) {
 					Value: "extra-env-var-value",
 				},
 			},
+		},
+		{
+			name: "test getModelInitEnvs with TensorRTLLM model format and missing GPU",
+			pod: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						constants.BaseModelName:          "test-base-model-name",
+						constants.BaseModelFormat:        constants.TensorRTLLM,
+						constants.BaseModelFormatVersion: "test-format-version",
+					},
+				},
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: constants.MainContainerName,
+						},
+					},
+				},
+			},
+			mi: &ModelInitInjector{
+				CompartmentId: "test-compartment-id",
+				AuthType:      "test-auth-type",
+				VaultId:       "test-vault-id",
+			},
+			wantErr: true,
 		},
 	}
 

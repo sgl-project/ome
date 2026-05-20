@@ -79,11 +79,20 @@ func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 		return err
 	}
 
-	modelInitInjector := newModelInitInjector(configMap)
+	modelInitInjector, err := newModelInitInjector(configMap)
+	if err != nil {
+		return err
+	}
 
-	fineTunedAdapterInjector := newFineTunedAdapterInjector(configMap, mutator.Client)
+	fineTunedAdapterInjector, err := newFineTunedAdapterInjector(configMap, mutator.Client)
+	if err != nil {
+		return err
+	}
 
-	servingSidecarInjector := newServingSidecarInjector(configMap)
+	servingSidecarInjector, err := newServingSidecarInjector(configMap)
+	if err != nil {
+		return err
+	}
 
 	rdmaInjector := NewRDMAInjector()
 
