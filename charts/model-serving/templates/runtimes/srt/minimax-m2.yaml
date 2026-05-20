@@ -11,6 +11,33 @@ spec:
       - nvidia-h200-8
   disabled: false
   routerConfig:
+    annotations:
+      prometheus.io/path: /metrics
+      prometheus.io/port: '29000'
+      prometheus.io/scrape: 'true'
+    labels:
+      logging-forward: enabled
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+    affinity:
+      podAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                    - engine
+            matchLabelKeys:
+              - ome.io/inferenceservice
+            topologyKey: kubernetes.io/hostname
+    volumes:
+      - name: customer-model-store
+        hostPath:
+          path: /mnt/data/models/customer-model-store
+          type: Directory
     runner:
       name: router
       image: {{ .Values.minimax_m2.router.image.repository }}:{{ .Values.minimax_m2.router.image.tag }}
@@ -18,6 +45,9 @@ spec:
         - containerPort: 8080
           name: http
       resources:
+        requests:
+          cpu: 1
+          memory: 2Gi
         limits:
           cpu: "1"
           memory: 2Gi
@@ -26,19 +56,25 @@ spec:
         - 0.0.0.0
         - --port
         - "8080"
+        - --model-path
+        - /mnt/data/models/customer-model-store
         - --service-discovery
         - --service-discovery-namespace
         - $(NAMESPACE)
         - --service-discovery-port
-        - "8080"
+        - "{{ .Values.sglang.port }}"
         - --selector
         - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+        - --enable-igw
+        - --request-id-headers
+        - opc-request-id
         - --tool-call-parser
         - minimax_m2
         - --reasoning-parser
         - minimax
-        - --enable-igw
         - --log-json
+        - --disable-retries
+        - --disable-circuit-breaker
       env:
         - name: NAMESPACE
           valueFrom:
@@ -48,6 +84,15 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.labels['ome.io/inferenceservice']
+        - name: BASE_MODEL_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['ome.io/base-model-name']
+      volumeMounts:
+        - name: customer-model-store
+          mountPath: /mnt/data/models/customer-model-store
+          subPathExpr: $(BASE_MODEL_NAME)
+          readOnly: true
       readinessProbe:
         httpGet:
           path: /readiness
@@ -66,9 +111,10 @@ spec:
         httpGet:
           path: /readiness
           port: 8080
-        failureThreshold: 10
-        periodSeconds: 20
+        failureThreshold: 60
+        periodSeconds: 10
         timeoutSeconds: 10
+        initialDelaySeconds: 60
   {{- if or .Values.commonAnnotations .Values.minimax_m2.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
@@ -202,7 +248,7 @@ spec:
         - --host
         - 0.0.0.0
         - --port
-        - "{{ .Values.sglang.port }}"
+        - {{ .Values.sglang.port | quote }}
         - --model-path
         - $(MODEL_PATH)
         - --tp-size
@@ -228,8 +274,8 @@ spec:
           port: 8080
         failureThreshold: 3
         successThreshold: 1
-        periodSeconds: 60
-        timeoutSeconds: 200
+        periodSeconds: 90
+        timeoutSeconds: 60
       livenessProbe:
         grpc:
           port: 8080

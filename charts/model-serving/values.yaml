@@ -1179,10 +1179,10 @@ minimax_m2:
   image:
     srt:
       repository: fra.ocir.io/idqj093njucb/smg
-      tag: 1.2.0-sglang-v0.5.9
+      tag: 1.4.1-sglang-v0.5.10
   router:
     image:
-      repository: docker.io/lightseekorg/smg
+      repository: fra.ocir.io/idqj093njucb/smg
       tag: "1.4.1"
 
 orion_14b_base:
@@ -1607,7 +1607,7 @@ devstral_2_123b_instruct_2512:
       tag: 1.4.0-vllm-v0.18.0-tf5
   router:
     image:
-      repository: docker.io/lightseekorg/smg
+      repository: fra.ocir.io/idqj093njucb/smg
       tag: "1.4.1"
 
 deberta_v3_base_prompt_injection_v2:

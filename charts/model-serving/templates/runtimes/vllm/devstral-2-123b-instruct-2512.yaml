@@ -11,6 +11,12 @@ spec:
       - nvidia-h200-8
   disabled: false
   routerConfig:
+    annotations:
+      prometheus.io/path: /metrics
+      prometheus.io/port: '29000'
+      prometheus.io/scrape: 'true'
+    labels:
+      logging-forward: enabled
     runner:
       name: router
       image: {{ .Values.devstral_2_123b_instruct_2512.router.image.repository }}:{{ .Values.devstral_2_123b_instruct_2512.router.image.tag }}
@@ -18,6 +24,9 @@ spec:
         - containerPort: 8080
           name: http
       resources:
+        requests:
+          cpu: 1
+          memory: 2Gi
         limits:
           cpu: "1"
           memory: 2Gi
@@ -30,13 +39,18 @@ spec:
         - --service-discovery-namespace
         - $(NAMESPACE)
         - --service-discovery-port
-        - "8080"
+        - "{{ .Values.vllm.port }}"
         - --selector
         - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
         - --tool-call-parser
         - mistral
         - --enable-igw
+        - --request-id-headers
+        - opc-request-id
         - --log-json
+        - --disable-retries
+        - --disable-circuit-breaker
+        - --disable-tokenizer-autoload
       env:
         - name: NAMESPACE
           valueFrom:
