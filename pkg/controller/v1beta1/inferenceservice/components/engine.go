@@ -398,3 +398,57 @@ func (e *Engine) ValidateSpec() error {
 	// Add more validation logic as needed
 	return nil
 }
+
+// ExtractRoleConfig implements RoleConfigExtractor by reusing the same
+// metadata and pod spec building helpers used during single-component
+// reconciliation. It does not create or update Kubernetes resources.
+func (e *Engine) ExtractRoleConfig(isvc *v1beta1.InferenceService) (*RoleConfig, error) {
+	if e.engineSpec == nil {
+		return nil, errors.New("engine spec is nil")
+	}
+
+	if isvc.Spec.Model != nil && len(isvc.Spec.Model.FineTunedWeights) > 0 {
+		if err := ReconcileFineTunedWeights(&e.BaseComponentFields, isvc); err != nil {
+			return nil, errors.Wrap(err, "failed to reconcile fine-tuned weights")
+		}
+	}
+
+	objectMeta, err := e.reconcileObjectMeta(isvc)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to reconcile object metadata")
+	}
+
+	podSpec, err := e.reconcilePodSpec(isvc, &objectMeta)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to reconcile pod spec")
+	}
+
+	workerPodSpec, err := e.reconcileWorkerPodSpec(isvc, &objectMeta)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to reconcile worker pod spec")
+	}
+
+	cfg := &RoleConfig{
+		ComponentType:          v1beta1.EngineComponent,
+		DeploymentMode:         e.DeploymentMode,
+		PodSpec:                podSpec,
+		ComponentExtensionSpec: &e.engineSpec.ComponentExtensionSpec,
+		ObjectMeta:             objectMeta,
+	}
+	if e.DeploymentMode == constants.MultiNode {
+		cfg.LeaderPodSpec = podSpec
+		cfg.WorkerPodSpec = workerPodSpec
+		cfg.WorkerSize = e.getWorkerSize()
+	}
+	return cfg, nil
+}
+
+// UpdateStatus propagates engine readiness and model status into the
+// InferenceService without performing a full resource reconciliation.
+func (e *Engine) UpdateStatus(isvc *v1beta1.InferenceService) error {
+	objectMeta, err := e.reconcileObjectMeta(isvc)
+	if err != nil {
+		return errors.Wrap(err, "failed to reconcile engine object metadata for status")
+	}
+	return e.updateEngineStatus(isvc, objectMeta)
+}

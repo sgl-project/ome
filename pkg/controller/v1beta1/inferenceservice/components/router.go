@@ -288,3 +288,40 @@ func (r *Router) ValidateSpec() error {
 	// Add more validation logic as needed
 	return nil
 }
+
+// ExtractRoleConfig implements RoleConfigExtractor by building the router's
+// metadata and pod spec without creating any Kubernetes resources. RBAC
+// resources are managed by the strategy/reconciler that consumes the result.
+func (r *Router) ExtractRoleConfig(isvc *v1beta1.InferenceService) (*RoleConfig, error) {
+	if r.routerSpec == nil {
+		return nil, errors.New("router spec is nil")
+	}
+
+	objectMeta, err := r.reconcileObjectMeta(isvc)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to reconcile object metadata")
+	}
+
+	podSpec, err := r.reconcilePodSpec(isvc, &objectMeta)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to reconcile pod spec")
+	}
+
+	return &RoleConfig{
+		ComponentType:          v1beta1.RouterComponent,
+		DeploymentMode:         r.DeploymentMode,
+		PodSpec:                podSpec,
+		ComponentExtensionSpec: &r.routerSpec.ComponentExtensionSpec,
+		ObjectMeta:             objectMeta,
+	}, nil
+}
+
+// UpdateStatus propagates router readiness and model status into the
+// InferenceService without performing a full resource reconciliation.
+func (r *Router) UpdateStatus(isvc *v1beta1.InferenceService) error {
+	objectMeta, err := r.reconcileObjectMeta(isvc)
+	if err != nil {
+		return errors.Wrap(err, "failed to reconcile router object metadata for status")
+	}
+	return r.updateRouterStatus(isvc, objectMeta)
+}

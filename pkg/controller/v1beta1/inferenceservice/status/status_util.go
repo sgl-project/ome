@@ -136,6 +136,11 @@ func (sr *StatusReconciler) setCondition(status *v1beta1.InferenceServiceStatus,
 	}
 }
 
+// SetComponentCondition sets a component condition on the status.
+func (sr *StatusReconciler) SetComponentCondition(status *v1beta1.InferenceServiceStatus, conditionType apis.ConditionType, condition *apis.Condition) {
+	sr.setCondition(status, conditionType, condition)
+}
+
 // InitializeComponentCondition initializes a component ready condition if it doesn't exist
 // This is used for MultiNode deployments to ensure conditions are visible from the start
 func (sr *StatusReconciler) InitializeComponentCondition(status *v1beta1.InferenceServiceStatus, component v1beta1.ComponentType) {

@@ -147,6 +147,7 @@ func (r *InferenceServiceReconciler) getAvailableResourceTypes() ([]schema.Group
 		{gvk: schema.GroupVersionKind{Group: "leaderworkerset.x-k8s.io", Version: "v1", Kind: "LeaderWorkerSet"}},
 		{gvk: schema.GroupVersionKind{Group: "keda.sh", Version: "v1alpha1", Kind: "ScaledObject"}},
 		{gvk: schema.GroupVersionKind{Group: "networking.istio.io", Version: "v1beta1", Kind: "VirtualService"}},
+		{gvk: schema.GroupVersionKind{Group: "workloads.x-k8s.io", Version: "v1alpha2", Kind: "RoleBasedGroup"}},
 	}
 
 	for _, res := range optionals {

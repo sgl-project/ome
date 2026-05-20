@@ -403,3 +403,57 @@ func (d *Decoder) ValidateSpec() error {
 	// Add more validation logic as needed
 	return nil
 }
+
+// ExtractRoleConfig implements RoleConfigExtractor by reusing the same
+// metadata and pod spec building helpers used during single-component
+// reconciliation. It does not create or update Kubernetes resources.
+func (d *Decoder) ExtractRoleConfig(isvc *v1beta1.InferenceService) (*RoleConfig, error) {
+	if d.decoderSpec == nil {
+		return nil, errors.New("decoder spec is nil")
+	}
+
+	if isvc.Spec.Model != nil && len(isvc.Spec.Model.FineTunedWeights) > 0 {
+		if err := ReconcileFineTunedWeights(&d.BaseComponentFields, isvc); err != nil {
+			return nil, errors.Wrap(err, "failed to reconcile fine-tuned weights")
+		}
+	}
+
+	objectMeta, err := d.reconcileObjectMeta(isvc)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to reconcile object metadata")
+	}
+
+	podSpec, err := d.reconcilePodSpec(isvc, &objectMeta)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to reconcile pod spec")
+	}
+
+	workerPodSpec, err := d.reconcileWorkerPodSpec(isvc, &objectMeta)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to reconcile worker pod spec")
+	}
+
+	cfg := &RoleConfig{
+		ComponentType:          v1beta1.DecoderComponent,
+		DeploymentMode:         d.DeploymentMode,
+		PodSpec:                podSpec,
+		ComponentExtensionSpec: &d.decoderSpec.ComponentExtensionSpec,
+		ObjectMeta:             objectMeta,
+	}
+	if d.DeploymentMode == constants.MultiNode {
+		cfg.LeaderPodSpec = podSpec
+		cfg.WorkerPodSpec = workerPodSpec
+		cfg.WorkerSize = d.getWorkerSize()
+	}
+	return cfg, nil
+}
+
+// UpdateStatus propagates decoder readiness and model status into the
+// InferenceService without performing a full resource reconciliation.
+func (d *Decoder) UpdateStatus(isvc *v1beta1.InferenceService) error {
+	objectMeta, err := d.reconcileObjectMeta(isvc)
+	if err != nil {
+		return errors.Wrap(err, "failed to reconcile decoder object metadata for status")
+	}
+	return d.updateDecoderStatus(isvc, objectMeta)
+}
