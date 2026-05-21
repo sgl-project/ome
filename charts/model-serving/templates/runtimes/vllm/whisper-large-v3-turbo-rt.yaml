@@ -1,0 +1,175 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-whisper-large-v3-turbo
+spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-h100-1
+      - nvidia-a100-80gb-1
+      - nvidia-a100-40gb-1
+      - nvidia-a10-1
+  disabled: false
+  {{- if or .Values.commonAnnotations .Values.whisper_large_v3_turbo.annotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{ toYaml .Values.commonAnnotations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.whisper_large_v3_turbo.annotations }}
+    {{ toYaml .Values.whisper_large_v3_turbo.annotations | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonLabels .Values.whisper_large_v3_turbo.labels }}
+  labels:
+    {{- if .Values.commonLabels }}
+    {{ toYaml .Values.commonLabels | nindent 4 }}
+    {{- end }}
+    {{- if .Values.whisper_large_v3_turbo.labels }}
+    {{ toYaml .Values.whisper_large_v3_turbo.labels | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonTolerations .Values.whisper_large_v3_turbo.tolerations }}
+  tolerations:
+    {{- if .Values.commonTolerations }}
+    {{ toYaml .Values.commonTolerations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.whisper_large_v3_turbo.tolerations }}
+    {{ toYaml .Values.whisper_large_v3_turbo.tolerations | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
+    {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+    - name: etc-pki
+      hostPath:
+        path: /etc/pki
+        type: Directory
+    {{- end }}
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.46.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      autoSelect: true
+      modelArchitecture: WhisperForConditionalGeneration
+      version: "1.0.0"
+      priority: 1
+      acceleratorConfig:
+        nvidia-h100-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a100-80gb-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a100-40gb-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a10-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+  modelSizeRange:
+    min: 800M
+    max: 2B
+  protocolVersions:
+    - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
+  engineConfig:
+    schedulerName: {{ .Values.commonSchedulerName }}
+    {{- if or .Values.commonAnnotations .Values.whisper_large_v3_turbo.annotations }}
+    annotations:
+      {{- if .Values.commonAnnotations }}
+      {{ toYaml .Values.commonAnnotations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.whisper_large_v3_turbo.annotations }}
+      {{ toYaml .Values.whisper_large_v3_turbo.annotations | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.commonLabels .Values.whisper_large_v3_turbo.labels }}
+    labels:
+      {{- if .Values.commonLabels }}
+      {{ toYaml .Values.commonLabels | nindent 6 }}
+      {{- end }}
+      {{- if .Values.whisper_large_v3_turbo.labels }}
+      {{ toYaml .Values.whisper_large_v3_turbo.labels | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.commonTolerations .Values.whisper_large_v3_turbo.tolerations }}
+    tolerations:
+      {{- if .Values.commonTolerations }}
+      {{ toYaml .Values.commonTolerations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.whisper_large_v3_turbo.tolerations }}
+      {{ toYaml .Values.whisper_large_v3_turbo.tolerations | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+        {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+      - name: etc-pki
+        hostPath:
+          path: /etc/pki
+          type: Directory
+        {{- end }}
+    runner:
+      name: ome-container
+      image: {{ .Values.whisper_large_v3_turbo.image.vllm.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.whisper_large_v3_turbo.image.vllm.tag | default .Values.vllm.latestImage.tag }}
+      ports:
+        - containerPort: {{ .Values.vllm.port }}
+          name: http1
+          protocol: TCP
+      args:
+        - $(MODEL_PATH)
+        - --port={{ .Values.vllm.port }}
+        - --served-model-name=vllm-model
+        - --host=0.0.0.0
+        - --dtype=float16
+        - --max-model-len=-1
+        - --tensor-parallel-size=1
+      env:
+        - name: VLLM_RPC_TIMEOUT
+          value: '30000'
+        - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
+          value: '120'
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 4
+          memory: 16Gi
+          nvidia.com/gpu: 1
+        limits:
+          cpu: 4
+          memory: 16Gi
+          nvidia.com/gpu: 1
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 90
+        timeoutSeconds: 60
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30

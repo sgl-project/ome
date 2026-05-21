@@ -3521,3 +3521,13 @@ nemotron_3_nano_omni_30b_a3b_reasoning:
     vllm:
       repository: ord.ocir.io/idqj093njucb/official-vllm-openai
       tag: 101584a
+
+whisper_large_v3_turbo:
+  enabled: false
+  annotations: {}
+  labels: {}
+  tolerations: []
+  image:
+    vllm:
+      repository: fra.ocir.io/idqj093njucb/vllm-openai
+      tag: "v0.19.0-audio"
