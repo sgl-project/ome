@@ -11,6 +11,9 @@ spec:
       - nvidia-a100-80gb-2
       - nvidia-a100-80gb-4
       - nvidia-a100-80gb-8
+      - nvidia-h200-2
+      - nvidia-h200-4
+      - nvidia-h200-8
   disabled: false
   routerConfig:
     annotations:
@@ -143,6 +146,15 @@ spec:
           tensorParallelismOverride:
             tensorParallelSize: 4
         nvidia-a100-80gb-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-h200-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-h200-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h200-8:
           tensorParallelismOverride:
             tensorParallelSize: 8
   modelSizeRange:
