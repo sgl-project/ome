@@ -316,7 +316,7 @@ const (
 
 // StorageSpec Constants
 var (
-	DefaultStorageSpecSecret     = "storage-config"  // #nosec G101 -- this is false positive
+	DefaultStorageSpecSecret     = "storage-config"      // #nosec G101 -- this is false positive
 	DefaultStorageSpecSecretPath = "/mnt/storage-secret" // #nosec G101
 )
 

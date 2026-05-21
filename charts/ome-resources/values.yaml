@@ -229,6 +229,11 @@ xai:
   enabled: false
   namespace: "genai-xai"
 
+byteplus:
+  enabled: false
+  namespace: "genai-byteplus"
+  parentProjectName: ""
+
 google:
   enabled: false
   namespace: "genai-google"

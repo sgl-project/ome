@@ -56,6 +56,8 @@ func NewServiceAccount(ctx context.Context, c client.Client, cs kubernetes.Inter
 		return NewGeminiServiceAccount(c, cs, log, scheme, sa), nil
 	case v1beta1.VendorXAI:
 		return NewXAIServiceAccount(c, cs, log, scheme, sa), nil
+	case v1beta1.VendorBytePlus:
+		return NewBytePlusServiceAccount(c, cs, log, scheme, sa), nil
 	default:
 		return nil, fmt.Errorf("Unsupport vendor %s", *org.Spec.Vendor)
 	}

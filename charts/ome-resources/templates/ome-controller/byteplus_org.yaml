@@ -1,0 +1,15 @@
+{{- if .Values.byteplus.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{.Values.byteplus.namespace}}
+---
+apiVersion: ome.io/v1beta1
+kind: Organization
+metadata:
+  name: genai-byteplus-0001
+spec:
+  organizationId: {{.Values.ome.ociETC.serviceCompartmentId}}
+  vendor: byteplus
+  disabled: false
+{{- end }}

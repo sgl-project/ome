@@ -1,0 +1,34 @@
+{{- if index .Values "seedance-default" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: seedance-default
+  labels:
+    {{ include "proxy-models-importer.genaiModelLabels" (dict "root" $ "model" "seedance-default") | nindent 4 }}
+  annotations:
+    {{ include "proxy-models-importer.genaiModelAnnotations" (dict "root" $ "model" "seedance-default") | nindent 4 }}
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: byteplus.seedance-default
+  storage:
+    storageUri: "vendor://byteplus/models/{{ index .Values "seedance-default" "osPrefixOverride" }}"
+  vendor: {{ index .Values "seedance-default" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelArchitecture: OpenAIForCausalLM
+  modelParameterSize: 1.8T
+  modelCapabilities:
+    - "TEXT_TO_VIDEO"
+    - "IMAGE_TEXT_TO_VIDEO"
+  apiCapabilities:
+    - "API_CAPABILITIES_PLACEHODER"
+  maxTokens: 1048576
+  additionalMetadata:
+    image-text-to-text: "{{ index .Values "seedance-default" "enableImageInput" }}"
+{{- end }}

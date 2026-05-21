@@ -11,6 +11,11 @@ gemini-default:
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
+seedance-default:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
 grok-default:
   enabled: false
   lifecyclePhase: "ACTIVE"

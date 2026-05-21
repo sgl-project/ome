@@ -35,6 +35,8 @@ func NewProject(ctx context.Context, c client.Client, cs kubernetes.Interface, l
 		return NewGeminiProject(c, cs, log, scheme, project), nil
 	case v1beta1.VendorXAI:
 		return NewXAIProject(c, cs, log, scheme, project), nil
+	case v1beta1.VendorBytePlus:
+		return NewBytePlusProject(c, cs, log, scheme, project), nil
 	default:
 		return nil, fmt.Errorf("Unsupport vendor %s", *org.Spec.Vendor)
 	}
@@ -107,6 +109,8 @@ func (r *ResourceBase) getStatusMessage(status v1beta1.ProjectStatusReason) stri
 		return "API operation failed"
 	case v1beta1.ProjectStatusOrgError:
 		return "Organization operation failed"
+	case v1beta1.ProjectStatusConfigError:
+		return "Configuration operation failed"
 	default:
 		return "Unknown status"
 	}

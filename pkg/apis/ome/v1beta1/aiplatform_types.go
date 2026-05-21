@@ -28,6 +28,7 @@ const (
 	VendorOpenAI      Vendor = "openai"
 	VendorGoogle      Vendor = "google"
 	VendorXAI         Vendor = "xai"
+	VendorBytePlus    Vendor = "byteplus"
 	VendorUnsupported Vendor = "unsupported"
 )
 
