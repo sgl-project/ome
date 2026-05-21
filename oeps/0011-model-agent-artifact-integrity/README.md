@@ -58,9 +58,7 @@ model-ready node label and the node-scoped model status ConfigMap. The existing
 
 Today, model-agent validates some artifacts during the initial download path and
 then marks the model Ready on the node. After that point, OME may keep
-advertising the model as Ready even if files are later deleted, truncated,
-replaced, or damaged by disk cleanup, manual maintenance, filesystem problems,
-or an interrupted update.
+advertising the model as Ready even if files are later altered.
 
 InferenceService scheduling relies on model-ready node labels and model status.
 If a node continues to advertise Ready for a model whose local files are no
