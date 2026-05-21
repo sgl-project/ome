@@ -1,0 +1,19 @@
+title: Model-Agent Ready Artifact Reconciliation
+oep-number: 0011
+authors:
+  - "@ankrovv"
+status: provisional
+creation-date: 2026-05-21
+reviewers:
+  - TBD
+approvers:
+  - TBD
+
+# The target maturity stage in the current dev cycle for this OEP.
+stage: alpha
+
+# The following PRR answers are required at beta release
+metrics:
+  - model_agent_ready_artifact_check_results_total
+  - model_agent_ready_artifact_check_duration_seconds
+  - model_agent_ready_artifact_bytes_checked_total
