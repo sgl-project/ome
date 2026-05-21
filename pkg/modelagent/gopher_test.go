@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"go.uber.org/zap/zaptest"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +21,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	omev1beta1lister "sigs.k8s.io/ome/pkg/client/listers/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/utils/storage"
 )
 
@@ -661,8 +665,97 @@ func entryJSON(sha, parentName string, parentPath string) string {
 	return string(b)
 }
 
+func modelEntryJSON(status ModelStatus) string {
+	entry := ModelEntry{Status: status}
+	b, err := json.Marshal(entry)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
 func dp(v v1beta1.DownloadPolicy) *v1beta1.DownloadPolicy {
 	return &v
+}
+
+func TestFindReadyObjectStorageModelWithSamePath(t *testing.T) {
+	storageURI := "oci://n/object-ns/b/model-bucket/o/models/large-model"
+	modelPath := filepath.Join(t.TempDir(), "large-model")
+	require.NoError(t, os.MkdirAll(modelPath, 0755))
+	readyKey := constants.GetModelConfigMapKey("default", "large-model", false)
+	current := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "large-model", Namespace: "service-ns"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: &storageURI,
+				Path:       &modelPath,
+			},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		entryStatus   ModelStatus
+		candidatePath string
+		destPath      string
+		wantReuse     bool
+	}{
+		{
+			name:          "ready model with same path",
+			entryStatus:   ModelStatusReady,
+			candidatePath: modelPath,
+			destPath:      modelPath,
+			wantReuse:     true,
+		},
+		{
+			name:          "updating model with same path",
+			entryStatus:   ModelStatusUpdating,
+			candidatePath: modelPath,
+			destPath:      modelPath,
+		},
+		{
+			name:          "ready model with different path",
+			entryStatus:   ModelStatusReady,
+			candidatePath: filepath.Join(t.TempDir(), "other-model"),
+			destPath:      modelPath,
+		},
+		{
+			name:          "ready model missing local path",
+			entryStatus:   ModelStatusReady,
+			candidatePath: filepath.Join(t.TempDir(), "missing-model"),
+			destPath:      filepath.Join(t.TempDir(), "missing-model"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{
+				readyKey: modelEntryJSON(tt.entryStatus),
+			}))
+			g.baseModelLister = &mockBaseModelLister{
+				models: []*v1beta1.BaseModel{
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "large-model", Namespace: "default"},
+						Spec: v1beta1.BaseModelSpec{
+							Storage: &v1beta1.StorageSpec{
+								StorageUri: &storageURI,
+								Path:       &tt.candidatePath,
+							},
+						},
+					},
+				},
+			}
+
+			matchedKey, reused := g.findReadyObjectStorageModelWithSamePath(context.Background(), &GopherTask{BaseModel: current}, current.Spec, tt.destPath)
+
+			assert.Equal(t, tt.wantReuse, reused)
+			if tt.wantReuse {
+				assert.Equal(t, readyKey, matchedKey)
+			} else {
+				assert.Empty(t, matchedKey)
+			}
+		})
+	}
 }
 
 func TestHandelReuseArtifactIfNecessary_NoReusePolicy(t *testing.T) {
