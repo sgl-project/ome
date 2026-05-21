@@ -1,13 +1,5 @@
 # OEP-0011: Model-Agent Ready Artifact Reconciliation
 
-<!--
-This OEP proposes a model-agent reconciliation loop that periodically verifies
-artifacts already advertised as Ready on a node. The alpha focuses on detecting
-missing, truncated, or drifted local artifacts with existing model-agent
-metadata and conservative filesystem checks. It does not introduce a new public
-artifact-integrity API or supply-chain trust model.
--->
-
 <!-- toc -->
 - [Summary](#summary)
 - [Motivation](#motivation)
@@ -20,12 +12,6 @@ artifact-integrity API or supply-chain trust model.
   - [Validation Policy](#validation-policy)
   - [Failure Behavior](#failure-behavior)
   - [Work Split](#work-split)
-  - [User Stories](#user-stories)
-    - [Story 1: Deleted File After Ready](#story-1-deleted-file-after-ready)
-    - [Story 2: Storage Path Changes Under the Same Model Name](#story-2-storage-path-changes-under-the-same-model-name)
-    - [Story 3: Detect Drift in a Hugging Face Artifact](#story-3-detect-drift-in-a-hugging-face-artifact)
-    - [Story 4: Roll Out Checks Without Serving Regressions](#story-4-roll-out-checks-without-serving-regressions)
-  - [Notes/Constraints/Caveats](#notesconstraintscaveats)
   - [Risks and Mitigations](#risks-and-mitigations)
 - [Design Details](#design-details)
   - [API Specifications](#api-specifications)
@@ -36,7 +22,7 @@ artifact-integrity API or supply-chain trust model.
   - [Reconciliation Flow](#reconciliation-flow)
   - [Readiness, Status, and Failure Behavior](#readiness-status-and-failure-behavior)
   - [Observability](#observability)
-  - [Security and Trust Boundaries](#security-and-trust-boundaries)
+  - [Validation Safety](#validation-safety)
   - [Backward Compatibility](#backward-compatibility)
   - [Implementation Plan](#implementation-plan)
   - [Test Plan](#test-plan)
@@ -54,15 +40,12 @@ artifact-integrity API or supply-chain trust model.
 This OEP proposes periodic Ready artifact reconciliation in model-agent. After
 model-agent initially downloads or accepts a model artifact and marks that model
 Ready on a node, the agent should be able to re-check that the local artifact
-still exists and still matches the model resource that is currently being
-advertised as Ready.
+still exists and still matches the current `storageUri` and `storage.path` for
+the `BaseModel` or `ClusterBaseModel` being advertised as Ready on that node.
 
 The initial alpha is intentionally narrow. It proposes adding model-agent
 process configuration, node-scoped status metadata, validation helpers,
-metrics, and a background reconciliation loop. It does not add new `BaseModel`,
-`ClusterBaseModel`, or `StorageSpec` API fields. Stronger user-declared
-manifests, public digest policy, signatures, provenance, and admission-time
-supply-chain policy are deferred to later work.
+metrics, and a background reconciliation loop.
 
 The proposed reconciler validates only models that are currently Ready on the
 local node. When it finds a concrete artifact failure, it would stop
@@ -85,11 +68,11 @@ longer valid, serving pods can be scheduled onto that node and fail later during
 engine startup. The resulting error is far from the actual fault boundary:
 model-agent's node-local Ready signal is stale.
 
-There is a related freshness problem when a model keeps the same resource name
+There is a related freshness problem when a model keeps the same Kubernetes name
 but its storage URI or local path changes. A node-scoped status record that does
 not identify the artifact source can make an older local artifact look Ready for
-the current model spec. Ready reconciliation should therefore operate on the
-current model resource identity, not just the model name.
+the current model spec. Ready reconciliation should therefore check storage
+identity, not just model name.
 
 ### Goals
 
@@ -97,34 +80,29 @@ current model resource identity, not just the model name.
    Ready on the local node.
 2. Validate only current `BaseModel` and `ClusterBaseModel` entries that are
    Ready in the node-scoped model status ConfigMap.
-3. Record storage identity in node-scoped status so stale Ready entries do not
-   satisfy a newer model spec that points at a different artifact.
-4. Reuse existing OCI Object Storage validation logic where available.
-5. Add conservative validation for Hugging Face and local artifacts using
+3. Record storage identity in node-scoped status so stale Ready entries are not
+   counted for a newer model spec that points at a different artifact.
+4. Reuse existing OCI Object Storage validation logic where it fits.
+5. Validate Hugging Face and local artifacts using
    known required config files, known model files, file size, and optional
    node-local baseline manifests.
-6. Support a low-cost basic mode and an optional deep checksum mode.
-7. On concrete validation failure, update both the model-ready node label and
+6. Support a low-cost Basic mode and an optional Deep checksum mode.
+7. On concrete validation failure, update the model-ready node label and
    node-scoped ConfigMap so the node is no longer selected as Ready.
-8. Update `BaseModel` and `ClusterBaseModel` status propagation so failed nodes
-   move from `nodesReady` to `nodesFailed`.
-9. Emit logs and metrics for validation success, failure, inconclusive results,
-   duration, checked bytes, and reason.
-10. Keep alpha backward compatible and avoid new public model API fields.
+8. Emit logs, events, and metrics for check result, reason, duration, and
+   checked bytes.
+9. Implement alpha using internal model-agent metadata and configuration,
+   without requiring changes to existing model specs.
 
 ### Non-Goals
 
-1. Add public `StorageSpec` fields for user-declared artifact integrity policy
-   in alpha.
-2. Add artifact signing, Sigstore, cosign, TUF, in-toto, or provenance policy.
-3. Prove that model content is safe, licensed, malware-free, or approved for a
-   workload.
-4. Add admission-time supply-chain enforcement.
-5. Make Hugging Face revision SHAs equivalent to cryptographic file digests.
-6. Delete or redownload failed artifacts as part of the periodic check.
-7. Validate PVC-backed artifacts that are managed outside model-agent.
-8. Require every existing local artifact to already have a checksum manifest.
-9. Change serving runtime, InferenceService, or scheduling APIs.
+1. Add public model-spec fields for artifact integrity policy in alpha.
+2. Prove model content quality, license compliance, malware status, or approval
+   for a workload.
+3. Treat Hugging Face revision SHAs as file digests.
+4. Delete or redownload failed artifacts as part of the periodic check.
+5. Require existing local artifacts to already have checksum manifests.
+6. Change serving runtime, InferenceService, or scheduling APIs.
 
 ## Proposal
 
@@ -161,10 +139,11 @@ currently Ready on that node.
 Each cycle:
 
 1. reads the local node-scoped model status ConfigMap;
-2. lists current `BaseModel` and `ClusterBaseModel` resources;
+2. lists current `BaseModel` and `ClusterBaseModel` specs;
 3. builds an index from model ConfigMap keys to current model specs;
 4. skips entries that are not `Ready`;
-5. skips entries that no longer have a current model resource;
+5. skips entries that no longer have a current `BaseModel` or
+   `ClusterBaseModel`;
 6. skips or clears stale entries whose storage identity does not match the
    current model spec;
 7. resolves the local artifact path using the same storage logic as download
@@ -197,12 +176,9 @@ Alpha uses sources that model-agent already owns or can derive locally:
    initial download. The baseline is useful for detecting later local drift; it
    is not a proof that the original bytes were correct.
 
-Future OEPs or follow-up phases may add user-declared manifests or signed
-metadata as stronger external sources of truth.
-
 ### Validation Policy
 
-Alpha exposes model-agent process configuration, not per-model public API:
+Alpha exposes model-agent process configuration, not per-model spec fields:
 
 - `Disabled`: do not run periodic Ready artifact checks.
 - `Basic`: verify low-cost invariants such as path existence, required config
@@ -257,60 +233,8 @@ PRs:
 4. **Configuration, metrics, and docs.** Wire model-agent flags/config, static
    manifests, metrics documentation, operator guidance, and Helm values if a
    model-agent chart is added or identified.
-5. **Future stronger integrity APIs.** Add user-declared manifests, digest
-   policy, signatures, or provenance only after the reconciliation behavior is
-   accepted and measured.
-
-### User Stories
-
-#### Story 1: Deleted File After Ready
-
-A node has `clusterbasemodel.llama-3-8b` marked Ready. During maintenance,
-`model-00002-of-00004.safetensors` is accidentally deleted from the local model
-directory. The next Ready artifact check should detect the missing expected file,
-sets that model's node label and ConfigMap entry to Failed, and the
-`ClusterBaseModel` status can move the node from `nodesReady` to
-`nodesFailed`.
-
-#### Story 2: Storage Path Changes Under the Same Model Name
-
-A `ClusterBaseModel` keeps the same name but changes from
-`/raid/models/google/gemma-4-31B-it` to
-`/raid/models/google/gemma-4-31b-it`. The old node ConfigMap entry no longer
-matches the current storage identity, so the controller does not count the old
-Ready entry for the new path. Model-agent can then refresh the artifact for the
-new identity instead of reusing stale status by name.
-
-#### Story 3: Detect Drift in a Hugging Face Artifact
-
-Model-agent downloads a Hugging Face model and records a node-local baseline
-with file paths and sizes. Later, a file is truncated by external cleanup. The
-basic check should detect the size mismatch. If deep mode is enabled and
-checksums are available in the baseline, it can also detect same-size content
-drift.
-
-#### Story 4: Roll Out Checks Without Serving Regressions
-
-An operator enables Basic mode with a long interval and jitter. Missing metadata
-for older artifacts produces `Inconclusive` metrics but does not fail nodes.
-After observing low noise, the operator enables Deep mode on selected nodes to
-catch same-size drift with a controlled I/O budget.
-
-### Notes/Constraints/Caveats
-
-1. This OEP is about node-local artifact health. It does not make claims about
-   model quality, license compliance, or artifact provenance.
-2. The model-agent owns the Ready signal for artifacts it downloads or accepts
-   on the local node. PVC-backed and externally managed artifacts may remain
-   `Inconclusive` unless model-agent owns enough metadata to validate them.
-3. Basic mode is intended to be low-cost for large models. It cannot
-   detect every same-size file mutation unless provider metadata or a local
-   baseline supplies hashes.
-4. Deep mode can detect same-size drift when it has hashes to compare, but it
-   reads model bytes and therefore needs explicit I/O controls before broad
-   rollout.
-5. Node-local baseline manifests detect changes after the baseline is written.
-   They are not a substitute for a remote, trusted manifest.
+5. **Future public integrity APIs.** Add user-declared manifests or digest
+   policy only after the reconciliation behavior is accepted and measured.
 
 ### Risks and Mitigations
 
@@ -346,13 +270,9 @@ catch same-size drift with a controlled I/O budget.
 
 ### API Specifications
 
-Alpha does not add public API fields to `BaseModel`, `ClusterBaseModel`,
-`StorageSpec`, or `InferenceService`.
-
-The only schema changes are internal model-agent status records in the
-node-scoped ConfigMap and model-agent configuration. Future public API for
-user-declared artifact integrity policy should be proposed separately if the
-periodic reconciliation design proves useful.
+Alpha does not add public model-spec fields. It only proposes internal
+model-agent status metadata in the node-scoped ConfigMap and model-agent
+process configuration.
 
 ### Model-Agent Configuration
 
@@ -544,23 +464,7 @@ Logs should include model identity, node, storage type, mode, result, reason,
 path, files checked, bytes checked, and duration. Logs must not include tokens,
 authorization headers, pre-authenticated request URLs, or secret values.
 
-### Security and Trust Boundaries
-
-This OEP defines local artifact health checks, not content trust.
-
-Trust boundaries:
-
-1. Kubernetes model specs are trusted according to Kubernetes RBAC.
-2. Object metadata is trusted only as much as the object-store writer and bucket
-   policy are trusted.
-3. Node-local baselines detect later local drift. They are not external roots of
-   trust.
-4. Node-scoped ConfigMaps are observation records. They are not accepted as the
-   only proof of correctness when stronger provider metadata exists.
-5. Serving pods consume model paths after model-agent advertises Ready; they do
-   not gain new trust responsibilities in alpha.
-
-Security requirements:
+### Validation Safety
 
 1. Baseline paths must be relative to the artifact root.
 2. Absolute paths, `..` segments, and paths resolving outside the artifact root
@@ -573,7 +477,7 @@ Security requirements:
 
 The alpha design is intended to be backward compatible:
 
-1. Existing model resources do not need new API fields.
+1. Existing `BaseModel` and `ClusterBaseModel` specs do not need new fields.
 2. The alpha reconciler is disabled unless configured.
 3. With `fail_on_inconclusive: false`, missing metadata does not demote Ready.
 4. Existing download-time OCI validation remains available.
@@ -606,7 +510,7 @@ The alpha design is intended to be backward compatible:
 [x] I/we understand that component owners may require updates to existing tests
 before accepting changes necessary for this enhancement.
 
-##### Prerequisite Testing Updates
+#### Prerequisite Testing Updates
 
 Existing tests should cover storage identity before periodic reconciliation is
 enabled:
@@ -628,7 +532,7 @@ enabled:
   digest.
 - Reconciler skips non-Ready entries.
 - Reconciler skips stale storage identity.
-- Reconciler handles missing current model resources.
+- Reconciler handles missing current `BaseModel` or `ClusterBaseModel`.
 - Reconciler marks current Ready entry Failed on concrete invalid result.
 - Reconciler does not fail on Inconclusive by default.
 - Reconciler rechecks identity before demoting Ready.
@@ -676,8 +580,7 @@ enabled:
    with clear rollback guidance.
 2. Default behavior is revisited with measured false-positive and performance
    data.
-3. Any public digest policy or supply-chain trust API is covered by a separate
-   accepted OEP.
+3. Any public digest policy is covered by a separate accepted OEP.
 
 ## Implementation History
 
@@ -694,8 +597,7 @@ created. They do not prove that pre-existing legacy artifacts were correct at
 the time they became Ready.
 
 The design adds internal ConfigMap fields and model-agent configuration that
-operators need to understand, even though it avoids new public model API fields
-in alpha.
+operators need to understand.
 
 ## Alternatives
 
@@ -713,7 +615,7 @@ required verification policy.
 
 That may be useful later, but it is larger than the immediate Ready artifact
 reconciliation problem. Alpha can improve node-local correctness with existing
-metadata and internal status before committing to a public API.
+metadata and internal status before committing to public model-spec fields.
 
 ### Always Run Deep Hashing
 
