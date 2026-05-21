@@ -119,11 +119,12 @@ The status entry should describe both state and artifact identity:
 
 - model key;
 - status: `Ready`, `Updating`, `Failed`, or `Deleted`;
+- existing model config metadata;
+- observed model generation or storage identity hash, when available;
 - source URI, when available;
 - local storage path, when available;
-- observed model generation or storage identity hash, when available;
-- optional config metadata;
-- optional validation metadata.
+- last validation result, reason, checked time, files checked, and bytes
+  checked.
 
 The storage identity fields are not a new user API. They are model-agent's
 record of which artifact source and path were validated when the node claimed
@@ -312,8 +313,9 @@ Field meanings:
 
 ### Node-Scoped Status Record
 
-The node-scoped ConfigMap stores one JSON entry per model key. Alpha should
-extend that entry with storage and validation metadata:
+The node-scoped ConfigMap stores one JSON entry per model key. The current
+entry already includes `name`, `status`, `config`, and `progress`. Alpha should
+extend that entry with storage identity and last-validation metadata:
 
 ```go
 type ModelEntry struct {
