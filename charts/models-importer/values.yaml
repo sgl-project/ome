@@ -740,6 +740,7 @@ gpt-oss-120b:
     - BM.GPU.H100-NC.8
     - BM.GPU.H200-NC.8
     - BM.GPU4.8
+    - BM.GPU.B200.8
 
 gpt-oss-20b:
   enabled: false
