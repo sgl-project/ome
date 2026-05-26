@@ -281,6 +281,12 @@ func MergeRuntimeArgumentsOverride(b *BaseComponentFields, container *corev1.Con
 				if tensorParallelismConfig.PipelineParallelSize != nil && *tensorParallelismConfig.PipelineParallelSize > 0 {
 					overrideParam(container, []string{"--pp-size", "--pp", "--pipeline-parallel-size"}, *tensorParallelismConfig.PipelineParallelSize)
 				}
+				// Override data parallel size if specified
+				// --dp-size and --dp are parameters used in sglang
+				// --data-parallel-size is parameter used in vllm
+				if tensorParallelismConfig.DataParallelSize != nil && *tensorParallelismConfig.DataParallelSize > 0 {
+					overrideParam(container, []string{"--dp-size", "--dp", "--data-parallel-size"}, *tensorParallelismConfig.DataParallelSize)
+				}
 			}
 		}
 	}

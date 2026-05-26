@@ -171,6 +171,65 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 	}
 }
 
+func TestMergeRuntimeArgumentsOverrideDataParallelSize(t *testing.T) {
+	tests := []struct {
+		name            string
+		container       v1.Container
+		expectedArgs    []string
+		expectedCommand []string
+	}{
+		{
+			name: "overrides data parallel size in args with sglang alias",
+			container: v1.Container{
+				Args: []string{"--dp-size", "1", "--enable-expert-parallel"},
+			},
+			expectedArgs: []string{"--dp-size", "4", "--enable-expert-parallel"},
+		},
+		{
+			name: "overrides data parallel size in command with vllm alias",
+			container: v1.Container{
+				Command: []string{
+					"python3",
+					"-m",
+					"vllm.entrypoints.openai.api_server",
+					"--data-parallel-size",
+					"1",
+				},
+			},
+			expectedCommand: []string{
+				"python3",
+				"-m",
+				"vllm.entrypoints.openai.api_server",
+				"--data-parallel-size",
+				"4",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewGomegaWithT(t)
+			b := &BaseComponentFields{
+				AcceleratorClassName: "nvidia-h100",
+				SupportedModelFormat: &v1beta1.SupportedModelFormat{
+					AcceleratorConfig: map[string]*v1beta1.AcceleratorModelConfig{
+						"nvidia-h100": {
+							TensorParallelismOverride: &v1beta1.TensorParallelismConfig{
+								DataParallelSize: int64Ptr(4),
+							},
+						},
+					},
+				},
+			}
+
+			MergeRuntimeArgumentsOverride(b, &tt.container)
+
+			g.Expect(tt.container.Args).To(gomega.Equal(tt.expectedArgs))
+			g.Expect(tt.container.Command).To(gomega.Equal(tt.expectedCommand))
+		})
+	}
+}
+
 func TestProcessBaseLabels(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
@@ -217,4 +276,8 @@ func TestProcessBaseLabels(t *testing.T) {
 	g.Expect(labels).To(gomega.HaveKeyWithValue(constants.InferenceServiceBaseModelSizeLabelKey, "LARGE"))
 	g.Expect(labels).To(gomega.HaveKeyWithValue(constants.BaseModelTypeLabelKey, string(constants.ServingBaseModel)))
 	g.Expect(labels).To(gomega.HaveKeyWithValue(constants.BaseModelVendorLabelKey, "meta"))
+}
+
+func int64Ptr(i int64) *int64 {
+	return &i
 }
