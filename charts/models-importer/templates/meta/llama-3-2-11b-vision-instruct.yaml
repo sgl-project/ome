@@ -5,6 +5,7 @@ metadata:
   name: llama-3-2-11b-vision-instruct
   labels:
     genai-managed-base-model-v1beta1: "true"
+{{ include "models-importer.genaiModelLabels" (dict "root" $ "model" "llama-3-2-11b-vision-instruct") | nindent 4 }}
   annotations:
     # TODO clean up annotations after migration, which is used in MP
     models.ome.io/runtime: "vllm-llama-3-2-11b-vision-instruct"
