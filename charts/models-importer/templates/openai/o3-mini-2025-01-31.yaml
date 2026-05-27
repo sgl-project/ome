@@ -5,6 +5,7 @@ metadata:
   name: o3-mini-2025-01-31
   labels:
     genai-managed-base-model-v1beta1: "true"
+{{ include "models-importer.genaiModelLabels" (dict "root" $ "model" "o3-mini-2025-01-31") | nindent 4 }}
   annotations:
     models.ome.io/runtime: ""
     models.ome.io/category: "SMALL"

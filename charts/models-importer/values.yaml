@@ -518,21 +518,29 @@ gpt-4o-search-preview:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-07-23"
 
 gpt-4o-search-preview-2025-03-11:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-07-23"
 
 gpt-4o-mini-search-preview:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-07-23"
 
 gpt-4o-mini-search-preview-2025-03-11:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-07-23"
 
 gpt-4-1:
   enabled: false
@@ -558,11 +566,15 @@ gpt-4-1-nano:
   enaled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-10-23"
 
 gpt-4-1-nano-2025-04-14:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-10-23"
 
 gpt-5:
   enabled: false
@@ -578,11 +590,15 @@ gpt-audio-mini:
   enabled: false
   enableImageInput: false
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-07-23"
 
 gpt-image-1:
   enabled: false
   enableImageInput: false
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-10-23"
 
 gpt-image-1-5:
   enabled: false
@@ -593,6 +609,8 @@ gpt-5-codex:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-07-23"
 
 gpt-5-2025-08-07:
   enabled: false
@@ -638,21 +656,29 @@ gpt-5-1-codex:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-07-23"
 
 gpt-5-1-codex-mini:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-07-23"
 
 gpt-5-1-codex-max:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-07-23"
 
 gpt-5-1-chat-latest:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-07-23"
 
 gpt-5-2:
   enabled: false
@@ -678,11 +704,15 @@ gpt-5-2-chat-latest:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-08-10"
 
 gpt-5-2-codex:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-07-23"
 
 gpt-5-3-codex:
   enabled: false
@@ -768,6 +798,8 @@ gpt-4o-transcribe-diarize:
 gpt-4o-mini-tts:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-07-23"
 
 gpt-4o-transcribe:
   enabled: false
@@ -780,6 +812,8 @@ gpt-realtime:
 gpt-realtime-mini:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-07-23"
 
 sora-2-pro:
   enabled: false
@@ -789,11 +823,15 @@ o1:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-10-23"
 
 o1-2024-12-17:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-10-23"
 
 o3:
   enabled: false
@@ -809,21 +847,29 @@ o3-mini:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-10-23"
 
 o3-mini-2025-01-31:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-10-23"
 
 o4-mini:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-10-23"
 
 o4-mini-2025-04-16:
   enabled: false
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
+  timeDeprecated: "2026-05-21"
+  timeOnDemandRetired: "2026-10-23"
 
 gpt-4o-mini-realtime-preview:
   enabled: false
