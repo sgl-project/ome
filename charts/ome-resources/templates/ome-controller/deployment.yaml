@@ -92,7 +92,7 @@ spec:
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: cert
           readOnly: true
-{{- if or .Values.google.enabled .Values.openai.enabled .Values.xai.enabled }}
+{{- if or .Values.google.enabled .Values.openai.enabled .Values.openaiProxy.enabled .Values.xai.enabled }}
         - mountPath: /tmp/secrets-store
           name: ome-vault-secrets
 {{- end }}
@@ -102,7 +102,7 @@ spec:
         secret:
           defaultMode: 420
           secretName: ome-webhook-server-cert
-{{- if or .Values.google.enabled .Values.openai.enabled .Values.xai.enabled }}
+{{- if or .Values.google.enabled .Values.openai.enabled .Values.openaiProxy.enabled .Values.xai.enabled }}
       - name: ome-vault-secrets
         csi:
           driver: secrets-store.csi.k8s.io

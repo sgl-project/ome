@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	admin "cloud.google.com/go/iam/admin/apiv1"
 
@@ -22,6 +23,11 @@ import (
 	serviceusage "google.golang.org/api/serviceusage/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	secretsStorePath             = "/tmp/secrets-store"
+	defaultOpenAIAdminSecretFile = "openai-admin-key"
 )
 
 // OrganizationScoped represents a resource scoped to an organization
@@ -119,9 +125,10 @@ func (r *ResourceBase) GetOpenAiAdminSecret(org *v1beta1.Organization) ([]byte, 
 		return nil, fmt.Errorf("unsupported vendor: %s (expected: openai)", *org.Spec.Vendor)
 	}
 
-	adminSecret, err := os.ReadFile("/tmp/secrets-store/openai-admin-key")
+	adminSecretFile := openAIAdminSecretFile(org)
+	adminSecret, err := os.ReadFile(filepath.Join(secretsStorePath, adminSecretFile))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read OpenAI admin API key file: %w", err)
+		return nil, fmt.Errorf("failed to read OpenAI admin API key file %q: %w", adminSecretFile, err)
 	}
 
 	if len(adminSecret) == 0 {
@@ -129,6 +136,15 @@ func (r *ResourceBase) GetOpenAiAdminSecret(org *v1beta1.Organization) ([]byte, 
 	}
 
 	return adminSecret, nil
+}
+
+func openAIAdminSecretFile(org *v1beta1.Organization) string {
+	// SecretRef.Name matches the Secrets Store CSI mounted file name. For example,
+	// genai-openai-proxy-0001 sets it to "openai-proxy-admin-key" in the chart.
+	if org.Spec.SecretRef != nil && org.Spec.SecretRef.Name != "" {
+		return org.Spec.SecretRef.Name
+	}
+	return defaultOpenAIAdminSecretFile
 }
 
 // InitializeGcpProjectClient initializes a GCP Project client using organization credentials

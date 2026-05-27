@@ -225,6 +225,9 @@ openai:
   enabled: false
   namespace: "genai-openai"
 
+openaiProxy:
+  enabled: false
+
 xai:
   enabled: false
   namespace: "genai-xai"

@@ -186,7 +186,7 @@ func TestResourceBase_InitializeClient(t *testing.T) {
 		},
 		Spec: v1beta1.OrganizationSpec{
 			SecretRef: &v1beta1.SecretReference{
-				Name:      "test-secret",
+				Name:      "openai-admin-key",
 				Namespace: "default",
 				Key:       "api-key",
 			},
@@ -219,6 +219,23 @@ func TestResourceBase_InitializeClient(t *testing.T) {
 
 	t.Run("InitializeClient", func(t *testing.T) {
 		client, err := rb.InitializeClient(context.Background(), testOrg)
+		require.NoError(t, err)
+		assert.NotNil(t, client)
+	})
+
+	t.Run("InitializeClient_CustomSecretRef", func(t *testing.T) {
+		proxyOrg := testOrg.DeepCopy()
+		proxyOrg.Spec.SecretRef.Name = "openai-proxy-admin-key"
+
+		err := os.WriteFile("/tmp/secrets-store/openai-proxy-admin-key", []byte("proxy-api-key"), 0644)
+		require.NoError(t, err)
+		defer os.Remove("/tmp/secrets-store/openai-proxy-admin-key")
+
+		adminSecret, err := rb.GetOpenAiAdminSecret(proxyOrg)
+		require.NoError(t, err)
+		assert.Equal(t, "proxy-api-key", string(adminSecret))
+
+		client, err := rb.InitializeClient(context.Background(), proxyOrg)
 		require.NoError(t, err)
 		assert.NotNil(t, client)
 	})

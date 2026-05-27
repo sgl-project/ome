@@ -1,8 +1,10 @@
-{{- if .Values.openai.enabled }}
+{{- if or .Values.openai.enabled .Values.openaiProxy.enabled }}
 apiVersion: v1
 kind: Namespace
 metadata:
   name: {{.Values.openai.namespace}}
+{{- end }}
+{{- if .Values.openai.enabled }}
 ---
 apiVersion: ome.io/v1beta1
 kind: Organization
@@ -27,4 +29,30 @@ metadata:
 type: Opaque
 data:
   OPENAI_ADMIN_API_KEY: c2stYWRtaW4teS16WV9STkpjLXpVaVFuM3hjelpNcXFjZlFNdlZ6NFdLSUdkWWk4dkpNd0gxYVRBaFBrYVBUYjFNNlQzQmxia0ZKa2NXeHlYUmVmUHdZMXVZMExnaXk5X18xSVFtbzZoMGFZVW9sMGtvQjRrYUQ0dkJwcEotZHdYa1hnQQ==
+{{- end }}
+{{- if .Values.openaiProxy.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: Organization
+metadata:
+  name: genai-openai-proxy-0001
+spec:
+  organizationId: {{.Values.ome.ociETC.serviceCompartmentId}}
+  vendor: openai
+  disabled: false
+  secretRef:
+    name: openai-proxy-admin-key
+    key: OPENAI_PROXY_ADMIN_API_KEY
+    namespace: {{.Values.openai.namespace}}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openai-proxy-admin-key
+  namespace: {{.Values.openai.namespace}}
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+data:
+  OPENAI_PROXY_ADMIN_API_KEY: c2stYWRtaW4teS16WV9STkpjLXpVaVFuM3hjelpNcXFjZlFNdlZ6NFdLSUdkWWk4dkpNd0gxYVRBaFBrYVBUYjFNNlQzQmxia0ZKa2NXeHlYUmVmUHdZMXVZMExnaXk5X18xSVFtbzZoMGFZVW9sMGtvQjRrYUQ0dkJwcEotZHdYa1hnQQ==
 {{- end }}
