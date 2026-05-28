@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
+	rbgv1alpha2 "sigs.k8s.io/rbgs/api/workloads/v1alpha2"
 
 	v1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
@@ -91,6 +92,9 @@ import (
 // +kubebuilder:rbac:groups=leaderworkerset.x-k8s.io,resources=leaderworkersets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=leaderworkerset.x-k8s.io,resources=leaderworkersets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=leaderworkerset.x-k8s.io,resources=leaderworkersets/finalizers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=workloads.x-k8s.io,resources=rolebasedgroups,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=workloads.x-k8s.io,resources=rolebasedgroups/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=workloads.x-k8s.io,resources=rolebasedgroups/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 
 // InferenceServiceState describes the Readiness of the InferenceService
@@ -632,6 +636,23 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 	// Initialize WorkloadStrategyManager
 	r.StrategyManager = workload.NewWorkloadStrategyManager(r.Log)
 
+	// Check RBG CRD availability before registering the strategy so that
+	// selecting "RoleBasedGroup" mode without the CRD installed does not
+	// produce confusing runtime API errors.
+	rbgFound, err := utils.IsCrdAvailable(r.ClientConfig, rbgv1alpha2.GroupVersion.String(), constants.RoleBasedGroupKind)
+	if err != nil {
+		return err
+	}
+
+	if rbgFound {
+		// Register RBG Strategy first so it has higher priority than the
+		// default SingleComponent strategy when the RoleBasedGroup mode is selected.
+		rbgStrategy := workload.NewRBGStrategy(r.Client, r.Clientset, r.Scheme, r.Log)
+		if err := r.StrategyManager.RegisterStrategy(rbgStrategy); err != nil {
+			return err
+		}
+	}
+
 	// Register SingleComponent Strategy (as default, registered last)
 	singleStrategy := workload.NewSingleComponentStrategy(r.Log)
 	if err := r.StrategyManager.RegisterStrategy(singleStrategy); err != nil {
@@ -696,6 +717,12 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 		ctrlBuilder = ctrlBuilder.Owns(&lws.LeaderWorkerSet{})
 	} else {
 		r.Log.Info("The InferenceService controller won't watch leaderworkerset.x-k8s.io/v1/LeaderWorkerSet resources because the CRD is not available.")
+	}
+
+	if rbgFound {
+		ctrlBuilder = ctrlBuilder.Owns(&rbgv1alpha2.RoleBasedGroup{})
+	} else {
+		r.Log.Info("The InferenceService controller won't watch workloads.x-k8s.io/v1alpha2/RoleBasedGroup resources because the CRD is not available.")
 	}
 
 	if vsFound && !ingressConfig.DisableIstioVirtualHost {

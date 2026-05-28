@@ -288,3 +288,24 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - workloads.x-k8s.io
+  resources:
+  - rolebasedgroups
+  - rolebasedgroups/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - workloads.x-k8s.io
+  resources:
+  - rolebasedgroups/status
+  verbs:
+  - get
+  - patch
+  - update

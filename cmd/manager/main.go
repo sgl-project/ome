@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
+	rbgv1alpha2 "sigs.k8s.io/rbgs/api/workloads/v1alpha2"
 	schedulerpluginsv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
 	volcanobatch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
 	volcano "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
@@ -220,6 +221,7 @@ func main() {
 		{ray.SchemeGroupVersion, constants.RayClusterKind, ray.AddToScheme},
 		{knservingv1.SchemeGroupVersion, constants.KnativeServiceKind, knservingv1.AddToScheme},
 		{lws.SchemeGroupVersion, constants.LWSKind, lws.AddToScheme},
+		{rbgv1alpha2.GroupVersion, constants.RoleBasedGroupKind, rbgv1alpha2.AddToScheme},
 		{volcano.SchemeGroupVersion, constants.VolcanoQueueKind, volcano.AddToScheme},
 		{volcanobatch.SchemeGroupVersion, constants.VolcanoJobKind, volcanobatch.AddToScheme},
 		{kedav1.SchemeGroupVersion, constants.KEDAScaledObjectKind, kedav1.AddToScheme},

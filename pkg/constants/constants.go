@@ -444,12 +444,13 @@ const (
 	PDDisaggregated   DeploymentModeType = "PDDisaggregated"
 	MultiNode         DeploymentModeType = "MultiNode"
 	VirtualDeployment DeploymentModeType = "VirtualDeployment"
+	RoleBasedGroup    DeploymentModeType = "RoleBasedGroup"
 )
 
 // IsValid checks if the deployment mode is valid
 func (d DeploymentModeType) IsValid() bool {
 	switch d {
-	case Serverless, RawDeployment, MultiNodeRayVLLM, MultiNode, VirtualDeployment:
+	case Serverless, RawDeployment, MultiNodeRayVLLM, MultiNode, VirtualDeployment, RoleBasedGroup:
 		return true
 	default:
 		return false
@@ -485,6 +486,7 @@ const (
 	LWSKind                 = "LeaderWorkerSet"
 	GatewayKind             = "Gateway"
 	ServiceKind             = "Service"
+	RoleBasedGroupKind      = "RoleBasedGroup"
 )
 
 // Volcano Job Labels
