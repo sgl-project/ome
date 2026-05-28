@@ -274,7 +274,7 @@ func TestProject_Create_Error(t *testing.T) {
 	require.NotEmpty(t, updatedProject.Status.Conditions)
 	condition := updatedProject.Status.Conditions[0]
 	assert.Equal(t, v1beta1.ConditionTypeError, condition.Type)
-	assert.Equal(t, metav1.ConditionFalse, condition.Status)
+	assert.Equal(t, metav1.ConditionTrue, condition.Status)
 	assert.Equal(t, string(v1beta1.ProjectStatusAPIError), condition.Reason)
 	assert.Equal(t, "API operation failed", condition.Message)
 }
@@ -325,7 +325,7 @@ func TestProject_Update_Error(t *testing.T) {
 	require.NotEmpty(t, updatedProject.Status.Conditions)
 	condition := updatedProject.Status.Conditions[0]
 	assert.Equal(t, v1beta1.ConditionTypeError, condition.Type)
-	assert.Equal(t, metav1.ConditionFalse, condition.Status)
+	assert.Equal(t, metav1.ConditionTrue, condition.Status)
 	assert.Equal(t, string(v1beta1.ProjectStatusAPIError), condition.Reason)
 	assert.Equal(t, "API operation failed", condition.Message)
 }
@@ -397,7 +397,7 @@ func TestProject_Delete_Error(t *testing.T) {
 	require.NotEmpty(t, updatedProject.Status.Conditions)
 	condition := updatedProject.Status.Conditions[0]
 	assert.Equal(t, v1beta1.ConditionTypeError, condition.Type)
-	assert.Equal(t, metav1.ConditionFalse, condition.Status)
+	assert.Equal(t, metav1.ConditionTrue, condition.Status)
 	assert.Equal(t, string(v1beta1.ProjectStatusAPIError), condition.Reason)
 	assert.Equal(t, "API operation failed", condition.Message)
 }
@@ -475,7 +475,7 @@ func TestProject_updateConditionWithError(t *testing.T) {
 	require.Len(t, updatedProject.Status.Conditions, 1)
 	condition := updatedProject.Status.Conditions[0]
 	assert.Equal(t, v1beta1.ConditionTypeError, condition.Type)
-	assert.Equal(t, metav1.ConditionFalse, condition.Status)
+	assert.Equal(t, metav1.ConditionTrue, condition.Status)
 	assert.Equal(t, string(v1beta1.ProjectStatusAPIError), condition.Reason)
 	assert.Equal(t, "API operation failed", condition.Message)
 }

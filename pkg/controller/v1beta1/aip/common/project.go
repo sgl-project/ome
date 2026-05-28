@@ -50,7 +50,6 @@ func (r *ResourceBase) updateCondition(ctx context.Context, p *v1beta1.Project, 
 
 	if status.IsError() {
 		conditionType = v1beta1.ConditionTypeError
-		conditionStatus = metav1.ConditionFalse
 	}
 
 	condition := metav1.Condition{
