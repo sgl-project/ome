@@ -62,23 +62,16 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai:v0.7.3.78f0810ef
+      image: fra.ocir.io/idqj093njucb/official-vllm-openai:v0.20.0
       ports:
         - containerPort: 8080
           name: http1
           protocol: TCP
-      command:
-        - /bin/bash
-        - '-lc'
-        - --
       args:
-        - |
-          python3 -m vllm.entrypoints.openai.api_server \
+        - $(MODEL_PATH) \
           --port=8080 \
-          --model="$MODEL_PATH" \
-          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --max-log-len=0 \
-          --served-model-name="$SERVED_MODEL_NAME" \
+          --served-model-name=vllm-model \
           --tensor-parallel-size=4 \
           --max-model-len=131072 \
           --gpu-memory-utilization=0.9 \

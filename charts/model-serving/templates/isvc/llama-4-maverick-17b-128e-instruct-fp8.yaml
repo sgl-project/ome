@@ -5,8 +5,13 @@ metadata:
   name: llama-4-maverick-17b-128e-instruct-fp8
   namespace: llama-4-maverick-17b-128e-instruct-fp8
 spec:
+  runtime:
+    apiGroup: ome.io
+    kind: ClusterServingRuntime
+    name: vllm-llama-4-maverick-17b-128e-instruct-fp8
   predictor:
     model:
+      runtime: vllm-llama-4-maverick-17b-128e-instruct-fp8
       baseModel:  llama-4-maverick-17b-128e-instruct-fp8
       protocolVersion: openAI
     minReplicas: {{ .Values.llama_4_maverick_17b_128e_instruct_fp8.minReplicas}}

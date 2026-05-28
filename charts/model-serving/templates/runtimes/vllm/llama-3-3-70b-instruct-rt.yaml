@@ -77,7 +77,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: LlamaForCausalLM
-      autoSelect: false
+      autoSelect: true
       priority: 1
       version: "1.0.0"
       acceleratorConfig:
@@ -281,6 +281,8 @@ spec:
   protocolVersions:
     - openAI
   schedulerName: {{ .Values.commonSchedulerName }}
+  {{- $gpus := 4 }}
+  {{- if eq .Values.oci.region "me-dubai-1" }}{{- $gpus = 8 }}{{- end }}
   containers:
     - name: ome-container
       image: {{ .Values.llama_3_3_70b_instruct.image.vllm.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_3_3_70b_instruct.image.vllm.tag | default .Values.vllm.latestImage.tag }}
@@ -294,13 +296,12 @@ spec:
         - --
       args:
         - |
-          python3 -m vllm.entrypoints.openai.api_server \
+          vllm serve "$MODEL_PATH" \
           --port={{ .Values.vllm.port }} \
-          --model="$MODEL_PATH" \
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --max-log-len=0 \
           --served-model-name="$SERVED_MODEL_NAME" \
-          --tensor-parallel-size=4 \
+          --tensor-parallel-size={{ $gpus }} \
           --max-model-len=131072 \
           --gpu-memory-utilization=0.9 \
           --enable-chunked-prefill \
@@ -317,11 +318,11 @@ spec:
         requests:
           cpu: 30
           memory: 100Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: {{ $gpus }}
         limits:
           cpu: 30
           memory: 100Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: {{ $gpus }}
 
       readinessProbe:
         httpGet:
@@ -405,13 +406,12 @@ spec:
         - --
       args:
         - |
-          python3 -m vllm.entrypoints.openai.api_server \
+          vllm serve "$MODEL_PATH" \
           --port={{ .Values.vllm.port }} \
-          --model="$MODEL_PATH" \
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --max-log-len=0 \
           --served-model-name="$SERVED_MODEL_NAME" \
-          --tensor-parallel-size=4 \
+          --tensor-parallel-size={{ $gpus }} \
           --max-model-len=131072 \
           --gpu-memory-utilization=0.9 \
           --enable-chunked-prefill \
@@ -428,11 +428,11 @@ spec:
         requests:
           cpu: 30
           memory: 100Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: {{ $gpus }}
         limits:
           cpu: 30
           memory: 100Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: {{ $gpus }}
       readinessProbe:
         httpGet:
           path: /health

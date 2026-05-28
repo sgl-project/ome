@@ -538,8 +538,8 @@ llama_3_3_70b_instruct:
   scaleMetric: { }
   image:
     vllm:
-      repository:
-      tag:
+      repository: fra.ocir.io/idqj093njucb/official-vllm-openai
+      tag: v0.20.0
     srt:
       repository:
       tag:
@@ -953,8 +953,8 @@ llama_4_maverick_17b_128e_instruct_fp8:
   maxReplicas: 1
   image:
     vllm:
-      repository:
-      tag:
+      repository: fra.ocir.io/idqj093njucb/official-vllm-openai
+      tag: v0.20.0
     srt:
       repository:
       tag:

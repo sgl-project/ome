@@ -5,11 +5,16 @@ metadata:
   name: llama-3-3-70b-instruct
   namespace: llama-3-3-70b-instruct
 spec:
+  runtime:
+    apiGroup: ome.io
+    kind: ClusterServingRuntime
+    name: vllm-llama-3-3-70b-instruct
   predictor:
     {{- with .Values.llama_3_3_70b_instruct.annotations }}
     annotations: {{ toYaml . | nindent 6 }}
     {{- end }}
     model:
+      runtime: vllm-llama-3-3-70b-instruct
       baseModel: llama-3-3-70b-instruct
       protocolVersion: openAI
     minReplicas: {{ .Values.llama_3_3_70b_instruct.minReplicas}}

@@ -10,7 +10,7 @@ metadata:
     genai-model-dedicated-retired-date: "{{ index .Values "llama-4-maverick-17b-128e-instruct-fp8" "timeDedicatedRetired" }}"
   annotations:
     # TODO clean up annotations after migration, which is used in MP
-    models.ome.io/runtime: "srt-llama-4-maverick-17b-128e-instruct-fp8"
+    models.ome.io/runtime: "vllm-llama-4-maverick-17b-128e-instruct-fp8"
     models.ome.io/category: "LARGE"
     models.ome.io/experimental: "{{ index .Values "llama-4-maverick-17b-128e-instruct-fp8" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "llama-4-maverick-17b-128e-instruct-fp8" "isInternal" }}"
