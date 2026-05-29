@@ -5,6 +5,9 @@ metadata:
   name: gpt-4o-realtime-preview
   labels:
     genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "gpt-4o-realtime-preview" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "gpt-4o-realtime-preview" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "gpt-4o-realtime-preview" "timeDedicatedRetired" }}"
   annotations:
     models.ome.io/runtime: ""
     models.ome.io/category: "SMALL"
