@@ -43,6 +43,7 @@ type config struct {
 	numDownloadWorker    int
 	namespace            string
 	logLevel             string
+	downloadTimeout      time.Duration
 }
 
 // Logger type alias for zap.SugaredLogger
@@ -73,6 +74,7 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 5, "Number of download workers")
 	rootCmd.PersistentFlags().StringVar(&cfg.namespace, "namespace", "ome", "Kubernetes namespace to use")
 	rootCmd.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
+	rootCmd.PersistentFlags().DurationVar(&cfg.downloadTimeout, "download-timeout", 6*time.Hour, "Maximum time allowed for a single model download before it is cancelled")
 
 	_ = v.BindPFlags(rootCmd.PersistentFlags())
 	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
@@ -268,6 +270,9 @@ func initializeComponents(
 		logger,
 		baseModelInformer.Lister(),
 		clusterBaseModelInformer.Lister(),
+		cfg.nodeName,
+		cfg.namespace,
+		cfg.downloadTimeout,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gopher: %w", err)
