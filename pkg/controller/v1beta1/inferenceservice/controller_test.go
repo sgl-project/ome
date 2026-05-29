@@ -27,7 +27,6 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/status"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/workload"
 	"sigs.k8s.io/ome/pkg/runtimeselector"
 	omeTesting "sigs.k8s.io/ome/pkg/testing"
 )
@@ -729,12 +728,6 @@ func TestInferenceServiceReconcile(t *testing.T) {
 				RuntimeSelector:          runtimeselector.New(c),
 				AcceleratorClassSelector: acceleratorclassselector.New(c),
 			}
-
-			// Initialize StrategyManager and register strategies
-			reconciler.StrategyManager = workload.NewWorkloadStrategyManager(reconciler.Log)
-			singleStrategy := workload.NewSingleComponentStrategy(reconciler.Log)
-			err = reconciler.StrategyManager.RegisterStrategy(singleStrategy)
-			g.Expect(err).NotTo(gomega.HaveOccurred())
 
 			// Ensure the InferenceService exists in the client
 			existingIsvc := &v1beta1.InferenceService{}
