@@ -71,7 +71,10 @@ func (fa *FineTunedAdapterInjector) injectFineTunedAdapter(pod *v1.Pod) error {
 
 	modelInitMounts := fa.getVolumeMounts(pod)
 
-	fineTunedWeightUri, _ := fa.getFineTunedWeightUri(pod)
+	fineTunedWeightUri, err := fa.getFineTunedWeightUri(pod)
+	if err != nil {
+		return err
+	}
 
 	initEnvs, err := fa.getModelInitEnvs(pod, fineTunedWeightUri)
 	if err != nil {
@@ -136,6 +139,10 @@ func (fa *FineTunedAdapterInjector) getFineTunedWeightUri(pod *v1.Pod) (*storage
 	fineTunedWeight, err := isvcutils.GetFineTunedWeight(fa.client, fa.fineTunedWeightName)
 	if err != nil {
 		return nil, err
+	}
+
+	if fineTunedWeight.Spec.Storage == nil || fineTunedWeight.Spec.Storage.StorageUri == nil || *fineTunedWeight.Spec.Storage.StorageUri == "" {
+		return nil, fmt.Errorf("fine-tuned weight %q storage.storageUri is required", fa.fineTunedWeightName)
 	}
 
 	osUri, err := storage.ParseOCIStorageURI(*fineTunedWeight.Spec.Storage.StorageUri)

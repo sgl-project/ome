@@ -1,10 +1,16 @@
 package pod
 
 import (
+	"strings"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 func TestInjectorConstructorsReturnJSONErrors(t *testing.T) {
@@ -88,4 +94,79 @@ func TestInjectorContainerBuildersReturnResourceErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFineTunedAdapterReturnsWeightLookupError(t *testing.T) {
+	injector := newTestFineTunedAdapterInjector(t, nil)
+	pod := newFineTunedAdapterPod("missing-weight")
+
+	err := injector.InjectFineTunedAdapter(pod)
+	if err == nil {
+		t.Fatalf("expected fine-tuned weight lookup error")
+	}
+}
+
+func TestFineTunedAdapterRequiresStorageURI(t *testing.T) {
+	tests := map[string]*v1beta1.StorageSpec{
+		"missing storage": nil,
+		"missing uri":     {},
+		"empty uri":       {StorageUri: stringPtr("")},
+	}
+
+	for name, storageSpec := range tests {
+		t.Run(name, func(t *testing.T) {
+			injector := newTestFineTunedAdapterInjector(t, &v1beta1.FineTunedWeight{
+				ObjectMeta: metav1.ObjectMeta{Name: "ft-weight"},
+				Spec: v1beta1.FineTunedWeightSpec{
+					Storage: storageSpec,
+				},
+			})
+			pod := newFineTunedAdapterPod("ft-weight")
+
+			err := injector.InjectFineTunedAdapter(pod)
+			if err == nil {
+				t.Fatalf("expected storage URI validation error")
+			}
+			if !strings.Contains(err.Error(), "storage.storageUri is required") {
+				t.Fatalf("expected storage URI validation error, got %v", err)
+			}
+		})
+	}
+}
+
+func newTestFineTunedAdapterInjector(t *testing.T, objects ...*v1beta1.FineTunedWeight) *FineTunedAdapterInjector {
+	t.Helper()
+
+	s := runtime.NewScheme()
+	if err := v1beta1.AddToScheme(s); err != nil {
+		t.Fatalf("failed to add v1beta1 to scheme: %v", err)
+	}
+
+	builder := fake.NewClientBuilder().WithScheme(s)
+	for _, obj := range objects {
+		if obj != nil {
+			builder.WithObjects(obj)
+		}
+	}
+
+	return &FineTunedAdapterInjector{
+		Image:         "fine-tuned-adapter:latest",
+		CompartmentId: "ocid1.compartment.oc1..test",
+		AuthType:      "InstancePrincipal",
+		client:        builder.Build(),
+	}
+}
+
+func newFineTunedAdapterPod(weightName string) *v1.Pod {
+	return &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				constants.FineTunedAdapterInjectionKey: weightName,
+			},
+		},
+	}
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
