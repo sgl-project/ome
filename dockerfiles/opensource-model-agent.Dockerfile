@@ -33,9 +33,15 @@ RUN if [ -n "$COMMIT_HASH" ]; then \
 
 WORKDIR /ome
 
-# Downgrade go.mod directive
+# Keep the signed Go 1.24 FIPS builder and only bump immediately-gating modules.
 ENV GOTOOLCHAIN=local
 RUN go mod edit -go=1.24
+RUN go get \
+    google.golang.org/grpc@v1.79.3 \
+    go.opentelemetry.io/otel@v1.40.0 \
+    go.opentelemetry.io/otel/metric@v1.40.0 \
+    go.opentelemetry.io/otel/sdk@v1.40.0 \
+    go.opentelemetry.io/otel/trace@v1.40.0
 RUN go mod tidy
 
 # Set env so Rust picks up OpenSSL 3
