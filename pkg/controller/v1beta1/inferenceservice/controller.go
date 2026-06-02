@@ -11,9 +11,9 @@ import (
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	"knative.dev/pkg/network"
 
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
+	opensourcev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 
 	multimodelconfig "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
 	"github.com/go-logr/logr"

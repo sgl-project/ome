@@ -10,9 +10,9 @@ import (
 
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/utils"
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	opensourcev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	kueueQueueReconciler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/reconcilers/kueuequeue"

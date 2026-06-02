@@ -5,7 +5,6 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -15,6 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	opensourcev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 var log = logf.Log.WithName("TrainingPersistentVolumeReconciler")

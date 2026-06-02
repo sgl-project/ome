@@ -7,7 +7,7 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"

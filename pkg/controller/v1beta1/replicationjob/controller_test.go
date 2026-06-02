@@ -11,7 +11,6 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"github.com/go-logr/logr"
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	batchv1 "k8s.io/api/batch/v1"
@@ -27,6 +26,7 @@ import (
 	cfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	opensourcev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 const (

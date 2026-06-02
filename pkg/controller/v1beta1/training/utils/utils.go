@@ -11,13 +11,13 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/metrics"
 	goerrors "github.com/pkg/errors"
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	opensourcev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // GetClusterBaseModel Get the cluster base model from the given model name.

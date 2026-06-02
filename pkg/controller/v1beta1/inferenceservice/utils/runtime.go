@@ -10,10 +10,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	goerrors "github.com/pkg/errors"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 var log = logf.Log.WithName("Runtime")

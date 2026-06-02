@@ -30,7 +30,6 @@ require (
 	github.com/ray-project/kuberay/ray-operator v1.2.2
 	github.com/satori/go.uuid v1.2.0
 	github.com/schollz/progressbar/v3 v3.18.0
-	github.com/sgl-project/ome v0.1.5
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.15.0
 	github.com/spf13/cobra v1.8.1
@@ -65,6 +64,7 @@ require (
 	sigs.k8s.io/jobset v0.7.1
 	sigs.k8s.io/kueue v0.10.6
 	sigs.k8s.io/lws v0.5.1
+	sigs.k8s.io/ome v0.1.6-0.20260529184227-cb9b9a0d9bfb
 	sigs.k8s.io/scheduler-plugins v0.30.12
 	sigs.k8s.io/yaml v1.4.0
 	volcano.sh/apis v1.9.0
@@ -211,3 +211,5 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
 )
+
+replace sigs.k8s.io/ome => github.com/ome-projects/ome v0.1.6-0.20260529184227-cb9b9a0d9bfb

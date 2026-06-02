@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/onsi/gomega"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 func TestValidateBenchmarkJob(t *testing.T) {

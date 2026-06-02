@@ -1206,7 +1206,7 @@
         },
         "outputModel": {
           "description": "OutputModel defines where the finetune weight (output model) stores.",
-          "$ref": "#/definitions/github.com.sgl-project.ome.pkg.apis.ome.v1beta1.StorageSpec"
+          "$ref": "#/definitions/sigs.k8s.io.ome.pkg.apis.ome.v1beta1.StorageSpec"
         }
       }
     },
@@ -2064,11 +2064,11 @@
         },
         "destination": {
           "description": "Destination specifies the data destination for the replication job.",
-          "$ref": "#/definitions/github.com.sgl-project.ome.pkg.apis.ome.v1beta1.StorageSpec"
+          "$ref": "#/definitions/sigs.k8s.io.ome.pkg.apis.ome.v1beta1.StorageSpec"
         },
         "source": {
           "description": "Source specifies the data source for the replication job.",
-          "$ref": "#/definitions/github.com.sgl-project.ome.pkg.apis.ome.v1beta1.StorageSpec"
+          "$ref": "#/definitions/sigs.k8s.io.ome.pkg.apis.ome.v1beta1.StorageSpec"
         }
       }
     },
@@ -2453,7 +2453,7 @@
         },
         "datasets": {
           "description": "Datasets defines the datasets for the training job.",
-          "$ref": "#/definitions/github.com.sgl-project.ome.pkg.apis.ome.v1beta1.StorageSpec"
+          "$ref": "#/definitions/sigs.k8s.io.ome.pkg.apis.ome.v1beta1.StorageSpec"
         },
         "hyperParameterTuningConfig": {
           "description": "HyperParameterTuningConfig defines the hyperparameter configuration and tuning strategy",

@@ -1,8 +1,8 @@
 package components
 
 import (
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // Component can be reconciled to create underlying resources for an InferenceService

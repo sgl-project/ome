@@ -7,13 +7,10 @@ import (
 
 	"knative.dev/pkg/kmp"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
-	omev1beta1informers "github.com/sgl-project/ome/pkg/client/informers/externalversions"
-	omev1beta1 "github.com/sgl-project/ome/pkg/client/informers/externalversions/ome/v1beta1"
-	omev1beta1lister "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -22,6 +19,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	omev1beta1informers "sigs.k8s.io/ome/pkg/client/informers/externalversions"
+	omev1beta1 "sigs.k8s.io/ome/pkg/client/informers/externalversions/ome/v1beta1"
+	omev1beta1lister "sigs.k8s.io/ome/pkg/client/listers/ome/v1beta1"
 )
 
 type Scount struct {

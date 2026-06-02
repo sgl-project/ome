@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	opensourcev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // AddToSchemes may be used to add all resources defined in the project to a Scheme

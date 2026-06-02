@@ -1,7 +1,7 @@
 package utils
 
 import (
-	v1beta1api "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	v1beta1api "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // MemoryStrategy TODO MemoryStrategy will be implemented in another PR

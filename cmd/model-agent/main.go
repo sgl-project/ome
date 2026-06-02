@@ -13,8 +13,8 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/hub"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/modelagent"
-	omev1beta1client "github.com/sgl-project/ome/pkg/client/clientset/versioned"
-	omev1beta1informers "github.com/sgl-project/ome/pkg/client/informers/externalversions"
+	omev1beta1client "sigs.k8s.io/ome/pkg/client/clientset/versioned"
+	omev1beta1informers "sigs.k8s.io/ome/pkg/client/informers/externalversions"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"

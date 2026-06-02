@@ -9,12 +9,12 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // NodeLabelOp represents an operation on node labels

@@ -18,7 +18,6 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
@@ -31,6 +30,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 const (

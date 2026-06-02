@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
-	"github.com/sgl-project/ome/pkg/runtimeselector"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	opensourcev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"sigs.k8s.io/ome/pkg/runtimeselector"
 )
 
 // +kubebuilder:webhook:path=/inferenceservice-router-mutator,mutating=true,failurePolicy=fail,groups=ome.io,resources=inferenceservices,verbs=create,update,versions=v1beta1,name=inferenceservice.ome-webhook-server.inferenceservice-router-mutator

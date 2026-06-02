@@ -7,7 +7,6 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/google/go-cmp/cmp"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 func TestSetDefaultPodSpec(t *testing.T) {

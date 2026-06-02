@@ -10,7 +10,6 @@ import (
 	raycluster "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/istiosidecar"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/lws"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,6 +17,7 @@ import (
 	knapis "knative.dev/pkg/apis"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	lwsSpec "sigs.k8s.io/lws/api/leaderworkerset/v1"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 type MultiNodeReconciler struct {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	opensourcev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"

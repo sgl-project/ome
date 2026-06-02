@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/equality"

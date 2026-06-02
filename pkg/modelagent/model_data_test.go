@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 func TestConvertMetadataToModelConfig(t *testing.T) {

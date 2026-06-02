@@ -19,7 +19,6 @@ import (
 	generalutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -39,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	opensourcev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // +kubebuilder:rbac:groups=ome.io,resources=capacityreservations,verbs=get;list;watch;create;update;patch;delete

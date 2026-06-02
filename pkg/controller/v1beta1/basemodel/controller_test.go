@@ -22,7 +22,7 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/modelagent"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 func TestBaseModelReconcile(t *testing.T) {

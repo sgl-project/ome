@@ -10,12 +10,12 @@ import (
 	"context"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/modelconfig"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/client/clientset/versioned"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/client/clientset/versioned"
 )
 
 const (

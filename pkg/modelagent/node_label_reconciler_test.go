@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -19,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 	ktesting "k8s.io/client-go/testing"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // setupTest prepares a test environment with fake clients and test models

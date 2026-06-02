@@ -36399,6 +36399,7 @@ spec:
                             - BaseModelNotReady
                             - BaseModelNotFound
                             - ModelLoadFailed
+                            - ContainerStartupFailed
                             - RuntimeUnhealthy
                             - RuntimeDisabled
                             - NoSupportingRuntime

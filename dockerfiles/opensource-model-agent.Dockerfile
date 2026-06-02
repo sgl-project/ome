@@ -24,10 +24,10 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Fetch open-source OME code from Artifactory-proxied GitHub
 RUN if [ -n "$COMMIT_HASH" ]; then \
-        curl -sSL "https://artifactory.oci.oraclecorp.com/api/vcs/downloadCommit/github-vcs-remote/sgl-project/ome/${COMMIT_HASH}" \
+        curl -sSL "https://artifactory.oci.oraclecorp.com/api/vcs/downloadCommit/github-vcs-remote/ome-projects/ome/${COMMIT_HASH}" \
         | tar -xzvf - && mv ome-* /ome; \
     else \
-        curl -sSL "https://artifactory.oci.oraclecorp.com/api/vcs/downloadTag/github-vcs-remote/sgl-project/ome/v${OME_VERSION}" \
+        curl -sSL "https://artifactory.oci.oraclecorp.com/api/vcs/downloadTag/github-vcs-remote/ome-projects/ome/v${OME_VERSION}" \
         | tar -xzvf - && mv ome-${OME_VERSION} /ome; \
     fi
 

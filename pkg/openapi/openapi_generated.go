@@ -2231,14 +2231,14 @@ func schema_pkg_apis_ome_v1beta1_ModelConfig(ref common.ReferenceCallback) commo
 					"outputModel": {
 						SchemaProps: spec.SchemaProps{
 							Description: "OutputModel defines where the finetune weight (output model) stores.",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageSpec"),
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.StorageSpec"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageSpec"},
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.StorageSpec"},
 	}
 }
 
@@ -3722,13 +3722,13 @@ func schema_pkg_apis_ome_v1beta1_ReplicationJobSpec(ref common.ReferenceCallback
 					"source": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Source specifies the data source for the replication job.",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageSpec"),
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.StorageSpec"),
 						},
 					},
 					"destination": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Destination specifies the data destination for the replication job.",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageSpec"),
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.StorageSpec"),
 						},
 					},
 					"compartmentID": {
@@ -3749,7 +3749,7 @@ func schema_pkg_apis_ome_v1beta1_ReplicationJobSpec(ref common.ReferenceCallback
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageSpec", "k8s.io/api/core/v1.Container"},
+			"k8s.io/api/core/v1.Container", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.StorageSpec"},
 	}
 }
 
@@ -4427,7 +4427,7 @@ func schema_pkg_apis_ome_v1beta1_TrainingJobSpec(ref common.ReferenceCallback) c
 					"datasets": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Datasets defines the datasets for the training job.",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageSpec"),
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.StorageSpec"),
 						},
 					},
 					"hyperParameterTuningConfig": {
@@ -4487,7 +4487,7 @@ func schema_pkg_apis_ome_v1beta1_TrainingJobSpec(ref common.ReferenceCallback) c
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HyperparameterTuningConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RuntimeRef", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainerSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageSpec"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HyperparameterTuningConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RuntimeRef", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainerSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.StorageSpec"},
 	}
 }
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"

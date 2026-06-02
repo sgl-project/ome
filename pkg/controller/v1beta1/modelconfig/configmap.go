@@ -3,8 +3,8 @@ package modelconfig
 import (
 	"fmt"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	jsoniter "github.com/json-iterator/go"

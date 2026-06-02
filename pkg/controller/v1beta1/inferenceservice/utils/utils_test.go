@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 func TestIsMergedFineTunedWeight(t *testing.T) {

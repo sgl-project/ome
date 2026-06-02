@@ -19,12 +19,12 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	v1beta1lister "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	v1beta1lister "sigs.k8s.io/ome/pkg/client/listers/ome/v1beta1"
 )
 
 type GopherTaskType string

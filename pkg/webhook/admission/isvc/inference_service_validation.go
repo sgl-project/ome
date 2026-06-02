@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 

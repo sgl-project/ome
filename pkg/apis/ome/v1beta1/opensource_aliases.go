@@ -1,7 +1,7 @@
 package v1beta1
 
 import (
-	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	opensourcev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // Type aliases for opensource types referenced by local type definitions.

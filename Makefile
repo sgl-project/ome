@@ -103,7 +103,7 @@ manifests: controller-gen yq## 📄 Generate WebhookConfiguration, ClusterRole a
 
 	@echo "\n🔧 Step 1: Generating opensource CRD manifests..."
 	@mkdir -p config/crd/full/opensource-ome
-	@OPENSOURCE_DIR=$$(go list -m -f '{{.Dir}}' github.com/sgl-project/ome) && \
+	@OPENSOURCE_DIR=$$(go list -m -f '{{.Dir}}' sigs.k8s.io/ome) && \
 		$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=$${OPENSOURCE_DIR}/pkg/apis/ome/... output:crd:dir=config/crd/full/opensource-ome
 	@echo "✅ Opensource CRD manifests generated"
 
@@ -114,7 +114,7 @@ manifests: controller-gen yq## 📄 Generate WebhookConfiguration, ClusterRole a
 
 	@echo "\n🔑 Step 3: Generating RBAC manifests..."
 	@$(CONTROLLER_GEN) rbac:roleName=ome-manager-role paths=./pkg/controller/... output:rbac:artifacts:config=config/rbac
-	@$(CONTROLLER_GEN) rbac:roleName=opensource-ome-manager-role paths=github.com/sgl-project/ome/pkg/controller/... output:rbac:artifacts:config=config/opensource-rbac
+	@$(CONTROLLER_GEN) rbac:roleName=opensource-ome-manager-role paths=sigs.k8s.io/ome/pkg/controller/... output:rbac:artifacts:config=config/opensource-rbac
 	@echo "✅ RBAC manifests generated"
 
 	@echo "\n📝 Step 4: Generating object boilerplate..."
