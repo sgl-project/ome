@@ -3,6 +3,8 @@
 oci:
   realm: oc1
   region: us-chicago-1
+  ocir_domain: fra.ocir.io
+  os_ns: idqj093njucb
   # Required environment variables for ONSR
   ociRegionMetadata: ""
   requestsCaBundle: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
@@ -47,11 +49,11 @@ router:
 deepseek_v4_flash:
   router:
     image:
-      repository: fra.ocir.io/idqj093njucb/smg
+      repository: smg
       tag: "1.4.1"
   engine:
     image:
-      repository: fra.ocir.io/idqj093njucb/vllm-openai
+      repository: vllm-openai
       tag: "v0.20.1-cu129"
   annotations: {}
   tolerations: []
@@ -65,11 +67,11 @@ deepseek_v4_flash:
 deepseek_v4_pro:
   router:
     image:
-      repository: fra.ocir.io/idqj093njucb/smg
+      repository: smg
       tag: "1.4.1"
   engine:
     image:
-      repository: fra.ocir.io/idqj093njucb/vllm-openai
+      repository: vllm-openai
       tag: "v0.20.1-cu129"
   annotations: {}
   tolerations: []

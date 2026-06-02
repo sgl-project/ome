@@ -15,7 +15,7 @@ spec:
       {{- .Values.router.labels | toYaml | nindent 6 }}
     runner:
       name: router
-      image: {{ .Values.deepseek_v4_flash.router.image.repository }}:{{ .Values.deepseek_v4_flash.router.image.tag }}
+      image: {{ .Values.oci.ocir_domain }}/{{ .Values.oci.os_ns }}/{{ .Values.deepseek_v4_flash.router.image.repository }}:{{ .Values.deepseek_v4_flash.router.image.tag }}
       terminationMessagePolicy: FallbackToLogsOnError
       ports:
         - containerPort: {{ .Values.router.port }}
@@ -160,7 +160,7 @@ spec:
       {{- end }}
     runner:
       name: ome-container
-      image: {{ .Values.deepseek_v4_flash.engine.image.repository }}:{{ .Values.deepseek_v4_flash.engine.image.tag }}
+      image: {{ .Values.oci.ocir_domain }}/{{ .Values.oci.os_ns }}/{{ .Values.deepseek_v4_flash.engine.image.repository }}:{{ .Values.deepseek_v4_flash.engine.image.tag }}
       terminationMessagePolicy: FallbackToLogsOnError
       ports:
         - containerPort: {{ .Values.engine.port }}
