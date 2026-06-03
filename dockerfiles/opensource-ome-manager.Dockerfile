@@ -2,7 +2,7 @@ FROM odo-docker-signed-local.artifactory.oci.oraclecorp.com/oke-golang-fips:go1.
 ENV GOPROXY="https://artifactory-builds.oci.oraclecorp.com/api/go/go-proxy"
 
 # Use commit hash artifact for current test purpose, will update to use released version later
-ARG COMMIT_HASH=7831c0b8f34b6bab49ee0bc7668140dc8f3a27cf
+ARG COMMIT_HASH=6446c318bf3310696c4b4254a6e867deccb34751
 
 ARG OME_VERSION=0.1.5
 ARG BUILD_CGO_ENABLED=1
