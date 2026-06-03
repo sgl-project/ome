@@ -995,6 +995,7 @@ llama_guard_4_12b:
   enabled: false
   enableRDMA: false
   singleNode: true
+  acceleratorClass: nvidia-h100-1
   labels:
     sidecar.istio.io/inject: 'true'
   annotations: { }

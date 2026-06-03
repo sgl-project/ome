@@ -3,6 +3,11 @@ kind: ClusterServingRuntime
 metadata:
   name: vllm-llama-guard-4-12b
 spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-h100-1
+      - nvidia-a100-80gb-1
+      - nvidia-a100-40gb-2
   disabled: false
   {{- if or .Values.commonAnnotations .Values.llama_guard_4_12b.annotations }}
   annotations:
@@ -55,6 +60,10 @@ spec:
       modelArchitecture: Llama4ForConditionalGeneration
       version: "1.0.0"
       priority: 1
+      acceleratorConfig:
+        nvidia-a100-40gb-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
   modelSizeRange:
     min: 10B
     max: 15B

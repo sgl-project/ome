@@ -5,6 +5,8 @@ metadata:
   name: llama-guard-4-12b
   namespace: llama-guard-4-12b
 spec:
+  acceleratorSelector:
+    acceleratorClass: {{ .Values.llama_guard_4_12b.acceleratorClass }}
   predictor:
     model:
       baseModel: llama-guard-4-12b
