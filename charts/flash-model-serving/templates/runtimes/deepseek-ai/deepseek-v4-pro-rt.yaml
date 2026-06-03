@@ -21,6 +21,9 @@ spec:
           name: http
           protocol: TCP
       resources:
+        requests:
+          cpu: "1"
+          memory: 2Gi
         limits:
           cpu: "8"
           memory: 16Gi
@@ -95,8 +98,6 @@ spec:
     - openAI
   engineConfig:
     schedulerName: {{ .Values.schedulerName }}
-    minReplicas: {{ .Values.deepseek_v4_pro.minReplicas }}
-    maxReplicas: {{ .Values.deepseek_v4_pro.maxReplicas }}
     {{- if or .Values.engine.annotations .Values.deepseek_v4_pro.annotations }}
     annotations:
       {{- if .Values.engine.annotations }}

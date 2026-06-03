@@ -21,3 +21,8 @@ data:
           - apiVersion: ome.io/v1beta1
             kind: ClusterServingRuntime
             name: vllm-deepseek-v4-flash
+      - id: nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4
+        runtimes:
+          - apiVersion: ome.io/v1beta1
+            kind: ClusterServingRuntime
+            name: vllm-nvidia-nemotron-3-ultra-550b-a55b-nvfp4

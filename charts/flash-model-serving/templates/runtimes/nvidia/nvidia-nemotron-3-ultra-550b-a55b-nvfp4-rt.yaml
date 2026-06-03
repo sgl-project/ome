@@ -1,12 +1,12 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-deepseek-v4-flash
+  name: vllm-nvidia-nemotron-3-ultra-550b-a55b-nvfp4
 spec:
   acceleratorRequirements:
     acceleratorClasses:
-      - nvidia-h100-4
-      - nvidia-h100-8
+      - nvidia-b200-4
+      - nvidia-b200-8
   disabled: false
   routerConfig:
     annotations:
@@ -15,7 +15,7 @@ spec:
       {{- .Values.router.labels | toYaml | nindent 6 }}
     runner:
       name: router
-      image: {{ .Values.oci.ocir_domain }}/{{ .Values.oci.os_ns }}/{{ .Values.deepseek_v4_flash.router.image.repository }}:{{ .Values.deepseek_v4_flash.router.image.tag }}
+      image: {{ .Values.oci.ocir_domain }}/{{ .Values.oci.os_ns }}/{{ .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.router.image.repository }}:{{ .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.router.image.tag }}
       terminationMessagePolicy: FallbackToLogsOnError
       ports:
         - containerPort: {{ .Values.router.port }}
@@ -46,6 +46,7 @@ spec:
         - --log-json
         - --disable-retries
         - --disable-circuit-breaker
+        - --disable-tokenizer-autoload
       env:
         - name: NAMESPACE
           valueFrom:
@@ -74,66 +75,65 @@ spec:
           path: /health
           port: {{ .Values.router.port }}
         failureThreshold: 5
-        periodSeconds: 20
+        periodSeconds: 30
         timeoutSeconds: 10
         initialDelaySeconds: 30
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.57.1"
+        version: "5.3.0"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: DeepseekV4ForCausalLM
-      quantization: fp8
       autoSelect: true
+      modelArchitecture: NemotronHForCausalLM
       priority: 1
       acceleratorConfig:
-        nvidia-h100-4:
+        nvidia-b200-4:
           tensorParallelismOverride:
-            tensorParallelSize: 1
-        nvidia-h100-8:
+            tensorParallelSize: 4
+        nvidia-b200-8:
           tensorParallelismOverride:
-            tensorParallelSize: 2
+            tensorParallelSize: 8
   modelSizeRange:
-    min: 150B
-    max: 200B
+    min: 330B
+    max: 340B
   protocolVersions:
     - openAI
   engineConfig:
     schedulerName: {{ .Values.schedulerName }}
-    {{- if or .Values.engine.annotations .Values.deepseek_v4_flash.annotations }}
+    {{- if or .Values.engine.annotations .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.annotations }}
     annotations:
       {{- if .Values.engine.annotations }}
       {{- .Values.engine.annotations | toYaml | nindent 6 }}
       {{- end }}
-      {{- if .Values.deepseek_v4_flash.annotations }}
-      {{- .Values.deepseek_v4_flash.annotations | toYaml | nindent 6 }}
+      {{- if .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.annotations }}
+      {{- .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.annotations | toYaml | nindent 6 }}
       {{- end }}
     {{- end }}
-    {{- if or .Values.engine.labels .Values.deepseek_v4_flash.labels }}
+    {{- if or .Values.engine.labels .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.labels }}
     labels:
       {{- if .Values.engine.labels }}
       {{- .Values.engine.labels | toYaml | nindent 6 }}
       {{- end }}
-      {{- if .Values.deepseek_v4_flash.labels }}
-      {{- .Values.deepseek_v4_flash.labels | toYaml | nindent 6 }}
+      {{- if .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.labels }}
+      {{- .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.labels | toYaml | nindent 6 }}
       {{- end }}
     {{- end }}
-    {{- if or .Values.engine.tolerations .Values.deepseek_v4_flash.tolerations }}
+    {{- if or .Values.engine.tolerations .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.tolerations }}
     tolerations:
       {{- if .Values.engine.tolerations }}
       {{- .Values.engine.tolerations | toYaml | nindent 6 }}
       {{- end }}
-      {{- if .Values.deepseek_v4_flash.tolerations }}
-      {{- .Values.deepseek_v4_flash.tolerations | toYaml | nindent 6 }}
+      {{- if .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.tolerations }}
+      {{- .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.tolerations | toYaml | nindent 6 }}
       {{- end }}
     {{- end }}
-    {{- if .Values.deepseek_v4_flash.topologySpreadConstraints }}
+    {{- if .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.topologySpreadConstraints }}
     topologySpreadConstraints:
-      {{- .Values.deepseek_v4_flash.topologySpreadConstraints | toYaml | nindent 6 }}
+      {{- .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.topologySpreadConstraints | toYaml | nindent 6 }}
     {{- end }}
-    {{- $scaleConfig := .Values.deepseek_v4_flash.scaleMetric }}
+    {{- $scaleConfig := .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.scaleMetric }}
     {{- if $scaleConfig }}
     {{- if kindIs "map" $scaleConfig }}
     {{- with (coalesce (get $scaleConfig "type") (get $scaleConfig "metric")) }}
@@ -156,12 +156,12 @@ spec:
           path: /etc/pki
           type: Directory
       {{- end }}
-      {{- if .Values.deepseek_v4_flash.volumes }}
-      {{- .Values.deepseek_v4_flash.volumes | toYaml | nindent 6 }}
+      {{- if .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.volumes }}
+      {{- .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.volumes | toYaml | nindent 6 }}
       {{- end }}
     runner:
       name: ome-container
-      image: {{ .Values.oci.ocir_domain }}/{{ .Values.oci.os_ns }}/{{ .Values.deepseek_v4_flash.engine.image.repository }}:{{ .Values.deepseek_v4_flash.engine.image.tag }}
+      image: {{ .Values.oci.ocir_domain }}/{{ .Values.oci.os_ns }}/{{ .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.engine.image.repository }}:{{ .Values.nvidia_nemotron_3_ultra_550b_a55b_nvfp4.engine.image.tag }}
       terminationMessagePolicy: FallbackToLogsOnError
       ports:
         - containerPort: {{ .Values.engine.port }}
@@ -172,40 +172,54 @@ spec:
         - serve
       args:
         - $(MODEL_PATH)
-        - --trust-remote-code
-        - --tensor-parallel-size=1
-        - --data-parallel-size=4
-        - --enable-expert-parallel
-        - --kv-cache-dtype=fp8
-        - --block-size=256
-        - '--compilation-config={"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
-        - --tokenizer-mode=deepseek_v4
-        - --tool-call-parser=deepseek_v4
-        - --enable-auto-tool-choice
-        - --reasoning-parser=deepseek_v4
-        - --served-model-name={{ .Values.serveModelName }}
-        - --max-model-len=-1
-        - --enable-chunked-prefill
-        - --no-scheduler-reserve-full-isl
-        - '--speculative-config={"method":"mtp","num_speculative_tokens":1}'
-        - --enable-log-requests
         - --port={{ .Values.engine.port }}
+        - --served-model-name={{ .Values.serveModelName }}
+        - --tensor-parallel-size=4
+        - --pipeline-parallel-size=1
+        - --data-parallel-size=1
+        - --trust-remote-code
+        - --dtype=auto
+        - --kv-cache-dtype=nvfp4
+        - --mamba-ssm-cache-dtype=float16
+        - --max-model-len=1048576
+        - --max-num-seqs=64
+        - --gpu-memory-utilization=0.9
+        - --max-cudagraph-capture-size=128
+        - --enable-chunked-prefill
+        - --enable-expert-parallel
+        - --async-scheduling
+        - --no-scheduler-reserve-full-isl
+        - --reasoning-parser-plugin=$(MODEL_PATH)/ultra_v3_reasoning_parser.py
+        - --reasoning-parser=ultra_v3
+        - --enable-auto-tool-choice
+        - --tool-call-parser=qwen3_xml
+        - --chat-template=$(MODEL_PATH)/chat_template.jinja
       env:
-        - name: VLLM_ENGINE_READY_TIMEOUT_S
-          value: '3600'
-        - name: VLLM_LOGGING_LEVEL
-          value: 'INFO'
+        - name: VLLM_ALLOW_LONG_MAX_MODEL_LEN
+          value: '1'
+        - name: VLLM_FLASHINFER_MOE_BACKEND
+          value: latency
+        - name: VLLM_USE_FLASHINFER_MOE_FP4
+          value: '1'
+        - name: VLLM_USE_FLASHINFER_MOE_FP8
+          value: '1'
+        - name: VLLM_FLASHINFER_ALLREDUCE_BACKEND
+          value: trtllm
+        - name: VLLM_RPC_TIMEOUT
+          value: '30000'
+        - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
+          value: '600'
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
           cpu: 64
-          memory: 256Gi
+          memory: 512Gi
           nvidia.com/gpu: 4
         limits:
           cpu: 64
-          memory: 256Gi
+          memory: 512Gi
           nvidia.com/gpu: 4
       readinessProbe:
         httpGet:
@@ -227,8 +241,8 @@ spec:
         httpGet:
           path: /health
           port: {{ .Values.engine.port }}
-        failureThreshold: 190
+        failureThreshold: 720
         successThreshold: 1
-        periodSeconds: 6
-        initialDelaySeconds: 60
+        periodSeconds: 10
+        initialDelaySeconds: 120
         timeoutSeconds: 30

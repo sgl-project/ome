@@ -60,8 +60,6 @@ deepseek_v4_flash:
   labels: {}
   volumes: []
   topologySpreadConstraints: [ ]
-  minReplicas: 1
-  maxReplicas: 1
   scaleMetric: {}
 
 deepseek_v4_pro:
@@ -78,6 +76,20 @@ deepseek_v4_pro:
   labels: {}
   volumes: []
   topologySpreadConstraints: [ ]
-  minReplicas: 1
-  maxReplicas: 1
+  scaleMetric: {}
+
+nvidia_nemotron_3_ultra_550b_a55b_nvfp4:
+  router:
+    image:
+      repository: smg
+      tag: "1.4.1"
+  engine:
+    image:
+      repository: vllm-openai
+      tag: "v0.22.0-cu129"
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: []
   scaleMetric: {}
