@@ -27,7 +27,7 @@ spec:
         version: "1.0.0"
       modelArchitecture: Gemma4ForConditionalGeneration
       autoSelect: true
-      priority: 1
+      priority: 2
       version: "1.0.0"
       acceleratorConfig:
         nvidia-h100-2:
