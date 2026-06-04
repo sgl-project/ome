@@ -4,6 +4,24 @@ metadata:
   name: vllm-gemma-4-tp1
 spec:
   disabled: false
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-h100-1
+      - nvidia-h100-2
+      - nvidia-h100-4
+      - nvidia-h100-8
+      - nvidia-a100-80gb-1
+      - nvidia-a100-80gb-2
+      - nvidia-a100-80gb-4
+      - nvidia-a100-80gb-8
+      - nvidia-h200-1
+      - nvidia-h200-2
+      - nvidia-h200-4
+      - nvidia-h200-8
+      - nvidia-b200-1
+      - nvidia-b200-2
+      - nvidia-b200-4
+      - nvidia-b200-8
   supportedModelFormats:
     - modelFramework:
         name: transformers
@@ -15,6 +33,55 @@ spec:
       autoSelect: true
       priority: 1
       version: "1.0.0"
+      acceleratorConfig:
+        nvidia-h100-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-h100-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-h100-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h100-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-a100-80gb-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-a100-80gb-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a100-80gb-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-a100-80gb-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-h200-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-h200-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-h200-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h200-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-b200-1:
+          tensorParallelismOverride:
+            tensorParallelSize: 1
+        nvidia-b200-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-b200-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-b200-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
   modelSizeRange:
     min: 4.6B
     max: 27.7B
@@ -153,11 +220,11 @@ spec:
       resources:
         requests:
           cpu: 10
-          memory: 30Gi
+          memory: 80Gi
           nvidia.com/gpu: 1
         limits:
           cpu: 10
-          memory: 30Gi
+          memory: 80Gi
           nvidia.com/gpu: 1
 
       readinessProbe:
