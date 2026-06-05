@@ -1,0 +1,23 @@
+{
+  "model": "vllm-model",
+  "f1_unsafe": 0.9137715179968702,
+  "f1_input_moderation": 0.9063333333333333,
+  "f1_output_moderation": 0.9220170454545454,
+  "total": 464,
+  "support": {
+    "unsafe": 181,
+    "safe": 283
+  },
+  "input_moderation_support": {
+    "unsafe": 123,
+    "safe": 158
+  },
+  "output_moderation_support": {
+    "unsafe": 58,
+    "safe": 125
+  },
+  "execution_time_ms": 33635.84399223328,
+  "execution_time_per_prompt_ms": 72.49104308670965,
+  "timestamp": "2026-04-13T20:47:45.908511+00:00",
+  "none_count": 0
+}

@@ -1,0 +1,114 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-sarashina-modernbert-based-reranker-1-4b
+spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-b200-1
+  disabled: false
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "5.0.0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: ModernBertForSequenceClassification
+      autoSelect: true
+      version: "1.0.0"
+      priority: 1
+  modelSizeRange:
+    min: 1B
+    max: 2B
+  protocolVersions:
+    - openAI
+  engineConfig:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+      prometheus.io/path: "/metrics"
+      ome.io/inject-model-init: "true"
+    labels:
+      logging-forward: enabled
+    tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node.kubernetes.io/instance-type
+                  operator: In
+                  values:
+                    - BM.GPU.B200.8
+    runner:
+      name: ome-container
+      image: {{ .Values.sarashina.image.smg.repository }}:{{ .Values.sarashina.image.smg.tag }}
+      ports:
+        - containerPort: 8080
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m vllm.entrypoints.openai.api_server \
+          --port=8080 \
+          --model="$MODEL_PATH" \
+          --served-model-name=vllm-model \
+          --host=0.0.0.0 \
+          --max-log-len=0
+      env:
+        - name: MODEL_PATH
+          value: "/opt/ml/model"
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+        - mountPath: /opt/ml/model
+          name: model-empty-dir
+      resources:
+        requests:
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
+        limits:
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
+
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 90
+        timeoutSeconds: 20
+
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30

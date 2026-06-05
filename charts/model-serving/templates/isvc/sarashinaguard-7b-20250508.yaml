@@ -1,0 +1,20 @@
+{{- if .Values.sarashinaguard_7b_20250508.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: sarashinaguard-7b-20250508
+  namespace: sarashinaguard-7b-20250508
+spec:
+  predictor:
+    model:
+      baseModel: sarashinaguard-7b-20250508
+      protocolVersion: openAI
+      runtime: vllm-sarashinaguard-7b-20250508
+    minReplicas: {{ .Values.sarashinaguard_7b_20250508.minReplicas}}
+    maxReplicas: {{ .Values.sarashinaguard_7b_20250508.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sarashinaguard-7b-20250508
+{{- end }}

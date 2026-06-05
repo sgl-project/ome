@@ -1,0 +1,50 @@
+{{- if index .Values "sarashina3-embedding" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: sarashina3-embedding
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "sarashina3-embedding" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "sarashina3-embedding" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "sarashina3-embedding" "timeDedicatedRetired" }}"
+  annotations:
+    models.ome.io/runtime: "vllm-sarashina-embedding-v2-3b"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "sarashina3-embedding" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "sarashina3-embedding" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "sarashina3-embedding" "lifecyclePhase" }}"
+    ome.io/base-model-decryption-key-name: "sarashina_embed"
+    ome.io/base-model-decryption-secret-name: "sarashina_embed-dek"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: softbank.sarashina3-embedding
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "sarashina3-embedding" "osBucket" }}/o/{{ index .Values "sarashina3-embedding" "vendor" }}/{{ index .Values "sarashina3-embedding" "osPrefixOverride" }}"
+    path: "/mnt/data/models/{{ index .Values "sarashina3-embedding" "vendor" }}/{{ index .Values "sarashina3-embedding" "osPrefixOverride" }}"
+  vendor: {{ index .Values "sarashina3-embedding" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.50.3"
+  modelArchitecture: LlamaModel
+  modelParameterSize: 3B
+  modelCapabilities:
+    - "TEXT_EMBEDDINGS"
+  maxTokens: 8192
+  additionalMetadata:
+    {{- $cfg := default "SB_B200_X1" (index .Values "sarashina3-embedding" "compatibleDACShapes") }}
+    {{- if $cfg }}
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: {{ $cfg }}
+          quotaUnit: 1
+          default: true
+    {{ end }}
+    internalName: "sarashina3-embedding"
+    type: "Serving"
+{{- end }}

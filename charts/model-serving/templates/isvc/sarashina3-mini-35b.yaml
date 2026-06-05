@@ -1,0 +1,20 @@
+{{- if .Values.sarashina3_mini_35b.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: sarashina3-mini-35b
+  namespace: sarashina3-mini-35b
+spec:
+  predictor:
+    model:
+      baseModel: sarashina3-mini-35b
+      protocolVersion: openAI
+      runtime: vllm-sarashina-35b
+    minReplicas: {{ .Values.sarashina3_mini_35b.minReplicas}}
+    maxReplicas: {{ .Values.sarashina3_mini_35b.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sarashina3-mini-35b
+{{- end }}

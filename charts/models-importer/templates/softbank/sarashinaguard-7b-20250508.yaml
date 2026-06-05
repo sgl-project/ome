@@ -1,0 +1,51 @@
+{{- if index .Values "sarashinaguard-7b-20250508" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: sarashinaguard-7b-20250508
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "sarashinaguard-7b-20250508" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "sarashinaguard-7b-20250508" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "sarashinaguard-7b-20250508" "timeDedicatedRetired" }}"
+  annotations:
+    models.ome.io/runtime: "vllm-sarashinaguard-7b-20250508"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "sarashinaguard-7b-20250508" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "sarashinaguard-7b-20250508" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "sarashinaguard-7b-20250508" "lifecyclePhase" }}"
+    ome.io/base-model-decryption-key-name: "sarashina3"
+    ome.io/base-model-decryption-secret-name: "sarashina3-dek"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: softbank.sarashina3-guard
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "sarashinaguard-7b-20250508" "osBucket" }}/o/{{ index .Values "sarashinaguard-7b-20250508" "vendor" }}/{{ index .Values "sarashinaguard-7b-20250508" "osPrefixOverride" }}"
+    path: "/mnt/data/models/{{ index .Values "sarashinaguard-7b-20250508" "vendor" }}/{{ index .Values "sarashinaguard-7b-20250508" "osPrefixOverride" }}"
+  vendor: {{ index .Values "sarashinaguard-7b-20250508" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.46.3"
+  modelArchitecture: LlamaForCausalLM
+  modelParameterSize: 7B
+  modelCapabilities:
+    - "CONTENT_MODERATION"
+    - "TEXT_CLASSIFICATION"
+  maxTokens: 32768
+  additionalMetadata:
+    {{- $cfg := default "SB_B200_X1" (index .Values "sarashinaguard-7b-20250508" "compatibleDACShapes") }}
+    {{- if $cfg }}
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: {{ $cfg }}
+          quotaUnit: 1
+          default: true
+    {{ end }}
+    internalName: "sarashinaguard-7b-20250508"
+    type: "Serving"
+{{- end }}

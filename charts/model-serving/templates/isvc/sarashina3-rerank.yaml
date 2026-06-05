@@ -1,0 +1,20 @@
+{{- if .Values.sarashina3_rerank.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: sarashina3-rerank
+  namespace: sarashina3-rerank
+spec:
+  predictor:
+    model:
+      baseModel: sarashina3-rerank
+      protocolVersion: openAI
+      runtime: vllm-sarashina-modernbert-based-reranker-1-4b
+    minReplicas: {{ .Values.sarashina3_rerank.minReplicas}}
+    maxReplicas: {{ .Values.sarashina3_rerank.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sarashina3-rerank
+{{- end }}

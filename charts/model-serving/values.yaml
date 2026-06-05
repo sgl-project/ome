@@ -24,6 +24,40 @@ sglang_diffusion:
   latestImage:
     tag: v0.5.9-5bf21db-cuda128
 
+sarashina:
+  image:
+    smg:
+      repository: fra.ocir.io/idqj093njucb/smg
+      tag: "1.4.0-vllm-v0.18.0"
+    smgTf5:
+      repository: fra.ocir.io/idqj093njucb/smg
+      tag: "1.4.0-vllm-v0.18.0-tf5"
+
+sarashina3_mini_35b:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+sarashina3_nano_7b:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+sarashinaguard_7b_20250508:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+sarashina3_rerank:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+sarashina3_embedding:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
 oci:
   realm: oc1
   region: us-chicago-1

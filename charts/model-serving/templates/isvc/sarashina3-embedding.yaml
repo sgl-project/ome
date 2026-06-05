@@ -1,0 +1,20 @@
+{{- if .Values.sarashina3_embedding.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: sarashina3-embedding
+  namespace: sarashina3-embedding
+spec:
+  predictor:
+    model:
+      baseModel: sarashina3-embedding
+      protocolVersion: openAI
+      runtime: vllm-sarashina-embedding-v2-3b
+    minReplicas: {{ .Values.sarashina3_embedding.minReplicas}}
+    maxReplicas: {{ .Values.sarashina3_embedding.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sarashina3-embedding
+{{- end }}

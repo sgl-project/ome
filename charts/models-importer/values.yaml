@@ -275,6 +275,31 @@ fusion-llama-3-1-8b-accountingperiod-bql-ner-moduletrigger:
   nodeAntiAffinity:
     - BM.GPU.A10.4
 
+sarashina3-mini-35b:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "SB_B200_X1"
+
+sarashina3-nano-7b:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "SB_B200_X1"
+
+sarashinaguard-7b-20250508:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "SB_B200_X1"
+
+sarashina3-embedding:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "SB_B200_X1"
+
+sarashina3-rerank:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "SB_B200_X1"
+
 command-a-032025:
   enabled: false
   lifecyclePhase: "ACTIVE"
