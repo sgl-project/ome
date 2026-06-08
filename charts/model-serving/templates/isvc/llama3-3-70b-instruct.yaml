@@ -5,6 +5,16 @@ metadata:
   name: llama-3-3-70b-instruct
   namespace: llama-3-3-70b-instruct
 spec:
+  engine:
+    minReplicas: {{ .Values.llama_3_3_70b_instruct.minReplicas}}
+    maxReplicas: {{ .Values.llama_3_3_70b_instruct.maxReplicas}}
+    {{- with .Values.llama_3_3_70b_instruct.affinity }}
+    affinity: {{ toYaml . | nindent 6 }}
+    {{- end }}
+  model:
+    apiGroup: ome.io
+    kind: ClusterBaseModel
+    name: llama-3-3-70b-instruct
   runtime:
     apiGroup: ome.io
     kind: ClusterServingRuntime
