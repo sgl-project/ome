@@ -55,6 +55,19 @@ spec:
         - name: OAI_A100_40G_X1
           quotaUnit: 1
           default: false
+        - name: OAI_B200_X1
+          quotaUnit: 1
+          default: false
+        - name: OAI_B200_X2
+          quotaUnit: 1
+          default: false
+        - name: OAI_B200_X4
+          quotaUnit: 1
+          default: false
+        - name: OAI_B200_X8
+          quotaUnit: 1
+          default: false
+
   modelConfiguration:
     {
       "architectures": [
