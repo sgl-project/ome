@@ -50,7 +50,7 @@ spec:
         - --port=8080
         - --enable-log-requests
         - --served-model-name=vllm-model
-        - --tensor-parallel-size=4
+        - --tensor-parallel-size=2
         - --gpu-memory-utilization=0.9
         - --max-model-len=32768
         - --reasoning-parser=qwen3
@@ -63,11 +63,11 @@ spec:
         requests:
           cpu: 20
           memory: 120Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: 2
         limits:
           cpu: 20
           memory: 120Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: 2
 
       readinessProbe:
         httpGet:
@@ -91,7 +91,7 @@ spec:
         httpGet:
           path: /health
           port: 8080
-        failureThreshold: 150
+        failureThreshold: 100
         successThreshold: 1
         periodSeconds: 6
         initialDelaySeconds: 60
@@ -110,6 +110,9 @@ spec:
         - containerPort: 8080
           name: http
       resources:
+        requests:
+          cpu: "1"
+          memory: 2Gi
         limits:
           cpu: "1"
           memory: 2Gi

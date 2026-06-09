@@ -92,7 +92,7 @@ spec:
         httpGet:
           path: /health
           port: 8080
-        failureThreshold: 150
+        failureThreshold: 60
         successThreshold: 1
         periodSeconds: 6
         initialDelaySeconds: 60
