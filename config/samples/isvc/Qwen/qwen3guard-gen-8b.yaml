@@ -12,8 +12,6 @@ metadata:
 spec:
   model:
     name: qwen3guard-gen-8b
-  runtime:
-    name: vllm-qwen3guard-gen-8b
   engine:
     minReplicas: 1
     maxReplicas: 1

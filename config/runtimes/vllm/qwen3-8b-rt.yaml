@@ -1,10 +1,20 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-qwen3guard-gen-8b
+  name: vllm-qwen3-8b
 spec:
   disabled: false
   supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.51.0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: Qwen3ForCausalLM
+      autoSelect: true
+      priority: 1
+      version: "1.0.0"
     - modelFramework:
         name: transformers
         version: "4.51.1"
@@ -12,7 +22,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: Qwen3ForCausalLM
-      autoSelect: false
+      autoSelect: true
       priority: 1
       version: "1.0.0"
   protocolVersions:
