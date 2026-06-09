@@ -140,10 +140,13 @@ resources:
   # Qwen
   - Qwen/Qwen3-0.6B.yaml
   - Qwen/Qwen3-30B-A3B.yaml
+  - Qwen/Qwen3-32B.yaml
   - Qwen/Qwen3-Embedding-0.6B.yaml
   - Qwen/Qwen3-Embedding-4B.yaml
+  - Qwen/Qwen3-Embedding-8B.yaml
   - Qwen/Qwen3-Next-80B-A3B-Instruct.yaml
   - Qwen/Qwen3-VL-235B-A22B-Instruct.yaml
+  - Qwen/Qwen3Guard-Gen-8B.yaml
 
   # rednote-hilab
   - rednote-hilab/dots.ocr.yaml
