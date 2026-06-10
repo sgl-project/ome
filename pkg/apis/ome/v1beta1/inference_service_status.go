@@ -18,6 +18,9 @@ type InferenceServiceStatus struct {
 	// - LatestDeploymentReady (serverless mode only): aggregated configuration condition, i.e. latest deployment readiness condition; <br/>
 	// - Ready: aggregated condition; <br/>
 	duckv1.Status `json:",inline"`
+	// LifecycleState is a high-level summary of the InferenceService state.
+	// +optional
+	LifecycleState InferenceServiceLifecycleState `json:"lifecycleState,omitempty"`
 	// Addressable endpoint for the InferenceService
 	// +optional
 	Address *duckv1.Addressable `json:"address,omitempty"`
@@ -30,6 +33,18 @@ type InferenceServiceStatus struct {
 	// Model related statuses
 	ModelStatus ModelStatus `json:"modelStatus,omitempty"`
 }
+
+// InferenceServiceLifecycleState is a high-level lifecycle state for the InferenceService.
+// +kubebuilder:validation:Enum=READY;CREATING;UPDATING;DELETING;FAILED
+type InferenceServiceLifecycleState string
+
+const (
+	InferenceServiceLifecycleStateReady    InferenceServiceLifecycleState = "READY"
+	InferenceServiceLifecycleStateCreating InferenceServiceLifecycleState = "CREATING"
+	InferenceServiceLifecycleStateUpdating InferenceServiceLifecycleState = "UPDATING"
+	InferenceServiceLifecycleStateDeleting InferenceServiceLifecycleState = "DELETING"
+	InferenceServiceLifecycleStateFailed   InferenceServiceLifecycleState = "FAILED"
+)
 
 // ComponentStatusSpec describes the state of the component
 type ComponentStatusSpec struct {

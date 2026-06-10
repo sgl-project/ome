@@ -2162,6 +2162,10 @@
           "x-kubernetes-patch-merge-key": "type",
           "x-kubernetes-patch-strategy": "merge"
         },
+        "lifecycleState": {
+          "description": "LifecycleState is a high-level summary of the InferenceService state.",
+          "type": "string"
+        },
         "modelStatus": {
           "description": "Model related statuses",
           "default": {},

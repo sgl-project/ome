@@ -769,6 +769,65 @@ func TestInferenceServiceReconcile(t *testing.T) {
 	}
 }
 
+func TestBackfillLifecycleState(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	tests := []struct {
+		name          string
+		status        v1beta1.InferenceServiceStatus
+		expectedState v1beta1.InferenceServiceLifecycleState
+	}{
+		{
+			name: "sets lifecycle state when missing",
+			status: v1beta1.InferenceServiceStatus{
+				ModelStatus: v1beta1.ModelStatus{
+					TransitionStatus: v1beta1.InProgress,
+				},
+			},
+			expectedState: v1beta1.InferenceServiceLifecycleStateCreating,
+		},
+		{
+			name: "keeps existing lifecycle state",
+			status: v1beta1.InferenceServiceStatus{
+				LifecycleState: v1beta1.InferenceServiceLifecycleStateReady,
+			},
+			expectedState: v1beta1.InferenceServiceLifecycleStateReady,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isvc := &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Status: tt.status,
+			}
+			c := ctrlclientfake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(isvc).
+				WithStatusSubresource(isvc).
+				Build()
+			reconciler := &InferenceServiceReconciler{
+				Client: c,
+				Log:    ctrl.Log.WithName("test"),
+			}
+
+			err := reconciler.backfillLifecycleState(context.TODO(), isvc)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+
+			updated := &v1beta1.InferenceService{}
+			err = c.Get(context.TODO(), types.NamespacedName{Name: isvc.Name, Namespace: isvc.Namespace}, updated)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+			g.Expect(updated.Status.LifecycleState).To(gomega.Equal(tt.expectedState))
+		})
+	}
+}
+
 func TestDetermineDeploymentModes(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
