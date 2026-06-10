@@ -93,3 +93,99 @@ nvidia_nemotron_3_ultra_550b_a55b_nvfp4:
   volumes: []
   topologySpreadConstraints: []
   scaleMetric: {}
+
+gemma_2_2b_it:
+  engine:
+    image:
+      repository: official-sgl
+      tag: v0.4.10.post2.6e6f9c7-cu126
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: [ ]
+  scaleMetric: {}
+
+gemma_2_9b_it:
+  engine:
+    image:
+      repository: official-sgl
+      tag: v0.4.10.post2.6e6f9c7-cu126
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: [ ]
+  scaleMetric: {}
+
+gemma_2_27b_it:
+  engine:
+    image:
+      repository: official-sgl
+      tag: v0.4.10.post2.6e6f9c7-cu126
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: [ ]
+  scaleMetric: {}
+
+gemma_3_270m_it:
+  engine:
+    image:
+      repository: official-sgl
+      tag: v0.4.10.post2.6e6f9c7-cu126
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: [ ]
+  scaleMetric: {}
+
+gemma_3_1b_it:
+  engine:
+    image:
+      repository: official-sgl
+      tag: v0.4.10.post2.6e6f9c7-cu126
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: [ ]
+  scaleMetric: {}
+
+gemma_3_4b_it:
+  engine:
+    image:
+      repository: official-sgl
+      tag: v0.4.10.post2.6e6f9c7-cu126
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: [ ]
+  scaleMetric: {}
+
+gemma_3_12b_it:
+  engine:
+    image:
+      repository: official-sgl
+      tag: v0.4.10.post2.6e6f9c7-cu126
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: [ ]
+  scaleMetric: {}
+
+gemma_3_27b_it:
+  engine:
+    image:
+      repository: official-sgl
+      tag: v0.5.6.post2.11e117f-cu129
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: [ ]
+  scaleMetric: {}
