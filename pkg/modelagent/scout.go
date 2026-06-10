@@ -37,8 +37,12 @@ type Scout struct {
 	nodeName               string
 	nodeInfo               *v1.Node
 	nodeShapeAlias         string
-	kubeClient             *kubernetes.Clientset
-	logger                 *zap.SugaredLogger
+	// availableVRAMBytes is the aggregate node VRAM looked up from
+	// nodeShapeAlias via the gpu-shape-memory-gb-map (total per-node GiB,
+	// not per-GPU). 0 means unknown (fail-open in Gopher's VRAM precheck).
+	availableVRAMBytes int64
+	kubeClient         *kubernetes.Clientset
+	logger             *zap.SugaredLogger
 }
 
 type TensorRTLLMShapeFilter struct {
@@ -76,6 +80,7 @@ func NewScout(ctx context.Context, nodeName string,
 		ctx:                    ctx,
 		nodeShapeAlias:         nodeShapeAlias,
 		nodeInfo:               nodeInfo,
+		availableVRAMBytes:     AvailableNodeVRAMBytes(nodeShapeAlias),
 		baseModelLister:        baseModelInformer.Lister(),
 		baseModelSynced:        baseModelInformer.Informer().HasSynced,
 		clusterBaseModelLister: clusterBaseModelInformer.Lister(),
@@ -250,6 +255,7 @@ func (w *Scout) downloadBaseModel(obj interface{}) {
 			w.logger.Errorf("Error getting the node info: %s, skipping download", err.Error())
 			return
 		}
+		w.availableVRAMBytes = AvailableNodeVRAMBytes(w.nodeShapeAlias)
 
 		w.logger.Infof("Downloading BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
 
@@ -268,6 +274,8 @@ func (w *Scout) downloadBaseModel(obj interface{}) {
 				ShapeAlias:         w.nodeShapeAlias,
 				ModelType:          modelType,
 			},
+			AvailableVRAMBytes: w.availableVRAMBytes,
+			MultiNodeSharded:   isMultiNodeSharded(baseModel, nil),
 		}
 
 		w.gopherChan <- gopherTask
@@ -295,6 +303,7 @@ func (w *Scout) downloadClusterBaseModel(obj interface{}) {
 			w.logger.Errorf("Error getting the node info: %s, skipping download", err.Error())
 			return
 		}
+		w.availableVRAMBytes = AvailableNodeVRAMBytes(w.nodeShapeAlias)
 
 		w.logger.Infof("Downloading ClusterBaseModel: %s", clusterBaseModel.Name)
 
@@ -306,8 +315,10 @@ func (w *Scout) downloadClusterBaseModel(obj interface{}) {
 		}
 
 		gopherTask := &GopherTask{
-			TaskType:         Download,
-			ClusterBaseModel: clusterBaseModel,
+			TaskType:           Download,
+			ClusterBaseModel:   clusterBaseModel,
+			AvailableVRAMBytes: w.availableVRAMBytes,
+			MultiNodeSharded:   isMultiNodeSharded(nil, clusterBaseModel),
 			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
 				IsTensorrtLLMModel: IsTensorrtLLMModel,
 				ShapeAlias:         w.nodeShapeAlias,
@@ -709,8 +720,10 @@ func (w *Scout) generateDownloadOverrideTaskBasedOnClusterBaseModel(clusterBaseM
 	}
 
 	gopherTask := &GopherTask{
-		TaskType:         DownloadOverride,
-		ClusterBaseModel: clusterBaseModel,
+		TaskType:           DownloadOverride,
+		ClusterBaseModel:   clusterBaseModel,
+		AvailableVRAMBytes: w.availableVRAMBytes,
+		MultiNodeSharded:   isMultiNodeSharded(nil, clusterBaseModel),
 		TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
 			IsTensorrtLLMModel: IsTensorrtLLMModel,
 			ShapeAlias:         w.nodeShapeAlias,
@@ -730,8 +743,10 @@ func (w *Scout) generateDownloadOverrideTaskBasedOnBaseModel(baseModel *v1beta1.
 		modelType = modelTypeFromMetadata
 	}
 	gopherTask := &GopherTask{
-		TaskType:  DownloadOverride,
-		BaseModel: baseModel,
+		TaskType:           DownloadOverride,
+		BaseModel:          baseModel,
+		AvailableVRAMBytes: w.availableVRAMBytes,
+		MultiNodeSharded:   isMultiNodeSharded(baseModel, nil),
 		TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
 			IsTensorrtLLMModel: IsTensorrtLLMModel,
 			ShapeAlias:         w.nodeShapeAlias,

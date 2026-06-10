@@ -41,6 +41,19 @@ type GopherTask struct {
 	BaseModel              *v1beta1.BaseModel
 	ClusterBaseModel       *v1beta1.ClusterBaseModel
 	TensorRTLLMShapeFilter *TensorRTLLMShapeFilter
+
+	// AvailableVRAMBytes is the aggregate per-node VRAM available to the
+	// gopher's host (sum across all GPUs), stamped by Scout when the task
+	// is created. 0 means "unknown" — Gopher's VRAM precheck fails open in
+	// that case.
+	AvailableVRAMBytes int64
+
+	// MultiNodeSharded is true when the BaseModel/ClusterBaseModel declared
+	// itself as multi-node-sharded via the MultiNodeShardedAnnotation. When
+	// true, Gopher skips the VRAM precheck entirely (the model is intended
+	// to be split across nodes at serve time, so no single node needs to fit
+	// the whole thing).
+	MultiNodeSharded bool
 }
 
 type Gopher struct {
@@ -193,6 +206,7 @@ func (s *Gopher) safeNodeLabelReconciliation(op *NodeLabelOp) error {
 			ModelStatus:      status,
 			BaseModel:        op.BaseModel,
 			ClusterBaseModel: op.ClusterBaseModel,
+			StatusDetail:     op.StatusDetail,
 		}
 
 		// Update the ConfigMap with model status
@@ -306,6 +320,16 @@ func (s *Gopher) processTask(task *GopherTask) error {
 		return err
 	}
 
+	// VRAM precheck — runs only for Download / DownloadOverride. For HF / Local
+	// this fetches a size estimate from the URI alone; for OCI / S3 the gate
+	// runs inline after the per-storage ListObjects step (see downloadModel).
+	if task.TaskType == Download || task.TaskType == DownloadOverride {
+		skipped, _ := s.vramPrecheck(ctx, task, storageType, *baseModelSpec.Storage.StorageUri)
+		if skipped {
+			return nil
+		}
+	}
+
 	switch task.TaskType {
 	case Download:
 		// we might implement a "delete/cleanup and then download" logic to update a model in the future
@@ -324,6 +348,39 @@ func (s *Gopher) processTask(task *GopherTask) error {
 				s.logger.Errorf("Failed to get target directory path for model %s: %v", modelInfo, err)
 				return err
 			}
+
+			// Inline VRAM gate for OCI: do a single ListObjects to sum bytes,
+			// then apply the gate. Done outside the Retry loop so a "skipped"
+			// outcome does not trigger retry. The downstream BulkDownload path
+			// will list again — acceptable extra round-trip for v1 (a list is
+			// cheap relative to the avoided bulk download).
+			//
+			// TODO(modelagent/gopher.go): plumb the listing into downloadModel
+			// so the bulk-download path reuses it and we save one ListObjects.
+			if !task.MultiNodeSharded && task.AvailableVRAMBytes > 0 {
+				if dsForList, derr := s.createOCIOSDataStore(baseModelSpec); derr != nil {
+					s.logger.Warnf("OCI VRAM precheck: data store creation failed (%v); continuing", derr)
+				} else if objects, lerr := dsForList.ListObjects(*osUri); lerr != nil {
+					s.logger.Warnf("OCI VRAM precheck: list objects failed (%v); continuing", lerr)
+				} else {
+					// Apply the same TensorRTLLM shape filter the download path
+					// uses, so we sum only the bytes this node will actually
+					// pull
+					if shouldFilterByTensorRTLLMShape(task) {
+						objects = filterObjectsByTensorRTLLMShape(objects, task.TensorRTLLMShapeFilter)
+					}
+					var size int64
+					for _, o := range objects {
+						if o.Size != nil {
+							size += *o.Size
+						}
+					}
+					if s.applyVRAMGate(task, size, ociListSumDetail()) {
+						return nil
+					}
+				}
+			}
+
 			err = utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
 				downloadErr := s.downloadModel(ctx, osUri, destPath, task)
 				if downloadErr != nil {
@@ -585,6 +642,32 @@ func getModelUID(task *GopherTask) string {
 	return ""
 }
 
+// shouldFilterByTensorRTLLMShape reports whether the OCI listing for this task
+// should be narrowed to a single TensorRTLLM shape subdir. TensorRTLLM buckets
+// often contain per-shape kernel directories (/H100/, /A100/, …); only one is
+// downloaded on a given node, and the same filter must be applied during the
+// VRAM precheck so we don't over-count by the number of shape subdirs.
+func shouldFilterByTensorRTLLMShape(task *GopherTask) bool {
+	return task != nil &&
+		task.TensorRTLLMShapeFilter != nil &&
+		task.TensorRTLLMShapeFilter.IsTensorrtLLMModel &&
+		task.TensorRTLLMShapeFilter.ModelType == string(constants.ServingBaseModel)
+}
+
+// filterObjectsByTensorRTLLMShape returns only the objects whose names contain
+// "/<shapeAlias>/". Caller must check shouldFilterByTensorRTLLMShape(task)
+// first so the filter is only applied to TRT-LLM serving models.
+func filterObjectsByTensorRTLLMShape(objects []objectstorage.ObjectSummary, filter *TensorRTLLMShapeFilter) []objectstorage.ObjectSummary {
+	needle := fmt.Sprintf("/%s/", filter.ShapeAlias)
+	out := make([]objectstorage.ObjectSummary, 0, len(objects))
+	for _, o := range objects {
+		if o.Name != nil && strings.Contains(*o.Name, needle) {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
 func (s *Gopher) markModelOnNodeFailed(task *GopherTask) {
 	modelInfo := getModelInfoForLogging(task)
 	s.logger.Infof("Marking model %s as Failed on node", modelInfo)
@@ -602,6 +685,111 @@ func (s *Gopher) markModelOnNodeFailed(task *GopherTask) {
 	} else {
 		s.logger.Infof("Successfully marked model %s as Failed on node", modelInfo)
 	}
+}
+
+// markModelOnNodeSkipped marks the model as Failed on this node with a
+// structured StatusDetail explaining the reason. Used by the VRAM precheck so
+// a downstream controller / operator can tell "this node intentionally did not
+// download" apart from "downloads have not been attempted yet".
+func (s *Gopher) markModelOnNodeSkipped(task *GopherTask, detail *StatusDetail) error {
+	modelInfo := getModelInfoForLogging(task)
+	s.logger.Infof("Marking model %s as Failed on node (skipped: %s)", modelInfo, detail.Reason)
+
+	nodeLabelOp := &NodeLabelOp{
+		ModelStateOnNode: Failed,
+		BaseModel:        task.BaseModel,
+		ClusterBaseModel: task.ClusterBaseModel,
+		StatusDetail:     detail,
+	}
+	return s.safeNodeLabelReconciliation(nodeLabelOp)
+}
+
+// applyVRAMGate compares the estimated weight bytes against the per-node
+// AvailableVRAMBytes (with the configured safety factor) and, when the model
+// is too large, persists a skip status, records a metric, and returns true to
+// signal the caller it should "return nil" to processTask.
+//
+// Returns false when the gate is inapplicable (size or availableVRAM is 0) or
+// when the model fits. Callers must call vramPrecheckBypassedFor first when
+// MultiNodeSharded is set so the bypass is logged once.
+func (s *Gopher) applyVRAMGate(task *GopherTask, size int64, detail *EstimateDetail) bool {
+	if task.MultiNodeSharded {
+		// vramPrecheck already logged/recorded the bypass; inline OCI/S3
+		// callers also reach this point and must not gate when sharded.
+		return false
+	}
+	if task.AvailableVRAMBytes <= 0 || size <= 0 || detail == nil {
+		return false
+	}
+	safety := vramSafetyFactor()
+	required := int64(float64(size) * safety)
+	if required <= task.AvailableVRAMBytes {
+		return false
+	}
+
+	modelInfo := getModelInfoForLogging(task)
+	modelType, namespace, name := GetModelTypeNamespaceAndName(task)
+	s.logger.Infof(
+		"Skipping download for %s: required=%d bytes > available VRAM=%d bytes "+
+			"(estimated_weights=%d, safety=%.2f, format=%s, method=%s, strategy=%s)",
+		modelInfo, required, task.AvailableVRAMBytes,
+		size, safety, detail.Format, detail.Method, detail.Strategy,
+	)
+	s.metrics.RecordSkippedDownload(modelType, namespace, name, "vram_insufficient")
+	if err := s.markModelOnNodeSkipped(task, &StatusDetail{
+		Reason: "VRAMInsufficient",
+		Message: fmt.Sprintf(
+			"estimated weight bytes %d (with safety factor %.2f → required %d) exceed available VRAM %d on this node",
+			size, safety, required, task.AvailableVRAMBytes,
+		),
+		RequiredBytes:        required,
+		AvailableVRAMBytes:   task.AvailableVRAMBytes,
+		EstimatedWeightBytes: size,
+		SafetyFactor:         safety,
+		Format:               detail.Format,
+		Method:               detail.Method,
+		Strategy:             detail.Strategy,
+	}); err != nil {
+		s.logger.Errorf("VRAM precheck: failed to persist skip status for %s: %v", modelInfo, err)
+	}
+	return true
+}
+
+// vramPrecheck handles the storage-URI-based precheck path (HuggingFace,
+// Local). For OCI/S3/Vendor/PVC this returns (false, false) and the caller
+// is expected to gate inline using the existing listing step (OCI today, S3
+// when wired).
+//
+// Returns (skipped, bypassed). skipped means the caller should "return nil"
+// to processTask; bypassed means the precheck was intentionally skipped (e.g.
+// multi-node-sharded annotation, no estimator for storage type) and the
+// download should continue.
+func (s *Gopher) vramPrecheck(ctx context.Context, task *GopherTask, storageType storage.StorageType, uri string) (skipped, bypassed bool) {
+	modelInfo := getModelInfoForLogging(task)
+	modelType, namespace, name := GetModelTypeNamespaceAndName(task)
+
+	if task.MultiNodeSharded {
+		s.logger.Infof("VRAM precheck skipped for %s: %s annotation set; multi-node sharding active",
+			modelInfo, MultiNodeShardedAnnotation)
+		s.metrics.RecordPrecheckBypass(modelType, namespace, name, "multi_node_sharded")
+		return false, true
+	}
+
+	estimator := s.estimatorFor(storageType)
+	if estimator == nil {
+		// OCI/S3 gate inline; other storage types have no estimator.
+		return false, false
+	}
+	size, detail, err := estimator.EstimateRemoteSize(ctx, uri)
+	if err != nil {
+		s.logger.Warnf("VRAM precheck for %s: size estimate failed (%v); continuing", modelInfo, err)
+		return false, false
+	}
+	if size <= 0 {
+		s.metrics.RecordPrecheckBypass(modelType, namespace, name, "size_unknown")
+		return false, true
+	}
+	return s.applyVRAMGate(task, size, detail), false
 }
 
 // getHuggingFaceToken retrieves authentication token for Hugging Face models.
@@ -779,17 +967,9 @@ func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectUR
 	s.logger.Infof("Done with list all %d objects in model bucket folder", len(objects))
 
 	// Shape filtering for TensorRTLLM
-	if task.TensorRTLLMShapeFilter != nil && task.TensorRTLLMShapeFilter.IsTensorrtLLMModel && task.TensorRTLLMShapeFilter.ModelType == string(constants.ServingBaseModel) {
+	if shouldFilterByTensorRTLLMShape(task) {
 		s.logger.Infof("TensorRTLLM Serving model detected. Start filtering model files that doesn't belong to the node shape %s in model bucket folder", task.TensorRTLLMShapeFilter.ShapeAlias)
-		shapeFilteredObjects := make([]objectstorage.ObjectSummary, 0)
-		for _, object := range objects {
-			if object.Name != nil {
-				if strings.Contains(*object.Name, fmt.Sprintf("/%s/", task.TensorRTLLMShapeFilter.ShapeAlias)) {
-					shapeFilteredObjects = append(shapeFilteredObjects, object)
-				}
-			}
-		}
-		objects = shapeFilteredObjects
+		objects = filterObjectsByTensorRTLLMShape(objects, task.TensorRTLLMShapeFilter)
 
 		if len(objects) == 0 {
 			return fmt.Errorf("no suitable objects found for shape %s", task.TensorRTLLMShapeFilter.ShapeAlias)

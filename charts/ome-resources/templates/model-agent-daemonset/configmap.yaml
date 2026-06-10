@@ -33,3 +33,23 @@ data:
       "gpu-b200-sxm": "B200",
       "gpu-l40s": "L40S"
     }
+  # Total node VRAM in GiB keyed by short shape alias from instance-type-map.
+  # Each value is the aggregate VRAM across all GPUs on a typical node of that
+  # shape (e.g. H100 = 8 × 80 GiB SXM).
+  # Unknown shapes fail open (precheck disabled for that node).
+  gpu-shape-memory-gb-map: |-
+    {
+      "A10": 96,
+      "A100-40G": 320,
+      "A100-80G": 640,
+      "H100": 640,
+      "H200": 1128,
+      "B200": 1536,
+      "L40": 384,
+      "L40S": 384
+    }
+  # Safety multiplier applied to the estimated weight bytes before comparing
+  # against per-node VRAM. Leaves headroom for activations / KV cache / CUDA
+  # workspace. Clamped to [1.0, 4.0]; values outside the range fall back to
+  # the built-in default of 1.2.
+  model-download-vram-safety-factor: "1.2"

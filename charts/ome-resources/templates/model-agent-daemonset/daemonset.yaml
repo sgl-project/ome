@@ -68,6 +68,16 @@ spec:
             configMapKeyRef:
               name: model-agent-config-map
               key: instance-type-map
+        - name: GPU_SHAPE_MEMORY_GB_MAP
+          valueFrom:
+            configMapKeyRef:
+              name: model-agent-config-map
+              key: gpu-shape-memory-gb-map
+        - name: MODEL_DOWNLOAD_VRAM_SAFETY_FACTOR
+          valueFrom:
+            configMapKeyRef:
+              name: model-agent-config-map
+              key: model-download-vram-safety-factor
         {{- range $key, $value := .Values.modelAgent.env }}
         - name: {{ $key }}
           value: {{ $value | quote }}

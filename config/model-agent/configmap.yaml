@@ -33,3 +33,19 @@ data:
       "gpu-b200-sxm": "B200",
       "gpu-l40s": "L40S"
     }
+  # Total node VRAM (GiB) keyed by the short shape alias above. The precheck
+  # looks up this aggregate directly; tune values when running non-standard
+  # GPU counts under the same alias. Unknown shapes fail open.
+  gpu-shape-memory-gb-map: |-
+    {
+      "A10": 96,
+      "A100-40G": 320,
+      "A100-80G": 640,
+      "H100": 640,
+      "H200": 1128,
+      "B200": 1536,
+      "L40": 384,
+      "L40S": 384
+    }
+  # Safety factor applied to estimated weight bytes; clamped to [1.0, 4.0].
+  model-download-vram-safety-factor: "1.2"

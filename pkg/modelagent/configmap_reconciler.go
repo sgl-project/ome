@@ -35,6 +35,7 @@ type CacheEntry struct {
 	ModelName     string         // Name of the model
 	ModelStatus   ModelStatus    // Current status of the model
 	ModelMetadata *ModelMetadata // Model metadata if available
+	StatusDetail  *StatusDetail  // Optional structured detail for the current status
 }
 
 // ConfigMapReconciler handles all ConfigMap operations for storing model state and metadata.
@@ -58,6 +59,7 @@ type ConfigMapStatusOp struct {
 	ModelStatus      ModelStatus               // The updated status of the model
 	BaseModel        *v1beta1.BaseModel        // Reference to a namespace-scoped BaseModel (nil if using ClusterBaseModel)
 	ClusterBaseModel *v1beta1.ClusterBaseModel // Reference to a cluster-scoped BaseModel (nil if using BaseModel)
+	StatusDetail     *StatusDetail             // Optional structured detail to persist alongside the status (omitted when nil)
 }
 
 // ConfigMapMetadataOp represents an operation to update model metadata in ConfigMap.
@@ -224,8 +226,9 @@ func (c *ConfigMapReconciler) recreateConfigMap(ctx context.Context) {
 	for modelID, cacheEntry := range c.modelCache {
 		// Create model entry from cache data
 		modelEntry := &ModelEntry{
-			Name:   cacheEntry.ModelName,
-			Status: cacheEntry.ModelStatus,
+			Name:         cacheEntry.ModelName,
+			Status:       cacheEntry.ModelStatus,
+			StatusDetail: cacheEntry.StatusDetail,
 		}
 
 		// Convert metadata to ModelConfig if available
@@ -278,8 +281,9 @@ func (c *ConfigMapReconciler) recreateConfigMap(ctx context.Context) {
 func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry *CacheEntry) {
 	// Construct model entry from cache data
 	modelEntry := &ModelEntry{
-		Name:   cacheEntry.ModelName,
-		Status: cacheEntry.ModelStatus,
+		Name:         cacheEntry.ModelName,
+		Status:       cacheEntry.ModelStatus,
+		StatusDetail: cacheEntry.StatusDetail,
 	}
 
 	// Convert metadata to ModelConfig if available
@@ -414,13 +418,23 @@ func (c *ConfigMapReconciler) ReconcileModelStatus(ctx context.Context, statusOp
 		}
 
 		cacheEntry = &CacheEntry{
-			ModelName:   modelName,
-			ModelStatus: statusOp.ModelStatus,
+			ModelName:    modelName,
+			ModelStatus:  statusOp.ModelStatus,
+			StatusDetail: statusOp.StatusDetail,
 		}
 		c.modelCache[modelID] = cacheEntry
 	} else {
-		// Just update the status in existing entry
+		// Just update the status in existing entry.
+		// StatusDetail follows the same rule as Progress: clear it on a
+		// successful Ready transition; otherwise overwrite when the caller
+		// supplied a new detail, or preserve when they did not.
 		cacheEntry.ModelStatus = statusOp.ModelStatus
+		switch {
+		case statusOp.ModelStatus == ModelStatusReady:
+			cacheEntry.StatusDetail = nil
+		case statusOp.StatusDetail != nil:
+			cacheEntry.StatusDetail = statusOp.StatusDetail
+		}
 	}
 	c.cacheMutex.Unlock()
 
@@ -783,6 +797,17 @@ func (c *ConfigMapReconciler) updateModelStatusInConfigMap(ctx context.Context, 
 			Status: op.ModelStatus,
 			Config: nil,
 		}
+	}
+
+	// StatusDetail: overwrite when the caller supplied one; clear on Ready so
+	// a previously-skipped model that later succeeds does not carry stale
+	// reasoning. On Failed we leave any preserved detail in place unless the
+	// caller overwrites it (the new detail typically describes the new failure).
+	switch {
+	case op.StatusDetail != nil:
+		modelEntry.StatusDetail = op.StatusDetail
+	case op.ModelStatus == ModelStatusReady:
+		modelEntry.StatusDetail = nil
 	}
 
 	// For 'ModelStatusDeleted' status, we might want to entirely remove the entry

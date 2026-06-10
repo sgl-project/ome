@@ -17,6 +17,8 @@ type Metrics struct {
 	// Counter metrics
 	modelDownloadsSuccessTotal *prometheus.CounterVec
 	modelDownloadsFailedTotal  *prometheus.CounterVec
+	modelDownloadsSkippedTotal *prometheus.CounterVec
+	modelPrecheckBypassTotal   *prometheus.CounterVec
 	modelVerificationsTotal    *prometheus.CounterVec
 	mdChecksumsFailedTotal     *prometheus.CounterVec
 	rateLimitCounter           *prometheus.CounterVec
@@ -151,6 +153,20 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 			},
 			[]string{"model_type", "namespace", "name"},
 		),
+		modelDownloadsSkippedTotal: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "model_agent_downloads_skipped_total",
+				Help: "The total number of model downloads skipped by a precheck (e.g. VRAM insufficient on this node)",
+			},
+			[]string{"model_type", "namespace", "name", "reason"},
+		),
+		modelPrecheckBypassTotal: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "model_agent_precheck_bypass_total",
+				Help: "The total number of times the VRAM precheck was intentionally bypassed (e.g. multi-node sharded annotation)",
+			},
+			[]string{"model_type", "namespace", "name", "reason"},
+		),
 		modelVerificationsTotal: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "model_agent_verifications_total",
@@ -221,6 +237,22 @@ func (m *Metrics) RecordSuccessfulDownload(modelType, namespace, name string) {
 // RecordFailedDownload records a failed model download
 func (m *Metrics) RecordFailedDownload(modelType, namespace, name, errorType string) {
 	m.modelDownloadsFailedTotal.WithLabelValues(modelType, namespace, name).Inc()
+}
+
+// RecordSkippedDownload records a model download that the agent refused to
+// perform on this node because a precheck rejected it (e.g. estimated weight
+// bytes exceeded available VRAM). reason is a short stable token for the
+// rejection cause; the initial taxonomy is "vram_insufficient".
+func (m *Metrics) RecordSkippedDownload(modelType, namespace, name, reason string) {
+	m.modelDownloadsSkippedTotal.WithLabelValues(modelType, namespace, name, reason).Inc()
+}
+
+// RecordPrecheckBypass records a model download for which the VRAM precheck
+// was deliberately skipped (the model declared itself multi-node-sharded, the
+// estimator returned 0, etc.). Distinct from RecordSkippedDownload so dashboards
+// can distinguish "gate ran and let it through" from "gate ran and refused".
+func (m *Metrics) RecordPrecheckBypass(modelType, namespace, name, reason string) {
+	m.modelPrecheckBypassTotal.WithLabelValues(modelType, namespace, name, reason).Inc()
 }
 
 // RecordVerification records a model verification

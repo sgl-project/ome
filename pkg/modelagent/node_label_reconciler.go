@@ -24,6 +24,11 @@ type NodeLabelOp struct {
 	ModelStateOnNode ModelStateOnNode
 	BaseModel        *v1beta1.BaseModel
 	ClusterBaseModel *v1beta1.ClusterBaseModel
+
+	// StatusDetail, when non-nil, is written into the node-scoped ConfigMap
+	// entry alongside the Status. Used to record machine-readable context
+	// for the current state transition (e.g. why a download was skipped).
+	StatusDetail *StatusDetail
 }
 
 // NodeLabelReconciler handles updating node labels œwith model status information
