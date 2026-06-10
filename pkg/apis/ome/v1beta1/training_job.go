@@ -50,6 +50,7 @@ type TrainingJobSpec struct {
 	// Whether the controller should suspend the running TrainJob.
 	// Defaults to false.
 	// +kubebuilder:default=false
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf", message="suspend is immutable"
 	Suspend *bool `json:"suspend,omitempty"`
 
 	// Labels to apply for the derivative JobSet and Jobs.

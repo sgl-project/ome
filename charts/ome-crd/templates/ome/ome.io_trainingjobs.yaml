@@ -354,6 +354,9 @@ spec:
               suspend:
                 default: false
                 type: boolean
+                x-kubernetes-validations:
+                - message: suspend is immutable
+                  rule: self == oldSelf
               trainer:
                 properties:
                   args:

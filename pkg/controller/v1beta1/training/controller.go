@@ -34,6 +34,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	jobsetv1alpha2 "sigs.k8s.io/jobset/api/jobset/v1alpha2"
 	opensourcev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
@@ -222,7 +223,7 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, fmt.Errorf("%w, %s", errorUnsupportedRuntime, runtimeRefGK)
 	}
 
-	opState, err := r.reconcileObjects(ctx, runtime, trainJob, req, baseModel.Spec.Vendor, affinity)
+	opState, err := r.reconcileObjects(ctx, runtime, trainJob, baseModel.Spec.Vendor, affinity)
 
 	originStatus := trainJob.Status.DeepCopy()
 	updateSuspendedCondition(trainJob)
@@ -237,7 +238,7 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-func (r *TrainingJobReconciler) reconcileObjects(ctx context.Context, runtime trainingruntimes.Runtime, trainJob *v1beta1.TrainingJob, req ctrl.Request, vendor *string, affinity *corev1.Affinity) (ObjectOperationState, error) {
+func (r *TrainingJobReconciler) reconcileObjects(ctx context.Context, runtime trainingruntimes.Runtime, trainJob *v1beta1.TrainingJob, vendor *string, affinity *corev1.Affinity) (ObjectOperationState, error) {
 	objs, err := runtime.NewObjects(ctx, trainJob, vendor, affinity)
 	if err != nil {
 		return BuildObjectFailed, err
@@ -261,7 +262,13 @@ func (r *TrainingJobReconciler) reconcileObjects(ctx context.Context, runtime tr
 		}
 		switch {
 		case created:
-			r.Log.Info("Successfully created object", "namespace", req.NamespacedName, logKeysAndValues)
+			r.Log.Info("Successfully created object", append([]any{"trainingJob", trainJob.Name}, logKeysAndValues...)...)
+			continue
+		case isCreateOnlyAlreadyExists(creationErr, gvk):
+			r.Log.Info("Object already exists; skipping update for create-only resource", append([]any{"trainingJob", trainJob.Name}, logKeysAndValues...)...)
+			continue
+		case obj.GetResourceVersion() != "" && isCreateOnlyObject(gvk):
+			r.Log.Info("Skipping update for create-only resource", append([]any{"trainingJob", trainJob.Name}, logKeysAndValues...)...)
 			continue
 		case client.IgnoreAlreadyExists(creationErr) != nil:
 			return CreateObjectFailed, creationErr
@@ -270,10 +277,18 @@ func (r *TrainingJobReconciler) reconcileObjects(ctx context.Context, runtime tr
 			if err = r.Client.Update(ctx, obj); err != nil {
 				return UpdateObjectFailed, err
 			}
-			r.Log.Info("Successfully updated object", "namespace", req.NamespacedName, logKeysAndValues)
+			r.Log.Info("Successfully updated object", append([]any{"trainingJob", trainJob.Name}, logKeysAndValues...)...)
 		}
 	}
 	return CreateObjectSucceeded, nil
+}
+
+func isCreateOnlyAlreadyExists(err error, gvk schema.GroupVersionKind) bool {
+	return apierr.IsAlreadyExists(err) && isCreateOnlyObject(gvk)
+}
+
+func isCreateOnlyObject(gvk schema.GroupVersionKind) bool {
+	return gvk.Group == jobsetv1alpha2.GroupVersion.Group && gvk.Kind == constants.JobSetKind
 }
 
 func (r *TrainingJobReconciler) updateFineTunedWeight(ctx context.Context, fineTuneWeights *opensourcev1beta1.FineTunedWeight, state opensourcev1beta1.LifeCycleState) error {

@@ -42,12 +42,20 @@ func (t TrainingjobValidator) ValidateCreate(ctx context.Context, obj runtime.Ob
 }
 
 func (t TrainingjobValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (warnings admission.Warnings, err error) {
+	oldTJob, err := convertToTrainingJob(oldObj)
+	if err != nil {
+		trainingJobValidatorLogger.Error(err, "Unable to convert old object to TrainingJob")
+		return nil, err
+	}
 	tjob, err := convertToTrainingJob(newObj)
 	if err != nil {
 		trainingJobValidatorLogger.Error(err, "Unable to convert object to TrainingJob")
 		return nil, err
 	}
 	trainingJobValidatorLogger.Info("validate update", "name", tjob.Name)
+	if err := validateTrainingJobUpdate(oldTJob, tjob); err != nil {
+		return nil, err
+	}
 	return validateTrainingJob(tjob)
 }
 
@@ -69,6 +77,17 @@ func validateTrainingJob(tjob *v1beta1.TrainingJob) (admission.Warnings, error) 
 	}
 
 	return allWarnings, nil
+}
+
+func validateTrainingJobUpdate(oldTJob, newTJob *v1beta1.TrainingJob) error {
+	if suspendValue(oldTJob.Spec.Suspend) != suspendValue(newTJob.Spec.Suspend) {
+		return fmt.Errorf("spec.suspend is immutable")
+	}
+	return nil
+}
+
+func suspendValue(suspend *bool) bool {
+	return suspend != nil && *suspend
 }
 
 // Validation of TrainingJob name
