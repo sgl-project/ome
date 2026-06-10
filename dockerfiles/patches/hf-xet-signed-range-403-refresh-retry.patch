@@ -1,0 +1,183 @@
+--- pkg/xet/src/hf_adapter.rs
++++ pkg/xet/src/hf_adapter.rs
+@@ -9,7 +9,7 @@
+ use tokio::fs;
+ use tokio::io::AsyncWriteExt;
+ use tokio::time::sleep;
+-use tracing::{debug, info};
++use tracing::{debug, info, warn};
+ 
+ #[derive(Clone)]
+ pub struct HfAdapter {
+@@ -44,6 +44,7 @@
+ }
+ 
+ const MAX_HTTP_RETRIES: usize = 3;
++const MAX_XET_DOWNLOAD_RETRIES: usize = 2;
+ const RETRY_BACKOFF_MS: u64 = 200;
+ 
+ impl HfAdapter {
+@@ -517,52 +518,75 @@
+             return Err(anyhow!("Download cancelled"));
+         }
+ 
+-        // Get initial XET connection info
+-        let mut token_manager = self.xet_token_manager.lock().await;
+-        let connection_info = token_manager
+-            .refresh_xet_connection_info(xet_file_data)
+-            .await?;
+-        drop(token_manager); // Release the lock - the XetDownloader will re-acquire it for refreshes
+-
+         info!(
+             "[XET] Using xet-core FileDownloader for hash: {}",
+             xet_file_data.file_hash
+         );
+-        debug!("[XET] Endpoint: {}", connection_info.endpoint);
+ 
+-        // Create XET downloader with connection info and token refresher capability
+-        // The token_manager is passed so it can refresh tokens if they expire during download
+-        let xet_downloader = XetDownloader::new(
+-            &connection_info,
+-            xet_file_data,
+-            self.xet_token_manager.clone(),
+-        )
+-        .await?;
+-
+         if let Some(ref tracker) = progress {
+             tracker.ensure_file_entry(file_name, expected_size);
+         }
+ 
+-        if is_cancelled(&cancel_check) {
+-            return Err(anyhow!("Download cancelled"));
+-        }
++        for attempt in 0..=MAX_XET_DOWNLOAD_RETRIES {
++            if is_cancelled(&cancel_check) {
++                return Err(anyhow!("Download cancelled"));
++            }
+ 
+-        // Download using xet-core's FileDownloader
+-        let _bytes_downloaded = xet_downloader
+-            .download_file(
+-                &xet_file_data.file_hash,
+-                dest_path,
+-                file_name,
+-                expected_size,
+-                progress.as_ref().map(|p| p.clone_for_tasks()),
++            let mut token_manager = self.xet_token_manager.lock().await;
++            if attempt > 0 {
++                token_manager.clear_cached_connection_info();
++            }
++            let connection_info = token_manager
++                .refresh_xet_connection_info(xet_file_data)
++                .await?;
++            drop(token_manager); // Release the lock - the XetDownloader will re-acquire it for refreshes
++
++            debug!("[XET] Endpoint: {}", connection_info.endpoint);
++
++            let xet_downloader = XetDownloader::new(
++                &connection_info,
++                xet_file_data,
++                self.xet_token_manager.clone(),
+             )
+             .await?;
+ 
+-        if let Some(ref tracker) = progress {
+-            tracker.update_file_absolute(file_name, expected_size, expected_size, true);
++            match xet_downloader
++                .download_file(
++                    &xet_file_data.file_hash,
++                    dest_path,
++                    file_name,
++                    expected_size,
++                    progress.as_ref().map(|p| p.clone_for_tasks()),
++                )
++                .await
++            {
++                Ok(_) => {
++                    if let Some(ref tracker) = progress {
++                        tracker.update_file_absolute(file_name, expected_size, expected_size, true);
++                    }
++
++                    return Ok(dest_path.to_string_lossy().to_string());
++                }
++                Err(err)
++                    if attempt < MAX_XET_DOWNLOAD_RETRIES
++                        && is_xet_signed_range_forbidden(&err) =>
++                {
++                    warn!(
++                        "[XET] Signed range download returned 403 for {}; refreshing XET connection info and retrying (attempt {}/{})",
++                        file_name,
++                        attempt + 1,
++                        MAX_XET_DOWNLOAD_RETRIES + 1
++                    );
++                    sleep(Duration::from_millis(
++                        RETRY_BACKOFF_MS * (attempt as u64 + 1),
++                    ))
++                    .await;
++                }
++                Err(err) => return Err(err),
++            }
+         }
+ 
+-        Ok(dest_path.to_string_lossy().to_string())
++        unreachable!("xet retry loop should always return or err");
+     }
+ }
+ 
+@@ -596,3 +620,42 @@
+         .map(|cancel| cancel())
+         .unwrap_or(false)
+ }
++
++fn is_xet_signed_range_forbidden(err: &anyhow::Error) -> bool {
++    let err_msg = format!("{err:?}").to_lowercase();
++
++    err_msg.contains("403")
++        && (err_msg.contains("s3::get_range")
++            || err_msg.contains("cdn.hf.co/xorbs")
++            || err_msg.contains("x-xet-session-id")
++            || (err_msg.contains("signed") && err_msg.contains("range"))
++            || err_msg.contains("signature"))
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn detects_xet_signed_range_forbidden_errors() {
++        let err = anyhow!(
++            "ReqwestMiddlewareError: Request failed after all retries. HTTP status client error (403 Forbidden) for url (https://cdn.hf.co/xorbs/default/...): s3::get_range"
++        );
++
++        assert!(is_xet_signed_range_forbidden(&err));
++    }
++
++    #[test]
++    fn ignores_non_signed_range_forbidden_errors() {
++        let err = anyhow!("head request failed after 4 attempts: HTTP 403");
++
++        assert!(!is_xet_signed_range_forbidden(&err));
++    }
++
++    #[test]
++    fn ignores_generic_xet_forbidden_errors() {
++        let err = anyhow!("xet download failed: HTTP status client error (403 Forbidden)");
++
++        assert!(!is_xet_signed_range_forbidden(&err));
++    }
++}
+--- pkg/xet/src/xet_integration.rs
++++ pkg/xet/src/xet_integration.rs
+@@ -153,6 +153,11 @@
+         }
+     }
+ 
++    /// Clear cached XET connection info so the next refresh call fetches fresh credentials.
++    pub fn clear_cached_connection_info(&mut self) {
++        self.cached_connection_info = None;
++    }
++
+     /// Refresh XET connection info using the refresh route
+     pub async fn refresh_xet_connection_info(
+         &mut self,

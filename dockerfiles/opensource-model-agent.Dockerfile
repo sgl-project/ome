@@ -16,6 +16,7 @@ RUN microdnf install -y \
     pkgconfig \
     openssl3-devel \
     curl \
+    patch \
     && microdnf clean all
 
 # Install Rust toolchain
@@ -32,6 +33,9 @@ RUN if [ -n "$COMMIT_HASH" ]; then \
     fi
 
 WORKDIR /ome
+
+COPY dockerfiles/patches/hf-xet-signed-range-403-refresh-retry.patch /tmp/hf-xet-signed-range-403-refresh-retry.patch
+RUN patch -p0 < /tmp/hf-xet-signed-range-403-refresh-retry.patch
 
 # Keep the signed Go 1.24 FIPS builder and only bump immediately-gating modules.
 ENV GOTOOLCHAIN=local
