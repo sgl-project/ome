@@ -66,3 +66,23 @@ data:
           - apiVersion: ome.io/v1beta1
             kind: ClusterServingRuntime
             name: srt-gemma-3-27b-it-v2
+      - id: Qwen/Qwen3.5-9B
+        runtimes:
+          - apiVersion: ome.io/v1beta1
+            kind: ClusterServingRuntime
+            name: vllm-qwen-3-5-9b-v2
+      - id: Qwen/Qwen3.6-35B-A3B
+        runtimes:
+          - apiVersion: ome.io/v1beta1
+            kind: ClusterServingRuntime
+            name: vllm-qwen-3-6-35b-a3b-v2
+      - id: google/gemma-4-31b-it
+        runtimes:
+          - apiVersion: ome.io/v1beta1
+            kind: ClusterServingRuntime
+            name: vllm-gemma-4-31b-it-v2
+      - id: google/medgemma-27b-text-it
+        runtimes:
+          - apiVersion: ome.io/v1beta1
+            kind: ClusterServingRuntime
+            name: vllm-medgemma-27b-text-it-imported

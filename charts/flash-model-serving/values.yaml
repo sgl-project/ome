@@ -189,3 +189,67 @@ gemma_3_27b_it:
   volumes: []
   topologySpreadConstraints: [ ]
   scaleMetric: {}
+
+qwen_3_5_9b:
+  router:
+    image:
+      repository: smg
+      tag: "1.4.1"
+  engine:
+    image:
+      repository: vllm-openai
+      tag: "v0.20.1-cu129"
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: []
+  scaleMetric: {}
+
+qwen_3_6_35b_a3b:
+  router:
+    image:
+      repository: smg
+      tag: "1.4.1"
+  engine:
+    image:
+      repository: vllm-openai
+      tag: "v0.20.1-cu129"
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: []
+  scaleMetric: {}
+
+gemma_4_31b_it:
+  router:
+    image:
+      repository: smg
+      tag: "1.4.1"
+  engine:
+    image:
+      repository: vllm-openai
+      tag: "v0.20.1-cu129"
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: []
+  scaleMetric: {}
+
+medgemma_27b_text_it_imported:
+  router:
+    image:
+      repository: smg
+      tag: "1.4.1"
+  engine:
+    image:
+      repository: vllm-openai
+      tag: "v0.20.1-cu129"
+  annotations: {}
+  tolerations: []
+  labels: {}
+  volumes: []
+  topologySpreadConstraints: []
+  scaleMetric: {}
