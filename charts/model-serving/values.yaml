@@ -1048,7 +1048,7 @@ gpt_oss_20b:
     maxReplicas: 1
     image:
       repository: fra.ocir.io/idqj093njucb/smg
-      tag: "v1.4.1.post2"
+      tag: "v1.4.1.post2-hotfix"
   labels: { }
   annotations: { }
   affinity:
@@ -1070,7 +1070,7 @@ gpt_oss_20b:
     tag:
     vllm:
       repository: fra.ocir.io/idqj093njucb/official-vllm-openai
-      tag: v0.20.0-grpc
+      tag: v0.22.1-hotfix-cuda12.9
 
 gpt_oss_20b_imported:
   enabled: false
@@ -1103,7 +1103,7 @@ gpt_oss_120b:
     maxReplicas: 1
     image:
       repository: fra.ocir.io/idqj093njucb/smg
-      tag: "v1.4.1.post2"
+      tag: "v1.4.1.post2-hotfix"
   labels: { }
   annotations: { }
   affinity:
@@ -1125,7 +1125,7 @@ gpt_oss_120b:
     tag:
     vllm:
       repository: fra.ocir.io/idqj093njucb/official-vllm-openai
-      tag: v0.20.0-grpc
+      tag: v0.22.1-hotfix-cuda12.9
 
 gpt_oss_120b_imported:
   enabled: false

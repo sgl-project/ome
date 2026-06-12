@@ -26,12 +26,9 @@ spec:
         - containerPort: 8080
           name: http
       resources:
-        requests:
-          cpu: "2"
-          memory: 8Gi
         limits:
-          cpu: "8"
-          memory: 16Gi
+          cpu: "1"
+          memory: 2Gi
       args:
         - --host
         - 0.0.0.0
@@ -50,6 +47,7 @@ spec:
         - --log-json
         - --disable-retries
         - --disable-circuit-breaker
+        - --disable-tokenizer-autoload
       env:
         - name: NAMESPACE
           valueFrom:
@@ -75,7 +73,7 @@ spec:
         timeoutSeconds: 10
       startupProbe:
         httpGet:
-          path: /readiness
+          path: /health
           port: 8080
         failureThreshold: 10
         periodSeconds: 20
@@ -141,18 +139,12 @@ spec:
         nvidia-h100-1:
           tensorParallelismOverride:
             tensorParallelSize: 1
-          runtimeArgsOverride:
-            - --kv-cache-dtype=fp8
         nvidia-h200-1:
           tensorParallelismOverride:
             tensorParallelSize: 1
-          runtimeArgsOverride:
-            - --kv-cache-dtype=fp8
         nvidia-b200-1:
           tensorParallelismOverride:
             tensorParallelSize: 1
-          runtimeArgsOverride:
-            - --kv-cache-dtype=fp8
           environmentOverride:
             VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8: "1"
   modelSizeRange:
@@ -205,7 +197,7 @@ spec:
       image: {{ .Values.gpt_oss_20b.image.vllm.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.gpt_oss_20b.image.vllm.tag | default .Values.vllm.commonImage.tag }}
       ports:
         - containerPort: 8080
-          name: grpc1
+          name: http
           protocol: TCP
       command:
         - /bin/bash
@@ -213,18 +205,20 @@ spec:
         - --
       args:
         - |
-          python3 -m vllm.entrypoints.grpc_server \
+          vllm serve "$MODEL_PATH" \
           --host=0.0.0.0 \
           --port=8080 \
-          --model="$MODEL_PATH" \
+          --max-log-len=0 \
           --served-model-name=gpt-oss-20b \
           --max-model-len=131072 \
           --tensor-parallel-size=1 \
+          --kv-cache-dtype=auto \
           --async-scheduling \
-          --max-cudagraph-capture-size=256
+          --max-cudagraph-capture-size=256 \
+          --enable-auto-tool-choice \
+          --tool-call-parser=openai \
+          --reasoning-parser=openai_gptoss
       env:
-        - name: VLLM_RPC_TIMEOUT
-          value: '30000'
         - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
           value: '120'
         - name: VLLM_WORKER_MULTIPROC_METHOD
@@ -242,21 +236,24 @@ spec:
           memory: 60Gi
           nvidia.com/gpu: 1
       readinessProbe:
-        grpc:
+        httpGet:
+          path: /health
           port: 8080
         failureThreshold: 3
         successThreshold: 1
         periodSeconds: 60
         timeoutSeconds: 200
       livenessProbe:
-        grpc:
+        httpGet:
+          path: /health
           port: 8080
         failureThreshold: 5
         successThreshold: 1
         periodSeconds: 60
         timeoutSeconds: 60
       startupProbe:
-        grpc:
+        httpGet:
+          path: /health
           port: 8080
         failureThreshold: 150
         successThreshold: 1
