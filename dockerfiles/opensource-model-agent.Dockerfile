@@ -37,15 +37,16 @@ WORKDIR /ome
 COPY dockerfiles/patches/hf-xet-signed-range-403-refresh-retry.patch /tmp/hf-xet-signed-range-403-refresh-retry.patch
 RUN patch -p0 < /tmp/hf-xet-signed-range-403-refresh-retry.patch
 
-# Keep the signed Go 1.24 FIPS builder and only bump immediately-gating modules.
-ENV GOTOOLCHAIN=local
-RUN go mod edit -go=1.24
+RUN go mod edit -go=1.25
 RUN go get \
     google.golang.org/grpc@v1.79.3 \
-    go.opentelemetry.io/otel@v1.40.0 \
-    go.opentelemetry.io/otel/metric@v1.40.0 \
-    go.opentelemetry.io/otel/sdk@v1.40.0 \
-    go.opentelemetry.io/otel/trace@v1.40.0
+    go.opentelemetry.io/otel@v1.43.0 \
+    go.opentelemetry.io/otel/metric@v1.43.0 \
+    go.opentelemetry.io/otel/sdk@v1.43.0 \
+    go.opentelemetry.io/otel/trace@v1.43.0 \
+    golang.org/x/crypto@v0.52.0 \
+    golang.org/x/net@v0.55.0 \
+    golang.org/x/sys@v0.45.0
 RUN go mod tidy
 
 # Set env so Rust picks up OpenSSL 3
@@ -70,10 +71,10 @@ FROM ocr-docker-remote.artifactory.oci.oraclecorp.com/os/oraclelinux:9-slim-fips
 
 # Include Oracle base support layer & apply hardening
 COPY --from=odo-docker-signed-local.artifactory.oci.oraclecorp.com/base-image-support/ol9:1.46 / /
-RUN microdnf install -y io-ol9-container-hardening && rm -rf /var/cache/yum
-
-# Update system packages and cleanup
 RUN microdnf update -y && \
+    microdnf install -y io-ol9-container-hardening crypto-policies-scripts && \
+    update-crypto-policies --set FIPS:NO-ENFORCE-EMS && \
+    rm -f /usr/local/bin/supercronic && \
     microdnf clean all && \
     rm -rf /var/cache/yum/*
 

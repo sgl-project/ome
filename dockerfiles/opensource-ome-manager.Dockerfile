@@ -32,6 +32,15 @@ RUN if [ -n "$COMMIT_HASH" ]; then \
 
 WORKDIR /ome
 
+RUN go mod edit -go=1.25
+RUN go get \
+    github.com/kedacore/keda/v2@v2.17.3 \
+    github.com/expr-lang/expr@v1.17.7 \
+    golang.org/x/crypto@v0.52.0 \
+    golang.org/x/net@v0.55.0 \
+    golang.org/x/sys@v0.45.0
+RUN go mod tidy
+
 # Set env so Rust picks up OpenSSL 3
 ENV OPENSSL_DIR=/usr \
     OPENSSL_LIB_DIR=/usr/lib64/openssl3 \
@@ -51,9 +60,10 @@ RUN GOFIPS140=latest CGO_ENABLED=${BUILD_CGO_ENABLED} GOOS=linux go build -o man
 # See https://confluence.oraclecorp.com/confluence/display/OCIODO/Docker+Support+Image+-+Self+Service for latest version
 FROM ocr-docker-remote.artifactory.oci.oraclecorp.com/os/oraclelinux:9-slim-fips
 COPY --from=odo-docker-signed-local.artifactory.oci.oraclecorp.com/base-image-support/ol9:1.46 / /
-RUN microdnf install io-ol9-container-hardening && rm -rf /var/cache/yum
-
 RUN microdnf update -y && \
+    microdnf install -y io-ol9-container-hardening crypto-policies-scripts && \
+    update-crypto-policies --set FIPS:NO-ENFORCE-EMS && \
+    rm -f /usr/local/bin/supercronic && \
     microdnf clean all && \
     rm -rf /var/cache/yum/*
 
