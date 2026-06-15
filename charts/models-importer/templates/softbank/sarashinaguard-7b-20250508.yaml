@@ -34,8 +34,7 @@ spec:
   modelArchitecture: LlamaForCausalLM
   modelParameterSize: 7B
   modelCapabilities:
-    - "CONTENT_MODERATION"
-    - "TEXT_CLASSIFICATION"
+    - "CHAT"
   maxTokens: 32768
   additionalMetadata:
     {{- $cfg := default "SB_B200_X1" (index .Values "sarashinaguard-7b-20250508" "compatibleDACShapes") }}
