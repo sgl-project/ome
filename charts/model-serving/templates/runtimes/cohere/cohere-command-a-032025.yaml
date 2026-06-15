@@ -3,6 +3,11 @@ kind: ClusterServingRuntime
 metadata:
   name: cohere-command-a-vllm
 spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-a100-80gb-2
+      - nvidia-h100-2
+      - nvidia-h200-2
   annotations:
     prometheus.io/port: '8002'
     prometheus.io/scrape: 'true'

@@ -3,6 +3,14 @@ kind: ClusterServingRuntime
 metadata:
   name: cohere-embed-v4
 spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-a10-1
+      - nvidia-a100-40gb-1
+      - nvidia-a100-80gb-1
+      - nvidia-h100-1
+      - nvidia-h200-1
+      - nvidia-b200-1
   {{- with .Values.cohere.commonAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

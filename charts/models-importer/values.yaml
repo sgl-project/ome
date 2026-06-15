@@ -303,23 +303,32 @@ sarashina3-rerank:
 command-a-032025:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  defaultDACShape: "COHERE_H100_X2"
+  additionalDACShapes: ["COHERE_A100_80G_X2","COHERE_H200_X2","LARGE_COHERE_V3"]
 
 command-a-032025-drcc:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  defaultDACShape: "COHERE_A100_40G_X4"
+  additionalDACShapes: ["SMALL_COHERE_4"]
 
 command-a-vision:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  defaultDACShape: "COHERE_H100_X2"
+  additionalDACShapes: ["COHERE_A100_80G_X2","COHERE_H200_X2","COHERE_B200_X2","LARGE_COHERE_V3"]
 
 command-a-vision-drcc:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  defaultDACShape: "COHERE_A100_40G_X4"
+  additionalDACShapes: ["SMALL_COHERE_4"]
 
 command-a-reasoning:
   enabled: false
   lifecyclePhase: "ACTIVE"
-  compatibleDACShapes: "LARGE_COHERE_V2_2"
+  defaultDACShape: "COHERE_H100_X4"
+  additionalDACShapes: ["COHERE_H200_X4", "COHERE_A100_80G_X4", "COHERE_A100_40G_X4", "LARGE_COHERE_V2_2", "SMALL_COHERE_4"]
 
 command-north-01-2026:
   enabled: false
@@ -390,6 +399,8 @@ cohere-embed-multilingual-light-image-v3-0:
 cohere-embed-v4-0:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  defaultDACShape: "COHERE_A10_X1"
+  additionalDACShapes: ["COHERE_A100_80G_X1","COHERE_H200_X1","COHERE_H100_X1","COHERE_A100_40G_X1","COHERE_B200_X1","EMBED_COHERE"]
 
 cohere-command-r-plus-v1-2-chat:
   enabled: false
@@ -484,13 +495,13 @@ cohere-rerank-v4-0-pro:
   enabled: false
   lifecyclePhase: "ACTIVE"
   defaultDACShape: "COHERE_H100_X1"
-  additionalDACShapes: []
+  additionalDACShapes: ["COHERE_A100_80G_X1","COHERE_A10_X1","COHERE_H200_X1"]
 
 cohere-rerank-v4-0-fast:
   enabled: false
   lifecyclePhase: "ACTIVE"
   defaultDACShape: "COHERE_H100_X1"
-  additionalDACShapes: []
+  additionalDACShapes: ["COHERE_A100_80G_X1","COHERE_A10_X1","COHERE_H200_X1"]
 
 deepseek-r1:
   enabled: false

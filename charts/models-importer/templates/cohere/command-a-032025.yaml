@@ -38,11 +38,18 @@ spec:
     - "CHAT"
   maxTokens: 256000
   additionalMetadata:
+    {{ $defaultDACShape := default "COHERE_H100_X2" (index .Values "command-a-032025" "defaultDACShape") -}}
+    {{ $additionalDACShapes := index .Values "command-a-032025" "additionalDACShapes" | default (list) -}}
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: LARGE_COHERE_V3
+        - name: {{ $defaultDACShape }}
           quotaUnit: 1
           default: true
+        {{- range $additionalDACShapes }}
+        - name: {{ . }}
+          quotaUnit: 1
+          default: false
+        {{- end }}
     internalName: "command-a-032025"
     type: "Serving"
 {{- end }}

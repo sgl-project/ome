@@ -38,11 +38,18 @@ spec:
     - "CHAT"
   maxTokens: 256000
   additionalMetadata:
+    {{ $defaultDACShape := default "COHERE_A100_40G_X4" (index .Values "command-a-vision-drcc" "defaultDACShape") -}}
+    {{ $additionalDACShapes := index .Values "command-a-vision-drcc" "additionalDACShapes" | default (list) -}}
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: SMALL_COHERE_4
+        - name: {{ $defaultDACShape }}
           quotaUnit: 1
           default: true
+        {{- range $additionalDACShapes }}
+        - name: {{ . }}
+          quotaUnit: 1
+          default: false
+        {{- end }}
     image-text-to-text: "true"
     internalName: "command-a-vision-drcc"
     type: "Serving"

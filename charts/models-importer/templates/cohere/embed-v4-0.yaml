@@ -37,11 +37,18 @@ spec:
     - "TEXT_EMBEDDINGS"
   maxTokens: 128000
   additionalMetadata:
+    {{ $defaultDACShape := default "COHERE_A10_X1" (index .Values "cohere-embed-v4-0" "defaultDACShape") -}}
+    {{ $additionalDACShapes := index .Values "cohere-embed-v4-0" "additionalDACShapes" | default (list) -}}
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: EMBED_COHERE
+        - name: {{ $defaultDACShape }}
           quotaUnit: 1
           default: true
+        {{- range $additionalDACShapes }}
+        - name: {{ . }}
+          quotaUnit: 1
+          default: false
+        {{- end }}
     internalName: "embed-v4-0-04152025"
     type: "Serving"
     image-text-to-text: "true"
