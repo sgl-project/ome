@@ -129,25 +129,25 @@ spec:
           tensorParallelismOverride:
             tensorParallelSize: 1
           runtimeArgsOverride:
-            - --attention-backend=trtllm_mha
+            - --attention-backend=triton
             - --mm-attention-backend=sdpa
         nvidia-b200-2:
           tensorParallelismOverride:
             tensorParallelSize: 2
           runtimeArgsOverride:
-            - --attention-backend=trtllm_mha
+            - --attention-backend=triton
             - --mm-attention-backend=sdpa
         nvidia-b200-4:
           tensorParallelismOverride:
             tensorParallelSize: 4
           runtimeArgsOverride:
-            - --attention-backend=trtllm_mha
+            - --attention-backend=triton
             - --mm-attention-backend=sdpa
         nvidia-b200-8:
           tensorParallelismOverride:
             tensorParallelSize: 8
           runtimeArgsOverride:
-            - --attention-backend=trtllm_mha
+            - --attention-backend=triton
             - --mm-attention-backend=sdpa
   volumes:
     - name: dshm
