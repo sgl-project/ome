@@ -14,7 +14,7 @@ metadata:
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: byteplus.seedance-1-5-pro-251215
+  displayName: dreamina.seedance-1-5-pro-251215
   storage:
     storageUri: "vendor://byteplus/models/{{ index .Values "seedance-1-5-pro-251215" "osPrefixOverride" }}"
   vendor: {{ index .Values "seedance-1-5-pro-251215" "vendor" }}

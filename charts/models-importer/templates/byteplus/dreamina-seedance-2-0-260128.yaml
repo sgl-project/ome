@@ -14,7 +14,7 @@ metadata:
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: byteplus.dreamina-seedance-2-0-260128
+  displayName: dreamina.dreamina-seedance-2-0-260128
   storage:
     storageUri: "vendor://byteplus/models/{{ index .Values "dreamina-seedance-2-0-260128" "osPrefixOverride" }}"
   vendor: {{ index .Values "dreamina-seedance-2-0-260128" "vendor" }}

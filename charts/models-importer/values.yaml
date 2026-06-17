@@ -1132,19 +1132,19 @@ grok-imagine-video:
 
 seedance-1-5-pro-251215:
   enabled: false
-  vendor: byteplus
+  vendor: dreamina
   osPrefixOverride: seedance-1-5-pro-251215
   lifecyclePhase: "ACTIVE"
 
 dreamina-seedance-2-0-260128:
   enabled: false
-  vendor: byteplus
+  vendor: dreamina
   osPrefixOverride: dreamina-seedance-2-0-260128
   lifecyclePhase: "ACTIVE"
 
 dreamina-seedance-2-0-fast-260128:
   enabled: false
-  vendor: byteplus
+  vendor: dreamina
   osPrefixOverride: dreamina-seedance-2-0-fast-260128
   lifecyclePhase: "ACTIVE"
 

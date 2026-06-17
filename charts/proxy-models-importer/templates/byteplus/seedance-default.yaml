@@ -10,7 +10,7 @@ metadata:
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: byteplus.seedance-default
+  displayName: dreamina.seedance-default
   storage:
     storageUri: "vendor://byteplus/models/{{ index .Values "seedance-default" "osPrefixOverride" }}"
   vendor: {{ index .Values "seedance-default" "vendor" }}
