@@ -1,0 +1,21 @@
+# apiVersion: v1
+# kind: Namespace
+# metadata:
+#   name: deepseek-v4
+---
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: deepseek-v4-pro-multi
+  namespace: deepseek-v4
+spec:
+  model:
+    name: deepseek-v4-pro
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: vllm-deepseek-v4-pro-multi
