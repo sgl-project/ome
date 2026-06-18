@@ -1,0 +1,256 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-gpt-oss-20b-imported
+spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-a100-80gb-1
+      - nvidia-a100-80gb-2
+      - nvidia-a100-80gb-4
+      - nvidia-a100-40gb-1
+      - nvidia-a100-40gb-2
+      - nvidia-a100-40gb-4
+      - nvidia-h100-1
+      - nvidia-h100-2
+      - nvidia-h100-4
+      - nvidia-h100-8
+      - nvidia-a10-1
+      - nvidia-a10-2
+      - nvidia-a10-4
+      - nvidia-b200-1
+      - nvidia-b200-2
+      - nvidia-b200-4
+      - nvidia-b200-8
+      - nvidia-h200-1
+      - nvidia-h200-2
+      - nvidia-h200-4
+      - nvidia-h200-8
+  disabled: false
+  routerConfig:
+    annotations:
+      prometheus.io/path: /metrics
+      prometheus.io/port: "29000"
+      prometheus.io/scrape: "true"
+    labels:
+      logging-forward: enabled
+    runner:
+      name: router
+      image: fra.ocir.io/idqj093njucb/smg:v1.4.1.post2-hotfix
+      ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+      resources:
+        requests:
+          cpu: "1"
+          memory: 2Gi
+        limits:
+          cpu: "1"
+          memory: 2Gi
+      args:
+        - --host
+        - 0.0.0.0
+        - --port
+        - "8080"
+        - --service-discovery
+        - --service-discovery-namespace
+        - $(NAMESPACE)
+        - --service-discovery-port
+        - "8080"
+        - --selector
+        - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+        - --enable-igw
+        - --request-id-headers
+        - opc-request-id
+        - --log-json
+        - --disable-retries
+        - --disable-circuit-breaker
+        - --disable-tokenizer-autoload
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: INFERENCESERVICE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['ome.io/inferenceservice']
+      readinessProbe:
+        httpGet:
+          path: /readiness
+          port: 8080
+        failureThreshold: 5
+        periodSeconds: 30
+        timeoutSeconds: 10
+      livenessProbe:
+        httpGet:
+          path: /liveness
+          port: 8080
+        failureThreshold: 5
+        periodSeconds: 30
+        timeoutSeconds: 10
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 10
+        periodSeconds: 20
+        timeoutSeconds: 10
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.55.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: GptOssForCausalLM
+      autoSelect: true
+      priority: 2
+      version: "1.0.0"
+      acceleratorConfig:
+        nvidia-a10-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a10-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-a100-80gb-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a100-80gb-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-a100-40gb-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-a100-40gb-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h100-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-h100-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h100-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-h200-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+        nvidia-h200-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+        nvidia-h200-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+        nvidia-b200-1:
+          environmentOverride:
+            VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8: "1"
+        nvidia-b200-2:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+          environmentOverride:
+            VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8: "1"
+        nvidia-b200-4:
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+          environmentOverride:
+            VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8: "1"
+        nvidia-b200-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+          environmentOverride:
+            VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8: "1"
+  modelSizeRange:
+    min: 10B
+    max: 25B
+  protocolVersions:
+    - openAI
+  engineConfig:
+    schedulerName: genai-kube-scheduler
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+      prometheus.io/path: "/metrics"
+      chainsaw.k8s-integration.oracle.com/compartmentId: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva"
+      chainsaw.k8s-integration.oracle.com/logPath: "vllm"
+      chainsaw.k8s-integration.oracle.com/namespace: "vllm"
+    labels:
+      logging-forward: enabled
+      sidecar.istio.io/inject: "true"
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+    runner:
+      name: ome-container
+      image: fra.ocir.io/idqj093njucb/official-vllm-openai:v0.22.1-hotfix-cuda12.9
+      ports:
+        - containerPort: 8080
+          name: http1
+          protocol: TCP
+      command:
+        - vllm
+        - serve
+      args:
+        - $(MODEL_PATH)
+        - --host=0.0.0.0
+        - --port=8080
+        - --max-log-len=0
+        - --served-model-name=vllm-model
+        - --max-model-len=131072
+        - --tensor-parallel-size=1
+        - --kv-cache-dtype=auto
+        - --async-scheduling
+        - --max-cudagraph-capture-size=256
+        - --enable-auto-tool-choice
+        - --tool-call-parser=openai
+        - --reasoning-parser=openai_gptoss
+      env:
+        - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
+          value: "120"
+        - name: VLLM_WORKER_MULTIPROC_METHOD
+          value: "spawn"
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 10
+          memory: 60Gi
+          nvidia.com/gpu: 1
+        limits:
+          cpu: 10
+          memory: 60Gi
+          nvidia.com/gpu: 1
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30

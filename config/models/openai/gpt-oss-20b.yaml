@@ -5,7 +5,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: ""
+    models.ome.io/runtime: "vllm-gpt-oss-20b-imported"
     models.ome.io/category: "SMALL"
     models.ome.io/experimental: "false"
     models.ome.io/internal: "false"
