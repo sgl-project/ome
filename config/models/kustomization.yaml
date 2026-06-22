@@ -116,6 +116,8 @@ resources:
 
   # moonshotai
   - moonshotai/Kimi-K2-Instruct.yaml
+  - moonshotai/Kimi-K2.6.yaml
+  - moonshotai/Kimi-K2.7-Code.yaml
   - moonshotai/Kimi-VL-A3B-Instruct.yaml
 
   # nvidia
