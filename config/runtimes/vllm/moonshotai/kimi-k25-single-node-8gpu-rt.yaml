@@ -3,16 +3,12 @@ kind: ClusterServingRuntime
 metadata:
   name: vllm-kimi-k25-single-node-8gpu
   annotations:
-    ome.io/fit-quantization: int4
     ome.io/engine-ready-timeout-sec: "3600"
 spec:
   acceleratorRequirements:
     acceleratorClasses:
       - nvidia-b200-8
       - nvidia-h200-8
-      # - nvidia-b300-8
-      # - nvidia-h100-8
-      # - nvidia-a100-80gb-8
   disabled: false
   routerConfig:
     annotations:
@@ -28,6 +24,9 @@ spec:
         - containerPort: 8080
           name: http
       resources:
+        requests:
+          cpu: "1"
+          memory: 2Gi
         limits:
           cpu: "1"
           memory: 2Gi
@@ -75,7 +74,7 @@ spec:
         timeoutSeconds: 10
       startupProbe:
         httpGet:
-          path: /readiness
+          path: /health
           port: 8080
         failureThreshold: 177
         periodSeconds: 20
@@ -98,15 +97,6 @@ spec:
         nvidia-h200-8:
           tensorParallelismOverride:
             tensorParallelSize: 8
-        # nvidia-b300-8:
-        #   tensorParallelismOverride:
-        #     tensorParallelSize: 8
-        # nvidia-h100-8:
-        #   tensorParallelismOverride:
-        #     tensorParallelSize: 8
-        # nvidia-a100-80gb-8:
-        #   tensorParallelismOverride:
-        #     tensorParallelSize: 8
   modelSizeRange:
     min: 150B
     max: 300B
