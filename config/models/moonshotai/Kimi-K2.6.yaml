@@ -4,6 +4,7 @@ metadata:
   name: kimi-k2-6
 spec:
   modelCapabilities:
+    - TEXT_TO_TEXT
     - IMAGE_TEXT_TO_TEXT
   vendor: moonshotai
   displayName: moonshotai.kimi-k2-6
