@@ -52,4 +52,4 @@ resources:
 - vllm/mixtral-8x7b-instruct-rt.yaml
 - vllm/deepseek-ai/deepseek-v4-flash-rt.yaml
 - vllm/deepseek-ai/deepseek-v4-pro-rt.yaml
-- vllm/moonshotai/kimi-k25-single-node-8gpu-rt.yaml
+- vllm/moonshotai/kimi-k25-tp8-rt.yaml

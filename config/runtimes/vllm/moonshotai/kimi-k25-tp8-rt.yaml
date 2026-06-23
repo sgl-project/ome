@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-kimi-k25-single-node-8gpu
+  name: vllm-kimi-k25-tp8
   annotations:
     ome.io/engine-ready-timeout-sec: "3600"
 spec:
