@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: glm-5-2-fp8-multi
+  namespace: glm
+spec:
+  model:
+    name: glm-5-2-fp8
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: vllm-glm-5-2-fp8-multi
