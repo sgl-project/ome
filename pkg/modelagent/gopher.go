@@ -741,6 +741,11 @@ func (s *Gopher) createOCIOSDataStore(baseModelSpec v1beta1.BaseModelSpec) (*oci
 	return ociOSDS, nil
 }
 
+// findReadyObjectStorageModelWithSamePath looks for a Ready OCI Object Storage
+// model entry on this node that resolves to the same local destination path.
+// This is intentionally independent of downloadPolicy: copied model CRs with
+// the same source and destination can reuse Ready local files, while normal
+// downloadPolicy behavior still applies when no same-path Ready artifact exists.
 func (s *Gopher) findReadyObjectStorageModelWithSamePath(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec, destPath string) (string, bool) {
 	if task == nil || (task.BaseModel == nil && task.ClusterBaseModel == nil) {
 		return "", false
@@ -819,28 +824,6 @@ func sameModelStoragePath(currentStorage *v1beta1.StorageSpec, candidateStorage 
 
 	candidateSpec := v1beta1.BaseModelSpec{Storage: candidateStorage}
 	return getDestPath(&candidateSpec, modelRootDir) == destPath
-}
-
-func sameStringPtr(left *string, right *string) bool {
-	if left == nil || right == nil {
-		return left == right
-	}
-	return *left == *right
-}
-
-func sameStringMapPtr(left *map[string]string, right *map[string]string) bool {
-	if left == nil || right == nil {
-		return left == right
-	}
-	if len(*left) != len(*right) {
-		return false
-	}
-	for key, leftValue := range *left {
-		if rightValue, ok := (*right)[key]; !ok || rightValue != leftValue {
-			return false
-		}
-	}
-	return true
 }
 
 func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectURI, destPath string, task *GopherTask) error {
