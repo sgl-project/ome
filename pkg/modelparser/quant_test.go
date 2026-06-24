@@ -33,11 +33,16 @@ func TestQuantAlgoToOMEEnum(t *testing.T) {
 		{name: "OCP MXFP4", in: "MXFP4", want: v1beta1.ModelQuantizationMXFP4},
 		{name: "lowercase mxfp4", in: "mxfp4", want: v1beta1.ModelQuantizationMXFP4},
 
+		// compressed-tensors container format (vLLM / llm-compressor) —
+		// label only; the precision lives in config_groups, not the name.
+		{name: "compressed-tensors hyphen", in: "compressed-tensors", want: v1beta1.ModelQuantizationCompressedTensors},
+		{name: "compressed_tensors underscore", in: "compressed_tensors", want: v1beta1.ModelQuantizationCompressedTensors},
+		{name: "compressed-tensors mixed case", in: "Compressed-Tensors", want: v1beta1.ModelQuantizationCompressedTensors},
+
 		// Negatives
 		{name: "empty string", in: "", want: ""},
 		{name: "whitespace only", in: "   ", want: ""},
 		{name: "unknown algorithm", in: "some-future-quant-format", want: ""},
-		{name: "unrelated string", in: "compressed-tensors", want: ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

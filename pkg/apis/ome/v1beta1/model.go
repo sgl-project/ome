@@ -274,6 +274,13 @@ const (
 	// the OpenAI gpt-oss family; declared via quant_method=mxfp4 in
 	// quantization_config inside config.json.
 	ModelQuantizationMXFP4 ModelQuantization = "mxfp4"
+	// ModelQuantizationCompressedTensors is the compressed-tensors
+	// container format (vLLM / llm-compressor). Unlike the values above it
+	// names a FORMAT, not a precision: the actual bit-width (FP8 / INT8 /
+	// INT4 / ...) is declared per-group in
+	// quantization_config.config_groups. Declared via
+	// quant_method="compressed-tensors" in config.json.
+	ModelQuantizationCompressedTensors ModelQuantization = "compressed-tensors"
 )
 
 // ModelCapability enum

@@ -33,6 +33,10 @@ func QuantAlgoToOMEEnum(s string) v1beta1.ModelQuantization {
 		// fbgemm_fp8 is matched above; this is the catch-all for plain
 		// fp8, fp8_per_tensor, fp8_e4m3, etc.
 		return v1beta1.ModelQuantizationFP8
+	case v == "compressed-tensors" || v == "compressed_tensors":
+		// Container format (vLLM / llm-compressor); names the format, not
+		// the precision (which lives in config_groups, currently unparsed).
+		return v1beta1.ModelQuantizationCompressedTensors
 	}
 	return ""
 }

@@ -162,6 +162,26 @@ func TestExtractModelMetadataFromHF(t *testing.T) {
 			expectedQuantization: v1beta1.ModelQuantizationFP8,
 		},
 		{
+			name: "Compressed-Tensors Model",
+			mockModel: &mockHuggingFaceModel{
+				modelType:          "llama",
+				architecture:       "LlamaForCausalLM",
+				parameterCount:     8000000000, // 8B
+				contextLength:      131072,
+				transformerVersion: "4.44.0",
+				quantizationType:   "compressed-tensors",
+				torchDtype:         "bfloat16",
+				modelSizeBytes:     8000000000,
+				hasVision:          false,
+			},
+			expectedMetadata: func(metadata ModelMetadata) bool {
+				return metadata.ModelType == "llama" &&
+					metadata.ModelArchitecture == "LlamaForCausalLM"
+			},
+			expectedCapability:   string(v1beta1.ModelCapabilityTextToText),
+			expectedQuantization: v1beta1.ModelQuantizationCompressedTensors,
+		},
+		{
 			name: "Vision Model",
 			mockModel: &mockHuggingFaceModel{
 				modelType:          "clip",
