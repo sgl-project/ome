@@ -4,7 +4,7 @@ package modelagent
 import (
 	"encoding/json"
 
-	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/modelparser"
 )
 
 // ModelStatus represents the status of a model on a node
@@ -25,22 +25,11 @@ const (
 // ConfigParsingAnnotation is the annotation key to skip config parsing
 const ConfigParsingAnnotation = "ome.oracle.com/skip-config-parsing"
 
-// ModelMetadata contains the extracted metadata about a model
-type ModelMetadata struct {
-	ModelType                 string
-	ModelArchitecture         string
-	ModelFramework            *v1beta1.ModelFrameworkSpec
-	ModelFormat               v1beta1.ModelFormat
-	ModelParameterSize        string
-	MaxTokens                 int32
-	ModelCapabilities         []string
-	ApiCapabilities           []string
-	ModelConfiguration        []byte
-	DecodedModelConfiguration map[string]interface{} `json:"DecodedModelConfiguration,omitempty"`
-	Quantization              v1beta1.ModelQuantization
-	DiffusionPipeline         *v1beta1.DiffusionPipelineSpec
-	Artifact                  Artifact `json:"Artifact,omitempty"`
-}
+// ModelMetadata is the metadata produced by the shared modelparser bridge.
+// It is aliased so existing modelagent code (cache, configmap reconciler,
+// gopher) keeps using the unqualified name while the parser implementation
+// lives in pkg/modelparser.
+type ModelMetadata = modelparser.ModelMetadata
 
 // ModelConfig represents the configuration of a model
 // This is a structured version of the model metadata that is stored in the ConfigMap
@@ -66,16 +55,9 @@ type ModelConfig struct {
 	Artifact Artifact `json:"artifact,omitempty"` // artifact's commit sha and paths
 }
 
-// Artifact records the information of model artifact, including version (Sha) and storage paths
-type Artifact struct {
-	Sha string `json:"sha"` // sha string fetched from HuggingFace
-	// parent model name -> parent model artifact storage path
-	// parent name convention is
-	// For ClusterBaseModel: clusterbasemodel.{model_name}
-	// For BaseModel: {namespace}.basemodel.{model_name}
-	ParentPath    map[string]string `json:"parentPath"`
-	ChildrenPaths []string          `json:"childrenPaths"` // an array of children paths
-}
+// Artifact records a model artifact's version (Sha) and storage paths.
+// Aliased to the shared modelparser type.
+type Artifact = modelparser.Artifact
 
 // DownloadProgress tracks the progress of a model download
 type DownloadProgress struct {

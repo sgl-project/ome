@@ -265,6 +265,15 @@ const (
 	ModelQuantizationFP8       ModelQuantization = "fp8"
 	ModelQuantizationFbgemmFP8 ModelQuantization = "fbgemm_fp8"
 	ModelQuantizationINT4      ModelQuantization = "int4"
+	// ModelQuantizationNVFP4 is NVIDIA FP4. Used by ModelOpt's NVFP4 PTQ
+	// pipeline; the on-disk convention packs two 4-bit values per byte
+	// (uint8[out, in/2]) with FP8 per-group scales (group_size typically
+	// 16) declared in hf_quant_config.json.
+	ModelQuantizationNVFP4 ModelQuantization = "nvfp4"
+	// ModelQuantizationMXFP4 is the OCP Microscaling FP4 format. Used by
+	// the OpenAI gpt-oss family; declared via quant_method=mxfp4 in
+	// quantization_config inside config.json.
+	ModelQuantizationMXFP4 ModelQuantization = "mxfp4"
 )
 
 // ModelCapability enum

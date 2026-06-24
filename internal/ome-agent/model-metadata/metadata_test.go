@@ -13,8 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
-	"sigs.k8s.io/ome/pkg/hfutil/modelconfig"
 	"sigs.k8s.io/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/modelconfig"
 )
 
 // mockHuggingFaceModel implements the HuggingFaceModel interface for testing
@@ -31,16 +31,18 @@ type mockHuggingFaceModel struct {
 	isEmbedding        bool
 }
 
-func (m *mockHuggingFaceModel) GetModelType() string          { return m.modelType }
-func (m *mockHuggingFaceModel) GetArchitecture() string       { return m.architecture }
-func (m *mockHuggingFaceModel) GetParameterCount() int64      { return m.parameterCount }
-func (m *mockHuggingFaceModel) GetContextLength() int         { return m.contextLength }
-func (m *mockHuggingFaceModel) GetTransformerVersion() string { return m.transformerVersion }
-func (m *mockHuggingFaceModel) GetQuantizationType() string   { return m.quantizationType }
-func (m *mockHuggingFaceModel) GetTorchDtype() string         { return m.torchDtype }
-func (m *mockHuggingFaceModel) GetModelSizeBytes() int64      { return m.modelSizeBytes }
-func (m *mockHuggingFaceModel) HasVision() bool               { return m.hasVision }
-func (m *mockHuggingFaceModel) IsEmbedding() bool             { return m.isEmbedding }
+func (m *mockHuggingFaceModel) GetModelType() string                         { return m.modelType }
+func (m *mockHuggingFaceModel) GetArchitecture() string                      { return m.architecture }
+func (m *mockHuggingFaceModel) GetParameterCount() int64                     { return m.parameterCount }
+func (m *mockHuggingFaceModel) GetContextLength() int                        { return m.contextLength }
+func (m *mockHuggingFaceModel) GetTransformerVersion() string                { return m.transformerVersion }
+func (m *mockHuggingFaceModel) GetQuantizationType() string                  { return m.quantizationType }
+func (m *mockHuggingFaceModel) GetTorchDtype() string                        { return m.torchDtype }
+func (m *mockHuggingFaceModel) GetModelSizeBytes() int64                     { return m.modelSizeBytes }
+func (m *mockHuggingFaceModel) HasVision() bool                              { return m.hasVision }
+func (m *mockHuggingFaceModel) IsEmbedding() bool                            { return m.isEmbedding }
+func (m *mockHuggingFaceModel) GetCapabilities() []modelconfig.Capability    { return nil }
+func (m *mockHuggingFaceModel) GetHFQuantConfig() *modelconfig.HFQuantConfig { return nil }
 
 func TestMetadataExtractor_updateSpec(t *testing.T) {
 	zapLogger, _ := zap.NewDevelopment()

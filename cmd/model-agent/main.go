@@ -25,6 +25,7 @@ import (
 	omev1beta1informers "sigs.k8s.io/ome/pkg/client/informers/externalversions"
 	"sigs.k8s.io/ome/pkg/logging"
 	"sigs.k8s.io/ome/pkg/modelagent"
+	"sigs.k8s.io/ome/pkg/modelparser"
 	"sigs.k8s.io/ome/pkg/version"
 	"sigs.k8s.io/ome/pkg/xet"
 )
@@ -202,7 +203,7 @@ func initializeComponents(
 	zapLogger := logger.Desugar()
 
 	// Create a ModelConfigParser instance
-	modelConfigParser := modelagent.NewModelConfigParser(omeClient, logger)
+	modelConfigParser := modelparser.NewModelConfigParser(omeClient, logger)
 
 	// Create a ConfigMapReconciler instance
 	configMapReconciler := modelagent.NewConfigMapReconciler(cfg.nodeName, cfg.namespace, kubeClient, logger)

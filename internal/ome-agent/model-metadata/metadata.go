@@ -27,8 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
-	"sigs.k8s.io/ome/pkg/hfutil/modelconfig"
 	"sigs.k8s.io/ome/pkg/logging"
+	"sigs.k8s.io/ome/pkg/modelconfig"
 )
 
 type MetadataExtractor struct {
@@ -77,7 +77,7 @@ func (m *MetadataExtractor) Start() error {
 
 	m.logger.Infof("Found model config at %s", configPath)
 
-	// Use hfutil/modelconfig to load the model
+	// Use modelconfig to load the model
 	model, err := modelconfig.LoadModelConfig(configPath)
 	if err != nil {
 		return errors.Wrapf(err, "failed to load model config from %s", configPath)

@@ -556,7 +556,7 @@ artifacts: kustomize ## Generate artifacts for release.
 # --- Configuration ---
 GOTOOLCHAIN      ?= go1.25.0+auto # https://github.com/golang/go/issues/75031
 XET_LIB_PATH     := $(shell pwd)/pkg/xet/target/release
-EXCLUDE_PATTERNS := "pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/|pkg/hfutil/modelconfig/examples/|pkg/hfutil/hub/samples/"
+EXCLUDE_PATTERNS := "pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/|pkg/modelconfig/examples/|pkg/hfutil/hub/samples/"
 
 # Define test packages
 TEST_PACKAGES     := $(shell go list ./... | grep -v -E '(pkg/apis|pkg/testing|pkg/openapi|pkg/client)')
