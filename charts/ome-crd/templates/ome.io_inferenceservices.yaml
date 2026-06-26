@@ -36271,10 +36271,15 @@ spec:
                     apiGroup:
                       default: ome.io
                       type: string
+                    autoSync:
+                      default: true
+                      type: boolean
                     kind:
                       default: ClusterServingRuntime
                       type: string
                     name:
+                      type: string
+                    revision:
                       type: string
                   required:
                     - name
@@ -36381,6 +36386,8 @@ spec:
                       - type
                     type: object
                   type: array
+                lastRuntimeSyncToken:
+                  type: string
                 modelStatus:
                   properties:
                     lastFailureInfo:
@@ -36460,6 +36467,8 @@ spec:
                 observedGeneration:
                   format: int64
                   type: integer
+                pinnedRevisionName:
+                  type: string
                 url:
                   type: string
               type: object

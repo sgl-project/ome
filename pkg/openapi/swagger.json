@@ -2162,6 +2162,10 @@
           "x-kubernetes-patch-merge-key": "type",
           "x-kubernetes-patch-strategy": "merge"
         },
+        "lastRuntimeSyncToken": {
+          "description": "LastRuntimeSyncToken is the ome.io/runtime-sync annotation value at last pin advance; the controller advances the pin when the live annotation differs from this.",
+          "type": "string"
+        },
         "modelStatus": {
           "description": "Model related statuses",
           "default": {},
@@ -2171,6 +2175,10 @@
           "description": "ObservedGeneration is the 'Generation' of the Service that was last processed by the controller.",
           "type": "integer",
           "format": "int64"
+        },
+        "pinnedRevisionName": {
+          "description": "PinnedRevisionName is the ControllerRevision (OME ns) driving pod specs. Empty when autoSync is true.",
+          "type": "string"
         },
         "url": {
           "description": "URL holds the url that will distribute traffic over the provided traffic targets. It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-level-suffix}",
@@ -4502,6 +4510,10 @@
           "description": "APIGroup of the resource being referenced Defaults to `ome.io` Specifies the Kubernetes API group of the referenced runtime.",
           "type": "string"
         },
+        "autoSync": {
+          "description": "AutoSync (default true) re-renders pod specs from the live runtime every reconcile. When false, the ISVC pins to a ControllerRevision snapshot; bump ome.io/runtime-sync or set spec.runtime.revision to roll forward.",
+          "type": "boolean"
+        },
         "kind": {
           "description": "Kind of the runtime being referenced Defaults to ClusterServingRuntime Specifies the Kubernetes resource kind of the referenced runtime. ClusterServingRuntime is a cluster-wide runtime, while ServingRuntime is namespace-scoped.",
           "type": "string"
@@ -4510,6 +4522,10 @@
           "description": "Name of the runtime being referenced Identifies the specific runtime environment to be used for model execution.",
           "type": "string",
           "default": ""
+        },
+        "revision": {
+          "description": "Revision pins to a named ControllerRevision in the OME namespace. Enables rollback; ignored when AutoSync is true.",
+          "type": "string"
         }
       }
     },

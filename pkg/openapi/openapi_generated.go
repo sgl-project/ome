@@ -3927,6 +3927,20 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref common.ReferenceCall
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatus"),
 						},
 					},
+					"pinnedRevisionName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PinnedRevisionName is the ControllerRevision (OME ns) driving pod specs. Empty when autoSync is true.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"lastRuntimeSyncToken": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastRuntimeSyncToken is the ome.io/runtime-sync annotation value at last pin advance; the controller advances the pin when the live annotation differs from this.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},
@@ -8082,6 +8096,20 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref common.ReferenceCallback)
 					"apiGroup": {
 						SchemaProps: spec.SchemaProps{
 							Description: "APIGroup of the resource being referenced Defaults to `ome.io` Specifies the Kubernetes API group of the referenced runtime.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"autoSync": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AutoSync (default true) re-renders pod specs from the live runtime every reconcile. When false, the ISVC pins to a ControllerRevision snapshot; bump ome.io/runtime-sync or set spec.runtime.revision to roll forward.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"revision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Revision pins to a named ControllerRevision in the OME namespace. Enables rollback; ignored when AutoSync is true.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

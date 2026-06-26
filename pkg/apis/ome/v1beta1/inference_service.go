@@ -315,6 +315,19 @@ type ServingRuntimeRef struct {
 	// Specifies the Kubernetes API group of the referenced runtime.
 	// +kubebuilder:default="ome.io"
 	APIGroup *string `json:"apiGroup,omitempty"`
+
+	// AutoSync (default true) re-renders pod specs from the live
+	// runtime every reconcile. When false, the ISVC pins to a
+	// ControllerRevision snapshot; bump ome.io/runtime-sync or set
+	// spec.runtime.revision to roll forward.
+	// +optional
+	// +kubebuilder:default=true
+	AutoSync *bool `json:"autoSync,omitempty"`
+
+	// Revision pins to a named ControllerRevision in the OME
+	// namespace. Enables rollback; ignored when AutoSync is true.
+	// +optional
+	Revision *string `json:"revision,omitempty"`
 }
 
 // InferenceService is the Schema for the InferenceServices API

@@ -29,6 +29,17 @@ type InferenceServiceStatus struct {
 	Components map[ComponentType]ComponentStatusSpec `json:"components,omitempty"`
 	// Model related statuses
 	ModelStatus ModelStatus `json:"modelStatus,omitempty"`
+
+	// PinnedRevisionName is the ControllerRevision (OME ns) driving
+	// pod specs. Empty when autoSync is true.
+	// +optional
+	PinnedRevisionName string `json:"pinnedRevisionName,omitempty"`
+
+	// LastRuntimeSyncToken is the ome.io/runtime-sync annotation
+	// value at last pin advance; the controller advances the pin
+	// when the live annotation differs from this.
+	// +optional
+	LastRuntimeSyncToken string `json:"lastRuntimeSyncToken,omitempty"`
 }
 
 // ComponentStatusSpec describes the state of the component

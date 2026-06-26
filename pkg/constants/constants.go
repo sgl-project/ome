@@ -24,6 +24,44 @@ var (
 	OMENamespace                     = getEnvOrDefault("POD_NAMESPACE", "ome")
 )
 
+// Runtime revision (ServingRuntime spec snapshot) constants. OME snapshots a
+// resolved ServingRuntimeSpec into a ControllerRevision in the OME namespace so
+// an InferenceService can pin to it (spec.runtime.autoSync=false) and detect
+// drift. See pkg/runtimerevision and pkg/controller/v1beta1/runtimerevision.
+var (
+	// Bumping this annotation on an ISVC tells the controller to
+	// advance the pinned ControllerRevision to a fresh snapshot of
+	// the current runtime spec.
+	RuntimeSyncAnnotationKey = OMEAPIGroupName + "/runtime-sync"
+
+	// RuntimeDrifted is True when a pinned ISVC's live runtime hash
+	// differs from the pinned revision's hash. Reasons:
+	//   RevisionMismatch — live spec drifted from pin
+	//   RevisionMissing  — pinned revision GC'd or deleted
+	//   PinAdvanced      — transient, set during ack
+	RuntimeDriftedConditionType = "RuntimeDrifted"
+
+	// Labels on ControllerRevisions the OME controller creates for
+	// pinning. The writer uses them to find-or-create by content
+	// hash; the GC loop uses them to list per-source-runtime.
+	RuntimeRevisionOfLabelKey          = OMEAPIGroupName + "/runtime-of"
+	RuntimeRevisionOfKindLabelKey      = OMEAPIGroupName + "/runtime-of-kind"
+	RuntimeRevisionOfNamespaceLabelKey = OMEAPIGroupName + "/runtime-of-namespace"
+	RuntimeRevisionHashLabelKey        = OMEAPIGroupName + "/revision-hash"
+
+	// Gates the immutability webhook so StatefulSet/DaemonSet-owned
+	// ControllerRevisions (no annotation) pass through unchanged.
+	RuntimeRevisionCreatedByKey      = OMEAPIGroupName + "/created-by"
+	RuntimeRevisionCreatedByOMEValue = "ome-controller"
+
+	// Annotation the GC controller sets on a revision the first time
+	// it observes it as unreferenced + over the retention count.
+	// Holds an RFC3339 timestamp; the GC controller deletes the
+	// revision when (now - value) exceeds the configured grace period.
+	// Cleared if the revision becomes referenced again before then.
+	RuntimeRevisionGCEligibleSinceKey = OMEAPIGroupName + "/gc-eligible-since"
+)
+
 // Benchmark Constants
 var (
 	BenchmarjJobName          = "benchmarkjob"
