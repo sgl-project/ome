@@ -60,7 +60,7 @@ func FindOrCreate(
 			},
 		},
 		Data:     runtime.RawExtension{Raw: specBytes},
-		Revision: 1, // Phase 3 GC will set this to a monotonic counter; Phase 1 doesn't rely on it.
+		Revision: 1, // Unused: OME identifies revisions by content hash (name + revision-hashlabel) and orders GC by CreationTimestamp. Kept as a valid non-zero value the ControllerRevision API requires.
 	}
 	if err := c.Create(ctx, rev); err != nil {
 		// A concurrent writer raced us; resolve to the existing name.

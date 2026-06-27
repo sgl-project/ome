@@ -231,21 +231,40 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// Validate specified runtime
 		rtName = isvc.Spec.Runtime.Name
 		userSpecifiedRuntime = true
-		if err := r.RuntimeSelector.ValidateRuntime(ctx, rtName, baseModel, isvc); err != nil {
-			r.Log.Error(err, "Runtime validation failed", "runtime", rtName, "model", isvc.Spec.Model.Name)
-			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeValidationError",
-				"Runtime %s does not support model %s: %v", rtName, isvc.Spec.Model.Name, err)
-			return reconcile.Result{}, err
-		}
 
-		// Get the runtime spec using selector
-		rtSpec, _, err := r.RuntimeSelector.GetRuntime(ctx, rtName, isvc.Namespace)
-		if err != nil {
-			r.Log.Error(err, "Failed to get runtime spec", "runtime", rtName)
-			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeFetchError", err.Error())
-			return reconcile.Result{}, err
+		if isvc.Spec.Runtime.AutoSync != nil && !*isvc.Spec.Runtime.AutoSync {
+			// Pinning opt-in (autoSync=false): resolve the runtime spec from the
+			// pinned ControllerRevision snapshot instead of the live runtime. The
+			// pin helper handles first-reconcile create, drift detection, and the
+			// ome.io/runtime-sync ack, and persists status itself when children
+			// must be skipped.
+			pin, perr := r.resolvePinnedRuntime(ctx, isvc)
+			if perr != nil {
+				r.Log.Error(perr, "Pin resolution failed", "runtime", rtName)
+				r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimePinError", perr.Error())
+				return reconcile.Result{}, perr
+			}
+			if pin.skipChildren {
+				return reconcile.Result{}, nil
+			}
+			rt = pin.spec
+		} else {
+			if err := r.RuntimeSelector.ValidateRuntime(ctx, rtName, baseModel, isvc); err != nil {
+				r.Log.Error(err, "Runtime validation failed", "runtime", rtName, "model", isvc.Spec.Model.Name)
+				r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeValidationError",
+					"Runtime %s does not support model %s: %v", rtName, isvc.Spec.Model.Name, err)
+				return reconcile.Result{}, err
+			}
+
+			// Get the runtime spec using selector
+			rtSpec, _, err := r.RuntimeSelector.GetRuntime(ctx, rtName, isvc.Namespace)
+			if err != nil {
+				r.Log.Error(err, "Failed to get runtime spec", "runtime", rtName)
+				r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeFetchError", err.Error())
+				return reconcile.Result{}, err
+			}
+			rt = rtSpec
 		}
-		rt = rtSpec
 	} else {
 		// Auto-select runtime
 		selection, err := r.RuntimeSelector.SelectRuntime(ctx, baseModel, isvc)

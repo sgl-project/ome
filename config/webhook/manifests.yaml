@@ -113,6 +113,36 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
+  name: controllerrevision-immutability.ome.io
+webhooks:
+  - clientConfig:
+      caBundle: Cg==
+      service:
+        name: $(webhookServiceName)
+        namespace: $(omeNamespace)
+        path: /validate-apps-v1-controllerrevision
+    failurePolicy: Ignore
+    name: controllerrevision-immutability.ome-webhook-server.validator
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: $(omeNamespace)
+    sideEffects: None
+    timeoutSeconds: 5
+    admissionReviewVersions: ["v1"]
+    rules:
+      - apiGroups:
+          - apps
+        apiVersions:
+          - v1
+        operations:
+          - UPDATE
+        resources:
+          - controllerrevisions
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
   name: capacityreservation.ome.io
 webhooks:
   - clientConfig:

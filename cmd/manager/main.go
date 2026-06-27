@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
@@ -44,12 +45,14 @@ import (
 	v1beta1benchmarkjobcontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/benchmark"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	v1beta1isvccontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice"
+	v1beta1runtimerevisioncontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/runtimerevision"
 	"sigs.k8s.io/ome/pkg/runtimeselector"
 	"sigs.k8s.io/ome/pkg/utils"
 	"sigs.k8s.io/ome/pkg/version"
 	"sigs.k8s.io/ome/pkg/webhook/admission/benchmark"
 	"sigs.k8s.io/ome/pkg/webhook/admission/isvc"
 	"sigs.k8s.io/ome/pkg/webhook/admission/pod"
+	runtimerevisionwebhook "sigs.k8s.io/ome/pkg/webhook/admission/runtimerevision"
 	"sigs.k8s.io/ome/pkg/webhook/admission/servingruntime"
 )
 
@@ -92,28 +95,32 @@ func init() {
 
 // Options defines the program-configurable options that may be passed on the command line.
 type Options struct {
-	metricsAddr             string
-	secureMetrics           bool
-	enableHTTP2             bool
-	webhookPort             int
-	enableLeaderElection    bool
-	enableWebhook           bool
-	probeAddr               string
-	leaderElectionNamespace string
-	zapOpts                 zap.Options
+	metricsAddr                string
+	secureMetrics              bool
+	enableHTTP2                bool
+	webhookPort                int
+	enableLeaderElection       bool
+	enableWebhook              bool
+	probeAddr                  string
+	leaderElectionNamespace    string
+	runtimeRevisionRetention   int
+	runtimeRevisionGracePeriod time.Duration
+	zapOpts                    zap.Options
 }
 
 // DefaultOptions returns the default values for the program options.
 func DefaultOptions() Options {
 	return Options{
-		metricsAddr:             ":8080",
-		webhookPort:             9443,
-		enableLeaderElection:    false,
-		enableWebhook:           false,
-		enableHTTP2:             false,
-		secureMetrics:           false,
-		probeAddr:               ":8081",
-		leaderElectionNamespace: LeaderElectionNamespace,
+		metricsAddr:                ":8080",
+		webhookPort:                9443,
+		enableLeaderElection:       false,
+		enableWebhook:              false,
+		enableHTTP2:                false,
+		secureMetrics:              false,
+		probeAddr:                  ":8081",
+		leaderElectionNamespace:    LeaderElectionNamespace,
+		runtimeRevisionRetention:   10,
+		runtimeRevisionGracePeriod: 24 * time.Hour,
 		zapOpts: zap.Options{
 			TimeEncoder: zapcore.RFC3339TimeEncoder,
 			ZapOpts:     []zaplog.Option{zaplog.AddCaller()},
@@ -137,6 +144,10 @@ func GetOptions() Options {
 	flag.StringVar(&opts.leaderElectionNamespace, "leader-election-namespace", opts.leaderElectionNamespace, "The namespace in which the leader election configmap will be created.")
 	flag.BoolVar(&opts.enableWebhook, "webhook", opts.enableWebhook, "Enable the webhook server.")
 	flag.StringVar(&opts.probeAddr, "health-probe-addr", opts.probeAddr, "The address the probe endpoint binds to.")
+	flag.IntVar(&opts.runtimeRevisionRetention, "runtime-revision-retention", opts.runtimeRevisionRetention,
+		"Number of ControllerRevision snapshots to retain per source runtime before garbage collection.")
+	flag.DurationVar(&opts.runtimeRevisionGracePeriod, "runtime-revision-grace-period", opts.runtimeRevisionGracePeriod,
+		"How long a runtime-revision snapshot must stay unreferenced and over-retention before GC deletes it.")
 	opts.zapOpts.BindFlags(flag.CommandLine)
 	flag.Parse()
 	return opts
@@ -306,6 +317,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	setupLog.Info("Setting up runtime-revision GC controller",
+		"retention", options.runtimeRevisionRetention,
+		"gracePeriod", options.runtimeRevisionGracePeriod)
+	if err = (&v1beta1runtimerevisioncontroller.GCReconciler{
+		Client:              mgr.GetClient(),
+		Log:                 ctrl.Log.WithName("RuntimeRevisionGC"),
+		Scheme:              mgr.GetScheme(),
+		OMENamespace:        constants.OMENamespace,
+		RetentionPerRuntime: options.runtimeRevisionRetention,
+		GracePeriod:         options.runtimeRevisionGracePeriod,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create runtime-revision GC controller")
+		os.Exit(1)
+	}
+
 	if options.enableWebhook {
 		setupLog.Info("Configuring webhook server", "port", options.webhookPort)
 		hookServer := mgr.GetWebhookServer()
@@ -328,6 +354,11 @@ func main() {
 		setupLog.Info("Registering benchmark job validator webhook to the webhook server")
 		hookServer.Register("/validate-ome-io-v1beta1-benchmarkjob", &webhook.Admission{
 			Handler: &benchmark.BenchmarkJobValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
+
+		setupLog.Info("Registering ControllerRevision immutability validator webhook to the webhook server")
+		hookServer.Register("/validate-apps-v1-controllerrevision", &webhook.Admission{
+			Handler: &runtimerevisionwebhook.ImmutabilityValidator{Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
 		if err = ctrl.NewWebhookManagedBy(mgr).
