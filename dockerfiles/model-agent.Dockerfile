@@ -37,8 +37,13 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY cmd/ cmd/
 COPY pkg/ pkg/
 
-# Build the XET library first
-RUN cd pkg/xet && make build
+# Build the XET library first.
+# Cache the cargo registry and git checkouts across builds so crates and the
+# huggingface/xet-core git deps aren't re-downloaded on every rebuild — faster
+# and resilient to transient network failures (e.g. curl [18] partial file).
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    cd pkg/xet && make build
 
 # Verify static library exists and remove dynamic library to force static linking
 RUN ls -lh /workspace/pkg/xet/target/release/libxet.* && \

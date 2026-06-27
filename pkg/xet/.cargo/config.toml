@@ -1,0 +1,12 @@
+# Network resilience for cargo in CI / Docker builds.
+#
+# Fixes transient "curl [18] Transferred a partial file" failures when
+# downloading crates: HTTP/2 multiplexing is the common trigger, so force
+# HTTP/1.1, retry transient drops a few times, and fetch the huggingface/xet-core git
+# dependencies via the system git client (more robust than libgit2).
+[net]
+retry = 4
+git-fetch-with-cli = true
+
+[http]
+multiplexing = false
