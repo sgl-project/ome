@@ -45,7 +45,7 @@ jobs:
 
       - name: Install Hugo
         run: |
-          cd hack/internal/tools && GOBIN=$GITHUB_WORKSPACE/bin CGO_ENABLED=1 go install -tags extended github.com/gohugoio/hugo@v0.147.7
+          cd hack/internal/tools && GOBIN=$GITHUB_WORKSPACE/bin CGO_ENABLED=1 go install -tags extended github.com/gohugoio/hugo@v0.157.0
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
 
       - name: Install dependencies

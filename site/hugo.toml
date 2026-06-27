@@ -163,6 +163,7 @@ github_project_repo = "https://github.com/ome-projects/ome"
   proxy = "direct"
   [module.hugoVersion]
     extended = true
+    min = "0.157.0"
   [[module.imports]]
     path = "github.com/google/docsy"
     disable = false
