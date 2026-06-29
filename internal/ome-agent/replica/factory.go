@@ -15,11 +15,13 @@ func NewReplicator(r *ReplicaAgent) (replicator.Replicator, error) {
 		return &replicator.HFToOCIReplicator{
 			Logger: r.Logger,
 			Config: replicator.HFToOCIReplicatorConfig{
-				LocalPath:      r.Config.LocalPath,
-				NumConnections: r.Config.NumConnections,
-				ChecksumConfig: r.Config.Target.ChecksumConfig,
-				HubClient:      r.Config.Source.HubClient,
-				OCIOSDataStore: r.Config.Target.OCIOSDataStore,
+				LocalPath:                      r.Config.LocalPath,
+				NumConnections:                 r.Config.NumConnections,
+				ChecksumConfig:                 r.Config.Target.ChecksumConfig,
+				HubClient:                      r.Config.Source.HubClient,
+				OCIOSDataStore:                 r.Config.Target.OCIOSDataStore,
+				HFDownloadTimeout:              r.Config.HFDownloadTimeout,
+				HFDownloadStaleProgressTimeout: r.Config.HFDownloadStaleProgressTimeout,
 			},
 			ReplicationInput: r.ReplicationInput,
 		}, nil
@@ -50,8 +52,10 @@ func NewReplicator(r *ReplicaAgent) (replicator.Replicator, error) {
 		return &replicator.HFToPVCReplicator{
 			Logger: r.Logger,
 			Config: replicator.HFToPVCReplicatorConfig{
-				LocalPath: r.Config.LocalPath,
-				HubClient: r.Config.Source.HubClient,
+				LocalPath:                      r.Config.LocalPath,
+				HubClient:                      r.Config.Source.HubClient,
+				HFDownloadTimeout:              r.Config.HFDownloadTimeout,
+				HFDownloadStaleProgressTimeout: r.Config.HFDownloadStaleProgressTimeout,
 			},
 			ReplicationInput: r.ReplicationInput,
 		}, nil

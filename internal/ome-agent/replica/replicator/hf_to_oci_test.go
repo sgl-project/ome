@@ -28,7 +28,7 @@ func TestHFToOCIReplicator_Replicate_Success(t *testing.T) {
 
 	downloadCalled := false
 	uploadCalled := false
-	downloadFromHFFunc = func(input common.ReplicationInput, hubClient *xet.Client, downloadDir string, logger logging.Interface) (string, error) {
+	downloadFromHFFunc = func(input common.ReplicationInput, hubClient *xet.Client, downloadDir string, opts hfDownloadOptions, logger logging.Interface) (string, error) {
 		downloadCalled = true
 		return "/tmp/model", nil
 	}
@@ -85,7 +85,7 @@ func TestHFToOCIReplicator_Replicate_Failure(t *testing.T) {
 	objs := CreateCommonMockReplicationObjects(1)
 
 	// Test download error
-	downloadFromHFFunc = func(input common.ReplicationInput, hubClient *xet.Client, downloadDir string, logger logging.Interface) (string, error) {
+	downloadFromHFFunc = func(input common.ReplicationInput, hubClient *xet.Client, downloadDir string, opts hfDownloadOptions, logger logging.Interface) (string, error) {
 		return "", errors.New("download error")
 	}
 	uploadCalled := false
@@ -99,7 +99,7 @@ func TestHFToOCIReplicator_Replicate_Failure(t *testing.T) {
 	assert.ErrorContains(t, err, "download error")
 
 	// Test upload error
-	downloadFromHFFunc = func(input common.ReplicationInput, hubClient *xet.Client, downloadDir string, logger logging.Interface) (string, error) {
+	downloadFromHFFunc = func(input common.ReplicationInput, hubClient *xet.Client, downloadDir string, opts hfDownloadOptions, logger logging.Interface) (string, error) {
 		return "/tmp/model", nil
 	}
 	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, checksumConfig *common.ChecksumConfig, numObjects int, numConnections int) error {

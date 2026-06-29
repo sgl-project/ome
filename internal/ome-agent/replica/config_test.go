@@ -3,6 +3,7 @@ package replica
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"sigs.k8s.io/ome/pkg/xet"
 
@@ -161,6 +162,8 @@ func TestWithViper(t *testing.T) {
 				v.Set("num_connections", 5)
 				v.Set("download_size_limit_gb", 100)
 				v.Set("enable_size_limit_check", true)
+				v.Set("hf_download_timeout", "2h")
+				v.Set("hf_download_stale_progress_timeout", "15m")
 				v.Set("source.storage_uri", "oci://n/test-src-namespace/b/test-src-bucket/o/models")
 				v.Set("target.storage_uri", "oci://n/test-tgt-namespace/b/test-tgt-bucket/o/models")
 				return v
@@ -171,6 +174,8 @@ func TestWithViper(t *testing.T) {
 				assert.Equal(t, 5, c.NumConnections)
 				assert.Equal(t, 100, c.DownloadSizeLimitGB)
 				assert.Equal(t, true, c.EnableSizeLimitCheck)
+				assert.Equal(t, 2*time.Hour, c.HFDownloadTimeout)
+				assert.Equal(t, 15*time.Minute, c.HFDownloadStaleProgressTimeout)
 				assert.Equal(t, "oci://n/test-src-namespace/b/test-src-bucket/o/models", c.Source.StorageURIStr)
 				assert.Equal(t, "oci://n/test-tgt-namespace/b/test-tgt-bucket/o/models", c.Target.StorageURIStr)
 			},
@@ -186,6 +191,8 @@ func TestWithViper(t *testing.T) {
 				assert.Equal(t, 10, c.NumConnections)
 				assert.Equal(t, 650, c.DownloadSizeLimitGB)
 				assert.Equal(t, true, c.EnableSizeLimitCheck)
+				assert.Equal(t, 72*time.Hour, c.HFDownloadTimeout)
+				assert.Equal(t, 30*time.Minute, c.HFDownloadStaleProgressTimeout)
 			},
 		},
 		{

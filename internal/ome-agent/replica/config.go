@@ -2,6 +2,7 @@ package replica
 
 import (
 	"fmt"
+	"time"
 
 	"sigs.k8s.io/ome/pkg/xet"
 
@@ -20,10 +21,12 @@ import (
 type Config struct {
 	AnotherLogger logging.Interface
 
-	LocalPath            string `mapstructure:"local_path" validate:"required"`
-	DownloadSizeLimitGB  int    `mapstructure:"download_size_limit_gb"`
-	EnableSizeLimitCheck bool   `mapstructure:"enable_size_limit_check"`
-	NumConnections       int    `mapstructure:"num_connections"`
+	LocalPath                      string        `mapstructure:"local_path" validate:"required"`
+	DownloadSizeLimitGB            int           `mapstructure:"download_size_limit_gb"`
+	EnableSizeLimitCheck           bool          `mapstructure:"enable_size_limit_check"`
+	NumConnections                 int           `mapstructure:"num_connections"`
+	HFDownloadTimeout              time.Duration `mapstructure:"hf_download_timeout"`
+	HFDownloadStaleProgressTimeout time.Duration `mapstructure:"hf_download_stale_progress_timeout"`
 
 	Source struct {
 		StorageURIStr  string `mapstructure:"storage_uri" validate:"required"`
@@ -59,9 +62,11 @@ func (c *Config) Apply(opts ...Option) error {
 // defaultConfig returns a new configuration with default values.
 func defaultConfig() *Config {
 	return &Config{
-		NumConnections:       10,
-		DownloadSizeLimitGB:  650,
-		EnableSizeLimitCheck: true,
+		NumConnections:                 10,
+		DownloadSizeLimitGB:            650,
+		EnableSizeLimitCheck:           true,
+		HFDownloadTimeout:              72 * time.Hour,
+		HFDownloadStaleProgressTimeout: 30 * time.Minute,
 	}
 }
 

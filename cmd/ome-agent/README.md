@@ -68,6 +68,8 @@ profile: "DEFAULT"
 
 download_size_limit_gb: 650
 enable_size_limit_check: true
+hf_download_timeout: "72h"
+hf_download_stale_progress_timeout: "30m"
 
 source:
   bucket_name: "model-store"
@@ -104,6 +106,8 @@ All environment variables ***must*** start the prefix `OME_AGENT_` to be recogni
 | `num_connections`                             | `OME_AGENT_NUM_CONNECTIONS`                             | 10                        | no                                                                                   |
 | `download_size_limit_gb`                      | `OME_AGENT_DOWNLOAD_SIZE_LIMIT_GB`                      | 650                       | no                                                                                   |
 | `enable_size_limit_check`                     | `OME_AGENT_ENABLE_SIZE_LIMIT_CHECK`                     | true                      | no                                                                                   |
+| `hf_download_timeout`                         | `OME_AGENT_HF_DOWNLOAD_TIMEOUT`                         | 72h                       | no                                                                                   |
+| `hf_download_stale_progress_timeout`          | `OME_AGENT_HF_DOWNLOAD_STALE_PROGRESS_TIMEOUT`          | 30m                       | no                                                                                   |
 | `source.bucket_name`                          | `OME_AGENT_SOURCE_BUCKET_NAME`                          |                           | yes                                                                                  |
 | `source.prefix`                               | `OME_AGENT_SOURCE_PREFIX`                               |                           | no                                                                                   |
 | `source.region`                               | `OME_AGENT_SOURCE_REGION`                               |                           | yes                                                                                  |

@@ -22,7 +22,7 @@ func TestHFToPVCReplicator_Replicate_Success(t *testing.T) {
 	}()
 
 	// Replace downloadFromHFFunc with a mock version
-	downloadFromHFFunc = func(input common.ReplicationInput, client *xet.Client, path string, logger logging.Interface) (string, error) {
+	downloadFromHFFunc = func(input common.ReplicationInput, client *xet.Client, path string, opts hfDownloadOptions, logger logging.Interface) (string, error) {
 		if path != "/mnt/data/meta/lama-Guard-4-12B" {
 			t.Errorf("unexpected path: got %s, want /mnt/data/meta/lama-Guard-4-12B", path)
 		}
@@ -61,7 +61,7 @@ func TestHFToPVCReplicator_Replicate_Failure(t *testing.T) {
 		downloadFromHFFunc = originalDownloadFunc
 	}()
 
-	downloadFromHFFunc = func(input common.ReplicationInput, client *xet.Client, path string, logger logging.Interface) (string, error) {
+	downloadFromHFFunc = func(input common.ReplicationInput, client *xet.Client, path string, opts hfDownloadOptions, logger logging.Interface) (string, error) {
 		return "", fmt.Errorf("mock error")
 	}
 

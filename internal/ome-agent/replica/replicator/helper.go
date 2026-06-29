@@ -1,6 +1,7 @@
 package replicator
 
 import (
+	"context"
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/base64"
@@ -8,6 +9,7 @@ import (
 	"hash"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"sigs.k8s.io/ome/pkg/xet"
@@ -32,11 +34,170 @@ const (
 )
 
 var (
-	downloadSnapHook                      = func(c *xet.Client, req *xet.SnapshotRequest) (string, error) { return c.DownloadSnapshot(req) }
+	downloadSnapHook = func(ctx context.Context, c *xet.Client, req *xet.SnapshotRequest) (string, error) {
+		return c.DownloadSnapshotWithContext(ctx, req)
+	}
+	setProgressHandlerHook = func(c *xet.Client, handler xet.ProgressHandler, throttle time.Duration) error {
+		return c.SetProgressHandler(handler, throttle)
+	}
+	disableProgressHook                   = func(c *xet.Client) error { return c.DisableProgress() }
 	downloadFromHFFunc                    = downloadFromHF
 	uploadDirectoryToOCIOSDataStoreFunc   = uploadDirectoryToOCIOSDataStore
 	downloadObjectsFromOCIOSDataStoreFunc = downloadObjectsFromOCIOSDataStore
 )
+
+type hfDownloadOptions struct {
+	DownloadTimeout              time.Duration
+	StaleProgressTimeout         time.Duration
+	ProgressCallbackThrottleTime time.Duration
+}
+
+type hfSnapshotDownloadResult struct {
+	path string
+	err  error
+}
+
+type hfDownloadProgressSnapshot struct {
+	completedBytes            uint64
+	completedFiles            uint32
+	currentFileCompletedBytes uint64
+}
+
+func downloadSnapshotWithTimeouts(
+	hubClient *xet.Client,
+	req *xet.SnapshotRequest,
+	opts hfDownloadOptions,
+	logger logging.Interface,
+) (string, error) {
+	ctx := context.Background()
+	cancel := func() {}
+	if opts.DownloadTimeout > 0 {
+		var timeoutCancel context.CancelFunc
+		ctx, timeoutCancel = context.WithTimeout(ctx, opts.DownloadTimeout)
+		cancel = timeoutCancel
+	}
+	defer cancel()
+
+	progressed := make(chan struct{}, 1)
+	staleTimedOut := make(chan struct{})
+	var closeStaleOnce sync.Once
+	var lastProgress hfDownloadProgressSnapshot
+	var lastProgressMu sync.Mutex
+	progressHandlerInstalled := false
+	downloadFinished := false
+
+	if opts.StaleProgressTimeout > 0 {
+		if opts.ProgressCallbackThrottleTime <= 0 {
+			opts.ProgressCallbackThrottleTime = 250 * time.Millisecond
+		}
+		if err := setProgressHandlerHook(hubClient, func(update xet.ProgressUpdate) {
+			current := hfDownloadProgressSnapshot{
+				completedBytes:            update.CompletedBytes,
+				completedFiles:            update.CompletedFiles,
+				currentFileCompletedBytes: update.CurrentFileCompletedBytes,
+			}
+			lastProgressMu.Lock()
+			defer lastProgressMu.Unlock()
+			if current == lastProgress {
+				return
+			}
+			lastProgress = current
+			select {
+			case progressed <- struct{}{}:
+			default:
+			}
+		}, opts.ProgressCallbackThrottleTime); err != nil {
+			logger.Warnf("Unable to install HuggingFace/Xet progress watchdog: %v", err)
+		} else {
+			progressHandlerInstalled = true
+			// Only disable the progress handler once the download goroutine has
+			// actually returned (downloadFinished). On the timeout/cancellation path
+			// the goroutine is still running inside DownloadSnapshotWithContext and the
+			// native side may invoke the progress callback concurrently; disabling it
+			// here would race with that in-flight callback. The handler is left in place
+			// and torn down when the process exits shortly after the non-zero return.
+			defer func() {
+				if !downloadFinished {
+					return
+				}
+				if err := disableProgressHook(hubClient); err != nil {
+					logger.Warnf("Unable to disable HuggingFace/Xet progress watchdog: %v", err)
+				}
+			}()
+		}
+	}
+
+	if progressHandlerInstalled {
+		staleCtx, staleCancel := context.WithCancel(ctx)
+		ctx = staleCtx
+		defer staleCancel()
+
+		go func() {
+			timer := time.NewTimer(opts.StaleProgressTimeout)
+			defer timer.Stop()
+			for {
+				select {
+				case <-staleCtx.Done():
+					return
+				case <-progressed:
+					if !timer.Stop() {
+						select {
+						case <-timer.C:
+						default:
+						}
+					}
+					timer.Reset(opts.StaleProgressTimeout)
+				case <-timer.C:
+					closeStaleOnce.Do(func() { close(staleTimedOut) })
+					staleCancel()
+					return
+				}
+			}
+		}()
+	}
+
+	start := time.Now()
+	logger.Infof("Starting HuggingFace/Xet snapshot download for repo %s revision %s with timeout %v and stale-progress timeout %v",
+		req.RepoID, req.Revision, opts.DownloadTimeout, opts.StaleProgressTimeout)
+
+	resultCh := make(chan hfSnapshotDownloadResult, 1)
+	go func() {
+		path, err := downloadSnapHook(ctx, hubClient, req)
+		resultCh <- hfSnapshotDownloadResult{path: path, err: err}
+	}()
+
+	select {
+	case result := <-resultCh:
+		downloadFinished = true
+		duration := time.Since(start)
+		if result.err != nil {
+			if isStaleProgressTimeout(staleTimedOut) {
+				return "", fmt.Errorf("HuggingFace/Xet snapshot download made no bytes/files progress for %s after %s: %w", opts.StaleProgressTimeout, duration, result.err)
+			}
+			if ctx.Err() == context.DeadlineExceeded {
+				return "", fmt.Errorf("HuggingFace/Xet snapshot download exceeded timeout %s after %s: %w", opts.DownloadTimeout, duration, result.err)
+			}
+			return "", result.err
+		}
+		logger.Infof("HuggingFace/Xet snapshot download completed in %v", duration)
+		return result.path, nil
+	case <-ctx.Done():
+		duration := time.Since(start)
+		if isStaleProgressTimeout(staleTimedOut) {
+			return "", fmt.Errorf("HuggingFace/Xet snapshot download made no bytes/files progress for %s after %s", opts.StaleProgressTimeout, duration)
+		}
+		return "", fmt.Errorf("HuggingFace/Xet snapshot download exceeded timeout %s after %s", opts.DownloadTimeout, duration)
+	}
+}
+
+func isStaleProgressTimeout(staleTimedOut <-chan struct{}) bool {
+	select {
+	case <-staleTimedOut:
+		return true
+	default:
+		return false
+	}
+}
 
 func UploadObjectToOCIOSDataStore(ociOSDataStore *ociobjectstore.OCIOSDataStore, object ociobjectstore.ObjectURI, filePath string) error {
 	if ociOSDataStore == nil {

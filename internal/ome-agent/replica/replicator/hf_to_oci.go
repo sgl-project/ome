@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"sigs.k8s.io/ome/pkg/xet"
 
@@ -23,18 +24,23 @@ type HFToOCIReplicator struct {
 }
 
 type HFToOCIReplicatorConfig struct {
-	LocalPath      string
-	NumConnections int
-	ChecksumConfig *common.ChecksumConfig
-	HubClient      *xet.Client
-	OCIOSDataStore *ociobjectstore.OCIOSDataStore
+	LocalPath                      string
+	NumConnections                 int
+	ChecksumConfig                 *common.ChecksumConfig
+	HubClient                      *xet.Client
+	OCIOSDataStore                 *ociobjectstore.OCIOSDataStore
+	HFDownloadTimeout              time.Duration
+	HFDownloadStaleProgressTimeout time.Duration
 }
 
 func (r *HFToOCIReplicator) Replicate(objects []common.ReplicationObject) error {
 	r.Logger.Info("Starting replication to target")
 	// Download
 	tempDirPath := filepath.Join(r.Config.LocalPath, ReplicaWorkspacePath)
-	downloadPath, err := downloadFromHFFunc(r.ReplicationInput, r.Config.HubClient, tempDirPath, r.Logger)
+	downloadPath, err := downloadFromHFFunc(r.ReplicationInput, r.Config.HubClient, tempDirPath, hfDownloadOptions{
+		DownloadTimeout:      r.Config.HFDownloadTimeout,
+		StaleProgressTimeout: r.Config.HFDownloadStaleProgressTimeout,
+	}, r.Logger)
 	if err != nil {
 		r.Logger.Errorf("Failed to download model %s from HuggingFace: %v", r.ReplicationInput.Source.BucketName, err)
 		return err
@@ -63,7 +69,7 @@ func (r *HFToOCIReplicator) Replicate(objects []common.ReplicationObject) error 
 	return nil
 }
 
-func downloadFromHF(input common.ReplicationInput, hubClient *xet.Client, downloadDir string, logger logging.Interface) (string, error) {
+func downloadFromHF(input common.ReplicationInput, hubClient *xet.Client, downloadDir string, opts hfDownloadOptions, logger logging.Interface) (string, error) {
 	req := &xet.SnapshotRequest{
 		RepoID:   input.Source.BucketName,
 		RepoType: hub.RepoTypeModel,
@@ -71,7 +77,7 @@ func downloadFromHF(input common.ReplicationInput, hubClient *xet.Client, downlo
 		LocalDir: downloadDir,
 	}
 
-	path, err := downloadSnapHook(hubClient, req)
+	path, err := downloadSnapshotWithTimeouts(hubClient, req, opts, logger)
 	if err != nil {
 		logger.Errorf("Failed to download snapshot: %v", err)
 	}
