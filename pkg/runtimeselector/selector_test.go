@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 // Helper functions
@@ -866,6 +867,105 @@ func TestGetCompatibleRuntimes_ExcludeNoAutoSelect(t *testing.T) {
 	// Only the auto-select runtime should appear
 	assert.Len(t, matches, 1)
 	assert.Equal(t, "rt-auto", matches[0].Name)
+}
+
+func TestSelectRuntime_FiltersByDeploymentModeAnnotation(t *testing.T) {
+	fakeClient := createFakeClient()
+	selector := New(fakeClient)
+
+	rawRuntime := &v1beta1.ServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "raw-rt", Namespace: "default"},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{
+					ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Weight: 20},
+					AutoSelect:  ptr(true),
+				},
+			},
+			EngineConfig: &v1beta1.EngineSpec{
+				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+					Annotations: map[string]string{
+						constants.DeploymentMode: string(constants.RawDeployment),
+					},
+				},
+			},
+		},
+	}
+	multiRuntime := &v1beta1.ServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "multi-rt", Namespace: "default"},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{
+					ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Weight: 10},
+					AutoSelect:  ptr(true),
+				},
+			},
+			EngineConfig: &v1beta1.EngineSpec{
+				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+					Annotations: map[string]string{
+						constants.DeploymentMode: string(constants.MultiNode),
+					},
+				},
+				Leader: &v1beta1.LeaderSpec{},
+				Worker: &v1beta1.WorkerSpec{Size: ptr(1)},
+			},
+		},
+	}
+	noAnnotationRuntime := &v1beta1.ServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "no-annotation-rt", Namespace: "default"},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{
+					ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Weight: 5},
+					AutoSelect:  ptr(true),
+				},
+			},
+			EngineConfig: &v1beta1.EngineSpec{
+				Leader: &v1beta1.LeaderSpec{},
+				Worker: &v1beta1.WorkerSpec{Size: ptr(1)},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	assert.NoError(t, fakeClient.Create(ctx, rawRuntime))
+	assert.NoError(t, fakeClient.Create(ctx, multiRuntime))
+	assert.NoError(t, fakeClient.Create(ctx, noAnnotationRuntime))
+
+	model := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}}
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "isvc",
+			Namespace: "default",
+			Annotations: map[string]string{
+				constants.DeploymentMode: string(constants.RawDeployment),
+			},
+		},
+		Spec: v1beta1.InferenceServiceSpec{
+			Engine: &v1beta1.EngineSpec{
+				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+					Annotations: map[string]string{
+						constants.DeploymentMode: string(constants.MultiNode),
+					},
+				},
+			},
+		},
+	}
+
+	matches, err := selector.GetCompatibleRuntimes(ctx, model, isvc, "default")
+	assert.NoError(t, err)
+	assert.Len(t, matches, 2)
+	assert.Equal(t, "multi-rt", matches[0].Name)
+	assert.Equal(t, "no-annotation-rt", matches[1].Name)
+
+	selection, err := selector.SelectRuntime(ctx, model, isvc)
+	assert.NoError(t, err)
+	assert.Equal(t, "multi-rt", selection.Name)
+
+	isvc.Spec.Engine.Annotations[constants.DeploymentMode] = ""
+	matches, err = selector.GetCompatibleRuntimes(ctx, model, isvc, "default")
+	assert.NoError(t, err)
+	assert.Len(t, matches, 3)
 }
 
 func TestSelectRuntime_NoRuntimeFoundError_Details(t *testing.T) {
