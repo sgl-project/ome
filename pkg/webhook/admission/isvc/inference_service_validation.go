@@ -455,6 +455,22 @@ func (v *InferenceServiceValidator) resolveModelAndRuntime(ctx context.Context, 
 	if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" {
 		// Validate specified runtime
 		if err := v.RuntimeSelector.ValidateRuntime(ctx, isvc.Spec.Runtime.Name, baseModel, isvc); err != nil {
+			// The operator named this runtime explicitly, so OME should not
+			// block on the runtime's *declared* supportedModelFormats: a
+			// generic runtime (e.g. sglang) can serve many architectures it
+			// never enumerates. Downgrade a pure compatibility mismatch
+			// (format / architecture / framework) to an advisory warning and
+			// admit — the deliberate choice wins over the declaration.
+			//
+			// Everything else stays a hard error: a not-found / disabled
+			// runtime or a malformed model genuinely cannot run, so admitting
+			// would only produce a broken ISVC.
+			if runtimeselector.IsRuntimeCompatibilityError(err) {
+				warnings = append(warnings, fmt.Sprintf(
+					"runtime %q does not declare support for model %q (%v); proceeding because the runtime was named explicitly",
+					isvc.Spec.Runtime.Name, isvc.Spec.Model.Name, err))
+				return warnings, nil
+			}
 			return warnings, fmt.Errorf("runtime %s does not support model %s: %w",
 				isvc.Spec.Runtime.Name, isvc.Spec.Model.Name, err)
 		}
