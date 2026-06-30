@@ -195,6 +195,34 @@ func TestCreateLWSDropsKueueQueueLabelFromPodTemplates(t *testing.T) {
 	assert.NotContains(t, leaderWorkerSet.Spec.LeaderWorkerTemplate.WorkerTemplate.Labels, constants.KueueQueueLabelKey)
 }
 
+func TestCreateLWSTruncatesLeaderAppLabel(t *testing.T) {
+	testContainer := corev1.Container{
+		Name:  "test-container",
+		Image: "test-image:latest",
+	}
+	headPod := &corev1.PodSpec{
+		Containers: []corev1.Container{testContainer},
+	}
+	workerPod := &corev1.PodSpec{
+		Containers: []corev1.Container{testContainer},
+	}
+	componentMeta := metav1.ObjectMeta{
+		Name:      "amaaaaaabgjpxjqamiuior4qamufon2clgneukbxomingadlfcsgq67sicoa-engine",
+		Namespace: "default",
+		Labels: map[string]string{
+			"app": "test-isvc",
+		},
+	}
+	componentExt := &v1beta1.ComponentExtensionSpec{}
+
+	leaderWorkerSet := createLWS(headPod, workerPod, 1, componentExt, componentMeta)
+	expectedAppLabel := constants.TruncateNameWithMaxLength(componentMeta.Name, 63)
+
+	assert.Len(t, leaderWorkerSet.Spec.LeaderWorkerTemplate.LeaderTemplate.Labels["app"], 63)
+	assert.Equal(t, expectedAppLabel, leaderWorkerSet.Spec.LeaderWorkerTemplate.LeaderTemplate.Labels["app"])
+	assert.Equal(t, "test-isvc", leaderWorkerSet.Spec.LeaderWorkerTemplate.WorkerTemplate.Labels["app"])
+}
+
 func TestReconcile(t *testing.T) {
 	// Setup test scheme
 	scheme := runtime.NewScheme()
