@@ -2,6 +2,7 @@ package modelagent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -324,31 +325,35 @@ func (s *Gopher) processTask(task *GopherTask) error {
 				s.logger.Errorf("Failed to get target directory path for model %s: %v", modelInfo, err)
 				return err
 			}
-			err = utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
-				downloadErr := s.downloadModel(ctx, osUri, destPath, task)
-				if downloadErr != nil {
-					// Check if context was cancelled
-					if ctx.Err() != nil {
-						s.logger.Infof("Download cancelled for model %s: %v", modelInfo, ctx.Err())
-						return ctx.Err()
+			if matchedKey, reused := s.findReadyObjectStorageModelWithSamePath(ctx, task, baseModelSpec, destPath); reused {
+				s.logger.Infof("Reusing Ready same-path model artifact for %s/%s from %s at %s", namespace, name, matchedKey, destPath)
+			} else {
+				err = utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
+					downloadErr := s.downloadModel(ctx, osUri, destPath, task)
+					if downloadErr != nil {
+						// Check if context was cancelled
+						if ctx.Err() != nil {
+							s.logger.Infof("Download cancelled for model %s: %v", modelInfo, ctx.Err())
+							return ctx.Err()
+						}
+						s.logger.Errorf("Failed to download model %s (attempt %d/%d): %v",
+							modelInfo, s.downloadRetry, s.downloadRetry, downloadErr)
 					}
-					s.logger.Errorf("Failed to download model %s (attempt %d/%d): %v",
-						modelInfo, s.downloadRetry, s.downloadRetry, downloadErr)
-				}
-				return downloadErr
-			})
-			if err != nil {
-				s.logger.Errorf("All download attempts failed for model %s: %v", modelInfo, err)
+					return downloadErr
+				})
+				if err != nil {
+					s.logger.Errorf("All download attempts failed for model %s: %v", modelInfo, err)
 
-				// Record download failure in metrics
-				errorType := "download_error"
-				if strings.Contains(err.Error(), "MD5") {
-					errorType = "md5_verification_error"
-				}
-				s.metrics.RecordFailedDownload(modelType, namespace, name, errorType)
+					// Record download failure in metrics
+					errorType := "download_error"
+					if strings.Contains(err.Error(), "MD5") {
+						errorType = "md5_verification_error"
+					}
+					s.metrics.RecordFailedDownload(modelType, namespace, name, errorType)
 
-				s.markModelOnNodeFailed(task)
-				return err
+					s.markModelOnNodeFailed(task)
+					return err
+				}
 			}
 			// Parse model config and update ConfigMap
 			// We can pass either BaseModel or ClusterBaseModel based on the task's model type
@@ -734,6 +739,91 @@ func (s *Gopher) createOCIOSDataStore(baseModelSpec v1beta1.BaseModelSpec) (*oci
 	}
 
 	return ociOSDS, nil
+}
+
+// findReadyObjectStorageModelWithSamePath looks for a Ready OCI Object Storage
+// model entry on this node that resolves to the same local destination path.
+// This is intentionally independent of downloadPolicy: copied model CRs with
+// the same source and destination can reuse Ready local files, while normal
+// downloadPolicy behavior still applies when no same-path Ready artifact exists.
+func (s *Gopher) findReadyObjectStorageModelWithSamePath(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec, destPath string) (string, bool) {
+	if task == nil || (task.BaseModel == nil && task.ClusterBaseModel == nil) {
+		return "", false
+	}
+	if baseModelSpec.Storage == nil || baseModelSpec.Storage.StorageUri == nil || baseModelSpec.Storage.Path == nil {
+		return "", false
+	}
+	if s.configMapReconciler == nil {
+		return "", false
+	}
+	if _, err := os.Stat(destPath); err != nil {
+		s.logger.Warnf("Cannot reuse same-path model artifact at %s because it is not available locally: %v", destPath, err)
+		return "", false
+	}
+
+	configMap, err := s.configMapReconciler.getConfigMap(ctx)
+	if err != nil {
+		s.logger.Warnf("Cannot inspect node ConfigMap for same-path model reuse: %v", err)
+		return "", false
+	}
+
+	currentKey := s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel)
+	if s.clusterBaseModelLister != nil {
+		clusterBaseModels, err := s.clusterBaseModelLister.List(labels.Everything())
+		if err == nil {
+			for _, model := range clusterBaseModels {
+				key := constants.GetModelConfigMapKey("", model.Name, true)
+				if key != currentKey && isReadyModelEntry(configMap.Data[key]) &&
+					sameModelStoragePath(baseModelSpec.Storage, model.Spec.Storage, s.modelRootDir, destPath) {
+					return key, true
+				}
+			}
+		} else {
+			s.logger.Warnf("Cannot list ClusterBaseModels for same-path model reuse: %v", err)
+		}
+	}
+
+	if s.baseModelLister != nil {
+		baseModels, err := s.baseModelLister.List(labels.Everything())
+		if err == nil {
+			for _, model := range baseModels {
+				key := constants.GetModelConfigMapKey(model.Namespace, model.Name, false)
+				if key != currentKey && isReadyModelEntry(configMap.Data[key]) &&
+					sameModelStoragePath(baseModelSpec.Storage, model.Spec.Storage, s.modelRootDir, destPath) {
+					return key, true
+				}
+			}
+		} else {
+			s.logger.Warnf("Cannot list BaseModels for same-path model reuse: %v", err)
+		}
+	}
+	return "", false
+}
+
+func isReadyModelEntry(dataEntry string) bool {
+	var entry ModelEntry
+	if err := json.Unmarshal([]byte(dataEntry), &entry); err != nil {
+		return false
+	}
+	return entry.Status == ModelStatusReady
+}
+
+func sameModelStoragePath(currentStorage *v1beta1.StorageSpec, candidateStorage *v1beta1.StorageSpec, modelRootDir string, destPath string) bool {
+	if currentStorage == nil || candidateStorage == nil || currentStorage.Path == nil || candidateStorage.Path == nil {
+		return false
+	}
+	if !sameStringPtr(currentStorage.StorageUri, candidateStorage.StorageUri) ||
+		!sameStringPtr(currentStorage.Path, candidateStorage.Path) ||
+		!sameStringPtr(currentStorage.SchemaPath, candidateStorage.SchemaPath) ||
+		!sameStringPtr(currentStorage.StorageKey, candidateStorage.StorageKey) {
+		return false
+	}
+	if !sameStringMapPtr(currentStorage.Parameters, candidateStorage.Parameters) {
+		return false
+	}
+
+	candidateSpec := v1beta1.BaseModelSpec{Storage: candidateStorage}
+	return getDestPath(&candidateSpec, modelRootDir) == destPath
 }
 
 func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectURI, destPath string, task *GopherTask) error {
