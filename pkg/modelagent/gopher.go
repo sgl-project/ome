@@ -326,9 +326,7 @@ func (s *Gopher) processTask(task *GopherTask) error {
 				s.logger.Errorf("Failed to get target directory path for model %s: %v", modelInfo, err)
 				return err
 			}
-			if matchedKey, reused := s.findReadyObjectStorageModelWithSamePath(ctx, task, baseModelSpec, destPath); reused {
-				s.logger.Infof("Reusing Ready same-path model artifact for %s/%s from %s at %s", namespace, name, matchedKey, destPath)
-			} else {
+			downloadObjectStorageModel := func() error {
 				err = utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
 					downloadErr := s.downloadModel(ctx, osUri, destPath, task)
 					if downloadErr != nil {
@@ -355,6 +353,17 @@ func (s *Gopher) processTask(task *GopherTask) error {
 					s.markModelOnNodeFailed(task)
 					return err
 				}
+				return nil
+			}
+
+			if shouldUseSamePathObjectStorageReuse(task) {
+				if matchedKey, reused := s.findReadyObjectStorageModelWithSamePath(ctx, task, baseModelSpec, destPath); reused {
+					s.logger.Infof("Reusing Ready same-path model artifact for %s/%s from %s at %s", namespace, name, matchedKey, destPath)
+				} else if err := downloadObjectStorageModel(); err != nil {
+					return err
+				}
+			} else if err := downloadObjectStorageModel(); err != nil {
+				return err
 			}
 			// Parse model config and update ConfigMap
 			// We can pass either BaseModel or ClusterBaseModel based on the task's model type
@@ -526,6 +535,10 @@ func (s *Gopher) processTask(task *GopherTask) error {
 	}
 
 	return nil
+}
+
+func shouldUseSamePathObjectStorageReuse(task *GopherTask) bool {
+	return task != nil && task.TaskType == Download
 }
 
 // isPathReferencedByOtherModels checks if the given path is still referenced by other BaseModel or ClusterBaseModel resources
@@ -744,9 +757,9 @@ func (s *Gopher) createOCIOSDataStore(baseModelSpec v1beta1.BaseModelSpec) (*oci
 
 // findReadyObjectStorageModelWithSamePath looks for a Ready OCI Object Storage
 // model entry on this node that resolves to the same local destination path.
-// This is intentionally independent of downloadPolicy: copied model CRs with
-// the same source and destination can reuse Ready local files, while normal
-// downloadPolicy behavior still applies when no same-path Ready artifact exists.
+// This is intentionally independent of downloadPolicy for normal Download tasks:
+// copied model CRs with the same source and destination can reuse Ready local
+// files. DownloadOverride keeps the existing download/validation path.
 func (s *Gopher) findReadyObjectStorageModelWithSamePath(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec, destPath string) (string, bool) {
 	if task == nil || (task.BaseModel == nil && task.ClusterBaseModel == nil) {
 		return "", false
