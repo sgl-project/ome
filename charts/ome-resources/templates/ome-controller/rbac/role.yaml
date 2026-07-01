@@ -58,16 +58,6 @@ rules:
   - apps
   resources:
   - controllerrevisions
-  verbs:
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - apps
-  resources:
   - deployments
   verbs:
   - create
