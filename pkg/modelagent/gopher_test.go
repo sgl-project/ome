@@ -758,6 +758,37 @@ func TestFindReadyObjectStorageModelWithSamePath(t *testing.T) {
 	}
 }
 
+func TestShouldUseSamePathObjectStorageReuse(t *testing.T) {
+	tests := []struct {
+		name string
+		task *GopherTask
+		want bool
+	}{
+		{
+			name: "normal download can reuse same-path object storage artifact",
+			task: &GopherTask{TaskType: Download},
+			want: true,
+		},
+		{
+			name: "download override must redownload and validate",
+			task: &GopherTask{TaskType: DownloadOverride},
+		},
+		{
+			name: "delete never reuses same-path object storage artifact",
+			task: &GopherTask{TaskType: Delete},
+		},
+		{
+			name: "nil task never reuses same-path object storage artifact",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, shouldUseSamePathObjectStorageReuse(tt.task))
+		})
+	}
+}
+
 func TestHandelReuseArtifactIfNecessary_NoReusePolicy(t *testing.T) {
 	nodeName := "node-1"
 	// Even if CM has content, when policy is AlwaysDownload we should not reuse.
