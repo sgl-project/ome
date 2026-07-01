@@ -61,8 +61,8 @@ func createLWS(headPod *corev1.PodSpec,
 	// Remove kueue.x-k8s.io/queue-name from LWS leader/worker templates. For LWS, the queue-name label belongs only
 	// on the top-level LeaderWorkerSet; child Pods should be managed by the Kueue LWS integration for the expected
 	// workload metadata.
-	delete(headPodMeta.Labels, constants.KueueQueueLabelKey)
-	delete(workerPodMeta.Labels, constants.KueueQueueLabelKey)
+	//delete(headPodMeta.Labels, constants.KueueQueueLabelKey)
+	//delete(workerPodMeta.Labels, constants.KueueQueueLabelKey)
 
 	// Need to remove Prometheus annotations for workerPods as workerPods don't expose endpoints
 	abandonedWorkerPodAnnotations := []string{
