@@ -663,7 +663,7 @@ func ModelConfigName(isvcName string) string {
 }
 
 func LWSName(isvcName string) string {
-	var maxLen = 50
+	var maxLen = 48
 	if len(isvcName) > maxLen {
 		isvcName = isvcName[len(isvcName)-maxLen:]
 	}
