@@ -2,7 +2,7 @@ package constants
 
 import "testing"
 
-func TestLWSNameTruncatesForStatefulSetRevisionLabel(t *testing.T) {
+func TestLWSNameTruncates(t *testing.T) {
 	tests := []struct {
 		name          string
 		componentName string
@@ -19,10 +19,12 @@ func TestLWSNameTruncatesForStatefulSetRevisionLabel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			maxLabelValueLength := 63
 			lwsNamePrefix := "lws-"
-			maxLWSNameSuffixLength := maxLabelValueLength - len("-") - len(tt.revisionHash) - len(lwsNamePrefix)
+			workerStatefulSetSuffix := "-0"
+			maxLWSNameSuffixLength := maxLabelValueLength - len(workerStatefulSetSuffix) - len("-") - len(tt.revisionHash) - len(lwsNamePrefix)
 
 			got := LWSName(tt.componentName)
-			revisionLabelValue := got + "-" + tt.revisionHash
+			workerStatefulSetName := got + workerStatefulSetSuffix
+			revisionLabelValue := workerStatefulSetName + "-" + tt.revisionHash
 			expected := lwsNamePrefix + tt.componentName[len(tt.componentName)-maxLWSNameSuffixLength:]
 
 			if len(revisionLabelValue) > maxLabelValueLength {
