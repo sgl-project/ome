@@ -76,6 +76,51 @@ These annotations control model encryption and decryption:
 | `serving.knative.openshift.io/enablePassthrough` | Enables passthrough on OpenShift    |
 
 
+### Runtime Revision and Pinning Annotations
+
+These annotations drive [runtime revision pinning](/ome/docs/concepts/runtime-revision), which lets an InferenceService pin to a content-addressed snapshot of its ServingRuntime instead of always tracking the live runtime.
+
+| Annotation                 | Description                                                                                                                                                                                    |
+|----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ome.io/runtime-sync`      | Set/bump to a new value on a pinned InferenceService (`spec.runtime.autoSync: false`) to acknowledge runtime drift and advance the pin to a fresh runtime snapshot.                             |
+| `ome.io/gc-eligible-since` | Set by the controller on an OME-managed ControllerRevision (RFC3339 timestamp) when it first becomes unreferenced and over the retention count; the garbage collector uses it. Not user-set.   |
+
+### Deployment Configuration Annotations
+
+| Annotation                    | Description                                                                                            |
+|-------------------------------|-------------------------------------------------------------------------------------------------------|
+| `ome.io/deploymentMode`       | Selects the deployment strategy (e.g. `RawDeployment`, `MultiNode`, `Serverless`, `PDDisaggregated`). |
+| `ome.io/dedicated-ai-cluster` | Associates the InferenceService with a dedicated AI cluster.                                           |
+| `ome.io/entrypoint-component` | Identifies the entrypoint component of a multi-component InferenceService.                             |
+| `ome.io/accelerator-class`    | Selects the accelerator class used for runtime matching and scheduling.                                |
+
+### Ingress Annotations
+
+See [Ingress administration](/ome/docs/administration/ingress) for usage details.
+
+| Annotation                                 | Description                                                          |
+|--------------------------------------------|--------------------------------------------------------------------|
+| `ome.io/ingress-domain`                    | Overrides the ingress domain for the InferenceService.             |
+| `ome.io/ingress-domain-template`           | Template used to construct the ingress domain.                     |
+| `ome.io/ingress-additional-domains`        | Additional domains to expose the InferenceService on.              |
+| `ome.io/ingress-url-scheme`                | URL scheme (`http`/`https`) for generated ingress URLs.            |
+| `ome.io/ingress-path-template`             | Template used to construct the ingress path.                       |
+| `ome.io/ingress-disable-istio-virtualhost` | Disables creation of the Istio VirtualHost for the InferenceService. |
+| `ome.io/ingress-disable-creation`          | Disables ingress creation entirely for the InferenceService.       |
+
+### Observability Annotations
+
+| Annotation               | Description                                          |
+|--------------------------|------------------------------------------------------|
+| `prometheus.ome.io/port` | Container port Prometheus should scrape for metrics. |
+| `prometheus.ome.io/path` | HTTP path Prometheus should scrape for metrics.      |
+
+### Model Management Annotations
+
+| Annotation                           | Description                                                                                     |
+|--------------------------------------|-------------------------------------------------------------------------------------------------|
+| `ome.oracle.com/skip-config-parsing` | Set on a BaseModel/ClusterBaseModel to skip automatic model-config parsing by the model agent.  |
+
 ## Labels
 
 ### Model and Runtime Labels
@@ -135,6 +180,27 @@ These annotations control model encryption and decryption:
 | `networking.knative.dev/visibility` | Knative network visibility       |
 | `sidecar.istio.io/inject`           | Istio sidecar injection          |
 
+
+### Runtime Revision Labels
+
+Applied by the controller to the OME-managed ControllerRevisions used for [runtime pinning](/ome/docs/concepts/runtime-revision). Not user-set.
+
+| Label                         | Description                                                                                          |
+|-------------------------------|-----------------------------------------------------------------------------------------------------|
+| `ome.io/runtime-of`           | Name of the source ServingRuntime/ClusterServingRuntime the revision snapshots.                     |
+| `ome.io/runtime-of-kind`      | Kind of the source runtime (`ServingRuntime` or `ClusterServingRuntime`).                           |
+| `ome.io/runtime-of-namespace` | Namespace of the source runtime (empty for cluster-scoped).                                          |
+| `ome.io/revision-hash`        | Content hash of the snapshotted runtime spec; used to find-or-create revisions.                     |
+| `ome.io/created-by`           | Marks the revision as OME-created (value `ome-controller`); gates the immutability webhook and GC.  |
+
+### Model Management Labels
+
+| Label                               | Description                                                       |
+|-------------------------------------|-------------------------------------------------------------------|
+| `models.ome.io/category`            | Category of the model.                                            |
+| `models.ome.io/node-name`           | Node the model artifact is managed on (set by the model agent).   |
+| `models.ome.io/managed-by`          | Identifies the manager of the model artifact.                     |
+| `models.ome/reserve-model-artifact` | Marks a model artifact to be reserved (retained, not reclaimed).  |
 
 ## Special Values
 

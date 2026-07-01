@@ -127,6 +127,99 @@ Available attributes in the `ServingRuntime` spec:
 | `modelSizeRange`                                  | Model size range is the range of model sizes supported by this runtime                                                                                                                                                                                                                                                                                                                                               |
 | `modelSizeRange.min`                              | Minimum size of the model in bytes                                                                                                                                                                                                                                                                                                                                                                                   |
 | `modelSizeRange.max`                              | Maximum size of the model in bytes                                                                                                                                                                                                                                                                                                                                                                                   |
+| `acceleratorRequirements`                         | Accelerator (GPU) requirements this runtime needs (see [Accelerator Requirements](#accelerator-requirements))                                                                                                                                                                                                                                                                                                        |
+
+### Accelerator Requirements
+
+A runtime can declare the accelerators it supports and the minimum hardware it needs through the optional `acceleratorRequirements` field on the `ServingRuntimeSpec`. This lets OME match a runtime against the accelerators available in the cluster (and against an InferenceService's `acceleratorSelector`) when selecting where to place a workload.
+
+| Field                                    | Type     | Description                                                                                          |
+|------------------------------------------|----------|------------------------------------------------------------------------------------------------------|
+| `acceleratorRequirements.acceleratorClasses`          | []string | Names of the `AcceleratorClass` resources this runtime supports                                     |
+| `acceleratorRequirements.minMemory`                   | int64    | Minimum accelerator memory required, in GB                                                          |
+| `acceleratorRequirements.minComputePerformanceTFLOPS` | int64    | Minimum compute capability required, in TFLOPS                                                      |
+| `acceleratorRequirements.minArchitectureVersion`      | string   | Minimum architecture version (NVIDIA compute capability or equivalent)                              |
+| `acceleratorRequirements.requiredFeatures`            | []string | Hardware features that must be present, e.g., `["tensor-cores", "fp8", "nvlink"]`                   |
+| `acceleratorRequirements.preferredPrecisions`         | []string | Numeric precisions in order of preference, e.g., `["fp8", "fp16", "fp32"]`                          |
+
+```yaml
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: srt-llama-fp8
+spec:
+  supportedModelFormats:
+    - modelFormat:
+        name: safetensors
+      modelArchitecture: LlamaForCausalLM
+      quantization: fp8
+      autoSelect: true
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-h100
+      - nvidia-h200
+    minMemory: 80
+    requiredFeatures:
+      - tensor-cores
+      - fp8
+    preferredPrecisions:
+      - fp8
+      - fp16
+  engineConfig:
+    runner:
+      image: lmsysorg/sglang:v0.4.6.post6
+```
+
+### Per-Accelerator Model Configuration
+
+The requirements above apply to the whole runtime. In addition, an individual entry in `supportedModelFormats` may carry per-accelerator overrides through its `acceleratorConfig` map. This is useful when the same model format needs different settings depending on which accelerator class it lands on - for example a larger GPU may run with a smaller tensor-parallel size, or a specific accelerator may need extra runtime flags or environment variables.
+
+`acceleratorConfig` is keyed by accelerator class name; each value is an `AcceleratorModelConfig`:
+
+| Field                                          | Type              | Description                                                                                                   |
+|------------------------------------------------|-------------------|---------------------------------------------------------------------------------------------------------------|
+| `minMemoryPerBillionParams`                    | int64             | Memory required per billion parameters (bytes). Used to compute whether the model fits on the accelerator     |
+| `tensorParallelismOverride`                    | TensorParallelismConfig | Overrides the default parallelism settings (see below)                                                   |
+| `runtimeArgsOverride`                          | []string          | Accelerator-specific runtime arguments, merged into the runner container's args                              |
+| `environmentOverride`                          | map[string]string | Accelerator-specific environment variables, applied to the runner container                                  |
+
+`tensorParallelismOverride` is a `TensorParallelismConfig`:
+
+| Field                  | Type  | Description                          |
+|------------------------|-------|--------------------------------------|
+| `tensorParallelSize`   | int64 | Size of the tensor parallelism       |
+| `pipelineParallelSize` | int64 | Size of the pipeline parallelism     |
+| `dataParallelSize`     | int64 | Size of the data parallelism         |
+
+When a model is placed on a given accelerator class, OME looks up the matching entry in `acceleratorConfig` and applies it: `environmentOverride` values are merged into the runner container's environment, `runtimeArgsOverride` entries are merged into its args, and any `tensorParallelismOverride` sizes are translated into the runtime's own flags (for example `--tp-size`/`--tensor-parallel-size` for the tensor-parallel size, `--pp-size`/`--pipeline-parallel-size` for pipeline parallelism, and `--dp-size`/`--data-parallel-size` for data parallelism). User-provided values on the InferenceService runner take precedence over these overrides.
+
+```yaml
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: srt-llama-multi-accelerator
+spec:
+  supportedModelFormats:
+    - modelFormat:
+        name: safetensors
+      modelArchitecture: LlamaForCausalLM
+      autoSelect: true
+      acceleratorConfig:
+        nvidia-a100-80gb:
+          minMemoryPerBillionParams: 2000000000
+          tensorParallelismOverride:
+            tensorParallelSize: 4
+          runtimeArgsOverride:
+            - --mem-fraction-static=0.9
+          environmentOverride:
+            NCCL_P2P_LEVEL: NVL
+        nvidia-h100:
+          tensorParallelismOverride:
+            tensorParallelSize: 2
+  engineConfig:
+    runner:
+      image: lmsysorg/sglang:v0.4.6.post6
+```
 
 ### Component Configuration
 

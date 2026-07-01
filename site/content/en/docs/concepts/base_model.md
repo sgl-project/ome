@@ -74,7 +74,8 @@ Available attributes in the BaseModel/ClusterBaseModel spec:
 | `modelArchitecture`            | string            | Specific implementation (e.g., "LlamaForCausalLM", "MistralForCausalLM") |
 | `modelParameterSize`           | string            | Human-readable parameter count (e.g., "7B", "70B", "405B")               |
 | `maxTokens`                    | int32             | Maximum number of tokens the model can process                           |
-| `modelCapabilities`            | []string          | Model capabilities (see Model Capabilities)                              |
+| `modelCapabilities`            | []string          | Model capabilities (see [Model Capabilities](#model-capabilities))       |
+| `apiCapabilities`              | []string          | OpenAI-style API endpoints the model serves (see [API Capabilities](#api-capabilities)) |
 | **Model Format and Framework** |                   |                                                                          |
 | `modelFormat.name`             | string            | Format name (e.g., "safetensors", "onnx", "pytorch")                     |
 | `modelFormat.version`          | string            | Format version (e.g., "1", "2.0")                                        |
@@ -91,6 +92,7 @@ Available attributes in the BaseModel/ClusterBaseModel spec:
 | `storage.nodeAffinity`         | NodeAffinity      | Advanced node selection rules                                            |
 | **Serving Configuration**      |                   |                                                                          |
 | `modelConfiguration`           | RawExtension      | Model-specific configuration as JSON                                     |
+| `diffusionPipeline`            | DiffusionPipelineSpec | Pipeline metadata for diffusion models (see [Diffusion Models](#diffusion-models)) |
 | `additionalMetadata`           | map[string]string | Additional key-value metadata                                            |
 
 ## Storage Backends
@@ -235,13 +237,111 @@ The system automatically determines:
 
 ### Quantization Types
 
+The `quantization` field records the quantization scheme of the model weights as they are stored on disk. It is **metadata** that the model parser extracts from the model's configuration (for example `quant_method` in `config.json` or `hf_quant_config.json`) - OME does not quantize or re-quantize your model. The value is informational and is used during [runtime selection](/ome/docs/concepts/serving_runtime) so that a compatible runtime (one whose `supportedModelFormats` declares the same quantization) can be chosen.
+
 Valid values for `quantization`:
 
-| Type         | Description                       |
-|--------------|-----------------------------------|
-| `fp8`        | 8-bit floating point quantization |
-| `fbgemm_fp8` | Facebook GEMM FP8 quantization    |
-| `int4`       | 4-bit integer quantization        |
+| Type         | Description                                                                                                            |
+|--------------|----------------------------------------------------------------------------------------------------------------------|
+| `fp8`        | 8-bit floating point quantization                                                                                     |
+| `fbgemm_fp8` | Facebook GEMM FP8 quantization                                                                                        |
+| `int4`       | 4-bit integer quantization                                                                                            |
+| `nvfp4`      | NVIDIA FP4, produced by ModelOpt's NVFP4 PTQ pipeline (two 4-bit values packed per byte, with FP8 per-group scales)  |
+| `mxfp4`      | OCP Microscaling FP4, used by the OpenAI gpt-oss family (declared via `quant_method=mxfp4` in `config.json`)          |
+| `compressed-tensors` | The compressed-tensors container format (vLLM / llm-compressor). Unlike the others this names a *format*, not a single precision - the actual bit width (FP8, INT8, INT4, ...) is declared per group in `quantization_config.config_groups`. |
+
+### Model Capabilities
+
+The `modelCapabilities` field describes what a model can do. Capabilities are detected automatically by the model parser where possible, and can also be set explicitly in the spec. They are used for filtering, display, and to help match a model to an appropriate runtime.
+
+Two generations of values exist. The **legacy** values remain accepted for backward compatibility, while the **standardized** values (which describe an input-to-output transformation) are the preferred naming going forward.
+
+Legacy capabilities:
+
+| Capability          | Description                          |
+|---------------------|--------------------------------------|
+| `TEXT_GENERATION`   | Generates text from a text prompt    |
+| `TEXT_SUMMARIZATION`| Summarizes input text                |
+| `TEXT_EMBEDDINGS`   | Produces text embedding vectors      |
+| `TEXT_RERANK`       | Reranks candidate documents          |
+| `CHAT`              | Conversational / chat interaction    |
+| `VISION`            | Understands image inputs             |
+
+Standardized capabilities (preferred):
+
+| Capability             | Description                                             |
+|------------------------|---------------------------------------------------------|
+| `EMBEDDING`            | Produces embedding vectors                               |
+| `RERANK`               | Reranks candidate documents                             |
+| `TEXT_TO_TEXT`         | Text input to text output (e.g., chat, completion)      |
+| `TEXT_TO_AUDIO`        | Text input to audio output (e.g., text-to-speech)       |
+| `TEXT_TO_IMAGE`        | Text input to image output                              |
+| `TEXT_TO_VIDEO`        | Text input to video output                              |
+| `IMAGE_TEXT_TO_TEXT`   | Image plus text input to text output (vision-language)  |
+| `IMAGE_TEXT_TO_AUDIO`  | Image plus text input to audio output                   |
+| `IMAGE_TEXT_TO_IMAGE`  | Image plus text input to image output                   |
+| `IMAGE_TEXT_TO_VIDEO`  | Image plus text input to video output                   |
+| `VIDEO_TEXT_TO_AUDIO`  | Video plus text input to audio output                   |
+| `AUDIO_TO_TEXT`        | Audio input to text output (e.g., transcription)        |
+| `AUDIO_TO_AUDIO`       | Audio input to audio output                             |
+| `AUDIO_TRANSLATION`    | Translates audio from one language to another           |
+
+### API Capabilities
+
+While `modelCapabilities` describes the kind of task a model performs, the separate `apiCapabilities` field lists the OpenAI-style API endpoints the model is able to serve. This lets clients and routers discover exactly which API surfaces are available for a given model.
+
+| API Capability                   | Endpoint                        |
+|----------------------------------|---------------------------------|
+| `OPENAI_V1_CHAT_COMPLETIONS`     | `/v1/chat/completions`          |
+| `OPENAI_V1_RESPONSES`            | `/v1/responses`                 |
+| `OPENAI_V1_EMBEDDINGS`           | `/v1/embeddings`                |
+| `OPENAI_V1_IMAGES_GENERATIONS`   | `/v1/images/generations`        |
+| `OPENAI_V1_IMAGES_EDITS`         | `/v1/images/edits`              |
+| `OPENAI_V1_AUDIO_SPEECH`         | `/v1/audio/speech`              |
+| `OPENAI_V1_AUDIO_TRANSCRIPTIONS` | `/v1/audio/transcriptions`      |
+| `OPENAI_V1_AUDIO_TRANSLATIONS`   | `/v1/audio/translations`        |
+| `OPENAI_V1_REALTIME`             | `/v1/realtime`                  |
+
+Example:
+
+```yaml
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  apiCapabilities:
+    - OPENAI_V1_CHAT_COMPLETIONS
+    - OPENAI_V1_RESPONSES
+```
+
+### Diffusion Models
+
+For diffusion models, the optional `diffusionPipeline` field on the BaseModel spec captures pipeline-specific metadata mirrored from the model's `model_index.json`. This allows runtimes to validate that they can serve a given diffusion pipeline. Its fields map directly to the entries of a diffusers pipeline:
+
+| Field                  | Description                                                                          |
+|------------------------|--------------------------------------------------------------------------------------|
+| `className`            | The pipeline implementation, e.g., `StableDiffusionXLPipeline` or `QwenImagePipeline`|
+| `scheduler`            | The scheduler component (library + type)                                             |
+| `textEncoder`          | The text-encoder component                                                           |
+| `tokenizer`            | The tokenizer component                                                              |
+| `transformer`          | The transformer (UNet/DiT) component                                                 |
+| `vae`                  | The VAE component                                                                    |
+| `additionalComponents` | Any other pipeline parts, keyed by their `model_index.json` entry                    |
+
+Each component is described by a `library` (e.g., `diffusers` or `transformers`) and a `type` (the fully qualified class name, e.g., `FlowMatchEulerDiscreteScheduler`).
+
+```yaml
+spec:
+  modelCapabilities:
+    - TEXT_TO_IMAGE
+  diffusionPipeline:
+    className: StableDiffusionXLPipeline
+    scheduler:
+      library: diffusers
+      type: EulerDiscreteScheduler
+    vae:
+      library: diffusers
+      type: AutoencoderKL
+```
 
 ### Disabling Automatic Parsing
 

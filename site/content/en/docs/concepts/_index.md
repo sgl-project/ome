@@ -35,6 +35,10 @@ This resource has both namespace-scoped and cluster-scoped which can be used to 
 The InferenceService CRD manages the entire lifecycle of model-serving workloads, including model versioning, scaling, and traffic routing.
 It supports real-time inference for both single-node and multi-node deployments, ensuring seamless model updates and efficient scaling.
 
+### [Runtime Revisions](/ome/docs/concepts/runtime-revision)
+
+Pin an InferenceService to an immutable snapshot of its ServingRuntime for stable, roll-forward/rollback-controlled updates instead of always tracking the live runtime.
+
 ### [Ingress](/ome/docs/concepts/ingress)
 
 OME supports a range of ingress controllers for external access to model serving workloads.

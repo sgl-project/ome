@@ -18,3 +18,9 @@ Deep dive into the Model Agent architecture, configuration, and operational best
 ### [Advanced Storage Configuration](/ome/docs/administration/storage/)
 
 Comprehensive guide to storage backends, authentication methods, and performance optimization for model storage systems.
+
+## Controller
+
+### [Controller Configuration](/ome/docs/administration/controller-configuration/)
+
+Command-line flags for the OME controller manager, including tuning runtime-revision garbage-collection retention and grace period.

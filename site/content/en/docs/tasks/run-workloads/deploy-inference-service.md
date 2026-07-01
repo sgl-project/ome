@@ -82,6 +82,52 @@ spec:
 EOF
 ```
 
+> **Note**: The `predictor.model` field shown above is the legacy form and is **deprecated**. New services should use the top-level `spec.model` reference described in the next step.
+
+## Step 2b: Use the recommended `spec.model` reference
+
+Instead of nesting the model under `predictor.model`, reference a `BaseModel` or `ClusterBaseModel` from the top-level `spec.model` field and configure serving through the `engine` component. This is the recommended form for new InferenceServices — see [Inference Service concepts](/ome/docs/concepts/inference_service) for the full field reference.
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-2-1b-instruct
+  namespace: llama-1b-demo
+spec:
+  # Top-level model reference (BaseModel or ClusterBaseModel)
+  model:
+    name: llama-3-2-1b-instruct
+    kind: ClusterBaseModel     # use BaseModel for a namespace-scoped model
+  # Optional: let OME auto-select a runtime, or pin one explicitly
+  runtime:
+    name: srt-llama-3-2-1b-instruct
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+EOF
+```
+
+To serve a fine-tuned variant, keep the same base model and list the fine-tuned weights via `spec.model.fineTunedWeights`. The weights are applied on top of the base model:
+
+```yaml
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-2-1b-finetuned
+  namespace: llama-1b-demo
+spec:
+  model:
+    name: llama-3-2-1b-instruct
+    kind: ClusterBaseModel
+    fineTunedWeights:
+      - my-lora-adapter        # references a FineTunedWeight resource
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+```
+
 ## Step 3: Monitor deployment progress
 
 Check the deployment status:
@@ -275,6 +321,44 @@ spec:
         effect: "NoSchedule"
 ```
 
+### Accelerator Selection
+
+Rather than hard-coding a `nodeSelector` and GPU resources, you can let OME pick a GPU class declaratively with `spec.acceleratorSelector`. Provide `constraints` that a matching accelerator must satisfy and a `policy` to break ties when several classes qualify (`BestFit`, `Cheapest`, `MostCapable`, or `FirstAvailable`):
+
+```yaml
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-3-70b-instruct
+  namespace: llama-70b-demo
+spec:
+  model:
+    name: llama-3-3-70b-instruct
+    kind: ClusterBaseModel
+  acceleratorSelector:
+    policy: Cheapest             # lowest-cost class that meets the constraints
+    constraints:
+      minMemory: 80             # at least 80 GB per accelerator
+      architectureFamilies:
+        - nvidia-hopper
+        - nvidia-ampere
+      preferredPrecisions:
+        - fp8
+        - fp16
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+```
+
+After deployment, check which class OME resolved:
+
+```bash
+kubectl get inferenceservice llama-3-3-70b-instruct -n llama-70b-demo \
+  -o jsonpath='{.status.components.engine.selectedAccelerator}' | jq
+```
+
+For disaggregated (prefill-decode) serving, you can override the class per component with `engine.acceleratorOverride` and `decoder.acceleratorOverride`. See [Inference Service concepts](/ome/docs/concepts/inference_service) for the full list of constraint fields.
+
 ## Monitoring and Debugging
 
 ### Check Service Health
@@ -328,6 +412,43 @@ kubectl describe node <gpu-node-name> | grep nvidia.com/gpu
 # View GPU utilization
 kubectl exec -it -n llama-1b-demo <pod-name> -- nvidia-smi
 ```
+
+### Interpreting Model Status
+
+When an InferenceService is stuck and not becoming Ready, the fastest signal is `status.modelStatus`:
+
+```bash
+kubectl get inferenceservice llama-3-2-1b-instruct -n llama-1b-demo \
+  -o jsonpath='{.status.modelStatus}' | jq
+```
+
+Read it in three steps:
+
+1. **`transitionStatus`** — the overall state of the model layer:
+
+   | Value                 | Meaning / Next step                                              |
+   |-----------------------|------------------------------------------------------------------|
+   | `UpToDate`            | Model layer is healthy; look elsewhere (ingress, pod readiness). |
+   | `InProgress`          | Target model is still loading — wait and re-check.               |
+   | `BlockedByFailedLoad` | Load failed — inspect `lastFailureInfo`.                         |
+   | `InvalidSpec`         | Spec failed validation — inspect `lastFailureInfo`.             |
+
+2. **`modelRevisionStates`** — `activeModelState` and `targetModelState` move through `Pending → Standby → Loading → Loaded`, or land on `FailedToLoad`.
+
+3. **`lastFailureInfo`** — present on failure, with a `reason`, `message`, `location` (usually the Pod name), and `exitCode`. Common reasons:
+
+   | Reason                   | What to check                                                        |
+   |--------------------------|----------------------------------------------------------------------|
+   | `BaseModelNotFound`      | The referenced BaseModel/ClusterBaseModel does not exist.            |
+   | `BaseModelNotReady`      | The base model exists but has not finished downloading.             |
+   | `FineTunedWeightsNotFound` | A referenced fine-tuned weight does not exist.                    |
+   | `ModelLoadFailed`        | The model failed to load inside the runtime container (check logs).  |
+   | `ContainerStartupFailed` | The serving container failed to start (check `exitCode` and logs).   |
+   | `NoSupportingRuntime`    | No ServingRuntime supports this model type.                         |
+   | `RuntimeNotRecognized`   | The named runtime does not exist.                                   |
+   | `RuntimeUnhealthy`       | The runtime containers failed to start or are unhealthy.            |
+
+For example, a service stuck with `transitionStatus: BlockedByFailedLoad` and `lastFailureInfo.reason: BaseModelNotReady` means the model weights are still downloading — check the `ClusterBaseModel` status before debugging the pod itself. The complete list of states and failure reasons is documented in [Inference Service concepts](/ome/docs/concepts/inference_service).
 
 ## Supported Models and Runtimes
 

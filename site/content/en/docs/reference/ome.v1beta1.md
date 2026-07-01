@@ -238,6 +238,706 @@ weight: 1
 </tbody>
 </table>
 
+## `AcceleratorCapabilities`     {#ome-io-v1beta1-AcceleratorCapabilities}
+
+
+**Appears in:**
+
+- [AcceleratorClassSpec](#ome-io-v1beta1-AcceleratorClassSpec)
+
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>memoryGB</code><br/>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/api/resource#Quantity"><code>k8s.io/apimachinery/pkg/api/resource.Quantity</code></a>
+</td>
+<td>
+   <p>Memory capacity in GB</p>
+</td>
+</tr>
+<tr><td><code>computeCapability</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>Compute capability (NVIDIA) or equivalent</p>
+</td>
+</tr>
+<tr><td><code>levelZeroVersion</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>Level Zero version (for Intel accelerators)</p>
+</td>
+</tr>
+<tr><td><code>clockSpeedMHz</code><br/>
+<code>int32</code>
+</td>
+<td>
+   <p>Clock speeds</p>
+</td>
+</tr>
+<tr><td><code>memoryBandwidthGBps</code><br/>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/api/resource#Quantity"><code>k8s.io/apimachinery/pkg/api/resource.Quantity</code></a>
+</td>
+<td>
+   <p>Memory bandwidth</p>
+</td>
+</tr>
+<tr><td><code>features</code><br/>
+<code>[]string</code>
+</td>
+<td>
+   <p>Features supported by this accelerator</p>
+</td>
+</tr>
+<tr><td><code>performance</code><br/>
+<a href="#ome-io-v1beta1-AcceleratorPerformance"><code>AcceleratorPerformance</code></a>
+</td>
+<td>
+   <p>Performance metrics</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `AcceleratorClass`     {#ome-io-v1beta1-AcceleratorClass}
+
+
+**Appears in:**
+
+
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>spec</code> <B>[Required]</B><br/>
+<a href="#ome-io-v1beta1-AcceleratorClassSpec"><code>AcceleratorClassSpec</code></a>
+</td>
+<td>
+   <span class="text-muted">No description provided.</span></td>
+</tr>
+<tr><td><code>status</code> <B>[Required]</B><br/>
+<a href="#ome-io-v1beta1-AcceleratorClassStatus"><code>AcceleratorClassStatus</code></a>
+</td>
+<td>
+   <span class="text-muted">No description provided.</span></td>
+</tr>
+</tbody>
+</table>
+
+## `AcceleratorClassSpec`     {#ome-io-v1beta1-AcceleratorClassSpec}
+
+
+**Appears in:**
+
+- [AcceleratorClass](#ome-io-v1beta1-AcceleratorClass)
+
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>vendor</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>Vendor of the accelerator (nvidia, amd, intel, etc.)</p>
+</td>
+</tr>
+<tr><td><code>family</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>Family of the accelerator (ampere, hopper, cdna2, etc.)</p>
+</td>
+</tr>
+<tr><td><code>model</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>Model name (a100, h100, mi250x, etc.)</p>
+</td>
+</tr>
+<tr><td><code>discovery</code> <B>[Required]</B><br/>
+<a href="#ome-io-v1beta1-AcceleratorDiscovery"><code>AcceleratorDiscovery</code></a>
+</td>
+<td>
+   <p>Discovery patterns to identify nodes with this accelerator</p>
+</td>
+</tr>
+<tr><td><code>capabilities</code> <B>[Required]</B><br/>
+<a href="#ome-io-v1beta1-AcceleratorCapabilities"><code>AcceleratorCapabilities</code></a>
+</td>
+<td>
+   <p>Capabilities of this accelerator class</p>
+</td>
+</tr>
+<tr><td><code>resources</code><br/>
+<a href="#ome-io-v1beta1-AcceleratorResource"><code>[]AcceleratorResource</code></a>
+</td>
+<td>
+   <p>Resources exposed by this accelerator</p>
+</td>
+</tr>
+<tr><td><code>integration</code><br/>
+<a href="#ome-io-v1beta1-AcceleratorIntegration"><code>AcceleratorIntegration</code></a>
+</td>
+<td>
+   <p>Integration with external systems</p>
+</td>
+</tr>
+<tr><td><code>cost</code><br/>
+<a href="#ome-io-v1beta1-AcceleratorCost"><code>AcceleratorCost</code></a>
+</td>
+<td>
+   <p>Cost information for optimization decisions</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `AcceleratorClassStatus`     {#ome-io-v1beta1-AcceleratorClassStatus}
+
+
+**Appears in:**
+
+- [AcceleratorClass](#ome-io-v1beta1-AcceleratorClass)
+
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>nodes</code><br/>
+<code>[]string</code>
+</td>
+<td>
+   <p>Nodes that have this accelerator</p>
+</td>
+</tr>
+<tr><td><code>totalAccelerators</code><br/>
+<code>int32</code>
+</td>
+<td>
+   <p>Total number of accelerators in the cluster</p>
+</td>
+</tr>
+<tr><td><code>availableAccelerators</code><br/>
+<code>int32</code>
+</td>
+<td>
+   <p>Available accelerators (not allocated)</p>
+</td>
+</tr>
+<tr><td><code>lastUpdated</code><br/>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#time-v1-meta"><code>k8s.io/apimachinery/pkg/apis/meta/v1.Time</code></a>
+</td>
+<td>
+   <p>Last update time</p>
+</td>
+</tr>
+<tr><td><code>conditions</code><br/>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#condition-v1-meta"><code>[]k8s.io/apimachinery/pkg/apis/meta/v1.Condition</code></a>
+</td>
+<td>
+   <p>Conditions represent the latest available observations</p>
+</td>
+</tr>
+<tr><td><code>availableNodes</code><br/>
+<code>int32</code>
+</td>
+<td>
+   <p>AvailableNodes is the number of nodes that have this accelerator available</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `AcceleratorConstraints`     {#ome-io-v1beta1-AcceleratorConstraints}
+
+
+**Appears in:**
+
+- [AcceleratorSelector](#ome-io-v1beta1-AcceleratorSelector)
+
+
+<p>AcceleratorConstraints defines requirements for accelerator selection</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>minMemory</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>MinMemory in GB</p>
+</td>
+</tr>
+<tr><td><code>maxMemory</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>MaxMemory in GB (useful for cost control)</p>
+</td>
+</tr>
+<tr><td><code>minComputePerformanceTFLOPS</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>MinComputePerformanceTFLOPS in TFLOPS</p>
+</td>
+</tr>
+<tr><td><code>minArchitectureVersion</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>MinArchitectureVersion Compute capability (NVIDIA) or equivalent</p>
+</td>
+</tr>
+<tr><td><code>requiredFeatures</code><br/>
+<code>[]string</code>
+</td>
+<td>
+   <p>RequiredFeatures that must be present</p>
+</td>
+</tr>
+<tr><td><code>excludedClasses</code><br/>
+<code>[]string</code>
+</td>
+<td>
+   <p>ExcludedClasses lists AcceleratorClasses to avoid</p>
+</td>
+</tr>
+<tr><td><code>architectureFamilies</code><br/>
+<code>[]string</code>
+</td>
+<td>
+   <p>ArchitectureFamilies limits selection to specific families
+Examples: [&quot;nvidia-hopper&quot;, &quot;nvidia-ampere&quot;]</p>
+</td>
+</tr>
+<tr><td><code>preferredPrecisions</code><br/>
+<code>[]string</code>
+</td>
+<td>
+   <p>PreferredPrecisions lists numeric precisions in order of preference
+Examples: [&quot;fp8&quot;, &quot;fp16&quot;, &quot;fp32&quot;]</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `AcceleratorCost`     {#ome-io-v1beta1-AcceleratorCost}
+
+
+**Appears in:**
+
+- [AcceleratorClassSpec](#ome-io-v1beta1-AcceleratorClassSpec)
+
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>perHour</code><br/>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/api/resource#Quantity"><code>k8s.io/apimachinery/pkg/api/resource.Quantity</code></a>
+</td>
+<td>
+   <p>Cost per hour in dollars</p>
+</td>
+</tr>
+<tr><td><code>perMillionTokens</code><br/>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/api/resource#Quantity"><code>k8s.io/apimachinery/pkg/api/resource.Quantity</code></a>
+</td>
+<td>
+   <p>Cost per million tokens (for usage-based pricing)</p>
+</td>
+</tr>
+<tr><td><code>spotPerHour</code><br/>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/api/resource#Quantity"><code>k8s.io/apimachinery/pkg/api/resource.Quantity</code></a>
+</td>
+<td>
+   <p>Spot instance pricing if available</p>
+</td>
+</tr>
+<tr><td><code>tier</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>Cost tier for simplified selection (low, medium, high)</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `AcceleratorDiscovery`     {#ome-io-v1beta1-AcceleratorDiscovery}
+
+
+**Appears in:**
+
+- [AcceleratorClassSpec](#ome-io-v1beta1-AcceleratorClassSpec)
+
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>nodeSelector</code><br/>
+<code>map[string]string</code>
+</td>
+<td>
+   <p>NodeSelector to identify nodes with this accelerator</p>
+</td>
+</tr>
+<tr><td><code>affinity</code><br/>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#affinity-v1-core"><code>k8s.io/api/core/v1.Affinity</code></a>
+</td>
+<td>
+   <p>Affinity for more complex node selection</p>
+</td>
+</tr>
+<tr><td><code>pciVendorID</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>PCIVendorID for device discovery (e.g., &quot;10de&quot; for NVIDIA)</p>
+</td>
+</tr>
+<tr><td><code>deviceIDs</code><br/>
+<code>[]string</code>
+</td>
+<td>
+   <p>DeviceIDs list of PCI device IDs</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `AcceleratorIntegration`     {#ome-io-v1beta1-AcceleratorIntegration}
+
+
+**Appears in:**
+
+- [AcceleratorClassSpec](#ome-io-v1beta1-AcceleratorClassSpec)
+
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>kueueResourceFlavor</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>KueueResourceFlavor name to sync with</p>
+</td>
+</tr>
+<tr><td><code>volcanoGPUType</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>VolcanoGPUType for Volcano integration</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `AcceleratorLatency`     {#ome-io-v1beta1-AcceleratorLatency}
+
+
+**Appears in:**
+
+- [AcceleratorPerformance](#ome-io-v1beta1-AcceleratorPerformance)
+
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>averageMillis</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>Average latency in milliseconds</p>
+</td>
+</tr>
+<tr><td><code>maximumMillis</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>Maximum latency in milliseconds</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `AcceleratorPerformance`     {#ome-io-v1beta1-AcceleratorPerformance}
+
+
+**Appears in:**
+
+- [AcceleratorCapabilities](#ome-io-v1beta1-AcceleratorCapabilities)
+
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>fp32Tflops</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>FP32 performance in TFLOPS</p>
+</td>
+</tr>
+<tr><td><code>fp16Tflops</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>FP16 performance in TFLOPS</p>
+</td>
+</tr>
+<tr><td><code>int8Tops</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>INT8 performance in TOPS</p>
+</td>
+</tr>
+<tr><td><code>int4Tops</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>INT4 performance in TOPS</p>
+</td>
+</tr>
+<tr><td><code>latency</code><br/>
+<a href="#ome-io-v1beta1-AcceleratorLatency"><code>AcceleratorLatency</code></a>
+</td>
+<td>
+   <p>Latency metrics</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `AcceleratorRequirements`     {#ome-io-v1beta1-AcceleratorRequirements}
+
+
+**Appears in:**
+
+- [ServingRuntimeSpec](#ome-io-v1beta1-ServingRuntimeSpec)
+
+
+<p>AcceleratorRequirements specifies the accelerator requirements for this runtime</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>acceleratorClasses</code><br/>
+<code>[]string</code>
+</td>
+<td>
+   <p>AcceleratorClasses lists the names of AcceleratorClasses this runtime supports</p>
+</td>
+</tr>
+<tr><td><code>minMemory</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>MinMemory specifies minimum GPU memory required in GB</p>
+</td>
+</tr>
+<tr><td><code>minComputePerformanceTFLOPS</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>MinComputePerformanceTFLOPS specifies minimum compute capability in TFLOPS</p>
+</td>
+</tr>
+<tr><td><code>minArchitectureVersion</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>MinArchitectureVersion Compute capability (NVIDIA) or equivalent</p>
+</td>
+</tr>
+<tr><td><code>requiredFeatures</code><br/>
+<code>[]string</code>
+</td>
+<td>
+   <p>RequiredFeatures lists hardware features that must be present
+Examples: [&quot;tensor-cores&quot;, &quot;fp8&quot;, &quot;nvlink&quot;]</p>
+</td>
+</tr>
+<tr><td><code>preferredPrecisions</code><br/>
+<code>[]string</code>
+</td>
+<td>
+   <p>PreferredPrecisions lists numeric precisions in order of preference
+Examples: [&quot;fp8&quot;, &quot;fp16&quot;, &quot;fp32&quot;]</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `AcceleratorResource`     {#ome-io-v1beta1-AcceleratorResource}
+
+
+**Appears in:**
+
+- [AcceleratorClassSpec](#ome-io-v1beta1-AcceleratorClassSpec)
+
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>name</code> <B>[Required]</B><br/>
+<code>string</code>
+</td>
+<td>
+   <p>Name of the resource (e.g., nvidia.com/gpu)</p>
+</td>
+</tr>
+<tr><td><code>quantity</code> <B>[Required]</B><br/>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/api/resource#Quantity"><code>k8s.io/apimachinery/pkg/api/resource.Quantity</code></a>
+</td>
+<td>
+   <p>Quantity per accelerator</p>
+</td>
+</tr>
+<tr><td><code>divisible</code><br/>
+<code>bool</code>
+</td>
+<td>
+   <p>Divisible indicates if the resource can be subdivided</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `AcceleratorSelection`     {#ome-io-v1beta1-AcceleratorSelection}
+
+
+**Appears in:**
+
+- [ComponentStatusSpec](#ome-io-v1beta1-ComponentStatusSpec)
+
+
+<p>AcceleratorSelection shows what accelerator was selected and why</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>acceleratorClass</code> <B>[Required]</B><br/>
+<code>string</code>
+</td>
+<td>
+   <p>AcceleratorClass that was selected</p>
+</td>
+</tr>
+<tr><td><code>reason</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>Reason explains why this accelerator was selected</p>
+</td>
+</tr>
+<tr><td><code>nodeSelector</code><br/>
+<code>map[string]string</code>
+</td>
+<td>
+   <p>NodeSelector that was applied to pods</p>
+</td>
+</tr>
+<tr><td><code>resourceRequests</code><br/>
+<code>map[string]string</code>
+</td>
+<td>
+   <p>ResourceRequests that were applied to pods</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `AcceleratorSelectionPolicy`     {#ome-io-v1beta1-AcceleratorSelectionPolicy}
+
+(Alias of `string`)
+
+**Appears in:**
+
+- [AcceleratorSelector](#ome-io-v1beta1-AcceleratorSelector)
+
+
+<p>AcceleratorSelectionPolicy defines how to select among matching accelerators</p>
+
+
+
+
+## `AcceleratorSelector`     {#ome-io-v1beta1-AcceleratorSelector}
+
+
+**Appears in:**
+
+- [DecoderSpec](#ome-io-v1beta1-DecoderSpec)
+
+- [EngineSpec](#ome-io-v1beta1-EngineSpec)
+
+- [InferenceServiceSpec](#ome-io-v1beta1-InferenceServiceSpec)
+
+
+<p>AcceleratorSelector defines how to select accelerators for the InferenceService</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>acceleratorClass</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>AcceleratorClass explicitly selects a specific AcceleratorClass
+Takes precedence over other selectors</p>
+</td>
+</tr>
+<tr><td><code>constraints</code><br/>
+<a href="#ome-io-v1beta1-AcceleratorConstraints"><code>AcceleratorConstraints</code></a>
+</td>
+<td>
+   <p>Constraints defines requirements that accelerators must meet</p>
+</td>
+</tr>
+<tr><td><code>policy</code><br/>
+<a href="#ome-io-v1beta1-AcceleratorSelectionPolicy"><code>AcceleratorSelectionPolicy</code></a>
+</td>
+<td>
+   <p>Policy defines the selection policy when multiple accelerators match</p>
+</td>
+</tr>
+</tbody>
+</table>
+
 ## `BaseModelSpec`     {#ome-io-v1beta1-BaseModelSpec}
 
 
@@ -312,6 +1012,13 @@ This can be used for scheduling or runtime selection.</p>
    <p>ModelCapabilities of the model, e.g., &quot;TEXT_GENERATION&quot;, &quot;TEXT_SUMMARIZATION&quot;, &quot;TEXT_EMBEDDINGS&quot;</p>
 </td>
 </tr>
+<tr><td><code>apiCapabilities</code><br/>
+<code>[]string</code>
+</td>
+<td>
+   <p>API capabilities supported by the model, e.g., &quot;OPENAI_V1_CHAT_COMPLETIONS&quot;</p>
+</td>
+</tr>
 <tr><td><code>modelConfiguration</code><br/>
 <a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/runtime#RawExtension"><code>k8s.io/apimachinery/pkg/runtime.RawExtension</code></a>
 </td>
@@ -344,6 +1051,13 @@ This can be used for scheduling or runtime selection.</p>
 </td>
 <td>
    <p>MaxTokens is the maximum number of tokens that can be processed by the model</p>
+</td>
+</tr>
+<tr><td><code>diffusionPipeline</code><br/>
+<a href="#ome-io-v1beta1-DiffusionPipelineSpec"><code>DiffusionPipelineSpec</code></a>
+</td>
+<td>
+   <p>DiffusionPipeline captures pipeline-specific metadata for diffusion models (from model_index.json).</p>
 </td>
 </tr>
 <tr><td><code>additionalMetadata</code><br/>
@@ -615,7 +1329,7 @@ concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).</p>
 <code>map[string]string</code>
 </td>
 <td>
-   <p>Labels that will be add to the component pod.
+   <p>Labels that will be added to the component pod.
 More info: http://kubernetes.io/docs/user-guide/labels</p>
 </td>
 </tr>
@@ -623,8 +1337,22 @@ More info: http://kubernetes.io/docs/user-guide/labels</p>
 <code>map[string]string</code>
 </td>
 <td>
-   <p>Annotations that will be add to the component pod.
+   <p>Annotations that will be added to the component pod.
 More info: http://kubernetes.io/docs/user-guide/annotations</p>
+</td>
+</tr>
+<tr><td><code>minAvailable</code><br/>
+<code>k8s.io/apimachinery/pkg/util/intstr.IntOrString</code>
+</td>
+<td>
+   <p>MinAvailable specifies how many component pods must still be available after the eviction</p>
+</td>
+</tr>
+<tr><td><code>maxUnavailable</code><br/>
+<code>k8s.io/apimachinery/pkg/util/intstr.IntOrString</code>
+</td>
+<td>
+   <p>MaxUnavailable specifies how many component pods can be unavailable</p>
 </td>
 </tr>
 <tr><td><code>deploymentStrategy</code><br/>
@@ -716,6 +1444,13 @@ It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-leve
    <p>Addressable endpoint for the InferenceService</p>
 </td>
 </tr>
+<tr><td><code>selectedAccelerator</code><br/>
+<a href="#ome-io-v1beta1-AcceleratorSelection"><code>AcceleratorSelection</code></a>
+</td>
+<td>
+   <p>SelectedAccelerator shows which AcceleratorClass was selected</p>
+</td>
+</tr>
 </tbody>
 </table>
 
@@ -784,8 +1519,130 @@ Defines the pod and container spec for worker nodes that perform
 distributed token generation tasks as directed by the leader.</p>
 </td>
 </tr>
+<tr><td><code>acceleratorOverride</code><br/>
+<a href="#ome-io-v1beta1-AcceleratorSelector"><code>AcceleratorSelector</code></a>
+</td>
+<td>
+   <p>AcceleratorOverride allows overriding the global accelerator selection for this component</p>
+</td>
+</tr>
 </tbody>
 </table>
+
+## `DiffusionComponentSpec`     {#ome-io-v1beta1-DiffusionComponentSpec}
+
+
+**Appears in:**
+
+- [DiffusionPipelineSpec](#ome-io-v1beta1-DiffusionPipelineSpec)
+
+
+<p>DiffusionComponentSpec captures an individual component used by a diffusion pipeline.
+The fields map directly to entries in a diffusers model_index.json file.</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>library</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>Library providing the component implementation, e.g., &quot;diffusers&quot; or &quot;transformers&quot;.</p>
+</td>
+</tr>
+<tr><td><code>type</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>Type is the fully qualified class name for the component, e.g., &quot;FlowMatchEulerDiscreteScheduler&quot;.</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `DiffusionPipelineSpec`     {#ome-io-v1beta1-DiffusionPipelineSpec}
+
+
+**Appears in:**
+
+- [BaseModelSpec](#ome-io-v1beta1-BaseModelSpec)
+
+- [SupportedModelFormat](#ome-io-v1beta1-SupportedModelFormat)
+
+
+<p>DiffusionPipelineSpec describes a diffusers pipeline so that runtimes can validate compatibility.
+When set, these fields should mirror the content of the model's model_index.json file.</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>className</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>ClassName is the pipeline implementation, e.g., &quot;StableDiffusionXLPipeline&quot; or &quot;QwenImagePipeline&quot;.</p>
+</td>
+</tr>
+<tr><td><code>scheduler</code><br/>
+<a href="#ome-io-v1beta1-DiffusionComponentSpec"><code>DiffusionComponentSpec</code></a>
+</td>
+<td>
+   <p>Scheduler component used by the pipeline.</p>
+</td>
+</tr>
+<tr><td><code>textEncoder</code><br/>
+<a href="#ome-io-v1beta1-DiffusionComponentSpec"><code>DiffusionComponentSpec</code></a>
+</td>
+<td>
+   <p>TextEncoder component used by the pipeline.</p>
+</td>
+</tr>
+<tr><td><code>tokenizer</code><br/>
+<a href="#ome-io-v1beta1-DiffusionComponentSpec"><code>DiffusionComponentSpec</code></a>
+</td>
+<td>
+   <p>Tokenizer component used by the pipeline.</p>
+</td>
+</tr>
+<tr><td><code>transformer</code><br/>
+<a href="#ome-io-v1beta1-DiffusionComponentSpec"><code>DiffusionComponentSpec</code></a>
+</td>
+<td>
+   <p>Transformer (UNet/DiT) component used by the pipeline.</p>
+</td>
+</tr>
+<tr><td><code>vae</code><br/>
+<a href="#ome-io-v1beta1-DiffusionComponentSpec"><code>DiffusionComponentSpec</code></a>
+</td>
+<td>
+   <p>VAE component used by the pipeline.</p>
+</td>
+</tr>
+<tr><td><code>additionalComponents</code><br/>
+<a href="#ome-io-v1beta1-DiffusionComponentSpec"><code>map[string]DiffusionComponentSpec</code></a>
+</td>
+<td>
+   <p>AdditionalComponents captures any other pipeline parts keyed by their model_index.json entry.</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `DownloadPolicy`     {#ome-io-v1beta1-DownloadPolicy}
+
+(Alias of `string`)
+
+**Appears in:**
+
+- [StorageSpec](#ome-io-v1beta1-StorageSpec)
+
+
+
+
 
 ## `Endpoint`     {#ome-io-v1beta1-Endpoint}
 
@@ -926,6 +1783,13 @@ distributed inference in multi-node deployments.</p>
    <p>Worker nodes configuration (only used for MultiNode deployment)
 Defines the pod and container spec for worker nodes that perform
 distributed processing tasks as directed by the leader.</p>
+</td>
+</tr>
+<tr><td><code>acceleratorOverride</code><br/>
+<a href="#ome-io-v1beta1-AcceleratorSelector"><code>AcceleratorSelector</code></a>
+</td>
+<td>
+   <p>AcceleratorOverride allows overriding the global accelerator selection for this component</p>
 </td>
 </tr>
 </tbody>
@@ -1211,6 +2075,13 @@ Provides settings for event-driven autoscaling using KEDA (Kubernetes Event-driv
 allowing the service to scale based on custom metrics or event sources.</p>
 </td>
 </tr>
+<tr><td><code>acceleratorSelector</code><br/>
+<a href="#ome-io-v1beta1-AcceleratorSelector"><code>AcceleratorSelector</code></a>
+</td>
+<td>
+   <p>AcceleratorSelector specifies accelerator selection preferences</p>
+</td>
+</tr>
 </tbody>
 </table>
 
@@ -1271,6 +2142,23 @@ It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-leve
 </td>
 <td>
    <p>Model related statuses</p>
+</td>
+</tr>
+<tr><td><code>pinnedRevisionName</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>PinnedRevisionName is the ControllerRevision (OME ns) driving
+pod specs. Empty when autoSync is true.</p>
+</td>
+</tr>
+<tr><td><code>lastRuntimeSyncToken</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>LastRuntimeSyncToken is the ome.io/runtime-sync annotation
+value at last pin advance; the controller advances the pin
+when the live annotation differs from this.</p>
 </td>
 </tr>
 </tbody>
@@ -1352,6 +2240,30 @@ the Deployment. Common operators include:</p>
 the evaluated metric.</p>
 <p>Example:
 &quot;GreaterThanOrEqual&quot;</p>
+</td>
+</tr>
+<tr><td><code>authenticationRef</code><br/>
+<a href="#ome-io-v1beta1-ScalerAuthenticationRef"><code>ScalerAuthenticationRef</code></a>
+</td>
+<td>
+   <p>AuthenticationRef references a TriggerAuthentication or ClusterTriggerAuthentication
+resource that contains the authentication configuration for the Prometheus server.
+This is required when the Prometheus server requires authentication (e.g., Grafana Cloud).</p>
+<p>Example:
+authenticationRef:
+name: grafana-cloud-auth
+kind: TriggerAuthentication</p>
+</td>
+</tr>
+<tr><td><code>authModes</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>AuthModes specifies the authentication mode(s) for the Prometheus scaler.
+Common values include: &quot;basic&quot;, &quot;tls&quot;, &quot;bearer&quot;, &quot;custom&quot;.
+Multiple modes can be specified comma-separated (e.g., &quot;tls,basic&quot;).</p>
+<p>Example:
+&quot;basic&quot; - Use basic authentication with username/password from TriggerAuthentication</p>
 </td>
 </tr>
 </tbody>
@@ -1524,6 +2436,21 @@ Used in validating that a runtime supports a predictor.
 It Can be &quot;major&quot;, &quot;major.minor&quot; or &quot;major.minor.patch&quot;.</p>
 </td>
 </tr>
+<tr><td><code>operator</code><br/>
+<a href="#ome-io-v1beta1-RuntimeSelectorOperator"><code>RuntimeSelectorOperator</code></a>
+</td>
+<td>
+   <p>Operator for the selector with supported values: &quot;Equal&quot;, &quot;GreaterThan&quot;
+This is used to select the serving runtime based on the modelFormat version</p>
+</td>
+</tr>
+<tr><td><code>weight</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>Weight of the model format in the runtime selector, used to prioritize modelFormat</p>
+</td>
+</tr>
 </tbody>
 </table>
 
@@ -1556,6 +2483,21 @@ It Can be &quot;major&quot;, &quot;major.minor&quot; or &quot;major.minor.patch&
    <p>Version of the library.
 Used in validating that a runtime supports a predictor.
 It Can be &quot;major&quot;, &quot;major.minor&quot; or &quot;major.minor.patch&quot;.</p>
+</td>
+</tr>
+<tr><td><code>operator</code><br/>
+<a href="#ome-io-v1beta1-RuntimeSelectorOperator"><code>RuntimeSelectorOperator</code></a>
+</td>
+<td>
+   <p>Operator for the selector with supported values: &quot;Equal&quot;, &quot;GreaterThan&quot;
+This is used to select the serving runtime based on the modelFramework version</p>
+</td>
+</tr>
+<tr><td><code>weight</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>Weight of the framework in the runtime selector, used to prioritize modelFramework</p>
 </td>
 </tr>
 </tbody>
@@ -2574,6 +3516,20 @@ Provides complete Kubernetes container configuration for the primary execution c
 </tbody>
 </table>
 
+## `RuntimeSelectorOperator`     {#ome-io-v1beta1-RuntimeSelectorOperator}
+
+(Alias of `string`)
+
+**Appears in:**
+
+- [ModelFormat](#ome-io-v1beta1-ModelFormat)
+
+- [ModelFrameworkSpec](#ome-io-v1beta1-ModelFrameworkSpec)
+
+
+
+
+
 ## `ScaleMetric`     {#ome-io-v1beta1-ScaleMetric}
 
 (Alias of `string`)
@@ -2587,6 +3543,40 @@ Provides complete Kubernetes container configuration for the primary execution c
 
 
 
+
+## `ScalerAuthenticationRef`     {#ome-io-v1beta1-ScalerAuthenticationRef}
+
+
+**Appears in:**
+
+- [KedaConfig](#ome-io-v1beta1-KedaConfig)
+
+
+<p>ScalerAuthenticationRef points to a KEDA TriggerAuthentication or ClusterTriggerAuthentication resource
+that contains the credentials for authenticating with the scaler's target (e.g., Prometheus server).</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>name</code> <B>[Required]</B><br/>
+<code>string</code>
+</td>
+<td>
+   <p>Name of the TriggerAuthentication or ClusterTriggerAuthentication resource.</p>
+</td>
+</tr>
+<tr><td><code>kind</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>Kind of the authentication resource being referenced.
+Valid values are &quot;TriggerAuthentication&quot; (namespace-scoped) or &quot;ClusterTriggerAuthentication&quot; (cluster-scoped).</p>
+</td>
+</tr>
+</tbody>
+</table>
 
 ## `ServiceMetadata`     {#ome-io-v1beta1-ServiceMetadata}
 
@@ -2797,6 +3787,24 @@ Defaults to <code>ome.io</code>
 Specifies the Kubernetes API group of the referenced runtime.</p>
 </td>
 </tr>
+<tr><td><code>autoSync</code><br/>
+<code>bool</code>
+</td>
+<td>
+   <p>AutoSync (default true) re-renders pod specs from the live
+runtime every reconcile. When false, the ISVC pins to a
+ControllerRevision snapshot; bump ome.io/runtime-sync or set
+spec.runtime.revision to roll forward.</p>
+</td>
+</tr>
+<tr><td><code>revision</code><br/>
+<code>string</code>
+</td>
+<td>
+   <p>Revision pins to a named ControllerRevision in the OME
+namespace. Enables rollback; ignored when AutoSync is true.</p>
+</td>
+</tr>
 </tbody>
 </table>
 
@@ -2881,6 +3889,13 @@ are hammered out.</p>
 </td>
 <td>
    <p>WorkerPodSpec for the serving runtime, this is used for multi-node serving without Ray Cluster</p>
+</td>
+</tr>
+<tr><td><code>acceleratorRequirements</code><br/>
+<a href="#ome-io-v1beta1-AcceleratorRequirements"><code>AcceleratorRequirements</code></a>
+</td>
+<td>
+   <p>AcceleratorRequirements specifies the accelerator requirements for this runtime</p>
 </td>
 </tr>
 </tbody>
@@ -2979,6 +3994,18 @@ for the model to be scheduled and downloaded onto that node.</p>
 are eligible to download and store this model, based on advanced scheduling policies.</p>
 </td>
 </tr>
+<tr><td><code>downloadPolicy</code><br/>
+<a href="#ome-io-v1beta1-DownloadPolicy"><code>DownloadPolicy</code></a>
+</td>
+<td>
+   <p>DownloadPolicy describes the policy of downloading model artifacts
+Supported policies:</p>
+<ul>
+<li>AlwaysDownload: always download a copy of model artifact in destination path</li>
+<li>ReuseIfExists: if the identical model artifact has been downloaded in the node, such artifact will be reused</li>
+</ul>
+</td>
+</tr>
 </tbody>
 </table>
 
@@ -3047,6 +4074,13 @@ It Can be &quot;major&quot;, &quot;major.minor&quot; or &quot;major.minor.patch&
    <p>Quantization of the model, e.g., &quot;fp8&quot;, &quot;fbgemm_fp8&quot;, &quot;int4&quot;</p>
 </td>
 </tr>
+<tr><td><code>diffusionPipeline</code><br/>
+<a href="#ome-io-v1beta1-DiffusionPipelineSpec"><code>DiffusionPipelineSpec</code></a>
+</td>
+<td>
+   <p>DiffusionPipeline supported by this runtime (used for diffusion models).</p>
+</td>
+</tr>
 <tr><td><code>autoSelect</code><br/>
 <code>bool</code>
 </td>
@@ -3064,6 +4098,51 @@ This is used to select the serving runtime if more than one serving runtime supp
 The value should be greater than zero.  The higher the value, the higher the priority.
 Priority is not considered if AutoSelect is either false or not specified.
 Priority can be overridden by specifying the runtime in the InferenceService.</p>
+</td>
+</tr>
+<tr><td><code>acceleratorConfig</code><br/>
+<a href="#ome-io-v1beta1-*sigs-k8s-io-ome-pkg-apis-ome-v1beta1-AcceleratorModelConfig"><code>map[string]AcceleratorModelConfig</code></a>
+</td>
+<td>
+   <p>AcceleratorConfig provides accelerator-specific overrides for this model format</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## `TensorParallelismConfig`     {#ome-io-v1beta1-TensorParallelismConfig}
+
+
+**Appears in:**
+
+
+
+<p>TensorParallelismConfig specifies tensor parallelism settings</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+
+<tr><td><code>tensorParallelSize</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>tensorParallelSize specifies the size of the tensor parallelism</p>
+</td>
+</tr>
+<tr><td><code>pipelineParallelSize</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>pipelineParallelSize specifies the size of the pipeline parallelism</p>
+</td>
+</tr>
+<tr><td><code>dataParallelSize</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>dataParallelSize specifies the size of the data parallelism</p>
 </td>
 </tr>
 </tbody>
