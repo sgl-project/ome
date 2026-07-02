@@ -862,7 +862,6 @@ func TestGetCompatibilityDetails_AcceleratorClasses(t *testing.T) {
 
 	t.Run("engine override matches class", func(t *testing.T) {
 		rt := mkRuntime([]string{"H100"})
-		rt.EngineConfig = &v1beta1.EngineSpec{}
 		cls := "H100"
 		isvc := &v1beta1.InferenceService{Spec: v1beta1.InferenceServiceSpec{Engine: &v1beta1.EngineSpec{AcceleratorOverride: &v1beta1.AcceleratorSelector{AcceleratorClass: &cls}}}}
 
@@ -873,7 +872,6 @@ func TestGetCompatibilityDetails_AcceleratorClasses(t *testing.T) {
 
 	t.Run("decoder override mismatches class", func(t *testing.T) {
 		rt := mkRuntime([]string{"nvidia-a100"})
-		rt.DecoderConfig = &v1beta1.DecoderSpec{}
 		cls := "H100"
 		isvc := &v1beta1.InferenceService{Spec: v1beta1.InferenceServiceSpec{Decoder: &v1beta1.DecoderSpec{AcceleratorOverride: &v1beta1.AcceleratorSelector{AcceleratorClass: &cls}}}}
 
@@ -888,99 +886,6 @@ func TestGetCompatibilityDetails_AcceleratorClasses(t *testing.T) {
 		report, err := matcher.GetCompatibilityDetails(rt, baseModel, isvc, "rt")
 		assert.NoError(t, err)
 		assert.True(t, report.IsCompatible)
-	})
-}
-
-func TestGetCompatibilityDetails_RequiredComponents(t *testing.T) {
-	matcher := NewDefaultRuntimeMatcher(NewConfig(nil))
-
-	baseModel := &v1beta1.BaseModelSpec{
-		ModelFormat: v1beta1.ModelFormat{Name: "pytorch"},
-	}
-
-	makeRuntime := func(engine *v1beta1.EngineSpec, decoder *v1beta1.DecoderSpec) *v1beta1.ServingRuntimeSpec {
-		return &v1beta1.ServingRuntimeSpec{
-			SupportedModelFormats: []v1beta1.SupportedModelFormat{
-				{
-					ModelFormat: &v1beta1.ModelFormat{
-						Name:   "pytorch",
-						Weight: 10,
-					},
-					AutoSelect: ptr(true),
-				},
-			},
-			EngineConfig:  engine,
-			DecoderConfig: decoder,
-		}
-	}
-
-	t.Run("empty isvc engine does not require runtime engine config", func(t *testing.T) {
-		servingRuntime := makeRuntime(nil, nil)
-		isvc := &v1beta1.InferenceService{
-			Spec: v1beta1.InferenceServiceSpec{
-				Engine: &v1beta1.EngineSpec{},
-			},
-		}
-
-		report, err := matcher.GetCompatibilityDetails(servingRuntime, baseModel, isvc, "rt")
-		assert.NoError(t, err)
-		assert.True(t, report.IsCompatible)
-	})
-
-	t.Run("configured isvc engine requires runtime engine config", func(t *testing.T) {
-		servingRuntime := makeRuntime(nil, nil)
-		isvc := &v1beta1.InferenceService{
-			Spec: v1beta1.InferenceServiceSpec{
-				Engine: &v1beta1.EngineSpec{
-					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-						MinReplicas: ptr(1),
-					},
-				},
-			},
-		}
-
-		report, err := matcher.GetCompatibilityDetails(servingRuntime, baseModel, isvc, "rt")
-		assert.NoError(t, err)
-		assert.False(t, report.IsCompatible)
-		assert.Contains(t, report.IncompatibilityReasons[0], "engineConfig")
-
-		ok, err := matcher.IsCompatible(servingRuntime, baseModel, isvc, "rt")
-		assert.False(t, ok)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "engineConfig")
-		assert.True(t, IsRuntimeComponentMismatchError(err))
-	})
-
-	t.Run("empty isvc decoder does not require runtime decoder config", func(t *testing.T) {
-		servingRuntime := makeRuntime(nil, nil)
-		isvc := &v1beta1.InferenceService{
-			Spec: v1beta1.InferenceServiceSpec{
-				Decoder: &v1beta1.DecoderSpec{},
-			},
-		}
-
-		report, err := matcher.GetCompatibilityDetails(servingRuntime, baseModel, isvc, "rt")
-		assert.NoError(t, err)
-		assert.True(t, report.IsCompatible)
-	})
-
-	t.Run("configured isvc decoder requires runtime decoder config", func(t *testing.T) {
-		servingRuntime := makeRuntime(&v1beta1.EngineSpec{}, nil)
-		isvc := &v1beta1.InferenceService{
-			Spec: v1beta1.InferenceServiceSpec{
-				Engine: &v1beta1.EngineSpec{},
-				Decoder: &v1beta1.DecoderSpec{
-					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-						MinReplicas: ptr(1),
-					},
-				},
-			},
-		}
-
-		report, err := matcher.GetCompatibilityDetails(servingRuntime, baseModel, isvc, "rt")
-		assert.NoError(t, err)
-		assert.False(t, report.IsCompatible)
-		assert.Contains(t, report.IncompatibilityReasons[0], "decoderConfig")
 	})
 }
 

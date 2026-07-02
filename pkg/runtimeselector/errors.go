@@ -29,17 +29,6 @@ func (e *RuntimeCompatibilityError) Unwrap() error {
 	return e.DetailedError
 }
 
-// RuntimeComponentMismatchError indicates that a runtime does not provide the components required by an InferenceService.
-type RuntimeComponentMismatchError struct {
-	RuntimeName string
-	Reason      string
-}
-
-// Error implements the error interface.
-func (e *RuntimeComponentMismatchError) Error() string {
-	return fmt.Sprintf("runtime %s component configuration mismatch: %s", e.RuntimeName, e.Reason)
-}
-
 // NoRuntimeFoundError indicates that no compatible runtime was found for a model.
 type NoRuntimeFoundError struct {
 	ModelName          string
@@ -127,12 +116,6 @@ func (e *ConfigurationError) Error() string {
 // IsRuntimeCompatibilityError checks if an error is a RuntimeCompatibilityError.
 func IsRuntimeCompatibilityError(err error) bool {
 	_, ok := err.(*RuntimeCompatibilityError)
-	return ok
-}
-
-// IsRuntimeComponentMismatchError checks if an error is a RuntimeComponentMismatchError.
-func IsRuntimeComponentMismatchError(err error) bool {
-	_, ok := err.(*RuntimeComponentMismatchError)
 	return ok
 }
 

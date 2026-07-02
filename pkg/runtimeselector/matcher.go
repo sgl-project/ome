@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/equality"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -32,14 +31,6 @@ func (m *DefaultRuntimeMatcher) IsCompatible(runtime *v1beta1.ServingRuntimeSpec
 	// Quick checks first
 	if runtime.IsDisabled() {
 		return false, &RuntimeDisabledError{RuntimeName: runtimeName}
-	}
-
-	// Check the runtime provides configs for all non-empty ISVC components.
-	if ok, reason := m.compareRequiredComponents(runtime, isvc); !ok {
-		return false, &RuntimeComponentMismatchError{
-			RuntimeName: runtimeName,
-			Reason:      reason,
-		}
 	}
 
 	// Check accelerator class compatibility
@@ -90,12 +81,6 @@ func (m *DefaultRuntimeMatcher) GetCompatibilityDetails(runtime *v1beta1.Serving
 	// Check if runtime is disabled
 	if runtime.IsDisabled() {
 		report.IncompatibilityReasons = append(report.IncompatibilityReasons, "runtime is disabled")
-		return report, nil
-	}
-
-	// Check that the runtime provides configs for all non-empty ISVC components.
-	if ok, reason := m.compareRequiredComponents(runtime, isvc); !ok {
-		report.IncompatibilityReasons = append(report.IncompatibilityReasons, reason)
 		return report, nil
 	}
 
@@ -327,33 +312,6 @@ func (m *DefaultRuntimeMatcher) compareAcceleratorClass(runtime *v1beta1.Serving
 	}
 
 	return true
-}
-
-// compareRequiredComponents rejects runtimes that do not provide configs for
-// components explicitly configured by the InferenceService. Empty component
-// specs in InferenceService are treated as not required.
-func (m *DefaultRuntimeMatcher) compareRequiredComponents(runtime *v1beta1.ServingRuntimeSpec, isvc *v1beta1.InferenceService) (bool, string) {
-	if isvc == nil || runtime == nil {
-		return true, ""
-	}
-
-	if isEngineSpecConfigured(isvc.Spec.Engine) && runtime.EngineConfig == nil {
-		return false, "inference service defines engine but runtime does not define engineConfig"
-	}
-
-	if isDecoderSpecConfigured(isvc.Spec.Decoder) && runtime.DecoderConfig == nil {
-		return false, "inference service defines decoder but runtime does not define decoderConfig"
-	}
-
-	return true, ""
-}
-
-func isEngineSpecConfigured(engine *v1beta1.EngineSpec) bool {
-	return engine != nil && !equality.Semantic.DeepEqual(engine, &v1beta1.EngineSpec{})
-}
-
-func isDecoderSpecConfigured(decoder *v1beta1.DecoderSpec) bool {
-	return decoder != nil && !equality.Semantic.DeepEqual(decoder, &v1beta1.DecoderSpec{})
 }
 
 // compareDeploymentMode rejects a runtime only when both the InferenceService

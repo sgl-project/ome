@@ -869,76 +869,6 @@ func TestGetCompatibleRuntimes_ExcludeNoAutoSelect(t *testing.T) {
 	assert.Equal(t, "rt-auto", matches[0].Name)
 }
 
-func TestSelectRuntime_FiltersByRequiredComponents(t *testing.T) {
-	fakeClient := createFakeClient()
-	selector := New(fakeClient)
-
-	noConfigRuntime := &v1beta1.ServingRuntime{
-		ObjectMeta: metav1.ObjectMeta{Name: "no-config-rt", Namespace: "default"},
-		Spec: v1beta1.ServingRuntimeSpec{
-			SupportedModelFormats: []v1beta1.SupportedModelFormat{
-				{ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Weight: 30}, AutoSelect: ptr(true)},
-			},
-		},
-	}
-	engineOnlyRuntime := &v1beta1.ServingRuntime{
-		ObjectMeta: metav1.ObjectMeta{Name: "engine-only-rt", Namespace: "default"},
-		Spec: v1beta1.ServingRuntimeSpec{
-			SupportedModelFormats: []v1beta1.SupportedModelFormat{
-				{ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Weight: 20}, AutoSelect: ptr(true)},
-			},
-			EngineConfig: &v1beta1.EngineSpec{},
-		},
-	}
-	engineDecoderRuntime := &v1beta1.ServingRuntime{
-		ObjectMeta: metav1.ObjectMeta{Name: "engine-decoder-rt", Namespace: "default"},
-		Spec: v1beta1.ServingRuntimeSpec{
-			SupportedModelFormats: []v1beta1.SupportedModelFormat{
-				{ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Weight: 10}, AutoSelect: ptr(true)},
-			},
-			EngineConfig:  &v1beta1.EngineSpec{},
-			DecoderConfig: &v1beta1.DecoderSpec{},
-		},
-	}
-
-	ctx := context.Background()
-	assert.NoError(t, fakeClient.Create(ctx, noConfigRuntime))
-	assert.NoError(t, fakeClient.Create(ctx, engineOnlyRuntime))
-	assert.NoError(t, fakeClient.Create(ctx, engineDecoderRuntime))
-
-	model := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}}
-	isvc := &v1beta1.InferenceService{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc", Namespace: "default"},
-		Spec: v1beta1.InferenceServiceSpec{
-			Engine: &v1beta1.EngineSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: ptr(1),
-				},
-			},
-			Decoder: &v1beta1.DecoderSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: ptr(1),
-				},
-			},
-		},
-	}
-
-	matches, err := selector.GetCompatibleRuntimes(ctx, model, isvc, "default")
-	assert.NoError(t, err)
-	assert.Len(t, matches, 1)
-	assert.Equal(t, "engine-decoder-rt", matches[0].Name)
-
-	selection, err := selector.SelectRuntime(ctx, model, isvc)
-	assert.NoError(t, err)
-	assert.Equal(t, "engine-decoder-rt", selection.Name)
-
-	isvc.Spec.Engine = &v1beta1.EngineSpec{}
-	isvc.Spec.Decoder = &v1beta1.DecoderSpec{}
-	matches, err = selector.GetCompatibleRuntimes(ctx, model, isvc, "default")
-	assert.NoError(t, err)
-	assert.Len(t, matches, 3)
-}
-
 func TestSelectRuntime_FiltersByDeploymentModeAnnotation(t *testing.T) {
 	fakeClient := createFakeClient()
 	selector := New(fakeClient)
@@ -1289,8 +1219,6 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
 					AcceleratorClasses: []string{"nvidia-tesla-t4", "nvidia-tesla-v100", "nvidia-a100"},
 				},
-				EngineConfig:  &v1beta1.EngineSpec{},
-				DecoderConfig: &v1beta1.DecoderSpec{},
 			},
 		},
 		{
@@ -1316,8 +1244,6 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
 					AcceleratorClasses: []string{"nvidia-tesla-t4", "nvidia-tesla-v100", "nvidia-a100"},
 				},
-				EngineConfig:  &v1beta1.EngineSpec{},
-				DecoderConfig: &v1beta1.DecoderSpec{},
 			},
 		},
 		{
@@ -1342,8 +1268,6 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
 					AcceleratorClasses: []string{"nvidia-tesla-t4", "nvidia-tesla-v100", "nvidia-a100"},
 				},
-				EngineConfig:  &v1beta1.EngineSpec{},
-				DecoderConfig: &v1beta1.DecoderSpec{},
 			},
 		},
 		{
@@ -1368,8 +1292,6 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
 					AcceleratorClasses: []string{"H100"},
 				},
-				EngineConfig:  &v1beta1.EngineSpec{},
-				DecoderConfig: &v1beta1.DecoderSpec{},
 			},
 		},
 		{
@@ -1394,8 +1316,6 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
 					AcceleratorClasses: []string{"H100", "nvidia-tesla-t4", "nvidia-tesla-v100", "nvidia-a100"},
 				},
-				EngineConfig:  &v1beta1.EngineSpec{},
-				DecoderConfig: &v1beta1.DecoderSpec{},
 			},
 		},
 	}
