@@ -703,7 +703,7 @@ func newGopherForProcessTask(cm *corev1.ConfigMap, nodeLabels ...map[string]stri
 		configMapReconciler: cmr,
 		nodeLabelReconciler: NewNodeLabelReconciler(cm.Name, client, 1, logger),
 		logger:              logger,
-		activeDownloads:     map[string]context.CancelFunc{},
+		activeDownloads:     map[string]activeDownload{},
 	}
 }
 
@@ -1025,6 +1025,98 @@ func TestRequeueSamePathInFlightReuseWaitTimesOut(t *testing.T) {
 	select {
 	case <-g.gopherChan:
 		t.Fatal("timed out same-path wait task should not be requeued")
+	default:
+	}
+}
+
+func TestProcessTaskWithOptions_HighPriorityDemotesFallbackDownload(t *testing.T) {
+	storageURI := "oci://n/object-ns/b/model-bucket/o/models/large-model"
+	modelPath := filepath.Join(t.TempDir(), "large-model")
+	model := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "large-model", Namespace: "service-ns", UID: "current-uid"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: &storageURI,
+				Path:       &modelPath,
+			},
+		},
+	}
+	g := newGopherForProcessTask(makeConfigMap("node-1", map[string]string{}))
+	g.baseModelLister = &mockBaseModelLister{models: []*v1beta1.BaseModel{model}}
+	g.taskQueue = newGopherTaskQueue()
+	task := &GopherTask{
+		TaskType:              Download,
+		BaseModel:             model,
+		SamePathWaitStartedAt: time.Now(),
+	}
+
+	err := g.processTaskWithOptions(task, false)
+
+	require.NoError(t, err)
+	queued, ok := g.taskQueue.popNormal()
+	require.True(t, ok)
+	assert.Equal(t, model.Name, queued.BaseModel.Name)
+	assert.True(t, queued.NormalPriorityOnly)
+	assert.Equal(t, 0, g.taskQueue.len())
+}
+
+func TestGopherEnqueueDeleteCancelsActiveDownload(t *testing.T) {
+	model := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "service-ns", UID: "model-uid"},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{}))
+	g.taskQueue = newGopherTaskQueue()
+	g.activeDownloads = map[string]activeDownload{
+		string(model.UID): {
+			token:  "download-token",
+			cancel: cancel,
+		},
+	}
+
+	g.enqueueTask(&GopherTask{TaskType: Delete, BaseModel: model})
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected delete enqueue to cancel active download")
+	}
+}
+
+func TestUnregisterActiveDownloadDoesNotRemoveNewerRegistration(t *testing.T) {
+	modelUID := "model-uid"
+	oldCtx, oldCancel := context.WithCancel(context.Background())
+	newCtx, newCancel := context.WithCancel(context.Background())
+	t.Cleanup(oldCancel)
+	t.Cleanup(newCancel)
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{}))
+	g.activeDownloads = map[string]activeDownload{
+		modelUID: {
+			token:  "old-token",
+			cancel: oldCancel,
+		},
+	}
+	g.activeDownloads[modelUID] = activeDownload{
+		token:  "new-token",
+		cancel: newCancel,
+	}
+
+	g.unregisterActiveDownload(modelUID, "old-token")
+
+	g.activeDownloadsMutex.RLock()
+	active, exists := g.activeDownloads[modelUID]
+	g.activeDownloadsMutex.RUnlock()
+	require.True(t, exists)
+	assert.Equal(t, "new-token", active.token)
+	active.cancel()
+	select {
+	case <-newCtx.Done():
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected newer active download cancel function to remain registered")
+	}
+	select {
+	case <-oldCtx.Done():
+		t.Fatal("old cancel function should not be called")
 	default:
 	}
 }

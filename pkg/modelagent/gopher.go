@@ -45,6 +45,12 @@ type GopherTask struct {
 	ClusterBaseModel       *v1beta1.ClusterBaseModel
 	TensorRTLLMShapeFilter *TensorRTLLMShapeFilter
 	SamePathWaitStartedAt  time.Time
+	NormalPriorityOnly     bool
+}
+
+type activeDownload struct {
+	token  string
+	cancel context.CancelFunc
 }
 
 type Gopher struct {
@@ -65,9 +71,10 @@ type Gopher struct {
 	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister
 
 	// Track active downloads for cancellation
-	activeDownloads      map[string]context.CancelFunc // key: model UID
+	activeDownloads      map[string]activeDownload // key: model UID
 	activeDownloadsMutex sync.RWMutex
 
+	taskQueue           *gopherTaskQueue
 	samePathWaitDelay   time.Duration
 	samePathWaitTimeout time.Duration
 }
@@ -116,62 +123,128 @@ func NewGopher(
 		nodeLabelReconciler:    nodeLabelReconciler,
 		metrics:                metrics,
 		logger:                 logger,
-		activeDownloads:        make(map[string]context.CancelFunc),
+		activeDownloads:        make(map[string]activeDownload),
 		baseModelLister:        baseModelLister,
 		clusterBaseModelLister: clusterBaseModelLister,
+		taskQueue:              newGopherTaskQueue(),
 		samePathWaitDelay:      defaultSamePathWaitDelay,
 		samePathWaitTimeout:    samePathWaitTimeout,
 	}, nil
 }
 
-func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int) {
+func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int, numHighPriorityWorker int) {
 	// Start the ConfigMap reconciliation service
 	s.configMapReconciler.StartReconciliation()
 	s.logger.Info("Started ConfigMap reconciliation service")
+
+	if s.taskQueue == nil {
+		s.taskQueue = newGopherTaskQueue()
+	}
+	if numHighPriorityWorker < 1 {
+		numHighPriorityWorker = 1
+	}
+	dispatchStopCh := make(chan struct{})
+	go s.dispatchTasks(dispatchStopCh)
 
 	// Start worker goroutines
 	for i := 0; i < numWorker; i++ {
 		go s.runWorker()
 	}
+	for i := 0; i < numHighPriorityWorker; i++ {
+		go s.runHighPriorityWorker()
+	}
 
 	// Wait for stop signal
 	<-stopCh
+	close(dispatchStopCh)
 
 	// Stop the ConfigMap reconciliation service
 	s.configMapReconciler.StopReconciliation()
+	s.taskQueue.close()
 	s.logger.Info("Stopped ConfigMap reconciliation service")
 
 	s.logger.Info("Received stop signal, shutting down Gopher workers...")
 }
 
-func (s *Gopher) runWorker() {
+func (s *Gopher) dispatchTasks(stopCh <-chan struct{}) {
 	for {
 		select {
 		case task, ok := <-s.gopherChan:
-			if ok {
-				// Process delete tasks immediately by checking active downloads
-				if task.TaskType == Delete {
-					modelUID := getModelUID(task)
-					s.activeDownloadsMutex.RLock()
-					_, isDownloading := s.activeDownloads[modelUID]
-					s.activeDownloadsMutex.RUnlock()
-
-					if isDownloading {
-						s.logger.Infof("Model %s is currently downloading, will cancel it", getModelInfoForLogging(task))
-					}
-				}
-
-				err := s.processTask(task)
-				if err != nil {
-					s.logger.Errorf("Gopher task failed with error: %s", err.Error())
-				}
-			} else {
-				s.logger.Info("gopher channel closed, worker exits.")
+			if !ok {
+				s.logger.Info("gopher channel closed, dispatcher exits.")
+				s.taskQueue.close()
 				return
 			}
-		default:
-			time.Sleep(500 * time.Millisecond)
+			s.enqueueTask(task)
+		case <-stopCh:
+			s.taskQueue.close()
+			return
 		}
+	}
+}
+
+func (s *Gopher) enqueueTask(task *GopherTask) {
+	if task == nil {
+		return
+	}
+	if s.taskQueue == nil {
+		s.taskQueue = newGopherTaskQueue()
+	}
+	if task.TaskType == Delete {
+		s.cancelActiveDownload(task)
+	}
+	s.taskQueue.enqueue(task)
+}
+
+func (s *Gopher) runWorker() {
+	if s.taskQueue == nil {
+		s.taskQueue = newGopherTaskQueue()
+	}
+	for {
+		task, ok := s.taskQueue.popNormal()
+		if !ok {
+			s.logger.Info("gopher task queue closed, worker exits.")
+			return
+		}
+		if task.TaskType == Delete {
+			s.cancelActiveDownload(task)
+		}
+		err := s.processTask(task)
+		if err != nil {
+			s.logger.Errorf("Gopher task failed with error: %s", err.Error())
+		}
+	}
+}
+
+func (s *Gopher) runHighPriorityWorker() {
+	if s.taskQueue == nil {
+		s.taskQueue = newGopherTaskQueue()
+	}
+	for {
+		task, ok := s.taskQueue.popHighPriority()
+		if !ok {
+			s.logger.Info("gopher high-priority task queue closed, worker exits.")
+			return
+		}
+		if task.TaskType == Delete {
+			s.cancelActiveDownload(task)
+		}
+		err := s.processTaskWithOptions(task, false)
+		if err != nil {
+			s.logger.Errorf("Gopher high-priority task failed with error: %s", err.Error())
+		}
+	}
+}
+
+func (s *Gopher) cancelActiveDownload(task *GopherTask) {
+	modelUID := getModelUID(task)
+	s.activeDownloadsMutex.RLock()
+	active, isDownloading := s.activeDownloads[modelUID]
+	s.activeDownloadsMutex.RUnlock()
+
+	if isDownloading {
+		s.logger.Infof("Model %s is currently downloading, will cancel it", getModelInfoForLogging(task))
+		active.cancel()
 	}
 }
 
@@ -254,6 +327,10 @@ func (s *Gopher) safeParseAndUpdateModelConfig(modelPath string, baseModel *v1be
 }
 
 func (s *Gopher) processTask(task *GopherTask) error {
+	return s.processTaskWithOptions(task, true)
+}
+
+func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload bool) error {
 	if task.BaseModel == nil && task.ClusterBaseModel == nil {
 		return fmt.Errorf("gopher got empty task")
 	}
@@ -311,15 +388,17 @@ func (s *Gopher) processTask(task *GopherTask) error {
 		ctx, cancel = context.WithCancel(context.Background())
 
 		// Register the cancel function
+		activeDownloadToken := fmt.Sprintf("%s-%d", modelUID, time.Now().UnixNano())
 		s.activeDownloadsMutex.Lock()
-		s.activeDownloads[modelUID] = cancel
+		s.activeDownloads[modelUID] = activeDownload{
+			token:  activeDownloadToken,
+			cancel: cancel,
+		}
 		s.activeDownloadsMutex.Unlock()
 
 		// Ensure cleanup on completion
 		defer func() {
-			s.activeDownloadsMutex.Lock()
-			delete(s.activeDownloads, modelUID)
-			s.activeDownloadsMutex.Unlock()
+			s.unregisterActiveDownload(modelUID, activeDownloadToken)
 			cancel() // Ensure context is cancelled
 		}()
 	}
@@ -391,6 +470,9 @@ func (s *Gopher) processTask(task *GopherTask) error {
 					s.logger.Infof("Reusing Ready same-path model artifact for %s/%s from %s at %s", namespace, name, matchedKey, destPath)
 				} else if matchedKey, wait := s.findUpdatingObjectStorageModelWithSamePath(ctx, task, baseModelSpec, destPath); wait &&
 					s.requeueSamePathInFlightReuseWait(task, matchedKey) {
+					return nil
+				} else if !allowFallbackDownload {
+					s.demoteToNormalPriority(task)
 					return nil
 				} else if err := downloadObjectStorageModel(); err != nil {
 					return err
@@ -484,9 +566,9 @@ func (s *Gopher) processTask(task *GopherTask) error {
 	case Delete:
 		// First, cancel any ongoing download for this model
 		s.activeDownloadsMutex.RLock()
-		if cancelFunc, exists := s.activeDownloads[modelUID]; exists {
+		if active, exists := s.activeDownloads[modelUID]; exists {
 			s.logger.Infof("Cancelling ongoing download for model %s", modelInfo)
-			cancelFunc() // This will cancel the download context
+			active.cancel() // This will cancel the download context
 		}
 		s.activeDownloadsMutex.RUnlock()
 
@@ -582,6 +664,23 @@ func (s *Gopher) processTask(task *GopherTask) error {
 	}
 
 	return nil
+}
+
+func (s *Gopher) unregisterActiveDownload(modelUID string, token string) {
+	s.activeDownloadsMutex.Lock()
+	defer s.activeDownloadsMutex.Unlock()
+	if active, exists := s.activeDownloads[modelUID]; exists && active.token == token {
+		delete(s.activeDownloads, modelUID)
+	}
+}
+
+func (s *Gopher) demoteToNormalPriority(task *GopherTask) {
+	if task == nil {
+		return
+	}
+	task.NormalPriorityOnly = true
+	s.logger.Infof("Demoting %s to normal priority for fallback download/validation", getModelInfoForLogging(task))
+	s.enqueueTask(task)
 }
 
 func shouldUseSamePathObjectStorageReuse(task *GopherTask) bool {
