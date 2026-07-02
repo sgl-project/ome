@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
@@ -263,6 +264,22 @@ func (s *Gopher) processTask(task *GopherTask) error {
 	ctx := context.Background()
 	var cancel context.CancelFunc
 
+	if task.TaskType == Download || task.TaskType == DownloadOverride {
+		if skip, runDeleteCleanup := s.shouldSkipStaleDownloadTask(task); skip {
+			if runDeleteCleanup {
+				s.logger.Infof("Model %s is deleting, running cleanup instead of download", modelInfo)
+				return s.processTask(&GopherTask{
+					TaskType:               Delete,
+					BaseModel:              task.BaseModel,
+					ClusterBaseModel:       task.ClusterBaseModel,
+					TensorRTLLMShapeFilter: task.TensorRTLLMShapeFilter,
+				})
+			}
+			s.logger.Infof("Model %s no longer exists, skipping stale download task", modelInfo)
+			return nil
+		}
+	}
+
 	// For Download and DownloadOverride tasks, set the node label to "Updating"
 	if task.TaskType == Download || task.TaskType == DownloadOverride {
 		s.logger.Infof("Setting model %s status to Updating before download", modelInfo)
@@ -421,6 +438,20 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			s.logger.Infof("Successfully downloaded ClusterBaseModel %s", task.ClusterBaseModel.Name)
 		}
 
+		if skip, runDeleteCleanup := s.shouldSkipStaleDownloadTask(task); skip {
+			if runDeleteCleanup {
+				s.logger.Infof("Model %s is deleting after download, running cleanup instead of marking Ready", modelInfo)
+				return s.processTask(&GopherTask{
+					TaskType:               Delete,
+					BaseModel:              task.BaseModel,
+					ClusterBaseModel:       task.ClusterBaseModel,
+					TensorRTLLMShapeFilter: task.TensorRTLLMShapeFilter,
+				})
+			}
+			s.logger.Infof("Model %s no longer exists after download, skipping Ready update", modelInfo)
+			return nil
+		}
+
 		// mark the model as Ready on both node labels and ConfigMap
 		nodeLabelOp := &NodeLabelOp{
 			ModelStateOnNode: Ready,
@@ -539,6 +570,46 @@ func (s *Gopher) processTask(task *GopherTask) error {
 
 func shouldUseSamePathObjectStorageReuse(task *GopherTask) bool {
 	return task != nil && task.TaskType == Download
+}
+
+func (s *Gopher) shouldSkipStaleDownloadTask(task *GopherTask) (bool, bool) {
+	if task == nil {
+		return false, false
+	}
+
+	if task.BaseModel != nil {
+		if s.baseModelLister == nil {
+			return false, false
+		}
+		latestModel, err := s.baseModelLister.BaseModels(task.BaseModel.Namespace).Get(task.BaseModel.Name)
+		if apierrors.IsNotFound(err) {
+			return true, false
+		}
+		if err != nil {
+			s.logger.Warnf("Cannot check latest BaseModel %s/%s before download: %v", task.BaseModel.Namespace, task.BaseModel.Name, err)
+			return false, false
+		}
+		isDeleting := latestModel.DeletionTimestamp != nil
+		return isDeleting, isDeleting
+	}
+
+	if task.ClusterBaseModel != nil {
+		if s.clusterBaseModelLister == nil {
+			return false, false
+		}
+		latestModel, err := s.clusterBaseModelLister.Get(task.ClusterBaseModel.Name)
+		if apierrors.IsNotFound(err) {
+			return true, false
+		}
+		if err != nil {
+			s.logger.Warnf("Cannot check latest ClusterBaseModel %s before download: %v", task.ClusterBaseModel.Name, err)
+			return false, false
+		}
+		isDeleting := latestModel.DeletionTimestamp != nil
+		return isDeleting, isDeleting
+	}
+
+	return false, false
 }
 
 // isPathReferencedByOtherModels checks if the given path is still referenced by other BaseModel or ClusterBaseModel resources

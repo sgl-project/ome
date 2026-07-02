@@ -15,8 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -260,7 +262,42 @@ func (m *mockBaseModelLister) List(selector labels.Selector) ([]*v1beta1.BaseMod
 }
 
 func (m *mockBaseModelLister) BaseModels(namespace string) omev1beta1lister.BaseModelNamespaceLister {
-	return nil // Not used in our test
+	return &mockBaseModelNamespaceLister{
+		namespace: namespace,
+		models:    m.models,
+		err:       m.err,
+	}
+}
+
+type mockBaseModelNamespaceLister struct {
+	namespace string
+	models    []*v1beta1.BaseModel
+	err       error
+}
+
+func (m *mockBaseModelNamespaceLister) List(selector labels.Selector) ([]*v1beta1.BaseModel, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	var models []*v1beta1.BaseModel
+	for _, model := range m.models {
+		if model.Namespace == m.namespace {
+			models = append(models, model)
+		}
+	}
+	return models, nil
+}
+
+func (m *mockBaseModelNamespaceLister) Get(name string) (*v1beta1.BaseModel, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	for _, model := range m.models {
+		if model.Namespace == m.namespace && model.Name == name {
+			return model, nil
+		}
+	}
+	return nil, apierrors.NewNotFound(schema.GroupResource{Group: "ome.io", Resource: "basemodels"}, name)
 }
 
 type mockClusterBaseModelLister struct {
@@ -279,7 +316,7 @@ func (m *mockClusterBaseModelLister) Get(name string) (*v1beta1.ClusterBaseModel
 			return model, nil
 		}
 	}
-	return nil, errors.New("not found")
+	return nil, apierrors.NewNotFound(schema.GroupResource{Group: "ome.io", Resource: "clusterbasemodels"}, name)
 }
 
 // TestIsPathReferencedByOtherModels tests the isPathReferencedByOtherModels method
@@ -647,6 +684,28 @@ func newGopherWithConfigMap(cm *corev1.ConfigMap) *Gopher {
 	}
 }
 
+func newGopherForProcessTask(cm *corev1.ConfigMap, nodeLabels ...map[string]string) *Gopher {
+	labels := map[string]string{}
+	if len(nodeLabels) > 0 {
+		labels = nodeLabels[0]
+	}
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   cm.Name,
+			Labels: labels,
+		},
+	}
+	client := k8sfake.NewSimpleClientset(cm, node)
+	logger := zap.NewNop().Sugar()
+	cmr := NewConfigMapReconciler(cm.Name, cm.Namespace, client, logger)
+	return &Gopher{
+		configMapReconciler: cmr,
+		nodeLabelReconciler: NewNodeLabelReconciler(cm.Name, client, 1, logger),
+		logger:              logger,
+		activeDownloads:     map[string]context.CancelFunc{},
+	}
+}
+
 func entryJSON(sha, parentName string, parentPath string) string {
 	entry := struct {
 		Config struct {
@@ -787,6 +846,142 @@ func TestShouldUseSamePathObjectStorageReuse(t *testing.T) {
 			assert.Equal(t, tt.want, shouldUseSamePathObjectStorageReuse(tt.task))
 		})
 	}
+}
+
+func TestShouldSkipStaleDownloadTask_BaseModelDeletingRequestsCleanup(t *testing.T) {
+	now := metav1.Now()
+	staleTaskModel := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "service-ns"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: stringPtr("oci://n/ns/b/bucket/o/model")},
+		},
+	}
+	latestModel := staleTaskModel.DeepCopy()
+	latestModel.DeletionTimestamp = &now
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{}))
+	g.baseModelLister = &mockBaseModelLister{models: []*v1beta1.BaseModel{latestModel}}
+
+	skip, runDeleteCleanup := g.shouldSkipStaleDownloadTask(&GopherTask{TaskType: Download, BaseModel: staleTaskModel})
+
+	assert.True(t, skip)
+	assert.True(t, runDeleteCleanup)
+}
+
+func TestShouldSkipStaleDownloadTask_BaseModelDeletedSkipsWithoutCleanup(t *testing.T) {
+	staleTaskModel := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "service-ns"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: stringPtr("oci://n/ns/b/bucket/o/model")},
+		},
+	}
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{}))
+	g.baseModelLister = &mockBaseModelLister{}
+
+	skip, runDeleteCleanup := g.shouldSkipStaleDownloadTask(&GopherTask{TaskType: Download, BaseModel: staleTaskModel})
+
+	assert.True(t, skip)
+	assert.False(t, runDeleteCleanup)
+}
+
+func TestShouldSkipStaleDownloadTask_BaseModelActiveDoesNotSkip(t *testing.T) {
+	model := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "service-ns"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: stringPtr("oci://n/ns/b/bucket/o/model")},
+		},
+	}
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{}))
+	g.baseModelLister = &mockBaseModelLister{models: []*v1beta1.BaseModel{model}}
+
+	skip, runDeleteCleanup := g.shouldSkipStaleDownloadTask(&GopherTask{TaskType: Download, BaseModel: model})
+
+	assert.False(t, skip)
+	assert.False(t, runDeleteCleanup)
+}
+
+func TestShouldSkipStaleDownloadTask_ClusterBaseModelDeletingRequestsCleanup(t *testing.T) {
+	now := metav1.Now()
+	staleTaskModel := &v1beta1.ClusterBaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "model"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: stringPtr("oci://n/ns/b/bucket/o/model")},
+		},
+	}
+	latestModel := staleTaskModel.DeepCopy()
+	latestModel.DeletionTimestamp = &now
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{}))
+	g.clusterBaseModelLister = &mockClusterBaseModelLister{models: []*v1beta1.ClusterBaseModel{latestModel}}
+
+	skip, runDeleteCleanup := g.shouldSkipStaleDownloadTask(&GopherTask{TaskType: Download, ClusterBaseModel: staleTaskModel})
+
+	assert.True(t, skip)
+	assert.True(t, runDeleteCleanup)
+}
+
+func TestShouldSkipStaleDownloadTask_ClusterBaseModelDeletedSkipsWithoutCleanup(t *testing.T) {
+	staleTaskModel := &v1beta1.ClusterBaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "model"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: stringPtr("oci://n/ns/b/bucket/o/model")},
+		},
+	}
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{}))
+	g.clusterBaseModelLister = &mockClusterBaseModelLister{}
+
+	skip, runDeleteCleanup := g.shouldSkipStaleDownloadTask(&GopherTask{TaskType: Download, ClusterBaseModel: staleTaskModel})
+
+	assert.True(t, skip)
+	assert.False(t, runDeleteCleanup)
+}
+
+func TestProcessTask_SkipsMissingBaseModelWithoutWritingStatus(t *testing.T) {
+	storageURI := "local:///models/model"
+	model := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "service-ns", UID: "uid-model"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: &storageURI},
+		},
+	}
+	labelKey, err := getModelLabelKey(&NodeLabelOp{ModelStateOnNode: Updating, BaseModel: model})
+	require.NoError(t, err)
+	cm := makeConfigMap("node-1", map[string]string{})
+	g := newGopherForProcessTask(cm, map[string]string{labelKey: string(Updating)})
+	g.baseModelLister = &mockBaseModelLister{}
+
+	err = g.processTask(&GopherTask{TaskType: Download, BaseModel: model})
+
+	require.NoError(t, err)
+	latest, err := g.configMapReconciler.kubeClient.CoreV1().ConfigMaps(cm.Namespace).Get(context.Background(), cm.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.NotContains(t, latest.Data, constants.GetModelConfigMapKey(model.Namespace, model.Name, false))
+}
+
+func TestProcessTask_TerminatingClusterBaseModelRunsDeleteCleanup(t *testing.T) {
+	modelName := "model"
+	modelKey := constants.GetModelConfigMapKey("", modelName, true)
+	cm := makeConfigMap("node-1", map[string]string{
+		modelKey: modelEntryJSON(ModelStatusReady),
+	})
+	g := newGopherForProcessTask(cm)
+
+	now := metav1.Now()
+	storageURI := "local:///models/model"
+	staleTaskModel := &v1beta1.ClusterBaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: modelName, UID: "uid-cluster-model"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: &storageURI},
+		},
+	}
+	latestModel := staleTaskModel.DeepCopy()
+	latestModel.DeletionTimestamp = &now
+	g.clusterBaseModelLister = &mockClusterBaseModelLister{models: []*v1beta1.ClusterBaseModel{latestModel}}
+
+	err := g.processTask(&GopherTask{TaskType: Download, ClusterBaseModel: staleTaskModel})
+
+	require.NoError(t, err)
+	latest, err := g.configMapReconciler.kubeClient.CoreV1().ConfigMaps(cm.Namespace).Get(context.Background(), cm.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.NotContains(t, latest.Data, modelKey)
 }
 
 func TestHandelReuseArtifactIfNecessary_NoReusePolicy(t *testing.T) {
