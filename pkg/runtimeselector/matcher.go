@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 	modelVer "sigs.k8s.io/ome/pkg/modelver"
 )
 
@@ -39,6 +40,15 @@ func (m *DefaultRuntimeMatcher) IsCompatible(runtime *v1beta1.ServingRuntimeSpec
 			ModelName:   "", // Will be filled by caller if available
 			ModelFormat: model.ModelFormat.Name,
 			Reason:      "runtime does not support the required accelerator class",
+		}
+	}
+	// Apply component-level deployment mode constraints
+	if ok, reason := m.compareDeploymentMode(runtime, isvc); !ok {
+		return false, &RuntimeCompatibilityError{
+			RuntimeName: runtimeName,
+			ModelName:   "", // Will be filled by caller if available
+			ModelFormat: model.ModelFormat.Name,
+			Reason:      reason,
 		}
 	}
 	// Check if any supported format matches
@@ -78,6 +88,12 @@ func (m *DefaultRuntimeMatcher) GetCompatibilityDetails(runtime *v1beta1.Serving
 	if !m.compareAcceleratorClass(runtime, isvc) {
 		report.IncompatibilityReasons = append(report.IncompatibilityReasons,
 			"runtime does not support the required accelerator class")
+		return report, nil
+	}
+
+	// Apply component-level deployment mode constraints
+	if ok, reason := m.compareDeploymentMode(runtime, isvc); !ok {
+		report.IncompatibilityReasons = append(report.IncompatibilityReasons, reason)
 		return report, nil
 	}
 
@@ -296,6 +312,101 @@ func (m *DefaultRuntimeMatcher) compareAcceleratorClass(runtime *v1beta1.Serving
 	}
 
 	return true
+}
+
+// compareDeploymentMode rejects a runtime only when both the InferenceService
+// component and the matching runtime component explicitly declare different deployment modes.
+func (m *DefaultRuntimeMatcher) compareDeploymentMode(runtime *v1beta1.ServingRuntimeSpec, isvc *v1beta1.InferenceService) (bool, string) {
+	isvcEngineDeploymentMode, hasIsvcEngineDeploymentMode := inferenceServiceEngineDeploymentMode(isvc)
+	runtimeEngineDeploymentMode, hasRuntimeEngineDeploymentMode := getRuntimeComponentDeploymentMode(runtime, v1beta1.EngineComponent)
+	if ok, reason := compareComponentDeploymentMode(
+		"engine",
+		isvcEngineDeploymentMode,
+		hasIsvcEngineDeploymentMode,
+		runtimeEngineDeploymentMode,
+		hasRuntimeEngineDeploymentMode,
+	); !ok {
+		return false, reason
+	}
+
+	isvcDecoderDeploymentMode, hasIsvcDecoderDeploymentMode := inferenceServiceDecoderDeploymentMode(isvc)
+	runtimeDecoderDeploymentMode, hasRuntimeDecoderDeploymentMode := getRuntimeComponentDeploymentMode(runtime, v1beta1.DecoderComponent)
+	if ok, reason := compareComponentDeploymentMode(
+		"decoder",
+		isvcDecoderDeploymentMode,
+		hasIsvcDecoderDeploymentMode,
+		runtimeDecoderDeploymentMode,
+		hasRuntimeDecoderDeploymentMode,
+	); !ok {
+		return false, reason
+	}
+
+	return true, ""
+}
+
+func compareComponentDeploymentMode(
+	componentName string,
+	isvcDeploymentMode constants.DeploymentModeType,
+	hasIsvcDeploymentMode bool,
+	runtimeDeploymentMode constants.DeploymentModeType,
+	hasRuntimeDeploymentMode bool) (bool, string) {
+	// Keep the runtime unless both sides explicitly declare deployment modes and those values differ.
+	if !hasIsvcDeploymentMode || !hasRuntimeDeploymentMode || isvcDeploymentMode == runtimeDeploymentMode {
+		return true, ""
+	}
+
+	return false, fmt.Sprintf("runtime %s deployment mode %s does not match requested %s deployment mode %s",
+		componentName, runtimeDeploymentMode, componentName, isvcDeploymentMode)
+}
+
+func inferenceServiceEngineDeploymentMode(isvc *v1beta1.InferenceService) (constants.DeploymentModeType, bool) {
+	if isvc == nil || isvc.Spec.Engine == nil {
+		return "", false
+	}
+
+	return deploymentModeFromAnnotations(isvc.Spec.Engine.Annotations)
+}
+
+func inferenceServiceDecoderDeploymentMode(isvc *v1beta1.InferenceService) (constants.DeploymentModeType, bool) {
+	if isvc == nil || isvc.Spec.Decoder == nil {
+		return "", false
+	}
+
+	return deploymentModeFromAnnotations(isvc.Spec.Decoder.Annotations)
+}
+
+func getRuntimeComponentDeploymentMode(runtime *v1beta1.ServingRuntimeSpec, componentType v1beta1.ComponentType) (constants.DeploymentModeType, bool) {
+	if runtime == nil {
+		return "", false
+	}
+
+	switch componentType {
+	case v1beta1.EngineComponent:
+		if runtime.EngineConfig == nil {
+			return "", false
+		}
+		return deploymentModeFromAnnotations(runtime.EngineConfig.Annotations)
+	case v1beta1.DecoderComponent:
+		if runtime.DecoderConfig == nil {
+			return "", false
+		}
+		return deploymentModeFromAnnotations(runtime.DecoderConfig.Annotations)
+	default:
+		return "", false
+	}
+}
+
+func deploymentModeFromAnnotations(annotations map[string]string) (constants.DeploymentModeType, bool) {
+	if annotations == nil {
+		return "", false
+	}
+	if mode, exists := annotations[constants.DeploymentMode]; exists {
+		deploymentMode := constants.DeploymentModeType(mode)
+		if deploymentMode.IsValid() {
+			return deploymentMode, true
+		}
+	}
+	return "", false
 }
 
 // compareSupportedModelFormats checks if a model matches a supported format.
