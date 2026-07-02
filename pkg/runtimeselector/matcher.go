@@ -360,7 +360,7 @@ func isDecoderSpecConfigured(decoder *v1beta1.DecoderSpec) bool {
 // component and the matching runtime component explicitly declare different deployment modes.
 func (m *DefaultRuntimeMatcher) compareDeploymentMode(runtime *v1beta1.ServingRuntimeSpec, isvc *v1beta1.InferenceService) (bool, string) {
 	isvcEngineDeploymentMode, hasIsvcEngineDeploymentMode := inferenceServiceEngineDeploymentMode(isvc)
-	runtimeEngineDeploymentMode, hasRuntimeEngineDeploymentMode := getRuntimeEngineDeploymentMode(runtime)
+	runtimeEngineDeploymentMode, hasRuntimeEngineDeploymentMode := getRuntimeComponentDeploymentMode(runtime, v1beta1.EngineComponent)
 	if ok, reason := compareComponentDeploymentMode(
 		"engine",
 		isvcEngineDeploymentMode,
@@ -372,7 +372,7 @@ func (m *DefaultRuntimeMatcher) compareDeploymentMode(runtime *v1beta1.ServingRu
 	}
 
 	isvcDecoderDeploymentMode, hasIsvcDecoderDeploymentMode := inferenceServiceDecoderDeploymentMode(isvc)
-	runtimeDecoderDeploymentMode, hasRuntimeDecoderDeploymentMode := getRuntimeDecoderDeploymentMode(runtime)
+	runtimeDecoderDeploymentMode, hasRuntimeDecoderDeploymentMode := getRuntimeComponentDeploymentMode(runtime, v1beta1.DecoderComponent)
 	if ok, reason := compareComponentDeploymentMode(
 		"decoder",
 		isvcDecoderDeploymentMode,
@@ -417,20 +417,25 @@ func inferenceServiceDecoderDeploymentMode(isvc *v1beta1.InferenceService) (cons
 	return deploymentModeFromAnnotations(isvc.Spec.Decoder.Annotations)
 }
 
-func getRuntimeEngineDeploymentMode(runtime *v1beta1.ServingRuntimeSpec) (constants.DeploymentModeType, bool) {
-	if runtime == nil || runtime.EngineConfig == nil {
+func getRuntimeComponentDeploymentMode(runtime *v1beta1.ServingRuntimeSpec, componentType v1beta1.ComponentType) (constants.DeploymentModeType, bool) {
+	if runtime == nil {
 		return "", false
 	}
 
-	return deploymentModeFromAnnotations(runtime.EngineConfig.Annotations)
-}
-
-func getRuntimeDecoderDeploymentMode(runtime *v1beta1.ServingRuntimeSpec) (constants.DeploymentModeType, bool) {
-	if runtime == nil || runtime.DecoderConfig == nil {
+	switch componentType {
+	case v1beta1.EngineComponent:
+		if runtime.EngineConfig == nil {
+			return "", false
+		}
+		return deploymentModeFromAnnotations(runtime.EngineConfig.Annotations)
+	case v1beta1.DecoderComponent:
+		if runtime.DecoderConfig == nil {
+			return "", false
+		}
+		return deploymentModeFromAnnotations(runtime.DecoderConfig.Annotations)
+	default:
 		return "", false
 	}
-
-	return deploymentModeFromAnnotations(runtime.DecoderConfig.Annotations)
 }
 
 func deploymentModeFromAnnotations(annotations map[string]string) (constants.DeploymentModeType, bool) {
