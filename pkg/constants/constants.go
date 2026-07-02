@@ -662,12 +662,14 @@ func ModelConfigName(isvcName string) string {
 	return fmt.Sprintf("modelconfig-%s", isvcName)
 }
 
-func LWSName(isvcName string) string {
-	var maxLen = 50
-	if len(isvcName) > maxLen {
-		isvcName = isvcName[len(isvcName)-maxLen:]
-	}
-	return fmt.Sprintf("lws-%s", isvcName)
+func LWSName(componentName string) string {
+	const (
+		lwsNamePrefix = "lws-"
+		// Leave room for downstream prefixes/suffixes when this name is embedded in Pod label values.
+		maxLWSNameLength = 35
+	)
+
+	return TruncateNameWithPrefix(componentName, lwsNamePrefix, maxLWSNameLength)
 }
 
 func InferenceServiceHostName(name string, namespace string, domain string) string {
@@ -950,6 +952,19 @@ func GetModelConfigMapKey(namespace, modelName string, isClusterBaseModel bool) 
 // TruncateNameWithMaxLength return a valid DNS name
 func TruncateNameWithMaxLength(name string, maxLength int) string {
 	return truncateWithHashTweaks(name, maxLength)
+}
+
+func TruncateNameWithPrefix(name, prefix string, maxLength int) string {
+	if maxLength <= 0 {
+		return ""
+	}
+
+	payloadMaxLength := maxLength - len(prefix)
+	if payloadMaxLength <= 0 {
+		return TruncateNameWithMaxLength(prefix, maxLength)
+	}
+
+	return prefix + TruncateNameWithMaxLength(name, payloadMaxLength)
 }
 
 // ParseModelInfoFromConfigMapKey attempts to parse model information from a ConfigMap key
