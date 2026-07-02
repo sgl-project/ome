@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"go.uber.org/zap/zaptest"
 
@@ -814,6 +815,217 @@ func TestFindReadyObjectStorageModelWithSamePath(t *testing.T) {
 				assert.Empty(t, matchedKey)
 			}
 		})
+	}
+}
+
+func TestFindUpdatingObjectStorageModelWithSamePathDoesNotRequireLocalPath(t *testing.T) {
+	storageURI := "oci://n/object-ns/b/model-bucket/o/models/large-model"
+	missingModelPath := filepath.Join(t.TempDir(), "missing-model")
+	readyKey := constants.GetModelConfigMapKey("default", "large-model", false)
+	currentCreatedAt := metav1.NewTime(time.Now())
+	candidateCreatedAt := metav1.NewTime(currentCreatedAt.Add(-time.Minute))
+	current := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "large-model", Namespace: "service-ns", CreationTimestamp: currentCreatedAt},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: &storageURI,
+				Path:       &missingModelPath,
+			},
+		},
+	}
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{
+		readyKey: modelEntryJSON(ModelStatusUpdating),
+	}))
+	g.baseModelLister = &mockBaseModelLister{
+		models: []*v1beta1.BaseModel{
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "large-model", Namespace: "default", CreationTimestamp: candidateCreatedAt},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: &storageURI,
+						Path:       &missingModelPath,
+					},
+				},
+			},
+		},
+	}
+
+	matchedKey, wait := g.findUpdatingObjectStorageModelWithSamePath(context.Background(), &GopherTask{BaseModel: current}, current.Spec, missingModelPath)
+
+	assert.True(t, wait)
+	assert.Equal(t, readyKey, matchedKey)
+}
+
+func TestFindUpdatingObjectStorageModelWithSamePathIgnoresNewerCandidate(t *testing.T) {
+	storageURI := "oci://n/object-ns/b/model-bucket/o/models/large-model"
+	modelPath := filepath.Join(t.TempDir(), "large-model")
+	currentCreatedAt := metav1.NewTime(time.Now())
+	candidateCreatedAt := metav1.NewTime(currentCreatedAt.Add(time.Minute))
+	current := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "large-model", Namespace: "service-ns", CreationTimestamp: currentCreatedAt},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: &storageURI,
+				Path:       &modelPath,
+			},
+		},
+	}
+	newerModel := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "large-model", Namespace: "another-ns", CreationTimestamp: candidateCreatedAt},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: &storageURI,
+				Path:       &modelPath,
+			},
+		},
+	}
+	newerKey := constants.GetModelConfigMapKey(newerModel.Namespace, newerModel.Name, false)
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{
+		newerKey: modelEntryJSON(ModelStatusUpdating),
+	}))
+	g.baseModelLister = &mockBaseModelLister{models: []*v1beta1.BaseModel{newerModel}}
+
+	matchedKey, wait := g.findUpdatingObjectStorageModelWithSamePath(context.Background(), &GopherTask{BaseModel: current}, current.Spec, modelPath)
+
+	assert.False(t, wait)
+	assert.Empty(t, matchedKey)
+}
+
+func TestFindUpdatingObjectStorageModelWithSamePathIgnoresDeletingCandidate(t *testing.T) {
+	storageURI := "oci://n/object-ns/b/model-bucket/o/models/large-model"
+	modelPath := filepath.Join(t.TempDir(), "large-model")
+	now := metav1.Now()
+	currentCreatedAt := metav1.NewTime(now.Add(time.Minute))
+	candidateCreatedAt := metav1.NewTime(now.Add(-time.Minute))
+	current := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "large-model", Namespace: "service-ns", CreationTimestamp: currentCreatedAt},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: &storageURI,
+				Path:       &modelPath,
+			},
+		},
+	}
+	deletingModel := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "large-model", Namespace: "default", CreationTimestamp: candidateCreatedAt, DeletionTimestamp: &now},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: &storageURI,
+				Path:       &modelPath,
+			},
+		},
+	}
+	deletingKey := constants.GetModelConfigMapKey(deletingModel.Namespace, deletingModel.Name, false)
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{
+		deletingKey: modelEntryJSON(ModelStatusUpdating),
+	}))
+	g.baseModelLister = &mockBaseModelLister{models: []*v1beta1.BaseModel{deletingModel}}
+
+	matchedKey, wait := g.findUpdatingObjectStorageModelWithSamePath(context.Background(), &GopherTask{BaseModel: current}, current.Spec, modelPath)
+
+	assert.False(t, wait)
+	assert.Empty(t, matchedKey)
+}
+
+func TestFindReadyObjectStorageModelWithSamePathIgnoresDeletingCandidate(t *testing.T) {
+	storageURI := "oci://n/object-ns/b/model-bucket/o/models/large-model"
+	modelPath := filepath.Join(t.TempDir(), "large-model")
+	require.NoError(t, os.MkdirAll(modelPath, 0755))
+	now := metav1.Now()
+	current := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "large-model", Namespace: "service-ns"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: &storageURI,
+				Path:       &modelPath,
+			},
+		},
+	}
+	deletingModel := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "large-model", Namespace: "default", DeletionTimestamp: &now},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: &storageURI,
+				Path:       &modelPath,
+			},
+		},
+	}
+	deletingKey := constants.GetModelConfigMapKey(deletingModel.Namespace, deletingModel.Name, false)
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{
+		deletingKey: modelEntryJSON(ModelStatusReady),
+	}))
+	g.baseModelLister = &mockBaseModelLister{models: []*v1beta1.BaseModel{deletingModel}}
+
+	matchedKey, reused := g.findReadyObjectStorageModelWithSamePath(context.Background(), &GopherTask{BaseModel: current}, current.Spec, modelPath)
+
+	assert.False(t, reused)
+	assert.Empty(t, matchedKey)
+}
+
+func TestProcessTask_RequeuesSamePathUpdatingObjectStorageModel(t *testing.T) {
+	storageURI := "oci://n/object-ns/b/model-bucket/o/models/large-model"
+	modelPath := filepath.Join(t.TempDir(), "large-model")
+	currentCreatedAt := metav1.NewTime(time.Now())
+	candidateCreatedAt := metav1.NewTime(currentCreatedAt.Add(-time.Minute))
+	current := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "large-model", Namespace: "service-ns", UID: "current-uid", CreationTimestamp: currentCreatedAt},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: &storageURI,
+				Path:       &modelPath,
+			},
+		},
+	}
+	updatingModel := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "large-model", Namespace: "default", CreationTimestamp: candidateCreatedAt},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: &storageURI,
+				Path:       &modelPath,
+			},
+		},
+	}
+	updatingKey := constants.GetModelConfigMapKey(updatingModel.Namespace, updatingModel.Name, false)
+	g := newGopherForProcessTask(makeConfigMap("node-1", map[string]string{
+		updatingKey: modelEntryJSON(ModelStatusUpdating),
+	}))
+	g.baseModelLister = &mockBaseModelLister{models: []*v1beta1.BaseModel{current, updatingModel}}
+	g.gopherChan = make(chan *GopherTask, 1)
+	g.samePathWaitDelay = time.Millisecond
+	g.samePathWaitTimeout = time.Hour
+
+	err := g.processTask(&GopherTask{TaskType: Download, BaseModel: current})
+
+	require.NoError(t, err)
+	select {
+	case task := <-g.gopherChan:
+		assert.Equal(t, current.Name, task.BaseModel.Name)
+		assert.False(t, task.SamePathWaitStartedAt.IsZero())
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected same-path Updating task to be requeued")
+	}
+}
+
+func TestRequeueSamePathInFlightReuseWaitTimesOut(t *testing.T) {
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{}))
+	g.gopherChan = make(chan *GopherTask, 1)
+	g.samePathWaitDelay = time.Millisecond
+	g.samePathWaitTimeout = time.Millisecond
+	task := &GopherTask{
+		TaskType:              Download,
+		SamePathWaitStartedAt: time.Now().Add(-time.Hour),
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "service-ns"},
+		},
+	}
+
+	requeued := g.requeueSamePathInFlightReuseWait(task, "default.basemodel.model")
+
+	assert.False(t, requeued)
+	select {
+	case <-g.gopherChan:
+		t.Fatal("timed out same-path wait task should not be requeued")
+	default:
 	}
 }
 

@@ -42,6 +42,7 @@ type config struct {
 	downloadRetry        int
 	downloadAuthType     string
 	numDownloadWorker    int
+	samePathWaitTimeout  time.Duration
 	namespace            string
 	logLevel             string
 }
@@ -72,6 +73,7 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&cfg.concurrency, "concurrency", 4, "Number of concurrent download workers per gopher")
 	rootCmd.PersistentFlags().IntVar(&cfg.multipartConcurrency, "multipart-concurrency", 4, "Number of concurrent multipart download workers per gopher")
 	rootCmd.PersistentFlags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 5, "Number of download workers")
+	rootCmd.PersistentFlags().DurationVar(&cfg.samePathWaitTimeout, "same-path-wait-timeout", 30*time.Minute, "Maximum time to wait for same-path model reuse before falling back to normal download")
 	rootCmd.PersistentFlags().StringVar(&cfg.namespace, "namespace", "ome", "Kubernetes namespace to use")
 	rootCmd.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 
@@ -264,6 +266,7 @@ func initializeComponents(
 		cfg.downloadRetry,
 		cfg.modelsRootDir,
 		gopherTaskChan,
+		cfg.samePathWaitTimeout,
 		nodeLabelReconciler,
 		metrics,
 		logger,

@@ -58,6 +58,8 @@ spec:
         - {{ .Values.modelAgent.hostPath }}
         - --num-download-worker
         - '2'
+        - --same-path-wait-timeout
+        - 30m
         env:
         - name: NODE_NAME
           valueFrom:

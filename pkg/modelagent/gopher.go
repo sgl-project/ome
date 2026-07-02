@@ -44,6 +44,7 @@ type GopherTask struct {
 	BaseModel              *v1beta1.BaseModel
 	ClusterBaseModel       *v1beta1.ClusterBaseModel
 	TensorRTLLMShapeFilter *TensorRTLLMShapeFilter
+	SamePathWaitStartedAt  time.Time
 }
 
 type Gopher struct {
@@ -55,7 +56,7 @@ type Gopher struct {
 	modelRootDir           string
 	xetConfig              *xet.Config
 	kubeClient             kubernetes.Interface
-	gopherChan             <-chan *GopherTask
+	gopherChan             chan *GopherTask
 	nodeLabelReconciler    *NodeLabelReconciler
 	metrics                *Metrics
 	logger                 *zap.SugaredLogger
@@ -66,10 +67,16 @@ type Gopher struct {
 	// Track active downloads for cancellation
 	activeDownloads      map[string]context.CancelFunc // key: model UID
 	activeDownloadsMutex sync.RWMutex
+
+	samePathWaitDelay   time.Duration
+	samePathWaitTimeout time.Duration
 }
 
 const (
 	BigFileSizeInMB = 200
+
+	defaultSamePathWaitDelay   = 30 * time.Second
+	defaultSamePathWaitTimeout = 30 * time.Minute
 )
 
 func NewGopher(
@@ -81,7 +88,8 @@ func NewGopher(
 	multipartConcurrency int,
 	downloadRetry int,
 	modelRootDir string,
-	gopherChan <-chan *GopherTask,
+	gopherChan chan *GopherTask,
+	samePathWaitTimeout time.Duration,
 	nodeLabelReconciler *NodeLabelReconciler,
 	metrics *Metrics,
 	logger *zap.SugaredLogger,
@@ -90,6 +98,9 @@ func NewGopher(
 
 	if xetConfig == nil {
 		return nil, fmt.Errorf("xet hugging face config cannot be nil")
+	}
+	if samePathWaitTimeout <= 0 {
+		samePathWaitTimeout = defaultSamePathWaitTimeout
 	}
 
 	return &Gopher{
@@ -108,6 +119,8 @@ func NewGopher(
 		activeDownloads:        make(map[string]context.CancelFunc),
 		baseModelLister:        baseModelLister,
 		clusterBaseModelLister: clusterBaseModelLister,
+		samePathWaitDelay:      defaultSamePathWaitDelay,
+		samePathWaitTimeout:    samePathWaitTimeout,
 	}, nil
 }
 
@@ -376,6 +389,9 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			if shouldUseSamePathObjectStorageReuse(task) {
 				if matchedKey, reused := s.findReadyObjectStorageModelWithSamePath(ctx, task, baseModelSpec, destPath); reused {
 					s.logger.Infof("Reusing Ready same-path model artifact for %s/%s from %s at %s", namespace, name, matchedKey, destPath)
+				} else if matchedKey, wait := s.findUpdatingObjectStorageModelWithSamePath(ctx, task, baseModelSpec, destPath); wait &&
+					s.requeueSamePathInFlightReuseWait(task, matchedKey) {
+					return nil
 				} else if err := downloadObjectStorageModel(); err != nil {
 					return err
 				}
@@ -832,6 +848,14 @@ func (s *Gopher) createOCIOSDataStore(baseModelSpec v1beta1.BaseModelSpec) (*oci
 // copied model CRs with the same source and destination can reuse Ready local
 // files. DownloadOverride keeps the existing download/validation path.
 func (s *Gopher) findReadyObjectStorageModelWithSamePath(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec, destPath string) (string, bool) {
+	return s.findObjectStorageModelWithSamePathAndStatus(ctx, task, baseModelSpec, destPath, ModelStatusReady, true)
+}
+
+func (s *Gopher) findUpdatingObjectStorageModelWithSamePath(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec, destPath string) (string, bool) {
+	return s.findObjectStorageModelWithSamePathAndStatus(ctx, task, baseModelSpec, destPath, ModelStatusUpdating, false)
+}
+
+func (s *Gopher) findObjectStorageModelWithSamePathAndStatus(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec, destPath string, status ModelStatus, requireLocalPath bool) (string, bool) {
 	if task == nil || (task.BaseModel == nil && task.ClusterBaseModel == nil) {
 		return "", false
 	}
@@ -841,9 +865,11 @@ func (s *Gopher) findReadyObjectStorageModelWithSamePath(ctx context.Context, ta
 	if s.configMapReconciler == nil {
 		return "", false
 	}
-	if _, err := os.Stat(destPath); err != nil {
-		s.logger.Warnf("Cannot reuse same-path model artifact at %s because it is not available locally: %v", destPath, err)
-		return "", false
+	if requireLocalPath {
+		if _, err := os.Stat(destPath); err != nil {
+			s.logger.Warnf("Cannot reuse same-path model artifact at %s because it is not available locally: %v", destPath, err)
+			return "", false
+		}
 	}
 
 	configMap, err := s.configMapReconciler.getConfigMap(ctx)
@@ -857,9 +883,15 @@ func (s *Gopher) findReadyObjectStorageModelWithSamePath(ctx context.Context, ta
 		clusterBaseModels, err := s.clusterBaseModelLister.List(labels.Everything())
 		if err == nil {
 			for _, model := range clusterBaseModels {
+				if model.DeletionTimestamp != nil {
+					continue
+				}
 				key := constants.GetModelConfigMapKey("", model.Name, true)
-				if key != currentKey && isReadyModelEntry(configMap.Data[key]) &&
+				if key != currentKey && hasModelEntryStatus(configMap.Data[key], status) &&
 					sameModelStoragePath(baseModelSpec.Storage, model.Spec.Storage, s.modelRootDir, destPath) {
+					if status == ModelStatusUpdating && !shouldWaitForSamePathCandidate(task, currentKey, key, model.CreationTimestamp.Time) {
+						continue
+					}
 					return key, true
 				}
 			}
@@ -872,9 +904,15 @@ func (s *Gopher) findReadyObjectStorageModelWithSamePath(ctx context.Context, ta
 		baseModels, err := s.baseModelLister.List(labels.Everything())
 		if err == nil {
 			for _, model := range baseModels {
+				if model.DeletionTimestamp != nil {
+					continue
+				}
 				key := constants.GetModelConfigMapKey(model.Namespace, model.Name, false)
-				if key != currentKey && isReadyModelEntry(configMap.Data[key]) &&
+				if key != currentKey && hasModelEntryStatus(configMap.Data[key], status) &&
 					sameModelStoragePath(baseModelSpec.Storage, model.Spec.Storage, s.modelRootDir, destPath) {
+					if status == ModelStatusUpdating && !shouldWaitForSamePathCandidate(task, currentKey, key, model.CreationTimestamp.Time) {
+						continue
+					}
 					return key, true
 				}
 			}
@@ -885,12 +923,65 @@ func (s *Gopher) findReadyObjectStorageModelWithSamePath(ctx context.Context, ta
 	return "", false
 }
 
-func isReadyModelEntry(dataEntry string) bool {
+func hasModelEntryStatus(dataEntry string, status ModelStatus) bool {
 	var entry ModelEntry
 	if err := json.Unmarshal([]byte(dataEntry), &entry); err != nil {
 		return false
 	}
-	return entry.Status == ModelStatusReady
+	return entry.Status == status
+}
+
+func shouldWaitForSamePathCandidate(task *GopherTask, currentKey string, candidateKey string, candidateCreatedAt time.Time) bool {
+	currentCreatedAt := getTaskModelCreationTime(task)
+	if !candidateCreatedAt.IsZero() && !currentCreatedAt.IsZero() && !candidateCreatedAt.Equal(currentCreatedAt) {
+		return candidateCreatedAt.Before(currentCreatedAt)
+	}
+	return candidateKey < currentKey
+}
+
+func getTaskModelCreationTime(task *GopherTask) time.Time {
+	if task == nil {
+		return time.Time{}
+	}
+	if task.BaseModel != nil {
+		return task.BaseModel.CreationTimestamp.Time
+	}
+	if task.ClusterBaseModel != nil {
+		return task.ClusterBaseModel.CreationTimestamp.Time
+	}
+	return time.Time{}
+}
+
+func (s *Gopher) requeueSamePathInFlightReuseWait(task *GopherTask, matchedKey string) bool {
+	if task == nil || s.gopherChan == nil {
+		return false
+	}
+	now := time.Now()
+	timeout := s.samePathWaitTimeout
+	if timeout <= 0 {
+		timeout = defaultSamePathWaitTimeout
+	}
+	if task.SamePathWaitStartedAt.IsZero() {
+		task.SamePathWaitStartedAt = now
+	} else if now.Sub(task.SamePathWaitStartedAt) >= timeout {
+		s.logger.Warnf("Timed out waiting for same-path model %s to become Ready for %s; falling back to normal download", matchedKey, getModelInfoForLogging(task))
+		return false
+	}
+
+	delay := s.samePathWaitDelay
+	if delay <= 0 {
+		delay = defaultSamePathWaitDelay
+	}
+	s.logger.Infof("Same-path model %s is Updating for %s; requeueing after %s before starting duplicate download", matchedKey, getModelInfoForLogging(task), delay)
+	time.AfterFunc(delay, func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Warnf("Cannot requeue same-path wait task for %s because gopher channel is closed: %v", getModelInfoForLogging(task), r)
+			}
+		}()
+		s.gopherChan <- task
+	})
+	return true
 }
 
 func sameModelStoragePath(currentStorage *v1beta1.StorageSpec, candidateStorage *v1beta1.StorageSpec, modelRootDir string, destPath string) bool {
