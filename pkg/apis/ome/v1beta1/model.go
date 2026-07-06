@@ -404,6 +404,47 @@ const (
 	LifeCycleDetailFailed     string = "Associated JobRun Failed"
 )
 
+// Model status condition types and reasons.
+const (
+	// ModelConditionSourceReachable reports whether OME can access the model source.
+	ModelConditionSourceReachable = "SourceReachable"
+	// ModelConditionReady reports whether the model status is ready for serving consumers.
+	ModelConditionReady = "Ready"
+
+	// ModelConditionReasonNotChecked means the controller has not checked this condition yet.
+	ModelConditionReasonNotChecked = "NotChecked"
+	// ModelConditionReasonSourceReachable means the model source is reachable.
+	ModelConditionReasonSourceReachable = "SourceReachable"
+	// ModelConditionReasonSourceNotReachable means the model source is not reachable.
+	ModelConditionReasonSourceNotReachable = "SourceNotReachable"
+
+	// ModelConditionReasonPVCInvalid means the PVC storage URI is malformed
+	// or violates the BaseModel/ClusterBaseModel namespace rules.
+	ModelConditionReasonPVCInvalid = "PVCInvalid"
+	// ModelConditionReasonPVCNotFound means the referenced PVC does not exist.
+	ModelConditionReasonPVCNotFound = "PVCNotFound"
+	// ModelConditionReasonPVCNotBound means the referenced PVC exists but is not Bound.
+	ModelConditionReasonPVCNotBound = "PVCNotBound"
+	// ModelConditionReasonPVCValidated means the referenced PVC exists and is Bound.
+	ModelConditionReasonPVCValidated = "PVCValidated"
+	// ModelConditionReasonPVCMetadataPending means the PVC is valid but model
+	// metadata has not yet been extracted.
+	ModelConditionReasonPVCMetadataPending = "PVCMetadataPending"
+	// ModelConditionReasonPVCMetadataExtracting means the metadata-extraction
+	// Job is currently running against the PVC.
+	ModelConditionReasonPVCMetadataExtracting = "PVCMetadataExtracting"
+	// ModelConditionReasonPVCMetadataExtractionFailed means the metadata
+	// extraction Job failed; reconcile will surface the Job's failure message.
+	ModelConditionReasonPVCMetadataExtractionFailed = "PVCMetadataExtractionFailed"
+	// ModelConditionReasonPVCMetadataReady means the metadata-extraction Job
+	// completed successfully and the model is ready to serve.
+	ModelConditionReasonPVCMetadataReady = "PVCMetadataReady"
+	// ModelConditionReasonPVCConfigMissing means the controller has no
+	// ome-agent image configured and therefore cannot spawn the metadata
+	// extraction Job.
+	ModelConditionReasonPVCConfigMissing = "PVCConfigMissing"
+)
+
 // ModelStatusSpec defines the observed state of Model weight
 type ModelStatusSpec struct {
 	// LifeCycle is an enum of Deprecated, Experiment, Public, Internal
@@ -412,11 +453,33 @@ type ModelStatusSpec struct {
 	// Status of the model weight
 	State LifeCycleState `json:"state"`
 
+	// ObservedGeneration is the .metadata.generation the controller last
+	// reconciled against. If this lags behind .metadata.generation, the
+	// controller has not yet observed the latest spec edit.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// LastReconcileTime is the wall-clock timestamp of the controller's most
+	// recent reconcile pass for this object. Liveness signal — if it falls
+	// behind by more than the reconcile period, the controller is wedged or
+	// not scheduled. Distinct from Condition.lastTransitionTime, which only
+	// advances on actual status flips.
+	// +optional
+	LastReconcileTime *metav1.Time `json:"lastReconcileTime,omitempty"`
+
 	// +listType=atomic
 	NodesReady []string `json:"nodesReady,omitempty"`
 
 	// +listType=atomic
 	NodesFailed []string `json:"nodesFailed,omitempty"`
+
+	// Conditions describe model readiness and source/metadata state. The PVC
+	// path reports SourceReachable and Ready; PerNode models continue to
+	// report node-level state through NodesReady and NodesFailed.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // BaseModel is the Schema for the basemodels API

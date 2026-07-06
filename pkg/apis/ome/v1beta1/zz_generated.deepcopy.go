@@ -1811,6 +1811,10 @@ func (in *ModelStatusSpec) DeepCopyInto(out *ModelStatusSpec) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.LastReconcileTime != nil {
+		in, out := &in.LastReconcileTime, &out.LastReconcileTime
+		*out = (*in).DeepCopy()
+	}
 	if in.NodesReady != nil {
 		in, out := &in.NodesReady, &out.NodesReady
 		*out = make([]string, len(*in))
@@ -1820,6 +1824,13 @@ func (in *ModelStatusSpec) DeepCopyInto(out *ModelStatusSpec) {
 		in, out := &in.NodesFailed, &out.NodesFailed
 		*out = make([]string, len(*in))
 		copy(*out, *in)
+	}
+	if in.Conditions != nil {
+		in, out := &in.Conditions, &out.Conditions
+		*out = make([]metav1.Condition, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 }
 
