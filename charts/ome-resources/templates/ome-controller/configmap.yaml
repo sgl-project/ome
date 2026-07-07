@@ -70,6 +70,21 @@ data:
         "authType" : "{{ .Values.ome.omeAgent.authType }}",
         "region": "{{ .Values.ome.omeAgent.region }}"
     }
+  omeAgent: |-
+    {
+        "image": "{{ include "ome.imageWithHub" (dict "values" .Values "repository" .Values.ome.omeAgent.image "tag" .Values.ome.omeAgent.tag) }}",
+        "serviceAccount": "{{ .Values.ome.omeAgent.metadataJob.serviceAccount }}",
+        "memoryRequest": "{{ .Values.ome.omeAgent.metadataJob.memoryRequest }}",
+        "memoryLimit": "{{ .Values.ome.omeAgent.metadataJob.memoryLimit }}",
+        "cpuRequest": "{{ .Values.ome.omeAgent.metadataJob.cpuRequest }}",
+        "cpuLimit": "{{ .Values.ome.omeAgent.metadataJob.cpuLimit }}",
+        "backoffLimit": {{ .Values.ome.omeAgent.metadataJob.backoffLimit | default 2 }},
+        "ttlSecondsAfterFinished": {{ .Values.ome.omeAgent.metadataJob.ttlSecondsAfterFinished | default 3600 }},
+        "nodeSelector": {{ .Values.ome.omeAgent.metadataJob.nodeSelector | default dict | toJson }},
+        "tolerations": {{ .Values.ome.omeAgent.metadataJob.tolerations | default list | toJson }},
+        "affinity": {{ .Values.ome.omeAgent.metadataJob.affinity | default dict | toJson }},
+        "priorityClassName": "{{ .Values.ome.omeAgent.metadataJob.priorityClassName | default "" }}"
+    }
   kedaConfig: |-
     {
       "enableKeda" : {{ .Values.ome.kedaConfig.enableKeda | default true }},

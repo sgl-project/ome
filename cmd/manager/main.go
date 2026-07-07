@@ -220,6 +220,11 @@ func main() {
 		setupLog.Error(err, "Failed to initialize ingress configuration")
 		os.Exit(1)
 	}
+	omeAgentConfig, err := controllerconfig.NewOmeAgentConfig(clientSet)
+	if err != nil {
+		setupLog.Error(err, "Failed to initialize ome-agent configuration")
+		os.Exit(1)
+	}
 
 	// Register optional schemes based on CRD availability
 	setupLog.Info("Registering optional CRD schemes")
@@ -271,9 +276,10 @@ func main() {
 	// Setup BaseModel and ClusterBaseModel controllers with the manager
 	setupLog.Info("Setting up BaseModel controller")
 	if err = (&v1beta1basemodelcontroller.BaseModelReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("BaseModel"),
-		Scheme: mgr.GetScheme(),
+		Client:         mgr.GetClient(),
+		Log:            ctrl.Log.WithName("BaseModel"),
+		Scheme:         mgr.GetScheme(),
+		OmeAgentConfig: omeAgentConfig,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create BaseModel controller")
 		os.Exit(1)
@@ -281,9 +287,10 @@ func main() {
 
 	setupLog.Info("Setting up ClusterBaseModel controller")
 	if err = (&v1beta1basemodelcontroller.ClusterBaseModelReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("ClusterBaseModel"),
-		Scheme: mgr.GetScheme(),
+		Client:         mgr.GetClient(),
+		Log:            ctrl.Log.WithName("ClusterBaseModel"),
+		Scheme:         mgr.GetScheme(),
+		OmeAgentConfig: omeAgentConfig,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create ClusterBaseModel controller")
 		os.Exit(1)

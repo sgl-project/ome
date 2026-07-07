@@ -11,6 +11,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -34,6 +36,7 @@ type Backend interface {
 // backend-specific imports.
 type BackendArgs struct {
 	Client          client.Client
+	Scheme          *runtime.Scheme
 	Log             logr.Logger
 	Obj             client.Object
 	Spec            *v1beta1.BaseModelSpec
@@ -54,6 +57,21 @@ func ModelSpecAndStatus(obj client.Object) (*v1beta1.BaseModelSpec, *v1beta1.Mod
 	default:
 		return nil, nil, fmt.Errorf("unsupported model type: %T", obj)
 	}
+}
+
+// StampObservedReconcile records that the controller has observed the
+// object's current generation and stamps the reconcile wall-clock time.
+// A no-op-safe helper the condition-writing backends call on every status
+// write so ObservedGeneration/LastReconcileTime stay fresh.
+func StampObservedReconcile(obj client.Object, status *v1beta1.ModelStatusSpec) {
+	if status == nil {
+		return
+	}
+	if status.ObservedGeneration != obj.GetGeneration() {
+		status.ObservedGeneration = obj.GetGeneration()
+	}
+	now := metav1.NewTime(time.Now())
+	status.LastReconcileTime = &now
 }
 
 // RetryUpdate retries updateFunc on conflict up to 3 times, with

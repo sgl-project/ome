@@ -8,6 +8,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/backends/pernode"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/backends/pvc"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/shared"
 )
 
@@ -32,6 +33,15 @@ func (perNodeBackend) Name() string                          { return "pernode" 
 func (perNodeBackend) Matches(_ *v1beta1.BaseModelSpec) bool { return true }
 
 func (perNodeBackend) Reconcile(ctx context.Context, a shared.BackendArgs) (ctrl.Result, error) {
+	// A model whose storage URI flipped away from pvc:// lands on the
+	// per-node backend; scrub any leftover PVC Job / ConfigMap / conditions
+	// before running the per-node flow. Idempotent no-op when there are no
+	// PVC artifacts (the common case).
+	if err := pvc.CleanupStaleArtifacts(ctx, a.Client, a.Log, a.Obj, a.IsClusterScoped); err != nil {
+		a.Log.Error(err, "Failed to clean up stale PVC artifacts after URI swap")
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+	}
+
 	if err := pernode.ReconcileStatusFromConfigMaps(ctx, a.Client, a.Log, a.Obj, a.IsClusterScoped, a.Kind); err != nil {
 		a.Log.Error(err, "Failed to update "+a.Kind+" status")
 		return ctrl.Result{RequeueAfter: time.Minute}, err

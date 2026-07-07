@@ -1,0 +1,46 @@
+{{- /*
+ServiceAccount + ClusterRole/Binding used by the metadata-extraction Job
+spawned by the BaseModel/ClusterBaseModel controller for PVC-backed
+models. The Job runs `ome-agent model-metadata`, parses the model
+directory mounted from the PVC, and writes a single per-model status
+ConfigMap in the OME namespace (deterministic name via
+constants.GetPVCMetadataConfigMapName). The BaseModel controller Gets
+that ConfigMap directly and updates the CR spec/state — the Job itself
+never writes to the CR.
+*/ -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.ome.omeAgent.metadataJob.serviceAccount }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/component: "ome-model-metadata-job"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.ome.omeAgent.metadataJob.serviceAccount }}
+  labels:
+    app.kubernetes.io/component: "ome-model-metadata-job"
+rules:
+  # Per-model status ConfigMap in the OME namespace. Granted cluster-scoped
+  # so the same SA works for ClusterBaseModel Jobs that may run in any
+  # namespace; the ConfigMap itself always lands in the OME namespace.
+  - apiGroups: [ "" ]
+    resources: [ "configmaps" ]
+    verbs: [ "get", "list", "create", "update", "patch" ]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.ome.omeAgent.metadataJob.serviceAccount }}
+  labels:
+    app.kubernetes.io/component: "ome-model-metadata-job"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Values.ome.omeAgent.metadataJob.serviceAccount }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.ome.omeAgent.metadataJob.serviceAccount }}
+    namespace: {{ .Release.Namespace }}
