@@ -89,14 +89,26 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 	}
 
 	// Add model volume mount if base model is specified and it's necessary
-	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil && b.BaseModelMeta != nil {
+	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModelMeta != nil {
 		if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
-			vm := corev1.VolumeMount{
-				Name:      b.BaseModelMeta.Name,
-				MountPath: *b.BaseModel.Storage.Path,
-				ReadOnly:  true,
+			if pvc := parsePVCComponents(b); pvc != nil {
+				// PVC-backed model: mount at the default model path, selecting
+				// the model directory within the claim via SubPath.
+				vm := corev1.VolumeMount{
+					Name:      b.BaseModelMeta.Name,
+					MountPath: constants.ModelDefaultMountPath,
+					SubPath:   pvc.SubPath,
+					ReadOnly:  true,
+				}
+				isvcutils.AppendVolumeMount(container, &vm)
+			} else if b.BaseModel.Storage.Path != nil {
+				vm := corev1.VolumeMount{
+					Name:      b.BaseModelMeta.Name,
+					MountPath: *b.BaseModel.Storage.Path,
+					ReadOnly:  true,
+				}
+				isvcutils.AppendVolumeMount(container, &vm)
 			}
-			isvcutils.AppendVolumeMount(container, &vm)
 		}
 	}
 
@@ -138,7 +150,14 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 	if !b.FineTunedServing {
 		// Base model serving - add MODEL_PATH env variable if necessary
 		if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
-			if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil {
+			if isPVCBaseModel(b) {
+				// PVC-backed model: weights are mounted at the default model
+				// path (Storage.Path is nil for pvc:// models).
+				b.Log.Info("Base model serving (PVC) - adding MODEL_PATH env variable if not provided", "inference service", isvc.Name, "namespace", isvc.Namespace)
+				isvcutils.AppendEnvVarsIfNotExist(container, &[]corev1.EnvVar{
+					{Name: constants.ModelPathEnvVarKey, Value: constants.ModelDefaultMountPath},
+				})
+			} else if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil {
 				b.Log.Info("Base model serving - adding MODEL_PATH env variable if not provided", "inference service", isvc.Name, "namespace", isvc.Namespace)
 				isvcutils.AppendEnvVarsIfNotExist(container, &[]corev1.EnvVar{
 					{Name: constants.ModelPathEnvVarKey, Value: *b.BaseModel.Storage.Path},
@@ -204,6 +223,25 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 		return
 	}
 
+	// Skip the per-node model-ready affinity for PVC-backed models. PVCs
+	// aren't tied to specific nodes and the model agent never labels nodes
+	// for them, so the readiness selector would leave the pod unschedulable.
+	// The runtime/AcceleratorClass node selectors below still apply.
+	if isPVCBaseModel(b) {
+		b.Log.Info("Skipping model-ready node selector for PVC-backed BaseModel",
+			"inferenceService", isvc.Name, "namespace", isvc.Namespace)
+		mergedNodeSelector := isvcutils.MergeNodeSelector(b.Runtime, b.AcceleratorClass, isvc, componentType)
+		if len(mergedNodeSelector) > 0 {
+			if podSpec.NodeSelector == nil {
+				podSpec.NodeSelector = make(map[string]string)
+			}
+			for k, v := range mergedNodeSelector {
+				podSpec.NodeSelector[k] = v
+			}
+		}
+		return
+	}
+
 	// Add preferred node affinity for model readiness using the shared utility function
 	isvcutils.AddNodeSelectorForModelReadyNode(podSpec, b.BaseModelMeta)
 
@@ -228,16 +266,30 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 // UpdatePodSpecVolumes updates pod spec with common volumes
 func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, objectMeta *metav1.ObjectMeta) {
 	// Add model volume if base model is specified
-	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil && b.BaseModelMeta != nil {
-		modelVolume := corev1.Volume{
-			Name: b.BaseModelMeta.Name,
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{
-					Path: *b.BaseModel.Storage.Path,
+	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModelMeta != nil {
+		if pvc := parsePVCComponents(b); pvc != nil {
+			// PVC-backed model: mount the claim directly (read-only).
+			modelVolume := corev1.Volume{
+				Name: b.BaseModelMeta.Name,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: pvc.PVCName,
+						ReadOnly:  true,
+					},
 				},
-			},
+			}
+			podSpec.Volumes = append(podSpec.Volumes, modelVolume)
+		} else if b.BaseModel.Storage.Path != nil {
+			modelVolume := corev1.Volume{
+				Name: b.BaseModelMeta.Name,
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: *b.BaseModel.Storage.Path,
+					},
+				},
+			}
+			podSpec.Volumes = append(podSpec.Volumes, modelVolume)
 		}
-		podSpec.Volumes = append(podSpec.Volumes, modelVolume)
 	}
 
 	// Add empty model directory volume if required for fine-tuned serving
