@@ -90,12 +90,13 @@ var (
 	AgentBaseModelTypeEnvVarKey       = AgentAppName + "_" + "MODEL_TYPE"
 
 	// General Configuration
-	AgentLocalPathEnvVarKey              = AgentAppName + "_" + "LOCAL_PATH"
-	AgentNumOfGPUEnvVarKey               = AgentAppName + "_" + "NUM_OF_GPU"
-	AgentDisableModelDecryptionEnvVarKey = AgentAppName + "_" + "DISABLE_MODEL_DECRYPTION"
-	AgentModelBucketNameEnvVarKey        = AgentAppName + "_" + "MODEL_BUCKET_NAME"
-	AgentModelNamespaceEnvVarKey         = AgentAppName + "_" + "MODEL_NAMESPACE"
-	AgentModelObjectName                 = AgentAppName + "_" + "MODEL_OBJECT_NAME"
+	AgentLocalPathEnvVarKey                  = AgentAppName + "_" + "LOCAL_PATH"
+	AgentNumOfGPUEnvVarKey                   = AgentAppName + "_" + "NUM_OF_GPU"
+	AgentDisableModelDecryptionEnvVarKey     = AgentAppName + "_" + "DISABLE_MODEL_DECRYPTION"
+	AgentModelBucketNameEnvVarKey            = AgentAppName + "_" + "MODEL_BUCKET_NAME"
+	AgentModelNamespaceEnvVarKey             = AgentAppName + "_" + "MODEL_NAMESPACE"
+	AgentModelObjectName                     = AgentAppName + "_" + "MODEL_OBJECT_NAME"
+	AgentTargetArtifactReuseAllowedEnvVarKey = AgentAppName + "_" + "TARGET_ARTIFACT_REUSE_ALLOWED"
 
 	// OCI Vault and Security
 	AgentCompartmentIDEnvVarKey = AgentAppName + "_" + "COMPARTMENT_ID"
@@ -119,9 +120,25 @@ var (
 
 // Model agent Constants
 const (
-	AgentConfigMapKeyName = "agent"
-	TensorRTLLM           = "tensorrtllm"
+	AgentConfigMapKeyName          = "agent"
+	TensorRTLLM                    = "tensorrtllm"
+	ArtifactCompleteMarkerFileName = ".ome-artifact-complete"
+	ArtifactCompleteMarkerBody     = "complete\n"
+	ArtifactUploadLockFileName     = ".ome-artifact-upload.lock"
+	ArtifactUploadLockBody         = "uploading\n"
 )
+
+func IsArtifactCompleteMarkerObjectName(objectName string) bool {
+	return objectName == ArtifactCompleteMarkerFileName || strings.HasSuffix(objectName, "/"+ArtifactCompleteMarkerFileName)
+}
+
+func IsArtifactUploadLockObjectName(objectName string) bool {
+	return objectName == ArtifactUploadLockFileName || strings.HasSuffix(objectName, "/"+ArtifactUploadLockFileName)
+}
+
+func IsInternalArtifactObjectName(objectName string) bool {
+	return IsArtifactCompleteMarkerObjectName(objectName) || IsArtifactUploadLockObjectName(objectName)
+}
 
 // InferenceService Annotations
 var (

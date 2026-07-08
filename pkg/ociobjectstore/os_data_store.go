@@ -328,6 +328,133 @@ func (cds *OCIOSDataStore) Upload(source string, target ObjectURI) error {
 	return nil
 }
 
+// UploadIfAbsent uploads a file or string only when the target object does not
+// already exist. It returns false when Object Storage rejects the write because
+// another writer has already created the object.
+func (cds *OCIOSDataStore) UploadIfAbsent(source string, target ObjectURI) (bool, error) {
+	if target.Namespace == "" {
+		namespace, err := cds.GetNamespace()
+		if err != nil {
+			return false, fmt.Errorf("error upload object due to no namespace found: %+v", err)
+		}
+		target.Namespace = *namespace
+	}
+
+	objectFullName := fmt.Sprintf(
+		"%s/%s/%s", target.Namespace, target.BucketName, target.ObjectName)
+
+	var putObjectBody io.ReadCloser
+	var uploadObjectSize *int64
+
+	if sourceFile, err := os.Open(source); err == nil {
+		fileInfo, err := sourceFile.Stat()
+		if err != nil {
+			return false, fmt.Errorf(
+				"failed to get source file info %q: %+v",
+				source,
+				err)
+		}
+		putObjectBody = sourceFile
+		tmp := fileInfo.Size()
+		uploadObjectSize = &tmp
+	} else {
+		putObjectBody = io.NopCloser(strings.NewReader(source))
+		tmp := int64(len(source))
+		uploadObjectSize = &tmp
+	}
+	defer putObjectBody.Close()
+
+	putObjectRequest := objectstorage.PutObjectRequest{
+		NamespaceName: &target.Namespace,
+		BucketName:    &target.BucketName,
+		ObjectName:    &target.ObjectName,
+		ContentLength: uploadObjectSize,
+		PutObjectBody: putObjectBody,
+		IfNoneMatch:   common.String("*"),
+	}
+	response, err := cds.Client.PutObject(context.Background(), putObjectRequest)
+	if isObjectAlreadyPresent(response.RawResponse, err) {
+		return false, nil
+	}
+	if err != nil || response.RawResponse == nil || response.RawResponse.StatusCode != http.StatusOK {
+		return false, fmt.Errorf(
+			"failed to put object %q with response %+v: %s",
+			objectFullName,
+			response,
+			errorMessage(err))
+	}
+	return true, nil
+}
+
+// DeleteObject removes an object from OCI Object Storage. Missing objects are
+// treated as already cleaned up so callers can use this for best-effort cleanup.
+func (cds *OCIOSDataStore) DeleteObject(target ObjectURI) error {
+	if target.Namespace == "" {
+		namespace, err := cds.GetNamespace()
+		if err != nil {
+			return fmt.Errorf("error delete object due to no namespace found: %+v", err)
+		}
+		target.Namespace = *namespace
+	}
+
+	objectFullName := fmt.Sprintf(
+		"%s/%s/%s", target.Namespace, target.BucketName, target.ObjectName)
+	deleteObjectRequest := objectstorage.DeleteObjectRequest{
+		NamespaceName: &target.Namespace,
+		BucketName:    &target.BucketName,
+		ObjectName:    &target.ObjectName,
+	}
+	response, err := cds.Client.DeleteObject(context.Background(), deleteObjectRequest)
+	if isObjectMissing(err) {
+		return nil
+	}
+	if err != nil || response.RawResponse == nil || response.RawResponse.StatusCode != http.StatusNoContent {
+		return fmt.Errorf(
+			"failed to delete object %q with response %+v: %s",
+			objectFullName,
+			response,
+			errorMessage(err))
+	}
+	return nil
+}
+
+// DeleteObjectIfMatch removes an object only when its current ETag matches the
+// caller's observed ETag. It returns false when the object is already gone or
+// has changed since observation.
+func (cds *OCIOSDataStore) DeleteObjectIfMatch(target ObjectURI, etag string) (bool, error) {
+	if etag == "" {
+		return false, fmt.Errorf("etag cannot be empty")
+	}
+	if target.Namespace == "" {
+		namespace, err := cds.GetNamespace()
+		if err != nil {
+			return false, fmt.Errorf("error delete object due to no namespace found: %+v", err)
+		}
+		target.Namespace = *namespace
+	}
+
+	objectFullName := fmt.Sprintf(
+		"%s/%s/%s", target.Namespace, target.BucketName, target.ObjectName)
+	deleteObjectRequest := objectstorage.DeleteObjectRequest{
+		NamespaceName: &target.Namespace,
+		BucketName:    &target.BucketName,
+		ObjectName:    &target.ObjectName,
+		IfMatch:       common.String(etag),
+	}
+	response, err := cds.Client.DeleteObject(context.Background(), deleteObjectRequest)
+	if isObjectMissing(err) || isPreconditionFailed(response.RawResponse, err) {
+		return false, nil
+	}
+	if err != nil || response.RawResponse == nil || response.RawResponse.StatusCode != http.StatusNoContent {
+		return false, fmt.Errorf(
+			"failed to delete object %q with response %+v: %s",
+			objectFullName,
+			response,
+			errorMessage(err))
+	}
+	return true, nil
+}
+
 // HeadObject fetches metadata headers for an object in OCI Object Storage.
 //
 // It returns an OCI HeadObjectResponse which contains fields such as size, ETag, and MD5 checksum.
@@ -423,7 +550,7 @@ func (cds *OCIOSDataStore) ListObjects(target ObjectURI) ([]objectstorage.Object
 		NamespaceName: &target.Namespace,
 		BucketName:    &target.BucketName,
 		Prefix:        &target.Prefix, //Virtual folder name within bucket
-		Fields:        common.String("name,size,md5"),
+		Fields:        common.String("name,size,md5,etag,timeCreated,timeModified"),
 	}
 
 	var allObjects []objectstorage.ObjectSummary
@@ -521,4 +648,32 @@ func isMultipartMd5(md5 string) bool {
 	}
 	_, err := strconv.Atoi(parts[1])
 	return err == nil
+}
+
+func isObjectAlreadyPresent(response *http.Response, err error) bool {
+	return isPreconditionFailed(response, err)
+}
+
+func isPreconditionFailed(response *http.Response, err error) bool {
+	if response != nil && response.StatusCode == http.StatusPreconditionFailed {
+		return true
+	}
+	if serviceErr, ok := common.IsServiceError(err); ok {
+		return serviceErr.GetHTTPStatusCode() == http.StatusPreconditionFailed
+	}
+	return false
+}
+
+func isObjectMissing(err error) bool {
+	if serviceErr, ok := common.IsServiceError(err); ok {
+		return serviceErr.GetHTTPStatusCode() == http.StatusNotFound
+	}
+	return false
+}
+
+func errorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }

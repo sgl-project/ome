@@ -192,6 +192,7 @@ func TestModuleIntegration(t *testing.T) {
 	v.Set("num_connections", 5)
 	v.Set("download_size_limit_gb", 100)
 	v.Set("enable_size_limit_check", true)
+	v.Set("target_artifact_reuse_allowed", true)
 	v.Set("source.storage_uri", "oci://n/test-src-namespace/b/test-src-bucket/o/models")
 	v.Set("target.storage_uri", "oci://n/test-tgt-namespace/b/test-tgt-bucket/o/models")
 
@@ -235,6 +236,7 @@ func TestModuleIntegration(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, config)
 	assert.Equal(t, "/test/path", config.LocalPath)
+	assert.True(t, config.TargetArtifactReuseAllowed)
 	assert.Equal(t, "oci://n/test-src-namespace/b/test-src-bucket/o/models", config.Source.StorageURIStr)
 	assert.Equal(t, mockDataStores[0], config.Source.OCIOSDataStore)
 	assert.Equal(t, mockDataStores[1], config.Target.OCIOSDataStore)
