@@ -49,6 +49,7 @@ import (
 	"sigs.k8s.io/ome/pkg/runtimeselector"
 	"sigs.k8s.io/ome/pkg/utils"
 	"sigs.k8s.io/ome/pkg/version"
+	basemodelwebhook "sigs.k8s.io/ome/pkg/webhook/admission/basemodel"
 	"sigs.k8s.io/ome/pkg/webhook/admission/benchmark"
 	"sigs.k8s.io/ome/pkg/webhook/admission/isvc"
 	"sigs.k8s.io/ome/pkg/webhook/admission/pod"
@@ -366,6 +367,16 @@ func main() {
 		setupLog.Info("Registering ControllerRevision immutability validator webhook to the webhook server")
 		hookServer.Register("/validate-apps-v1-controllerrevision", &webhook.Admission{
 			Handler: &runtimerevisionwebhook.ImmutabilityValidator{Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
+
+		setupLog.Info("Registering BaseModel validator webhook to the webhook server")
+		hookServer.Register("/validate-ome-io-v1beta1-basemodel", &webhook.Admission{
+			Handler: &basemodelwebhook.BaseModelValidator{Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
+
+		setupLog.Info("Registering ClusterBaseModel validator webhook to the webhook server")
+		hookServer.Register("/validate-ome-io-v1beta1-clusterbasemodel", &webhook.Admission{
+			Handler: &basemodelwebhook.ClusterBaseModelValidator{Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
 		if err = ctrl.NewWebhookManagedBy(mgr).
