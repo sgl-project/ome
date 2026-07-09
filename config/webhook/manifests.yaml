@@ -143,33 +143,6 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
-  name: capacityreservation.ome.io
-webhooks:
-  - clientConfig:
-      caBundle: Cg==
-      service:
-        name: $(webhookServiceName)
-        namespace: $(omeNamespace)
-        path: /validate-ome-io-v1beta1-capacityreservation
-    failurePolicy: Fail
-    name: capacityreservation.ome-webhook-server.validator
-    sideEffects: None
-    admissionReviewVersions: ["v1beta1"]
-    rules:
-      - apiGroups:
-          - ome.io
-        apiVersions:
-          - v1beta1
-        operations:
-          - CREATE
-          - UPDATE
-        resources:
-          - clustercapacityreservations
----
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingWebhookConfiguration
-metadata:
-  creationTimestamp: null
   name: servingruntime.ome.io
 webhooks:
   - clientConfig:

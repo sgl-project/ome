@@ -54,6 +54,26 @@ replacements:
       kind: ValidatingWebhookConfiguration
       name: servingruntime.ome.io
   - fieldPaths:
+    - webhooks.*.clientConfig.service.name
+    select:
+      kind: ValidatingWebhookConfiguration
+      name: controllerrevision-immutability.ome.io
+  - fieldPaths:
+    - webhooks.*.clientConfig.service.name
+    select:
+      kind: ValidatingWebhookConfiguration
+      name: basemodel.ome.io
+  - fieldPaths:
+    - webhooks.*.clientConfig.service.name
+    select:
+      kind: ValidatingWebhookConfiguration
+      name: clusterbasemodel.ome.io
+  - fieldPaths:
+    - spec.conversion.webhook.clientConfig.service.name
+    select:
+      kind: CustomResourceDefinition
+      name: inferenceservices.ome.io
+  - fieldPaths:
     - spec.commonName
     - spec.dnsNames.0
     options:
@@ -94,6 +114,26 @@ replacements:
     select:
       kind: ValidatingWebhookConfiguration
       name: servingruntime.ome.io
+  - fieldPaths:
+    - webhooks.*.clientConfig.service.namespace
+    select:
+      kind: ValidatingWebhookConfiguration
+      name: controllerrevision-immutability.ome.io
+  - fieldPaths:
+    - webhooks.*.namespaceSelector.matchLabels.[kubernetes.io/metadata.name]
+    select:
+      kind: ValidatingWebhookConfiguration
+      name: controllerrevision-immutability.ome.io
+  - fieldPaths:
+    - webhooks.*.clientConfig.service.namespace
+    select:
+      kind: ValidatingWebhookConfiguration
+      name: basemodel.ome.io
+  - fieldPaths:
+    - webhooks.*.clientConfig.service.namespace
+    select:
+      kind: ValidatingWebhookConfiguration
+      name: clusterbasemodel.ome.io
   - fieldPaths:
     - spec.commonName
     - spec.dnsNames.0
@@ -152,6 +192,30 @@ replacements:
     select:
       kind: ValidatingWebhookConfiguration
       name: servingruntime.ome.io
+  - fieldPaths:
+    - metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      delimiter: '/'
+      index: 0
+    select:
+      kind: ValidatingWebhookConfiguration
+      name: controllerrevision-immutability.ome.io
+  - fieldPaths:
+    - metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      delimiter: '/'
+      index: 0
+    select:
+      kind: ValidatingWebhookConfiguration
+      name: basemodel.ome.io
+  - fieldPaths:
+    - metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      delimiter: '/'
+      index: 0
+    select:
+      kind: ValidatingWebhookConfiguration
+      name: clusterbasemodel.ome.io
 
 patches:
 - path: manager_image_patch.yaml
@@ -165,3 +229,6 @@ patches:
 - path: isvc_conversion_webhook.yaml
 - path: cainjection_conversion_webhook.yaml
 - path: benchmarkjob_validationwebhook_cainjection_patch.yaml
+- path: controllerrevision_validatingwebhook_cainjection_patch.yaml
+- path: basemodel_validatingwebhook_cainjection_patch.yaml
+- path: clusterbasemodel_validatingwebhook_cainjection_patch.yaml
