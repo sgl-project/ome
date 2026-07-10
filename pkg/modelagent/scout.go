@@ -53,7 +53,7 @@ type downloadOverrideChangeCandidate struct {
 	old, new interface{}
 }
 
-type modelDownloadInputs struct {
+type downloadOverrideInputs struct {
 	Storage              *v1beta1.StorageSpec
 	IsTensorRTLLMModel   bool
 	TensorRTLLMModelType string
@@ -361,7 +361,7 @@ func (w *Scout) updateBaseModel(old, new interface{}) {
 	hasChanges, err := hasDownloadOverrideChanges([]downloadOverrideChangeCandidate{
 		{"Labels", oldBaseModel.Labels, newBaseModel.Labels},
 		{"Annotations", oldBaseModel.Annotations, newBaseModel.Annotations},
-		{"DownloadInputs", modelDownloadInputsFromSpec(oldBaseModel.Spec), modelDownloadInputsFromSpec(newBaseModel.Spec)},
+		{"DownloadOverrideInputs", downloadOverrideInputsFromSpec(oldBaseModel.Spec), downloadOverrideInputsFromSpec(newBaseModel.Spec)},
 	}, ignoreDownloadPolicy)
 	if err != nil {
 		w.logger.Errorf("Failed to diff BaseModel %s in namespace %s: %v",
@@ -410,7 +410,7 @@ func (w *Scout) updateClusterBaseModel(old, new interface{}) {
 	hasChanges, err := hasDownloadOverrideChanges([]downloadOverrideChangeCandidate{
 		{"Labels", oldClusterBaseModel.Labels, newClusterBaseModel.Labels},
 		{"Annotations", oldClusterBaseModel.Annotations, newClusterBaseModel.Annotations},
-		{"DownloadInputs", modelDownloadInputsFromSpec(oldClusterBaseModel.Spec), modelDownloadInputsFromSpec(newClusterBaseModel.Spec)},
+		{"DownloadOverrideInputs", downloadOverrideInputsFromSpec(oldClusterBaseModel.Spec), downloadOverrideInputsFromSpec(newClusterBaseModel.Spec)},
 	}, ignoreDownloadPolicy)
 	if err != nil {
 		w.logger.Errorf("Failed to diff ClusterBaseModel %s: %v", newClusterBaseModel.Name, err)
@@ -436,7 +436,7 @@ func hasDownloadOverrideChanges(candidates []downloadOverrideChangeCandidate, op
 	return false, nil
 }
 
-func modelDownloadInputsFromSpec(spec v1beta1.BaseModelSpec) modelDownloadInputs {
+func downloadOverrideInputsFromSpec(spec v1beta1.BaseModelSpec) downloadOverrideInputs {
 	isTensorRTLLMModel := spec.ModelFormat.Name == constants.TensorRTLLM
 	modelType := ""
 	if isTensorRTLLMModel {
@@ -445,7 +445,7 @@ func modelDownloadInputsFromSpec(spec v1beta1.BaseModelSpec) modelDownloadInputs
 			modelType = modelTypeFromMetadata
 		}
 	}
-	return modelDownloadInputs{
+	return downloadOverrideInputs{
 		Storage:              spec.Storage,
 		IsTensorRTLLMModel:   isTensorRTLLMModel,
 		TensorRTLLMModelType: modelType,
