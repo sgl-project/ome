@@ -49,6 +49,10 @@ spec:
         - /raid/models
         - --num-download-worker
         - '2'
+        - --num-high-priority-worker
+        - '1'
+        - --same-path-wait-timeout
+        - 30m
         - --concurrency
         - '2'
         env:
