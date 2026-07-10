@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
@@ -45,6 +46,17 @@ type TensorRTLLMShapeFilter struct {
 	IsTensorrtLLMModel bool
 	ShapeAlias         string
 	ModelType          string
+}
+
+type downloadOverrideChangeCandidate struct {
+	name     string
+	old, new interface{}
+}
+
+type downloadOverrideInputs struct {
+	Storage              *v1beta1.StorageSpec
+	IsTensorRTLLMModel   bool
+	TensorRTLLMModelType string
 }
 
 func NewScout(ctx context.Context, nodeName string,
@@ -346,22 +358,15 @@ func (w *Scout) updateBaseModel(old, new interface{}) {
 	// Exclude DownloadPolicy from Spec diff — policy changes are detected separately above.
 	ignoreDownloadPolicy := cmpopts.IgnoreFields(v1beta1.StorageSpec{}, "DownloadPolicy")
 
-	hasChanges := false
-	for _, diff := range []struct {
-		name     string
-		old, new interface{}
-	}{
+	hasChanges, err := hasDownloadOverrideChanges([]downloadOverrideChangeCandidate{
 		{"Labels", oldBaseModel.Labels, newBaseModel.Labels},
 		{"Annotations", oldBaseModel.Annotations, newBaseModel.Annotations},
-		{"Spec", oldBaseModel.Spec, newBaseModel.Spec},
-	} {
-		result, err := kmp.SafeDiff(diff.old, diff.new, ignoreDownloadPolicy)
-		if err != nil {
-			w.logger.Errorf("Failed to diff %s for BaseModel: %s in namespace %s",
-				diff.name, newBaseModel.Name, newBaseModel.Namespace)
-			return
-		}
-		hasChanges = hasChanges || (result != "")
+		{"DownloadOverrideInputs", downloadOverrideInputsFromSpec(oldBaseModel.Spec), downloadOverrideInputsFromSpec(newBaseModel.Spec)},
+	}, ignoreDownloadPolicy)
+	if err != nil {
+		w.logger.Errorf("Failed to diff BaseModel %s in namespace %s: %v",
+			newBaseModel.Name, newBaseModel.Namespace, err)
+		return
 	}
 
 	if (policyChanged || hasChanges) && w.shouldDownloadModel(newBaseModel.Spec.Storage) {
@@ -402,27 +407,48 @@ func (w *Scout) updateClusterBaseModel(old, new interface{}) {
 	// Exclude DownloadPolicy from Spec diff — policy changes are detected separately above.
 	ignoreDownloadPolicy := cmpopts.IgnoreFields(v1beta1.StorageSpec{}, "DownloadPolicy")
 
-	hasChanges := false
-	for _, diff := range []struct {
-		name     string
-		old, new interface{}
-	}{
+	hasChanges, err := hasDownloadOverrideChanges([]downloadOverrideChangeCandidate{
 		{"Labels", oldClusterBaseModel.Labels, newClusterBaseModel.Labels},
 		{"Annotations", oldClusterBaseModel.Annotations, newClusterBaseModel.Annotations},
-		{"Spec", oldClusterBaseModel.Spec, newClusterBaseModel.Spec},
-	} {
-		result, err := kmp.SafeDiff(diff.old, diff.new, ignoreDownloadPolicy)
-		if err != nil {
-			w.logger.Errorf("Failed to diff %s for BaseModel: %s in namespace %s",
-				diff.name, newClusterBaseModel.Name, newClusterBaseModel.Namespace)
-			return
-		}
-		hasChanges = hasChanges || (result != "")
+		{"DownloadOverrideInputs", downloadOverrideInputsFromSpec(oldClusterBaseModel.Spec), downloadOverrideInputsFromSpec(newClusterBaseModel.Spec)},
+	}, ignoreDownloadPolicy)
+	if err != nil {
+		w.logger.Errorf("Failed to diff ClusterBaseModel %s: %v", newClusterBaseModel.Name, err)
+		return
 	}
 
 	if (policyChanged || hasChanges) && w.shouldDownloadModel(newClusterBaseModel.Spec.Storage) {
 		w.logger.Infof("ClusterBaseModel %s need refresh", newClusterBaseModel.GetName())
 		w.generateDownloadOverrideTaskBasedOnClusterBaseModel(newClusterBaseModel)
+	}
+}
+
+func hasDownloadOverrideChanges(candidates []downloadOverrideChangeCandidate, opts ...cmp.Option) (bool, error) {
+	for _, candidate := range candidates {
+		result, err := kmp.SafeDiff(candidate.old, candidate.new, opts...)
+		if err != nil {
+			return false, fmt.Errorf("failed to diff %s: %w", candidate.name, err)
+		}
+		if result != "" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func downloadOverrideInputsFromSpec(spec v1beta1.BaseModelSpec) downloadOverrideInputs {
+	isTensorRTLLMModel := spec.ModelFormat.Name == constants.TensorRTLLM
+	modelType := ""
+	if isTensorRTLLMModel {
+		modelType = string(constants.ServingBaseModel)
+		if modelTypeFromMetadata, ok := spec.AdditionalMetadata["type"]; ok {
+			modelType = modelTypeFromMetadata
+		}
+	}
+	return downloadOverrideInputs{
+		Storage:              spec.Storage,
+		IsTensorRTLLMModel:   isTensorRTLLMModel,
+		TensorRTLLMModelType: modelType,
 	}
 }
 
