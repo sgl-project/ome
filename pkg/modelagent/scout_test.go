@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
@@ -1437,17 +1438,18 @@ func TestUpdateBaseModel_NoDuplicateTaskOnPolicyOnlyChange(t *testing.T) {
 	sugaredLogger := logger.Sugar()
 	defer func(s *zap.SugaredLogger) { _ = s.Sync() }(sugaredLogger)
 
-	ch := make(chan *GopherTask, 10)
-	scout := &Scout{
-		nodeShapeAlias: "a10",
-		gopherChan:     ch,
-		logger:         sugaredLogger,
-		nodeInfo: &corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "test-node",
-				Labels: map[string]string{"gpu-model": "a10"},
+	newScout := func(ch chan<- *GopherTask) *Scout {
+		return &Scout{
+			nodeShapeAlias: "a10",
+			gopherChan:     ch,
+			logger:         sugaredLogger,
+			nodeInfo: &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "test-node",
+					Labels: map[string]string{"gpu-model": "a10"},
+				},
 			},
-		},
+		}
 	}
 
 	tests := []struct {
@@ -1472,24 +1474,22 @@ func TestUpdateBaseModel_NoDuplicateTaskOnPolicyOnlyChange(t *testing.T) {
 			description:   "Dedicated handler skips non-HF, spec diff excludes DownloadPolicy",
 		},
 		{
-			name: "non-policy spec change - exactly 1 task from hasChanges block",
+			name: "download-affecting storage change - exactly 1 task from hasChanges block",
 			oldModel: &v1beta1.BaseModel{
 				ObjectMeta: metav1.ObjectMeta{Name: "model-3"},
 				Spec: v1beta1.BaseModelSpec{
-					ModelExtensionSpec: v1beta1.ModelExtensionSpec{DisplayName: ptr("Old Name")},
 					Storage: &v1beta1.StorageSpec{
 						DownloadPolicy: ptr(v1beta1.AlwaysDownload),
-						StorageUri:     ptr("hf://meta-llama/llama-3"),
+						StorageUri:     ptr("oci://bucket/old-model"),
 					},
 				},
 			},
 			newModel: &v1beta1.BaseModel{
 				ObjectMeta: metav1.ObjectMeta{Name: "model-3"},
 				Spec: v1beta1.BaseModelSpec{
-					ModelExtensionSpec: v1beta1.ModelExtensionSpec{DisplayName: ptr("New Name")},
 					Storage: &v1beta1.StorageSpec{
 						DownloadPolicy: ptr(v1beta1.AlwaysDownload),
-						StorageUri:     ptr("hf://meta-llama/llama-3"),
+						StorageUri:     ptr("oci://bucket/new-model"),
 					},
 				},
 			},
@@ -1501,30 +1501,93 @@ func TestUpdateBaseModel_NoDuplicateTaskOnPolicyOnlyChange(t *testing.T) {
 			oldModel: &v1beta1.BaseModel{
 				ObjectMeta: metav1.ObjectMeta{Name: "model-4"},
 				Spec: v1beta1.BaseModelSpec{
-					ModelExtensionSpec: v1beta1.ModelExtensionSpec{DisplayName: ptr("Old Name")},
 					Storage: &v1beta1.StorageSpec{
 						DownloadPolicy: ptr(v1beta1.ReuseIfExists),
-						StorageUri:     ptr("hf://meta-llama/llama-3"),
+						StorageUri:     ptr("hf://meta-llama/old-model"),
 					},
 				},
 			},
 			newModel: &v1beta1.BaseModel{
 				ObjectMeta: metav1.ObjectMeta{Name: "model-4"},
 				Spec: v1beta1.BaseModelSpec{
-					ModelExtensionSpec: v1beta1.ModelExtensionSpec{DisplayName: ptr("New Name")},
 					Storage: &v1beta1.StorageSpec{
 						DownloadPolicy: ptr(v1beta1.AlwaysDownload),
-						StorageUri:     ptr("hf://meta-llama/llama-3"),
+						StorageUri:     ptr("hf://meta-llama/new-model"),
 					},
 				},
 			},
 			expectedTasks: 1,
 			description:   "Single task even when both policy and spec change",
 		},
+		{
+			name: "parsed model metadata spec enrichment - 0 tasks",
+			oldModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{Name: "model-5"},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						DownloadPolicy: ptr(v1beta1.ReuseIfExists),
+						StorageUri:     ptr("oci://bucket/model"),
+					},
+				},
+			},
+			newModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{Name: "model-5"},
+				Spec: v1beta1.BaseModelSpec{
+					ModelType:          ptr("qwen3"),
+					ModelArchitecture:  ptr("Qwen3ForCausalLM"),
+					ModelFramework:     &v1beta1.ModelFrameworkSpec{Name: "transformers", Version: ptr("4.51.0")},
+					ModelFormat:        v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+					ModelParameterSize: ptr("8.19B"),
+					ModelCapabilities:  []string{"TEXT_TO_TEXT"},
+					MaxTokens:          ptr(int32(40960)),
+					ModelConfiguration: runtime.RawExtension{Raw: []byte(`{"model_type":"qwen3"}`)},
+					AdditionalMetadata: map[string]string{"type": "custom"},
+					Storage: &v1beta1.StorageSpec{
+						DownloadPolicy: ptr(v1beta1.ReuseIfExists),
+						StorageUri:     ptr("oci://bucket/model"),
+					},
+				},
+			},
+			expectedTasks: 0,
+			description:   "Parser-populated metadata does not change artifact lifecycle inputs",
+		},
+		{
+			name: "label touch still triggers manual refresh - exactly 1 task",
+			oldModel: func() *v1beta1.BaseModel {
+				model := newBaseModel("model-6", v1beta1.ReuseIfExists, "oci://bucket/model")
+				model.Labels = map[string]string{"refresh": "old"}
+				return model
+			}(),
+			newModel: func() *v1beta1.BaseModel {
+				model := newBaseModel("model-6", v1beta1.ReuseIfExists, "oci://bucket/model")
+				model.Labels = map[string]string{"refresh": "new"}
+				return model
+			}(),
+			expectedTasks: 1,
+			description:   "Metadata touches preserve DownloadOverride so local MD5 validation can redownload corrupted files",
+		},
+		{
+			name: "annotation touch still triggers manual refresh - exactly 1 task",
+			oldModel: func() *v1beta1.BaseModel {
+				model := newBaseModel("model-7", v1beta1.ReuseIfExists, "oci://bucket/model")
+				model.Annotations = map[string]string{"refresh": "old"}
+				return model
+			}(),
+			newModel: func() *v1beta1.BaseModel {
+				model := newBaseModel("model-7", v1beta1.ReuseIfExists, "oci://bucket/model")
+				model.Annotations = map[string]string{"refresh": "new"}
+				return model
+			}(),
+			expectedTasks: 1,
+			description:   "Annotation touches preserve DownloadOverride so local MD5 validation can redownload corrupted files",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			ch := make(chan *GopherTask, 10)
+			scout := newScout(ch)
+
 			scout.updateBaseModel(tc.oldModel, tc.newModel)
 			assert.Equal(t, tc.expectedTasks, len(ch), tc.description)
 			for range tc.expectedTasks {
@@ -1540,17 +1603,18 @@ func TestUpdateClusterBaseModel_NoDuplicateTaskOnPolicyOnlyChange(t *testing.T) 
 	sugaredLogger := logger.Sugar()
 	defer func(s *zap.SugaredLogger) { _ = s.Sync() }(sugaredLogger)
 
-	ch := make(chan *GopherTask, 10)
-	scout := &Scout{
-		nodeShapeAlias: "a10",
-		gopherChan:     ch,
-		logger:         sugaredLogger,
-		nodeInfo: &corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "test-node",
-				Labels: map[string]string{"gpu-model": "a10"},
+	newScout := func(ch chan<- *GopherTask) *Scout {
+		return &Scout{
+			nodeShapeAlias: "a10",
+			gopherChan:     ch,
+			logger:         sugaredLogger,
+			nodeInfo: &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "test-node",
+					Labels: map[string]string{"gpu-model": "a10"},
+				},
 			},
-		},
+		}
 	}
 
 	tests := []struct {
@@ -1575,34 +1639,97 @@ func TestUpdateClusterBaseModel_NoDuplicateTaskOnPolicyOnlyChange(t *testing.T) 
 			description:   "Dedicated handler skips non-HF, spec diff excludes DownloadPolicy",
 		},
 		{
-			name: "non-policy spec change - exactly 1 task",
+			name: "download-affecting storage change - exactly 1 task",
 			oldModel: &v1beta1.ClusterBaseModel{
 				ObjectMeta: metav1.ObjectMeta{Name: "cbm-3"},
 				Spec: v1beta1.BaseModelSpec{
-					ModelExtensionSpec: v1beta1.ModelExtensionSpec{DisplayName: ptr("Old Name")},
 					Storage: &v1beta1.StorageSpec{
 						DownloadPolicy: ptr(v1beta1.AlwaysDownload),
-						StorageUri:     ptr("hf://meta-llama/llama-3"),
+						StorageUri:     ptr("oci://bucket/old-model"),
 					},
 				},
 			},
 			newModel: &v1beta1.ClusterBaseModel{
 				ObjectMeta: metav1.ObjectMeta{Name: "cbm-3"},
 				Spec: v1beta1.BaseModelSpec{
-					ModelExtensionSpec: v1beta1.ModelExtensionSpec{DisplayName: ptr("New Name")},
 					Storage: &v1beta1.StorageSpec{
 						DownloadPolicy: ptr(v1beta1.AlwaysDownload),
-						StorageUri:     ptr("hf://meta-llama/llama-3"),
+						StorageUri:     ptr("oci://bucket/new-model"),
 					},
 				},
 			},
 			expectedTasks: 1,
 			description:   "Only the hasChanges block should fire",
 		},
+		{
+			name: "parsed model metadata spec enrichment - 0 tasks",
+			oldModel: &v1beta1.ClusterBaseModel{
+				ObjectMeta: metav1.ObjectMeta{Name: "cbm-4"},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						DownloadPolicy: ptr(v1beta1.ReuseIfExists),
+						StorageUri:     ptr("oci://bucket/model"),
+					},
+				},
+			},
+			newModel: &v1beta1.ClusterBaseModel{
+				ObjectMeta: metav1.ObjectMeta{Name: "cbm-4"},
+				Spec: v1beta1.BaseModelSpec{
+					ModelType:          ptr("qwen3"),
+					ModelArchitecture:  ptr("Qwen3ForCausalLM"),
+					ModelFramework:     &v1beta1.ModelFrameworkSpec{Name: "transformers", Version: ptr("4.51.0")},
+					ModelFormat:        v1beta1.ModelFormat{Name: "safetensors", Version: ptr("1.0.0")},
+					ModelParameterSize: ptr("8.19B"),
+					ModelCapabilities:  []string{"TEXT_TO_TEXT"},
+					MaxTokens:          ptr(int32(40960)),
+					ModelConfiguration: runtime.RawExtension{Raw: []byte(`{"model_type":"qwen3"}`)},
+					AdditionalMetadata: map[string]string{"type": "custom"},
+					Storage: &v1beta1.StorageSpec{
+						DownloadPolicy: ptr(v1beta1.ReuseIfExists),
+						StorageUri:     ptr("oci://bucket/model"),
+					},
+				},
+			},
+			expectedTasks: 0,
+			description:   "Parser-populated metadata does not change artifact lifecycle inputs",
+		},
+		{
+			name: "label touch still triggers manual refresh - exactly 1 task",
+			oldModel: func() *v1beta1.ClusterBaseModel {
+				model := newClusterBaseModel("cbm-5", v1beta1.ReuseIfExists, "oci://bucket/model")
+				model.Labels = map[string]string{"refresh": "old"}
+				return model
+			}(),
+			newModel: func() *v1beta1.ClusterBaseModel {
+				model := newClusterBaseModel("cbm-5", v1beta1.ReuseIfExists, "oci://bucket/model")
+				model.Labels = map[string]string{"refresh": "new"}
+				return model
+			}(),
+			expectedTasks: 1,
+			description:   "Metadata touches preserve DownloadOverride so local MD5 validation can redownload corrupted files",
+		},
+		{
+			name: "annotation touch still triggers manual refresh - exactly 1 task",
+			oldModel: func() *v1beta1.ClusterBaseModel {
+				model := newClusterBaseModel("cbm-6", v1beta1.ReuseIfExists, "oci://bucket/model")
+				model.Annotations = map[string]string{"refresh": "old"}
+				return model
+			}(),
+			newModel: func() *v1beta1.ClusterBaseModel {
+				model := newClusterBaseModel("cbm-6", v1beta1.ReuseIfExists, "oci://bucket/model")
+				model.Annotations = map[string]string{"refresh": "new"}
+				return model
+			}(),
+			expectedTasks: 1,
+			description:   "Annotation touches preserve DownloadOverride so local MD5 validation can redownload corrupted files",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			ch := make(chan *GopherTask, 10)
+			scout := newScout(ch)
+
 			scout.updateClusterBaseModel(tc.oldModel, tc.newModel)
 			assert.Equal(t, tc.expectedTasks, len(ch), tc.description)
 			for range tc.expectedTasks {
