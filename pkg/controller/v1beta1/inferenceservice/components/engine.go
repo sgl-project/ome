@@ -237,7 +237,7 @@ func (e *Engine) processLabels(isvc *v1beta1.InferenceService) (map[string]strin
 
 // determineEngineName determines the name of the engine service
 func (e *Engine) determineEngineName(isvc *v1beta1.InferenceService) (string, error) {
-	// For engine, we'll use a pattern similar to predictor but with "-engine" suffix
+	// Use the "<name>-engine" naming pattern for the engine service
 	defaultEngineName := isvc.Name + "-engine"
 	existingName := defaultEngineName
 

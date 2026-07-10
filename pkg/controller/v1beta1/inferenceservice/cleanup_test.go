@@ -582,24 +582,6 @@ func TestShouldKeepExternalService(t *testing.T) {
 			description: "should keep external service when annotation is set and router is active",
 		},
 		{
-			name: "Keep external service when annotation is set and predictor is active",
-			isvc: &v1beta1.InferenceService{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-isvc",
-					Namespace: "default",
-					UID:       "test-uid",
-					Annotations: map[string]string{
-						"ome.io/ingress-disable-creation": "true",
-					},
-				},
-			},
-			activeComponents: map[v1beta1.ComponentType]bool{
-				v1beta1.PredictorComponent: true,
-			},
-			expected:    true,
-			description: "should keep external service when annotation is set and predictor is active",
-		},
-		{
 			name: "Do not keep external service when annotation is not set",
 			isvc: &v1beta1.InferenceService{
 				ObjectMeta: metav1.ObjectMeta{

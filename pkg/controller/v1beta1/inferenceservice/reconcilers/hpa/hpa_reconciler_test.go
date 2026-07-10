@@ -59,7 +59,7 @@ func TestCreateHPA(t *testing.T) {
 				ScaleMetric: &cpuResource,
 			},
 		},
-		"predictordefaulthpa": {
+		"enginedefaulthpa": {
 			objectMeta: metav1.ObjectMeta{},
 			componentExt: &v1beta1.ComponentExtensionSpec{
 				MinReplicas: nil,
@@ -68,7 +68,7 @@ func TestCreateHPA(t *testing.T) {
 				ScaleMetric: &memoryResource,
 			},
 		},
-		"predictorspecifiedhpa": {
+		"enginespecifiedhpa": {
 			objectMeta: metav1.ObjectMeta{},
 			componentExt: &v1beta1.ComponentExtensionSpec{
 				MinReplicas: isvc.GetIntReference(5),
@@ -92,8 +92,8 @@ func TestCreateHPA(t *testing.T) {
 	defaultutilization := int32(80)
 	igminreplicas := int32(2)
 	igutilization := int32(30)
-	predictorminreplicas := int32(5)
-	predictorutilization := int32(50)
+	engineminreplicas := int32(5)
+	engineutilization := int32(50)
 
 	expectedHPASpecs := map[string]*autoscalingv2.HorizontalPodAutoscaler{
 		"igdefaulthpa": {
@@ -146,7 +146,7 @@ func TestCreateHPA(t *testing.T) {
 				Behavior: &autoscalingv2.HorizontalPodAutoscalerBehavior{},
 			},
 		},
-		"predictordefaulthpa": {
+		"enginedefaulthpa": {
 			ObjectMeta: metav1.ObjectMeta{},
 			Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
 				ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
@@ -170,14 +170,14 @@ func TestCreateHPA(t *testing.T) {
 				Behavior: &autoscalingv2.HorizontalPodAutoscalerBehavior{},
 			},
 		},
-		"predictorspecifiedhpa": {
+		"enginespecifiedhpa": {
 			ObjectMeta: metav1.ObjectMeta{},
 			Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
 				ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
 					APIVersion: "apps/v1",
 					Kind:       "Deployment",
 				},
-				MinReplicas: &predictorminreplicas,
+				MinReplicas: &engineminreplicas,
 				MaxReplicas: 10,
 				Metrics: []autoscalingv2.MetricSpec{
 					{
@@ -186,7 +186,7 @@ func TestCreateHPA(t *testing.T) {
 							Name: v1.ResourceName("cpu"),
 							Target: autoscalingv2.MetricTarget{
 								Type:               "Utilization",
-								AverageUtilization: &predictorutilization,
+								AverageUtilization: &engineutilization,
 							},
 						},
 					},
@@ -218,20 +218,20 @@ func TestCreateHPA(t *testing.T) {
 			expected: expectedHPASpecs["igspecifiedhpa"],
 		},
 		{
-			name: "predictor default hpa",
+			name: "engine default hpa",
 			args: args{
-				objectMeta:   testInput["predictordefaulthpa"].objectMeta,
-				componentExt: testInput["predictordefaulthpa"].componentExt,
+				objectMeta:   testInput["enginedefaulthpa"].objectMeta,
+				componentExt: testInput["enginedefaulthpa"].componentExt,
 			},
-			expected: expectedHPASpecs["predictordefaulthpa"],
+			expected: expectedHPASpecs["enginedefaulthpa"],
 		},
 		{
-			name: "predictor specified hpa",
+			name: "engine specified hpa",
 			args: args{
-				objectMeta:   testInput["predictorspecifiedhpa"].objectMeta,
-				componentExt: testInput["predictorspecifiedhpa"].componentExt,
+				objectMeta:   testInput["enginespecifiedhpa"].objectMeta,
+				componentExt: testInput["enginespecifiedhpa"].componentExt,
 			},
-			expected: expectedHPASpecs["predictorspecifiedhpa"],
+			expected: expectedHPASpecs["enginespecifiedhpa"],
 		},
 		{
 			name: "invalid input for hpa",
@@ -239,7 +239,7 @@ func TestCreateHPA(t *testing.T) {
 				objectMeta:   testInput["invalidinputhpa"].objectMeta,
 				componentExt: testInput["invalidinputhpa"].componentExt,
 			},
-			expected: expectedHPASpecs["predictordefaulthpa"],
+			expected: expectedHPASpecs["enginedefaulthpa"],
 		},
 	}
 	for _, tt := range tests {

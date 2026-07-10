@@ -285,7 +285,7 @@ InferenceService-specific information, such as a name, to the runtime environmen
 
 ## Using ClusterServingRuntimes
 
-When users define predictor in their InferenceService, they can explicitly specify the name of a _ClusterServingRuntime_ or _ServingRuntime_. For example:
+When users reference a model in their InferenceService, they can explicitly specify the name of a _ClusterServingRuntime_ or _ServingRuntime_. For example:
 
 ```yaml
 apiVersion: ome.io/v1beta1

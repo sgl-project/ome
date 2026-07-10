@@ -49,7 +49,7 @@ go run k8s.io/kube-openapi/cmd/openapi-gen \
     "knative.dev/pkg/apis/duck/v1" \
     "./pkg/apis/ome/v1beta1" 2>&1
 
-# Hack, the name is required in openAPI specification even if set "+optional" for v1.Container in PredictorExtensionSpec.
+# Hack, the name is required in openAPI specification even if set "+optional" for v1.Container in RunnerSpec.
 sed -i'.bak' -e 's/Required: \[\]string{\"name\"},//g' $OPENAPI_SPEC_FILE && rm -rf $OPENAPI_SPEC_FILE.bak
 sed -i'.bak' -e 's/Required: \[\]string{\"modelFormat\", \"name\"},/Required: \[\]string{\"modelFormat\"},/g' $OPENAPI_SPEC_FILE && rm -rf $OPENAPI_SPEC_FILE.bak
 

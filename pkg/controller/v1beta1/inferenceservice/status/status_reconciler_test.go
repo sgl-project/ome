@@ -36,7 +36,7 @@ func TestPropagateRawStatus(t *testing.T) {
 		{
 			name:      "successful deployment with available condition",
 			status:    &v1beta1.InferenceServiceStatus{},
-			component: v1beta1.PredictorComponent,
+			component: v1beta1.EngineComponent,
 			deployment: &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-deployment",
@@ -152,7 +152,7 @@ func TestPropagateRawStatus(t *testing.T) {
 		{
 			name:      "deployment with progressing condition",
 			status:    &v1beta1.InferenceServiceStatus{},
-			component: v1beta1.PredictorComponent,
+			component: v1beta1.EngineComponent,
 			deployment: &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-deployment",
@@ -191,13 +191,13 @@ func TestPropagateRawStatus(t *testing.T) {
 			name: "available rollout preserves previous ready revision until new deployment revision is complete",
 			status: &v1beta1.InferenceServiceStatus{
 				Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
-					v1beta1.PredictorComponent: {
+					v1beta1.EngineComponent: {
 						LatestReadyRevision:   "1",
 						LatestCreatedRevision: "1",
 					},
 				},
 			},
-			component: v1beta1.PredictorComponent,
+			component: v1beta1.EngineComponent,
 			deployment: &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-deployment",
@@ -238,13 +238,13 @@ func TestPropagateRawStatus(t *testing.T) {
 			name: "scale to zero rollout preserves previous ready revision until a new pod becomes available",
 			status: &v1beta1.InferenceServiceStatus{
 				Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
-					v1beta1.PredictorComponent: {
+					v1beta1.EngineComponent: {
 						LatestReadyRevision:   "1",
 						LatestCreatedRevision: "1",
 					},
 				},
 			},
-			component: v1beta1.PredictorComponent,
+			component: v1beta1.EngineComponent,
 			deployment: &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-deployment",
@@ -287,7 +287,7 @@ func TestPropagateRawStatus(t *testing.T) {
 		{
 			name:      "deployment with replica failure",
 			status:    &v1beta1.InferenceServiceStatus{},
-			component: v1beta1.PredictorComponent,
+			component: v1beta1.EngineComponent,
 			deployment: &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-deployment",
@@ -335,8 +335,6 @@ func TestPropagateRawStatus(t *testing.T) {
 			// Verify the correct condition was set based on component type
 			var expectedCondition apis.ConditionType
 			switch tt.component {
-			case v1beta1.PredictorComponent:
-				expectedCondition = v1beta1.PredictorReady
 			case v1beta1.EngineComponent:
 				expectedCondition = v1beta1.EngineReady
 			case v1beta1.DecoderComponent:
@@ -372,7 +370,7 @@ func TestPropagateMultiNodeStatus(t *testing.T) {
 		{
 			name:      "successful LeaderWorkerSet with ready condition",
 			status:    &v1beta1.InferenceServiceStatus{},
-			component: v1beta1.PredictorComponent,
+			component: v1beta1.EngineComponent,
 			lws: &lwsspec.LeaderWorkerSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-lws",
@@ -483,7 +481,7 @@ func TestPropagateMultiNodeStatus(t *testing.T) {
 		{
 			name:      "LeaderWorkerSet with progressing condition",
 			status:    &v1beta1.InferenceServiceStatus{},
-			component: v1beta1.PredictorComponent,
+			component: v1beta1.EngineComponent,
 			lws: &lwsspec.LeaderWorkerSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-lws",
@@ -533,8 +531,6 @@ func TestPropagateMultiNodeStatus(t *testing.T) {
 			// Verify the correct condition was set based on component type
 			var expectedCondition apis.ConditionType
 			switch tt.component {
-			case v1beta1.PredictorComponent:
-				expectedCondition = v1beta1.PredictorReady
 			case v1beta1.EngineComponent:
 				expectedCondition = v1beta1.EngineReady
 			case v1beta1.DecoderComponent:
@@ -569,7 +565,7 @@ func TestPropagateStatus(t *testing.T) {
 		{
 			name:      "successful Knative service",
 			status:    &v1beta1.InferenceServiceStatus{},
-			component: v1beta1.PredictorComponent,
+			component: v1beta1.EngineComponent,
 			serviceStatus: &knservingv1.ServiceStatus{
 				Status: duckv1.Status{
 					Conditions: duckv1.Conditions{
@@ -721,8 +717,6 @@ func TestPropagateStatus(t *testing.T) {
 			var expectedReadyCondition apis.ConditionType
 
 			switch tt.component {
-			case v1beta1.PredictorComponent:
-				expectedReadyCondition = v1beta1.PredictorReady
 			case v1beta1.EngineComponent:
 				expectedReadyCondition = v1beta1.EngineReady
 			case v1beta1.DecoderComponent:
@@ -1086,7 +1080,7 @@ func TestUpdateModelTransitionStatus(t *testing.T) {
 			name:                     "update transition status to invalid spec",
 			status:                   &v1beta1.InferenceServiceStatus{ModelStatus: v1beta1.ModelStatus{}},
 			transitionStatus:         v1beta1.InvalidSpec,
-			info:                     &v1beta1.FailureInfo{Reason: v1beta1.InvalidPredictorSpec, Message: "Invalid spec"},
+			info:                     &v1beta1.FailureInfo{Reason: v1beta1.NoSupportingRuntime, Message: "Invalid spec"},
 			expectedTransitionStatus: v1beta1.InvalidSpec,
 		},
 		{
@@ -1124,11 +1118,11 @@ func TestPropagateCrossComponentStatus(t *testing.T) {
 		{
 			name:          "all components ready",
 			status:        &v1beta1.InferenceServiceStatus{},
-			componentList: []v1beta1.ComponentType{v1beta1.PredictorComponent},
+			componentList: []v1beta1.ComponentType{v1beta1.EngineComponent},
 			conditionType: v1beta1.RoutesReady,
 			setupStatus: func(status *v1beta1.InferenceServiceStatus) {
-				status.SetCondition(v1beta1.PredictorRouteReady, &apis.Condition{
-					Type:   v1beta1.PredictorRouteReady,
+				status.SetCondition(v1beta1.EngineRouteReady, &apis.Condition{
+					Type:   v1beta1.EngineRouteReady,
 					Status: corev1.ConditionTrue,
 				})
 			},
@@ -1137,11 +1131,11 @@ func TestPropagateCrossComponentStatus(t *testing.T) {
 		{
 			name:          "component not ready",
 			status:        &v1beta1.InferenceServiceStatus{},
-			componentList: []v1beta1.ComponentType{v1beta1.PredictorComponent},
+			componentList: []v1beta1.ComponentType{v1beta1.EngineComponent},
 			conditionType: v1beta1.RoutesReady,
 			setupStatus: func(status *v1beta1.InferenceServiceStatus) {
-				status.SetCondition(v1beta1.PredictorRouteReady, &apis.Condition{
-					Type:   v1beta1.PredictorRouteReady,
+				status.SetCondition(v1beta1.EngineRouteReady, &apis.Condition{
+					Type:   v1beta1.EngineRouteReady,
 					Status: corev1.ConditionFalse,
 					Reason: "RouteNotReady",
 				})
@@ -1284,7 +1278,7 @@ func TestPropagateMultiNodeRayVLLMStatus(t *testing.T) {
 		{
 			name:      "successful multi-deployment with available conditions",
 			status:    &v1beta1.InferenceServiceStatus{},
-			component: v1beta1.PredictorComponent,
+			component: v1beta1.EngineComponent,
 			deployments: []*appsv1.Deployment{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1461,7 +1455,7 @@ func TestPropagateMultiNodeRayVLLMStatus(t *testing.T) {
 		{
 			name:      "one deployment not available",
 			status:    &v1beta1.InferenceServiceStatus{},
-			component: v1beta1.PredictorComponent,
+			component: v1beta1.EngineComponent,
 			deployments: []*appsv1.Deployment{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1520,7 +1514,7 @@ func TestPropagateMultiNodeRayVLLMStatus(t *testing.T) {
 		{
 			name:        "empty deployment list",
 			status:      &v1beta1.InferenceServiceStatus{},
-			component:   v1beta1.PredictorComponent,
+			component:   v1beta1.EngineComponent,
 			deployments: []*appsv1.Deployment{},
 			url:         nil,
 			expectedStatus: v1beta1.ComponentStatusSpec{
@@ -1553,8 +1547,6 @@ func TestPropagateMultiNodeRayVLLMStatus(t *testing.T) {
 				// Check that a condition was set indicating the error
 				var expectedCondition apis.ConditionType
 				switch tt.component {
-				case v1beta1.PredictorComponent:
-					expectedCondition = v1beta1.PredictorReady
 				case v1beta1.EngineComponent:
 					expectedCondition = v1beta1.EngineReady
 				case v1beta1.DecoderComponent:

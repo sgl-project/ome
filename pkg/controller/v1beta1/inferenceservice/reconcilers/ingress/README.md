@@ -3,7 +3,7 @@
 ## Recent Updates (2024)
 
 ### Architecture Improvements
-- **Component Architecture Migration**: Fully migrated from legacy predictor-based logic to modern Engine/Router/Decoder architecture
+- **Component Architecture Migration**: Fully migrated to the modern Engine/Router/Decoder architecture
 - **Enhanced Error Handling**: Added comprehensive status conditions and logging when ingress builders return nil
 - **MultiNode Support**: Fixed and verified ingress creation for distributed MultiNode deployments
 - **Service Naming Consistency**: Aligned all builders to use `EngineServiceName()`, `RouterServiceName()`, and decoder services
@@ -140,12 +140,12 @@ func (f *Factory) CreateIngressStrategy(deploymentMode string) (interfaces.Ingre
 - Integrates with Knative networking
 - Uses Istio service mesh for traffic routing
 - Supports both internal (cluster-local) and external traffic
-- Routes to predictor service (legacy) or router service (new architecture)
+- Routes to the engine service or the router service
 
 **Service Targeting:**
 ```go
 // From virtualservice_builder.go
-backend := constants.PredictorServiceName(isvc.Name)  // Default: service-name
+backend := isvc.Name  // engine service uses the isvc name
 
 if isvc.Spec.Router != nil {
     backend = constants.RouterServiceName(isvc.Name)  // Router: service-name
@@ -180,11 +180,11 @@ if isvc.Spec.Router != nil {
 
 **Routing Logic:**
 - **With Router:** External traffic → Router service → Engine service
-- **Engine Only:** External traffic → Engine/Predictor service
+- **Engine Only:** External traffic → Engine service
 
 **Service Names:**
 - Router: `{inference-service-name}` (router service)
-- Engine/Predictor: `{inference-service-name}` (predictor service - legacy)
+- Engine: `{inference-service-name}` (engine service)
 
 ### RawDeployment/MultiNode (Kubernetes Ingress)
 
@@ -485,7 +485,7 @@ func (f *Factory) CreateIngressStrategy(deploymentMode string) (interfaces.Ingre
 
 **Key Features:**
 - Handles both internal (cluster-local) and external traffic
-- Routes to router service if available, otherwise to predictor/engine
+- Routes to router service if available, otherwise to the engine service
 - Uses VirtualServiceBuilder for resource construction
 
 ### 4. Kubernetes Ingress Strategy (`strategies/raw_ingress_strategy.go`)

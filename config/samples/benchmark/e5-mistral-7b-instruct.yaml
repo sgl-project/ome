@@ -47,10 +47,9 @@ spec:
 #  name: e5-mistral-7b-instruct
 #  namespace: e5-mistral-7b-instruct
 #spec:
-#  predictor:
-#    model:
-#      baseModel: e5-mistral-7b-instruct
-#      protocolVersion: openAI
+#  model:
+#    name: e5-mistral-7b-instruct
+#  engine:
 #    minReplicas: 1
 #    maxReplicas: 1
 ---

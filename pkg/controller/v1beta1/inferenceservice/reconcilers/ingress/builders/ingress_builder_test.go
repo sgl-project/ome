@@ -69,7 +69,7 @@ func TestIngressBuilder_BuildIngress(t *testing.T) {
 			expectedEngine: true,
 		},
 		{
-			name:          "predictor not ready",
+			name:          "engine not ready",
 			isvc:          createTestInferenceServiceIngress("test-isvc", "default"),
 			expectNil:     true,
 			expectedError: false,
@@ -451,11 +451,7 @@ func createTestInferenceServiceIngress(name, namespace string) *v1beta1.Inferenc
 			Namespace: namespace,
 		},
 		Spec: v1beta1.InferenceServiceSpec{
-			Predictor: v1beta1.PredictorSpec{
-				Model: &v1beta1.ModelSpec{
-					Runtime: stringPtrIngress("sklearn"),
-				},
-			},
+			Engine: &v1beta1.EngineSpec{},
 		},
 		Status: v1beta1.InferenceServiceStatus{
 			Status: duckv1.Status{
@@ -485,8 +481,8 @@ func createTestInferenceServiceWithRouterAndDecoderIngress(name, namespace strin
 }
 
 func setEngineReadyIngress(isvc *v1beta1.InferenceService) {
-	isvc.Status.SetCondition(v1beta1.PredictorReady, &knativeapis.Condition{
-		Type:   v1beta1.PredictorReady,
+	isvc.Status.SetCondition(v1beta1.EngineReady, &knativeapis.Condition{
+		Type:   v1beta1.EngineReady,
 		Status: corev1.ConditionTrue,
 	})
 	isvc.Status.SetCondition(v1beta1.EngineReady, &knativeapis.Condition{

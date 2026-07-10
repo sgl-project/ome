@@ -27,19 +27,19 @@ func TestInitializeComponentStatus(t *testing.T) {
 		{
 			name:      "initialize empty status",
 			status:    &v1beta1.InferenceServiceStatus{},
-			component: v1beta1.PredictorComponent,
+			component: v1beta1.EngineComponent,
 			expected:  v1beta1.ComponentStatusSpec{},
 		},
 		{
 			name: "initialize with existing components",
 			status: &v1beta1.InferenceServiceStatus{
 				Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
-					v1beta1.PredictorComponent: {
+					v1beta1.EngineComponent: {
 						LatestReadyRevision: "existing-rev",
 					},
 				},
 			},
-			component: v1beta1.PredictorComponent,
+			component: v1beta1.EngineComponent,
 			expected: v1beta1.ComponentStatusSpec{
 				LatestReadyRevision: "existing-rev",
 			},
@@ -504,9 +504,9 @@ func TestSetCondition(t *testing.T) {
 		{
 			name:          "set condition true",
 			status:        &v1beta1.InferenceServiceStatus{},
-			conditionType: v1beta1.PredictorReady,
+			conditionType: v1beta1.EngineReady,
 			condition: &apis.Condition{
-				Type:   v1beta1.PredictorReady,
+				Type:   v1beta1.EngineReady,
 				Status: corev1.ConditionTrue,
 				Reason: "Ready",
 			},
@@ -515,9 +515,9 @@ func TestSetCondition(t *testing.T) {
 		{
 			name:          "set condition false",
 			status:        &v1beta1.InferenceServiceStatus{},
-			conditionType: v1beta1.PredictorReady,
+			conditionType: v1beta1.EngineReady,
 			condition: &apis.Condition{
-				Type:   v1beta1.PredictorReady,
+				Type:   v1beta1.EngineReady,
 				Status: corev1.ConditionFalse,
 				Reason: "NotReady",
 			},
@@ -526,9 +526,9 @@ func TestSetCondition(t *testing.T) {
 		{
 			name:          "set condition unknown",
 			status:        &v1beta1.InferenceServiceStatus{},
-			conditionType: v1beta1.PredictorReady,
+			conditionType: v1beta1.EngineReady,
 			condition: &apis.Condition{
-				Type:   v1beta1.PredictorReady,
+				Type:   v1beta1.EngineReady,
 				Status: corev1.ConditionUnknown,
 				Reason: "Unknown",
 			},
@@ -537,19 +537,19 @@ func TestSetCondition(t *testing.T) {
 		{
 			name:          "set condition true with reason and message",
 			status:        &v1beta1.InferenceServiceStatus{},
-			conditionType: v1beta1.PredictorReady,
+			conditionType: v1beta1.EngineReady,
 			condition: &apis.Condition{
-				Type:    v1beta1.PredictorReady,
+				Type:    v1beta1.EngineReady,
 				Status:  corev1.ConditionTrue,
 				Reason:  "Ready",
-				Message: "Predictor is ready",
+				Message: "Engine is ready",
 			},
 			shouldSet: true,
 		},
 		{
 			name:          "nil condition",
 			status:        &v1beta1.InferenceServiceStatus{},
-			conditionType: v1beta1.PredictorReady,
+			conditionType: v1beta1.EngineReady,
 			condition:     nil,
 			shouldSet:     false,
 		},
@@ -576,7 +576,7 @@ func TestGetReadyConditionsMap(t *testing.T) {
 	conditionsMap := manager.getReadyConditionsMap()
 
 	assert.NotNil(t, conditionsMap)
-	assert.Equal(t, v1beta1.PredictorReady, conditionsMap[v1beta1.PredictorComponent])
+	assert.Equal(t, v1beta1.EngineReady, conditionsMap[v1beta1.EngineComponent])
 	assert.Equal(t, v1beta1.EngineReady, conditionsMap[v1beta1.EngineComponent])
 	assert.Equal(t, v1beta1.DecoderReady, conditionsMap[v1beta1.DecoderComponent])
 }
@@ -586,7 +586,7 @@ func TestGetRouteConditionsMap(t *testing.T) {
 	conditionsMap := manager.getRouteConditionsMap()
 
 	assert.NotNil(t, conditionsMap)
-	assert.Equal(t, v1beta1.PredictorRouteReady, conditionsMap[v1beta1.PredictorComponent])
+	assert.Equal(t, v1beta1.EngineRouteReady, conditionsMap[v1beta1.EngineComponent])
 	assert.Equal(t, v1beta1.EngineRouteReady, conditionsMap[v1beta1.EngineComponent])
 	assert.Equal(t, v1beta1.DecoderRouteReady, conditionsMap[v1beta1.DecoderComponent])
 }
@@ -596,7 +596,7 @@ func TestGetConfigurationConditionsMap(t *testing.T) {
 	conditionsMap := manager.getConfigurationConditionsMap()
 
 	assert.NotNil(t, conditionsMap)
-	assert.Equal(t, v1beta1.PredictorConfigurationReady, conditionsMap[v1beta1.PredictorComponent])
+	assert.Equal(t, v1beta1.EngineConfigurationReady, conditionsMap[v1beta1.EngineComponent])
 	assert.Equal(t, v1beta1.EngineConfigurationReady, conditionsMap[v1beta1.EngineComponent])
 	assert.Equal(t, v1beta1.DecoderConfigurationReady, conditionsMap[v1beta1.DecoderComponent])
 }
@@ -692,7 +692,7 @@ func TestPropagateServiceConditions(t *testing.T) {
 		{
 			name:      "service ready with URL and address",
 			status:    &v1beta1.InferenceServiceStatus{},
-			component: v1beta1.PredictorComponent,
+			component: v1beta1.EngineComponent,
 			serviceStatus: &knservingv1.ServiceStatus{
 				Status: duckv1.Status{
 					Conditions: duckv1.Conditions{
@@ -715,7 +715,7 @@ func TestPropagateServiceConditions(t *testing.T) {
 		{
 			name:      "service not ready",
 			status:    &v1beta1.InferenceServiceStatus{},
-			component: v1beta1.PredictorComponent,
+			component: v1beta1.EngineComponent,
 			serviceStatus: &knservingv1.ServiceStatus{
 				Status: duckv1.Status{
 					Conditions: duckv1.Conditions{
@@ -742,7 +742,7 @@ func TestPropagateServiceConditions(t *testing.T) {
 			assert.Equal(t, tt.expectedAddr, statusSpec.Address)
 
 			// Check that conditions were set
-			readyCondition := tt.status.GetCondition(v1beta1.PredictorReady)
+			readyCondition := tt.status.GetCondition(v1beta1.EngineReady)
 			assert.NotNil(t, readyCondition)
 		})
 	}

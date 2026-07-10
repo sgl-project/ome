@@ -339,10 +339,9 @@ var (
 
 // InferenceService Component enums
 const (
-	Predictor InferenceServiceComponent = "predictor"
-	Router    InferenceServiceComponent = "router"
-	Engine    InferenceServiceComponent = "engine"
-	Decoder   InferenceServiceComponent = "decoder"
+	Router  InferenceServiceComponent = "router"
+	Engine  InferenceServiceComponent = "engine"
+	Decoder InferenceServiceComponent = "decoder"
 )
 
 // InferenceService protocol enums
@@ -684,25 +683,8 @@ func InferenceServiceHostName(name string, namespace string, domain string) stri
 	return builder.String()
 }
 
-func DefaultPredictorServiceName(name string) string {
-	var builder strings.Builder
-	predictorStr := string(Predictor)
-	// Pre-allocate capacity: name + "-" + predictorStr + "-" + InferenceServiceDefault
-	builder.Grow(len(name) + len(predictorStr) + len(InferenceServiceDefault) + 2)
-	builder.WriteString(name)
-	builder.WriteByte('-')
-	builder.WriteString(predictorStr)
-	builder.WriteByte('-')
-	builder.WriteString(InferenceServiceDefault)
-	return builder.String()
-}
-
 func DefaultRouterServiceName(name string) string {
 	return name + "-" + string(Router) + "-" + InferenceServiceDefault
-}
-
-func PredictorServiceName(name string) string {
-	return name
 }
 
 func RouterServiceName(name string) string {

@@ -38,7 +38,7 @@ func TestGatewayAPIStrategy_Reconcile(t *testing.T) {
 		expectedHTTPRoutesCount int
 	}{
 		{
-			name: "successful reconcile with predictor only",
+			name: "successful reconcile with engine only",
 			isvc: createTestInferenceServiceGateway("test-isvc", "default"),
 			ingressConfig: &controllerconfig.IngressConfig{
 				EnableGatewayAPI:       true,
@@ -468,11 +468,7 @@ func createTestInferenceServiceGateway(name, namespace string) *v1beta1.Inferenc
 			Namespace: namespace,
 		},
 		Spec: v1beta1.InferenceServiceSpec{
-			Predictor: v1beta1.PredictorSpec{
-				Model: &v1beta1.ModelSpec{
-					Runtime: stringPtr("sklearn"),
-				},
-			},
+			Engine: &v1beta1.EngineSpec{},
 		},
 		Status: v1beta1.InferenceServiceStatus{
 			Status: duckv1.Status{
@@ -503,8 +499,8 @@ func createTestInferenceServiceWithClusterLocal(name, namespace string) *v1beta1
 }
 
 func setComponentStatusReadyGateway(isvc *v1beta1.InferenceService) {
-	isvc.Status.SetCondition(v1beta1.PredictorReady, &apis.Condition{
-		Type:   v1beta1.PredictorReady,
+	isvc.Status.SetCondition(v1beta1.EngineReady, &apis.Condition{
+		Type:   v1beta1.EngineReady,
 		Status: corev1.ConditionTrue,
 	})
 

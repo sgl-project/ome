@@ -73,20 +73,18 @@ metadata:
   name: llama-3-2-1b-instruct
   namespace: llama-1b-demo
 spec:
-  predictor:
-    model:
-      baseModel: llama-3-2-1b-instruct
-      protocolVersion: openAI
+  model:
+    name: llama-3-2-1b-instruct
+  engine:
     minReplicas: 1
     maxReplicas: 1
 EOF
 ```
 
-> **Note**: The `predictor.model` field shown above is the legacy form and is **deprecated**. New services should use the top-level `spec.model` reference described in the next step.
 
 ## Step 2b: Use the recommended `spec.model` reference
 
-Instead of nesting the model under `predictor.model`, reference a `BaseModel` or `ClusterBaseModel` from the top-level `spec.model` field and configure serving through the `engine` component. This is the recommended form for new InferenceServices — see [Inference Service concepts](/ome/docs/concepts/inference_service) for the full field reference.
+You can also pin the runtime and model kind explicitly. Reference a `BaseModel` or `ClusterBaseModel` from the top-level `spec.model` field and configure serving through the `engine` component — see [Inference Service concepts](/ome/docs/concepts/inference_service) for the full field reference.
 
 ```bash
 kubectl apply -f - <<EOF
@@ -214,11 +212,11 @@ metadata:
   name: llama-3-3-70b-instruct
   namespace: llama-70b-demo
 spec:
-  predictor:
-    model:
-      baseModel: llama-3-3-70b-instruct
-      protocolVersion: openAI
-      runtime: srt-llama-3-3-70b-instruct
+  model:
+    name: llama-3-3-70b-instruct
+  runtime:
+    name: srt-llama-3-3-70b-instruct
+  engine:
     minReplicas: 1
     maxReplicas: 1
 EOF
@@ -248,11 +246,11 @@ metadata:
   annotations:
     ome.io/deploymentMode: "MultiNode"
 spec:
-  predictor:
-    model:
-      baseModel: deepseek-r1
-      protocolVersion: openAI
-      runtime: srt-multi-node-deepseek-r1-rdma
+  model:
+    name: deepseek-r1
+  runtime:
+    name: srt-multi-node-deepseek-r1-rdma
+  engine:
     minReplicas: 1
     maxReplicas: 1
 EOF
@@ -276,18 +274,19 @@ kind: InferenceService
 metadata:
   name: custom-resources
 spec:
-  predictor:
-    model:
-      baseModel: llama-3-2-3b-instruct
-    resources:
-      requests:
-        cpu: "16"
-        memory: 64Gi
-        nvidia.com/gpu: 1
-      limits:
-        cpu: "16"
-        memory: 64Gi
-        nvidia.com/gpu: 1
+  model:
+    name: llama-3-2-3b-instruct
+  engine:
+    runner:
+      resources:
+        requests:
+          cpu: "16"
+          memory: 64Gi
+          nvidia.com/gpu: 1
+        limits:
+          cpu: "16"
+          memory: 64Gi
+          nvidia.com/gpu: 1
 ```
 
 ### Environment Variables
@@ -296,14 +295,15 @@ Pass custom environment variables to the serving container:
 
 ```yaml
 spec:
-  predictor:
-    model:
-      baseModel: llama-3-2-1b-instruct
-    env:
-      - name: CUSTOM_SETTING
-        value: "production"
-      - name: LOG_LEVEL
-        value: "INFO"
+  model:
+    name: llama-3-2-1b-instruct
+  engine:
+    runner:
+      env:
+        - name: CUSTOM_SETTING
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
 ```
 
 ### Node Selection
@@ -312,7 +312,7 @@ Target specific node types:
 
 ```yaml
 spec:
-  predictor:
+  engine:
     nodeSelector:
       node.kubernetes.io/instance-type: BM.GPU.H100.8
     tolerations:

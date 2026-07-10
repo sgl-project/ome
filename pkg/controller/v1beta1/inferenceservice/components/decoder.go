@@ -237,10 +237,9 @@ func (d *Decoder) processLabels(isvc *v1beta1.InferenceService) (map[string]stri
 
 // determineDecoderName determines the name of the decoder service
 func (d *Decoder) determineDecoderName(isvc *v1beta1.InferenceService) (string, error) {
-	// For decoder, we'll use a pattern similar to predictor but with "-decoder" suffix
+	// Use the "<name>-decoder" naming pattern for the decoder service
 	defaultDecoderName := isvc.Name + "-decoder"
 
-	// For decoder, we'll use a pattern similar to predictor but with "-decoder" suffix
 	if d.DeploymentMode != constants.MultiNode {
 		existing := &v1.Service{}
 		if err := d.Client.Get(context.TODO(), types.NamespacedName{Name: defaultDecoderName, Namespace: isvc.Namespace}, existing); err == nil {

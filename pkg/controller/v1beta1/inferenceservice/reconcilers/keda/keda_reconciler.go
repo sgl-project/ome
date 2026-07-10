@@ -34,23 +34,25 @@ func NewKEDAReconciler(
 	client client.Client,
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
-	inferenceServiceSpec *v1beta1.InferenceServiceSpec,
+	componentExt *v1beta1.ComponentExtensionSpec,
+	kedaConfig *v1beta1.KedaConfig,
 ) (*KEDAReconciler, error) {
 
-	scaledObject := createScaledObject(componentMeta, *inferenceServiceSpec)
+	scaledObject := createScaledObject(componentMeta, componentExt, kedaConfig)
 
 	return &KEDAReconciler{
 		client:       client,
 		scheme:       scheme,
 		ScaledObject: scaledObject,
-		componentExt: &inferenceServiceSpec.Predictor.ComponentExtensionSpec,
+		componentExt: componentExt,
 	}, nil
 }
 
 // createScaledObject creates the ScaledObject resource
 func createScaledObject(
 	componentMeta metav1.ObjectMeta,
-	inferenceServiceSpec v1beta1.InferenceServiceSpec,
+	componentExt *v1beta1.ComponentExtensionSpec,
+	kedaConfig *v1beta1.KedaConfig,
 ) *kedav1.ScaledObject {
 	filteredLabels := make(map[string]string)
 	for key, value := range componentMeta.Labels {
@@ -59,10 +61,9 @@ func createScaledObject(
 			filteredLabels[key] = value
 		}
 	}
-	componentExt := &inferenceServiceSpec.Predictor.ComponentExtensionSpec
 	minReplicas := calculateMinReplicas(componentExt)
 	maxReplicas := calculateMaxReplicas(componentExt, minReplicas)
-	triggers := getScaledObjectTriggers(componentMeta, inferenceServiceSpec)
+	triggers := getScaledObjectTriggers(componentMeta, componentExt, kedaConfig)
 
 	return &kedav1.ScaledObject{
 		ObjectMeta: metav1.ObjectMeta{
@@ -101,13 +102,12 @@ func calculateMaxReplicas(componentExt *v1beta1.ComponentExtensionSpec, minRepli
 }
 
 // getScaledObjectTriggers constructs the triggers for the ScaledObject
-func getScaledObjectTriggers(metadata metav1.ObjectMeta, inferenceServiceSpec v1beta1.InferenceServiceSpec) []kedav1.ScaleTriggers {
-	kedaConfig := inferenceServiceSpec.KedaConfig
+func getScaledObjectTriggers(metadata metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec, kedaConfig *v1beta1.KedaConfig) []kedav1.ScaleTriggers {
 	threshold := getScalingThreshold(metadata, kedaConfig)
 	operator := getScalingOperator(metadata, kedaConfig)
 	prometheusServerAddress := getPrometheusServerAddress(metadata, kedaConfig)
 	prometheusQuery := getPrometheusQuery(metadata, kedaConfig)
-	scaleMetric := getScaleMetric(inferenceServiceSpec)
+	scaleMetric := getScaleMetric(componentExt)
 
 	triggerMetadata := map[string]string{
 		"serverAddress": prometheusServerAddress,
@@ -154,10 +154,10 @@ func getScalingThreshold(metadata metav1.ObjectMeta, kedaConfig *v1beta1.KedaCon
 }
 
 // getScaleMetric retrieves the scaling metric name
-func getScaleMetric(inferenceServiceSpec v1beta1.InferenceServiceSpec) string {
-	// Use ScaleMetric from inferenceServiceSpec if available
-	if inferenceServiceSpec.Predictor.ScaleMetric != nil && *inferenceServiceSpec.Predictor.ScaleMetric != "" {
-		return string(*inferenceServiceSpec.Predictor.ScaleMetric)
+func getScaleMetric(componentExt *v1beta1.ComponentExtensionSpec) string {
+	// Use ScaleMetric from the component extension spec if available
+	if componentExt.ScaleMetric != nil && *componentExt.ScaleMetric != "" {
+		return string(*componentExt.ScaleMetric)
 	}
 	// Default metric
 	return string(v1beta1.MetricTPS)

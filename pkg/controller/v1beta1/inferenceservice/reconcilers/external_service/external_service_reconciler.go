@@ -107,7 +107,7 @@ func (r *ExternalServiceReconciler) shouldCreateExternalService(isvc *v1beta1.In
 	}
 
 	// Only create if there are components that can serve traffic
-	return isvc.Spec.Router != nil || isvc.Spec.Engine != nil || isvc.Spec.Predictor.Model != nil
+	return isvc.Spec.Router != nil || isvc.Spec.Engine != nil
 }
 
 // determineTargetSelector determines which component should be the target for the external service
@@ -116,20 +116,17 @@ func (r *ExternalServiceReconciler) determineTargetSelector(isvc *v1beta1.Infere
 		constants.InferenceServicePodLabelKey: isvc.Name,
 	}
 
-	if !isvcutils.IsPredictorUsed(isvc) {
-		// Priority: Router > Engine
-		if isvc.Spec.Router != nil {
-			baseSelector[constants.OMEComponentLabel] = string(v1beta1.RouterComponent)
-			return baseSelector
-		}
-
-		if isvc.Spec.Engine != nil {
-			baseSelector[constants.OMEComponentLabel] = string(v1beta1.EngineComponent)
-			return baseSelector
-		}
+	// Priority: Router > Engine
+	if isvc.Spec.Router != nil {
+		baseSelector[constants.OMEComponentLabel] = string(v1beta1.RouterComponent)
+		return baseSelector
 	}
 
-	// When predictor is still used, not attach component label to service selector to make sure no downtime during migration
+	if isvc.Spec.Engine != nil {
+		baseSelector[constants.OMEComponentLabel] = string(v1beta1.EngineComponent)
+		return baseSelector
+	}
+
 	return baseSelector
 }
 

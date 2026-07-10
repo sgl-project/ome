@@ -39,7 +39,7 @@ func TestServerlessStrategy_Reconcile(t *testing.T) {
 		expectedIngressReady   corev1.ConditionStatus
 	}{
 		{
-			name: "successful reconcile with predictor only",
+			name: "successful reconcile with engine only",
 			isvc: createTestInferenceService("test-isvc", "default"),
 			ingressConfig: &controllerconfig.IngressConfig{
 				IngressGateway:             "knative-serving/knative-ingress-gateway",
@@ -169,7 +169,7 @@ func TestServerlessStrategy_GetServiceHost(t *testing.T) {
 		expectedHost string
 	}{
 		{
-			name:         "predictor only",
+			name:         "engine only",
 			isvc:         createTestInferenceServiceWithEngineStatus("test-isvc", "default"),
 			expectedHost: "test-isvc.default.example.com",
 		},
@@ -459,11 +459,7 @@ func createTestInferenceService(name, namespace string) *v1beta1.InferenceServic
 			Namespace: namespace,
 		},
 		Spec: v1beta1.InferenceServiceSpec{
-			Predictor: v1beta1.PredictorSpec{
-				Model: &v1beta1.ModelSpec{
-					Runtime: stringPtr("sklearn"),
-				},
-			},
+			Engine: &v1beta1.EngineSpec{},
 		},
 		Status: v1beta1.InferenceServiceStatus{
 			Status: duckv1.Status{
@@ -506,8 +502,8 @@ func createTestInferenceServiceWithRouterStatus(name, namespace string) *v1beta1
 }
 
 func setComponentStatusReady(isvc *v1beta1.InferenceService) {
-	isvc.Status.SetCondition(v1beta1.PredictorReady, &apis.Condition{
-		Type:   v1beta1.PredictorReady,
+	isvc.Status.SetCondition(v1beta1.EngineReady, &apis.Condition{
+		Type:   v1beta1.EngineReady,
 		Status: corev1.ConditionTrue,
 	})
 

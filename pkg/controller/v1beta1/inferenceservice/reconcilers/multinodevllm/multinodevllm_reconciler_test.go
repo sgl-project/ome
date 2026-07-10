@@ -48,23 +48,20 @@ func TestMultiNodeVLLMReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1beta1.InferenceServiceSpec{
-					Predictor: v1beta1.PredictorSpec{
+					Engine: &v1beta1.EngineSpec{
 						ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
 							MinReplicas: ptr.To(1),
 							MaxReplicas: 3,
 						},
-						Model: &v1beta1.ModelSpec{
-							PredictorExtensionSpec: v1beta1.PredictorExtensionSpec{
-								RuntimeVersion: ptr.To("2.6.0"),
-								Container: corev1.Container{
-									Image: "vllm/vllm-openai:latest",
-									Name:  "kserve-container",
-								},
+						Runner: &v1beta1.RunnerSpec{
+							Container: corev1.Container{
+								Image: "vllm/vllm-openai:latest",
+								Name:  "kserve-container",
 							},
-							Runtime:   ptr.To("vllm"),
-							BaseModel: ptr.To("llama-7b"),
 						},
 					},
+					Runtime: &v1beta1.ServingRuntimeRef{Name: "vllm"},
+					Model:   &v1beta1.ModelRef{Name: "llama-7b"},
 				},
 			},
 			wantErr: false,
@@ -72,7 +69,7 @@ func TestMultiNodeVLLMReconciler_Reconcile(t *testing.T) {
 				// Verify RayCluster was created
 				rayCluster := &ray.RayCluster{}
 				err := client.Get(context.Background(), types.NamespacedName{
-					Name:      "test-isvc-predictor-0",
+					Name:      "test-isvc-engine-0",
 					Namespace: "default",
 				}, rayCluster)
 				assert.Error(t, err)
@@ -81,7 +78,7 @@ func TestMultiNodeVLLMReconciler_Reconcile(t *testing.T) {
 				// Verify Service was created
 				service := &corev1.Service{}
 				err = client.Get(context.Background(), types.NamespacedName{
-					Name:      "test-isvc-predictor",
+					Name:      "test-isvc-engine",
 					Namespace: "default",
 				}, service)
 				assert.Error(t, err)
@@ -93,7 +90,7 @@ func TestMultiNodeVLLMReconciler_Reconcile(t *testing.T) {
 			setupClient: func() client.Client {
 				existingRayCluster := &ray.RayCluster{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-isvc-predictor-0",
+						Name:      "test-isvc-engine-0",
 						Namespace: "default",
 					},
 					Spec: ray.RayClusterSpec{
@@ -119,23 +116,20 @@ func TestMultiNodeVLLMReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1beta1.InferenceServiceSpec{
-					Predictor: v1beta1.PredictorSpec{
+					Engine: &v1beta1.EngineSpec{
 						ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
 							MinReplicas: ptr.To(2),
 							MaxReplicas: 4,
 						},
-						Model: &v1beta1.ModelSpec{
-							PredictorExtensionSpec: v1beta1.PredictorExtensionSpec{
-								RuntimeVersion: ptr.To("2.6.0"),
-								Container: corev1.Container{
-									Image: "vllm/vllm-openai:v0.2.7",
-									Name:  "kserve-container",
-								},
+						Runner: &v1beta1.RunnerSpec{
+							Container: corev1.Container{
+								Image: "vllm/vllm-openai:v0.2.7",
+								Name:  "kserve-container",
 							},
-							Runtime:   ptr.To("vllm"),
-							BaseModel: ptr.To("llama-13b"),
 						},
 					},
+					Runtime: &v1beta1.ServingRuntimeRef{Name: "vllm"},
+					Model:   &v1beta1.ModelRef{Name: "llama-13b"},
 				},
 			},
 			wantErr: false,
@@ -143,7 +137,7 @@ func TestMultiNodeVLLMReconciler_Reconcile(t *testing.T) {
 				// Verify RayCluster exists
 				rayCluster := &ray.RayCluster{}
 				err := client.Get(context.Background(), types.NamespacedName{
-					Name:      "test-isvc-predictor-0",
+					Name:      "test-isvc-engine-0",
 					Namespace: "default",
 				}, rayCluster)
 				assert.NoError(t, err)
@@ -163,23 +157,20 @@ func TestMultiNodeVLLMReconciler_Reconcile(t *testing.T) {
 					},
 				},
 				Spec: v1beta1.InferenceServiceSpec{
-					Predictor: v1beta1.PredictorSpec{
+					Engine: &v1beta1.EngineSpec{
 						ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
 							MinReplicas: ptr.To(2),
 							MaxReplicas: 4,
 						},
-						Model: &v1beta1.ModelSpec{
-							PredictorExtensionSpec: v1beta1.PredictorExtensionSpec{
-								RuntimeVersion: ptr.To("0.5.3"),
-								Container: corev1.Container{
-									Image: "vllm/vllm-openai:latest",
-									Name:  "kserve-container",
-								},
+						Runner: &v1beta1.RunnerSpec{
+							Container: corev1.Container{
+								Image: "vllm/vllm-openai:latest",
+								Name:  "kserve-container",
 							},
-							Runtime:   ptr.To("vllm"),
-							BaseModel: ptr.To("falcon-40b"),
 						},
 					},
+					Runtime: &v1beta1.ServingRuntimeRef{Name: "vllm"},
+					Model:   &v1beta1.ModelRef{Name: "falcon-40b"},
 				},
 			},
 			wantErr: false,
@@ -216,7 +207,7 @@ func TestMultiNodeVLLMReconciler_Reconcile(t *testing.T) {
 
 			podSpec := &corev1.PodSpec{
 				Containers: []corev1.Container{
-					tt.isvc.Spec.Predictor.Model.Container,
+					tt.isvc.Spec.Engine.Runner.Container,
 				},
 			}
 
@@ -225,7 +216,7 @@ func TestMultiNodeVLLMReconciler_Reconcile(t *testing.T) {
 				clientset,
 				s,
 				tt.isvc.ObjectMeta,
-				&tt.isvc.Spec.Predictor.ComponentExtensionSpec,
+				&tt.isvc.Spec.Engine.ComponentExtensionSpec,
 				podSpec,
 			)
 			require.NoError(t, err)
@@ -258,7 +249,7 @@ func TestCreateRawURL(t *testing.T) {
 				Name:      "test-isvc",
 				Namespace: "default",
 			},
-			wantHost:  "test-isvc-predictor.default",
+			wantHost:  "test-isvc-engine.default",
 			wantError: false,
 		},
 		{
@@ -267,7 +258,7 @@ func TestCreateRawURL(t *testing.T) {
 				Name:      "custom-isvc",
 				Namespace: "production",
 			},
-			wantHost:  "custom-isvc-predictor.production",
+			wantHost:  "custom-isvc-engine.production",
 			wantError: false,
 		},
 	}

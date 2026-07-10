@@ -212,7 +212,7 @@ func (r *Router) processLabels(isvc *v1beta1.InferenceService) (map[string]strin
 
 // determineRouterName determines the name of the router service
 func (r *Router) determineRouterName(isvc *v1beta1.InferenceService) (string, error) {
-	// For router, we'll use a pattern similar to predictor but with "-router" suffix
+	// Use the "<name>-router" naming pattern for the router service
 	defaultRouterName := isvc.Name + "-router"
 	existingName := defaultRouterName
 

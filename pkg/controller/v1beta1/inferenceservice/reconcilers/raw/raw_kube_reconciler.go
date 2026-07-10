@@ -34,23 +34,20 @@ func NewRawKubeReconciler(client client.Client,
 	clientset kubernetes.Interface,
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
-	inferenceServiceSpec *v1beta1.InferenceServiceSpec,
+	componentExt *v1beta1.ComponentExtensionSpec,
+	kedaConfig *v1beta1.KedaConfig,
 	podSpec *corev1.PodSpec,
 ) (*RawKubeReconciler, error) {
-	as, err := autoscaler.NewAutoscalerReconciler(client, clientset, scheme, componentMeta, inferenceServiceSpec)
+	as, err := autoscaler.NewAutoscalerReconciler(client, clientset, scheme, componentMeta, componentExt, kedaConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	pdb := pdb.NewPDBReconciler(client, scheme, componentMeta, &inferenceServiceSpec.Predictor.ComponentExtensionSpec)
+	pdb := pdb.NewPDBReconciler(client, scheme, componentMeta, componentExt)
 	url, err := createRawURL(clientset, componentMeta)
 	if err != nil {
 		return nil, err
 	}
-
-	// TODO: Remove this once we have a better way to handle the component extension spec
-	// Ensure we are using the predictor's extension spec for the component reconcilers
-	componentExt := &inferenceServiceSpec.Predictor.ComponentExtensionSpec
 
 	return &RawKubeReconciler{
 		client:              client,

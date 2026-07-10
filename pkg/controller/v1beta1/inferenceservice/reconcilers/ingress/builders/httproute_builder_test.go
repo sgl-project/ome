@@ -278,7 +278,7 @@ func TestHTTPRouteBuilder_BuildHTTPRoute_TopLevelComponent(t *testing.T) {
 			expectedRules: 2, // decoder + router
 		},
 		{
-			name:          "top level predictor not ready",
+			name:          "top level engine not ready",
 			isvc:          createTestInferenceServiceHTTPRoute("test-isvc", "default"),
 			expectNil:     true,
 			expectedError: false,
@@ -437,11 +437,7 @@ func createTestInferenceServiceHTTPRoute(name, namespace string) *v1beta1.Infere
 			Namespace: namespace,
 		},
 		Spec: v1beta1.InferenceServiceSpec{
-			Predictor: v1beta1.PredictorSpec{
-				Model: &v1beta1.ModelSpec{
-					Runtime: stringPtr("sklearn"),
-				},
-			},
+			Engine: &v1beta1.EngineSpec{},
 		},
 		Status: v1beta1.InferenceServiceStatus{
 			Status: duckv1.Status{
@@ -453,7 +449,7 @@ func createTestInferenceServiceHTTPRoute(name, namespace string) *v1beta1.Infere
 
 func createTestInferenceServiceHTTPRouteWithTimeout(name, namespace string, timeoutSeconds int64) *v1beta1.InferenceService {
 	isvc := createTestInferenceServiceHTTPRoute(name, namespace)
-	isvc.Spec.Predictor.TimeoutSeconds = &timeoutSeconds
+	isvc.Spec.Engine.TimeoutSeconds = &timeoutSeconds
 	return isvc
 }
 
@@ -489,8 +485,8 @@ func createTestInferenceServiceWithRouterAndDecoderHTTPRoute(name, namespace str
 }
 
 func setEngineReady(isvc *v1beta1.InferenceService) {
-	isvc.Status.SetCondition(v1beta1.PredictorReady, &apis.Condition{
-		Type:   v1beta1.PredictorReady,
+	isvc.Status.SetCondition(v1beta1.EngineReady, &apis.Condition{
+		Type:   v1beta1.EngineReady,
 		Status: corev1.ConditionTrue,
 	})
 	isvc.Status.SetCondition(v1beta1.EngineReady, &apis.Condition{

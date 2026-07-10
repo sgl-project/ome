@@ -373,10 +373,8 @@ func TestBenchmarkJobReconciler_createPodSpec(t *testing.T) {
 						Namespace: "default",
 					},
 					Spec: v1beta1.InferenceServiceSpec{
-						Predictor: v1beta1.PredictorSpec{
-							Model: &v1beta1.ModelSpec{
-								BaseModel: StringPtr("test-model"),
-							},
+						Model: &v1beta1.ModelRef{
+							Name: "test-model",
 						},
 					},
 					Status: v1beta1.InferenceServiceStatus{
@@ -448,13 +446,8 @@ func TestBenchmarkJobReconciler_buildBenchmarkCommand(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1beta1.InferenceServiceSpec{
-					Predictor: v1beta1.PredictorSpec{
-						Model: &v1beta1.ModelSpec{
-							BaseModel: StringPtr("test-model"),
-							PredictorExtensionSpec: v1beta1.PredictorExtensionSpec{
-								StorageUri: StringPtr("oci://bucket/path"),
-							},
-						},
+					Model: &v1beta1.ModelRef{
+						Name: "test-model",
 					},
 				},
 				Status: v1beta1.InferenceServiceStatus{
@@ -553,10 +546,8 @@ func TestBenchmarkJobReconciler_addNodeSelectorFromInferenceService(t *testing.T
 					Namespace: "default",
 				},
 				Spec: v1beta1.InferenceServiceSpec{
-					Predictor: v1beta1.PredictorSpec{
-						Model: &v1beta1.ModelSpec{
-							BaseModel: StringPtr("test-base-model"),
-						},
+					Model: &v1beta1.ModelRef{
+						Name: "test-base-model",
 					},
 				},
 			},
@@ -596,10 +587,8 @@ func TestBenchmarkJobReconciler_addNodeSelectorFromInferenceService(t *testing.T
 					Namespace: "default",
 				},
 				Spec: v1beta1.InferenceServiceSpec{
-					Predictor: v1beta1.PredictorSpec{
-						Model: &v1beta1.ModelSpec{
-							BaseModel: StringPtr("test-cluster-model"),
-						},
+					Model: &v1beta1.ModelRef{
+						Name: "test-cluster-model",
 					},
 				},
 			},
@@ -657,10 +646,8 @@ func TestBenchmarkJobReconciler_addNodeSelectorFromInferenceService(t *testing.T
 					Namespace: "default",
 				},
 				Spec: v1beta1.InferenceServiceSpec{
-					Predictor: v1beta1.PredictorSpec{
-						Model: &v1beta1.ModelSpec{
-							BaseModel: StringPtr("non-existent-model"),
-						},
+					Model: &v1beta1.ModelRef{
+						Name: "non-existent-model",
 					},
 				},
 			},
@@ -749,10 +736,8 @@ func TestBenchmarkJobReconciler_createPodSpec_NodeAffinity(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: v1beta1.InferenceServiceSpec{
-			Predictor: v1beta1.PredictorSpec{
-				Model: &v1beta1.ModelSpec{
-					BaseModel: StringPtr("test-model"),
-				},
+			Model: &v1beta1.ModelRef{
+				Name: "test-model",
 			},
 		},
 		Status: v1beta1.InferenceServiceStatus{
@@ -848,10 +833,8 @@ func TestBenchmarkJobReconciler_createPodSpec_NodeAffinity_WithPodOverride(t *te
 			Namespace: "default",
 		},
 		Spec: v1beta1.InferenceServiceSpec{
-			Predictor: v1beta1.PredictorSpec{
-				Model: &v1beta1.ModelSpec{
-					BaseModel: StringPtr("test-model"),
-				},
+			Model: &v1beta1.ModelRef{
+				Name: "test-model",
 			},
 		},
 		Status: v1beta1.InferenceServiceStatus{

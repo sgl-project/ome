@@ -129,8 +129,7 @@ func (r *InferenceServiceReconciler) shouldKeepExternalService(isvc *v1beta1.Inf
 	if val, ok := isvc.Annotations["ome.io/ingress-disable-creation"]; ok && val == "true" {
 		// Keep external service if any component that can serve traffic is active
 		return activeComponents[v1beta1.RouterComponent] ||
-			activeComponents[v1beta1.EngineComponent] ||
-			activeComponents[v1beta1.PredictorComponent]
+			activeComponents[v1beta1.EngineComponent]
 	}
 	return false
 }
@@ -180,99 +179,6 @@ func getCoreResourceTypes() []schema.GroupVersionKind {
 		{Group: "", Version: "v1", Kind: "ServiceAccount"},
 		{Group: "", Version: "v1", Kind: "PersistentVolumeClaim"},
 	}
-}
-
-// cleanupOldPredictorDeployment deletes the old predictor deployment after migration
-// when all new component deployments (engine, decoder, router) are ready.
-// This is a temporary migration-specific cleanup function.
-func (r *InferenceServiceReconciler) cleanupOldPredictorDeployment(
-	ctx context.Context,
-	isvc *v1beta1.InferenceService,
-) (bool, error) {
-	log := log.FromContext(ctx)
-
-	// Check if old predictor deployment exists (uses the inference service name)
-	// If it doesn't exist, cleanup is already done, return early
-	predictorDeploymentList := &appsv1.DeploymentList{}
-	err := r.List(ctx, predictorDeploymentList,
-		client.InNamespace(isvc.Namespace),
-		client.MatchingLabels{"component": "predictor"})
-
-	if err != nil {
-		// Error checking for deployment
-		return false, fmt.Errorf("failed to check for old predictor deployment: %w", err)
-	}
-
-	if len(predictorDeploymentList.Items) == 0 {
-		// Old predictor deployment doesn't exist, cleanup already done
-		return true, nil
-	}
-	predictorDeployment := &predictorDeploymentList.Items[0]
-
-	// Only run if new architecture is being used (Engine/Decoder/Router specs exist)
-	if isvc.Spec.Engine == nil && isvc.Spec.Decoder == nil && isvc.Spec.Router == nil {
-		return true, nil
-	}
-
-	// Check if all new component deployments are ready
-	allReady := true
-
-	// Check engine deployment if it exists
-	if isvc.Spec.Engine != nil {
-		engineName := isvc.Name + "-engine"
-		ready, err := r.isDeploymentReady(ctx, engineName, isvc.Namespace)
-		if err != nil {
-			return false, err
-		}
-		allReady = allReady && ready
-		log.V(1).Info("Engine deployment status", "name", engineName, "ready", ready)
-	}
-
-	// Check decoder deployment if it exists
-	if isvc.Spec.Decoder != nil {
-		decoderName := isvc.Name + "-decoder"
-		ready, err := r.isDeploymentReady(ctx, decoderName, isvc.Namespace)
-		if err != nil {
-			return false, err
-		}
-		allReady = allReady && ready
-		log.V(1).Info("Decoder deployment status", "name", decoderName, "ready", ready)
-	}
-
-	// Check router deployment if it exists
-	if isvc.Spec.Router != nil {
-		routerName := isvc.Name + "-router"
-		ready, err := r.isDeploymentReady(ctx, routerName, isvc.Namespace)
-		if err != nil {
-			return false, err
-		}
-		allReady = allReady && ready
-		log.V(1).Info("Router deployment status", "name", routerName, "ready", ready)
-	}
-
-	// Only delete if all new deployments are ready
-	if !allReady {
-		log.Info("Waiting for new component deployments to be ready before deleting old predictor deployment",
-			"namespace", isvc.Namespace,
-			"inferenceService", isvc.Name)
-		return false, nil
-	}
-
-	// Delete old predictor deployment (uses the inference service name)
-
-	log.Info("Deleting old predictor deployment after successful migration",
-		"predictorDeployment", predictorDeployment.Name,
-		"namespace", isvc.Namespace)
-
-	if err := r.Delete(ctx, predictorDeployment); err != nil {
-		return false, fmt.Errorf("failed to delete old predictor Deployment: %w", err)
-	}
-
-	log.Info("Successfully deleted old predictor deployment",
-		"predictorDeployment", predictorDeployment.Name,
-		"namespace", isvc.Namespace)
-
-	return true, nil
 }
 
 // isDeploymentReady checks if a deployment is ready by verifying the Available condition

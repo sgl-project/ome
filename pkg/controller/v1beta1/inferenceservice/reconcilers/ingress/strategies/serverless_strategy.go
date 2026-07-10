@@ -348,7 +348,7 @@ func (s *ServerlessStrategy) getHostPrefix(isvc *v1beta1.InferenceService, disab
 		if isvc.Spec.Router != nil {
 			return constants.DefaultRouterServiceName(isvc.Name)
 		}
-		return constants.PredictorServiceName(isvc.Name)
+		return isvc.Name
 	}
 	return isvc.Name
 }

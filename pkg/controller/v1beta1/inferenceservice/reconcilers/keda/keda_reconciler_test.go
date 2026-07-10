@@ -149,7 +149,7 @@ func TestGetScaledObjectTriggers(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			triggers := getScaledObjectTriggers(tt.metadata, tt.inferenceServiceSpec)
+			triggers := getScaledObjectTriggers(tt.metadata, &v1beta1.ComponentExtensionSpec{}, tt.inferenceServiceSpec.KedaConfig)
 
 			if len(triggers) != 1 {
 				t.Fatalf("Expected 1 trigger, got %d", len(triggers))

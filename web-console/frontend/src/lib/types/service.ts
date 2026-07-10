@@ -15,15 +15,26 @@ export interface InferenceService {
 }
 
 export interface InferenceServiceSpec {
-  predictor: PredictorSpec
+  model?: ModelRef
+  runtime?: RuntimeRef
+  engine?: ComponentSpec
+  decoder?: ComponentSpec
+  router?: ComponentSpec
   transformer?: TransformerSpec
   explainer?: ExplainerSpec
 }
 
-export interface PredictorSpec {
-  model?: string
-  runtime?: string
-  replicas?: number
+export interface ModelRef {
+  name?: string
+  kind?: string
+  fineTunedWeights?: string[]
+}
+
+export interface RuntimeRef {
+  name?: string
+}
+
+export interface ComponentSpec {
   minReplicas?: number
   maxReplicas?: number
   resources?: ResourceRequirements

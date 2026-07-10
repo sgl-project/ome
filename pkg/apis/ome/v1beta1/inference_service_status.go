@@ -13,7 +13,6 @@ type InferenceServiceStatus struct {
 	// Conditions for the InferenceService <br/>
 	// - EngineRouteReady: engine route readiness condition; <br/>
 	// - DecoderRouteReady: decoder route readiness condition; <br/>
-	// - PredictorReady: predictor readiness condition; <br/>
 	// - RoutesReady (serverless mode only): aggregated routing condition, i.e. endpoint readiness condition; <br/>
 	// - LatestDeploymentReady (serverless mode only): aggregated configuration condition, i.e. latest deployment readiness condition; <br/>
 	// - Ready: aggregated condition; <br/>
@@ -97,12 +96,11 @@ type AcceleratorSelection struct {
 // ComponentType contains the different types of components of the service
 type ComponentType string
 
-// PredictorComponent ComponentType Enum
+// ComponentType enum values
 const (
-	PredictorComponent ComponentType = "predictor"
-	RouterComponent    ComponentType = "router"
-	EngineComponent    ComponentType = "engine"
-	DecoderComponent   ComponentType = "decoder"
+	RouterComponent  ComponentType = "router"
+	EngineComponent  ComponentType = "engine"
+	DecoderComponent ComponentType = "decoder"
 )
 
 // ConditionType represents a Service condition value
@@ -111,20 +109,14 @@ const (
 	EngineRouteReady apis.ConditionType = "EngineRouteReady"
 	// DecoderRouteReady is set when decoder route is ready
 	DecoderRouteReady apis.ConditionType = "DecoderRouteReady"
-	// PredictorRouteReady is set when network configuration has completed.
-	PredictorRouteReady apis.ConditionType = "PredictorRouteReady"
 	// EngineConfigurationReady is set when engine pods are ready.
 	EngineConfigurationReady apis.ConditionType = "EngineConfigurationReady"
 	// DecoderConfigurationReady is set when decoder pods are ready.
 	DecoderConfigurationReady apis.ConditionType = "DecoderConfigurationReady"
-	// PredictorConfigurationReady is set when predictor pods are ready.
-	PredictorConfigurationReady apis.ConditionType = "PredictorConfigurationReady"
 	// EngineReady is set when engine pods are ready.
 	EngineReady apis.ConditionType = "EngineReady"
 	// DecoderReady is set when decoder pods are ready.
 	DecoderReady apis.ConditionType = "DecoderReady"
-	// PredictorReady is set when predictor has reported readiness.
-	PredictorReady apis.ConditionType = "PredictorReady"
 	// IngressReady is set when Ingress is created
 	IngressReady apis.ConditionType = "IngressReady"
 	// RoutesReady is set when underlying routes for all components have reported readiness.
@@ -144,11 +136,11 @@ const (
 )
 
 type ModelStatus struct {
-	// Whether the available predictor endpoints reflect the current Spec or is in transition
+	// Whether the available model server endpoints reflect the current Spec or is in transition
 	// +kubebuilder:default=UpToDate
 	TransitionStatus TransitionStatus `json:"transitionStatus"`
 
-	// State information of the predictor's model.
+	// State information of the model.
 	// +optional
 	ModelRevisionStates *ModelRevisionStates `json:"modelRevisionStates,omitempty"`
 
@@ -156,7 +148,7 @@ type ModelStatus struct {
 	// +optional
 	LastFailureInfo *FailureInfo `json:"lastFailureInfo,omitempty"`
 
-	// Model copy information of the predictor's model.
+	// Model copy information of the model.
 	// +optional
 	ModelCopies *ModelCopies `json:"modelCopies,omitempty"`
 }
@@ -170,10 +162,10 @@ type ModelRevisionStates struct {
 }
 
 type ModelCopies struct {
-	// How many copies of this predictor's models failed to load recently
+	// How many copies of this model failed to load recently
 	// +kubebuilder:default=0
 	FailedCopies int `json:"failedCopies"`
-	// Total number copies of this predictor's models that are currently loaded
+	// Total number copies of this model that are currently loaded
 	// +optional
 	TotalCopies int `json:"totalCopies,omitempty"`
 }
@@ -184,13 +176,13 @@ type TransitionStatus string
 
 // TransitionStatus Enum values
 const (
-	// Predictor is up-to-date (reflects current spec)
+	// Model is up-to-date (reflects current spec)
 	UpToDate TransitionStatus = "UpToDate"
 	// Waiting for target model to reach state of active model
 	InProgress TransitionStatus = "InProgress"
 	// Target model failed to load
 	BlockedByFailedLoad TransitionStatus = "BlockedByFailedLoad"
-	// Target predictor spec failed validation
+	// Target model spec failed validation
 	InvalidSpec TransitionStatus = "InvalidSpec"
 )
 
@@ -213,7 +205,7 @@ const (
 )
 
 // FailureReason enum
-// +kubebuilder:validation:Enum=BaseModelNotReady;BaseModelNotFound;ModelLoadFailed;ContainerStartupFailed;RuntimeUnhealthy;RuntimeDisabled;NoSupportingRuntime;RuntimeNotRecognized;InvalidPredictorSpec
+// +kubebuilder:validation:Enum=BaseModelNotReady;BaseModelNotFound;ModelLoadFailed;ContainerStartupFailed;RuntimeUnhealthy;RuntimeDisabled;NoSupportingRuntime;RuntimeNotRecognized
 type FailureReason string
 
 // FailureReason enum values
@@ -230,8 +222,6 @@ const (
 	NoSupportingRuntime FailureReason = "NoSupportingRuntime"
 	// RuntimeNotRecognized There is no ServingRuntime defined with the specified runtime name
 	RuntimeNotRecognized FailureReason = "RuntimeNotRecognized"
-	// InvalidPredictorSpec The current Predictor Spec is invalid or unsupported
-	InvalidPredictorSpec FailureReason = "InvalidPredictorSpec"
 	// BaseModelNotFound base model is not found either from the cluster level or from the specified namespace
 	BaseModelNotFound FailureReason = "BaseModelNotFound"
 	// BaseModelNotReady base model is not ready
@@ -276,7 +266,7 @@ type FailureInfo struct {
 
 // InferenceService component conditions
 // The overall Ready condition is managed by the conditionSet which only requires IngressReady
-// Component-specific ready conditions (PredictorReady, EngineReady, DecoderReady) are managed separately
+// Component-specific ready conditions (EngineReady, DecoderReady) are managed separately
 var conditionSet = apis.NewLivingConditionSet(
 	IngressReady,
 	EngineReady,

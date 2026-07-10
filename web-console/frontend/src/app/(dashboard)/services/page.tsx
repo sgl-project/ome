@@ -183,14 +183,14 @@ export default function ServicesPage() {
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm text-muted-foreground">
-                    {service.spec.predictor?.model || '-'}
+                    {service.spec.model?.name || '-'}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm text-muted-foreground">
-                    {service.spec.predictor?.runtime || '-'}
+                    {service.spec.runtime?.name || '-'}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm text-muted-foreground">
                     <span className="inline-flex items-center rounded-md bg-accent/10 text-accent px-2 py-0.5 text-xs font-medium">
-                      {service.spec.predictor?.replicas || 1}
+                      {service.spec.engine?.minReplicas || 1}
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">

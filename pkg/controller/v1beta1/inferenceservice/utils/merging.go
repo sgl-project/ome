@@ -16,8 +16,8 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-// MergeRuntimeContainers Merge the predictor Container struct with the runtime Container struct, allowing users
-func MergeRuntimeContainers(runtimeContainer *v1.Container, predictorContainer *v1.Container) (*v1.Container, error) {
+// MergeRuntimeContainers merges the override Container struct with the runtime Container struct, allowing users
+func MergeRuntimeContainers(runtimeContainer *v1.Container, overrideContainer *v1.Container) (*v1.Container, error) {
 	// Save runtime container name, as the name can be overridden as empty string during the Unmarshal below
 	// since the Name field does not have the 'omitempty' struct tag.
 	runtimeContainerName := runtimeContainer.Name
@@ -28,7 +28,7 @@ func MergeRuntimeContainers(runtimeContainer *v1.Container, predictorContainer *
 		return nil, err
 	}
 
-	overrides, err := json.Marshal(predictorContainer)
+	overrides, err := json.Marshal(overrideContainer)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func MergeRuntimeContainers(runtimeContainer *v1.Container, predictorContainer *
 	}
 
 	// Strategic merge patch will replace args but more useful behaviour here is to concatenate
-	mergedContainer.Args = append(append([]string{}, runtimeContainer.Args...), predictorContainer.Args...)
+	mergedContainer.Args = append(append([]string{}, runtimeContainer.Args...), overrideContainer.Args...)
 
 	return &mergedContainer, nil
 }

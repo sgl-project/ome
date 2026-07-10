@@ -2,11 +2,7 @@ package isvc
 
 import (
 	"context"
-	"encoding/json"
-	"os"
-	"strings"
 
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -16,17 +12,11 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
 )
 
 var (
 	// logger for the mutating webhook.
 	mutatorLogger = logf.Log.WithName("inferenceservice-v1beta1-mutating-webhook")
-
-	// DeprecationWarningPredictor is the warning message for using the deprecated Predictor field
-	DeprecationWarningPredictor = "The Predictor field is deprecated and will be removed in a future release. Please use Engine and Model fields instead."
-	// Environment variable to control whether Predictor migration is enabled
-	EnablePredictorMigrationEnvVar = "ENABLE_PREDICTOR_MIGRATION"
 )
 
 // InferenceServiceDefaulter is responsible for setting default values on the InferenceService
@@ -93,26 +83,6 @@ func DefaultInferenceService(ctx context.Context, c client.Client, isvc *v1beta1
 		}
 	}
 
-	// Add deprecated warning annotation for Predictor usage
-	if isPredictorUsed(isvc) {
-		if isvc.ObjectMeta.Annotations == nil {
-			isvc.ObjectMeta.Annotations = map[string]string{}
-		}
-		// Only add the warning if it's not already there
-		if _, exists := isvc.ObjectMeta.Annotations[constants.DeprecationWarning]; !exists {
-			isvc.ObjectMeta.Annotations[constants.DeprecationWarning] = DeprecationWarningPredictor
-		}
-
-		// Check if migration is enabled via environment variable
-		enableMigration := shouldEnableMigration()
-		if enableMigration {
-			// Migrate Predictor fields to Engine and top-level Model/Runtime
-			if err := migrateFromPredictorToNewArchitecture(ctx, c, isvc); err != nil {
-				return err
-			}
-		}
-	}
-
 	// Set default values for Engine component if present
 	if isvc.Spec.Engine != nil {
 		defaultEngine(isvc.Spec.Engine)
@@ -127,163 +97,6 @@ func DefaultInferenceService(ctx context.Context, c client.Client, isvc *v1beta1
 	if isvc.Spec.Router != nil {
 		defaultRouter(isvc.Spec.Router)
 	}
-	return nil
-}
-
-// isPredictorUsed checks if the Predictor field is used in the InferenceService
-// shouldEnableMigration checks if Predictor migration is enabled via environment variable
-func shouldEnableMigration() bool {
-	// Check the environment variable - default to true for backward compatibility
-	value := os.Getenv(EnablePredictorMigrationEnvVar)
-	// If the variable is not set or set to anything other than "false", enable migration
-	return value != "false"
-}
-
-func isPredictorUsed(isvc *v1beta1.InferenceService) bool {
-	// Check if the Predictor has any fields set
-	predictor := isvc.Spec.Predictor
-
-	// Check if Model is defined in Predictor
-	if predictor.Model != nil && predictor.Model.BaseModel != nil {
-		return true
-	}
-
-	// Check if MinReplicas or MaxReplicas are set
-	if predictor.MinReplicas != nil {
-		return true
-	}
-
-	// Check other significant fields
-	if predictor.ServiceAccountName != "" ||
-		len(predictor.Containers) > 0 ||
-		len(predictor.Volumes) > 0 ||
-		len(predictor.NodeSelector) > 0 ||
-		len(predictor.Tolerations) > 0 ||
-		predictor.Affinity != nil {
-		return true
-	}
-
-	return false
-}
-
-// migrateFromPredictorToNewArchitecture moves fields from Predictor to Engine and top-level Model/Runtime
-func migrateFromPredictorToNewArchitecture(ctx context.Context, c client.Client, isvc *v1beta1.InferenceService) error {
-	// Skip migration if Engine is already configured
-	if isvc.Spec.Engine != nil {
-		return nil
-	}
-
-	// Create Engine component from Predictor
-	engine := &v1beta1.EngineSpec{}
-
-	// First migrate the embedded structs: ComponentExtensionSpec and PodSpec fields
-	// We use JSON marshaling for safer migration of complex nested structures
-	if err := migrateSpecViaJSON(&isvc.Spec.Predictor, engine); err != nil {
-		// Log error but continue with migration
-		mutatorLogger.Error(err, "Error migrating Predictor to Engine via JSON")
-	}
-
-	// Process containers carefully - they could be nil
-	if len(isvc.Spec.Predictor.Containers) > 0 {
-		// Look for ome-container or containers with 'ome' in the name and map to Runner
-		omeContainerFound := false
-		var otherContainers []v1.Container
-
-		for _, container := range isvc.Spec.Predictor.Containers {
-			// If we find a container that looks like an OME container and we haven't already
-			// assigned a Runner, use this container as the Runner
-			if !omeContainerFound && (container.Name == "ome-container" || strings.Contains(strings.ToLower(container.Name), "ome")) {
-				engine.Runner = &v1beta1.RunnerSpec{
-					Container: container,
-				}
-				omeContainerFound = true
-			} else {
-				// Keep other containers
-				otherContainers = append(otherContainers, container)
-			}
-		}
-
-		// Only set Containers if we have remaining containers after moving one to Runner
-		if len(otherContainers) > 0 {
-			engine.Containers = otherContainers
-		} else {
-			engine.Containers = nil
-		}
-
-		// If no OME container was found but we have containers, use the first one as Runner
-		if !omeContainerFound && len(isvc.Spec.Predictor.Containers) > 0 {
-			// Use the first container as the Runner
-			engine.Runner = &v1beta1.RunnerSpec{
-				Container: isvc.Spec.Predictor.Containers[0],
-			}
-
-			// If there's only one container, set Containers to nil
-			if len(isvc.Spec.Predictor.Containers) == 1 {
-				engine.Containers = nil
-			} else if len(isvc.Spec.Predictor.Containers) > 1 {
-				// Otherwise, keep all containers except the first one
-				engine.Containers = isvc.Spec.Predictor.Containers[1:]
-			}
-		}
-	}
-
-	// If the predictor has a Worker, migrate it to the Engine
-	if isvc.Spec.Predictor.Worker != nil {
-		engine.Worker = isvc.Spec.Predictor.Worker
-	}
-
-	// Set the Engine
-	isvc.Spec.Engine = engine
-
-	// Move Model to top-level if not already there
-	if isvc.Spec.Model == nil && isvc.Spec.Predictor.Model != nil {
-		// Create ModelRef from BaseModel if it exists
-		if isvc.Spec.Predictor.Model.BaseModel != nil {
-			modelName := *isvc.Spec.Predictor.Model.BaseModel
-
-			// Determine the model kind dynamically
-			kind, err := utils.DetermineModelKind(ctx, c, modelName, isvc.Namespace)
-			if err != nil {
-				mutatorLogger.Error(err, "Failed to determine model kind", "modelName", modelName, "namespace", isvc.Namespace)
-				return err
-			}
-
-			isvc.Spec.Model = &v1beta1.ModelRef{
-				Name: modelName,
-				Kind: &kind,
-			}
-
-			// Copy any fine-tuned weights if present
-			if len(isvc.Spec.Predictor.Model.FineTunedWeights) > 0 {
-				isvc.Spec.Model.FineTunedWeights = isvc.Spec.Predictor.Model.FineTunedWeights
-			}
-		}
-	}
-
-	// Move Runtime reference if present
-	if isvc.Spec.Runtime == nil && isvc.Spec.Predictor.Model != nil && isvc.Spec.Predictor.Model.Runtime != nil {
-		clusterServingRuntime := "ClusterServingRuntime"
-		isvc.Spec.Runtime = &v1beta1.ServingRuntimeRef{
-			Name: *isvc.Spec.Predictor.Model.Runtime,
-			Kind: &clusterServingRuntime, // Kind is a *string, needs to be a pointer
-		}
-	}
-	return nil
-}
-
-// migrateSpecViaJSON uses JSON marshaling/unmarshaling to safely migrate from one spec to another
-func migrateSpecViaJSON(source, target interface{}) error {
-	// Marshal the source spec
-	sourceJSON, err := json.Marshal(source)
-	if err != nil {
-		return err
-	}
-
-	// Unmarshal into the target spec
-	if err := json.Unmarshal(sourceJSON, target); err != nil {
-		return err
-	}
-
 	return nil
 }
 

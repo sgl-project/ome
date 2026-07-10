@@ -7,11 +7,6 @@ import (
 
 // InferenceServiceSpec is the top level type for this resource
 type InferenceServiceSpec struct {
-	// Predictor defines the model serving spec
-	// It specifies how the model should be deployed and served, handling inference requests.
-	// Deprecated: Predictor is deprecated and will be removed in a future release. Please use Engine and Model fields instead.
-	// +optional
-	Predictor PredictorSpec `json:"predictor"`
 
 	// Engine defines the serving engine spec
 	// This provides detailed container and pod specifications for model serving.

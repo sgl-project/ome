@@ -21,7 +21,7 @@ type SupportedModelFormat struct {
 	// +optional
 	ModelType *string `json:"modelType,omitempty"`
 	// Version of the model format.
-	// Used in validating that a runtime supports a predictor.
+	// Used in validating that a runtime supports a model.
 	// It Can be "major", "major.minor" or "major.minor.patch".
 	// +optional
 	Version *string `json:"version,omitempty"`

@@ -60,7 +60,6 @@ spec:
       - my-lora-adapter          # optional, applied on top of the base model
 ```
 
-> **Deprecated**: The older `spec.predictor.model` field (with `baseModel`, `protocolVersion`, and `runtime` nested under `predictor`) still works for backward compatibility but is deprecated. New InferenceServices should use `spec.model` together with `spec.runtime` and the `engine`/`decoder`/`router` components. See the [full field reference](/ome/docs/reference/ome.v1beta1) for details.
 
 ## Component Types
 
@@ -597,7 +596,6 @@ status:
 | `EngineReady`    | Engine component is ready to serve requests |
 | `DecoderReady`   | Decoder component is ready (if configured)  |
 | `RouterReady`    | Router component is ready (if configured)   |
-| `PredictorReady` | **Deprecated**: Legacy predictor readiness  |
 
 ### Model Status and Troubleshooting
 
@@ -657,7 +655,6 @@ Common `reason` values and what they point to:
 | `RuntimeDisabled`            | The selected ServingRuntime is disabled.                                     |
 | `NoSupportingRuntime`        | No ServingRuntime supports the specified model type.                         |
 | `RuntimeNotRecognized`       | No ServingRuntime is defined with the specified runtime name.               |
-| `InvalidPredictorSpec`       | The predictor spec is invalid or unsupported.                               |
 | `InvalidRouterSpec`          | The router spec is invalid.                                                  |
 
 #### Debugging Workflow

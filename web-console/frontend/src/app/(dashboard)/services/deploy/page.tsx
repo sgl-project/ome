@@ -278,10 +278,13 @@ export default function DeployServicePage() {
           namespace: data.namespace,
         },
         spec: {
-          predictor: {
-            model: data.model,
-            runtime: data.runtime,
-            replicas: data.replicas,
+          model: {
+            name: data.model,
+          },
+          runtime: {
+            name: data.runtime,
+          },
+          engine: {
             minReplicas: data.minReplicas,
             maxReplicas: data.maxReplicas,
           },

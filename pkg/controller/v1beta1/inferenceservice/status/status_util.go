@@ -177,30 +177,27 @@ func (sr *StatusReconciler) InitializeComponentCondition(status *v1beta1.Inferen
 // getReadyConditionsMap returns the mapping of component types to ready conditions
 func (sr *StatusReconciler) getReadyConditionsMap() map[v1beta1.ComponentType]apis.ConditionType {
 	return map[v1beta1.ComponentType]apis.ConditionType{
-		v1beta1.PredictorComponent: v1beta1.PredictorReady,
-		v1beta1.RouterComponent:    v1beta1.RouterReady,
-		v1beta1.EngineComponent:    v1beta1.EngineReady,
-		v1beta1.DecoderComponent:   v1beta1.DecoderReady,
+		v1beta1.RouterComponent:  v1beta1.RouterReady,
+		v1beta1.EngineComponent:  v1beta1.EngineReady,
+		v1beta1.DecoderComponent: v1beta1.DecoderReady,
 	}
 }
 
 // getRouteConditionsMap returns the mapping of component types to route conditions
 func (sr *StatusReconciler) getRouteConditionsMap() map[v1beta1.ComponentType]apis.ConditionType {
 	return map[v1beta1.ComponentType]apis.ConditionType{
-		v1beta1.PredictorComponent: v1beta1.PredictorRouteReady,
-		v1beta1.RouterComponent:    v1beta1.RouterRouteReady,
-		v1beta1.EngineComponent:    v1beta1.EngineRouteReady,
-		v1beta1.DecoderComponent:   v1beta1.DecoderRouteReady,
+		v1beta1.RouterComponent:  v1beta1.RouterRouteReady,
+		v1beta1.EngineComponent:  v1beta1.EngineRouteReady,
+		v1beta1.DecoderComponent: v1beta1.DecoderRouteReady,
 	}
 }
 
 // getConfigurationConditionsMap returns the mapping of component types to configuration conditions
 func (sr *StatusReconciler) getConfigurationConditionsMap() map[v1beta1.ComponentType]apis.ConditionType {
 	return map[v1beta1.ComponentType]apis.ConditionType{
-		v1beta1.PredictorComponent: v1beta1.PredictorConfigurationReady,
-		v1beta1.RouterComponent:    v1beta1.RouterConfigurationReady,
-		v1beta1.EngineComponent:    v1beta1.EngineConfigurationReady,
-		v1beta1.DecoderComponent:   v1beta1.DecoderConfigurationReady,
+		v1beta1.RouterComponent:  v1beta1.RouterConfigurationReady,
+		v1beta1.EngineComponent:  v1beta1.EngineConfigurationReady,
+		v1beta1.DecoderComponent: v1beta1.DecoderConfigurationReady,
 	}
 }
 

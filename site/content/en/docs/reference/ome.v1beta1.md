@@ -1259,8 +1259,6 @@ will be set and updated by the controller.</p>
 
 - [EngineSpec](#ome-io-v1beta1-EngineSpec)
 
-- [PredictorSpec](#ome-io-v1beta1-PredictorSpec)
-
 - [RouterSpec](#ome-io-v1beta1-RouterSpec)
 
 
@@ -2010,15 +2008,6 @@ Cross-namespace references are allowed but require appropriate RBAC permissions.
 <thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
 <tbody>
 
-<tr><td><code>predictor</code><br/>
-<a href="#ome-io-v1beta1-PredictorSpec"><code>PredictorSpec</code></a>
-</td>
-<td>
-   <p>Predictor defines the model serving spec
-It specifies how the model should be deployed and served, handling inference requests.
-Deprecated: Predictor is deprecated and will be removed in a future release. Please use Engine and Model fields instead.</p>
-</td>
-</tr>
 <tr><td><code>engine</code><br/>
 <a href="#ome-io-v1beta1-EngineSpec"><code>EngineSpec</code></a>
 </td>
@@ -2108,7 +2097,6 @@ allowing the service to scale based on custom metrics or event sources.</p>
 <ul>
 <li>EngineRouteReady: engine route readiness condition; <!-- raw HTML omitted --></li>
 <li>DecoderRouteReady: decoder route readiness condition; <!-- raw HTML omitted --></li>
-<li>PredictorReady: predictor readiness condition; <!-- raw HTML omitted --></li>
 <li>RoutesReady (serverless mode only): aggregated routing condition, i.e. endpoint readiness condition; <!-- raw HTML omitted --></li>
 <li>LatestDeploymentReady (serverless mode only): aggregated configuration condition, i.e. latest deployment readiness condition; <!-- raw HTML omitted --></li>
 <li>Ready: aggregated condition; <!-- raw HTML omitted --></li>
@@ -2340,14 +2328,14 @@ Provides fine-grained control over the container that executes the leader node's
 <code>int</code>
 </td>
 <td>
-   <p>How many copies of this predictor's models failed to load recently</p>
+   <p>How many copies of this model failed to load recently</p>
 </td>
 </tr>
 <tr><td><code>totalCopies</code><br/>
 <code>int</code>
 </td>
 <td>
-   <p>Total number copies of this predictor's models that are currently loaded</p>
+   <p>Total number copies of this model that are currently loaded</p>
 </td>
 </tr>
 </tbody>
@@ -2432,7 +2420,7 @@ Provides fine-grained control over the container that executes the leader node's
 </td>
 <td>
    <p>Version of the model format.
-Used in validating that a runtime supports a predictor.
+Used in validating that a runtime supports a model.
 It Can be &quot;major&quot;, &quot;major.minor&quot; or &quot;major.minor.patch&quot;.</p>
 </td>
 </tr>
@@ -2481,7 +2469,7 @@ This is used to select the serving runtime based on the modelFormat version</p>
 </td>
 <td>
    <p>Version of the library.
-Used in validating that a runtime supports a predictor.
+Used in validating that a runtime supports a model.
 It Can be &quot;major&quot;, &quot;major.minor&quot; or &quot;major.minor.patch&quot;.</p>
 </td>
 </tr>
@@ -2628,47 +2616,6 @@ References to fine-tuned weights that should be applied to the base model.</p>
 </tbody>
 </table>
 
-## `ModelSpec`     {#ome-io-v1beta1-ModelSpec}
-
-
-**Appears in:**
-
-- [PredictorSpec](#ome-io-v1beta1-PredictorSpec)
-
-
-
-<table class="table">
-<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
-<tbody>
-
-<tr><td><code>runtime</code><br/>
-<code>string</code>
-</td>
-<td>
-   <p>Specific ClusterServingRuntime/ServingRuntime name to use for deployment.</p>
-</td>
-</tr>
-<tr><td><code>PredictorExtensionSpec</code> <B>[Required]</B><br/>
-<a href="#ome-io-v1beta1-PredictorExtensionSpec"><code>PredictorExtensionSpec</code></a>
-</td>
-<td>(Members of <code>PredictorExtensionSpec</code> are embedded into this type.)
-   <span class="text-muted">No description provided.</span></td>
-</tr>
-<tr><td><code>baseModel</code> <B>[Required]</B><br/>
-<code>string</code>
-</td>
-<td>
-   <span class="text-muted">No description provided.</span></td>
-</tr>
-<tr><td><code>fineTunedWeights</code> <B>[Required]</B><br/>
-<code>[]string</code>
-</td>
-<td>
-   <span class="text-muted">No description provided.</span></td>
-</tr>
-</tbody>
-</table>
-
 ## `ModelState`     {#ome-io-v1beta1-ModelState}
 
 (Alias of `string`)
@@ -2700,14 +2647,14 @@ References to fine-tuned weights that should be applied to the base model.</p>
 <a href="#ome-io-v1beta1-TransitionStatus"><code>TransitionStatus</code></a>
 </td>
 <td>
-   <p>Whether the available predictor endpoints reflect the current Spec or is in transition</p>
+   <p>Whether the available model server endpoints reflect the current Spec or is in transition</p>
 </td>
 </tr>
 <tr><td><code>modelRevisionStates</code><br/>
 <a href="#ome-io-v1beta1-ModelRevisionStates"><code>ModelRevisionStates</code></a>
 </td>
 <td>
-   <p>State information of the predictor's model.</p>
+   <p>State information of the model.</p>
 </td>
 </tr>
 <tr><td><code>lastFailureInfo</code><br/>
@@ -2721,7 +2668,7 @@ References to fine-tuned weights that should be applied to the base model.</p>
 <a href="#ome-io-v1beta1-ModelCopies"><code>ModelCopies</code></a>
 </td>
 <td>
-   <p>Model copy information of the predictor's model.</p>
+   <p>Model copy information of the model.</p>
 </td>
 </tr>
 </tbody>
@@ -2760,6 +2707,26 @@ References to fine-tuned weights that should be applied to the base model.</p>
    <p>Status of the model weight</p>
 </td>
 </tr>
+<tr><td><code>observedGeneration</code><br/>
+<code>int64</code>
+</td>
+<td>
+   <p>ObservedGeneration is the .metadata.generation the controller last
+reconciled against. If this lags behind .metadata.generation, the
+controller has not yet observed the latest spec edit.</p>
+</td>
+</tr>
+<tr><td><code>lastReconcileTime</code><br/>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#time-v1-meta"><code>k8s.io/apimachinery/pkg/apis/meta/v1.Time</code></a>
+</td>
+<td>
+   <p>LastReconcileTime is the wall-clock timestamp of the controller's most
+recent reconcile pass for this object. Liveness signal — if it falls
+behind by more than the reconcile period, the controller is wedged or
+not scheduled. Distinct from Condition.lastTransitionTime, which only
+advances on actual status flips.</p>
+</td>
+</tr>
 <tr><td><code>nodesReady</code> <B>[Required]</B><br/>
 <code>[]string</code>
 </td>
@@ -2771,6 +2738,15 @@ References to fine-tuned weights that should be applied to the base model.</p>
 </td>
 <td>
    <span class="text-muted">No description provided.</span></td>
+</tr>
+<tr><td><code>conditions</code><br/>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#condition-v1-meta"><code>[]k8s.io/apimachinery/pkg/apis/meta/v1.Condition</code></a>
+</td>
+<td>
+   <p>Conditions describe model readiness and source/metadata state. The PVC
+path reports SourceReachable and Ready; PerNode models continue to
+report node-level state through NodesReady and NodesFailed.</p>
+</td>
 </tr>
 </tbody>
 </table>
@@ -2901,8 +2877,6 @@ More info: https://kubernetes.io/docs/concepts/storage/volumes</p>
 - [EngineSpec](#ome-io-v1beta1-EngineSpec)
 
 - [LeaderSpec](#ome-io-v1beta1-LeaderSpec)
-
-- [PredictorSpec](#ome-io-v1beta1-PredictorSpec)
 
 - [RouterSpec](#ome-io-v1beta1-RouterSpec)
 
@@ -3327,106 +3301,6 @@ by name.</p>
 <p>This is an alpha field and requires enabling the
 DynamicResourceAllocation feature gate.</p>
 <p>This field is immutable.</p>
-</td>
-</tr>
-</tbody>
-</table>
-
-## `PredictorExtensionSpec`     {#ome-io-v1beta1-PredictorExtensionSpec}
-
-
-**Appears in:**
-
-- [ModelSpec](#ome-io-v1beta1-ModelSpec)
-
-
-<p>PredictorExtensionSpec defines configuration shared across all predictor frameworks</p>
-
-
-<table class="table">
-<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
-<tbody>
-
-<tr><td><code>storageUri</code><br/>
-<code>string</code>
-</td>
-<td>
-   <p>This field points to the location of the model which is mounted onto the pod.</p>
-</td>
-</tr>
-<tr><td><code>runtimeVersion</code><br/>
-<code>string</code>
-</td>
-<td>
-   <p>Runtime version of the predictor docker image</p>
-</td>
-</tr>
-<tr><td><code>protocolVersion</code><br/>
-<a href="https://pkg.go.dev/sigs.k8s.io/ome/pkg/constants#InferenceServiceProtocol"><code>sigs.k8s.io/ome/pkg/constants.InferenceServiceProtocol</code></a>
-</td>
-<td>
-   <p>Protocol version to use by the predictor (i.e. v1 or v2 or grpc-v1 or grpc-v2)</p>
-</td>
-</tr>
-<tr><td><code>Container</code><br/>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#container-v1-core"><code>k8s.io/api/core/v1.Container</code></a>
-</td>
-<td>(Members of <code>Container</code> are embedded into this type.)
-   <p>Container enables overrides for the predictor.
-Each framework will have different defaults that are populated in the underlying container spec.</p>
-</td>
-</tr>
-</tbody>
-</table>
-
-## `PredictorSpec`     {#ome-io-v1beta1-PredictorSpec}
-
-
-**Appears in:**
-
-- [InferenceServiceSpec](#ome-io-v1beta1-InferenceServiceSpec)
-
-
-<p>PredictorSpec defines the configuration for a predictor,
-The following fields follow a &quot;1-of&quot; semantic. Users must specify exactly one spec.</p>
-
-
-<table class="table">
-<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
-<tbody>
-
-<tr><td><code>model</code> <B>[Required]</B><br/>
-<a href="#ome-io-v1beta1-ModelSpec"><code>ModelSpec</code></a>
-</td>
-<td>
-   <p>Model spec for any arbitrary framework.</p>
-</td>
-</tr>
-<tr><td><code>PodSpec</code> <B>[Required]</B><br/>
-<a href="#ome-io-v1beta1-PodSpec"><code>PodSpec</code></a>
-</td>
-<td>(Members of <code>PodSpec</code> are embedded into this type.)
-   <p>This spec is dual purpose. <!-- raw HTML omitted --></p>
-<ol>
-<li>Provide a full PodSpec for custom predictor.
-The field PodSpec.Containers is mutually exclusive with other predictors (i.e. TFServing). <!-- raw HTML omitted --></li>
-<li>Provide a predictor (i.e. TFServing) and specify PodSpec
-overrides, you must not provide PodSpec.Containers in this case. <!-- raw HTML omitted --></li>
-</ol>
-</td>
-</tr>
-<tr><td><code>ComponentExtensionSpec</code> <B>[Required]</B><br/>
-<a href="#ome-io-v1beta1-ComponentExtensionSpec"><code>ComponentExtensionSpec</code></a>
-</td>
-<td>(Members of <code>ComponentExtensionSpec</code> are embedded into this type.)
-   <p>Component extension defines the deployment configurations for a predictor</p>
-</td>
-</tr>
-<tr><td><code>workerSpec</code><br/>
-<a href="#ome-io-v1beta1-WorkerSpec"><code>WorkerSpec</code></a>
-</td>
-<td>
-   <p>WorkerSpec for the predictor, this is used for multi-node serving without Ray Cluster</p>
 </td>
 </tr>
 </tbody>
@@ -4049,7 +3923,7 @@ Name of the model</p>
 </td>
 <td>
    <p>Version of the model format.
-Used in validating that a runtime supports a predictor.
+Used in validating that a runtime supports a model.
 It Can be &quot;major&quot;, &quot;major.minor&quot; or &quot;major.minor.patch&quot;.</p>
 </td>
 </tr>
@@ -4200,8 +4074,6 @@ Priority can be overridden by specifying the runtime in the InferenceService.</p
 - [DecoderSpec](#ome-io-v1beta1-DecoderSpec)
 
 - [EngineSpec](#ome-io-v1beta1-EngineSpec)
-
-- [PredictorSpec](#ome-io-v1beta1-PredictorSpec)
 
 
 <p>WorkerSpec defines the configuration for worker nodes in a multi-node component
