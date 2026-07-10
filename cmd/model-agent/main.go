@@ -31,18 +31,20 @@ import (
 
 // config holds all configuration parameters for the model agent
 type config struct {
-	port                 int
-	modelsRootDir        string
-	modelsRootDirOnHost  string
-	nodeName             string
-	nodeLabelRetry       int
-	concurrency          int
-	multipartConcurrency int
-	downloadRetry        int
-	downloadAuthType     string
-	numDownloadWorker    int
-	namespace            string
-	logLevel             string
+	port                  int
+	modelsRootDir         string
+	modelsRootDirOnHost   string
+	nodeName              string
+	nodeLabelRetry        int
+	concurrency           int
+	multipartConcurrency  int
+	downloadRetry         int
+	downloadAuthType      string
+	numDownloadWorker     int
+	numHighPriorityWorker int
+	samePathWaitTimeout   time.Duration
+	namespace             string
+	logLevel              string
 }
 
 // Logger type alias for zap.SugaredLogger
@@ -71,6 +73,8 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&cfg.concurrency, "concurrency", 4, "Number of concurrent download workers per gopher")
 	rootCmd.PersistentFlags().IntVar(&cfg.multipartConcurrency, "multipart-concurrency", 4, "Number of concurrent multipart download workers per gopher")
 	rootCmd.PersistentFlags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 5, "Number of download workers")
+	rootCmd.PersistentFlags().IntVar(&cfg.numHighPriorityWorker, "num-high-priority-worker", 1, "Number of high-priority workers for delete and same-path reuse tasks")
+	rootCmd.PersistentFlags().DurationVar(&cfg.samePathWaitTimeout, "same-path-wait-timeout", 30*time.Minute, "Maximum time to wait for same-path model reuse before falling back to normal download")
 	rootCmd.PersistentFlags().StringVar(&cfg.namespace, "namespace", "ome", "Kubernetes namespace to use")
 	rootCmd.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 
@@ -263,6 +267,7 @@ func initializeComponents(
 		cfg.downloadRetry,
 		cfg.modelsRootDir,
 		gopherTaskChan,
+		cfg.samePathWaitTimeout,
 		nodeLabelReconciler,
 		metrics,
 		logger,
@@ -344,7 +349,7 @@ func runCommand(cmd *cobra.Command, args []string) {
 	}()
 
 	// Start gopher (download workers)
-	go gopher.Run(stopCh, cfg.numDownloadWorker)
+	go gopher.Run(stopCh, cfg.numDownloadWorker, cfg.numHighPriorityWorker)
 
 	// Start scout (watchers)
 	if err := scout.Run(stopCh); err != nil {

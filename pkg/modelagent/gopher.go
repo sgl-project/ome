@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
@@ -42,6 +43,13 @@ type GopherTask struct {
 	BaseModel              *v1beta1.BaseModel
 	ClusterBaseModel       *v1beta1.ClusterBaseModel
 	TensorRTLLMShapeFilter *TensorRTLLMShapeFilter
+	SamePathWaitStartedAt  time.Time
+	NormalPriorityOnly     bool
+}
+
+type activeDownload struct {
+	token  string
+	cancel context.CancelFunc
 }
 
 type Gopher struct {
@@ -53,7 +61,7 @@ type Gopher struct {
 	modelRootDir           string
 	xetConfig              *xet.Config
 	kubeClient             kubernetes.Interface
-	gopherChan             <-chan *GopherTask
+	gopherChan             chan *GopherTask
 	nodeLabelReconciler    *NodeLabelReconciler
 	metrics                *Metrics
 	logger                 *zap.SugaredLogger
@@ -62,12 +70,19 @@ type Gopher struct {
 	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister
 
 	// Track active downloads for cancellation
-	activeDownloads      map[string]context.CancelFunc // key: model UID
+	activeDownloads      map[string]activeDownload // key: model UID
 	activeDownloadsMutex sync.RWMutex
+
+	taskQueue           *gopherTaskQueue
+	samePathWaitDelay   time.Duration
+	samePathWaitTimeout time.Duration
 }
 
 const (
 	BigFileSizeInMB = 200
+
+	defaultSamePathWaitDelay   = 30 * time.Second
+	defaultSamePathWaitTimeout = 30 * time.Minute
 )
 
 func NewGopher(
@@ -79,7 +94,8 @@ func NewGopher(
 	multipartConcurrency int,
 	downloadRetry int,
 	modelRootDir string,
-	gopherChan <-chan *GopherTask,
+	gopherChan chan *GopherTask,
+	samePathWaitTimeout time.Duration,
 	nodeLabelReconciler *NodeLabelReconciler,
 	metrics *Metrics,
 	logger *zap.SugaredLogger,
@@ -88,6 +104,9 @@ func NewGopher(
 
 	if xetConfig == nil {
 		return nil, fmt.Errorf("xet hugging face config cannot be nil")
+	}
+	if samePathWaitTimeout <= 0 {
+		samePathWaitTimeout = defaultSamePathWaitTimeout
 	}
 
 	return &Gopher{
@@ -103,60 +122,128 @@ func NewGopher(
 		nodeLabelReconciler:    nodeLabelReconciler,
 		metrics:                metrics,
 		logger:                 logger,
-		activeDownloads:        make(map[string]context.CancelFunc),
+		activeDownloads:        make(map[string]activeDownload),
 		baseModelLister:        baseModelLister,
 		clusterBaseModelLister: clusterBaseModelLister,
+		taskQueue:              newGopherTaskQueue(),
+		samePathWaitDelay:      defaultSamePathWaitDelay,
+		samePathWaitTimeout:    samePathWaitTimeout,
 	}, nil
 }
 
-func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int) {
+func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int, numHighPriorityWorker int) {
 	// Start the ConfigMap reconciliation service
 	s.configMapReconciler.StartReconciliation()
 	s.logger.Info("Started ConfigMap reconciliation service")
+
+	if s.taskQueue == nil {
+		s.taskQueue = newGopherTaskQueue()
+	}
+	if numHighPriorityWorker < 1 {
+		numHighPriorityWorker = 1
+	}
+	dispatchStopCh := make(chan struct{})
+	go s.dispatchTasks(dispatchStopCh)
 
 	// Start worker goroutines
 	for i := 0; i < numWorker; i++ {
 		go s.runWorker()
 	}
+	for i := 0; i < numHighPriorityWorker; i++ {
+		go s.runHighPriorityWorker()
+	}
 
 	// Wait for stop signal
 	<-stopCh
+	close(dispatchStopCh)
 
 	// Stop the ConfigMap reconciliation service
 	s.configMapReconciler.StopReconciliation()
+	s.taskQueue.close()
 	s.logger.Info("Stopped ConfigMap reconciliation service")
 
 	s.logger.Info("Received stop signal, shutting down Gopher workers...")
 }
 
-func (s *Gopher) runWorker() {
+func (s *Gopher) dispatchTasks(stopCh <-chan struct{}) {
 	for {
 		select {
 		case task, ok := <-s.gopherChan:
-			if ok {
-				// Process delete tasks immediately by checking active downloads
-				if task.TaskType == Delete {
-					modelUID := getModelUID(task)
-					s.activeDownloadsMutex.RLock()
-					_, isDownloading := s.activeDownloads[modelUID]
-					s.activeDownloadsMutex.RUnlock()
-
-					if isDownloading {
-						s.logger.Infof("Model %s is currently downloading, will cancel it", getModelInfoForLogging(task))
-					}
-				}
-
-				err := s.processTask(task)
-				if err != nil {
-					s.logger.Errorf("Gopher task failed with error: %s", err.Error())
-				}
-			} else {
-				s.logger.Info("gopher channel closed, worker exits.")
+			if !ok {
+				s.logger.Info("gopher channel closed, dispatcher exits.")
+				s.taskQueue.close()
 				return
 			}
-		default:
-			time.Sleep(500 * time.Millisecond)
+			s.enqueueTask(task)
+		case <-stopCh:
+			s.taskQueue.close()
+			return
 		}
+	}
+}
+
+func (s *Gopher) enqueueTask(task *GopherTask) {
+	if task == nil {
+		return
+	}
+	if s.taskQueue == nil {
+		s.taskQueue = newGopherTaskQueue()
+	}
+	if task.TaskType == Delete {
+		s.cancelActiveDownload(task)
+	}
+	s.taskQueue.enqueue(task)
+}
+
+func (s *Gopher) runWorker() {
+	if s.taskQueue == nil {
+		s.taskQueue = newGopherTaskQueue()
+	}
+	for {
+		task, ok := s.taskQueue.popNormal()
+		if !ok {
+			s.logger.Info("gopher task queue closed, worker exits.")
+			return
+		}
+		if task.TaskType == Delete {
+			s.cancelActiveDownload(task)
+		}
+		err := s.processTask(task)
+		if err != nil {
+			s.logger.Errorf("Gopher task failed with error: %s", err.Error())
+		}
+	}
+}
+
+func (s *Gopher) runHighPriorityWorker() {
+	if s.taskQueue == nil {
+		s.taskQueue = newGopherTaskQueue()
+	}
+	for {
+		task, ok := s.taskQueue.popHighPriority()
+		if !ok {
+			s.logger.Info("gopher high-priority task queue closed, worker exits.")
+			return
+		}
+		if task.TaskType == Delete {
+			s.cancelActiveDownload(task)
+		}
+		err := s.processTaskWithOptions(task, false)
+		if err != nil {
+			s.logger.Errorf("Gopher high-priority task failed with error: %s", err.Error())
+		}
+	}
+}
+
+func (s *Gopher) cancelActiveDownload(task *GopherTask) {
+	modelUID := getModelUID(task)
+	s.activeDownloadsMutex.RLock()
+	active, isDownloading := s.activeDownloads[modelUID]
+	s.activeDownloadsMutex.RUnlock()
+
+	if isDownloading {
+		s.logger.Infof("Model %s is currently downloading, will cancel it", getModelInfoForLogging(task))
+		active.cancel()
 	}
 }
 
@@ -239,6 +326,10 @@ func (s *Gopher) safeParseAndUpdateModelConfig(modelPath string, baseModel *v1be
 }
 
 func (s *Gopher) processTask(task *GopherTask) error {
+	return s.processTaskWithOptions(task, true)
+}
+
+func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload bool) error {
 	if task.BaseModel == nil && task.ClusterBaseModel == nil {
 		return fmt.Errorf("gopher got empty task")
 	}
@@ -262,6 +353,22 @@ func (s *Gopher) processTask(task *GopherTask) error {
 	ctx := context.Background()
 	var cancel context.CancelFunc
 
+	if task.TaskType == Download || task.TaskType == DownloadOverride {
+		if skip, runDeleteCleanup := s.shouldSkipStaleDownloadTask(task); skip {
+			if runDeleteCleanup {
+				s.logger.Infof("Model %s is deleting, running cleanup instead of download", modelInfo)
+				return s.processTask(&GopherTask{
+					TaskType:               Delete,
+					BaseModel:              task.BaseModel,
+					ClusterBaseModel:       task.ClusterBaseModel,
+					TensorRTLLMShapeFilter: task.TensorRTLLMShapeFilter,
+				})
+			}
+			s.logger.Infof("Model %s no longer exists, skipping stale download task", modelInfo)
+			return nil
+		}
+	}
+
 	// For Download and DownloadOverride tasks, set the node label to "Updating"
 	if task.TaskType == Download || task.TaskType == DownloadOverride {
 		s.logger.Infof("Setting model %s status to Updating before download", modelInfo)
@@ -280,15 +387,17 @@ func (s *Gopher) processTask(task *GopherTask) error {
 		ctx, cancel = context.WithCancel(context.Background())
 
 		// Register the cancel function
+		activeDownloadToken := fmt.Sprintf("%s-%d", modelUID, time.Now().UnixNano())
 		s.activeDownloadsMutex.Lock()
-		s.activeDownloads[modelUID] = cancel
+		s.activeDownloads[modelUID] = activeDownload{
+			token:  activeDownloadToken,
+			cancel: cancel,
+		}
 		s.activeDownloadsMutex.Unlock()
 
 		// Ensure cleanup on completion
 		defer func() {
-			s.activeDownloadsMutex.Lock()
-			delete(s.activeDownloads, modelUID)
-			s.activeDownloadsMutex.Unlock()
+			s.unregisterActiveDownload(modelUID, activeDownloadToken)
 			cancel() // Ensure context is cancelled
 		}()
 	}
@@ -358,6 +467,12 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			if shouldUseSamePathObjectStorageReuse(task) {
 				if matchedKey, reused := s.findReadyObjectStorageModelWithSamePath(ctx, task, baseModelSpec, destPath); reused {
 					s.logger.Infof("Reusing Ready same-path model artifact for %s/%s from %s at %s", namespace, name, matchedKey, destPath)
+				} else if matchedKey, wait := s.findUpdatingObjectStorageModelWithSamePath(ctx, task, baseModelSpec, destPath); wait &&
+					s.requeueSamePathInFlightReuseWait(task, matchedKey) {
+					return nil
+				} else if !allowFallbackDownload {
+					s.demoteToNormalPriority(task)
+					return nil
 				} else if err := downloadObjectStorageModel(); err != nil {
 					return err
 				}
@@ -420,6 +535,20 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			s.logger.Infof("Successfully downloaded ClusterBaseModel %s", task.ClusterBaseModel.Name)
 		}
 
+		if skip, runDeleteCleanup := s.shouldSkipStaleDownloadTask(task); skip {
+			if runDeleteCleanup {
+				s.logger.Infof("Model %s is deleting after download, running cleanup instead of marking Ready", modelInfo)
+				return s.processTask(&GopherTask{
+					TaskType:               Delete,
+					BaseModel:              task.BaseModel,
+					ClusterBaseModel:       task.ClusterBaseModel,
+					TensorRTLLMShapeFilter: task.TensorRTLLMShapeFilter,
+				})
+			}
+			s.logger.Infof("Model %s no longer exists after download, skipping Ready update", modelInfo)
+			return nil
+		}
+
 		// mark the model as Ready on both node labels and ConfigMap
 		nodeLabelOp := &NodeLabelOp{
 			ModelStateOnNode: Ready,
@@ -436,9 +565,9 @@ func (s *Gopher) processTask(task *GopherTask) error {
 	case Delete:
 		// First, cancel any ongoing download for this model
 		s.activeDownloadsMutex.RLock()
-		if cancelFunc, exists := s.activeDownloads[modelUID]; exists {
+		if active, exists := s.activeDownloads[modelUID]; exists {
 			s.logger.Infof("Cancelling ongoing download for model %s", modelInfo)
-			cancelFunc() // This will cancel the download context
+			active.cancel() // This will cancel the download context
 		}
 		s.activeDownloadsMutex.RUnlock()
 
@@ -536,8 +665,65 @@ func (s *Gopher) processTask(task *GopherTask) error {
 	return nil
 }
 
+func (s *Gopher) unregisterActiveDownload(modelUID string, token string) {
+	s.activeDownloadsMutex.Lock()
+	defer s.activeDownloadsMutex.Unlock()
+	if active, exists := s.activeDownloads[modelUID]; exists && active.token == token {
+		delete(s.activeDownloads, modelUID)
+	}
+}
+
+func (s *Gopher) demoteToNormalPriority(task *GopherTask) {
+	if task == nil {
+		return
+	}
+	task.NormalPriorityOnly = true
+	s.logger.Infof("Demoting %s to normal priority for fallback download/validation", getModelInfoForLogging(task))
+	s.enqueueTask(task)
+}
+
 func shouldUseSamePathObjectStorageReuse(task *GopherTask) bool {
 	return task != nil && task.TaskType == Download
+}
+
+func (s *Gopher) shouldSkipStaleDownloadTask(task *GopherTask) (bool, bool) {
+	if task == nil {
+		return false, false
+	}
+
+	if task.BaseModel != nil {
+		if s.baseModelLister == nil {
+			return false, false
+		}
+		latestModel, err := s.baseModelLister.BaseModels(task.BaseModel.Namespace).Get(task.BaseModel.Name)
+		if apierrors.IsNotFound(err) {
+			return true, false
+		}
+		if err != nil {
+			s.logger.Warnf("Cannot check latest BaseModel %s/%s before download: %v", task.BaseModel.Namespace, task.BaseModel.Name, err)
+			return false, false
+		}
+		isDeleting := latestModel.DeletionTimestamp != nil
+		return isDeleting, isDeleting
+	}
+
+	if task.ClusterBaseModel != nil {
+		if s.clusterBaseModelLister == nil {
+			return false, false
+		}
+		latestModel, err := s.clusterBaseModelLister.Get(task.ClusterBaseModel.Name)
+		if apierrors.IsNotFound(err) {
+			return true, false
+		}
+		if err != nil {
+			s.logger.Warnf("Cannot check latest ClusterBaseModel %s before download: %v", task.ClusterBaseModel.Name, err)
+			return false, false
+		}
+		isDeleting := latestModel.DeletionTimestamp != nil
+		return isDeleting, isDeleting
+	}
+
+	return false, false
 }
 
 // isPathReferencedByOtherModels checks if the given path is still referenced by other BaseModel or ClusterBaseModel resources
@@ -760,6 +946,14 @@ func (s *Gopher) createOCIOSDataStore(baseModelSpec v1beta1.BaseModelSpec) (*oci
 // copied model CRs with the same source and destination can reuse Ready local
 // files. DownloadOverride keeps the existing download/validation path.
 func (s *Gopher) findReadyObjectStorageModelWithSamePath(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec, destPath string) (string, bool) {
+	return s.findObjectStorageModelWithSamePathAndStatus(ctx, task, baseModelSpec, destPath, ModelStatusReady, true)
+}
+
+func (s *Gopher) findUpdatingObjectStorageModelWithSamePath(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec, destPath string) (string, bool) {
+	return s.findObjectStorageModelWithSamePathAndStatus(ctx, task, baseModelSpec, destPath, ModelStatusUpdating, false)
+}
+
+func (s *Gopher) findObjectStorageModelWithSamePathAndStatus(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec, destPath string, status ModelStatus, requireLocalPath bool) (string, bool) {
 	if task == nil || (task.BaseModel == nil && task.ClusterBaseModel == nil) {
 		return "", false
 	}
@@ -769,9 +963,11 @@ func (s *Gopher) findReadyObjectStorageModelWithSamePath(ctx context.Context, ta
 	if s.configMapReconciler == nil {
 		return "", false
 	}
-	if _, err := os.Stat(destPath); err != nil {
-		s.logger.Warnf("Cannot reuse same-path model artifact at %s because it is not available locally: %v", destPath, err)
-		return "", false
+	if requireLocalPath {
+		if _, err := os.Stat(destPath); err != nil {
+			s.logger.Warnf("Cannot reuse same-path model artifact at %s because it is not available locally: %v", destPath, err)
+			return "", false
+		}
 	}
 
 	configMap, err := s.configMapReconciler.getConfigMap(ctx)
@@ -785,9 +981,15 @@ func (s *Gopher) findReadyObjectStorageModelWithSamePath(ctx context.Context, ta
 		clusterBaseModels, err := s.clusterBaseModelLister.List(labels.Everything())
 		if err == nil {
 			for _, model := range clusterBaseModels {
+				if model.DeletionTimestamp != nil {
+					continue
+				}
 				key := constants.GetModelConfigMapKey("", model.Name, true)
-				if key != currentKey && isReadyModelEntry(configMap.Data[key]) &&
+				if key != currentKey && hasModelEntryStatus(configMap.Data[key], status) &&
 					sameModelStoragePath(baseModelSpec.Storage, model.Spec.Storage, s.modelRootDir, destPath) {
+					if status == ModelStatusUpdating && !shouldWaitForSamePathCandidate(task, currentKey, key, model.CreationTimestamp.Time) {
+						continue
+					}
 					return key, true
 				}
 			}
@@ -800,9 +1002,15 @@ func (s *Gopher) findReadyObjectStorageModelWithSamePath(ctx context.Context, ta
 		baseModels, err := s.baseModelLister.List(labels.Everything())
 		if err == nil {
 			for _, model := range baseModels {
+				if model.DeletionTimestamp != nil {
+					continue
+				}
 				key := constants.GetModelConfigMapKey(model.Namespace, model.Name, false)
-				if key != currentKey && isReadyModelEntry(configMap.Data[key]) &&
+				if key != currentKey && hasModelEntryStatus(configMap.Data[key], status) &&
 					sameModelStoragePath(baseModelSpec.Storage, model.Spec.Storage, s.modelRootDir, destPath) {
+					if status == ModelStatusUpdating && !shouldWaitForSamePathCandidate(task, currentKey, key, model.CreationTimestamp.Time) {
+						continue
+					}
 					return key, true
 				}
 			}
@@ -813,12 +1021,65 @@ func (s *Gopher) findReadyObjectStorageModelWithSamePath(ctx context.Context, ta
 	return "", false
 }
 
-func isReadyModelEntry(dataEntry string) bool {
+func hasModelEntryStatus(dataEntry string, status ModelStatus) bool {
 	var entry ModelEntry
 	if err := json.Unmarshal([]byte(dataEntry), &entry); err != nil {
 		return false
 	}
-	return entry.Status == ModelStatusReady
+	return entry.Status == status
+}
+
+func shouldWaitForSamePathCandidate(task *GopherTask, currentKey string, candidateKey string, candidateCreatedAt time.Time) bool {
+	currentCreatedAt := getTaskModelCreationTime(task)
+	if !candidateCreatedAt.IsZero() && !currentCreatedAt.IsZero() && !candidateCreatedAt.Equal(currentCreatedAt) {
+		return candidateCreatedAt.Before(currentCreatedAt)
+	}
+	return candidateKey < currentKey
+}
+
+func getTaskModelCreationTime(task *GopherTask) time.Time {
+	if task == nil {
+		return time.Time{}
+	}
+	if task.BaseModel != nil {
+		return task.BaseModel.CreationTimestamp.Time
+	}
+	if task.ClusterBaseModel != nil {
+		return task.ClusterBaseModel.CreationTimestamp.Time
+	}
+	return time.Time{}
+}
+
+func (s *Gopher) requeueSamePathInFlightReuseWait(task *GopherTask, matchedKey string) bool {
+	if task == nil || s.gopherChan == nil {
+		return false
+	}
+	now := time.Now()
+	timeout := s.samePathWaitTimeout
+	if timeout <= 0 {
+		timeout = defaultSamePathWaitTimeout
+	}
+	if task.SamePathWaitStartedAt.IsZero() {
+		task.SamePathWaitStartedAt = now
+	} else if now.Sub(task.SamePathWaitStartedAt) >= timeout {
+		s.logger.Warnf("Timed out waiting for same-path model %s to become Ready for %s; falling back to normal download", matchedKey, getModelInfoForLogging(task))
+		return false
+	}
+
+	delay := s.samePathWaitDelay
+	if delay <= 0 {
+		delay = defaultSamePathWaitDelay
+	}
+	s.logger.Infof("Same-path model %s is Updating for %s; requeueing after %s before starting duplicate download", matchedKey, getModelInfoForLogging(task), delay)
+	time.AfterFunc(delay, func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Warnf("Cannot requeue same-path wait task for %s because gopher channel is closed: %v", getModelInfoForLogging(task), r)
+			}
+		}()
+		s.gopherChan <- task
+	})
+	return true
 }
 
 func sameModelStoragePath(currentStorage *v1beta1.StorageSpec, candidateStorage *v1beta1.StorageSpec, modelRootDir string, destPath string) bool {
