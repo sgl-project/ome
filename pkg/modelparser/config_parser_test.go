@@ -380,6 +380,55 @@ func TestUpdateModelSpec(t *testing.T) {
 	assert.Equal(t, "7B", *existingSpec.ModelParameterSize)
 }
 
+// TestUpdateModelSpecPreservesModelConfiguration guards the preserve-if-unset
+// contract for the ModelConfiguration RawExtension. It is stored as a
+// preserve-unknown-fields field, so the apiserver serves it with sorted keys
+// while the parser emits struct-declaration order — byte-comparing the two would
+// never match and would rewrite the spec every reconcile. This locks in that an
+// already-set ModelConfiguration is NOT overwritten on a byte difference.
+func TestUpdateModelSpecPreservesModelConfiguration(t *testing.T) {
+	parser := &ModelConfigParser{logger: zap.NewNop().Sugar()}
+
+	// Same content, different byte order: sorted keys (apiserver) vs struct order (parser).
+	storedConfig := []byte(`{"architecture":"llama","model_type":"llama"}`)
+	parsedConfig := []byte(`{"model_type":"llama","architecture":"llama"}`)
+
+	// Fully-parsed spec: every field metadata provides is already set, so
+	// preserve-if-unset must leave everything untouched and report no change.
+	existingType := "llama"
+	existingArch := "LlamaForCausalLM"
+	existingSize := "7B"
+	existingMaxTokens := int32(4096)
+	spec := &v1beta1.BaseModelSpec{
+		ModelType:          &existingType,
+		ModelArchitecture:  &existingArch,
+		ModelParameterSize: &existingSize,
+		MaxTokens:          &existingMaxTokens,
+		ModelCapabilities:  []string{"CAP"},
+		ModelFramework:     &v1beta1.ModelFrameworkSpec{Name: "transformers"},
+		ModelFormat:        v1beta1.ModelFormat{Name: "safetensors"},
+		DiffusionPipeline:  &v1beta1.DiffusionPipelineSpec{},
+	}
+	spec.ModelConfiguration.Raw = storedConfig
+
+	// Metadata carries a byte-different ModelConfiguration (and other values that
+	// must be ignored because the corresponding spec fields are already set).
+	metadata := ModelMetadata{
+		ModelType:          "changed",
+		ModelArchitecture:  "changed",
+		ModelParameterSize: "13B",
+		MaxTokens:          8192,
+		ModelCapabilities:  []string{"OTHER"},
+		ModelConfiguration: parsedConfig,
+	}
+
+	updated := parser.updateModelSpec(spec, metadata)
+
+	assert.False(t, updated, "updateModelSpec must report no change when all fields are already set")
+	assert.Equal(t, storedConfig, spec.ModelConfiguration.Raw,
+		"ModelConfiguration must be preserved, not overwritten on a byte difference")
+}
+
 func TestParseDiffusionPipelineSpec(t *testing.T) {
 	data := []byte(`{
   "_class_name": "StableDiffusionPipeline",

@@ -1,7 +1,6 @@
 package modelparser
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -661,7 +660,12 @@ func updateField(current interface{}, new interface{}) bool {
 			return true
 		}
 	case *runtime.RawExtension:
-		if new != nil && len(new.([]byte)) > 0 && !bytes.Equal(c.Raw, new.([]byte)) {
+		// Preserve-if-unset, like every other field. ModelConfiguration is a
+		// preserve-unknown-fields RawExtension: the apiserver re-serializes it
+		// with sorted keys, so byte-comparing that against the parser's
+		// struct-order output never matches — which marked the field "changed"
+		// every reconcile and churned the spec. Write once.
+		if len(c.Raw) == 0 && new != nil && len(new.([]byte)) > 0 {
 			c.Raw = append(c.Raw[:0], new.([]byte)...)
 			return true
 		}
