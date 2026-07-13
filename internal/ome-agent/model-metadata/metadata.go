@@ -1,249 +1,264 @@
-// Package modelmetadata provides functionality to extract metadata from model files
-// stored in PVCs and update BaseModel/ClusterBaseModel CRs.
+// Package modelmetadata extracts metadata from PVC-mounted model directories
+// and writes a single per-model status ConfigMap that the BaseModel /
+// ClusterBaseModel controller reads directly by deterministic name.
 //
-// This agent is designed to be run as a Kubernetes Job by the BaseModel controller.
-// The controller will:
-// 1. Create a Job with the model PVC mounted
-// 2. Pass the model path and BaseModel details via command-line flags
-// 3. The agent will extract metadata and update the CR
-//
-// Example invocation:
-//
-//	ome-agent model-metadata \
-//	  --config /etc/ome-agent/model-metadata.yaml \
-//	  --model-path /model \
-//	  --basemodel-name llama-7b \
-//	  --basemodel-namespace model-serving
+// Flow when run as a Kubernetes Job:
+//  1. The BaseModel controller mounts the PVC at /model and invokes
+//     `ome-agent model-metadata --model-path /model --basemodel-name X
+//     [--basemodel-namespace Y | --cluster-scoped]`.
+//  2. We delegate parsing to pkg/modelparser, which already understands
+//     both config.json (HF text models) and model_index.json (diffusion).
+//  3. We convert the parser's metadata into the modelagent.ModelEntry
+//     shape and upsert exactly one ConfigMap per PVC-backed model in
+//     the OME namespace. The ConfigMap name is deterministic
+//     (constants.GetPVCMetadataConfigMapName) so the controller can
+//     Get it by name without scanning.
+//  4. On any extraction failure (including SIGTERM mid-write) we still
+//     write a Status=Failed entry so the controller can transition the
+//     model to Failed with a useful message instead of waiting
+//     indefinitely.
 package modelmetadata
 
 import (
 	"context"
-	"path/filepath"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
-	"github.com/pkg/errors"
-	"github.com/spf13/afero"
+	"go.uber.org/zap"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/logging"
-	"sigs.k8s.io/ome/pkg/modelconfig"
+	"sigs.k8s.io/ome/pkg/modelagent"
+	"sigs.k8s.io/ome/pkg/modelparser"
 )
 
+// MetadataExtractor parses a PVC-mounted model and writes the result to a
+// status ConfigMap.
 type MetadataExtractor struct {
 	config *Config
-	fs     afero.Fs
 	client client.Client
+	parser *modelparser.ModelConfigParser
 	logger logging.Interface
 }
 
-func NewMetadataExtractor(config *Config, fs afero.Fs, client client.Client) (*MetadataExtractor, error) {
+func NewMetadataExtractor(config *Config, kubeClient client.Client, zapLogger *zap.Logger) (*MetadataExtractor, error) {
 	if err := config.Validate(); err != nil {
-		return nil, errors.Wrap(err, "invalid configuration")
+		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
+	if kubeClient == nil {
+		return nil, errors.New("kubeClient must not be nil")
+	}
+	if zapLogger == nil {
+		return nil, errors.New("zapLogger must not be nil")
+	}
+
+	// modelparser logs through *zap.SugaredLogger; reuse the fx-provided
+	// *zap.Logger so we have a single logging stack in the agent process.
+	// Pass nil omeClient — ParseModelConfig only writes to the API server
+	// when called with a non-nil BaseModel/ClusterBaseModel and we pass
+	// both nil; the ConfigMap, not the parser, is the canonical write
+	// path in the PVC flow.
+	parser := modelparser.NewModelConfigParser(nil, zapLogger.Sugar())
 
 	return &MetadataExtractor{
 		config: config,
-		fs:     fs,
-		client: client,
+		client: kubeClient,
+		parser: parser,
 		logger: config.Logger,
 	}, nil
 }
 
+// Start runs the extractor end-to-end. The fx OnStart hook calls this in
+// a fire-and-forget goroutine, so we derive a SIGTERM/SIGINT-aware
+// context here. A signal that arrives mid-extraction:
+//   - cancels the parent ctx for in-flight modelparser/API calls
+//   - triggers a deferred best-effort Failed-ConfigMap write under a
+//     short detached context so the controller doesn't see the model
+//     stuck at In_Transit forever
 func (m *MetadataExtractor) Start() error {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	runErr := m.run(ctx)
+
+	if shouldWriteAbortedStatus(runErr, ctx.Err()) {
+		// Use a fresh, bounded context so the write doesn't immediately
+		// fail under the cancelled parent.
+		writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		msg := "metadata extraction aborted (pod received SIGTERM/SIGINT)"
+		if writeErr := m.writeStatus(writeCtx, modelagent.ModelStatusFailed, nil, msg); writeErr != nil {
+			m.logger.Errorf("Failed to write Aborted status on cancellation: %v", writeErr)
+		}
+	}
+	return runErr
+}
+
+// shouldWriteAbortedStatus encodes Start()'s post-run gate for the
+// best-effort Failed-Aborted ConfigMap write. Both predicates must hold:
+//
+//   - signalErr != nil  → a SIGTERM/SIGINT actually fired. Detecting via
+//     the signal context's Err() (not errors.Is(runErr, context.Canceled))
+//     because runErr may have been wrapped with %v, replaced with a
+//     parser/network error, or never been a context error at all.
+//   - runErr   != nil   → run() did NOT successfully write Ready. Without
+//     this guard a signal that arrives between Ready-write completing and
+//     Start() returning would clobber the freshly-written Ready entry
+//     with Failed-Aborted — transitioning a healthy model to
+//     LifeCycleStateFailed.
+//
+// Pulled out of Start() because the actual signal/Ready-write race is
+// impossible to reproduce deterministically; the helper is unit-tested
+// exhaustively in metadata_test.go.
+func shouldWriteAbortedStatus(runErr, signalErr error) bool {
+	return runErr != nil && signalErr != nil
+}
+
+func (m *MetadataExtractor) run(ctx context.Context) error {
 	m.logger.Infof("Starting model metadata extraction for model at %s", m.config.ModelPath)
 
-	// Try different config file names
-	configFiles := []string{"config.json", "model_config.json", "configuration.json"}
+	metadata, parseErr := m.parser.ParseModelConfig(m.config.ModelPath, nil, nil)
+	if parseErr != nil {
+		// Surface the parse failure through the ConfigMap so the controller
+		// can transition the BaseModel to Failed. We still return the
+		// underlying error so the Job pod exits non-zero.
+		writeErr := m.writeStatus(ctx, modelagent.ModelStatusFailed, nil, parseErr.Error())
+		if writeErr != nil {
+			m.logger.Errorf("Failed to write Failed status to ConfigMap: %v", writeErr)
+		}
+		return fmt.Errorf("failed to parse model config at %s: %w", m.config.ModelPath, parseErr)
+	}
+	if metadata == nil {
+		err := errors.New("model parser returned no metadata (skip-parsing annotation set or directory empty)")
+		writeErr := m.writeStatus(ctx, modelagent.ModelStatusFailed, nil, err.Error())
+		if writeErr != nil {
+			m.logger.Errorf("Failed to write Failed status to ConfigMap: %v", writeErr)
+		}
+		return err
+	}
 
-	var configPath string
-	for _, configFile := range configFiles {
-		path := filepath.Join(m.config.ModelPath, configFile)
-		exists, err := afero.Exists(m.fs, path)
+	cfg := modelagent.ConvertMetadataToModelConfig(*metadata)
+	if err := m.writeStatus(ctx, modelagent.ModelStatusReady, cfg, ""); err != nil {
+		return fmt.Errorf("failed to write Ready status to ConfigMap: %w", err)
+	}
+	m.logger.Infof("Wrote Ready status with metadata to ConfigMap for model %s", m.modelInfo())
+	return nil
+}
+
+// writeStatus upserts the per-PVC ConfigMap with a single ModelEntry. The
+// controller looks the ConfigMap up by exact name (no list-and-filter), so
+// we do NOT label it with the per-node `models.ome/basemodel-status`
+// selector — that label is reserved for the per-node ConfigMap pattern.
+func (m *MetadataExtractor) writeStatus(ctx context.Context, status modelagent.ModelStatus, cfg *modelagent.ModelConfig, errMessage string) error {
+	cmName := constants.GetPVCMetadataConfigMapName(m.config.BaseModelName, m.config.BaseModelNamespace, m.config.ClusterScoped)
+	modelKey := constants.GetModelConfigMapKey(m.config.BaseModelNamespace, m.config.BaseModelName, m.config.ClusterScoped)
+
+	entry := modelagent.ModelEntry{
+		Name:   m.config.BaseModelName,
+		Status: status,
+		Config: cfg,
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return fmt.Errorf("marshal ModelEntry: %w", err)
+	}
+
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		cm := &corev1.ConfigMap{}
+		err := m.client.Get(ctx, types.NamespacedName{Namespace: constants.OMENamespace, Name: cmName}, cm)
+		if apierrors.IsNotFound(err) {
+			cm = newPVCMetadataConfigMap(cmName, m.config.BaseModelName, m.config.ClusterScoped)
+			cm.Data = map[string]string{modelKey: string(data)}
+			if errMessage != "" {
+				cm.Annotations = map[string]string{constants.PVCMetadataLastErrorAnnotation: errMessage}
+			}
+			return m.client.Create(ctx, cm)
+		}
 		if err != nil {
-			m.logger.Warnf("Error checking for %s: %v", path, err)
-			continue
+			return err
 		}
-		if exists {
-			configPath = path
-			break
+		ensurePVCMetadataLabels(cm, m.config.BaseModelName, m.config.ClusterScoped)
+		if cm.Data == nil {
+			cm.Data = map[string]string{}
 		}
-	}
+		cm.Data[modelKey] = string(data)
+		if errMessage != "" {
+			if cm.Annotations == nil {
+				cm.Annotations = map[string]string{}
+			}
+			cm.Annotations[constants.PVCMetadataLastErrorAnnotation] = errMessage
+		} else {
+			delete(cm.Annotations, constants.PVCMetadataLastErrorAnnotation)
+		}
+		return m.client.Update(ctx, cm)
+	})
+}
 
-	if configPath == "" {
-		return errors.New("no model config file found (tried: config.json, model_config.json, configuration.json)")
-	}
-
-	m.logger.Infof("Found model config at %s", configPath)
-
-	// Use modelconfig to load the model
-	model, err := modelconfig.LoadModelConfig(configPath)
-	if err != nil {
-		return errors.Wrapf(err, "failed to load model config from %s", configPath)
-	}
-
-	// Update the CR
+func (m *MetadataExtractor) modelInfo() string {
 	if m.config.ClusterScoped {
-		return m.updateClusterBaseModel(model)
+		return m.config.BaseModelName
 	}
-	return m.updateBaseModel(model)
+	return m.config.BaseModelNamespace + "/" + m.config.BaseModelName
 }
 
-func (m *MetadataExtractor) updateBaseModel(model modelconfig.HuggingFaceModel) error {
-	ctx := context.Background()
-
-	// Fetch the BaseModel
-	baseModel := &v1beta1.BaseModel{}
-	err := m.client.Get(ctx, types.NamespacedName{
-		Name:      m.config.BaseModelName,
-		Namespace: m.config.BaseModelNamespace,
-	}, baseModel)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get BaseModel %s/%s", m.config.BaseModelNamespace, m.config.BaseModelName)
+func newPVCMetadataConfigMap(name, modelName string, isClusterScoped bool) *corev1.ConfigMap {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: constants.OMENamespace,
+		},
 	}
-
-	// Update spec with extracted metadata
-	updated := m.updateSpec(&baseModel.Spec, model)
-	if !updated {
-		m.logger.Info("No updates needed for BaseModel spec")
-		return nil
-	}
-
-	// Update the BaseModel
-	err = m.client.Update(ctx, baseModel)
-	if err != nil {
-		return errors.Wrapf(err, "failed to update BaseModel %s/%s", m.config.BaseModelNamespace, m.config.BaseModelName)
-	}
-
-	m.logger.Infof("Successfully updated BaseModel %s/%s", m.config.BaseModelNamespace, m.config.BaseModelName)
-	return nil
+	ensurePVCMetadataLabels(cm, modelName, isClusterScoped)
+	return cm
 }
 
-func (m *MetadataExtractor) updateClusterBaseModel(model modelconfig.HuggingFaceModel) error {
-	ctx := context.Background()
-
-	// Fetch the ClusterBaseModel
-	clusterBaseModel := &v1beta1.ClusterBaseModel{}
-	err := m.client.Get(ctx, types.NamespacedName{Name: m.config.BaseModelName}, clusterBaseModel)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get ClusterBaseModel %s", m.config.BaseModelName)
+func ensurePVCMetadataLabels(cm *corev1.ConfigMap, modelName string, isClusterScoped bool) {
+	if cm.Labels == nil {
+		cm.Labels = map[string]string{}
 	}
-
-	// Update spec with extracted metadata
-	updated := m.updateSpec(&clusterBaseModel.Spec, model)
-	if !updated {
-		m.logger.Info("No updates needed for ClusterBaseModel spec")
-		return nil
+	cm.Labels[constants.PVCStorageConfigMapLabel] = "true"
+	cm.Labels[constants.PVCMetadataModelNameLabel] = sanitizeLabelValue(modelName)
+	scope := "namespaced"
+	if isClusterScoped {
+		scope = "cluster"
 	}
-
-	// Update the ClusterBaseModel
-	err = m.client.Update(ctx, clusterBaseModel)
-	if err != nil {
-		return errors.Wrapf(err, "failed to update ClusterBaseModel %s", m.config.BaseModelName)
-	}
-
-	m.logger.Infof("Successfully updated ClusterBaseModel %s", m.config.BaseModelName)
-	return nil
+	cm.Labels[constants.PVCMetadataScopeLabel] = scope
 }
 
-func (m *MetadataExtractor) updateSpec(spec *v1beta1.BaseModelSpec, model modelconfig.HuggingFaceModel) bool {
-	if spec == nil || model == nil {
-		return false
-	}
-
-	updated := false
-
-	// Model type
-	modelType := model.GetModelType()
-	if spec.ModelType == nil && modelType != "" {
-		spec.ModelType = &modelType
-		updated = true
-	}
-
-	// Architecture
-	arch := model.GetArchitecture()
-	if spec.ModelArchitecture == nil && arch != "" {
-		spec.ModelArchitecture = &arch
-		updated = true
-	}
-
-	// Parameter count
-	paramCount := model.GetParameterCount()
-	if spec.ModelParameterSize == nil && paramCount > 0 {
-		paramStr := modelconfig.FormatParamCount(paramCount)
-		spec.ModelParameterSize = &paramStr
-		updated = true
-	}
-
-	// Max tokens
-	contextLength := int32(model.GetContextLength())
-	if spec.MaxTokens == nil && contextLength > 0 {
-		spec.MaxTokens = &contextLength
-		updated = true
-	}
-
-	// Capabilities
-	if len(spec.ModelCapabilities) == 0 {
-		capabilities := m.inferCapabilities(model)
-		if len(capabilities) > 0 {
-			spec.ModelCapabilities = capabilities
-			updated = true
+// sanitizeLabelValue maps an arbitrary string to a value that satisfies
+// the K8s label-value rules ([a-zA-Z0-9._-]{0,63}). Invalid characters
+// become '-'; the result is trimmed and a "model" fallback is returned if
+// trimming would leave it empty so labels are always present and useful.
+func sanitizeLabelValue(s string) string {
+	const maxLen = 63
+	out := make([]byte, 0, len(s))
+	for i := 0; i < len(s) && i < maxLen; i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z',
+			c >= 'A' && c <= 'Z',
+			c >= '0' && c <= '9',
+			c == '.', c == '_', c == '-':
+			out = append(out, c)
+		default:
+			out = append(out, '-')
 		}
 	}
-
-	// Framework (default to pytorch for HF models)
-	if spec.ModelFramework == nil {
-		spec.ModelFramework = &v1beta1.ModelFrameworkSpec{
-			Name: "transformers",
-		}
-		updated = true
+	// Trim leading/trailing non-alphanumeric per K8s rules.
+	trimmed := strings.Trim(string(out), "._-")
+	if trimmed == "" {
+		return "model"
 	}
-
-	// Torch dtype as model format
-	torchDtype := model.GetTorchDtype()
-	if spec.ModelFormat.Name == "" && torchDtype != "" {
-		spec.ModelFormat = v1beta1.ModelFormat{
-			Name: torchDtype,
-		}
-		updated = true
-	}
-
-	return updated
-}
-
-func (m *MetadataExtractor) inferCapabilities(model modelconfig.HuggingFaceModel) []string {
-	var capabilities []string
-
-	// Check for vision capability
-	if model.HasVision() {
-		capabilities = append(capabilities, "vision")
-	}
-
-	// Infer from architecture and model type
-	arch := strings.ToLower(model.GetArchitecture())
-	modelType := strings.ToLower(model.GetModelType())
-
-	// Text generation models
-	if strings.Contains(arch, "causallm") || strings.Contains(modelType, "gpt") ||
-		strings.Contains(modelType, "llama") || strings.Contains(modelType, "llava") ||
-		strings.Contains(modelType, "mistral") || strings.Contains(modelType, "falcon") ||
-		strings.Contains(modelType, "opt") || strings.Contains(modelType, "bloom") ||
-		strings.Contains(modelType, "qwen") {
-		capabilities = append(capabilities, "text-generation")
-	}
-
-	// Embedding models
-	if strings.Contains(arch, "embedding") || strings.Contains(modelType, "bert") ||
-		strings.Contains(modelType, "sentence") || strings.Contains(modelType, "e5") ||
-		strings.Contains(modelType, "bge") {
-		capabilities = append(capabilities, "text-embeddings")
-	}
-
-	// Default to text-generation if no capabilities detected
-	if len(capabilities) == 0 {
-		capabilities = append(capabilities, "text-generation")
-	}
-
-	return capabilities
+	return trimmed
 }

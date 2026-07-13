@@ -6,7 +6,6 @@ import (
 	"go.uber.org/fx"
 
 	modelmetadata "sigs.k8s.io/ome/internal/ome-agent/model-metadata"
-	aferoModule "sigs.k8s.io/ome/pkg/afero"
 	"sigs.k8s.io/ome/pkg/logging"
 )
 
@@ -56,7 +55,6 @@ func (m *ModelMetadataAgent) ConfigureCommand(cmd *cobra.Command) {
 // FxModules returns the fx modules needed by this agent
 func (m *ModelMetadataAgent) FxModules() []fx.Option {
 	return []fx.Option{
-		aferoModule.Module,
 		logging.Module,
 		fx.Provide(NewK8sClient),
 		modelmetadata.Module,

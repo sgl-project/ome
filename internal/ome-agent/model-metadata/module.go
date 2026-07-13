@@ -3,9 +3,9 @@ package modelmetadata
 import (
 	"fmt"
 
-	"github.com/spf13/afero"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/logging"
@@ -15,7 +15,7 @@ type metadataParams struct {
 	fx.In
 
 	Logger logging.Interface
-	Fs     afero.Fs
+	Zap    *zap.Logger
 	Client client.Client
 	Viper  *viper.Viper
 }
@@ -37,5 +37,5 @@ var Module = fx.Provide(
 			return nil, fmt.Errorf("invalid model metadata config: %w", err)
 		}
 
-		return NewMetadataExtractor(config, params.Fs, params.Client)
+		return NewMetadataExtractor(config, params.Client, params.Zap)
 	})
