@@ -91,3 +91,11 @@ repos:
         language: system
         types: [go]
         pass_filenames: false
+
+      - id: npm-lockfile-sync
+        name: npm lockfile in sync
+        description: Ensure web-console/frontend package-lock.json matches package.json
+        entry: bash -c 'cd web-console/frontend && npm install --package-lock-only --ignore-scripts --no-audit --no-fund && git diff --exit-code package-lock.json'
+        language: system
+        files: ^web-console/frontend/package(-lock)?\.json$
+        pass_filenames: false

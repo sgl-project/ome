@@ -30,6 +30,7 @@ When submitting a pull request:
 - **Go Formatting**: `go-fmt`, `go-vet` with workspace-wide formatting
 - **Helm Linting**: `helm-lint` with all warnings treated as errors
 - **Spell Checking**: `codespell` for catching typos across all text files
+- **Web Console**: `npm-lockfile-sync` keeps `web-console/frontend/package-lock.json` in sync with `package.json`, so CI's `npm ci` stays reproducible
 To set up:
 
 ```bash
@@ -41,6 +42,8 @@ To run it:
 pre-commit run --all-files #run all hooks on all files.
 pre-commit run go-fmt --all-files # run go-fmt hooks on all files.
 ```
+
+> **Note:** The `npm-lockfile-sync` hook regenerates the lockfile via `npm install --package-lock-only`, whose output can vary slightly across npm versions. To avoid spurious lockfile diffs, use the same Node.js major version as CI — **Node 23** (e.g. `nvm use 23`).
 
 ### PR Template
 
