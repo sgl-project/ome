@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: nvidia-nemotron-3-super-120b-a12b-fp8
+  namespace: nvidia-nemotron-3-super-120b-a12b-fp8
+spec:
+  model:
+    name: nvidia-nemotron-3-super-120b-a12b-fp8
+  runtime:
+    name: vllm-nvidia-nemotron-3-super-120b-a12b-fp8
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
