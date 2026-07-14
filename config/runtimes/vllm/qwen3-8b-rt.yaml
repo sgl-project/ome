@@ -1,0 +1,109 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-qwen3-8b
+spec:
+  disabled: false
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.51.0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: Qwen3ForCausalLM
+      autoSelect: true
+      priority: 1
+      version: "1.0.0"
+    - modelFramework:
+        name: transformers
+        version: "4.51.1"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: Qwen3ForCausalLM
+      autoSelect: true
+      priority: 1
+      version: "1.0.0"
+  protocolVersions:
+    - openAI
+  modelSizeRange:
+    min: 7B
+    max: 9B
+  engineConfig:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+      prometheus.io/path: "/metrics"
+    labels:
+      logging-forward: enabled
+    tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+    runner:
+      name: ome-container
+      image: docker.io/vllm/vllm-openai:v0.20.0
+      ports:
+        - containerPort: 8080
+          name: http1
+          protocol: TCP
+      command:
+        - vllm
+        - serve
+      args:
+        - $(MODEL_PATH)
+        - --port
+        - "8080"
+        - --served-model-name
+        - vllm-model
+        - --tensor-parallel-size
+        - "1"
+        - --max-model-len
+        - "32768"
+        - --gpu-memory-utilization
+        - "0.9"
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
+        limits:
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
+
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 90
+        timeoutSeconds: 60
+
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 60
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30

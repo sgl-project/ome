@@ -6,6 +6,8 @@ metadata:
 spec:
   model:
     name: qwen3-32b
+  runtime:
+    name: vllm-qwen3-32b
   engine:
     minReplicas: 1
     maxReplicas: 1

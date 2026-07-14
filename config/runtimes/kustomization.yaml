@@ -52,3 +52,6 @@ resources:
 - vllm/mixtral-8x7b-instruct-rt.yaml
 - vllm/deepseek-ai/deepseek-v4-flash-rt.yaml
 - vllm/deepseek-ai/deepseek-v4-pro-rt.yaml
+- vllm/qwen3-8b-rt.yaml
+- vllm/qwen3-32b-rt.yaml
+- vllm/qwen3-embedding-8b-rt.yaml
