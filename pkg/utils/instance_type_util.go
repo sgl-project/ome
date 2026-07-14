@@ -27,6 +27,7 @@ var defaultInstanceTypeMap = map[string]string{
 	"BM.GPU.H200.8":    "H200",
 	"BM.GPU.H200-NC.8": "H200",
 	"BM.GPU.B200.8":    "B200",
+	"BM.GPU.B300.8":    "B300",
 
 	// AWS instance types
 	"p5.48xlarge": "H100",
