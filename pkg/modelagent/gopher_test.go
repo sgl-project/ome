@@ -1064,6 +1064,8 @@ func TestDemoteToNormalPriorityClassifiesValidationBeforeEnqueue(t *testing.T) {
 	storageURI := "oci://n/object-ns/b/model-bucket/o/models/already-downloaded"
 	modelPath := filepath.Join(t.TempDir(), "already-downloaded")
 	require.NoError(t, os.MkdirAll(modelPath, 0755))
+	missingStorageURI := "oci://n/object-ns/b/model-bucket/o/models/missing-artifact"
+	missingModelPath := filepath.Join(t.TempDir(), "missing-artifact")
 	alreadyDownloaded := &v1beta1.BaseModel{
 		ObjectMeta: metav1.ObjectMeta{Name: "already-downloaded", Namespace: "service-ns", UID: "already-downloaded-uid"},
 		Spec: v1beta1.BaseModelSpec{
@@ -1073,7 +1075,7 @@ func TestDemoteToNormalPriorityClassifiesValidationBeforeEnqueue(t *testing.T) {
 	missingArtifact := &v1beta1.BaseModel{
 		ObjectMeta: metav1.ObjectMeta{Name: "missing-artifact", Namespace: "service-ns", UID: "missing-artifact-uid"},
 		Spec: v1beta1.BaseModelSpec{
-			Storage: &v1beta1.StorageSpec{StorageUri: &storageURI, Path: &modelPath},
+			Storage: &v1beta1.StorageSpec{StorageUri: &missingStorageURI, Path: &missingModelPath},
 		},
 	}
 	g := &Gopher{
@@ -1082,6 +1084,8 @@ func TestDemoteToNormalPriorityClassifiesValidationBeforeEnqueue(t *testing.T) {
 		startupReadyModelKeys: map[string]struct{}{getModelID(alreadyDownloaded, nil): {}},
 		modelRootDir:          t.TempDir(),
 	}
+	_, err := os.Stat(missingModelPath)
+	require.True(t, os.IsNotExist(err))
 
 	g.demoteToNormalPriority(&GopherTask{TaskType: Download, BaseModel: alreadyDownloaded})
 	g.demoteToNormalPriority(&GopherTask{TaskType: Download, BaseModel: missingArtifact})
@@ -1140,6 +1144,38 @@ func TestCaptureStartupReadyModelsCapturesOnlyReadyEntries(t *testing.T) {
 	assert.Contains(t, g.startupReadyModelKeys, readyKey)
 	assert.NotContains(t, g.startupReadyModelKeys, updatingKey)
 	assert.NotContains(t, g.startupReadyModelKeys, "invalid")
+}
+
+func TestCaptureStartupReadyModelsFeedsValidationClassification(t *testing.T) {
+	storageURI := "oci://n/object-ns/b/model-bucket/o/models/ready-model"
+	modelPath := filepath.Join(t.TempDir(), "ready-model")
+	require.NoError(t, os.MkdirAll(modelPath, 0755))
+	readyModel := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "ready-model", Namespace: "service-ns", UID: "ready-model-uid"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: &storageURI, Path: &modelPath},
+		},
+	}
+	updatingModel := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "updating-model", Namespace: "service-ns", UID: "updating-model-uid"},
+	}
+	g := newGopherForProcessTask(makeConfigMap("node-1", map[string]string{
+		constants.GetModelConfigMapKey(readyModel.Namespace, readyModel.Name, false):       modelEntryJSON(ModelStatusReady),
+		constants.GetModelConfigMapKey(updatingModel.Namespace, updatingModel.Name, false): modelEntryJSON(ModelStatusUpdating),
+	}))
+	g.taskQueue = newGopherTaskQueue()
+
+	g.captureStartupReadyModels(context.Background())
+	g.enqueueTask(&GopherTask{TaskType: Download, BaseModel: readyModel})
+
+	task, ok := g.taskQueue.popNormal()
+	require.True(t, ok)
+	assert.Equal(t, readyModel.Name, task.BaseModel.Name)
+	assert.True(t, task.NormalPriorityOnly)
+	assert.True(t, task.NormalValidationOnly)
+	assert.Contains(t, g.startupReadyModelKeys, getModelID(readyModel, nil))
+	assert.NotContains(t, g.startupReadyModelKeys, getModelID(updatingModel, nil))
+	assert.Equal(t, 0, g.taskQueue.len())
 }
 
 func TestGopherEnqueueDeleteCancelsActiveDownload(t *testing.T) {
