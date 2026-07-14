@@ -1,18 +1,18 @@
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
-  name: gpt-oss-20b
+  name: gpt-oss-120b
   namespace: openai-test
   annotations:
     ome.io/deploymentMode: RawDeployment
 spec:
   model:
-    name: gpt-oss-20b
+    name: gpt-oss-120b
   engine:
     minReplicas: 1
     maxReplicas: 1
   runtime:
-    name: vllm-gpt-oss-20b-imported
+    name: vllm-gpt-oss-120b-imported
   router:
     minReplicas: 1
     maxReplicas: 1
