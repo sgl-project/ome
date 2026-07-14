@@ -61,13 +61,16 @@ func runAgentCommand(cmd *cobra.Command, module AgentModule, action func() error
 			fx.Hook{
 				OnStart: func(context.Context) error {
 					go func() {
-						if err := action(); err != nil {
-							l.Error(module.Name()+" encountered an error during execution", zap.Error(err))
-							os.Exit(1)
-						}
-						if err := sh.Shutdown(); err != nil {
-							l.Error("Failed to shutdown "+module.Name(), zap.Error(err))
-						}
+				if err := action(); err != nil {
+					l.Error(module.Name()+" encountered an error during execution", zap.Error(err))
+					if err := sh.Shutdown(fx.ExitCode(1)); err != nil {
+						l.Error("Failed to shutdown "+module.Name(), zap.Error(err))
+					}
+					return
+				}
+				if err := sh.Shutdown(); err != nil {
+					l.Error("Failed to shutdown "+module.Name(), zap.Error(err))
+				}
 					}()
 					return nil
 				},
@@ -79,8 +82,7 @@ func runAgentCommand(cmd *cobra.Command, module AgentModule, action func() error
 
 	app := fx.New(fx.Options(options...))
 	app.Run()
-	err := app.Stop(context.Background())
-	if err != nil {
-		return
+	if err := app.Stop(context.Background()); err != nil {
+		cmd.PrintErrln("Error during shutdown:", err)
 	}
 }
