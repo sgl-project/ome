@@ -46,7 +46,7 @@ type GopherTask struct {
 	TensorRTLLMShapeFilter *TensorRTLLMShapeFilter
 	SamePathWaitStartedAt  time.Time
 	NormalPriorityOnly     bool
-	NormalValidationOnly   bool
+	RevalidationReplay     bool
 }
 
 type activeDownload struct {
@@ -85,8 +85,9 @@ type Gopher struct {
 const (
 	BigFileSizeInMB = 200
 
-	defaultSamePathWaitDelay   = 30 * time.Second
-	defaultSamePathWaitTimeout = 30 * time.Minute
+	defaultSamePathWaitDelay           = 30 * time.Second
+	defaultSamePathWaitTimeout         = 30 * time.Minute
+	defaultStartupReadySnapshotTimeout = 5 * time.Second
 )
 
 func NewGopher(
@@ -136,7 +137,9 @@ func NewGopher(
 }
 
 func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int, numHighPriorityWorker int) {
-	s.captureStartupReadyModels(context.Background())
+	startupSnapshotCtx, cancelStartupSnapshot := context.WithTimeout(context.Background(), defaultStartupReadySnapshotTimeout)
+	defer cancelStartupSnapshot()
+	s.captureStartupReadyModels(startupSnapshotCtx)
 
 	// Start the ConfigMap reconciliation service
 	s.configMapReconciler.StartReconciliation()
@@ -198,7 +201,7 @@ func (s *Gopher) enqueueTask(task *GopherTask) {
 	if task.TaskType == Delete {
 		s.cancelActiveDownload(task)
 	} else {
-		s.markValidationOnlyIfStartupReady(task)
+		s.classifyStartupRevalidation(task)
 	}
 	s.taskQueue.enqueue(task)
 }
@@ -215,9 +218,6 @@ func (s *Gopher) runWorker() {
 		}
 		if task.TaskType == Delete {
 			s.cancelActiveDownload(task)
-		}
-		if s.deferStartupReadyValidationIfLocalPathExists(task) {
-			continue
 		}
 		err := s.processTask(task)
 		if err != nil {
@@ -689,29 +689,20 @@ func (s *Gopher) demoteToNormalPriority(task *GopherTask) {
 		return
 	}
 	task.NormalPriorityOnly = true
-	s.markValidationOnlyIfStartupReady(task)
+	s.classifyStartupRevalidation(task)
 	s.logger.Infof("Demoting %s to normal priority for fallback download/validation", getModelInfoForLogging(task))
 	s.enqueueTask(task)
 }
 
-func (s *Gopher) deferStartupReadyValidationIfLocalPathExists(task *GopherTask) bool {
-	if s.markValidationOnlyIfStartupReady(task) {
-		s.logger.Infof("Deferring MD5 validation for %s behind normal download work", getModelInfoForLogging(task))
-		s.enqueueTask(task)
-		return true
-	}
-	return false
-}
-
-func (s *Gopher) markValidationOnlyIfStartupReady(task *GopherTask) bool {
-	if task == nil || task.NormalValidationOnly || task.TaskType != Download {
+func (s *Gopher) classifyStartupRevalidation(task *GopherTask) bool {
+	if task == nil || task.RevalidationReplay || task.TaskType != Download {
 		return false
 	}
-	if !s.wasReadyAtStartupWithLocalPath(task) {
+	if !s.isStartupRevalidation(task) {
 		return false
 	}
 	task.NormalPriorityOnly = true
-	task.NormalValidationOnly = true
+	task.RevalidationReplay = true
 	return true
 }
 
@@ -721,6 +712,11 @@ func (s *Gopher) captureStartupReadyModels(ctx context.Context) {
 	}
 	configMap, err := s.configMapReconciler.getConfigMap(ctx)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			s.logger.Infof("No startup Ready model snapshot because node ConfigMap does not exist yet")
+			s.startupReadyModelKeys = map[string]struct{}{}
+			return
+		}
 		s.logger.Warnf("Cannot capture startup Ready model snapshot: %v", err)
 		s.startupReadyModelKeys = map[string]struct{}{}
 		return
@@ -735,7 +731,7 @@ func (s *Gopher) captureStartupReadyModels(ctx context.Context) {
 	s.logger.Infof("Captured %d Ready models from startup ConfigMap snapshot", len(readyModelKeys))
 }
 
-func (s *Gopher) wasReadyAtStartupWithLocalPath(task *GopherTask) bool {
+func (s *Gopher) isStartupRevalidation(task *GopherTask) bool {
 	if len(s.startupReadyModelKeys) == 0 {
 		return false
 	}
@@ -752,7 +748,7 @@ func (s *Gopher) wasReadyAtStartupWithLocalPath(task *GopherTask) bool {
 	} else {
 		return false
 	}
-	if baseModelSpec.Storage == nil || baseModelSpec.Storage.StorageUri == nil || baseModelSpec.Storage.Path == nil {
+	if baseModelSpec.Storage == nil || baseModelSpec.Storage.StorageUri == nil || baseModelSpec.Storage.Path == nil || *baseModelSpec.Storage.Path == "" {
 		return false
 	}
 	storageType, err := storage.GetStorageType(*baseModelSpec.Storage.StorageUri)

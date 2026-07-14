@@ -712,6 +712,10 @@ Returns:
 func (c *ConfigMapReconciler) getConfigMap(ctx context.Context) (*corev1.ConfigMap, error) {
 	existingConfigMap, err := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Get(ctx, c.nodeName, metav1.GetOptions{})
 	if err != nil {
+		if errors.IsNotFound(err) {
+			c.logger.Infof("Node %s configmap does not exist yet", c.nodeName)
+			return nil, err
+		}
 		c.logger.Errorf("Failed retrieve node %s configmap: %v", c.nodeName, err)
 		return nil, err
 	}

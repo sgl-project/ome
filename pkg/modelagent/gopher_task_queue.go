@@ -8,12 +8,12 @@ import (
 )
 
 type gopherTaskQueue struct {
-	mutex            sync.Mutex
-	cond             *sync.Cond
-	high             []*GopherTask
-	normalDownload   []*GopherTask
-	normalValidation []*GopherTask
-	closed           bool
+	mutex              sync.Mutex
+	cond               *sync.Cond
+	high               []*GopherTask
+	normalDownload     []*GopherTask
+	normalRevalidation []*GopherTask
+	closed             bool
 }
 
 func newGopherTaskQueue() *gopherTaskQueue {
@@ -36,12 +36,12 @@ func (q *gopherTaskQueue) enqueue(task *GopherTask) {
 		// reuse-wait tasks, so it is the only non-FIFO insertion.
 		q.high = removeSupersededTasks(q.high, task)
 		q.normalDownload = removeSupersededTasks(q.normalDownload, task)
-		q.normalValidation = removeSupersededTasks(q.normalValidation, task)
+		q.normalRevalidation = removeSupersededTasks(q.normalRevalidation, task)
 		q.high = append([]*GopherTask{task}, q.high...)
 	} else if shouldUseHighPriorityQueue(task) {
 		q.high = append(q.high, task)
-	} else if task.NormalValidationOnly {
-		q.normalValidation = append(q.normalValidation, task)
+	} else if task.RevalidationReplay {
+		q.normalRevalidation = append(q.normalRevalidation, task)
 	} else {
 		q.normalDownload = append(q.normalDownload, task)
 	}
@@ -51,7 +51,7 @@ func (q *gopherTaskQueue) enqueue(task *GopherTask) {
 func (q *gopherTaskQueue) popNormal() (*GopherTask, bool) {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
-	for len(q.normalDownload) == 0 && len(q.normalValidation) == 0 && !q.closed {
+	for len(q.normalDownload) == 0 && len(q.normalRevalidation) == 0 && !q.closed {
 		q.cond.Wait()
 	}
 	if len(q.normalDownload) > 0 {
@@ -59,9 +59,9 @@ func (q *gopherTaskQueue) popNormal() (*GopherTask, bool) {
 		q.normalDownload = q.normalDownload[1:]
 		return task, true
 	}
-	if len(q.normalValidation) > 0 {
-		task := q.normalValidation[0]
-		q.normalValidation = q.normalValidation[1:]
+	if len(q.normalRevalidation) > 0 {
+		task := q.normalRevalidation[0]
+		q.normalRevalidation = q.normalRevalidation[1:]
 		return task, true
 	}
 	return nil, false
@@ -91,7 +91,7 @@ func (q *gopherTaskQueue) close() {
 func (q *gopherTaskQueue) len() int {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
-	return len(q.high) + len(q.normalDownload) + len(q.normalValidation)
+	return len(q.high) + len(q.normalDownload) + len(q.normalRevalidation)
 }
 
 func shouldUseHighPriorityQueue(task *GopherTask) bool {
@@ -99,7 +99,7 @@ func shouldUseHighPriorityQueue(task *GopherTask) bool {
 }
 
 func isObjectStorageDownloadTask(task *GopherTask) bool {
-	if task == nil || task.TaskType != Download || task.NormalPriorityOnly || task.NormalValidationOnly {
+	if task == nil || task.TaskType != Download || task.NormalPriorityOnly || task.RevalidationReplay {
 		return false
 	}
 	var storageSpec *v1beta1.StorageSpec

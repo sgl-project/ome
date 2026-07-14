@@ -103,12 +103,12 @@ func TestGopherTaskQueueKeepsDownloadOverrideNormal(t *testing.T) {
 	assert.Equal(t, "oci-model", queued.BaseModel.Name)
 }
 
-func TestGopherTaskQueuePrioritizesNormalDownloadBeforeValidation(t *testing.T) {
+func TestGopherTaskQueuePrioritizesNormalDownloadBeforeRevalidationReplay(t *testing.T) {
 	queue := newGopherTaskQueue()
 	validation := &GopherTask{
-		TaskType:             Download,
-		NormalPriorityOnly:   true,
-		NormalValidationOnly: true,
+		TaskType:           Download,
+		NormalPriorityOnly: true,
+		RevalidationReplay: true,
 		BaseModel: &v1beta1.BaseModel{
 			ObjectMeta: metav1.ObjectMeta{Name: "validation", Namespace: "service-ns", UID: "validation-uid"},
 		},
@@ -232,17 +232,17 @@ func TestGopherTaskQueueDemotedSamePathWaitUsesNormalQueue(t *testing.T) {
 	assert.Equal(t, "demoted", task.BaseModel.Name)
 }
 
-func TestGopherTaskQueueDeleteSupersedesPendingValidationForSameModel(t *testing.T) {
+func TestGopherTaskQueueDeleteSupersedesPendingRevalidationReplayForSameModel(t *testing.T) {
 	queue := newGopherTaskQueue()
 	model := &v1beta1.BaseModel{
 		ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "service-ns", UID: "model-uid"},
 	}
 
 	queue.enqueue(&GopherTask{
-		TaskType:             Download,
-		BaseModel:            model,
-		NormalPriorityOnly:   true,
-		NormalValidationOnly: true,
+		TaskType:           Download,
+		BaseModel:          model,
+		NormalPriorityOnly: true,
+		RevalidationReplay: true,
 	})
 	queue.enqueue(&GopherTask{TaskType: Delete, BaseModel: model})
 
