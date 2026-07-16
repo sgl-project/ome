@@ -230,6 +230,42 @@ func TestGenericMultimodalFallback_TextConfig(t *testing.T) {
 	}
 }
 
+// TestGenericMultimodalFallback_TextConfigModelMaxLength covers a
+// multimodal model whose only context-length signal is a nested
+// text_config.model_max_length (no top-level context field and no
+// nested max_position_embeddings). probeNestedConfig must merge it up
+// so GetContextLength's model_max_length cascade slot resolves.
+func TestGenericMultimodalFallback_TextConfigModelMaxLength(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.json")
+
+	configJSON := `{
+		"architectures": ["InklingMMModel"],
+		"model_type": "inkling_mm_model",
+		"text_config": {
+			"model_max_length": 1048576,
+			"hidden_size": 6144,
+			"num_hidden_layers": 66,
+			"num_attention_heads": 64,
+			"vocab_size": 201024,
+			"torch_dtype": "bfloat16"
+		}
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configJSON), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	config, err := LoadModelConfig(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if config.GetContextLength() != 1048576 {
+		t.Errorf("Expected context length 1048576 from nested text_config.model_max_length, got %d", config.GetContextLength())
+	}
+}
+
 func TestGenericMultimodalFallback_LanguageConfig(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.json")

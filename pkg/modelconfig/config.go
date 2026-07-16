@@ -131,6 +131,7 @@ type nestedLLMConfig struct {
 	NumAttentionHeads     int      `json:"num_attention_heads"`
 	IntermediateSize      int      `json:"intermediate_size"`
 	MaxPositionEmbeddings int      `json:"max_position_embeddings"`
+	ModelMaxLength        int      `json:"model_max_length"`
 	VocabSize             int      `json:"vocab_size"`
 	TransformersVersion   string   `json:"transformers_version"`
 	TorchDtype            string   `json:"torch_dtype"`
@@ -198,6 +199,9 @@ func mergeNestedIntoConfig(config *GenericModelConfig, nested *nestedLLMConfig) 
 	}
 	if config.MaxPositionEmbeddings == 0 {
 		config.MaxPositionEmbeddings = nested.MaxPositionEmbeddings
+	}
+	if config.ModelMaxLength == 0 {
+		config.ModelMaxLength = nested.ModelMaxLength
 	}
 	if config.VocabSize == 0 {
 		config.VocabSize = nested.VocabSize

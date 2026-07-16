@@ -284,6 +284,7 @@ Standardized capabilities (preferred):
 | `VIDEO_TEXT_TO_AUDIO`  | Video plus text input to audio output                   |
 | `AUDIO_TO_TEXT`        | Audio input to text output (e.g., transcription)        |
 | `AUDIO_TO_AUDIO`       | Audio input to audio output                             |
+| `AUDIO_TEXT_TO_TEXT`   | Audio plus text input to text output                    |
 | `AUDIO_TRANSLATION`    | Translates audio from one language to another           |
 
 ### API Capabilities
