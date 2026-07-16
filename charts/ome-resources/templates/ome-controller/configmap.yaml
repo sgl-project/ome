@@ -1,3 +1,5 @@
+{{- /* enigma init container's INSTANCE_TYPE_MAP env: single source in values.yaml (modelAgent.instanceTypeMap) via the ome.instanceTypeMap helper. */ -}}
+{{- $instanceTypeMap := include "ome.instanceTypeMap" . -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -56,7 +58,7 @@ data:
         "authType" : "{{ .Values.ome.omeAgent.authType }}",
         "vaultId": "{{ .Values.ome.omeAgent.vaultId }}",
         "region": "{{ .Values.ome.omeAgent.region }}",
-        "extraEnvVars": {{ toJson .Values.ome.omeAgent.modelInit.extraEnvVars }},
+        "extraEnvVars": {{ concat (.Values.ome.omeAgent.modelInit.extraEnvVars | default list) (list (dict "name" "INSTANCE_TYPE_MAP" "value" $instanceTypeMap)) | toJson }},
         "extraVolumeMounts": {{ toJson .Values.ome.omeAgent.modelInit.extraVolumeMounts }}
     }
   servingSidecar: |-

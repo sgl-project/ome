@@ -16,3 +16,13 @@ Parameters:
 {{- printf "%s:%s" $repo $tag -}}
 {{- end }}
 {{- end }}
+
+{{/*
+Instance-type -> short-name map as a compact JSON string.
+Single source of truth (.Values.modelAgent.instanceTypeMap) rendered into both
+the model-agent ConfigMap (instance-type-map key) and the enigma init
+container's INSTANCE_TYPE_MAP env var (ome-controller/configmap.yaml).
+*/}}
+{{- define "ome.instanceTypeMap" -}}
+{{- .Values.modelAgent.instanceTypeMap | toJson -}}
+{{- end }}
