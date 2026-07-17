@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-qwen-3-32b
+  name: vllm-qwen-sea-lion-v4-32b-it
 spec:
   disabled: false
   routerConfig:
@@ -122,9 +122,11 @@ spec:
         - --served-model-name=vllm-model
         - --tensor-parallel-size=2
         - --gpu-memory-utilization=0.9
-        - --max-model-len=32768
+        - --max-model-len=40960
         - --reasoning-parser=qwen3
+        - '--default-chat-template-kwargs={"enable_thinking":false}'
         - --enable-auto-tool-choice
+        - --exclude-tools-when-tool-choice-none
         - --tool-call-parser=hermes
       env:
         - name: VLLM_LOGGING_LEVEL
