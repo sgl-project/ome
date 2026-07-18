@@ -39,10 +39,10 @@ COPY pkg/ pkg/
 
 # Build the XET library first.
 # Cache the cargo registry and git checkouts across builds so crates and the
-# huggingface/xet-core git deps aren't re-downloaded on every rebuild — faster
-# and resilient to transient network failures (e.g. curl [18] partial file).
-RUN --mount=type=cache,target=/root/.cargo/registry \
-    --mount=type=cache,target=/root/.cargo/git \
+# huggingface/xet-core git deps aren't re-downloaded on every rebuild. Lock the
+# caches because the amd64 and arm64 build stages run concurrently.
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     cd pkg/xet && make build
 
 # Verify static library exists and remove dynamic library to force static linking
