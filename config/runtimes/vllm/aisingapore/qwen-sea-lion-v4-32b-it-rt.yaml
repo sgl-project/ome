@@ -13,7 +13,7 @@ spec:
       logging-forward: enabled
     runner:
       name: router
-      image: docker.io/lightseekorg/smg:1.4.1
+      image: docker.io/lightseekorg/smg:1.7.0
       ports:
         - containerPort: 8080
           name: http
@@ -107,7 +107,7 @@ spec:
           medium: Memory
     runner:
       name: ome-container
-      image: docker.io/vllm/vllm-openai:v0.23.0-cu129
+      image: docker.io/vllm/vllm-openai:v0.24.0-cu129
       ports:
         - containerPort: 8080
           name: http1
