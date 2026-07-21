@@ -103,6 +103,35 @@ func TestGopherTaskQueueKeepsDownloadOverrideNormal(t *testing.T) {
 	assert.Equal(t, "oci-model", queued.BaseModel.Name)
 }
 
+func TestGopherTaskQueuePrioritizesNormalDownloadBeforeRevalidationReplay(t *testing.T) {
+	queue := newGopherTaskQueue()
+	validation := &GopherTask{
+		TaskType:           Download,
+		NormalPriorityOnly: true,
+		RevalidationReplay: true,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{Name: "validation", Namespace: "service-ns", UID: "validation-uid"},
+		},
+	}
+	download := &GopherTask{
+		TaskType:           Download,
+		NormalPriorityOnly: true,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{Name: "download", Namespace: "service-ns", UID: "download-uid"},
+		},
+	}
+
+	queue.enqueue(validation)
+	queue.enqueue(download)
+
+	task, ok := queue.popNormal()
+	require.True(t, ok)
+	assert.Equal(t, "download", task.BaseModel.Name)
+	task, ok = queue.popNormal()
+	require.True(t, ok)
+	assert.Equal(t, "validation", task.BaseModel.Name)
+}
+
 func TestGopherTaskQueueDeleteSupersedesPendingDownloadsForSameModel(t *testing.T) {
 	queue := newGopherTaskQueue()
 	model := &v1beta1.BaseModel{
@@ -201,6 +230,26 @@ func TestGopherTaskQueueDemotedSamePathWaitUsesNormalQueue(t *testing.T) {
 	task, ok = queue.popNormal()
 	require.True(t, ok)
 	assert.Equal(t, "demoted", task.BaseModel.Name)
+}
+
+func TestGopherTaskQueueDeleteSupersedesPendingRevalidationReplayForSameModel(t *testing.T) {
+	queue := newGopherTaskQueue()
+	model := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "service-ns", UID: "model-uid"},
+	}
+
+	queue.enqueue(&GopherTask{
+		TaskType:           Download,
+		BaseModel:          model,
+		NormalPriorityOnly: true,
+		RevalidationReplay: true,
+	})
+	queue.enqueue(&GopherTask{TaskType: Delete, BaseModel: model})
+
+	task, ok := queue.popHighPriority()
+	require.True(t, ok)
+	assert.Equal(t, Delete, task.TaskType)
+	assert.Equal(t, 0, queue.len())
 }
 
 func TestGopherTaskQueueEnqueueWakesMatchingBlockedWorker(t *testing.T) {

@@ -45,6 +45,7 @@ type GopherTask struct {
 	TensorRTLLMShapeFilter *TensorRTLLMShapeFilter
 	SamePathWaitStartedAt  time.Time
 	NormalPriorityOnly     bool
+	RevalidationReplay     bool
 }
 
 type activeDownload struct {
@@ -76,13 +77,16 @@ type Gopher struct {
 	taskQueue           *gopherTaskQueue
 	samePathWaitDelay   time.Duration
 	samePathWaitTimeout time.Duration
+
+	startupReadyModelKeys map[string]struct{}
 }
 
 const (
 	BigFileSizeInMB = 200
 
-	defaultSamePathWaitDelay   = 30 * time.Second
-	defaultSamePathWaitTimeout = 30 * time.Minute
+	defaultSamePathWaitDelay           = 30 * time.Second
+	defaultSamePathWaitTimeout         = 30 * time.Minute
+	defaultStartupReadySnapshotTimeout = 5 * time.Second
 )
 
 func NewGopher(
@@ -132,6 +136,10 @@ func NewGopher(
 }
 
 func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int, numHighPriorityWorker int) {
+	startupSnapshotCtx, cancelStartupSnapshot := context.WithTimeout(context.Background(), defaultStartupReadySnapshotTimeout)
+	defer cancelStartupSnapshot()
+	s.captureStartupReadyModels(startupSnapshotCtx)
+
 	// Start the ConfigMap reconciliation service
 	s.configMapReconciler.StartReconciliation()
 	s.logger.Info("Started ConfigMap reconciliation service")
@@ -191,6 +199,8 @@ func (s *Gopher) enqueueTask(task *GopherTask) {
 	}
 	if task.TaskType == Delete {
 		s.cancelActiveDownload(task)
+	} else {
+		s.classifyStartupRevalidation(task)
 	}
 	s.taskQueue.enqueue(task)
 }
@@ -678,8 +688,76 @@ func (s *Gopher) demoteToNormalPriority(task *GopherTask) {
 		return
 	}
 	task.NormalPriorityOnly = true
+	s.classifyStartupRevalidation(task)
 	s.logger.Infof("Demoting %s to normal priority for fallback download/validation", getModelInfoForLogging(task))
 	s.enqueueTask(task)
+}
+
+func (s *Gopher) classifyStartupRevalidation(task *GopherTask) bool {
+	if task == nil || task.RevalidationReplay || task.TaskType != Download {
+		return false
+	}
+	if !s.isStartupRevalidation(task) {
+		return false
+	}
+	task.NormalPriorityOnly = true
+	task.RevalidationReplay = true
+	return true
+}
+
+func (s *Gopher) captureStartupReadyModels(ctx context.Context) {
+	if s.configMapReconciler == nil {
+		return
+	}
+	configMap, err := s.configMapReconciler.getConfigMap(ctx)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			s.logger.Infof("No startup Ready model snapshot because node ConfigMap does not exist yet")
+			s.startupReadyModelKeys = map[string]struct{}{}
+			return
+		}
+		s.logger.Warnf("Cannot capture startup Ready model snapshot: %v", err)
+		s.startupReadyModelKeys = map[string]struct{}{}
+		return
+	}
+	readyModelKeys := make(map[string]struct{})
+	for key, data := range configMap.Data {
+		if hasModelEntryStatus(data, ModelStatusReady) {
+			readyModelKeys[key] = struct{}{}
+		}
+	}
+	s.startupReadyModelKeys = readyModelKeys
+	s.logger.Infof("Captured %d Ready models from startup ConfigMap snapshot", len(readyModelKeys))
+}
+
+func (s *Gopher) isStartupRevalidation(task *GopherTask) bool {
+	if len(s.startupReadyModelKeys) == 0 {
+		return false
+	}
+	modelKey := getModelID(task.BaseModel, task.ClusterBaseModel)
+	if _, wasReady := s.startupReadyModelKeys[modelKey]; !wasReady {
+		return false
+	}
+
+	var baseModelSpec v1beta1.BaseModelSpec
+	if task.BaseModel != nil {
+		baseModelSpec = task.BaseModel.Spec
+	} else if task.ClusterBaseModel != nil {
+		baseModelSpec = task.ClusterBaseModel.Spec
+	} else {
+		return false
+	}
+	if baseModelSpec.Storage == nil || baseModelSpec.Storage.StorageUri == nil || baseModelSpec.Storage.Path == nil || *baseModelSpec.Storage.Path == "" {
+		return false
+	}
+	storageType, err := storage.GetStorageType(*baseModelSpec.Storage.StorageUri)
+	if err != nil || storageType != storage.StorageTypeOCI {
+		return false
+	}
+
+	destPath := getDestPath(&baseModelSpec, s.modelRootDir)
+	fileInfo, err := os.Stat(destPath)
+	return err == nil && fileInfo.IsDir()
 }
 
 func shouldUseSamePathObjectStorageReuse(task *GopherTask) bool {
@@ -1100,6 +1178,21 @@ func sameModelStoragePath(currentStorage *v1beta1.StorageSpec, candidateStorage 
 	return getDestPath(&candidateSpec, modelRootDir) == destPath
 }
 
+func filterObjectStorageObjectsForTask(objects []objectstorage.ObjectSummary, task *GopherTask) []objectstorage.ObjectSummary {
+	if task == nil || task.TensorRTLLMShapeFilter == nil ||
+		!task.TensorRTLLMShapeFilter.IsTensorrtLLMModel ||
+		task.TensorRTLLMShapeFilter.ModelType != string(constants.ServingBaseModel) {
+		return objects
+	}
+	shapeFilteredObjects := make([]objectstorage.ObjectSummary, 0)
+	for _, object := range objects {
+		if object.Name != nil && strings.Contains(*object.Name, fmt.Sprintf("/%s/", task.TensorRTLLMShapeFilter.ShapeAlias)) {
+			shapeFilteredObjects = append(shapeFilteredObjects, object)
+		}
+	}
+	return shapeFilteredObjects
+}
+
 func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectURI, destPath string, task *GopherTask) error {
 	startTime := time.Now()
 	defer func() {
@@ -1145,15 +1238,7 @@ func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectUR
 	// Shape filtering for TensorRTLLM
 	if task.TensorRTLLMShapeFilter != nil && task.TensorRTLLMShapeFilter.IsTensorrtLLMModel && task.TensorRTLLMShapeFilter.ModelType == string(constants.ServingBaseModel) {
 		s.logger.Infof("TensorRTLLM Serving model detected. Start filtering model files that doesn't belong to the node shape %s in model bucket folder", task.TensorRTLLMShapeFilter.ShapeAlias)
-		shapeFilteredObjects := make([]objectstorage.ObjectSummary, 0)
-		for _, object := range objects {
-			if object.Name != nil {
-				if strings.Contains(*object.Name, fmt.Sprintf("/%s/", task.TensorRTLLMShapeFilter.ShapeAlias)) {
-					shapeFilteredObjects = append(shapeFilteredObjects, object)
-				}
-			}
-		}
-		objects = shapeFilteredObjects
+		objects = filterObjectStorageObjectsForTask(objects, task)
 
 		if len(objects) == 0 {
 			return fmt.Errorf("no suitable objects found for shape %s", task.TensorRTLLMShapeFilter.ShapeAlias)

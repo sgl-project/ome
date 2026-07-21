@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1058,6 +1060,168 @@ func TestProcessTaskWithOptions_HighPriorityDemotesFallbackDownload(t *testing.T
 	assert.Equal(t, model.Name, queued.BaseModel.Name)
 	assert.True(t, queued.NormalPriorityOnly)
 	assert.Equal(t, 0, g.taskQueue.len())
+}
+
+func TestDemoteToNormalPriorityClassifiesRevalidationBeforeEnqueue(t *testing.T) {
+	storageURI := "oci://n/object-ns/b/model-bucket/o/models/already-downloaded"
+	modelPath := filepath.Join(t.TempDir(), "already-downloaded")
+	require.NoError(t, os.MkdirAll(modelPath, 0755))
+	missingStorageURI := "oci://n/object-ns/b/model-bucket/o/models/missing-artifact"
+	missingModelPath := filepath.Join(t.TempDir(), "missing-artifact")
+	alreadyDownloaded := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "already-downloaded", Namespace: "service-ns", UID: "already-downloaded-uid"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: &storageURI, Path: &modelPath},
+		},
+	}
+	missingArtifact := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "missing-artifact", Namespace: "service-ns", UID: "missing-artifact-uid"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: &missingStorageURI, Path: &missingModelPath},
+		},
+	}
+	g := &Gopher{
+		taskQueue:             newGopherTaskQueue(),
+		logger:                zap.NewNop().Sugar(),
+		startupReadyModelKeys: map[string]struct{}{getModelID(alreadyDownloaded, nil): {}},
+		modelRootDir:          t.TempDir(),
+	}
+	_, err := os.Stat(missingModelPath)
+	require.True(t, os.IsNotExist(err))
+
+	g.demoteToNormalPriority(&GopherTask{TaskType: Download, BaseModel: alreadyDownloaded})
+	g.demoteToNormalPriority(&GopherTask{TaskType: Download, BaseModel: missingArtifact})
+
+	task, ok := g.taskQueue.popNormal()
+	require.True(t, ok)
+	assert.Equal(t, missingArtifact.Name, task.BaseModel.Name)
+	assert.True(t, task.NormalPriorityOnly)
+	assert.False(t, task.RevalidationReplay)
+
+	task, ok = g.taskQueue.popNormal()
+	require.True(t, ok)
+	assert.Equal(t, alreadyDownloaded.Name, task.BaseModel.Name)
+	assert.True(t, task.NormalPriorityOnly)
+	assert.True(t, task.RevalidationReplay)
+}
+
+func TestEnqueueTaskClassifiesStartupReadyLocalPathAsRevalidation(t *testing.T) {
+	storageURI := "oci://n/object-ns/b/model-bucket/o/models/ready-model"
+	modelPath := filepath.Join(t.TempDir(), "ready-model")
+	require.NoError(t, os.MkdirAll(modelPath, 0755))
+	model := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "ready-model", Namespace: "service-ns", UID: "ready-model-uid"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: &storageURI, Path: &modelPath},
+		},
+	}
+	g := &Gopher{
+		taskQueue:             newGopherTaskQueue(),
+		logger:                zap.NewNop().Sugar(),
+		startupReadyModelKeys: map[string]struct{}{getModelID(model, nil): {}},
+	}
+
+	g.enqueueTask(&GopherTask{TaskType: Download, BaseModel: model})
+
+	task, ok := g.taskQueue.popNormal()
+	require.True(t, ok)
+	assert.Equal(t, model.Name, task.BaseModel.Name)
+	assert.True(t, task.NormalPriorityOnly)
+	assert.True(t, task.RevalidationReplay)
+	assert.Equal(t, 0, g.taskQueue.len())
+}
+
+func TestCaptureStartupReadyModelsCapturesOnlyReadyEntries(t *testing.T) {
+	readyKey := constants.GetModelConfigMapKey("service-ns", "ready-model", false)
+	updatingKey := constants.GetModelConfigMapKey("service-ns", "updating-model", false)
+	cm := makeConfigMap("node-1", map[string]string{
+		readyKey:    modelEntryJSON(ModelStatusReady),
+		updatingKey: modelEntryJSON(ModelStatusUpdating),
+		"invalid":   "not-json",
+	})
+	g := newGopherForProcessTask(cm)
+
+	g.captureStartupReadyModels(context.Background())
+
+	assert.Contains(t, g.startupReadyModelKeys, readyKey)
+	assert.NotContains(t, g.startupReadyModelKeys, updatingKey)
+	assert.NotContains(t, g.startupReadyModelKeys, "invalid")
+}
+
+func TestCaptureStartupReadyModelsFeedsRevalidationClassification(t *testing.T) {
+	storageURI := "oci://n/object-ns/b/model-bucket/o/models/ready-model"
+	modelPath := filepath.Join(t.TempDir(), "ready-model")
+	require.NoError(t, os.MkdirAll(modelPath, 0755))
+	readyModel := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "ready-model", Namespace: "service-ns", UID: "ready-model-uid"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: &storageURI, Path: &modelPath},
+		},
+	}
+	updatingModel := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "updating-model", Namespace: "service-ns", UID: "updating-model-uid"},
+	}
+	g := newGopherForProcessTask(makeConfigMap("node-1", map[string]string{
+		constants.GetModelConfigMapKey(readyModel.Namespace, readyModel.Name, false):       modelEntryJSON(ModelStatusReady),
+		constants.GetModelConfigMapKey(updatingModel.Namespace, updatingModel.Name, false): modelEntryJSON(ModelStatusUpdating),
+	}))
+	g.taskQueue = newGopherTaskQueue()
+
+	g.captureStartupReadyModels(context.Background())
+	g.enqueueTask(&GopherTask{TaskType: Download, BaseModel: readyModel})
+
+	task, ok := g.taskQueue.popNormal()
+	require.True(t, ok)
+	assert.Equal(t, readyModel.Name, task.BaseModel.Name)
+	assert.True(t, task.NormalPriorityOnly)
+	assert.True(t, task.RevalidationReplay)
+	assert.Contains(t, g.startupReadyModelKeys, getModelID(readyModel, nil))
+	assert.NotContains(t, g.startupReadyModelKeys, getModelID(updatingModel, nil))
+	assert.Equal(t, 0, g.taskQueue.len())
+}
+
+func TestCaptureStartupReadyModelsTreatsMissingConfigMapAsColdStart(t *testing.T) {
+	core, recorded := observer.New(zap.DebugLevel)
+	logger := zap.New(core).Sugar()
+	cm := makeConfigMap("node-1", map[string]string{})
+	reconciler := NewConfigMapReconciler(cm.Name, cm.Namespace, k8sfake.NewSimpleClientset(), logger)
+	g := &Gopher{
+		configMapReconciler:   reconciler,
+		logger:                logger,
+		startupReadyModelKeys: map[string]struct{}{"stale-model": {}},
+	}
+
+	g.captureStartupReadyModels(context.Background())
+
+	assert.Empty(t, g.startupReadyModelKeys)
+	assert.Empty(t, recorded.FilterLevelExact(zapcore.ErrorLevel).All())
+	assert.Empty(t, recorded.FilterLevelExact(zapcore.WarnLevel).All())
+}
+
+func TestClassifyStartupRevalidationIgnoresEmptyStoragePath(t *testing.T) {
+	storageURI := "oci://n/object-ns/b/model-bucket/o/models/ready-model"
+	emptyPath := ""
+	modelRootDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(modelRootDir+"/"+storageURI, 0755))
+	model := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "ready-model", Namespace: "service-ns", UID: "ready-model-uid"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: &storageURI,
+				Path:       &emptyPath,
+			},
+		},
+	}
+	g := &Gopher{
+		logger:                zap.NewNop().Sugar(),
+		startupReadyModelKeys: map[string]struct{}{getModelID(model, nil): {}},
+		modelRootDir:          modelRootDir,
+	}
+	task := &GopherTask{TaskType: Download, BaseModel: model}
+
+	assert.False(t, g.classifyStartupRevalidation(task))
+	assert.False(t, task.NormalPriorityOnly)
+	assert.False(t, task.RevalidationReplay)
 }
 
 func TestGopherEnqueueDeleteCancelsActiveDownload(t *testing.T) {
