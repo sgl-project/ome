@@ -14,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
 
@@ -33,6 +34,7 @@ const (
 // CacheEntry represents an entry in the model cache for ConfigMap reconciliation.
 type CacheEntry struct {
 	ModelName     string         // Name of the model
+	ModelUID      types.UID      // UID of the model resource that owns this entry
 	ModelStatus   ModelStatus    // Current status of the model
 	ModelMetadata *ModelMetadata // Model metadata if available
 }
@@ -41,15 +43,16 @@ type CacheEntry struct {
 // It provides self-healing capabilities through periodic reconciliation to recover from
 // manual ConfigMap deletions or modifications without requiring agent restarts.
 type ConfigMapReconciler struct {
-	kubeClient        kubernetes.Interface   // Kubernetes client for ConfigMap CRUD operations
-	nodeName          string                 // The name of the node (used as ConfigMap name)
-	namespace         string                 // The namespace to store the ConfigMap in
-	logger            *zap.SugaredLogger     // Logger for recording operations
-	modelCache        map[string]*CacheEntry // In-memory cache of model information
-	cacheMutex        sync.RWMutex           // Mutex to protect concurrent access to the cache
-	reconcileInterval time.Duration          // Interval for periodic reconciliation
-	isReconciling     bool                   // Flag to prevent concurrent reconciliations
-	stopCh            chan struct{}          // Channel to signal reconciliation goroutine to stop
+	kubeClient        kubernetes.Interface              // Kubernetes client for ConfigMap CRUD operations
+	nodeName          string                            // The name of the node (used as ConfigMap name)
+	namespace         string                            // The namespace to store the ConfigMap in
+	logger            *zap.SugaredLogger                // Logger for recording operations
+	modelCache        map[string]*CacheEntry            // In-memory cache of model information
+	fencedModelUIDs   map[string]map[types.UID]struct{} // Model UIDs that must not be restored or updated
+	cacheMutex        sync.RWMutex                      // Mutex to protect concurrent access to the cache
+	reconcileInterval time.Duration                     // Interval for periodic reconciliation
+	isReconciling     bool                              // Flag to prevent concurrent reconciliations
+	stopCh            chan struct{}                     // Channel to signal reconciliation goroutine to stop
 }
 
 // ConfigMapStatusOp represents an operation to update model status in ConfigMap.
@@ -94,6 +97,7 @@ func NewConfigMapReconciler(nodeName string, namespace string, kubeClient kubern
 		namespace:         namespace,
 		logger:            logger,
 		modelCache:        make(map[string]*CacheEntry),
+		fencedModelUIDs:   make(map[string]map[types.UID]struct{}),
 		reconcileInterval: 5 * time.Minute, // Perform reconciliation every 5 minutes by default
 		stopCh:            make(chan struct{}),
 	}
@@ -176,16 +180,27 @@ func (c *ConfigMapReconciler) reconcileConfigMaps() {
 		return
 	}
 
-	// Check if all models in the cache are present in the ConfigMap
+	// Copy missing entries before doing API writes so deletion can update the cache concurrently.
+	type missingModel struct {
+		modelID    string
+		cacheEntry CacheEntry
+	}
+	var missingModels []missingModel
 	c.cacheMutex.RLock()
 	for modelID, cacheEntry := range c.modelCache {
-		// Check if model exists in ConfigMap
 		if _, exists := cm.Data[modelID]; !exists {
-			c.logger.Warnf("Model %s missing from ConfigMap, will restore it", modelID)
-			c.restoreModelInConfigMap(modelID, cacheEntry)
+			missingModels = append(missingModels, missingModel{
+				modelID:    modelID,
+				cacheEntry: *cacheEntry,
+			})
 		}
 	}
 	c.cacheMutex.RUnlock()
+
+	for _, missing := range missingModels {
+		c.logger.Warnf("Model %s missing from ConfigMap, will restore it", missing.modelID)
+		c.restoreModelInConfigMap(missing.modelID, &missing.cacheEntry)
+	}
 
 	c.logger.Debug("ConfigMap reconciliation completed successfully")
 }
@@ -276,6 +291,12 @@ func (c *ConfigMapReconciler) recreateConfigMap(ctx context.Context) {
 //
 // If the ConfigMap is missing entirely, this will trigger a fallback to recreateConfigMap.
 func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry *CacheEntry) {
+	// The entry may be a snapshot copied before deletion or node-local cleanup started.
+	if c.isModelRestoreBlocked(modelID, cacheEntry.ModelUID) {
+		c.logger.Debugf("Skipping stale restore for model %s", modelID)
+		return
+	}
+
 	// Construct model entry from cache data
 	modelEntry := &ModelEntry{
 		Name:   cacheEntry.ModelName,
@@ -312,7 +333,7 @@ func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry
 	cm, err := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Get(ctx, c.nodeName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// ConfigMap doesn't exist anymore, fallback to full recreation
+			// The whole ConfigMap is missing, so restore every cached model.
 			c.logger.Warn("ConfigMap not found during model restore, falling back to full recreation")
 			c.recreateConfigMap(ctx)
 			return
@@ -321,23 +342,32 @@ func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry
 		return
 	}
 
-	// Add or update the model entry - initialize Data map if nil
+	// Initialize the Data map if necessary.
 	if cm.Data == nil {
 		cm.Data = make(map[string]string)
 	}
 
-	// Add the restored model entry to the ConfigMap
+	// Restore only a missing entry; do not overwrite a concurrent writer's newer value.
+	if _, exists := cm.Data[modelID]; exists {
+		return
+	}
 	cm.Data[modelID] = string(modelEntryJSON)
 
 	// Update the ConfigMap with retry logic (3 attempts)
 	for attempts := 0; attempts < 3; attempts++ {
+		// Re-check live-cache ownership before every write so cleanup can invalidate a copied snapshot.
+		if c.isModelRestoreBlocked(modelID, cacheEntry.ModelUID) {
+			c.logger.Debugf("Skipping stale restore for model %s", modelID)
+			return
+		}
+
 		_, err = c.kubeClient.CoreV1().ConfigMaps(c.namespace).Update(ctx, cm, metav1.UpdateOptions{})
 		if err == nil {
 			// Successfully updated
 			break
 		}
 
-		// Check if we need to retry due to conflict
+		// Check if we need to retry due to a resourceVersion conflict
 		if errors.IsConflict(err) && attempts < 2 {
 			c.logger.Warnf("Conflict during model restore (attempt %d), retrying: %v", attempts+1, err)
 			// Get the latest version of the ConfigMap
@@ -346,9 +376,16 @@ func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry
 				c.logger.Errorf("Failed to get ConfigMap for conflict resolution: %v", err)
 				return
 			}
-			// Re-apply our changes to the latest version
+			if c.isModelRestoreBlocked(modelID, cacheEntry.ModelUID) {
+				c.logger.Debugf("Skipping stale restore for model %s", modelID)
+				return
+			}
 			if cm.Data == nil {
 				cm.Data = make(map[string]string)
+			}
+			// Re-apply only this model's entry if it is still missing from the latest ConfigMap.
+			if _, exists := cm.Data[modelID]; exists {
+				return
 			}
 			cm.Data[modelID] = string(modelEntryJSON)
 			continue
@@ -380,16 +417,8 @@ func (c *ConfigMapReconciler) ReconcileModelStatus(ctx context.Context, statusOp
 	modelInfo := getConfigMapModelInfo(statusOp.BaseModel, statusOp.ClusterBaseModel)
 	c.logger.Infof("Reconciling model status in ConfigMap for %s with status: %s", modelInfo, statusOp.ModelStatus)
 
-	// Get or create the ConfigMap
-	configMap, needCreate, err := c.getOrCreateConfigMap(ctx)
-	if err != nil {
-		c.logger.Errorf("Failed to get or create ConfigMap for %s: %v", modelInfo, err)
-		return err
-	}
-	c.logger.Debugf("Got ConfigMap (needCreate=%v) for %s: %+v", needCreate, modelInfo, configMap.Name)
-
 	// Update the ConfigMap with status
-	err = c.updateModelStatusInConfigMap(ctx, configMap, statusOp, needCreate)
+	err := c.updateModelStatusInConfigMap(ctx, statusOp)
 	if err != nil {
 		c.logger.Errorf("Failed to update model status in ConfigMap for %s: %v", modelInfo, err)
 		return err
@@ -397,7 +426,14 @@ func (c *ConfigMapReconciler) ReconcileModelStatus(ctx context.Context, statusOp
 
 	// Update the in-memory cache
 	modelID := getModelID(statusOp.BaseModel, statusOp.ClusterBaseModel)
+	modelUID := getModelResourceUID(statusOp.BaseModel, statusOp.ClusterBaseModel)
 	c.cacheMutex.Lock()
+	// Deletion may start after the ConfigMap mutation; do not repopulate the cache with a stale generation.
+	if !c.prepareActiveModelLocked(modelID, modelUID) {
+		c.cacheMutex.Unlock()
+		c.logger.Debugf("Skipping cache status update for model %s", modelInfo)
+		return nil
+	}
 	if c.modelCache == nil {
 		c.modelCache = make(map[string]*CacheEntry)
 	}
@@ -415,11 +451,13 @@ func (c *ConfigMapReconciler) ReconcileModelStatus(ctx context.Context, statusOp
 
 		cacheEntry = &CacheEntry{
 			ModelName:   modelName,
+			ModelUID:    modelUID,
 			ModelStatus: statusOp.ModelStatus,
 		}
 		c.modelCache[modelID] = cacheEntry
 	} else {
 		// Just update the status in existing entry
+		cacheEntry.ModelUID = modelUID
 		cacheEntry.ModelStatus = statusOp.ModelStatus
 	}
 	c.cacheMutex.Unlock()
@@ -462,21 +500,32 @@ func getModelID(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterB
 	return constants.GetModelConfigMapKey(namespace, modelName, isClusterBaseModel)
 }
 
+func getModelResourceUID(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) types.UID {
+	if baseModel != nil {
+		return baseModel.UID
+	}
+	if clusterBaseModel != nil {
+		return clusterBaseModel.UID
+	}
+	return ""
+}
+
+// isModelResourceDeleting distinguishes terminal CR deletion from node-local cleanup.
+// Node-local cleanup may later download the same CR generation onto this node again.
+func isModelResourceDeleting(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) bool {
+	if baseModel != nil {
+		return baseModel.DeletionTimestamp != nil
+	}
+	return clusterBaseModel != nil && clusterBaseModel.DeletionTimestamp != nil
+}
+
 // ReconcileModelMetadata updates the ConfigMap with model metadata
 func (c *ConfigMapReconciler) ReconcileModelMetadata(ctx context.Context, op *ConfigMapMetadataOp) error {
 	modelInfo := getConfigMapModelInfo(op.BaseModel, op.ClusterBaseModel)
 	c.logger.Infof("Reconciling model metadata in ConfigMap for %s", modelInfo)
 
-	// Get or create the ConfigMap
-	configMap, needCreate, err := c.getOrCreateConfigMap(ctx)
-	if err != nil {
-		c.logger.Errorf("Failed to get or create ConfigMap for %s: %v", modelInfo, err)
-		return err
-	}
-	c.logger.Debugf("Got ConfigMap (needCreate=%v) for %s: %+v", needCreate, modelInfo, configMap.Name)
-
 	// Update the ConfigMap with metadata
-	err = c.updateModelMetadataInConfigMap(ctx, configMap, op, needCreate)
+	err := c.updateModelMetadataInConfigMap(ctx, op)
 	if err != nil {
 		c.logger.Errorf("Failed to update model metadata in ConfigMap for %s: %v", modelInfo, err)
 		return err
@@ -484,7 +533,14 @@ func (c *ConfigMapReconciler) ReconcileModelMetadata(ctx context.Context, op *Co
 
 	// Update the in-memory cache with metadata
 	modelID := getModelID(op.BaseModel, op.ClusterBaseModel)
+	modelUID := getModelResourceUID(op.BaseModel, op.ClusterBaseModel)
 	c.cacheMutex.Lock()
+	// Deletion may start after the ConfigMap mutation; do not repopulate the cache with a stale generation.
+	if !c.prepareActiveModelLocked(modelID, modelUID) {
+		c.cacheMutex.Unlock()
+		c.logger.Debugf("Skipping cache metadata update for model %s", modelInfo)
+		return nil
+	}
 	if c.modelCache == nil {
 		c.modelCache = make(map[string]*CacheEntry)
 	}
@@ -500,11 +556,13 @@ func (c *ConfigMapReconciler) ReconcileModelMetadata(ctx context.Context, op *Co
 
 		cacheEntry = &CacheEntry{
 			ModelName:     modelName,
+			ModelUID:      modelUID,
 			ModelMetadata: &op.ModelMetadata,
 		}
 		c.modelCache[modelID] = cacheEntry
 	} else {
 		// Update the metadata
+		cacheEntry.ModelUID = modelUID
 		cacheEntry.ModelMetadata = &op.ModelMetadata
 	}
 	c.cacheMutex.Unlock()
@@ -526,18 +584,7 @@ func (c *ConfigMapReconciler) ReconcileModelMetadata(ctx context.Context, op *Co
 func (c *ConfigMapReconciler) ReconcileModelProgress(ctx context.Context, op *ConfigMapProgressOp) error {
 	modelInfo := getConfigMapModelInfo(op.BaseModel, op.ClusterBaseModel)
 
-	// Use retry logic to handle concurrent updates (optimistic locking conflicts)
-	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		// Get or create the ConfigMap (fresh on each retry)
-		configMap, needCreate, err := c.getOrCreateConfigMap(ctx)
-		if err != nil {
-			return err
-		}
-
-		// Update the ConfigMap with progress
-		return c.updateModelProgressInConfigMap(ctx, configMap, op, needCreate)
-	})
-
+	err := c.updateModelProgressInConfigMap(ctx, op)
 	if err != nil {
 		c.logger.Errorf("Failed to update model progress in ConfigMap for %s: %v", modelInfo, err)
 		return err
@@ -546,18 +593,10 @@ func (c *ConfigMapReconciler) ReconcileModelProgress(ctx context.Context, op *Co
 	return nil
 }
 
-// updateModelProgressInConfigMap updates the model progress in the ConfigMap
-func (c *ConfigMapReconciler) updateModelProgressInConfigMap(ctx context.Context, configMap *corev1.ConfigMap, op *ConfigMapProgressOp, needCreate bool) error {
-	// Get model information and key
+// updateModelProgressInConfigMap updates the model progress in the ConfigMap.
+func (c *ConfigMapReconciler) updateModelProgressInConfigMap(ctx context.Context, op *ConfigMapProgressOp) error {
 	key := c.getModelConfigMapKey(op.BaseModel, op.ClusterBaseModel)
-	modelInfo := getConfigMapModelInfo(op.BaseModel, op.ClusterBaseModel)
-
-	if configMap.Data == nil {
-		configMap.Data = make(map[string]string)
-	}
-
-	// Get the existing model entry or create a new one
-	var modelEntry ModelEntry
+	modelUID := getModelResourceUID(op.BaseModel, op.ClusterBaseModel)
 	var modelName string
 	if op.BaseModel != nil {
 		modelName = op.BaseModel.Name
@@ -565,39 +604,32 @@ func (c *ConfigMapReconciler) updateModelProgressInConfigMap(ctx context.Context
 		modelName = op.ClusterBaseModel.Name
 	}
 
-	// Check if there's already an entry for this model
-	if existingData, exists := configMap.Data[key]; exists {
-		// If entry exists, try to unmarshal it
-		if err := json.Unmarshal([]byte(existingData), &modelEntry); err != nil {
-			// If it's not in our format yet, create a new entry
-			modelEntry = ModelEntry{
-				Name:   modelName,
-				Status: ModelStatusUpdating,
-			}
-		}
-	} else {
-		// No existing entry, create a new one
-		modelEntry = ModelEntry{
+	return c.mutateModelEntryWithRetry(ctx, key, modelUID, false, func(data map[string]string) (bool, error) {
+		modelEntry := ModelEntry{
 			Name:   modelName,
 			Status: ModelStatusUpdating,
 		}
-	}
+		if existingData, exists := data[key]; exists {
+			if err := json.Unmarshal([]byte(existingData), &modelEntry); err != nil {
+				modelEntry = ModelEntry{
+					Name:   modelName,
+					Status: ModelStatusUpdating,
+				}
+			}
+		}
+		modelEntry.Progress = op.Progress
 
-	// Update the progress (can be nil to clear it)
-	modelEntry.Progress = op.Progress
-
-	// Marshal the model entry back to JSON
-	entryJSON, err := json.Marshal(modelEntry)
-	if err != nil {
-		c.logger.Errorf("Failed to marshal model entry for %s: %v", modelInfo, err)
-		return err
-	}
-
-	// Store the model entry in the ConfigMap
-	configMap.Data[key] = string(entryJSON)
-
-	c.logger.Infof("will update model progress in configmap for key %s", key)
-	return c.saveConfigMap(ctx, configMap, modelInfo, needCreate)
+		entryJSON, err := json.Marshal(modelEntry)
+		if err != nil {
+			return false, err
+		}
+		newValue := string(entryJSON)
+		if data[key] == newValue {
+			return false, nil
+		}
+		data[key] = newValue
+		return true, nil
+	})
 }
 
 // DeleteModelFromConfigMap removes a model entry from the ConfigMap
@@ -613,44 +645,28 @@ func (c *ConfigMapReconciler) DeleteModelFromConfigMap(ctx context.Context, base
 	modelInfo := getConfigMapModelInfo(baseModel, clusterBaseModel)
 	c.logger.Infof("Deleting model from ConfigMap: %s", modelInfo)
 
-	// Get ConfigMap
-	configMap, err := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Get(ctx, c.nodeName, metav1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// ConfigMap doesn't exist, nothing to delete
-			return nil
-		}
-		c.logger.Errorf("Failed to get ConfigMap for model deletion: %v", err)
-		return err
-	}
-
-	// Determine the model ID in the ConfigMap
 	modelID := c.getModelConfigMapKey(baseModel, clusterBaseModel)
-
-	// Check if model exists in ConfigMap
-	if _, exists := configMap.Data[modelID]; !exists {
-		c.logger.Infof("Model %s doesn't exist in ConfigMap, nothing to delete", modelInfo)
-		return nil
+	modelUID := getModelResourceUID(baseModel, clusterBaseModel)
+	if isModelResourceDeleting(baseModel, clusterBaseModel) {
+		// A deleting CR generation must never be restored or updated again.
+		c.fenceModelUIDAndEvictCache(modelID, modelUID)
+	} else {
+		// Node-local cleanup may be reversed by a later selector or affinity update using the same UID.
+		c.evictModelCache(modelID)
 	}
 
-	// Delete the model from ConfigMap
-	delete(configMap.Data, modelID)
-
-	// Update the ConfigMap
-	_, err = c.kubeClient.CoreV1().ConfigMaps(c.namespace).Update(ctx, configMap, metav1.UpdateOptions{})
+	// Delete must bypass any existing fence; retries still operate on the latest ConfigMap.
+	err := c.mutateModelEntryWithRetry(ctx, modelID, modelUID, true, func(data map[string]string) (bool, error) {
+		if _, exists := data[modelID]; !exists {
+			return false, nil
+		}
+		delete(data, modelID)
+		return true, nil
+	})
 	if err != nil {
 		c.logger.Errorf("Failed to update ConfigMap after model deletion: %v", err)
 		return err
 	}
-
-	// Also update our in-memory cache to remove the model
-	c.cacheMutex.Lock()
-	if c.modelCache != nil {
-		modelCacheID := getModelID(baseModel, clusterBaseModel)
-		delete(c.modelCache, modelCacheID)
-		c.logger.Debugf("Removed model %s from cache", modelInfo)
-	}
-	c.cacheMutex.Unlock()
 
 	c.logger.Infof("Successfully deleted model %s from ConfigMap and cache", modelInfo)
 	return nil
@@ -736,20 +752,136 @@ func (c *ConfigMapReconciler) getModelConfigMapKey(baseModel *v1beta1.BaseModel,
 	return constants.GetModelConfigMapKey(namespace, modelName, isClusterBaseModel)
 }
 
+type configMapMutation func(configMap *corev1.ConfigMap) (bool, error)
+
+type modelEntryMutation func(data map[string]string) (bool, error)
+
+// mutateConfigMapWithRetry applies mutate to the latest ConfigMap and retries optimistic-concurrency conflicts.
+// The mutation's bool reports whether an API write is needed; false with a nil error is a successful no-op.
+func (c *ConfigMapReconciler) mutateConfigMapWithRetry(ctx context.Context, mutate configMapMutation) error {
+	return retry.OnError(retry.DefaultRetry, func(err error) bool {
+		return errors.IsConflict(err) || errors.IsAlreadyExists(err)
+	}, func() error {
+		configMap, needCreate, err := c.getOrCreateConfigMap(ctx)
+		if err != nil {
+			return err
+		}
+
+		changed, err := mutate(configMap)
+		if err != nil || !changed {
+			return err
+		}
+
+		if needCreate {
+			_, err = c.kubeClient.CoreV1().ConfigMaps(c.namespace).Create(ctx, configMap, metav1.CreateOptions{})
+			return err
+		}
+
+		_, err = c.kubeClient.CoreV1().ConfigMaps(c.namespace).Update(ctx, configMap, metav1.UpdateOptions{})
+		return err
+	})
+}
+
+// mutateModelEntryWithRetry applies a per-model mutation unless its UID is fenced by deletion or another generation.
+// allowDeleting lets the delete operation bypass the fence it installs for itself.
+func (c *ConfigMapReconciler) mutateModelEntryWithRetry(
+	ctx context.Context,
+	modelID string,
+	modelUID types.UID,
+	allowDeleting bool,
+	mutate modelEntryMutation,
+) error {
+	return c.mutateConfigMapWithRetry(ctx, func(configMap *corev1.ConfigMap) (bool, error) {
+		if !allowDeleting && c.isModelMutationBlocked(modelID, modelUID) {
+			c.logger.Debugf("Skipping stale ConfigMap mutation for model %s", modelID)
+			return false, nil
+		}
+		if configMap.Data == nil {
+			configMap.Data = make(map[string]string)
+		}
+		return mutate(configMap.Data)
+	})
+}
+
+// evictModelCache removes the source used by periodic self-healing without permanently fencing the UID.
+// This is used for node-local cleanup because the same CR generation may become eligible for the node again.
+func (c *ConfigMapReconciler) evictModelCache(modelID string) {
+	c.cacheMutex.Lock()
+	defer c.cacheMutex.Unlock()
+	delete(c.modelCache, modelID)
+}
+
+// fenceModelUIDAndEvictCache atomically fences the model generation and removes its cached entry.
+// Evicting the cache first prevents periodic reconciliation from restoring the ConfigMap entry during deletion.
+func (c *ConfigMapReconciler) fenceModelUIDAndEvictCache(modelID string, modelUID types.UID) {
+	c.cacheMutex.Lock()
+	defer c.cacheMutex.Unlock()
+	delete(c.modelCache, modelID)
+	if modelUID == "" {
+		c.logger.Warnf("fenceModelUIDAndEvictCache called with empty UID for %s; skipping fence install", modelID)
+		return
+	}
+	if c.fencedModelUIDs == nil {
+		c.fencedModelUIDs = make(map[string]map[types.UID]struct{})
+	}
+	if c.fencedModelUIDs[modelID] == nil {
+		c.fencedModelUIDs[modelID] = make(map[types.UID]struct{})
+	}
+	c.fencedModelUIDs[modelID][modelUID] = struct{}{}
+}
+
+func (c *ConfigMapReconciler) isModelMutationBlocked(modelID string, modelUID types.UID) bool {
+	c.cacheMutex.RLock()
+	defer c.cacheMutex.RUnlock()
+	return c.isModelMutationBlockedLocked(modelID, modelUID)
+}
+
+// isModelRestoreBlocked rejects a copied reconciliation snapshot after its live cache entry was evicted.
+// Unlike status and metadata updates, self-healing restore is valid only while the model remains in the cache.
+func (c *ConfigMapReconciler) isModelRestoreBlocked(modelID string, modelUID types.UID) bool {
+	c.cacheMutex.RLock()
+	defer c.cacheMutex.RUnlock()
+	if c.isModelMutationBlockedLocked(modelID, modelUID) {
+		return true
+	}
+	_, exists := c.modelCache[modelID]
+	return !exists
+}
+
+func (c *ConfigMapReconciler) isModelMutationBlockedLocked(modelID string, modelUID types.UID) bool {
+	if c.isModelUIDFencedLocked(modelID, modelUID) {
+		return true
+	}
+	cacheEntry, exists := c.modelCache[modelID]
+	// This relies on deletion finalizers preventing same-name recreation before ConfigMap cleanup;
+	// force deletion may block the new UID until another model event or agent restart.
+	return exists && cacheEntry.ModelUID != "" && modelUID != "" && cacheEntry.ModelUID != modelUID
+}
+
+func (c *ConfigMapReconciler) isModelUIDFencedLocked(modelID string, modelUID types.UID) bool {
+	fencedUIDs, exists := c.fencedModelUIDs[modelID]
+	if !exists {
+		return false
+	}
+	if modelUID == "" {
+		return true
+	}
+	_, exists = fencedUIDs[modelUID]
+	return exists
+}
+
+func (c *ConfigMapReconciler) prepareActiveModelLocked(modelID string, modelUID types.UID) bool {
+	// The caller holds cacheMutex so deletion cannot begin between this check and the cache write.
+	return !c.isModelMutationBlockedLocked(modelID, modelUID)
+}
+
 // updateModelStatusInConfigMap updates the model status in the ConfigMap
-func (c *ConfigMapReconciler) updateModelStatusInConfigMap(ctx context.Context, configMap *corev1.ConfigMap, op *ConfigMapStatusOp, needCreate bool) error {
-	// Get model information and key
+func (c *ConfigMapReconciler) updateModelStatusInConfigMap(ctx context.Context, op *ConfigMapStatusOp) error {
 	key := c.getModelConfigMapKey(op.BaseModel, op.ClusterBaseModel)
 	modelInfo := getConfigMapModelInfo(op.BaseModel, op.ClusterBaseModel)
+	modelUID := getModelResourceUID(op.BaseModel, op.ClusterBaseModel)
 	c.logger.Debugf("Using key '%s' for model %s", key, modelInfo)
 
-	if configMap.Data == nil {
-		c.logger.Debugf("ConfigMap Data is nil, initializing it for %s", modelInfo)
-		configMap.Data = make(map[string]string)
-	}
-
-	// Get the existing model entry or create a new one
-	var modelEntry ModelEntry
 	var modelName string
 	if op.BaseModel != nil {
 		modelName = op.BaseModel.Name
@@ -757,67 +889,46 @@ func (c *ConfigMapReconciler) updateModelStatusInConfigMap(ctx context.Context, 
 		modelName = op.ClusterBaseModel.Name
 	}
 
-	// Check if there's already an entry for this model
-	if existingData, exists := configMap.Data[key]; exists {
-		// If entry exists, try to unmarshal it
-		if err := json.Unmarshal([]byte(existingData), &modelEntry); err != nil {
-			// If it's not in our format yet, create a new entry with just the status
-			modelEntry = ModelEntry{
-				Name:   modelName,
-				Status: op.ModelStatus,
-				Config: nil,
+	return c.mutateModelEntryWithRetry(ctx, key, modelUID, false, func(data map[string]string) (bool, error) {
+		if op.ModelStatus == ModelStatusDeleted {
+			if _, exists := data[key]; !exists {
+				return false, nil
 			}
-		} else {
-			// Update just the status, preserving the config
-			modelEntry.Status = op.ModelStatus
-			// Clear progress when status becomes Ready or Failed (download complete)
-			// This ensures the controller sees the final status update atomically
-			if op.ModelStatus == ModelStatusReady || op.ModelStatus == ModelStatusFailed {
-				modelEntry.Progress = nil
-			}
+			delete(data, key)
+			return true, nil
 		}
-	} else {
-		// No existing entry, create a new one
-		modelEntry = ModelEntry{
-			Name:   modelName,
-			Status: op.ModelStatus,
-			Config: nil,
-		}
-	}
 
-	// For 'ModelStatusDeleted' status, we might want to entirely remove the entry
-	if op.ModelStatus == ModelStatusDeleted {
-		c.logger.Debugf("Deleting ConfigMap data[%s] for %s", key, modelInfo)
-		delete(configMap.Data, key)
-	} else {
-		// Marshal the model entry to JSON
+		modelEntry := ModelEntry{Name: modelName}
+		if existingData, exists := data[key]; exists {
+			if err := json.Unmarshal([]byte(existingData), &modelEntry); err != nil {
+				modelEntry = ModelEntry{Name: modelName}
+			}
+		}
+		modelEntry.Status = op.ModelStatus
+		if op.ModelStatus == ModelStatusReady || op.ModelStatus == ModelStatusFailed {
+			modelEntry.Progress = nil
+		}
+
 		entryJSON, err := json.Marshal(modelEntry)
 		if err != nil {
-			c.logger.Errorf("Failed to marshal model entry for %s: %v", modelInfo, err)
-			return err
+			return false, err
 		}
-		c.logger.Debugf("Setting ConfigMap data[%s] to %s for %s", key, string(entryJSON), modelInfo)
-		configMap.Data[key] = string(entryJSON)
-	}
-
-	c.logger.Infof("will update model status in configmap for key %s", key)
-	return c.saveConfigMap(ctx, configMap, modelInfo, needCreate)
+		newValue := string(entryJSON)
+		if data[key] == newValue {
+			return false, nil
+		}
+		data[key] = newValue
+		return true, nil
+	})
 }
 
 // updateModelMetadataInConfigMap updates the model metadata in the ConfigMap
-func (c *ConfigMapReconciler) updateModelMetadataInConfigMap(ctx context.Context, configMap *corev1.ConfigMap, op *ConfigMapMetadataOp, needCreate bool) error {
-	// Get model information and key
+func (c *ConfigMapReconciler) updateModelMetadataInConfigMap(ctx context.Context, op *ConfigMapMetadataOp) error {
 	key := c.getModelConfigMapKey(op.BaseModel, op.ClusterBaseModel)
 	modelInfo := getConfigMapModelInfo(op.BaseModel, op.ClusterBaseModel)
+	modelUID := getModelResourceUID(op.BaseModel, op.ClusterBaseModel)
 	c.logger.Debugf("Using key '%s' for model %s", key, modelInfo)
 
-	if configMap.Data == nil {
-		c.logger.Debugf("ConfigMap Data is nil, initializing it for %s", modelInfo)
-		configMap.Data = make(map[string]string)
-	}
-
-	// Get the existing model entry or create a new one
-	var modelEntry ModelEntry
 	var modelName string
 	if op.BaseModel != nil {
 		modelName = op.BaseModel.Name
@@ -825,82 +936,33 @@ func (c *ConfigMapReconciler) updateModelMetadataInConfigMap(ctx context.Context
 		modelName = op.ClusterBaseModel.Name
 	}
 
-	// Check if there's already an entry for this model
-	if existingData, exists := configMap.Data[key]; exists {
-		// If entry exists, try to unmarshal it
-		if err := json.Unmarshal([]byte(existingData), &modelEntry); err != nil {
-			// If it's not in our format yet, create a new entry
-			modelEntry = ModelEntry{
-				Name:   modelName,
-				Status: ModelStatusReady, // Default to ready when adding metadata
-				Config: nil,
-			}
-		}
-		// Keep existing status
-	} else {
-		// No existing entry, create a new one
-		modelEntry = ModelEntry{
-			Name:   modelName,
-			Status: ModelStatusReady, // Default to ready when adding metadata
-			Config: nil,
-		}
-	}
-
-	// Create model config from metadata
 	modelConfig := ConvertMetadataToModelConfig(op.ModelMetadata)
-
-	// Update the config in the model entry
-	modelEntry.Config = modelConfig
-
-	// Marshal the model entry back to JSON
-	entryJSON, err := json.Marshal(modelEntry)
-	if err != nil {
-		c.logger.Errorf("Failed to marshal model entry for %s: %v", modelInfo, err)
-		return err
-	}
-
-	// Store the model entry in the ConfigMap
-	configMap.Data[key] = string(entryJSON)
-	c.logger.Debugf("Setting ConfigMap data[%s] = %s for %s", key, string(entryJSON), modelInfo)
-
-	return c.saveConfigMap(ctx, configMap, modelInfo, needCreate)
-}
-
-// saveConfigMap creates or updates the ConfigMap in Kubernetes
-// Uses retry.RetryOnConflict to handle concurrent updates to the same ConfigMap
-func (c *ConfigMapReconciler) saveConfigMap(ctx context.Context, configMap *corev1.ConfigMap, modelInfo string, needCreate bool) error {
-	// Create or update the ConfigMap
-	if needCreate {
-		c.logger.Infof("Creating new ConfigMap '%s' in namespace '%s' for %s", c.nodeName, c.namespace, modelInfo)
-		_, err := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Create(ctx, configMap, metav1.CreateOptions{})
-		if err != nil {
-			c.logger.Errorf("Failed to create ConfigMap '%s' in namespace '%s' for %s: %v", c.nodeName, c.namespace, modelInfo, err)
-			return err
+	return c.mutateModelEntryWithRetry(ctx, key, modelUID, false, func(data map[string]string) (bool, error) {
+		modelEntry := ModelEntry{
+			Name:   modelName,
+			Status: ModelStatusReady,
 		}
-		c.logger.Infof("Successfully created ConfigMap '%s' in namespace '%s' for %s", c.nodeName, c.namespace, modelInfo)
-	} else {
-		c.logger.Infof("Updating ConfigMap '%s' in namespace '%s' for %s", c.nodeName, c.namespace, modelInfo)
-		// Store the data we want to apply - this is the caller's intended changes
-		dataToApply := configMap.Data
-
-		updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
-			if currentConfigMap.Data == nil {
-				currentConfigMap.Data = make(map[string]string)
+		if existingData, exists := data[key]; exists {
+			if err := json.Unmarshal([]byte(existingData), &modelEntry); err != nil {
+				modelEntry = ModelEntry{
+					Name:   modelName,
+					Status: ModelStatusReady,
+				}
 			}
-			for key, value := range dataToApply {
-				currentConfigMap.Data[key] = value
-			}
-			return true, currentConfigMap, nil
 		}
-		err := c.updateConfigMapWithRetry(ctx, updateConfigMap)
+		modelEntry.Config = modelConfig
 
+		entryJSON, err := json.Marshal(modelEntry)
 		if err != nil {
-			c.logger.Errorf("Failed to update ConfigMap '%s' in namespace '%s' for %s: %v", c.nodeName, c.namespace, modelInfo, err)
-			return err
+			return false, err
 		}
-		c.logger.Infof("Successfully updated ConfigMap '%s' in namespace '%s' for %s", c.nodeName, c.namespace, modelInfo)
-	}
-	return nil
+		newValue := string(entryJSON)
+		if data[key] == newValue {
+			return false, nil
+		}
+		data[key] = newValue
+		return true, nil
+	})
 }
 
 // updateConfigMapWithRetry A fundamental method to update configmap via a read-modify-write update with retry.

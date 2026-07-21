@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 	ktesting "k8s.io/client-go/testing"
 
@@ -43,6 +44,7 @@ func createTestBaseModelCM() *v1beta1.BaseModel {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-model",
 			Namespace: "default",
+			UID:       types.UID("test-model-uid"),
 		},
 	}
 }
@@ -52,6 +54,7 @@ func createTestClusterBaseModelCM() *v1beta1.ClusterBaseModel {
 	return &v1beta1.ClusterBaseModel{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-cluster-model",
+			UID:  types.UID("test-cluster-model-uid"),
 		},
 	}
 }
@@ -148,62 +151,6 @@ func TestGetOrCreateConfigMap(t *testing.T) {
 	assert.Contains(t, err.Error(), "fake error")
 }
 
-// TestSaveConfigMap tests the saveConfigMap method
-func TestSaveConfigMap(t *testing.T) {
-	reconciler, kubeClient, _ := setupConfigMapTest(t)
-	modelInfo := "test model"
-
-	// Test creating new ConfigMap
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      reconciler.nodeName,
-			Namespace: reconciler.namespace,
-		},
-		Data: map[string]string{"test": "value"},
-	}
-
-	ctx := context.Background()
-	err := reconciler.saveConfigMap(ctx, configMap, modelInfo, true)
-	assert.NoError(t, err)
-
-	// Verify ConfigMap was created
-	createdCM, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(
-		ctx, reconciler.nodeName, metav1.GetOptions{},
-	)
-	assert.NoError(t, err)
-	assert.Equal(t, "value", createdCM.Data["test"])
-
-	// Test updating existing ConfigMap
-	configMap.Data["test"] = "updated"
-	err = reconciler.saveConfigMap(ctx, configMap, modelInfo, false)
-	assert.NoError(t, err)
-
-	// Verify ConfigMap was updated
-	updatedCM, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(
-		ctx, reconciler.nodeName, metav1.GetOptions{},
-	)
-	assert.NoError(t, err)
-	assert.Equal(t, "updated", updatedCM.Data["test"])
-
-	// Test create error
-	kubeClient.PrependReactor("create", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
-		return true, nil, errors.New("fake create error")
-	})
-
-	err = reconciler.saveConfigMap(ctx, configMap, modelInfo, true)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "fake create error")
-
-	// Test update error
-	kubeClient.PrependReactor("update", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
-		return true, nil, errors.New("fake update error")
-	})
-
-	err = reconciler.saveConfigMap(ctx, configMap, modelInfo, false)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "fake update error")
-}
-
 // Note: These types are defined in the main package file
 // ModelStatus, ModelStatusReady, ModelStatusDeleted, and ModelEntry are
 // used here but not redeclared to avoid conflicts.
@@ -211,16 +158,7 @@ func TestSaveConfigMap(t *testing.T) {
 // TestUpdateModelStatusInConfigMap tests the updateModelStatusInConfigMap method
 func TestUpdateModelStatusInConfigMap(t *testing.T) {
 	// Setup test environment
-	reconciler, _, _ := setupConfigMapTest(t)
-
-	// Create a test ConfigMap
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-node",
-			Namespace: "test-namespace",
-		},
-		Data: make(map[string]string),
-	}
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
 
 	// Create a test operation
 	baseModel := createTestBaseModelCM()
@@ -229,15 +167,14 @@ func TestUpdateModelStatusInConfigMap(t *testing.T) {
 		ModelStatus: ModelStatusReady,
 	}
 
-	// Rather than mocking the internal function which is challenging,
-	// we'll verify the expected result directly
-
-	// Execute the test - the function should modify the configMap in-place
+	// Execute the test and persist the update through the fake Kubernetes client
 	ctx := context.Background()
-	err := reconciler.updateModelStatusInConfigMap(ctx, configMap, op, true)
+	err := reconciler.updateModelStatusInConfigMap(ctx, op)
 	assert.NoError(t, err)
 
 	// Verify the ConfigMap was updated correctly
+	configMap, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
 	key := reconciler.getModelConfigMapKey(baseModel, nil)
 	assert.Contains(t, configMap.Data, key, "ConfigMap should contain the model key")
 
@@ -253,22 +190,12 @@ func TestUpdateModelStatusInConfigMap(t *testing.T) {
 	assert.Equal(t, baseModel.Name, modelEntry.Name)
 	assert.Equal(t, ModelStatusReady, modelEntry.Status)
 	assert.Nil(t, modelEntry.Config)
-
 }
 
 // TestUpdateModelMetadataInConfigMap tests the updateModelMetadataInConfigMap method
 func TestUpdateModelMetadataInConfigMap(t *testing.T) {
 	// Setup test environment
 	reconciler, kubeClient, _ := setupConfigMapTest(t)
-
-	// Create a test ConfigMap
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-node",
-			Namespace: "test-namespace",
-		},
-		Data: make(map[string]string),
-	}
 
 	// Create test model metadata with fields from our internal ModelMetadata type
 	modelMetadata := ModelMetadata{
@@ -295,10 +222,12 @@ func TestUpdateModelMetadataInConfigMap(t *testing.T) {
 
 	// Execute the test
 	ctx := context.Background()
-	err := reconciler.updateModelMetadataInConfigMap(ctx, configMap, op, true)
+	err := reconciler.updateModelMetadataInConfigMap(ctx, op)
 	assert.NoError(t, err)
 
 	// Verify the ConfigMap was updated correctly
+	configMap, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
 	key := reconciler.getModelConfigMapKey(baseModel, nil)
 	assert.Contains(t, configMap.Data, key)
 
@@ -327,72 +256,82 @@ func TestUpdateModelMetadataInConfigMap(t *testing.T) {
 		ModelMetadata:    modelMetadata,
 	}
 
-	err = reconciler.updateModelMetadataInConfigMap(ctx, configMap, clusterOp, false)
+	err = reconciler.updateModelMetadataInConfigMap(ctx, clusterOp)
 	assert.NoError(t, err)
 
-	// Test update of existing entry
-	// First, create an entry with an existing status
-	existingKey := reconciler.getModelConfigMapKey(baseModel, nil)
+	// Test update of an existing entry
+	// Updating metadata must preserve status and download progress from the latest entry.
+	configMap, err = kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
 	existingEntry := ModelEntry{
-		Name:   baseModel.Name,
-		Status: ModelStatusFailed,
-		Config: nil,
+		Name:     baseModel.Name,
+		Status:   ModelStatusUpdating,
+		Progress: &DownloadProgress{Phase: "Downloading", CompletedBytes: 10},
 	}
 	entryBytes, _ := json.Marshal(existingEntry)
-	configMap.Data[existingKey] = string(entryBytes)
-
-	// Update with new metadata should preserve the status
-	err = reconciler.updateModelMetadataInConfigMap(ctx, configMap, op, false)
+	configMap.Data[key] = string(entryBytes)
+	_, err = kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Update(ctx, configMap, metav1.UpdateOptions{})
 	assert.NoError(t, err)
 
-	// Verify status was preserved and config was updated
-	err = json.Unmarshal([]byte(configMap.Data[existingKey]), &modelEntry)
+	err = reconciler.updateModelMetadataInConfigMap(ctx, op)
 	assert.NoError(t, err)
-	assert.Equal(t, ModelStatusFailed, modelEntry.Status)
+
+	// Verify status and progress were preserved and config was updated
+	configMap, err = kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	err = json.Unmarshal([]byte(configMap.Data[key]), &modelEntry)
+	assert.NoError(t, err)
+	assert.Equal(t, ModelStatusUpdating, modelEntry.Status)
+	assert.Equal(t, uint64(10), modelEntry.Progress.CompletedBytes)
 	assert.NotNil(t, modelEntry.Config)
 
-	// Test invalid existing JSON data
-	configMap.Data[existingKey] = "{invalid-json}"
-	err = reconciler.updateModelMetadataInConfigMap(ctx, configMap, op, false)
-	assert.NoError(t, err) // Should handle gracefully
-
-	// Test nil Data map
-	configMapNilData := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-node-nil-data",
-			Namespace: "test-namespace",
-		},
-	}
-	err = reconciler.updateModelMetadataInConfigMap(ctx, configMapNilData, op, true)
-	assert.NoError(t, err)
-	assert.NotNil(t, configMapNilData.Data)
-
-	// Test saving errors
-	kubeClient.PrependReactor("create", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
-		return true, nil, errors.New("simulated create error")
-	})
-
-	err = reconciler.updateModelMetadataInConfigMap(ctx, configMap, op, true)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "simulated create error")
-
-	// Test create error
-	kubeClient.PrependReactor("create", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
-		return true, nil, errors.New("simulated create error")
-	})
-
-	err = reconciler.saveConfigMap(ctx, configMap, "test-model", true)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "simulated create error")
-
-	// Test update error
+	// Test update error propagation
 	kubeClient.PrependReactor("update", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("simulated update error")
 	})
+	op.ModelMetadata.MaxTokens++
+	err = reconciler.updateModelMetadataInConfigMap(ctx, op)
+	if assert.Error(t, err) {
+		assert.Contains(t, err.Error(), "simulated update error")
+	}
+}
 
-	err = reconciler.saveConfigMap(ctx, configMap, "test-model", false)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "simulated update error")
+func TestReconcileModelProgressPreservesExistingEntry(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+	baseModel := createTestBaseModelCM()
+
+	metadata := ModelMetadata{ModelType: "llm", ModelArchitecture: "transformer"}
+	assert.NoError(t, reconciler.ReconcileModelMetadata(ctx, &ConfigMapMetadataOp{
+		BaseModel:     baseModel,
+		ModelMetadata: metadata,
+	}))
+
+	progress := &DownloadProgress{Phase: "Downloading", TotalBytes: 100, CompletedBytes: 40}
+	assert.NoError(t, reconciler.ReconcileModelProgress(ctx, &ConfigMapProgressOp{
+		BaseModel: baseModel,
+		Progress:  progress,
+	}))
+
+	key := reconciler.getModelConfigMapKey(baseModel, nil)
+	configMap, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	var modelEntry ModelEntry
+	assert.NoError(t, json.Unmarshal([]byte(configMap.Data[key]), &modelEntry))
+	assert.Equal(t, ModelStatusReady, modelEntry.Status)
+	assert.NotNil(t, modelEntry.Config)
+	assert.Equal(t, uint64(40), modelEntry.Progress.CompletedBytes)
+
+	assert.NoError(t, reconciler.ReconcileModelStatus(ctx, &ConfigMapStatusOp{
+		BaseModel:   baseModel,
+		ModelStatus: ModelStatusReady,
+	}))
+	configMap, err = kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	modelEntry = ModelEntry{}
+	assert.NoError(t, json.Unmarshal([]byte(configMap.Data[key]), &modelEntry))
+	assert.NotNil(t, modelEntry.Config)
+	assert.Nil(t, modelEntry.Progress)
 }
 
 // TestRestoreModelInConfigMap tests the restoreModelInConfigMap method
@@ -422,6 +361,7 @@ func TestRestoreModelInConfigMap(t *testing.T) {
 	modelID := reconciler.getModelConfigMapKey(baseModel, nil)
 	reconciler.modelCache[modelID] = &CacheEntry{
 		ModelName:   "test-model",
+		ModelUID:    baseModel.UID,
 		ModelStatus: ModelStatusReady,
 		ModelMetadata: &ModelMetadata{
 			ModelType:          "llm",
@@ -514,6 +454,254 @@ func TestDeleteModelFromConfigMap(t *testing.T) {
 	// Deleting from non-existent ConfigMap should still be successful (nothing to delete)
 	err = reconciler.DeleteModelFromConfigMap(ctx, baseModel, nil)
 	assert.NoError(t, err)
+}
+
+func TestDeleteModelFromConfigMapRetriesConflict(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+	baseModel := createTestBaseModelCM()
+
+	assert.NoError(t, reconciler.ReconcileModelStatus(ctx, &ConfigMapStatusOp{
+		BaseModel:   baseModel,
+		ModelStatus: ModelStatusReady,
+	}))
+
+	updateAttempts := 0
+	kubeClient.PrependReactor("update", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
+		updateAttempts++
+		if updateAttempts == 1 {
+			return true, nil, apierrors.NewConflict(
+				schema.GroupResource{Resource: "configmaps"},
+				reconciler.nodeName,
+				errors.New("simulated concurrent update"),
+			)
+		}
+		return false, nil, nil
+	})
+
+	assert.NoError(t, reconciler.DeleteModelFromConfigMap(ctx, baseModel, nil))
+	assert.Equal(t, 2, updateAttempts)
+
+	configMap, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	assert.NotContains(t, configMap.Data, reconciler.getModelConfigMapKey(baseModel, nil))
+}
+
+func TestProgressConflictDoesNotRestoreAnotherDeletedModel(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+	deletedModel := createTestBaseModelCM()
+	updatedModel := deletedModel.DeepCopy()
+	updatedModel.Name = "other-model"
+	updatedModel.UID = types.UID("other-model-uid")
+
+	for _, op := range []*ConfigMapStatusOp{
+		{BaseModel: deletedModel, ModelStatus: ModelStatusReady},
+		{BaseModel: updatedModel, ModelStatus: ModelStatusUpdating},
+	} {
+		assert.NoError(t, reconciler.ReconcileModelStatus(ctx, op))
+	}
+
+	deletedKey := reconciler.getModelConfigMapKey(deletedModel, nil)
+	updatedKey := reconciler.getModelConfigMapKey(updatedModel, nil)
+	configMapResource := corev1.SchemeGroupVersion.WithResource("configmaps")
+	updateAttempts := 0
+	kubeClient.PrependReactor("update", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
+		updateAttempts++
+		if updateAttempts != 1 {
+			return false, nil, nil
+		}
+
+		current, err := kubeClient.Tracker().Get(configMapResource, reconciler.namespace, reconciler.nodeName)
+		assert.NoError(t, err)
+		latest := current.(*corev1.ConfigMap).DeepCopy()
+		delete(latest.Data, deletedKey)
+		assert.NoError(t, kubeClient.Tracker().Update(configMapResource, latest, reconciler.namespace))
+
+		return true, nil, apierrors.NewConflict(
+			schema.GroupResource{Resource: "configmaps"},
+			reconciler.nodeName,
+			errors.New("simulated deletion after stale read"),
+		)
+	})
+
+	assert.NoError(t, reconciler.ReconcileModelProgress(ctx, &ConfigMapProgressOp{
+		BaseModel: updatedModel,
+		Progress:  &DownloadProgress{Phase: "Downloading", CompletedBytes: 10},
+	}))
+	assert.Equal(t, 2, updateAttempts)
+
+	configMap, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	assert.NotContains(t, configMap.Data, deletedKey)
+	assert.Contains(t, configMap.Data, updatedKey)
+}
+
+func TestDeletedUIDCannotBeRestoredOrUpdatedButNewUIDCanWrite(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+	oldModel := createTestBaseModelCM()
+	modelID := reconciler.getModelConfigMapKey(oldModel, nil)
+
+	assert.NoError(t, reconciler.ReconcileModelStatus(ctx, &ConfigMapStatusOp{
+		BaseModel:   oldModel,
+		ModelStatus: ModelStatusReady,
+	}))
+	reconciler.cacheMutex.RLock()
+	staleCacheEntry := *reconciler.modelCache[modelID]
+	reconciler.cacheMutex.RUnlock()
+
+	deletionTimestamp := metav1.Now()
+	oldModel.DeletionTimestamp = &deletionTimestamp
+	assert.NoError(t, reconciler.DeleteModelFromConfigMap(ctx, oldModel, nil))
+	reconciler.restoreModelInConfigMap(modelID, &staleCacheEntry)
+	assert.NoError(t, reconciler.ReconcileModelProgress(ctx, &ConfigMapProgressOp{
+		BaseModel: oldModel,
+		Progress:  &DownloadProgress{Phase: "Downloading", CompletedBytes: 99},
+	}))
+	assert.NoError(t, reconciler.ReconcileModelMetadata(ctx, &ConfigMapMetadataOp{
+		BaseModel:     oldModel,
+		ModelMetadata: ModelMetadata{ModelType: "stale"},
+	}))
+
+	configMap, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	assert.NotContains(t, configMap.Data, modelID)
+
+	newModel := oldModel.DeepCopy()
+	newModel.UID = types.UID("replacement-model-uid")
+	newModel.DeletionTimestamp = nil
+	assert.NoError(t, reconciler.ReconcileModelStatus(ctx, &ConfigMapStatusOp{
+		BaseModel:   newModel,
+		ModelStatus: ModelStatusReady,
+	}))
+	assert.NoError(t, reconciler.ReconcileModelProgress(ctx, &ConfigMapProgressOp{
+		BaseModel: newModel,
+		Progress:  &DownloadProgress{Phase: "Downloading", CompletedBytes: 50},
+	}))
+	assert.NoError(t, reconciler.ReconcileModelMetadata(ctx, &ConfigMapMetadataOp{
+		BaseModel:     newModel,
+		ModelMetadata: ModelMetadata{ModelType: "replacement"},
+	}))
+
+	assert.NoError(t, reconciler.ReconcileModelStatus(ctx, &ConfigMapStatusOp{
+		BaseModel:   oldModel,
+		ModelStatus: ModelStatusFailed,
+	}))
+	assert.NoError(t, reconciler.ReconcileModelProgress(ctx, &ConfigMapProgressOp{
+		BaseModel: oldModel,
+		Progress:  &DownloadProgress{Phase: "Downloading", CompletedBytes: 100},
+	}))
+	assert.NoError(t, reconciler.ReconcileModelMetadata(ctx, &ConfigMapMetadataOp{
+		BaseModel:     oldModel,
+		ModelMetadata: ModelMetadata{ModelType: "stale"},
+	}))
+
+	configMap, err = kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	var modelEntry ModelEntry
+	assert.NoError(t, json.Unmarshal([]byte(configMap.Data[modelID]), &modelEntry))
+	assert.Equal(t, ModelStatusReady, modelEntry.Status)
+	assert.Equal(t, uint64(50), modelEntry.Progress.CompletedBytes)
+	assert.Equal(t, "replacement", modelEntry.Config.ModelType)
+}
+
+func TestNodeCleanupAllowsSameUIDToWriteAgain(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+	model := createTestBaseModelCM()
+	modelID := reconciler.getModelConfigMapKey(model, nil)
+
+	assert.NoError(t, reconciler.ReconcileModelStatus(ctx, &ConfigMapStatusOp{
+		BaseModel:   model,
+		ModelStatus: ModelStatusReady,
+	}))
+
+	// A Delete task without DeletionTimestamp is node-local cleanup, not terminal CR deletion.
+	assert.NoError(t, reconciler.DeleteModelFromConfigMap(ctx, model, nil))
+	reconciler.cacheMutex.RLock()
+	_, cacheExists := reconciler.modelCache[modelID]
+	_, fenceExists := reconciler.fencedModelUIDs[modelID]
+	reconciler.cacheMutex.RUnlock()
+	assert.False(t, cacheExists)
+	assert.False(t, fenceExists)
+
+	assert.NoError(t, reconciler.ReconcileModelStatus(ctx, &ConfigMapStatusOp{
+		BaseModel:   model,
+		ModelStatus: ModelStatusReady,
+	}))
+
+	configMap, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	assert.Contains(t, configMap.Data, modelID)
+	reconciler.cacheMutex.RLock()
+	cacheEntry := reconciler.modelCache[modelID]
+	reconciler.cacheMutex.RUnlock()
+	if assert.NotNil(t, cacheEntry) {
+		assert.Equal(t, model.UID, cacheEntry.ModelUID)
+	}
+}
+
+func TestNodeCleanupBlocksStaleRestoreSnapshot(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+	model := createTestBaseModelCM()
+	modelID := reconciler.getModelConfigMapKey(model, nil)
+
+	assert.NoError(t, reconciler.ReconcileModelStatus(ctx, &ConfigMapStatusOp{
+		BaseModel:   model,
+		ModelStatus: ModelStatusReady,
+	}))
+	reconciler.cacheMutex.RLock()
+	staleCacheEntry := *reconciler.modelCache[modelID]
+	reconciler.cacheMutex.RUnlock()
+
+	assert.NoError(t, reconciler.DeleteModelFromConfigMap(ctx, model, nil))
+	reconciler.restoreModelInConfigMap(modelID, &staleCacheEntry)
+
+	configMap, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	assert.NotContains(t, configMap.Data, modelID)
+}
+
+func TestEmptyUIDEvictsCacheWithoutInstallingFence(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+	model := createTestBaseModelCM()
+	modelID := reconciler.getModelConfigMapKey(model, nil)
+
+	reconciler.cacheMutex.Lock()
+	reconciler.modelCache[modelID] = &CacheEntry{
+		ModelName: model.Name,
+		ModelUID:  types.UID("cached-model-uid"),
+	}
+	reconciler.cacheMutex.Unlock()
+
+	reconciler.fenceModelUIDAndEvictCache(modelID, "")
+
+	reconciler.cacheMutex.RLock()
+	_, cacheExists := reconciler.modelCache[modelID]
+	_, fenceExists := reconciler.fencedModelUIDs[modelID]
+	reconciler.cacheMutex.RUnlock()
+	assert.False(t, cacheExists)
+	assert.False(t, fenceExists)
+
+	model.UID = types.UID("replacement-model-uid")
+	assert.NoError(t, reconciler.ReconcileModelStatus(ctx, &ConfigMapStatusOp{
+		BaseModel:   model,
+		ModelStatus: ModelStatusReady,
+	}))
+
+	configMap, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	assert.Contains(t, configMap.Data, modelID)
+
+	reconciler.cacheMutex.RLock()
+	cacheEntry := reconciler.modelCache[modelID]
+	reconciler.cacheMutex.RUnlock()
+	if assert.NotNil(t, cacheEntry) {
+		assert.Equal(t, model.UID, cacheEntry.ModelUID)
+	}
 }
 
 // TestRecreateConfigMap tests the recreateConfigMap method
