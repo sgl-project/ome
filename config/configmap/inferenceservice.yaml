@@ -36,7 +36,7 @@ data:
 
   modelInit: |-
     {
-        "image" : "ghcr.io/moirai-internal/ome-agent:v1.2.0",
+        "image" : "ghcr.io/moirai-internal/ome-agent:v1.2.1",
         "memoryRequest": "320Gi",
         "memoryLimit": "320Gi",
         "cpuRequest": "15",
@@ -55,7 +55,7 @@ data:
 
   multinodeProber: |-
     {
-      "image" : "ghcr.io/moirai-internal/multinode-prober:v1.2.0",
+      "image" : "ghcr.io/moirai-internal/multinode-prober:v1.2.1",
       "memoryRequest": "100Mi",
       "memoryLimit": "100Mi",
       "cpuRequest": "100m",

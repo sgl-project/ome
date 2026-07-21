@@ -30,7 +30,7 @@ spec:
           - "--leader-elect"
           - "webhook"
           - "--zap-encoder=console"
-        image: ghcr.io/moirai-internal/ome-manager:v1.2.0
+        image: ghcr.io/moirai-internal/ome-manager:v1.2.1
         imagePullPolicy: Always
         name: manager
         securityContext:
