@@ -203,9 +203,7 @@ func (d *Decoder) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.Ob
 
 // processAnnotations processes the annotations for the decoder
 func (d *Decoder) processAnnotations(isvc *v1beta1.InferenceService) (map[string]string, error) {
-	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
-		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
-	})
+	annotations := filterServiceAnnotationsForComponent(isvc)
 
 	// Merge with decoder annotations
 	mergedAnnotations := annotations
@@ -225,10 +223,10 @@ func (d *Decoder) processAnnotations(isvc *v1beta1.InferenceService) (map[string
 
 // processLabels processes the labels for the decoder
 func (d *Decoder) processLabels(isvc *v1beta1.InferenceService) (map[string]string, error) {
-	mergedLabels := isvc.Labels
+	mergedLabels := filterComponentMetadata(isvc.Labels, componentMetadataExclusions(isvc))
 	if d.decoderSpec != nil {
 		decoderLabels := d.decoderSpec.Labels
-		mergedLabels = utils.Union(isvc.Labels, decoderLabels)
+		mergedLabels = utils.Union(mergedLabels, decoderLabels)
 	}
 
 	// Use common function for base labels processing

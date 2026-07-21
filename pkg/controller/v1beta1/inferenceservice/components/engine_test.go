@@ -753,10 +753,18 @@ func TestEngineReconcileObjectMeta(t *testing.T) {
 					Name:      "test-isvc",
 					Namespace: "default",
 					Annotations: map[string]string{
-						"custom-annotation": "value",
+						"custom-annotation":                                "value",
+						"example.com/stable-resource-id":                   "resource-1",
+						"example.com/request-id":                           "request-1",
+						constants.ComponentMetadataExclusionsAnnotationKey: "example.com/request-id, example.com/workflow-id",
+						"kubectl.kubernetes.io/last-applied-configuration": "ignored",
 					},
 					Labels: map[string]string{
-						"custom-label": "value",
+						"custom-label":                   "value",
+						"example.com/stable-created-at":  "2026-07-20T00-00-00Z",
+						"example.com/stable-resource-id": "resource-1",
+						"example.com/request-id":         "request-1",
+						"example.com/workflow-id":        "workflow-1",
 					},
 				},
 			},
@@ -788,6 +796,7 @@ func TestEngineReconcileObjectMeta(t *testing.T) {
 			runtimeName: "test-runtime",
 			expectedAnnotations: map[string]string{
 				"custom-annotation":                    "value",
+				"example.com/stable-resource-id":       "resource-1",
 				"engine-annotation":                    "engine-value",
 				constants.BaseModelName:                "base-model",
 				constants.BaseModelFormat:              "safetensors",
@@ -797,6 +806,8 @@ func TestEngineReconcileObjectMeta(t *testing.T) {
 			},
 			expectedLabels: map[string]string{
 				"custom-label":                                  "value",
+				"example.com/stable-created-at":                 "2026-07-20T00-00-00Z",
+				"example.com/stable-resource-id":                "resource-1",
 				"engine-label":                                  "engine-value",
 				constants.InferenceServicePodLabelKey:           "test-isvc",
 				constants.OMEComponentLabel:                     "engine",
@@ -913,6 +924,10 @@ func TestEngineReconcileObjectMeta(t *testing.T) {
 			for k, v := range tt.expectedLabels {
 				g.Expect(objectMeta.Labels).To(gomega.HaveKeyWithValue(k, v))
 			}
+			g.Expect(objectMeta.Annotations).NotTo(gomega.HaveKey(constants.ComponentMetadataExclusionsAnnotationKey))
+			g.Expect(objectMeta.Annotations).NotTo(gomega.HaveKey("example.com/request-id"))
+			g.Expect(objectMeta.Labels).NotTo(gomega.HaveKey("example.com/request-id"))
+			g.Expect(objectMeta.Labels).NotTo(gomega.HaveKey("example.com/workflow-id"))
 		})
 	}
 }

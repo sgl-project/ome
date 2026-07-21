@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -477,6 +478,41 @@ func ProcessBaseAnnotations(b *BaseComponentFields, isvc *v1beta1.InferenceServi
 	}
 
 	return annotations, nil
+}
+
+func componentMetadataExclusions(isvc *v1beta1.InferenceService) map[string]struct{} {
+	exclusions := map[string]struct{}{
+		constants.ComponentMetadataExclusionsAnnotationKey: {},
+	}
+	if isvc == nil || isvc.Annotations == nil {
+		return exclusions
+	}
+
+	for _, key := range strings.Split(isvc.Annotations[constants.ComponentMetadataExclusionsAnnotationKey], ",") {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			exclusions[key] = struct{}{}
+		}
+	}
+	return exclusions
+}
+
+func filterComponentMetadata(metadata map[string]string, exclusions map[string]struct{}) map[string]string {
+	return utils.Filter(metadata, func(key string) bool {
+		_, excluded := exclusions[key]
+		return !excluded
+	})
+}
+
+func filterServiceAnnotationsForComponent(isvc *v1beta1.InferenceService) map[string]string {
+	exclusions := componentMetadataExclusions(isvc)
+	return utils.Filter(isvc.Annotations, func(key string) bool {
+		if utils.Includes(constants.ServiceAnnotationDisallowedList, key) {
+			return false
+		}
+		_, excluded := exclusions[key]
+		return !excluded
+	})
 }
 
 // ProcessBaseLabels processes common labels

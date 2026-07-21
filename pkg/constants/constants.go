@@ -427,11 +427,16 @@ const (
 // DefaultModelLocalMountPath is where models will be mounted by the storage-initializer
 const DefaultModelLocalMountPath = "/mnt/models"
 
+// ComponentMetadataExclusionsAnnotationKey lists comma-separated parent metadata keys that
+// should not be propagated to component metadata.
+const ComponentMetadataExclusionsAnnotationKey = "ome.io/component-metadata-exclusions"
+
 var (
 	ServiceAnnotationDisallowedList = []string{
 		autoscaling.MinScaleAnnotationKey,
 		autoscaling.MaxScaleAnnotationKey,
 		StorageInitializerSourceUriInternalAnnotationKey,
+		ComponentMetadataExclusionsAnnotationKey,
 		"kubectl.kubernetes.io/last-applied-configuration",
 	}
 

@@ -178,9 +178,7 @@ func (r *Router) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.Obj
 
 // processAnnotations processes the annotations for the router
 func (r *Router) processAnnotations(isvc *v1beta1.InferenceService) (map[string]string, error) {
-	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
-		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
-	})
+	annotations := filterServiceAnnotationsForComponent(isvc)
 
 	// Merge with router annotations
 	mergedAnnotations := annotations
@@ -200,10 +198,10 @@ func (r *Router) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 
 // processLabels processes the labels for the router
 func (r *Router) processLabels(isvc *v1beta1.InferenceService) (map[string]string, error) {
-	mergedLabels := isvc.Labels
+	mergedLabels := filterComponentMetadata(isvc.Labels, componentMetadataExclusions(isvc))
 	if r.routerSpec != nil {
 		routerLabels := r.routerSpec.Labels
-		mergedLabels = utils.Union(isvc.Labels, routerLabels)
+		mergedLabels = utils.Union(mergedLabels, routerLabels)
 	}
 
 	// Use common function for base labels processing

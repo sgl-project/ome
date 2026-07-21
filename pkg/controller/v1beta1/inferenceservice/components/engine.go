@@ -203,9 +203,7 @@ func (e *Engine) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.Obj
 
 // processAnnotations processes the annotations for the engine
 func (e *Engine) processAnnotations(isvc *v1beta1.InferenceService) (map[string]string, error) {
-	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
-		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
-	})
+	annotations := filterServiceAnnotationsForComponent(isvc)
 
 	// Merge with engine annotations
 	mergedAnnotations := annotations
@@ -225,10 +223,10 @@ func (e *Engine) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 
 // processLabels processes the labels for the engine
 func (e *Engine) processLabels(isvc *v1beta1.InferenceService) (map[string]string, error) {
-	mergedLabels := isvc.Labels
+	mergedLabels := filterComponentMetadata(isvc.Labels, componentMetadataExclusions(isvc))
 	if e.engineSpec != nil {
 		engineLabels := e.engineSpec.Labels
-		mergedLabels = utils.Union(isvc.Labels, engineLabels)
+		mergedLabels = utils.Union(mergedLabels, engineLabels)
 	}
 
 	// Use common function for base labels processing
