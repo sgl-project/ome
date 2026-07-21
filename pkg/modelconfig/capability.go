@@ -167,15 +167,21 @@ func diffusionRule(hf HuggingFaceModel) []Capability {
 }
 
 func nemotronHNanoRule(hf HuggingFaceModel) []Capability {
-	if !strings.Contains(strings.ToLower(hf.GetModelType()), "nemotronh_nano") {
+	modelType := strings.ToLower(hf.GetModelType())
+	if !strings.Contains(modelType, "nemotronh_nano") {
 		return nil
 	}
-	return []Capability{
+	capabilities := []Capability{
 		CapabilityImageTextToText,
 		CapabilityTextToText,
-		CapabilityAudioTextToText,
-		CapabilityVideoTextToText,
 	}
+	if strings.Contains(modelType, "nemotronh_nano_omni") {
+		capabilities = append(capabilities,
+			CapabilityAudioTextToText,
+			CapabilityVideoTextToText,
+		)
+	}
+	return capabilities
 }
 
 func omniRule(hf HuggingFaceModel) []Capability {

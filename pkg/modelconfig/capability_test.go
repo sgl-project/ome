@@ -206,6 +206,21 @@ func TestClassifyCapabilities_NemotronH_Nano(t *testing.T) {
 	}
 }
 
+func TestClassifyCapabilities_NemotronH_NanoNonOmni(t *testing.T) {
+	m := &stubModel{
+		modelType:    "NemotronH_Nano_VL_V2",
+		architecture: "NemotronH_Nano_VL_V2",
+		hasVision:    true,
+	}
+	want := []Capability{
+		CapabilityImageTextToText,
+		CapabilityTextToText,
+	}
+	if got := classifyCapabilities(m); !equalCaps(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
 func TestClassifyCapabilities_Omni(t *testing.T) {
 	m := &stubModel{
 		modelType:    "qwen",
