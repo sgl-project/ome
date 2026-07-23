@@ -424,8 +424,12 @@ const (
 	LLamaVllmFTServingServedModelNamePrefix = "/data"
 )
 
-// DefaultModelLocalMountPath is where models will be mounted by the storage-initializer
-const DefaultModelLocalMountPath = "/mnt/models"
+const (
+	// DefaultModelLocalMountPath is where models will be mounted by the storage-initializer.
+	DefaultModelLocalMountPath = "/mnt/models"
+	// ModelArtifactsDirectory is the node-local shared artifact directory under a model store.
+	ModelArtifactsDirectory = "_artifacts"
+)
 
 var (
 	ServiceAnnotationDisallowedList = []string{
