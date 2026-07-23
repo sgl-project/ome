@@ -66,6 +66,7 @@ type Gopher struct {
 	concurrency            int
 	multipartConcurrency   int
 	modelRootDir           string
+	modelArtifactCache     ModelArtifactCacheConfig
 	xetConfig              *xet.Config
 	kubeClient             kubernetes.Interface
 	gopherChan             chan *GopherTask
@@ -111,6 +112,7 @@ func NewGopher(
 	multipartConcurrency int,
 	downloadRetry int,
 	modelRootDir string,
+	modelArtifactCache ModelArtifactCacheConfig,
 	gopherChan chan *GopherTask,
 	samePathWaitTimeout time.Duration,
 	nodeLabelReconciler *NodeLabelReconciler,
@@ -133,6 +135,7 @@ func NewGopher(
 		concurrency:            concurrency,
 		multipartConcurrency:   multipartConcurrency,
 		modelRootDir:           modelRootDir,
+		modelArtifactCache:     modelArtifactCache.normalized(),
 		xetConfig:              xetConfig,
 		kubeClient:             kubeClient,
 		gopherChan:             gopherChan,
@@ -519,109 +522,126 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 				return nil
 			}
 
-			if useHuggingFaceOriginRepair {
-				var repaired bool
-				artifact, repaired, err = s.repairHuggingFaceOriginArtifactParent(ctx, task, name, destPath, hfArtifactParentKey, hfArtifactParentPath, hfOriginIdentity, downloadObjectStorageModel)
+			reusedMountedArtifactCache := false
+			if useHuggingFaceOriginReuse && allowFallbackDownload && s.modelArtifactCache.normalized().enabled() {
+				var cacheSource string
+				reusedMountedArtifactCache, cacheSource, err = s.tryReuseMountedArtifactCache(ctx, hfOriginIdentity, destPath)
 				if err != nil {
+					s.metrics.RecordFailedDownload(modelType, namespace, name, "mounted_artifact_cache_error")
+					s.markModelOnNodeFailed(task)
 					return err
 				}
-				if !repaired {
-					return nil
+				if reusedMountedArtifactCache {
+					s.logger.Infof("Reusing mounted model artifact cache for %s/%s from %s at %s", namespace, name, cacheSource, destPath)
+					artifact = s.buildSelfParentArtifactFromIdentity(ctx, task, hfOriginIdentity, destPath)
 				}
-			} else if shouldUseSamePathObjectStorageReuse(task) {
-				var reused bool
-				if useHuggingFaceOriginReuse {
-					if stop, validationErr := s.validateStartupHuggingFaceArtifactParentIfNeeded(ctx, task, hfArtifactParentKey, hfOriginIdentity, downloadObjectStorageModel); stop || validationErr != nil {
-						return validationErr
-					}
-					artifact, reused, err = s.reuseHuggingFaceOriginArtifactIfPossible(ctx, task, baseModelSpec, modelType, namespace, name, destPath, hfOriginIdentity)
+			}
+
+			if !reusedMountedArtifactCache {
+				if useHuggingFaceOriginRepair {
+					var repaired bool
+					artifact, repaired, err = s.repairHuggingFaceOriginArtifactParent(ctx, task, name, destPath, hfArtifactParentKey, hfArtifactParentPath, hfOriginIdentity, downloadObjectStorageModel)
 					if err != nil {
 						return err
 					}
-				}
-				if reused {
-					s.logger.Infof("Reusing Ready Hugging Face origin model artifact for %s/%s at %s", namespace, name, destPath)
-				} else if useHuggingFaceOriginReuse {
-					if wait, waitErr := s.requeueIfHuggingFaceArtifactParentUpdating(ctx, task, hfOriginIdentity); wait || waitErr != nil {
-						return waitErr
-					}
-					if !allowFallbackDownload {
-						s.demoteToNormalPriority(task)
+					if !repaired {
 						return nil
 					}
-					parentPath, parentStatus, reserved, err := s.configMapReconciler.reserveHuggingFaceArtifactParentEntry(ctx, hfArtifactParentKey, hfOriginIdentity, hfArtifactParentPath)
-					if err != nil {
-						return err
-					}
-					rebuildParentPath := hfArtifactParentPath
-					if strings.TrimSpace(parentPath) != "" {
-						rebuildParentPath = parentPath
-					}
-					if !reserved {
-						switch parentStatus {
-						case ModelStatusUpdating:
-							if s.requeueSamePathInFlightReuseWait(task, hfArtifactParentKey) {
-								return nil
-							}
-							return fmt.Errorf("timed out waiting for Hugging Face artifact parent %s to become Ready", hfArtifactParentKey)
-						case ModelStatusReady:
-							artifact, reused, err = s.reuseHuggingFaceOriginArtifactIfPossible(ctx, task, baseModelSpec, modelType, namespace, name, destPath, hfOriginIdentity)
-							if err != nil {
-								return err
-							}
-							if reused {
-								s.logger.Infof("Reusing Ready Hugging Face origin model artifact for %s/%s at %s after reservation check", namespace, name, destPath)
-							} else {
-								s.logger.Warnf("Hugging Face artifact parent %s is Ready but cannot be reused from %s; rebuilding canonical parent", hfArtifactParentKey, parentPath)
-							}
+				} else if shouldUseSamePathObjectStorageReuse(task) {
+					var reused bool
+					if useHuggingFaceOriginReuse {
+						if stop, validationErr := s.validateStartupHuggingFaceArtifactParentIfNeeded(ctx, task, hfArtifactParentKey, hfOriginIdentity, downloadObjectStorageModel); stop || validationErr != nil {
+							return validationErr
 						}
-					}
-					if !reused {
-						if !reserved {
-							var acquired bool
-							rebuildParentPath, acquired, err = s.acquireHuggingFaceArtifactParentRebuild(ctx, task, hfArtifactParentKey, rebuildParentPath, hfOriginIdentity)
-							if err != nil {
-								return err
-							}
-							if !acquired {
-								return nil
-							}
-						}
-						if err := downloadObjectStorageModel(rebuildParentPath); err != nil {
-							if reserved {
-								if cleanupErr := s.configMapReconciler.deleteConfigMapDataEntry(ctx, hfArtifactParentKey); cleanupErr != nil {
-									s.logger.Warnf("failed to remove Hugging Face artifact parent reservation %s after download failure: %v", hfArtifactParentKey, cleanupErr)
-								}
-							} else if failErr := s.configMapReconciler.markHuggingFaceArtifactParentFailed(ctx, hfArtifactParentKey, hfOriginIdentity, rebuildParentPath); failErr != nil {
-								s.logger.Warnf("failed to mark Hugging Face artifact parent %s at %s as Failed after rebuild error: %v", hfArtifactParentKey, rebuildParentPath, failErr)
-							}
-							return err
-						}
-						if markerErr := writeHuggingFaceArtifactReadyMarker(rebuildParentPath); markerErr != nil {
-							s.logger.Warnf("failed to write Hugging Face artifact ready marker for parent %s at %s: %v", hfArtifactParentKey, rebuildParentPath, markerErr)
-						}
-						if err := s.markHuggingFaceArtifactParentReady(ctx, hfArtifactParentKey, rebuildParentPath, hfOriginIdentity); err != nil {
-							s.logger.Errorf("downloaded Hugging Face artifact parent %s at %s but failed to mark it Ready: %v", hfArtifactParentKey, rebuildParentPath, err)
-							return err
-						}
-						artifact, err = s.linkHuggingFaceOriginArtifact(ctx, task, name, destPath, hfArtifactParentKey, rebuildParentPath, hfOriginIdentity)
+						artifact, reused, err = s.reuseHuggingFaceOriginArtifactIfPossible(ctx, task, baseModelSpec, modelType, namespace, name, destPath, hfOriginIdentity)
 						if err != nil {
 							return err
 						}
 					}
-				} else if matchedKey, reused := s.findReadyObjectStorageModelWithSamePath(ctx, task, baseModelSpec, destPath); reused {
-					s.logger.Infof("Reusing Ready same-path model artifact for %s/%s from %s at %s", namespace, name, matchedKey, destPath)
-				} else if matchedKey, wait := s.findUpdatingObjectStorageModelWithSamePath(ctx, task, baseModelSpec, destPath); wait &&
-					s.requeueSamePathInFlightReuseWait(task, matchedKey) {
-					return nil
-				} else if !allowFallbackDownload {
-					s.demoteToNormalPriority(task)
-					return nil
+					if reused {
+						s.logger.Infof("Reusing Ready Hugging Face origin model artifact for %s/%s at %s", namespace, name, destPath)
+					} else if useHuggingFaceOriginReuse {
+						if wait, waitErr := s.requeueIfHuggingFaceArtifactParentUpdating(ctx, task, hfOriginIdentity); wait || waitErr != nil {
+							return waitErr
+						}
+						if !allowFallbackDownload {
+							s.demoteToNormalPriority(task)
+							return nil
+						}
+						parentPath, parentStatus, reserved, err := s.configMapReconciler.reserveHuggingFaceArtifactParentEntry(ctx, hfArtifactParentKey, hfOriginIdentity, hfArtifactParentPath)
+						if err != nil {
+							return err
+						}
+						rebuildParentPath := hfArtifactParentPath
+						if strings.TrimSpace(parentPath) != "" {
+							rebuildParentPath = parentPath
+						}
+						if !reserved {
+							switch parentStatus {
+							case ModelStatusUpdating:
+								if s.requeueSamePathInFlightReuseWait(task, hfArtifactParentKey) {
+									return nil
+								}
+								return fmt.Errorf("timed out waiting for Hugging Face artifact parent %s to become Ready", hfArtifactParentKey)
+							case ModelStatusReady:
+								artifact, reused, err = s.reuseHuggingFaceOriginArtifactIfPossible(ctx, task, baseModelSpec, modelType, namespace, name, destPath, hfOriginIdentity)
+								if err != nil {
+									return err
+								}
+								if reused {
+									s.logger.Infof("Reusing Ready Hugging Face origin model artifact for %s/%s at %s after reservation check", namespace, name, destPath)
+								} else {
+									s.logger.Warnf("Hugging Face artifact parent %s is Ready but cannot be reused from %s; rebuilding canonical parent", hfArtifactParentKey, parentPath)
+								}
+							}
+						}
+						if !reused {
+							if !reserved {
+								var acquired bool
+								rebuildParentPath, acquired, err = s.acquireHuggingFaceArtifactParentRebuild(ctx, task, hfArtifactParentKey, rebuildParentPath, hfOriginIdentity)
+								if err != nil {
+									return err
+								}
+								if !acquired {
+									return nil
+								}
+							}
+							if err := downloadObjectStorageModel(rebuildParentPath); err != nil {
+								if reserved {
+									if cleanupErr := s.configMapReconciler.deleteConfigMapDataEntry(ctx, hfArtifactParentKey); cleanupErr != nil {
+										s.logger.Warnf("failed to remove Hugging Face artifact parent reservation %s after download failure: %v", hfArtifactParentKey, cleanupErr)
+									}
+								} else if failErr := s.configMapReconciler.markHuggingFaceArtifactParentFailed(ctx, hfArtifactParentKey, hfOriginIdentity, rebuildParentPath); failErr != nil {
+									s.logger.Warnf("failed to mark Hugging Face artifact parent %s at %s as Failed after rebuild error: %v", hfArtifactParentKey, rebuildParentPath, failErr)
+								}
+								return err
+							}
+							if markerErr := writeHuggingFaceArtifactReadyMarker(rebuildParentPath); markerErr != nil {
+								s.logger.Warnf("failed to write Hugging Face artifact ready marker for parent %s at %s: %v", hfArtifactParentKey, rebuildParentPath, markerErr)
+							}
+							if err := s.markHuggingFaceArtifactParentReady(ctx, hfArtifactParentKey, rebuildParentPath, hfOriginIdentity); err != nil {
+								s.logger.Errorf("downloaded Hugging Face artifact parent %s at %s but failed to mark it Ready: %v", hfArtifactParentKey, rebuildParentPath, err)
+								return err
+							}
+							artifact, err = s.linkHuggingFaceOriginArtifact(ctx, task, name, destPath, hfArtifactParentKey, rebuildParentPath, hfOriginIdentity)
+							if err != nil {
+								return err
+							}
+						}
+					} else if matchedKey, reused := s.findReadyObjectStorageModelWithSamePath(ctx, task, baseModelSpec, destPath); reused {
+						s.logger.Infof("Reusing Ready same-path model artifact for %s/%s from %s at %s", namespace, name, matchedKey, destPath)
+					} else if matchedKey, wait := s.findUpdatingObjectStorageModelWithSamePath(ctx, task, baseModelSpec, destPath); wait &&
+						s.requeueSamePathInFlightReuseWait(task, matchedKey) {
+						return nil
+					} else if !allowFallbackDownload {
+						s.demoteToNormalPriority(task)
+						return nil
+					} else if err := downloadObjectStorageModel(destPath); err != nil {
+						return err
+					}
 				} else if err := downloadObjectStorageModel(destPath); err != nil {
 					return err
 				}
-			} else if err := downloadObjectStorageModel(destPath); err != nil {
-				return err
 			}
 			if artifact == nil && hasHFOriginIdentity {
 				artifact = s.buildSelfParentArtifactFromIdentity(ctx, task, hfOriginIdentity, destPath)

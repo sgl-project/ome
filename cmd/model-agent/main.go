@@ -32,20 +32,24 @@ import (
 
 // config holds all configuration parameters for the model agent
 type config struct {
-	port                  int
-	modelsRootDir         string
-	modelsRootDirOnHost   string
-	nodeName              string
-	nodeLabelRetry        int
-	concurrency           int
-	multipartConcurrency  int
-	downloadRetry         int
-	downloadAuthType      string
-	numDownloadWorker     int
-	numHighPriorityWorker int
-	samePathWaitTimeout   time.Duration
-	namespace             string
-	logLevel              string
+	port                             int
+	modelsRootDir                    string
+	modelsRootDirOnHost              string
+	nodeName                         string
+	nodeLabelRetry                   int
+	concurrency                      int
+	multipartConcurrency             int
+	downloadRetry                    int
+	downloadAuthType                 string
+	numDownloadWorker                int
+	numHighPriorityWorker            int
+	samePathWaitTimeout              time.Duration
+	modelArtifactCacheEnabled        bool
+	modelArtifactCacheMounts         string
+	modelArtifactCacheKeyRoot        string
+	modelArtifactCacheSourceRequired bool
+	namespace                        string
+	logLevel                         string
 }
 
 // Logger type alias for zap.SugaredLogger
@@ -76,6 +80,10 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 5, "Number of download workers")
 	rootCmd.PersistentFlags().IntVar(&cfg.numHighPriorityWorker, "num-high-priority-worker", 1, "Number of high-priority workers for delete and same-path reuse tasks")
 	rootCmd.PersistentFlags().DurationVar(&cfg.samePathWaitTimeout, "same-path-wait-timeout", 30*time.Minute, "Maximum time to wait for same-path model reuse before falling back to normal download")
+	rootCmd.PersistentFlags().BoolVar(&cfg.modelArtifactCacheEnabled, "model-artifact-cache-enabled", false, "Enable mounted model artifact cache reuse before remote OCI Object Storage download")
+	rootCmd.PersistentFlags().StringVar(&cfg.modelArtifactCacheMounts, "model-artifact-cache-mounts", "", "Comma-separated mounted model artifact cache roots")
+	rootCmd.PersistentFlags().StringVar(&cfg.modelArtifactCacheKeyRoot, "model-artifact-cache-key-root", modelagent.DefaultMountedArtifactCacheKeyRoot, "Relative artifact cache key root under each mounted cache root")
+	rootCmd.PersistentFlags().BoolVar(&cfg.modelArtifactCacheSourceRequired, "model-artifact-cache-source-required", false, "Fail the model task when a configured mounted artifact cache source is present but unusable")
 	rootCmd.PersistentFlags().StringVar(&cfg.namespace, "namespace", "ome", "Kubernetes namespace to use")
 	rootCmd.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 
@@ -257,6 +265,13 @@ func initializeComponents(
 
 	logger.Infof("Configured Xet Hugging Face hub client with max concurrent downloads: %d", xetHubConfig.MaxConcurrentDownloads)
 
+	modelArtifactCacheConfig := modelagent.ModelArtifactCacheConfig{
+		Enabled:        v.GetBool("model-artifact-cache-enabled"),
+		Mounts:         splitCommaSeparated(v.GetString("model-artifact-cache-mounts")),
+		KeyRoot:        v.GetString("model-artifact-cache-key-root"),
+		SourceRequired: v.GetBool("model-artifact-cache-source-required"),
+	}
+
 	// Create a Gopher instance for downloading models
 	gopher, err := modelagent.NewGopher(
 		modelConfigParser,
@@ -267,6 +282,7 @@ func initializeComponents(
 		cfg.multipartConcurrency,
 		cfg.downloadRetry,
 		cfg.modelsRootDir,
+		modelArtifactCacheConfig,
 		gopherTaskChan,
 		cfg.samePathWaitTimeout,
 		nodeLabelReconciler,
@@ -280,6 +296,21 @@ func initializeComponents(
 	}
 
 	return scout, gopher, nil
+}
+
+func splitCommaSeparated(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	values := strings.Split(value, ",")
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 // runCommand is the main entry point executed by Cobra

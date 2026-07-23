@@ -115,6 +115,10 @@ func TestDefaultConfig(t *testing.T) {
 	testCmd.Flags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 3, "number of download workers")
 	testCmd.Flags().IntVar(&cfg.numHighPriorityWorker, "num-high-priority-worker", 1, "number of high-priority workers")
 	testCmd.Flags().DurationVar(&cfg.samePathWaitTimeout, "same-path-wait-timeout", 30*time.Minute, "same-path wait timeout")
+	testCmd.Flags().BoolVar(&cfg.modelArtifactCacheEnabled, "model-artifact-cache-enabled", false, "enable model artifact cache")
+	testCmd.Flags().StringVar(&cfg.modelArtifactCacheMounts, "model-artifact-cache-mounts", "", "model artifact cache mounts")
+	testCmd.Flags().StringVar(&cfg.modelArtifactCacheKeyRoot, "model-artifact-cache-key-root", "_artifacts", "model artifact cache key root")
+	testCmd.Flags().BoolVar(&cfg.modelArtifactCacheSourceRequired, "model-artifact-cache-source-required", false, "require model artifact cache source")
 	testCmd.Flags().StringVar(&cfg.namespace, "namespace", "ome", "the namespace of the ome model agents daemon set")
 
 	// Call initConfig to set cfg.nodeName
@@ -131,7 +135,16 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, 3, cfg.numDownloadWorker)
 	assert.Equal(t, 1, cfg.numHighPriorityWorker)
 	assert.Equal(t, 30*time.Minute, cfg.samePathWaitTimeout)
+	assert.False(t, cfg.modelArtifactCacheEnabled)
+	assert.Empty(t, cfg.modelArtifactCacheMounts)
+	assert.Equal(t, "_artifacts", cfg.modelArtifactCacheKeyRoot)
+	assert.False(t, cfg.modelArtifactCacheSourceRequired)
 	assert.Equal(t, "ome", cfg.namespace)
+}
+
+func TestSplitCommaSeparated(t *testing.T) {
+	assert.Nil(t, splitCommaSeparated(""))
+	assert.Equal(t, []string{"/cache-a", "/cache-b"}, splitCommaSeparated(" /cache-a, /cache-b ,, "))
 }
 
 func TestInitializeLogger(t *testing.T) {
