@@ -10,6 +10,12 @@ OME Resources and Controller
 |-----|------|---------|-------------|
 | global.imagePullSecrets | list | `[]` |  |
 | global.hub | string | `"ghcr.io/moirai-internal"` |  |
+| modelAgent.artifactCache.enabled | bool | `false` |  |
+| modelAgent.artifactCache.hostPath | string | `"/mnt/model-artifact-cache"` |  |
+| modelAgent.artifactCache.keyRoot | string | `"_artifacts"` |  |
+| modelAgent.artifactCache.mountPath | string | `"/mnt/model-artifact-cache"` |  |
+| modelAgent.artifactCache.mounts | list | `[]` |  |
+| modelAgent.artifactCache.sourceRequired | bool | `false` |  |
 | modelAgent.health.port | int | `8080` |  |
 | modelAgent.hostPath | string | `"/mnt/data/models"` |  |
 | modelAgent.image.pullPolicy | string | `"Always"` |  |

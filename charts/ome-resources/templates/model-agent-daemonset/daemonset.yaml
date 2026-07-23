@@ -42,6 +42,12 @@ spec:
           hostPath:
             path: {{ .Values.modelAgent.hostPath }}
             type: DirectoryOrCreate
+        {{- if .Values.modelAgent.artifactCache.enabled }}
+        - name: model-artifact-cache
+          hostPath:
+            path: {{ .Values.modelAgent.artifactCache.hostPath }}
+            type: DirectoryOrCreate
+        {{- end }}
         {{- with .Values.modelAgent.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -62,6 +68,20 @@ spec:
         - '1'
         - --same-path-wait-timeout
         - 30m
+        {{- if .Values.modelAgent.artifactCache.enabled }}
+        - --model-artifact-cache-enabled
+        - --model-artifact-cache-mounts
+        {{- if .Values.modelAgent.artifactCache.mounts }}
+        - {{ join "," .Values.modelAgent.artifactCache.mounts | quote }}
+        {{- else }}
+        - {{ .Values.modelAgent.artifactCache.mountPath | quote }}
+        {{- end }}
+        - --model-artifact-cache-key-root
+        - {{ .Values.modelAgent.artifactCache.keyRoot | quote }}
+        {{- if .Values.modelAgent.artifactCache.sourceRequired }}
+        - --model-artifact-cache-source-required
+        {{- end }}
+        {{- end }}
         env:
         - name: NODE_NAME
           valueFrom:
@@ -80,6 +100,11 @@ spec:
         - name: host-models
           readOnly: false
           mountPath: {{ .Values.modelAgent.hostPath }}
+        {{- if .Values.modelAgent.artifactCache.enabled }}
+        - name: model-artifact-cache
+          readOnly: true
+          mountPath: {{ .Values.modelAgent.artifactCache.mountPath }}
+        {{- end }}
         {{- with .Values.modelAgent.extraVolumeMounts }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

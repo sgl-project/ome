@@ -120,6 +120,23 @@ modelAgent:
     pullPolicy: Always
     tag: *defaultVersion
 
+  artifactCache:
+    # Enables read-through model artifact cache reuse before Object Storage download.
+    enabled: false
+    # Host path where cache exports are mounted on GPU nodes.
+    hostPath: /mnt/model-artifact-cache
+    # Container path exposed to model-agent. Keep this equal to hostPath unless
+    # the deployment needs an explicit container path abstraction.
+    mountPath: /mnt/model-artifact-cache
+    # One or more mounted cache roots visible inside the model-agent container.
+    # Example:
+    # mounts:
+    #   - /mnt/model-artifact-cache/cache-01
+    #   - /mnt/model-artifact-cache/cache-02
+    mounts: []
+    keyRoot: _artifacts
+    sourceRequired: false
+
   # Instance-type -> short-name mappings, by cloud provider. Single source of
   # truth: rendered into the model-agent ConfigMap (instance-type-map) and the
   # enigma init container's INSTANCE_TYPE_MAP env var via the
