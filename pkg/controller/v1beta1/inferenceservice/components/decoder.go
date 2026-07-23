@@ -156,8 +156,6 @@ func (d *Decoder) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta
 		return d.deploymentReconciler.ReconcileMultiNodeDeployment(isvc, objectMeta, podSpec, workerSize, workerPodSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	case constants.MultiNodeRayVLLM:
 		return d.deploymentReconciler.ReconcileMultiNodeRayVLLMDeployment(isvc, objectMeta, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
-	case constants.Serverless:
-		return d.deploymentReconciler.ReconcileKnativeDeployment(isvc, objectMeta, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for decoder")
 	}
@@ -271,7 +269,7 @@ func (d *Decoder) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *m
 			runnerSpec = d.decoderSpec.Runner
 		}
 	default:
-		// For raw deployment and serverless, use decoder spec
+		// For raw deployment, use decoder spec
 		basePodSpec = d.decoderSpec.PodSpec
 		runnerSpec = d.decoderSpec.Runner
 	}

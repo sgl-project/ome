@@ -165,7 +165,7 @@ func (b *HTTPRouteBuilder) buildEngineHTTPRoute(isvc *v1beta1.InferenceService) 
 }
 
 func (b *HTTPRouteBuilder) buildRouterHTTPRoute(isvc *v1beta1.InferenceService) (*gatewayapiv1.HTTPRoute, error) {
-	if !isvc.Status.IsConditionReady(v1beta1.RoutesReady) {
+	if !isvc.Status.IsConditionReady(v1beta1.RouterReady) {
 		isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
 			Type:   v1beta1.IngressReady,
 			Status: corev1.ConditionFalse,
@@ -289,7 +289,7 @@ func (b *HTTPRouteBuilder) buildTopLevelHTTPRoute(isvc *v1beta1.InferenceService
 	}
 
 	if isvc.Spec.Router != nil {
-		if !isvc.Status.IsConditionReady(v1beta1.RoutesReady) {
+		if !isvc.Status.IsConditionReady(v1beta1.RouterReady) {
 			isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
 				Type:   v1beta1.IngressReady,
 				Status: corev1.ConditionFalse,

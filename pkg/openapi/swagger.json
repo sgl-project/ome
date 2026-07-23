@@ -956,16 +956,6 @@
             "default": ""
           }
         },
-        "canaryTrafficPercent": {
-          "description": "CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision",
-          "type": "integer",
-          "format": "int64"
-        },
-        "containerConcurrency": {
-          "description": "ContainerConcurrency specifies how many requests can be processed concurrently, this sets the hard limit of the container concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).",
-          "type": "integer",
-          "format": "int64"
-        },
         "deploymentStrategy": {
           "description": "The deployment strategy to use to replace existing pods with new ones. Only applicable for raw deployment mode.",
           "$ref": "#/definitions/k8s.io.api.apps.v1.DeploymentStrategy"
@@ -995,16 +985,16 @@
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
-          "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
+          "description": "Minimum number of replicas, defaults to 1.",
           "type": "integer",
           "format": "int32"
         },
         "scaleMetric": {
-          "description": "ScaleMetric defines the scaling metric type watched by autoscaler possible values are concurrency, rps, cpu, memory. concurrency, rps are supported via Knative Pod Autoscaler(https://knative.dev/docs/serving/autoscaling/autoscaling-metrics).",
+          "description": "ScaleMetric defines the scaling metric type watched by autoscaler. Possible values are cpu, memory for HPA; KEDA additionally supports custom metrics.",
           "type": "string"
         },
         "scaleTarget": {
-          "description": "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for. concurrency and rps targets are supported by Knative Pod Autoscaler (https://knative.dev/docs/serving/autoscaling/autoscaling-targets/).",
+          "description": "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for.",
           "type": "integer",
           "format": "int32"
         },
@@ -1031,14 +1021,6 @@
           "description": "Latest revision name that is in ready state",
           "type": "string"
         },
-        "latestRolledoutRevision": {
-          "description": "Latest revision name that is rolled out with 100 percent traffic",
-          "type": "string"
-        },
-        "previousRolledoutRevision": {
-          "description": "Previous revision name that is rolled out with 100 percent traffic",
-          "type": "string"
-        },
         "restURL": {
           "description": "REST endpoint of the component if available.",
           "$ref": "#/definitions/knative.URL"
@@ -1046,15 +1028,6 @@
         "selectedAccelerator": {
           "description": "SelectedAccelerator shows which AcceleratorClass was selected",
           "$ref": "#/definitions/v1beta1.AcceleratorSelection"
-        },
-        "traffic": {
-          "description": "Traffic holds the configured traffic distribution for latest ready revision and previous rolled out revision.",
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/knative.dev.serving.pkg.apis.serving.v1.TrafficTarget"
-          },
-          "x-kubernetes-list-type": "atomic"
         },
         "url": {
           "description": "URL holds the primary url that will distribute traffic over the provided traffic targets. This will be one the REST or gRPC endpoints that are available. It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-level-suffix}",
@@ -1090,16 +1063,6 @@
         "automountServiceAccountToken": {
           "description": "AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.",
           "type": "boolean"
-        },
-        "canaryTrafficPercent": {
-          "description": "CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision",
-          "type": "integer",
-          "format": "int64"
-        },
-        "containerConcurrency": {
-          "description": "ContainerConcurrency specifies how many requests can be processed concurrently, this sets the hard limit of the container concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).",
-          "type": "integer",
-          "format": "int64"
         },
         "containers": {
           "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
@@ -1236,7 +1199,7 @@
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
-          "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
+          "description": "Minimum number of replicas, defaults to 1.",
           "type": "integer",
           "format": "int32"
         },
@@ -1313,11 +1276,11 @@
           "type": "string"
         },
         "scaleMetric": {
-          "description": "ScaleMetric defines the scaling metric type watched by autoscaler possible values are concurrency, rps, cpu, memory. concurrency, rps are supported via Knative Pod Autoscaler(https://knative.dev/docs/serving/autoscaling/autoscaling-metrics).",
+          "description": "ScaleMetric defines the scaling metric type watched by autoscaler. Possible values are cpu, memory for HPA; KEDA additionally supports custom metrics.",
           "type": "string"
         },
         "scaleTarget": {
-          "description": "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for. concurrency and rps targets are supported by Knative Pod Autoscaler (https://knative.dev/docs/serving/autoscaling/autoscaling-targets/).",
+          "description": "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for.",
           "type": "integer",
           "format": "int32"
         },
@@ -1537,16 +1500,6 @@
           "description": "AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.",
           "type": "boolean"
         },
-        "canaryTrafficPercent": {
-          "description": "CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision",
-          "type": "integer",
-          "format": "int64"
-        },
-        "containerConcurrency": {
-          "description": "ContainerConcurrency specifies how many requests can be processed concurrently, this sets the hard limit of the container concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).",
-          "type": "integer",
-          "format": "int64"
-        },
         "containers": {
           "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
           "type": "array",
@@ -1682,7 +1635,7 @@
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
-          "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
+          "description": "Minimum number of replicas, defaults to 1.",
           "type": "integer",
           "format": "int32"
         },
@@ -1759,11 +1712,11 @@
           "type": "string"
         },
         "scaleMetric": {
-          "description": "ScaleMetric defines the scaling metric type watched by autoscaler possible values are concurrency, rps, cpu, memory. concurrency, rps are supported via Knative Pod Autoscaler(https://knative.dev/docs/serving/autoscaling/autoscaling-metrics).",
+          "description": "ScaleMetric defines the scaling metric type watched by autoscaler. Possible values are cpu, memory for HPA; KEDA additionally supports custom metrics.",
           "type": "string"
         },
         "scaleTarget": {
-          "description": "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for. concurrency and rps targets are supported by Knative Pod Autoscaler (https://knative.dev/docs/serving/autoscaling/autoscaling-targets/).",
+          "description": "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for.",
           "type": "integer",
           "format": "int32"
         },
@@ -3111,11 +3064,6 @@
           "description": "AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.",
           "type": "boolean"
         },
-        "canaryTrafficPercent": {
-          "description": "CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision",
-          "type": "integer",
-          "format": "int64"
-        },
         "config": {
           "description": "Additional configuration parameters for the runner This can include framework-specific settings",
           "type": "object",
@@ -3123,11 +3071,6 @@
             "type": "string",
             "default": ""
           }
-        },
-        "containerConcurrency": {
-          "description": "ContainerConcurrency specifies how many requests can be processed concurrently, this sets the hard limit of the container concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).",
-          "type": "integer",
-          "format": "int64"
         },
         "containers": {
           "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
@@ -3260,7 +3203,7 @@
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
-          "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
+          "description": "Minimum number of replicas, defaults to 1.",
           "type": "integer",
           "format": "int32"
         },
@@ -3337,11 +3280,11 @@
           "type": "string"
         },
         "scaleMetric": {
-          "description": "ScaleMetric defines the scaling metric type watched by autoscaler possible values are concurrency, rps, cpu, memory. concurrency, rps are supported via Knative Pod Autoscaler(https://knative.dev/docs/serving/autoscaling/autoscaling-metrics).",
+          "description": "ScaleMetric defines the scaling metric type watched by autoscaler. Possible values are cpu, memory for HPA; KEDA additionally supports custom metrics.",
           "type": "string"
         },
         "scaleTarget": {
-          "description": "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for. concurrency and rps targets are supported by Knative Pod Autoscaler (https://knative.dev/docs/serving/autoscaling/autoscaling-targets/).",
+          "description": "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for.",
           "type": "integer",
           "format": "int32"
         },

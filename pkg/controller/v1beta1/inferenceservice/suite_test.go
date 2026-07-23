@@ -14,7 +14,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
-	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -50,7 +49,6 @@ var _ = BeforeSuite(func() {
 	Expect(appsv1.AddToScheme(testScheme)).To(Succeed())
 	Expect(v1.AddToScheme(testScheme)).To(Succeed())
 	Expect(kedav1.AddToScheme(testScheme)).To(Succeed())
-	Expect(knservingv1.AddToScheme(testScheme)).To(Succeed())
 	Expect(lws.AddToScheme(testScheme)).To(Succeed())
 	Expect(autoscalingv2.AddToScheme(testScheme)).To(Succeed())
 

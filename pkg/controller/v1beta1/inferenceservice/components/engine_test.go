@@ -18,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
-	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -46,7 +45,6 @@ func TestEngineReconcile(t *testing.T) {
 	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(v1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(appsv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
-	g.Expect(knservingv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(lws.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(kedav1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(autoscalingv2.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
@@ -403,73 +401,6 @@ func TestEngineReconcile(t *testing.T) {
 					g.Expect(workerFound).To(gomega.BeTrue(), "Worker model node selector not found")
 					g.Expect(workerValue).To(gomega.Equal("Ready"))
 				}
-			},
-		},
-		{
-			name:           "Serverless deployment",
-			deploymentMode: constants.Serverless,
-			baseModel: &v1beta1.BaseModelSpec{
-				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
-				},
-			},
-			baseModelMeta: &metav1.ObjectMeta{
-				Name: "base-model-3",
-			},
-			engineSpec: &v1beta1.EngineSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(0),
-					MaxReplicas: 5,
-				},
-				PodSpec: v1beta1.PodSpec{
-					Containers: []v1.Container{
-						{
-							Name:  "serverless-container",
-							Image: "serverless:latest",
-						},
-					},
-				},
-			},
-			runtime:     &v1beta1.ServingRuntimeSpec{},
-			runtimeName: "serverless-runtime",
-			isvc: &v1beta1.InferenceService{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-sl-isvc",
-					Namespace: "default",
-				},
-				Spec: v1beta1.InferenceServiceSpec{
-					Model: &v1beta1.ModelRef{},
-				},
-			},
-			setupMocks: func(c client.Client, cs kubernetes.Interface) {
-				// Create inferenceservice config in both clients
-				cm := &v1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "inferenceservice-config",
-						Namespace: "ome",
-					},
-					Data: map[string]string{
-						"config": "{}",
-					},
-				}
-				// Create in controller-runtime client
-				err := c.Create(context.TODO(), cm)
-				g.Expect(err).NotTo(gomega.HaveOccurred())
-
-				// Also create in clientset (if different)
-				_, err = cs.CoreV1().ConfigMaps("ome").Create(context.TODO(), cm, metav1.CreateOptions{})
-				if err != nil && !strings.Contains(err.Error(), "already exists") {
-					g.Expect(err).NotTo(gomega.HaveOccurred())
-				}
-			},
-			validate: func(t *testing.T, c client.Client, isvc *v1beta1.InferenceService) {
-				// Check Knative Service was created
-				ksvc := &knservingv1.Service{}
-				err := c.Get(context.TODO(), types.NamespacedName{
-					Name:      "test-sl-isvc-engine",
-					Namespace: "default",
-				}, ksvc)
-				g.Expect(err).NotTo(gomega.HaveOccurred())
 			},
 		},
 		{

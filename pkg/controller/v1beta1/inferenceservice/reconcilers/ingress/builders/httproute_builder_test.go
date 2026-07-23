@@ -496,8 +496,8 @@ func setEngineReady(isvc *v1beta1.InferenceService) {
 }
 
 func setRouterReady(isvc *v1beta1.InferenceService) {
-	isvc.Status.SetCondition(v1beta1.RoutesReady, &apis.Condition{
-		Type:   v1beta1.RoutesReady,
+	isvc.Status.SetCondition(v1beta1.RouterReady, &apis.Condition{
+		Type:   v1beta1.RouterReady,
 		Status: corev1.ConditionTrue,
 	})
 }

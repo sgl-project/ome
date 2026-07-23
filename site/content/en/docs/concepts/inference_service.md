@@ -136,7 +136,6 @@ OME automatically selects the optimal deployment mode based on your configuratio
 | Mode                              | Description                                 | Use Cases                                                         | Infrastructure                                                                |
 |-----------------------------------|---------------------------------------------|-------------------------------------------------------------------|-------------------------------------------------------------------------------|
 | **Raw Deployment**                | Standard Kubernetes Deployment              | Stable workloads, predictable traffic, no cold starts             | Kubernetes Deployments + Services                                             |
-| **Serverless**                    | Knative-based auto-scaling                  | Variable workloads, cost optimization, scale-to-zero              | Knative Serving                                                               |
 | **Multi-Node**                    | Distributed inference across multiple nodes | Large models (DeepSeek), models that can not fit in a single node | LeaderWorkerSet                                                               |
 | **Prefill-Decode Disaggregation** | Disaggregated serving architecture          | Maximizing resource utilization, better performance,              | Raw Deployments or LeaderWorkerSet(if the model can not fit in a single node) |
 
@@ -158,27 +157,6 @@ spec:
 ```
 
 This deployment mode offers direct Kubernetes management with standard HPA-based autoscaling, no cold starts, and is ideal for stable, predictable workloads.
-
-### Serverless Mode
-
-Leverages Knative Serving for automatic scaling including scale-to-zero capabilities.
-
-```yaml
-apiVersion: ome.io/v1beta1
-kind: InferenceService
-metadata:
-  name: llama-chat
-spec:
-  model:
-    name: llama-3-70b-instruct
-  engine:
-    minReplicas: 0  # Enables scale-to-zero
-    maxReplicas: 10
-    scaleTarget: 10  # Concurrent requests per pod
-```
-This deployment mode leverages Knative Serving for request-based autoscaling, scale-to-zero when idle, and is ideal for variable workloads and cost-sensitive environments.
-
-> **⚠️ WARNING**: This deployment mode leverages Knative Serving for request-based autoscaling, scale-to-zero when idle, and is ideal for variable workloads and cost-sensitive environments; however, it may introduce additional startup latency for large language models due to cold starts and model loading time.
 
 ### Multi-Node Mode
 
@@ -240,11 +218,11 @@ OME derives the deployment mode from the component spec rather than requiring yo
 
 - If `engine.leader` **or** `engine.worker` is set, the Engine is deployed as Multi-Node.
 - If `decoder.leader` **or** `decoder.worker` is set, the Decoder is deployed as Multi-Node.
-- Otherwise the component falls back to Raw Deployment (or Serverless when `minReplicas: 0`).
+- Otherwise the component falls back to Raw Deployment.
 
 You can also force a specific distributed backend with the `ome.io/deploymentMode` annotation (for example `MultiNode` or `MultiNodeRayVLLM`); when present, the annotation takes precedence over the inferred mode.
 
-> **Note**: The `decoder` component only supports Raw Deployment or Multi-Node. When a decoder is present, the engine is never placed in Serverless mode.
+> **Note**: The `decoder` component only supports Raw Deployment or Multi-Node.
 
 ### Leader and Worker Specs
 
@@ -685,9 +663,6 @@ Choose the appropriate deployment mode based on your requirements:
 |-------------------------------------|------------------|
 | Stable, predictable load            | Raw Deployment   |
 | No cold starts                      | Raw Deployment   |
-| Variable workload                   | Serverless       |
-| Cost optimization                   | Serverless       |
-| Scale-to-zero capability            | Serverless       |
 | Large model requiring multiple GPUs | Multi-Node       |
 | Distributed inference               | Multi-Node       |
 | Maximum performance                 | Multi-Node       |

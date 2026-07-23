@@ -53,21 +53,31 @@ type InferenceServicesConfig struct {
 
 // +kubebuilder:object:generate=false
 type IngressConfig struct {
-	IngressGateway             string    `json:"ingressGateway,omitempty"`
-	IngressServiceName         string    `json:"ingressService,omitempty"`
-	LocalGateway               string    `json:"localGateway,omitempty"`
-	LocalGatewayServiceName    string    `json:"localGatewayService,omitempty"`
-	KnativeLocalGatewayService string    `json:"knativeLocalGatewayService,omitempty"`
-	OmeIngressGateway          string    `json:"omeIngressGateway,omitempty"`
-	IngressDomain              string    `json:"ingressDomain,omitempty"`
-	IngressClassName           *string   `json:"ingressClassName,omitempty"`
-	AdditionalIngressDomains   *[]string `json:"additionalIngressDomains,omitempty"`
-	DomainTemplate             string    `json:"domainTemplate,omitempty"`
-	UrlScheme                  string    `json:"urlScheme,omitempty"`
-	DisableIstioVirtualHost    bool      `json:"disableIstioVirtualHost,omitempty"`
-	PathTemplate               string    `json:"pathTemplate,omitempty"`
-	DisableIngressCreation     bool      `json:"disableIngressCreation,omitempty"`
-	EnableGatewayAPI           bool      `json:"enableGatewayAPI,omitempty"`
+	// Deprecated: IngressGateway and IngressServiceName are no longer consumed by any
+	// ingress strategy (they were only used by the removed Serverless/Istio VirtualService
+	// path). They are retained, still shipped in the config map, and no longer required,
+	// so that a controller image that predates the Serverless removal keeps starting
+	// against a newer config map.
+	//
+	// TODO: remove these two fields once no controller image that requires them is still
+	// running. Removing them is a breaking change for that image, which validates both at
+	// startup and exits if either is empty. Delete together with the "ingressGateway" and
+	// "ingressService" keys in config/configmap/inferenceservice.yaml and
+	// charts/ome-resources/templates/ome-controller/configmap.yaml, and the gateway /
+	// gatewayService values in charts/ome-resources/values.yaml.
+	IngressGateway     string `json:"ingressGateway,omitempty"`
+	IngressServiceName string `json:"ingressService,omitempty"`
+
+	OmeIngressGateway        string    `json:"omeIngressGateway,omitempty"`
+	IngressDomain            string    `json:"ingressDomain,omitempty"`
+	IngressClassName         *string   `json:"ingressClassName,omitempty"`
+	AdditionalIngressDomains *[]string `json:"additionalIngressDomains,omitempty"`
+	DomainTemplate           string    `json:"domainTemplate,omitempty"`
+	UrlScheme                string    `json:"urlScheme,omitempty"`
+	DisableIstioVirtualHost  bool      `json:"disableIstioVirtualHost,omitempty"`
+	PathTemplate             string    `json:"pathTemplate,omitempty"`
+	DisableIngressCreation   bool      `json:"disableIngressCreation,omitempty"`
+	EnableGatewayAPI         bool      `json:"enableGatewayAPI,omitempty"`
 }
 
 // +kubebuilder:object:generate=false
@@ -152,9 +162,6 @@ func NewIngressConfig(clientset kubernetes.Interface) (*IngressConfig, error) {
 			return nil, fmt.Errorf("unable to parse ingress config json: %w", err)
 		}
 
-		if ingressConfig.IngressGateway == "" || ingressConfig.IngressServiceName == "" {
-			return nil, fmt.Errorf("invalid ingress config - ingressGateway and ingressService are required")
-		}
 		if ingressConfig.PathTemplate != "" {
 			// TODO: ensure that the generated path is valid, that is:
 			// * both Name and Namespace are used to avoid collisions
@@ -211,9 +218,8 @@ func NewDeployConfig(clientset kubernetes.Interface) (*DeployConfig, error) {
 			return nil, fmt.Errorf("invalid deploy config, defaultDeploymentMode is required")
 		}
 
-		if deployConfig.DefaultDeploymentMode != string(constants.Serverless) &&
-			deployConfig.DefaultDeploymentMode != string(constants.RawDeployment) {
-			return nil, fmt.Errorf("invalid deployment mode. Supported modes are %s and %s", constants.Serverless, constants.RawDeployment)
+		if deployConfig.DefaultDeploymentMode != string(constants.RawDeployment) {
+			return nil, fmt.Errorf("invalid deployment mode %q. The only supported mode is %s", deployConfig.DefaultDeploymentMode, constants.RawDeployment)
 		}
 	}
 	return deployConfig, nil

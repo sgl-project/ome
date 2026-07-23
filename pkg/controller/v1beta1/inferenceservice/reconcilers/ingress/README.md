@@ -34,9 +34,8 @@
 
 ## Architecture Overview
 
-The ingress reconciler uses a **strategy pattern** to handle different deployment modes and ingress technologies. The system supports three main ingress resource types:
+The ingress reconciler uses a **strategy pattern** to handle different deployment modes and ingress technologies. The system supports two main ingress resource types:
 
-- **Istio VirtualService** (for Serverless/Knative deployments)
 - **Kubernetes Ingress** (for RawDeployment/MultiNode with standard ingress controllers)
 - **Gateway API HTTPRoute** (for RawDeployment/MultiNode with Gateway API enabled)
 
@@ -46,7 +45,6 @@ graph TB
         A[InferenceService Spec] --> B[Deployment Mode Detection]
         B --> C{Deployment Mode}
 
-        C -->|Serverless| D[ServerlessStrategy]
         C -->|RawDeployment/MultiNode| E{Gateway API Enabled?}
 
         E -->|Yes| F[GatewayAPIStrategy]
@@ -104,7 +102,7 @@ func (r *IngressReconciler) determineDeploymentMode(isvc *v1beta1.InferenceServi
         }
     }
 
-    return string(constants.Serverless) // Default fallback
+    return string(constants.RawDeployment) // Default fallback
 }
 ```
 
@@ -116,8 +114,6 @@ The factory pattern selects the appropriate strategy:
 // From factory/reconciler_factory.go
 func (f *Factory) CreateIngressStrategy(deploymentMode string) (interfaces.IngressStrategy, error) {
     switch deploymentMode {
-    case string(constants.Serverless):
-        return f.serverlessStrategy, nil
     case string(constants.RawDeployment), string(constants.MultiNode):
         if f.ingressConfig.EnableGatewayAPI {
             return f.gatewayAPIStrategy, nil
@@ -130,27 +126,6 @@ func (f *Factory) CreateIngressStrategy(deploymentMode string) (interfaces.Ingre
 ```
 
 ## Ingress Resource Types
-
-### 1. Serverless Strategy - Istio VirtualService
-
-**Used for:** `Serverless` deployment mode
-**Resource Type:** `istio.io/api/networking/v1beta1.VirtualService`
-
-**Key Features:**
-- Integrates with Knative networking
-- Uses Istio service mesh for traffic routing
-- Supports both internal (cluster-local) and external traffic
-- Routes to the engine service or the router service
-
-**Service Targeting:**
-```go
-// From virtualservice_builder.go
-backend := isvc.Name  // engine service uses the isvc name
-
-if isvc.Spec.Router != nil {
-    backend = constants.RouterServiceName(isvc.Name)  // Router: service-name
-}
-```
 
 ### 2. Kubernetes Ingress Strategy
 
@@ -175,16 +150,6 @@ if isvc.Spec.Router != nil {
 - Enhanced security and observability
 
 ## Routing Rules by Deployment Mode
-
-### Serverless (Istio VirtualService)
-
-**Routing Logic:**
-- **With Router:** External traffic → Router service → Engine service
-- **Engine Only:** External traffic → Engine service
-
-**Service Names:**
-- Router: `{inference-service-name}` (router service)
-- Engine: `{inference-service-name}` (engine service)
 
 ### RawDeployment/MultiNode (Kubernetes Ingress)
 
@@ -455,7 +420,7 @@ func (r *IngressReconciler) ReconcileWithDeploymentMode(ctx context.Context, isv
 #### `determineDeploymentMode()`
 - Analyzes InferenceService spec to determine deployment mode
 - Checks entrypoint component and its deployment mode
-- Falls back to Serverless if not specified
+- Falls back to RawDeployment if not specified
 
 ### 2. Strategy Factory (`factory/reconciler_factory.go`)
 
@@ -465,8 +430,6 @@ func (r *IngressReconciler) ReconcileWithDeploymentMode(ctx context.Context, isv
 ```go
 func (f *Factory) CreateIngressStrategy(deploymentMode string) (interfaces.IngressStrategy, error) {
     switch deploymentMode {
-    case string(constants.Serverless):
-        return f.serverlessStrategy, nil
     case string(constants.RawDeployment), string(constants.MultiNode):
         if f.ingressConfig.EnableGatewayAPI {
             return f.gatewayAPIStrategy, nil
@@ -477,16 +440,6 @@ func (f *Factory) CreateIngressStrategy(deploymentMode string) (interfaces.Ingre
     }
 }
 ```
-
-### 3. Serverless Strategy (`strategies/serverless_strategy.go`)
-
-**Creates:** Istio VirtualService resources
-**Integration:** Knative networking and Istio service mesh
-
-**Key Features:**
-- Handles both internal (cluster-local) and external traffic
-- Routes to router service if available, otherwise to the engine service
-- Uses VirtualServiceBuilder for resource construction
 
 ### 4. Kubernetes Ingress Strategy (`strategies/raw_ingress_strategy.go`)
 
@@ -612,7 +565,7 @@ func (b *IngressBuilder) buildRouterRules(isvc *v1beta1.InferenceService) ([]net
 
 **EnableGatewayAPI:**
 - **Type:** `bool`
-- **Purpose:** Switches between Kubernetes Ingress and Gateway API for non-serverless modes
+- **Purpose:** Switches between Kubernetes Ingress and Gateway API
 - **Default:** `false` (uses Kubernetes Ingress)
 
 **IngressClassName:**
@@ -637,8 +590,7 @@ data:
 
 The OME ingress reconciler provides a flexible, strategy-based approach to handling external access across different deployment modes:
 
-1. **Serverless deployments** use Istio VirtualService for seamless Knative integration
-2. **RawDeployment/MultiNode deployments** use either Kubernetes Ingress or Gateway API HTTPRoute based on configuration
+1. **RawDeployment/MultiNode deployments** use either Kubernetes Ingress or Gateway API HTTPRoute based on configuration
 3. **Component-aware routing** adapts to the presence of router, decoder, and engine components
 4. **Fallback external service** ensures accessibility when ingress is disabled
 5. **Readiness-based reconciliation** prevents ingress creation before services are available

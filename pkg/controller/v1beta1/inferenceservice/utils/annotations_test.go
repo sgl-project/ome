@@ -12,8 +12,6 @@ import (
 func TestResolveIngressConfig(t *testing.T) {
 	// Base config from ConfigMap
 	baseConfig := &controllerconfig.IngressConfig{
-		IngressGateway:          "knative-serving/knative-ingress-gateway",
-		IngressServiceName:      "istio-ingressgateway.istio-system.svc.cluster.local",
 		IngressDomain:           "svc.cluster.local",
 		DomainTemplate:          "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
 		UrlScheme:               "http",
@@ -38,8 +36,6 @@ func TestResolveIngressConfig(t *testing.T) {
 				constants.IngressDomainTemplate: "{{ .Name }}-custom.example.com",
 			},
 			expected: &controllerconfig.IngressConfig{
-				IngressGateway:          "knative-serving/knative-ingress-gateway",
-				IngressServiceName:      "istio-ingressgateway.istio-system.svc.cluster.local",
 				IngressDomain:           "svc.cluster.local",
 				DomainTemplate:          "{{ .Name }}-custom.example.com",
 				UrlScheme:               "http",
@@ -55,8 +51,6 @@ func TestResolveIngressConfig(t *testing.T) {
 				constants.IngressURLScheme: "https",
 			},
 			expected: &controllerconfig.IngressConfig{
-				IngressGateway:          "knative-serving/knative-ingress-gateway",
-				IngressServiceName:      "istio-ingressgateway.istio-system.svc.cluster.local",
 				IngressDomain:           "my-domain.com",
 				DomainTemplate:          "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
 				UrlScheme:               "https",
@@ -71,8 +65,6 @@ func TestResolveIngressConfig(t *testing.T) {
 				constants.IngressAdditionalDomains: "alt1.com, alt2.com, alt3.com",
 			},
 			expected: &controllerconfig.IngressConfig{
-				IngressGateway:           "knative-serving/knative-ingress-gateway",
-				IngressServiceName:       "istio-ingressgateway.istio-system.svc.cluster.local",
 				IngressDomain:            "svc.cluster.local",
 				DomainTemplate:           "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
 				UrlScheme:                "http",
@@ -89,8 +81,6 @@ func TestResolveIngressConfig(t *testing.T) {
 				constants.IngressDisableCreation:         "true",
 			},
 			expected: &controllerconfig.IngressConfig{
-				IngressGateway:          "knative-serving/knative-ingress-gateway",
-				IngressServiceName:      "istio-ingressgateway.istio-system.svc.cluster.local",
 				IngressDomain:           "svc.cluster.local",
 				DomainTemplate:          "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
 				UrlScheme:               "http",
@@ -105,8 +95,6 @@ func TestResolveIngressConfig(t *testing.T) {
 				constants.IngressPathTemplate: "/api/v1/models/{{ .Name }}",
 			},
 			expected: &controllerconfig.IngressConfig{
-				IngressGateway:          "knative-serving/knative-ingress-gateway",
-				IngressServiceName:      "istio-ingressgateway.istio-system.svc.cluster.local",
 				IngressDomain:           "svc.cluster.local",
 				DomainTemplate:          "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
 				UrlScheme:               "http",
@@ -127,8 +115,6 @@ func TestResolveIngressConfig(t *testing.T) {
 				constants.IngressDisableCreation:         "false",
 			},
 			expected: &controllerconfig.IngressConfig{
-				IngressGateway:           "knative-serving/knative-ingress-gateway",
-				IngressServiceName:       "istio-ingressgateway.istio-system.svc.cluster.local",
 				IngressDomain:            "company.com",
 				DomainTemplate:           "{{ .Name }}-prod.company.com",
 				UrlScheme:                "https",
@@ -168,11 +154,11 @@ func TestGetDeploymentModeFromAnnotations(t *testing.T) {
 			expectedFound: false,
 		},
 		{
-			name: "valid Serverless mode",
+			name: "valid MultiNode mode",
 			annotations: map[string]string{
-				constants.DeploymentMode: string(constants.Serverless),
+				constants.DeploymentMode: string(constants.MultiNode),
 			},
-			expectedMode:  constants.Serverless,
+			expectedMode:  constants.MultiNode,
 			expectedFound: true,
 		},
 		{
@@ -255,7 +241,7 @@ func TestGetDeploymentMode(t *testing.T) {
 				constants.DeploymentMode: string(constants.RawDeployment),
 			},
 			deployConfig: &controllerconfig.DeployConfig{
-				DefaultDeploymentMode: string(constants.Serverless),
+				DefaultDeploymentMode: string(constants.MultiNode),
 			},
 			expectedMode: constants.RawDeployment,
 		},
@@ -263,9 +249,9 @@ func TestGetDeploymentMode(t *testing.T) {
 			name:        "no annotation uses config default",
 			annotations: map[string]string{},
 			deployConfig: &controllerconfig.DeployConfig{
-				DefaultDeploymentMode: string(constants.Serverless),
+				DefaultDeploymentMode: string(constants.MultiNode),
 			},
-			expectedMode: constants.Serverless,
+			expectedMode: constants.MultiNode,
 		},
 		{
 			name:        "nil annotations uses config default",

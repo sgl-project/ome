@@ -6,7 +6,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"knative.dev/pkg/apis"
-	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	lwsspec "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -181,99 +180,6 @@ func (sr *StatusReconciler) getReadyConditionsMap() map[v1beta1.ComponentType]ap
 		v1beta1.EngineComponent:  v1beta1.EngineReady,
 		v1beta1.DecoderComponent: v1beta1.DecoderReady,
 	}
-}
-
-// getRouteConditionsMap returns the mapping of component types to route conditions
-func (sr *StatusReconciler) getRouteConditionsMap() map[v1beta1.ComponentType]apis.ConditionType {
-	return map[v1beta1.ComponentType]apis.ConditionType{
-		v1beta1.RouterComponent:  v1beta1.RouterRouteReady,
-		v1beta1.EngineComponent:  v1beta1.EngineRouteReady,
-		v1beta1.DecoderComponent: v1beta1.DecoderRouteReady,
-	}
-}
-
-// getConfigurationConditionsMap returns the mapping of component types to configuration conditions
-func (sr *StatusReconciler) getConfigurationConditionsMap() map[v1beta1.ComponentType]apis.ConditionType {
-	return map[v1beta1.ComponentType]apis.ConditionType{
-		v1beta1.RouterComponent:  v1beta1.RouterConfigurationReady,
-		v1beta1.EngineComponent:  v1beta1.EngineConfigurationReady,
-		v1beta1.DecoderComponent: v1beta1.DecoderConfigurationReady,
-	}
-}
-
-// getConditionsMapIndex returns the mapping of condition types to component condition maps
-func (sr *StatusReconciler) getConditionsMapIndex() map[apis.ConditionType]map[v1beta1.ComponentType]apis.ConditionType {
-	return map[apis.ConditionType]map[v1beta1.ComponentType]apis.ConditionType{
-		v1beta1.RoutesReady:           sr.getRouteConditionsMap(),
-		v1beta1.LatestDeploymentReady: sr.getConfigurationConditionsMap(),
-	}
-}
-
-// handleTrafficRouting handles the complex traffic routing logic
-func (sr *StatusReconciler) handleTrafficRouting(
-	statusSpec *v1beta1.ComponentStatusSpec,
-	serviceStatus *knservingv1.ServiceStatus,
-	revisionTraffic map[string]int64) {
-
-	for _, traffic := range serviceStatus.Traffic {
-		if traffic.RevisionName == serviceStatus.LatestReadyRevisionName && traffic.LatestRevision != nil &&
-			*traffic.LatestRevision {
-			if statusSpec.LatestRolledoutRevision != serviceStatus.LatestReadyRevisionName {
-				if traffic.Percent != nil && *traffic.Percent == FullTrafficPercent {
-					// track the last revision that's fully rolled out
-					statusSpec.PreviousRolledoutRevision = statusSpec.LatestRolledoutRevision
-					statusSpec.LatestRolledoutRevision = serviceStatus.LatestReadyRevisionName
-				}
-			} else {
-				// This is to handle case when the latest ready revision is rolled out with 100% and then rolled back
-				// so here we need to rollback the LatestRolledoutRevision to PreviousRolledoutRevision
-				if serviceStatus.LatestReadyRevisionName == serviceStatus.LatestCreatedRevisionName {
-					if traffic.Percent != nil && *traffic.Percent < FullTrafficPercent {
-						// check the possibility that the traffic is split over the same revision
-						if val, ok := revisionTraffic[traffic.RevisionName]; ok {
-							if val == FullTrafficPercent && statusSpec.PreviousRolledoutRevision != "" {
-								statusSpec.LatestRolledoutRevision = statusSpec.PreviousRolledoutRevision
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-}
-
-// propagateServiceConditions propagates conditions from Knative service
-func (sr *StatusReconciler) propagateServiceConditions(
-	status *v1beta1.InferenceServiceStatus,
-	component v1beta1.ComponentType,
-	serviceStatus *knservingv1.ServiceStatus,
-	statusSpec *v1beta1.ComponentStatusSpec) {
-
-	// propagate overall ready condition for each component
-	readyCondition := serviceStatus.GetCondition(knservingv1.ServiceConditionReady)
-	if readyCondition != nil && readyCondition.Status == v1.ConditionTrue {
-		if serviceStatus.Address != nil {
-			statusSpec.Address = serviceStatus.Address
-		}
-		if serviceStatus.URL != nil {
-			statusSpec.URL = serviceStatus.URL
-		}
-	}
-	readyConditionType := sr.getReadyConditionsMap()[component]
-	sr.setCondition(status, readyConditionType, readyCondition)
-
-	// propagate route condition for each component
-	routeCondition := serviceStatus.GetCondition(RoutesReadyCondition)
-	routeConditionType := sr.getRouteConditionsMap()[component]
-	sr.setCondition(status, routeConditionType, routeCondition)
-
-	// propagate configuration condition for each component
-	configurationCondition := serviceStatus.GetCondition(ConfigurationsReadyCondition)
-	configurationConditionType := sr.getConfigurationConditionsMap()[component]
-	sr.setCondition(status, configurationConditionType, configurationCondition)
-
-	// propagate traffic status for each component
-	statusSpec.Traffic = serviceStatus.Traffic
 }
 
 // checkContainerStatuses checks the status of containers in a pod

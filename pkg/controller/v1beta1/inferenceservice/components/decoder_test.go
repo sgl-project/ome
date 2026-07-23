@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
-	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -41,7 +40,6 @@ func TestDecoderReconcile(t *testing.T) {
 	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(v1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(appsv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
-	g.Expect(knservingv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(lws.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(kedav1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(autoscalingv2.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())

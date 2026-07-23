@@ -207,14 +207,6 @@ func TestMutator_Handle(t *testing.T) {
 				Patches: []jsonpatch.JsonPatchOperation{
 					{
 						Operation: "add",
-						Path:      "/metadata/annotations",
-						Value: map[string]interface{}{
-							"ome.io/enable-metric-aggregation":  "",
-							"ome.io/enable-prometheus-scraping": "",
-						},
-					},
-					{
-						Operation: "add",
 						Path:      "/metadata/namespace",
 						Value:     "default",
 					},
@@ -306,14 +298,6 @@ func TestMutator_Handle(t *testing.T) {
 			},
 			matcher: gomega.BeEquivalentTo(admission.Response{
 				Patches: []jsonpatch.JsonPatchOperation{
-					{
-						Operation: "add",
-						Path:      "/metadata/annotations",
-						Value: map[string]interface{}{
-							"ome.io/enable-metric-aggregation":  "",
-							"ome.io/enable-prometheus-scraping": "",
-						},
-					},
 					{
 						Operation: "add",
 						Path:      "/metadata/namespace",

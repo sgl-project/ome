@@ -8,9 +8,6 @@ data:
     {
         "ingressGateway" : "knative-serving/knative-ingress-gateway",
         "ingressService" : "istio-ingressgateway.istio-system.svc.cluster.local",
-        "localGateway" : "knative-serving/knative-local-gateway",
-        "localGatewayService" : "knative-local-gateway.istio-system.svc.cluster.local",
-        "knativeLocalGatewayService" : "knative-local-gateway.istio-system.svc.cluster.local",
         "omeIngressGateway" : "",
         "ingressDomain"  : "svc.cluster.local",
         "ingressClassName" : "istio",
@@ -26,12 +23,6 @@ data:
   deploy: |-
     {
       "defaultDeploymentMode": "RawDeployment"
-    }
-
-  metricsAggregator: |-
-    {
-      "enableMetricAggregation": "false",
-      "enablePrometheusScraping" : "false"
     }
 
   modelInit: |-

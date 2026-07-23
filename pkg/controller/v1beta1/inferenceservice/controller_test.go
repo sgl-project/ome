@@ -701,7 +701,7 @@ func determineEngineDeploymentMode(engineSpec *v1beta1.EngineSpec) constants.Dep
 	if engineSpec.Leader != nil || engineSpec.Worker != nil {
 		return constants.MultiNode
 	}
-	// Note: In real implementation, serverless mode would be determined by annotations/config
+	// Note: In real implementation, the deployment mode would be determined by annotations/config
 	return constants.RawDeployment
 }
 

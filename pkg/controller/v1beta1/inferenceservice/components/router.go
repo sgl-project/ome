@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -131,8 +130,6 @@ func (r *Router) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta 
 	switch r.DeploymentMode {
 	case constants.RawDeployment:
 		return r.deploymentReconciler.ReconcileRawDeployment(isvc, objectMeta, podSpec, &r.routerSpec.ComponentExtensionSpec, v1beta1.RouterComponent)
-	case constants.Serverless:
-		return r.deploymentReconciler.ReconcileKnativeDeployment(isvc, objectMeta, podSpec, &r.routerSpec.ComponentExtensionSpec, v1beta1.RouterComponent)
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for router")
 	}
@@ -218,11 +215,6 @@ func (r *Router) determineRouterName(isvc *v1beta1.InferenceService) (string, er
 
 	if r.DeploymentMode == constants.RawDeployment {
 		existing := &v1.Service{}
-		if err := r.Client.Get(context.TODO(), types.NamespacedName{Name: defaultRouterName, Namespace: isvc.Namespace}, existing); err == nil {
-			return existingName, nil
-		}
-	} else {
-		existing := &knservingv1.Service{}
 		if err := r.Client.Get(context.TODO(), types.NamespacedName{Name: defaultRouterName, Namespace: isvc.Namespace}, existing); err == nil {
 			return existingName, nil
 		}

@@ -6,17 +6,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"knative.dev/pkg/apis"
-	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	lwsspec "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
-)
-
-// Constants for magic numbers and string literals
-const (
-	FullTrafficPercent           = 100
-	RoutesReadyCondition         = "RoutesReady"
-	ConfigurationsReadyCondition = "ConfigurationsReady"
 )
 
 // StatusReconciler handles all status-related operations for InferenceService
@@ -116,36 +108,6 @@ func (sr *StatusReconciler) PropagateMultiNodeRayVLLMStatus(
 	sr.setCondition(status, readyCondition, condition)
 	status.Components[component] = statusSpec
 	status.ObservedGeneration = firstDeployment.Status.ObservedGeneration
-}
-
-// PropagateStatus propagates status from Knative Service
-func (sr *StatusReconciler) PropagateStatus(
-	status *v1beta1.InferenceServiceStatus,
-	component v1beta1.ComponentType,
-	serviceStatus *knservingv1.ServiceStatus) {
-
-	statusSpec := sr.initializeComponentStatus(status, component)
-
-	statusSpec.LatestCreatedRevision = serviceStatus.LatestCreatedRevisionName
-	revisionTraffic := map[string]int64{}
-	for _, traffic := range serviceStatus.Traffic {
-		if traffic.Percent != nil {
-			revisionTraffic[traffic.RevisionName] += *traffic.Percent
-		}
-	}
-
-	// Handle traffic routing logic
-	sr.handleTrafficRouting(&statusSpec, serviceStatus, revisionTraffic)
-
-	if serviceStatus.LatestReadyRevisionName != statusSpec.LatestReadyRevision {
-		statusSpec.LatestReadyRevision = serviceStatus.LatestReadyRevisionName
-	}
-
-	// Propagate conditions
-	sr.propagateServiceConditions(status, component, serviceStatus, &statusSpec)
-
-	status.Components[component] = statusSpec
-	status.ObservedGeneration = serviceStatus.ObservedGeneration
 }
 
 // PropagateModelStatus propagates model status from pod information
@@ -267,33 +229,4 @@ func (sr *StatusReconciler) SetModelFailureInfo(status *v1beta1.InferenceService
 	}
 	status.ModelStatus.LastFailureInfo = info
 	return true
-}
-
-// PropagateCrossComponentStatus aggregates conditions across components
-func (sr *StatusReconciler) PropagateCrossComponentStatus(
-	status *v1beta1.InferenceServiceStatus,
-	componentList []v1beta1.ComponentType,
-	conditionType apis.ConditionType) {
-
-	conditionsMap, ok := sr.getConditionsMapIndex()[conditionType]
-	if !ok {
-		return
-	}
-
-	crossComponentCondition := &apis.Condition{
-		Type:   conditionType,
-		Status: v1.ConditionTrue,
-	}
-
-	for _, component := range componentList {
-		if !status.IsConditionReady(conditionsMap[component]) {
-			crossComponentCondition.Status = v1.ConditionFalse
-			if status.IsConditionUnknown(conditionsMap[component]) {
-				crossComponentCondition.Status = v1.ConditionUnknown
-			}
-			crossComponentCondition.Reason = string(conditionsMap[component]) + " not ready"
-		}
-	}
-
-	sr.setCondition(status, conditionType, crossComponentCondition)
 }

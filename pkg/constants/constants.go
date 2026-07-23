@@ -11,17 +11,13 @@ import (
 	rayutils "github.com/ray-project/kuberay/ray-operator/controllers/ray/utils"
 	"k8s.io/apimachinery/pkg/types"
 	"knative.dev/pkg/network"
-	"knative.dev/serving/pkg/apis/autoscaling"
 )
 
 // OME Constants
 var (
-	OMEName                          = "ome"
-	OMEAPIGroupName                  = "ome.io"
-	KnativeAutoscalingAPIGroupName   = "autoscaling.knative.dev"
-	KnativeServingAPIGroupNamePrefix = "serving.knative"
-	KnativeServingAPIGroupName       = KnativeServingAPIGroupNamePrefix + ".dev"
-	OMENamespace                     = getEnvOrDefault("POD_NAMESPACE", "ome")
+	OMEName         = "ome"
+	OMEAPIGroupName = "ome.io"
+	OMENamespace    = getEnvOrDefault("POD_NAMESPACE", "ome")
 )
 
 // Runtime revision (ServingRuntime spec snapshot) constants. OME snapshots a
@@ -125,45 +121,34 @@ const (
 
 // InferenceService Annotations
 var (
-	DeploymentMode                           = OMEAPIGroupName + "/deploymentMode"
-	EnableRoutingTagAnnotationKey            = OMEAPIGroupName + "/enable-tag-routing"
-	AutoscalerClass                          = OMEAPIGroupName + "/autoscalerClass"
-	AutoscalerMetrics                        = OMEAPIGroupName + "/metrics"
-	TargetUtilizationPercentage              = OMEAPIGroupName + "/targetUtilizationPercentage"
-	DeprecationWarning                       = OMEAPIGroupName + "/deprecation-warning"
-	MinScaleAnnotationKey                    = KnativeAutoscalingAPIGroupName + "/min-scale"
-	MaxScaleAnnotationKey                    = KnativeAutoscalingAPIGroupName + "/max-scale"
-	RollOutDurationAnnotationKey             = KnativeServingAPIGroupName + "/rollout-duration"
-	KnativeOpenshiftEnablePassthroughKey     = "serving.knative.openshift.io/enablePassthrough"
-	EnableMetricAggregation                  = OMEAPIGroupName + "/enable-metric-aggregation"
-	SetPrometheusAnnotation                  = OMEAPIGroupName + "/enable-prometheus-scraping"
-	DedicatedAICluster                       = OMEAPIGroupName + "/dedicated-ai-cluster"
-	VolcanoQueue                             = OMEAPIGroupName + "/volcano-queue"
-	ModelInitInjectionKey                    = OMEAPIGroupName + "/inject-model-init"
-	FineTunedAdapterInjectionKey             = OMEAPIGroupName + "/inject-fine-tuned-adapter"
-	ServingSidecarInjectionKey               = OMEAPIGroupName + "/inject-serving-sidecar"
-	FineTunedWeightFTStrategyKey             = OMEAPIGroupName + "/fine-tuned-weight-ft-strategy"
-	BaseModelName                            = OMEAPIGroupName + "/base-model-name"
-	BaseModelVendorAnnotationKey             = OMEAPIGroupName + "/base-model-vendor"
-	ServingRuntimeKeyName                    = OMEAPIGroupName + "/serving-runtime"
-	BaseModelFormat                          = OMEAPIGroupName + "/base-model-format"
-	BaseModelFormatVersion                   = OMEAPIGroupName + "/base-model-format-version"
-	FTServingWithMergedWeightsAnnotationKey  = OMEAPIGroupName + "/fine-tuned-serving-with-merged-weights"
-	ServiceType                              = OMEAPIGroupName + "/service-type"
-	LoadBalancerIP                           = OMEAPIGroupName + "/load-balancer-ip"
-	EntrypointComponent                      = OMEAPIGroupName + "/entrypoint-component"
-	ContainerPrometheusPortKey               = "prometheus.ome.io/port"
-	ContainerPrometheusPathKey               = "prometheus.ome.io/path"
-	PrometheusPortAnnotationKey              = "prometheus.io/port"
-	PrometheusPathAnnotationKey              = "prometheus.io/path"
-	PrometheusScrapeAnnotationKey            = "prometheus.io/scrape"
-	RDMAAutoInjectAnnotationKey              = "rdma.ome.io/auto-inject"
-	RDMAProfileAnnotationKey                 = "rdma.ome.io/profile"
-	RDMAContainerNameAnnotationKey           = "rdma.ome.io/container-name"
-	DefaultPrometheusPath                    = "/metrics"
-	QueueProxyAggregatePrometheusMetricsPort = 9088
-	DefaultPodPrometheusPort                 = "9091"
-	ModelCategoryAnnotation                  = "models.ome.io/category"
+	DeploymentMode                          = OMEAPIGroupName + "/deploymentMode"
+	EnableRoutingTagAnnotationKey           = OMEAPIGroupName + "/enable-tag-routing"
+	AutoscalerClass                         = OMEAPIGroupName + "/autoscalerClass"
+	AutoscalerMetrics                       = OMEAPIGroupName + "/metrics"
+	TargetUtilizationPercentage             = OMEAPIGroupName + "/targetUtilizationPercentage"
+	DeprecationWarning                      = OMEAPIGroupName + "/deprecation-warning"
+	DedicatedAICluster                      = OMEAPIGroupName + "/dedicated-ai-cluster"
+	VolcanoQueue                            = OMEAPIGroupName + "/volcano-queue"
+	ModelInitInjectionKey                   = OMEAPIGroupName + "/inject-model-init"
+	FineTunedAdapterInjectionKey            = OMEAPIGroupName + "/inject-fine-tuned-adapter"
+	ServingSidecarInjectionKey              = OMEAPIGroupName + "/inject-serving-sidecar"
+	FineTunedWeightFTStrategyKey            = OMEAPIGroupName + "/fine-tuned-weight-ft-strategy"
+	BaseModelName                           = OMEAPIGroupName + "/base-model-name"
+	BaseModelVendorAnnotationKey            = OMEAPIGroupName + "/base-model-vendor"
+	ServingRuntimeKeyName                   = OMEAPIGroupName + "/serving-runtime"
+	BaseModelFormat                         = OMEAPIGroupName + "/base-model-format"
+	BaseModelFormatVersion                  = OMEAPIGroupName + "/base-model-format-version"
+	FTServingWithMergedWeightsAnnotationKey = OMEAPIGroupName + "/fine-tuned-serving-with-merged-weights"
+	ServiceType                             = OMEAPIGroupName + "/service-type"
+	LoadBalancerIP                          = OMEAPIGroupName + "/load-balancer-ip"
+	EntrypointComponent                     = OMEAPIGroupName + "/entrypoint-component"
+	PrometheusPortAnnotationKey             = "prometheus.io/port"
+	PrometheusPathAnnotationKey             = "prometheus.io/path"
+	PrometheusScrapeAnnotationKey           = "prometheus.io/scrape"
+	RDMAAutoInjectAnnotationKey             = "rdma.ome.io/auto-inject"
+	RDMAProfileAnnotationKey                = "rdma.ome.io/profile"
+	RDMAContainerNameAnnotationKey          = "rdma.ome.io/container-name"
+	ModelCategoryAnnotation                 = "models.ome.io/category"
 
 	// Ingress Configuration Overrides
 	IngressDomainTemplate          = OMEAPIGroupName + "/ingress-domain-template"
@@ -298,10 +283,6 @@ const (
 
 // InferenceService Environment Variables
 const (
-	ContainerPrometheusMetricsPortEnvVarKey           = "CONTAINER_PROMETHEUS_METRICS_PORT"
-	ContainerPrometheusMetricsPathEnvVarKey           = "CONTAINER_PROMETHEUS_METRICS_PATH"
-	QueueProxyAggregatePrometheusMetricsPortEnvVarKey = "AGGREGATE_PROMETHEUS_METRICS_PORT"
-
 	TFewWeightPathEnvVarKey = "TFEW_PATH"
 
 	ModelPathEnvVarKey       = "MODEL_PATH"
@@ -325,15 +306,13 @@ type InferenceServiceVerb string
 
 type InferenceServiceProtocol string
 
-// Knative constants
 const (
-	KnativeLocalGateway   = "knative-serving/knative-local-gateway"
-	KnativeIngressGateway = "knative-serving/knative-ingress-gateway"
-	VisibilityLabel       = "networking.knative.dev/visibility"
+	// VisibilityLabel marks an InferenceService as cluster-local. The key retains its
+	// historical networking.knative.dev prefix so existing resources keep working.
+	VisibilityLabel = "networking.knative.dev/visibility"
 )
 
 var (
-	LocalGatewayHost = "knative-local-gateway.istio-system.svc." + network.GetClusterDomainName()
 	IstioMeshGateway = "mesh"
 )
 
@@ -358,7 +337,6 @@ const (
 	InferenceServiceDefaultAgentPort    = 9081
 	CommonDefaultHttpPort               = 80
 	CommonISVCPort                      = 8080
-	AggregateMetricsPortName            = "aggr-metric"
 )
 
 // Labels to put on kservice
@@ -429,8 +407,10 @@ const DefaultModelLocalMountPath = "/mnt/models"
 
 var (
 	ServiceAnnotationDisallowedList = []string{
-		autoscaling.MinScaleAnnotationKey,
-		autoscaling.MaxScaleAnnotationKey,
+		// Legacy Knative autoscaler keys. Knative support was removed; these stay listed
+		// so stale annotations on existing InferenceServices keep being stripped.
+		"autoscaling.knative.dev/min-scale",
+		"autoscaling.knative.dev/max-scale",
 		StorageInitializerSourceUriInternalAnnotationKey,
 		"kubectl.kubernetes.io/last-applied-configuration",
 	}
@@ -475,7 +455,6 @@ const (
 type DeploymentModeType string
 
 const (
-	Serverless        DeploymentModeType = "Serverless"
 	RawDeployment     DeploymentModeType = "RawDeployment"
 	MultiNodeRayVLLM  DeploymentModeType = "MultiNodeRayVLLM"
 	PDDisaggregated   DeploymentModeType = "PDDisaggregated"
@@ -486,19 +465,17 @@ const (
 // IsValid checks if the deployment mode is valid
 func (d DeploymentModeType) IsValid() bool {
 	switch d {
-	case Serverless, RawDeployment, MultiNodeRayVLLM, MultiNode, VirtualDeployment:
+	case RawDeployment, MultiNodeRayVLLM, MultiNode, VirtualDeployment:
 		return true
 	default:
 		return false
 	}
 }
 
-const (
-	DefaultNSKnativeServing = "knative-serving"
-)
-
 // revision label
 const (
+	// RevisionLabel is the pod label used to look up pods for non-raw deployment modes.
+	// The key retains its historical serving.knative.dev prefix.
 	RevisionLabel         = "serving.knative.dev/revision"
 	RawDeploymentAppLabel = "app"
 )
@@ -514,7 +491,6 @@ const (
 // CRD Kinds
 const (
 	IstioVirtualServiceKind = "VirtualService"
-	KnativeServiceKind      = "Service"
 	RayClusterKind          = "RayCluster"
 	VolcanoQueueKind        = "Queue"
 	KEDAScaledObjectKind    = "ScaledObject"

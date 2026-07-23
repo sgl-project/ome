@@ -24,7 +24,6 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -235,7 +234,6 @@ func main() {
 		addToScheme  func(*runtime.Scheme) error
 	}{
 		{ray.SchemeGroupVersion, constants.RayClusterKind, ray.AddToScheme},
-		{knservingv1.SchemeGroupVersion, constants.KnativeServiceKind, knservingv1.AddToScheme},
 		{lws.SchemeGroupVersion, constants.LWSKind, lws.AddToScheme},
 		{volcano.SchemeGroupVersion, constants.VolcanoQueueKind, volcano.AddToScheme},
 		{volcanobatch.SchemeGroupVersion, constants.VolcanoJobKind, volcanobatch.AddToScheme},

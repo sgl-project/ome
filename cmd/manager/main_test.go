@@ -269,7 +269,7 @@ func createMockConfigMap() *corev1.ConfigMap {
 		},
 		Data: map[string]string{
 			"deploy": `{
-				"defaultDeploymentMode": "Serverless"
+				"defaultDeploymentMode": "RawDeployment"
 			}`,
 			"ingress": `{
 				"ingressGateway": "test-gateway",

@@ -26,26 +26,6 @@ func TestDefaultStrategyFactory_CreateStrategyWithOptions(t *testing.T) {
 		errorContains    string
 	}{
 		{
-			name:           "serverless deployment mode",
-			deploymentMode: string(constants.Serverless),
-			opts: interfaces.ReconcilerOptions{
-				Client: createFakeClient(t),
-				Scheme: createScheme(t),
-				IngressConfig: &controllerconfig.IngressConfig{
-					IngressGateway:             "knative-serving/knative-ingress-gateway",
-					LocalGateway:               "knative-serving/knative-local-gateway",
-					IngressDomain:              "example.com",
-					LocalGatewayServiceName:    "knative-local-gateway",
-					KnativeLocalGatewayService: "knative-local-gateway.istio-system.svc.cluster.local",
-					DomainTemplate:             "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
-					UrlScheme:                  "https",
-				},
-				IsvcConfig: &controllerconfig.InferenceServicesConfig{},
-			},
-			expectedStrategy: "Serverless",
-			expectedError:    false,
-		},
-		{
 			name:           "raw deployment mode with kubernetes ingress",
 			deploymentMode: string(constants.RawDeployment),
 			opts: interfaces.ReconcilerOptions{
@@ -214,8 +194,8 @@ func TestDefaultStrategyFactory_StrategyConsistency(t *testing.T) {
 	}
 
 	// Create multiple strategies of the same type
-	strategy1, err1 := factory.CreateStrategyWithOptions(string(constants.Serverless), opts)
-	strategy2, err2 := factory.CreateStrategyWithOptions(string(constants.Serverless), opts)
+	strategy1, err1 := factory.CreateStrategyWithOptions(string(constants.RawDeployment), opts)
+	strategy2, err2 := factory.CreateStrategyWithOptions(string(constants.RawDeployment), opts)
 
 	assert.NoError(t, err1)
 	assert.NoError(t, err2)
@@ -336,11 +316,11 @@ func TestDefaultStrategyFactory_NilOptions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.expectPanic {
 				assert.Panics(t, func() {
-					_, _ = factory.CreateStrategyWithOptions(string(constants.Serverless), tt.opts)
+					_, _ = factory.CreateStrategyWithOptions(string(constants.RawDeployment), tt.opts)
 				})
 			} else {
 				// Should not panic, though it might return an error
-				strategy, err := factory.CreateStrategyWithOptions(string(constants.Serverless), tt.opts)
+				strategy, err := factory.CreateStrategyWithOptions(string(constants.RawDeployment), tt.opts)
 				// We don't assert error/success here as different nil values might be handled differently
 				_ = strategy
 				_ = err
@@ -374,33 +354,6 @@ func stringPtr(s string) *string {
 }
 
 // Benchmark tests
-func BenchmarkDefaultStrategyFactory_CreateServerlessStrategy(b *testing.B) {
-	fakeClientset := fake.NewSimpleClientset()
-	factory := NewStrategyFactory(fakeClientset)
-
-	opts := interfaces.ReconcilerOptions{
-		Client: createFakeClient(&testing.T{}),
-		Scheme: createScheme(&testing.T{}),
-		IngressConfig: &controllerconfig.IngressConfig{
-			IngressGateway:             "knative-serving/knative-ingress-gateway",
-			LocalGateway:               "knative-serving/knative-local-gateway",
-			IngressDomain:              "example.com",
-			KnativeLocalGatewayService: "knative-local-gateway.istio-system.svc.cluster.local",
-			DomainTemplate:             "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
-		},
-		IsvcConfig: &controllerconfig.InferenceServicesConfig{},
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		strategy, err := factory.CreateStrategyWithOptions(string(constants.Serverless), opts)
-		if err != nil {
-			b.Fatal(err)
-		}
-		_ = strategy
-	}
-}
-
 func BenchmarkDefaultStrategyFactory_CreateKubernetesIngressStrategy(b *testing.B) {
 	fakeClientset := fake.NewSimpleClientset()
 	factory := NewStrategyFactory(fakeClientset)

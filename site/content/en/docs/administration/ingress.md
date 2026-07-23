@@ -149,7 +149,6 @@ OME creates different ingress resources based on deployment mode:
 
 | Deployment Mode   | Ingress Type                      | Configuration                                         |
 |-------------------|-----------------------------------|-------------------------------------------------------|
-| **Serverless**    | Istio VirtualService              | Uses `ingressGateway` and `ingressService` parameters |
 | **RawDeployment** | Kubernetes Ingress or Gateway API | Uses `ingressClassName` parameter                     |
 | **MultiNode**     | Kubernetes Ingress or Gateway API | Uses `ingressClassName` parameter                     |
 

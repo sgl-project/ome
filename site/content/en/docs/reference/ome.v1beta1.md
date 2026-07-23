@@ -1273,7 +1273,7 @@ will be set and updated by the controller.</p>
 <code>int</code>
 </td>
 <td>
-   <p>Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.</p>
+   <p>Minimum number of replicas, defaults to 1.</p>
 </td>
 </tr>
 <tr><td><code>maxReplicas</code><br/>
@@ -1287,26 +1287,15 @@ will be set and updated by the controller.</p>
 <code>int</code>
 </td>
 <td>
-   <p>ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for.
-concurrency and rps targets are supported by Knative Pod Autoscaler
-(https://knative.dev/docs/serving/autoscaling/autoscaling-targets/).</p>
+   <p>ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for.</p>
 </td>
 </tr>
 <tr><td><code>scaleMetric</code><br/>
 <a href="#ome-io-v1beta1-ScaleMetric"><code>ScaleMetric</code></a>
 </td>
 <td>
-   <p>ScaleMetric defines the scaling metric type watched by autoscaler
-possible values are concurrency, rps, cpu, memory. concurrency, rps are supported via
-Knative Pod Autoscaler(https://knative.dev/docs/serving/autoscaling/autoscaling-metrics).</p>
-</td>
-</tr>
-<tr><td><code>containerConcurrency</code><br/>
-<code>int64</code>
-</td>
-<td>
-   <p>ContainerConcurrency specifies how many requests can be processed concurrently, this sets the hard limit of the container
-concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).</p>
+   <p>ScaleMetric defines the scaling metric type watched by autoscaler.
+Possible values are cpu, memory for HPA; KEDA additionally supports custom metrics.</p>
 </td>
 </tr>
 <tr><td><code>timeoutSeconds</code><br/>
@@ -1314,13 +1303,6 @@ concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).</p>
 </td>
 <td>
    <p>TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.</p>
-</td>
-</tr>
-<tr><td><code>canaryTrafficPercent</code><br/>
-<code>int64</code>
-</td>
-<td>
-   <p>CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision</p>
 </td>
 </tr>
 <tr><td><code>labels</code><br/>
@@ -1396,27 +1378,6 @@ More info: http://kubernetes.io/docs/user-guide/annotations</p>
 </td>
 <td>
    <p>Latest revision name that is created</p>
-</td>
-</tr>
-<tr><td><code>previousRolledoutRevision</code><br/>
-<code>string</code>
-</td>
-<td>
-   <p>Previous revision name that is rolled out with 100 percent traffic</p>
-</td>
-</tr>
-<tr><td><code>latestRolledoutRevision</code><br/>
-<code>string</code>
-</td>
-<td>
-   <p>Latest revision name that is rolled out with 100 percent traffic</p>
-</td>
-</tr>
-<tr><td><code>traffic</code><br/>
-<a href="https://pkg.go.dev/knative.dev/serving/pkg/apis/serving/v1#TrafficTarget"><code>[]knative.dev/serving/pkg/apis/serving/v1.TrafficTarget</code></a>
-</td>
-<td>
-   <p>Traffic holds the configured traffic distribution for latest ready revision and previous rolled out revision.</p>
 </td>
 </tr>
 <tr><td><code>url</code><br/>
@@ -2095,10 +2056,10 @@ allowing the service to scale based on custom metrics or event sources.</p>
 <td>(Members of <code>Status</code> are embedded into this type.)
    <p>Conditions for the InferenceService <!-- raw HTML omitted --></p>
 <ul>
-<li>EngineRouteReady: engine route readiness condition; <!-- raw HTML omitted --></li>
-<li>DecoderRouteReady: decoder route readiness condition; <!-- raw HTML omitted --></li>
-<li>RoutesReady (serverless mode only): aggregated routing condition, i.e. endpoint readiness condition; <!-- raw HTML omitted --></li>
-<li>LatestDeploymentReady (serverless mode only): aggregated configuration condition, i.e. latest deployment readiness condition; <!-- raw HTML omitted --></li>
+<li>EngineReady: engine readiness condition; <!-- raw HTML omitted --></li>
+<li>DecoderReady: decoder readiness condition; <!-- raw HTML omitted --></li>
+<li>RouterReady: router readiness condition; <!-- raw HTML omitted --></li>
+<li>IngressReady: ingress readiness condition; <!-- raw HTML omitted --></li>
 <li>Ready: aggregated condition; <!-- raw HTML omitted --></li>
 </ul>
 </td>

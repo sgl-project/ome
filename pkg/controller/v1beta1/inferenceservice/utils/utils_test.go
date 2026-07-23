@@ -1496,13 +1496,13 @@ func TestDetermineEngineDeploymentMode(t *testing.T) {
 			expectedMode: constants.MultiNode,
 		},
 		{
-			name: "serverless with min replicas 0",
+			name: "min replicas 0 falls back to raw deployment",
 			engine: &v1beta1.EngineSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
 					MinReplicas: intPtr(0),
 				},
 			},
-			expectedMode: constants.Serverless,
+			expectedMode: constants.RawDeployment,
 		},
 		{
 			name: "raw deployment with min replicas > 0",
@@ -1531,7 +1531,7 @@ func TestDetermineEngineDeploymentMode(t *testing.T) {
 			expectedMode: constants.RawDeployment,
 		},
 		{
-			name: "multi-node takes precedence over serverless",
+			name: "multi-node takes precedence over min replicas 0",
 			engine: &v1beta1.EngineSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
 					MinReplicas: intPtr(0),

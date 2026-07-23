@@ -10,7 +10,6 @@ import (
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	netv1 "k8s.io/api/networking/v1"
 	"k8s.io/client-go/kubernetes/scheme"
-	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -33,10 +32,6 @@ func SetupEnvTest() *envtest.Environment {
 
 	if err := netv1.SchemeBuilder.AddToScheme(scheme.Scheme); err != nil {
 		log.Error(err, "Failed to add networking v1 scheme")
-	}
-
-	if err := knservingv1.SchemeBuilder.AddToScheme(scheme.Scheme); err != nil {
-		log.Error(err, "Failed to add knative serving scheme")
 	}
 
 	if err := istioclientv1beta1.SchemeBuilder.AddToScheme(scheme.Scheme); err != nil {

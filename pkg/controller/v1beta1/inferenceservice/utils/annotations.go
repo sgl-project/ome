@@ -93,21 +93,18 @@ func RemovePodAnnotations(metadata *metav1.ObjectMeta, annotationsToRemove []str
 func ResolveIngressConfig(baseConfig *controllerconfig.IngressConfig, annotations map[string]string) *controllerconfig.IngressConfig {
 	// Start with a copy of the base config to avoid modifying the original
 	resolved := &controllerconfig.IngressConfig{
-		IngressGateway:             baseConfig.IngressGateway,
-		IngressServiceName:         baseConfig.IngressServiceName,
-		LocalGateway:               baseConfig.LocalGateway,
-		LocalGatewayServiceName:    baseConfig.LocalGatewayServiceName,
-		KnativeLocalGatewayService: baseConfig.KnativeLocalGatewayService,
-		OmeIngressGateway:          baseConfig.OmeIngressGateway,
-		IngressDomain:              baseConfig.IngressDomain,
-		IngressClassName:           baseConfig.IngressClassName,
-		AdditionalIngressDomains:   baseConfig.AdditionalIngressDomains,
-		DomainTemplate:             baseConfig.DomainTemplate,
-		UrlScheme:                  baseConfig.UrlScheme,
-		DisableIstioVirtualHost:    baseConfig.DisableIstioVirtualHost,
-		PathTemplate:               baseConfig.PathTemplate,
-		DisableIngressCreation:     baseConfig.DisableIngressCreation,
-		EnableGatewayAPI:           baseConfig.EnableGatewayAPI,
+		IngressGateway:           baseConfig.IngressGateway,
+		IngressServiceName:       baseConfig.IngressServiceName,
+		OmeIngressGateway:        baseConfig.OmeIngressGateway,
+		IngressDomain:            baseConfig.IngressDomain,
+		IngressClassName:         baseConfig.IngressClassName,
+		AdditionalIngressDomains: baseConfig.AdditionalIngressDomains,
+		DomainTemplate:           baseConfig.DomainTemplate,
+		UrlScheme:                baseConfig.UrlScheme,
+		DisableIstioVirtualHost:  baseConfig.DisableIstioVirtualHost,
+		PathTemplate:             baseConfig.PathTemplate,
+		DisableIngressCreation:   baseConfig.DisableIngressCreation,
+		EnableGatewayAPI:         baseConfig.EnableGatewayAPI,
 	}
 
 	// Override with annotation values if present

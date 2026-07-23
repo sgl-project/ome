@@ -10,7 +10,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -157,8 +156,6 @@ func (e *Engine) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta 
 		return e.deploymentReconciler.ReconcileMultiNodeDeployment(isvc, objectMeta, podSpec, workerSize, workerPodSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
 	case constants.MultiNodeRayVLLM:
 		return e.deploymentReconciler.ReconcileMultiNodeRayVLLMDeployment(isvc, objectMeta, podSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
-	case constants.Serverless:
-		return e.deploymentReconciler.ReconcileKnativeDeployment(isvc, objectMeta, podSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for engine")
 	}
@@ -246,11 +243,6 @@ func (e *Engine) determineEngineName(isvc *v1beta1.InferenceService) (string, er
 		if err := e.Client.Get(context.TODO(), types.NamespacedName{Name: defaultEngineName, Namespace: isvc.Namespace}, existing); err == nil {
 			return existingName, nil
 		}
-	} else {
-		existing := &knservingv1.Service{}
-		if err := e.Client.Get(context.TODO(), types.NamespacedName{Name: defaultEngineName, Namespace: isvc.Namespace}, existing); err == nil {
-			return existingName, nil
-		}
 	}
 
 	// If the default name doesn't exist, use it
@@ -277,7 +269,7 @@ func (e *Engine) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *me
 			runnerSpec = e.engineSpec.Runner
 		}
 	default:
-		// For raw deployment and serverless, use engine spec
+		// For raw deployment, use engine spec
 		basePodSpec = e.engineSpec.PodSpec
 		runnerSpec = e.engineSpec.Runner
 	}

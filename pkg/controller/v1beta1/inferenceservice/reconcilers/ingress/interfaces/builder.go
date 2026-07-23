@@ -14,12 +14,6 @@ type ResourceBuilder interface {
 	GetResourceType() string
 }
 
-// VirtualServiceBuilder builds Istio VirtualService resources
-type VirtualServiceBuilder interface {
-	ResourceBuilder
-	BuildVirtualService(ctx context.Context, isvc *v1beta1.InferenceService, domainList *[]string) (client.Object, error)
-}
-
 // HTTPRouteBuilder builds Gateway API HTTPRoute resources
 type HTTPRouteBuilder interface {
 	ResourceBuilder

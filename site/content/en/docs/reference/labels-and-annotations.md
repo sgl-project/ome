@@ -66,16 +66,6 @@ These annotations control model encryption and decryption:
 | `rdma.ome.io/container-name` | Specifies the container name for RDMA configuration |
 
 
-### Knative Annotations
-
-| Annotation                                       | Description                         |
-|--------------------------------------------------|-------------------------------------|
-| `autoscaling.knative.dev/min-scale`              | Sets the minimum number of replicas |
-| `autoscaling.knative.dev/max-scale`              | Sets the maximum number of replicas |
-| `serving.knative.dev/rollout-duration`           | Specifies the rollout duration      |
-| `serving.knative.openshift.io/enablePassthrough` | Enables passthrough on OpenShift    |
-
-
 ### Runtime Revision and Pinning Annotations
 
 These annotations drive [runtime revision pinning](/ome/docs/concepts/runtime-revision), which lets an InferenceService pin to a content-addressed snapshot of its ServingRuntime instead of always tracking the live runtime.
@@ -89,7 +79,7 @@ These annotations drive [runtime revision pinning](/ome/docs/concepts/runtime-re
 
 | Annotation                    | Description                                                                                            |
 |-------------------------------|-------------------------------------------------------------------------------------------------------|
-| `ome.io/deploymentMode`       | Selects the deployment strategy (e.g. `RawDeployment`, `MultiNode`, `Serverless`, `PDDisaggregated`). |
+| `ome.io/deploymentMode`       | Selects the deployment strategy (e.g. `RawDeployment`, `MultiNode`, `PDDisaggregated`). |
 | `ome.io/dedicated-ai-cluster` | Associates the InferenceService with a dedicated AI cluster.                                           |
 | `ome.io/entrypoint-component` | Identifies the entrypoint component of a multi-component InferenceService.                             |
 | `ome.io/accelerator-class`    | Selects the accelerator class used for runtime matching and scheduling.                                |
@@ -177,7 +167,7 @@ See [Ingress administration](/ome/docs/administration/ingress) for usage details
 | Label                               | Description                      |
 |-------------------------------------|----------------------------------|
 | `networking.ome.io/visibility`      | Network visibility configuration |
-| `networking.knative.dev/visibility` | Knative network visibility       |
+| `networking.knative.dev/visibility` | Cluster-local network visibility  |
 | `sidecar.istio.io/inject`           | Istio sidecar injection          |
 
 
@@ -214,8 +204,8 @@ Applied by the controller to the OME-managed ControllerRevisions used for [runti
 
 - `cpu`: CPU utilization
 - `memory`: Memory utilization
-- `concurrency`: Request concurrency (Knative)
-- `rps`: Requests per second (Knative)
+- `concurrency`: Request concurrency
+- `rps`: Requests per second
 
 
 ### Priority Classes

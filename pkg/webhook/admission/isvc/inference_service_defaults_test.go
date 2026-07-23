@@ -127,7 +127,7 @@ func TestDeploymentModeDetection(t *testing.T) {
 			isvc: &v1beta1.InferenceService{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						constants.DeploymentMode: string(constants.Serverless),
+						constants.DeploymentMode: string(constants.MultiNode),
 					},
 				},
 				Spec: v1beta1.InferenceServiceSpec{
@@ -136,7 +136,7 @@ func TestDeploymentModeDetection(t *testing.T) {
 				},
 			},
 			deployConfig: nil,
-			expectedMode: string(constants.Serverless),
+			expectedMode: string(constants.MultiNode),
 		},
 	}
 

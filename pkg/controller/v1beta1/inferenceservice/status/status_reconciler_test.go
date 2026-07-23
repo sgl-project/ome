@@ -4,14 +4,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
-	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	lwsspec "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -554,182 +552,6 @@ func TestPropagateMultiNodeStatus(t *testing.T) {
 	}
 }
 
-func TestPropagateStatus(t *testing.T) {
-	tests := []struct {
-		name           string
-		status         *v1beta1.InferenceServiceStatus
-		component      v1beta1.ComponentType
-		serviceStatus  *knservingv1.ServiceStatus
-		expectedStatus v1beta1.ComponentStatusSpec
-	}{
-		{
-			name:      "successful Knative service",
-			status:    &v1beta1.InferenceServiceStatus{},
-			component: v1beta1.EngineComponent,
-			serviceStatus: &knservingv1.ServiceStatus{
-				Status: duckv1.Status{
-					Conditions: duckv1.Conditions{
-						{
-							Type:   knservingv1.ServiceConditionReady,
-							Status: corev1.ConditionTrue,
-						},
-					},
-				},
-				RouteStatusFields: knservingv1.RouteStatusFields{
-					URL: &apis.URL{
-						Scheme: "https",
-						Host:   "test-service.example.com",
-					},
-					Address: &duckv1.Addressable{
-						URL: &apis.URL{
-							Scheme: "https",
-							Host:   "test-service.example.com",
-						},
-					},
-					Traffic: []knservingv1.TrafficTarget{
-						{
-							RevisionName:   "test-service-00001",
-							Percent:        ptr.To(int64(100)),
-							LatestRevision: ptr.To(true),
-						},
-					},
-				},
-				ConfigurationStatusFields: knservingv1.ConfigurationStatusFields{
-					LatestReadyRevisionName:   "test-service-00001",
-					LatestCreatedRevisionName: "test-service-00001",
-				},
-			},
-			expectedStatus: v1beta1.ComponentStatusSpec{
-				LatestReadyRevision:   "test-service-00001",
-				LatestCreatedRevision: "test-service-00001",
-				URL:                   &apis.URL{Scheme: "https", Host: "test-service.example.com"},
-				Address:               &duckv1.Addressable{URL: &apis.URL{Scheme: "https", Host: "test-service.example.com"}},
-			},
-		},
-		{
-			name:      "successful engine Knative service",
-			status:    &v1beta1.InferenceServiceStatus{},
-			component: v1beta1.EngineComponent,
-			serviceStatus: &knservingv1.ServiceStatus{
-				Status: duckv1.Status{
-					Conditions: duckv1.Conditions{
-						{
-							Type:   knservingv1.ServiceConditionReady,
-							Status: corev1.ConditionTrue,
-						},
-					},
-				},
-				RouteStatusFields: knservingv1.RouteStatusFields{
-					URL: &apis.URL{
-						Scheme: "https",
-						Host:   "test-engine-service.example.com",
-					},
-					Address: &duckv1.Addressable{
-						URL: &apis.URL{
-							Scheme: "https",
-							Host:   "test-engine-service.example.com",
-						},
-					},
-					Traffic: []knservingv1.TrafficTarget{
-						{
-							RevisionName:   "test-engine-service-00002",
-							Percent:        ptr.To(int64(100)),
-							LatestRevision: ptr.To(true),
-						},
-					},
-				},
-				ConfigurationStatusFields: knservingv1.ConfigurationStatusFields{
-					LatestReadyRevisionName:   "test-engine-service-00002",
-					LatestCreatedRevisionName: "test-engine-service-00002",
-				},
-			},
-			expectedStatus: v1beta1.ComponentStatusSpec{
-				LatestReadyRevision:   "test-engine-service-00002",
-				LatestCreatedRevision: "test-engine-service-00002",
-				URL:                   &apis.URL{Scheme: "https", Host: "test-engine-service.example.com"},
-				Address:               &duckv1.Addressable{URL: &apis.URL{Scheme: "https", Host: "test-engine-service.example.com"}},
-			},
-		},
-		{
-			name:      "decoder service with traffic split",
-			status:    &v1beta1.InferenceServiceStatus{},
-			component: v1beta1.DecoderComponent,
-			serviceStatus: &knservingv1.ServiceStatus{
-				Status: duckv1.Status{
-					Conditions: duckv1.Conditions{
-						{
-							Type:   knservingv1.ServiceConditionReady,
-							Status: corev1.ConditionTrue,
-						},
-					},
-				},
-				RouteStatusFields: knservingv1.RouteStatusFields{
-					URL: &apis.URL{
-						Scheme: "https",
-						Host:   "test-decoder-service.example.com",
-					},
-					Address: &duckv1.Addressable{
-						URL: &apis.URL{
-							Scheme: "https",
-							Host:   "test-decoder-service.example.com",
-						},
-					},
-					Traffic: []knservingv1.TrafficTarget{
-						{
-							RevisionName:   "test-decoder-service-00003",
-							Percent:        ptr.To(int64(50)),
-							LatestRevision: ptr.To(true),
-						},
-						{
-							RevisionName:   "test-decoder-service-00002",
-							Percent:        ptr.To(int64(50)),
-							LatestRevision: ptr.To(false),
-						},
-					},
-				},
-				ConfigurationStatusFields: knservingv1.ConfigurationStatusFields{
-					LatestReadyRevisionName:   "test-decoder-service-00003",
-					LatestCreatedRevisionName: "test-decoder-service-00003",
-				},
-			},
-			expectedStatus: v1beta1.ComponentStatusSpec{
-				LatestReadyRevision:   "test-decoder-service-00003",
-				LatestCreatedRevision: "test-decoder-service-00003",
-				URL:                   &apis.URL{Scheme: "https", Host: "test-decoder-service.example.com"},
-				Address:               &duckv1.Addressable{URL: &apis.URL{Scheme: "https", Host: "test-decoder-service.example.com"}},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			manager := NewStatusReconciler()
-
-			manager.PropagateStatus(tt.status, tt.component, tt.serviceStatus)
-
-			actualStatus := tt.status.Components[tt.component]
-			assert.Equal(t, tt.expectedStatus.LatestReadyRevision, actualStatus.LatestReadyRevision)
-			assert.Equal(t, tt.expectedStatus.LatestCreatedRevision, actualStatus.LatestCreatedRevision)
-			assert.Equal(t, tt.expectedStatus.URL, actualStatus.URL)
-			assert.Equal(t, tt.expectedStatus.Address, actualStatus.Address)
-
-			// Verify appropriate conditions were set
-			var expectedReadyCondition apis.ConditionType
-
-			switch tt.component {
-			case v1beta1.EngineComponent:
-				expectedReadyCondition = v1beta1.EngineReady
-			case v1beta1.DecoderComponent:
-				expectedReadyCondition = v1beta1.DecoderReady
-			}
-
-			// The status reconciler will propagate service conditions to component conditions
-			readyCondition := tt.status.GetCondition(expectedReadyCondition)
-			assert.NotNil(t, readyCondition)
-		})
-	}
-}
-
 func TestPropagateModelStatus(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -1106,110 +928,6 @@ func TestUpdateModelTransitionStatus(t *testing.T) {
 	}
 }
 
-func TestPropagateCrossComponentStatus(t *testing.T) {
-	tests := []struct {
-		name           string
-		status         *v1beta1.InferenceServiceStatus
-		componentList  []v1beta1.ComponentType
-		conditionType  apis.ConditionType
-		setupStatus    func(*v1beta1.InferenceServiceStatus)
-		expectedStatus corev1.ConditionStatus
-	}{
-		{
-			name:          "all components ready",
-			status:        &v1beta1.InferenceServiceStatus{},
-			componentList: []v1beta1.ComponentType{v1beta1.EngineComponent},
-			conditionType: v1beta1.RoutesReady,
-			setupStatus: func(status *v1beta1.InferenceServiceStatus) {
-				status.SetCondition(v1beta1.EngineRouteReady, &apis.Condition{
-					Type:   v1beta1.EngineRouteReady,
-					Status: corev1.ConditionTrue,
-				})
-			},
-			expectedStatus: corev1.ConditionTrue,
-		},
-		{
-			name:          "component not ready",
-			status:        &v1beta1.InferenceServiceStatus{},
-			componentList: []v1beta1.ComponentType{v1beta1.EngineComponent},
-			conditionType: v1beta1.RoutesReady,
-			setupStatus: func(status *v1beta1.InferenceServiceStatus) {
-				status.SetCondition(v1beta1.EngineRouteReady, &apis.Condition{
-					Type:   v1beta1.EngineRouteReady,
-					Status: corev1.ConditionFalse,
-					Reason: "RouteNotReady",
-				})
-			},
-			expectedStatus: corev1.ConditionFalse,
-		},
-		{
-			name:          "multiple components all ready",
-			status:        &v1beta1.InferenceServiceStatus{},
-			componentList: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
-			conditionType: v1beta1.RoutesReady,
-			setupStatus: func(status *v1beta1.InferenceServiceStatus) {
-				status.SetCondition(v1beta1.EngineRouteReady, &apis.Condition{
-					Type:   v1beta1.EngineRouteReady,
-					Status: corev1.ConditionTrue,
-				})
-				status.SetCondition(v1beta1.DecoderRouteReady, &apis.Condition{
-					Type:   v1beta1.DecoderRouteReady,
-					Status: corev1.ConditionTrue,
-				})
-			},
-			expectedStatus: corev1.ConditionTrue,
-		},
-		{
-			name:          "multiple components one not ready",
-			status:        &v1beta1.InferenceServiceStatus{},
-			componentList: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
-			conditionType: v1beta1.RoutesReady,
-			setupStatus: func(status *v1beta1.InferenceServiceStatus) {
-				status.SetCondition(v1beta1.EngineRouteReady, &apis.Condition{
-					Type:   v1beta1.EngineRouteReady,
-					Status: corev1.ConditionTrue,
-				})
-				status.SetCondition(v1beta1.DecoderRouteReady, &apis.Condition{
-					Type:   v1beta1.DecoderRouteReady,
-					Status: corev1.ConditionFalse,
-					Reason: "DecoderRouteNotReady",
-				})
-			},
-			expectedStatus: corev1.ConditionFalse,
-		},
-		{
-			name:          "configuration ready for engine and decoder",
-			status:        &v1beta1.InferenceServiceStatus{},
-			componentList: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
-			conditionType: v1beta1.LatestDeploymentReady,
-			setupStatus: func(status *v1beta1.InferenceServiceStatus) {
-				status.SetCondition(v1beta1.EngineConfigurationReady, &apis.Condition{
-					Type:   v1beta1.EngineConfigurationReady,
-					Status: corev1.ConditionTrue,
-				})
-				status.SetCondition(v1beta1.DecoderConfigurationReady, &apis.Condition{
-					Type:   v1beta1.DecoderConfigurationReady,
-					Status: corev1.ConditionTrue,
-				})
-			},
-			expectedStatus: corev1.ConditionTrue,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			manager := NewStatusReconciler()
-			tt.setupStatus(tt.status)
-
-			manager.PropagateCrossComponentStatus(tt.status, tt.componentList, tt.conditionType)
-
-			condition := tt.status.GetCondition(tt.conditionType)
-			require.NotNil(t, condition)
-			assert.Equal(t, tt.expectedStatus, condition.Status)
-		})
-	}
-}
-
 func TestSetModelFailureInfo(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -1568,4 +1286,63 @@ func TestPropagateMultiNodeRayVLLMStatus(t *testing.T) {
 			}
 		})
 	}
+}
+
+// availableDeployment returns a Deployment reporting DeploymentAvailable=True,
+// simulating a component whose pods are running in RawDeployment mode.
+func availableDeployment(name string) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default",
+			Annotations: map[string]string{
+				"deployment.kubernetes.io/revision": "1",
+			},
+		},
+		Status: appsv1.DeploymentStatus{
+			Replicas:           1,
+			ReadyReplicas:      1,
+			AvailableReplicas:  1,
+			UpdatedReplicas:    1,
+			ObservedGeneration: 1,
+			Conditions: []appsv1.DeploymentCondition{
+				{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue, Reason: "MinimumReplicasAvailable"},
+			},
+		},
+	}
+}
+
+// TestRawMultiComponentReadiness is a regression guard for the removal of the
+// Serverless-only PropagateCrossComponentStatus/componentList plumbing from the
+// controller. It proves that a RawDeployment InferenceService with engine +
+// decoder + router still has each component condition set and reaches overall
+// Ready purely through the per-component PropagateRawStatus calls (plus
+// IngressReady) - with no cross-component aggregation step.
+func TestRawMultiComponentReadiness(t *testing.T) {
+	sr := NewStatusReconciler()
+	status := &v1beta1.InferenceServiceStatus{}
+	url := &apis.URL{Scheme: "http", Host: "svc.default.svc.cluster.local"}
+
+	// Each component propagates its own status independently, exactly as it does
+	// during its own Reconcile(), with no componentList aggregation.
+	sr.PropagateRawStatus(status, v1beta1.EngineComponent, availableDeployment("isvc-engine"), url)
+	sr.PropagateRawStatus(status, v1beta1.DecoderComponent, availableDeployment("isvc-decoder"), url)
+	sr.PropagateRawStatus(status, v1beta1.RouterComponent, availableDeployment("isvc-router"), url)
+
+	// IngressReady is the other half of the living condition set.
+	status.SetCondition(v1beta1.IngressReady, &apis.Condition{
+		Type:   v1beta1.IngressReady,
+		Status: corev1.ConditionTrue,
+	})
+
+	// All three component conditions are set...
+	assert.True(t, status.IsConditionReady(v1beta1.EngineReady), "EngineReady should be true")
+	assert.True(t, status.IsConditionReady(v1beta1.DecoderReady), "DecoderReady should be true")
+	assert.True(t, status.IsConditionReady(v1beta1.RouterReady), "RouterReady should be true")
+
+	// ...and the InferenceService aggregates to Ready without any cross-component step.
+	assert.True(t, status.IsReady(), "InferenceService should be Ready")
+
+	// All three component status blocks exist.
+	assert.Len(t, status.Components, 3)
 }

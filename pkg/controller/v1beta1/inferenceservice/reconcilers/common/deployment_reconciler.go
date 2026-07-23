@@ -12,7 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/knative"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinode"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinodevllm"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/raw"
@@ -81,28 +80,6 @@ func (r *DeploymentReconciler) ReconcileMultiNodeDeployment(
 	}
 
 	r.StatusManager.PropagateMultiNodeStatus(&isvc.Status, componentType, lws, reconciler.URL)
-	return ctrl.Result{}, nil
-}
-
-// ReconcileKnativeDeployment handles serverless deployment using Knative
-func (r *DeploymentReconciler) ReconcileKnativeDeployment(
-	isvc *v1beta1.InferenceService,
-	objectMeta metav1.ObjectMeta,
-	podSpec *v1.PodSpec,
-	componentSpec *v1beta1.ComponentExtensionSpec,
-	componentType v1beta1.ComponentType,
-) (ctrl.Result, error) {
-	reconciler := knative.NewKsvcReconciler(r.Client, r.Scheme, objectMeta, componentSpec, podSpec, isvc.Status.Components[componentType])
-	if err := controllerutil.SetControllerReference(isvc, reconciler.Service, r.Scheme); err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to set owner reference for %s", componentType)
-	}
-
-	status, err := reconciler.Reconcile()
-	if err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile %s", componentType)
-	}
-
-	r.StatusManager.PropagateStatus(&isvc.Status, componentType, status)
 	return ctrl.Result{}, nil
 }
 

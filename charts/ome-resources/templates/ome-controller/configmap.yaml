@@ -23,9 +23,6 @@ data:
     {
         "ingressGateway" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.gateway }}",
         "ingressService" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.gatewayService }}",
-        "localGateway" : "{{ .Values.ome.controller.ingressGateway.localGateway.gateway }}",
-        "localGatewayService" : "{{ .Values.ome.controller.ingressGateway.localGateway.gatewayService }}",
-        "knativeLocalGatewayService" : "{{ .Values.ome.controller.ingressGateway.localGateway.gatewayService }}",
         "omeIngressGateway" : "{{ .Values.ome.controller.ingressGateway.omeIngressGateway | default "" }}",
         "ingressDomain"  : "{{ .Values.ome.controller.ingressGateway.domain }}",
         "ingressClassName" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.className }}",
@@ -42,11 +39,6 @@ data:
       "defaultDeploymentMode": "{{ .Values.ome.controller.deploymentMode }}"
     }
 
-  metricsAggregator: |-
-    {
-      "enableMetricAggregation": "{{ .Values.ome.metricsaggregator.enableMetricAggregation }}",
-      "enablePrometheusScraping" : "{{ .Values.ome.metricsaggregator.enablePrometheusScraping }}"
-    }
   modelInit: |-
     {
         "image":  "{{ include "ome.imageWithHub" (dict "values" .Values "repository" .Values.ome.omeAgent.image "tag" .Values.ome.omeAgent.tag) }}",

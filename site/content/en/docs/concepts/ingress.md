@@ -14,30 +14,7 @@ Think of ingress as the "front door" to your AI services - it handles incoming H
 
 ## Deployment Modes and Ingress Types
 
-OME supports three different ingress strategies depending on how you deploy your inference services:
-
-### Serverless Mode (Knative)
-**Best for**: Variable workloads, auto-scaling, cost optimization
-
-When deploying in serverless mode, OME integrates with Knative and creates **Istio VirtualService** resources for routing:
-
-```yaml
-apiVersion: ome.io/v1beta1
-kind: InferenceService
-metadata:
-  name: llama-chat
-spec:
-  engine:
-    model: llama-3-70b-instruct
-    resources:
-      requests:
-        nvidia.com/gpu: 1
-```
-
-This automatically creates external access at:
-```
-https://llama-chat.your-namespace.example.com
-```
+OME supports two different ingress strategies depending on how you deploy your inference services:
 
 ### Raw Deployment Mode
 **Best for**: Consistent workloads, dedicated resources, custom configurations
@@ -289,9 +266,6 @@ kubectl get inferenceservice llama-chat -o jsonpath='{.status.conditions[?(@.typ
 ```bash
 # Check ingress resources
 kubectl get ingress -l ome.io/inferenceservice=llama-chat
-
-# For serverless mode, check VirtualService
-kubectl get virtualservice -l ome.io/inferenceservice=llama-chat
 
 # For Gateway API
 kubectl get httproute -l ome.io/inferenceservice=llama-chat

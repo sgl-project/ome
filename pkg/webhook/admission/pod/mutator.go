@@ -74,11 +74,6 @@ func (mutator *Mutator) Handle(ctx context.Context, req admission.Request) admis
 
 func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 
-	metricsAggregator, err := newMetricsAggregator(configMap)
-	if err != nil {
-		return err
-	}
-
 	modelInitInjector, err := newModelInitInjector(configMap)
 	if err != nil {
 		return err
@@ -97,7 +92,6 @@ func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 	rdmaInjector := NewRDMAInjector()
 
 	mutators := []func(pod *v1.Pod) error{
-		metricsAggregator.InjectMetricsAggregator,
 		modelInitInjector.InjectModelInit,
 		fineTunedAdapterInjector.InjectFineTunedAdapter,
 		servingSidecarInjector.InjectServingSidecar,

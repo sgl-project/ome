@@ -1808,7 +1808,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 				Properties: map[string]spec.Schema{
 					"minReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
+							Description: "Minimum number of replicas, defaults to 1.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -1822,35 +1822,21 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 					},
 					"scaleTarget": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for. concurrency and rps targets are supported by Knative Pod Autoscaler (https://knative.dev/docs/serving/autoscaling/autoscaling-targets/).",
+							Description: "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
 					},
 					"scaleMetric": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ScaleMetric defines the scaling metric type watched by autoscaler possible values are concurrency, rps, cpu, memory. concurrency, rps are supported via Knative Pod Autoscaler(https://knative.dev/docs/serving/autoscaling/autoscaling-metrics).",
+							Description: "ScaleMetric defines the scaling metric type watched by autoscaler. Possible values are cpu, memory for HPA; KEDA additionally supports custom metrics.",
 							Type:        []string{"string"},
 							Format:      "",
-						},
-					},
-					"containerConcurrency": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ContainerConcurrency specifies how many requests can be processed concurrently, this sets the hard limit of the container concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).",
-							Type:        []string{"integer"},
-							Format:      "int64",
 						},
 					},
 					"timeoutSeconds": {
 						SchemaProps: spec.SchemaProps{
 							Description: "TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.",
-							Type:        []string{"integer"},
-							Format:      "int64",
-						},
-					},
-					"canaryTrafficPercent": {
-						SchemaProps: spec.SchemaProps{
-							Description: "CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision",
 							Type:        []string{"integer"},
 							Format:      "int64",
 						},
@@ -1939,39 +1925,6 @@ func schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref common.ReferenceCallbac
 							Format:      "",
 						},
 					},
-					"previousRolledoutRevision": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Previous revision name that is rolled out with 100 percent traffic",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"latestRolledoutRevision": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Latest revision name that is rolled out with 100 percent traffic",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"traffic": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "atomic",
-							},
-						},
-						SchemaProps: spec.SchemaProps{
-							Description: "Traffic holds the configured traffic distribution for latest ready revision and previous rolled out revision.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("knative.dev/serving/pkg/apis/serving/v1.TrafficTarget"),
-									},
-								},
-							},
-						},
-					},
 					"url": {
 						SchemaProps: spec.SchemaProps{
 							Description: "URL holds the primary url that will distribute traffic over the provided traffic targets. This will be one the REST or gRPC endpoints that are available. It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-level-suffix}",
@@ -2000,7 +1953,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref common.ReferenceCallbac
 			},
 		},
 		Dependencies: []string{
-			"knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "knative.dev/serving/pkg/apis/serving/v1.TrafficTarget", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelection"},
+			"knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelection"},
 	}
 }
 
@@ -2481,7 +2434,7 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 					},
 					"minReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
+							Description: "Minimum number of replicas, defaults to 1.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -2495,35 +2448,21 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 					},
 					"scaleTarget": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for. concurrency and rps targets are supported by Knative Pod Autoscaler (https://knative.dev/docs/serving/autoscaling/autoscaling-targets/).",
+							Description: "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
 					},
 					"scaleMetric": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ScaleMetric defines the scaling metric type watched by autoscaler possible values are concurrency, rps, cpu, memory. concurrency, rps are supported via Knative Pod Autoscaler(https://knative.dev/docs/serving/autoscaling/autoscaling-metrics).",
+							Description: "ScaleMetric defines the scaling metric type watched by autoscaler. Possible values are cpu, memory for HPA; KEDA additionally supports custom metrics.",
 							Type:        []string{"string"},
 							Format:      "",
-						},
-					},
-					"containerConcurrency": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ContainerConcurrency specifies how many requests can be processed concurrently, this sets the hard limit of the container concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).",
-							Type:        []string{"integer"},
-							Format:      "int64",
 						},
 					},
 					"timeoutSeconds": {
 						SchemaProps: spec.SchemaProps{
 							Description: "TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.",
-							Type:        []string{"integer"},
-							Format:      "int64",
-						},
-					},
-					"canaryTrafficPercent": {
-						SchemaProps: spec.SchemaProps{
-							Description: "CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision",
 							Type:        []string{"integer"},
 							Format:      "int64",
 						},
@@ -3255,7 +3194,7 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 					},
 					"minReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
+							Description: "Minimum number of replicas, defaults to 1.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -3269,35 +3208,21 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 					},
 					"scaleTarget": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for. concurrency and rps targets are supported by Knative Pod Autoscaler (https://knative.dev/docs/serving/autoscaling/autoscaling-targets/).",
+							Description: "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
 					},
 					"scaleMetric": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ScaleMetric defines the scaling metric type watched by autoscaler possible values are concurrency, rps, cpu, memory. concurrency, rps are supported via Knative Pod Autoscaler(https://knative.dev/docs/serving/autoscaling/autoscaling-metrics).",
+							Description: "ScaleMetric defines the scaling metric type watched by autoscaler. Possible values are cpu, memory for HPA; KEDA additionally supports custom metrics.",
 							Type:        []string{"string"},
 							Format:      "",
-						},
-					},
-					"containerConcurrency": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ContainerConcurrency specifies how many requests can be processed concurrently, this sets the hard limit of the container concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).",
-							Type:        []string{"integer"},
-							Format:      "int64",
 						},
 					},
 					"timeoutSeconds": {
 						SchemaProps: spec.SchemaProps{
 							Description: "TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.",
-							Type:        []string{"integer"},
-							Format:      "int64",
-						},
-					},
-					"canaryTrafficPercent": {
-						SchemaProps: spec.SchemaProps{
-							Description: "CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision",
 							Type:        []string{"integer"},
 							Format:      "int64",
 						},
@@ -6044,7 +5969,7 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 					},
 					"minReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
+							Description: "Minimum number of replicas, defaults to 1.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -6058,35 +5983,21 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 					},
 					"scaleTarget": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for. concurrency and rps targets are supported by Knative Pod Autoscaler (https://knative.dev/docs/serving/autoscaling/autoscaling-targets/).",
+							Description: "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
 					},
 					"scaleMetric": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ScaleMetric defines the scaling metric type watched by autoscaler possible values are concurrency, rps, cpu, memory. concurrency, rps are supported via Knative Pod Autoscaler(https://knative.dev/docs/serving/autoscaling/autoscaling-metrics).",
+							Description: "ScaleMetric defines the scaling metric type watched by autoscaler. Possible values are cpu, memory for HPA; KEDA additionally supports custom metrics.",
 							Type:        []string{"string"},
 							Format:      "",
-						},
-					},
-					"containerConcurrency": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ContainerConcurrency specifies how many requests can be processed concurrently, this sets the hard limit of the container concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).",
-							Type:        []string{"integer"},
-							Format:      "int64",
 						},
 					},
 					"timeoutSeconds": {
 						SchemaProps: spec.SchemaProps{
 							Description: "TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.",
-							Type:        []string{"integer"},
-							Format:      "int64",
-						},
-					},
-					"canaryTrafficPercent": {
-						SchemaProps: spec.SchemaProps{
-							Description: "CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision",
 							Type:        []string{"integer"},
 							Format:      "int64",
 						},

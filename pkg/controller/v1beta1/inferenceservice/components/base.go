@@ -540,7 +540,6 @@ func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceServic
 	// The deployment reconciler will update the condition based on the actual deployment status:
 	// - MultiNode: Updates when LWS becomes available
 	// - RawDeployment: Updates when Deployment becomes available
-	// - Serverless: Updates when Knative Service becomes ready
 	b.StatusManager.InitializeComponentCondition(&isvc.Status, componentType)
 
 	// Update model status for all deployment modes based on actual pod information

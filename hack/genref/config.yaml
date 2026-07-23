@@ -23,8 +23,6 @@ externalPackages:
     target: https://pkg.go.dev/istio.io/api/networking/v1beta1#{{- .TypeIdentifier -}}
   - match: ^knative\.dev/pkg/apis/duck/v1\.
     target: https://pkg.go.dev/knative.dev/pkg/apis/duck/v1#{{- .TypeIdentifier -}}
-  - match: ^knative\.dev/serving/pkg/apis/serving/v1\.
-    target: https://pkg.go.dev/knative.dev/serving/pkg/apis/serving/v1#{{- .TypeIdentifier -}}
   - match: ^sigs\.k8s\.io/gateway-api/apis/v1\.
     target: https://pkg.go.dev/sigs.k8s.io/gateway-api/apis/v1#{{- .TypeIdentifier -}}
   - match: ^volcano\.sh/apis/batch/v1alpha1\.

@@ -147,10 +147,10 @@ func TestNewIngressConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "missing required fields",
+			name: "pathTemplate without ingressDomain",
 			configMapData: map[string]string{
 				IngressConfigKeyName: `{
-					"ingressDomain": "example.com"
+					"pathTemplate": "/{{ .Namespace }}/{{ .Name }}"
 				}`,
 			},
 			expectedError: true,
@@ -218,12 +218,12 @@ func TestNewDeployConfig(t *testing.T) {
 			name: "valid config",
 			configMapData: map[string]string{
 				DeployConfigName: `{
-					"defaultDeploymentMode": "Serverless"
+					"defaultDeploymentMode": "RawDeployment"
 				}`,
 			},
 			expectedError: false,
 			validateConfig: func(t *testing.T, cfg *DeployConfig) {
-				assert.Equal(t, "Serverless", cfg.DefaultDeploymentMode)
+				assert.Equal(t, "RawDeployment", cfg.DefaultDeploymentMode)
 			},
 		},
 		{

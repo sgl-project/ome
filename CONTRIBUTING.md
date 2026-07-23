@@ -134,16 +134,6 @@ You must install these tools:
 5. [`kustomize`](https://github.com/kubernetes-sigs/kustomize/): To customize YAMLs for different environments, requires v5.0.0+.
 6. [`yq`](https://github.com/mikefarah/yq): yq is used in the project makefiles to parse and display YAML output, requires yq `4.*`.
 
-### Install Optional Knative on a Kubernetes Cluster
-
-OME currently has an optional layer of `Knative Serving` for auto-scaling, canary rollout, `Istio` for traffic routing and ingress.
-
-* To install Knative components on your Kubernetes cluster, follow the [installation guide](https://knative.dev/docs/admin/install/) or alternatively, use the [Knative Operators](https://knative.dev/docs/install/operator/knative-with-operators/) to manage your installation. Observability, tracing, and logging are optional but are often valuable tools for troubleshooting challenging issues. They can be installed via the [directions here](https://github.com/knative/docs/blob/release-0.15/docs/serving/installing-logging-metrics-traces.md).
-* If you start from scratch, OME requires Kubernetes 1.27+, Knative 1.13+, Istio v1.19+.
-* If you already have `Istio` or `Knative`, then you don't need to install them explicitly, as long as version dependencies are satisfied.
-
-**Note:** On a local environment, when using `minikube` or `kind` as a Kubernetes cluster, there has been a reported issue that [knative quickstart](https://knative.dev/docs/install/quickstart-install/) bootstrap does not work as expected. It is recommended to follow the installation manual from knative using [yaml](https://knative.dev/docs/install/yaml-install/) or using [knative operator](https://knative.dev/docs/install/operator/knative-with-operators/) for a better result.
-
 ### Setup Your Environment
 
 To start your environment, you'll need to set these environment variables (we recommend adding them to your `.bashrc`):
@@ -178,30 +168,6 @@ cd ome
 Once you reach this point, you are ready to do a full build and deploy as described below.
 
 ## Deploy OME
-
-### Check Knative Serving Installation
-
-This step is optional, if you have already installed Knative Serving or if you are planning to use OME without Knative, you can skip this step.
-
-Once you've [set up your development environment](#prerequisites), you can verify the installation with the following:
-
-```bash
-$ kubectl -n knative-serving get pods
-NAME                                          READY   STATUS    RESTARTS         AGE
-activator-5bdfcc644b-xjz8t                    1/1     Running   61 (5d21h ago)   6d1h
-autoscaler-d4b84f565-sp8zf                    1/1     Running   0                5d21h
-controller-7985f684c-4tn58                    1/1     Running   53 (5d21h ago)   6d1h
-net-certmanager-controller-79ff896db5-4f8sw   1/1     Running   0                6d
-net-certmanager-webhook-7c658f4bb7-brchb      1/1     Running   0                6d
-webhook-6499644c89-v9wmf                      1/1     Running   0                5d21h
-```
-
-```bash
-$ kubectl get svc -n istio-system
-NAME                   TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)                                      AGE
-istio-ingressgateway   LoadBalancer   10.96.41.243    131.186.10.237   15021:31714/TCP,80:31781/TCP,443:32190/TCP   6d
-istiod                 ClusterIP      10.96.214.221   <none>           15010/TCP,15012/TCP,443/TCP,15014/TCP        6d
-```
 
 ### Deploy OME from the Main Branch
 

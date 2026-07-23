@@ -42,24 +42,6 @@ func TestIngressReconciler_Reconcile(t *testing.T) {
 		expectError          bool
 	}{
 		{
-			name:           "serverless deployment mode",
-			isvc:           createTestInferenceServiceWithStatus("test-isvc", "default"),
-			deploymentMode: constants.Serverless,
-			ingressConfig: &controllerconfig.IngressConfig{
-				IngressGateway:             "knative-serving/knative-ingress-gateway",
-				LocalGateway:               "knative-serving/knative-local-gateway",
-				IngressDomain:              "example.com",
-				LocalGatewayServiceName:    "knative-local-gateway",
-				KnativeLocalGatewayService: "knative-local-gateway.istio-system.svc.cluster.local",
-				DomainTemplate:             "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
-				UrlScheme:                  "https",
-				DisableIstioVirtualHost:    false,
-			},
-			isvcConfig:           &controllerconfig.InferenceServicesConfig{},
-			expectedStrategyName: "Serverless",
-			expectError:          false,
-		},
-		{
 			name:           "raw deployment mode with kubernetes ingress",
 			isvc:           createTestInferenceServiceWithStatus("test-isvc", "default"),
 			deploymentMode: constants.RawDeployment,
@@ -195,7 +177,7 @@ func TestIngressReconciler_GetDeploymentMode(t *testing.T) {
 		expectedMode constants.DeploymentModeType
 	}{
 		{
-			name: "serverless deployment mode - engine with min replicas 0",
+			name: "min replicas 0 falls back to raw deployment",
 			engine: &v1beta1.EngineSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
 					MinReplicas: intPtr(0),
@@ -203,7 +185,7 @@ func TestIngressReconciler_GetDeploymentMode(t *testing.T) {
 			},
 			decoder:      nil,
 			router:       nil,
-			expectedMode: constants.Serverless,
+			expectedMode: constants.RawDeployment,
 		},
 		{
 			name: "raw deployment mode - engine with min replicas > 0",
@@ -227,21 +209,6 @@ func TestIngressReconciler_GetDeploymentMode(t *testing.T) {
 			expectedMode: constants.MultiNode,
 		},
 		{
-			name: "router takes precedence - serverless router with raw engine",
-			engine: &v1beta1.EngineSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(1),
-				},
-			},
-			decoder: nil,
-			router: &v1beta1.RouterSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(0),
-				},
-			},
-			expectedMode: constants.Serverless,
-		},
-		{
 			name:         "no components - defaults to raw deployment",
 			engine:       nil,
 			decoder:      nil,
@@ -252,7 +219,7 @@ func TestIngressReconciler_GetDeploymentMode(t *testing.T) {
 			name: "decoder constraint - engine becomes raw when decoder present",
 			engine: &v1beta1.EngineSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(0), // Would be serverless, but decoder constraint applies
+					MinReplicas: intPtr(0),
 				},
 			},
 			decoder:      &v1beta1.DecoderSpec{}, // Decoder present
@@ -307,24 +274,6 @@ func TestIngressReconciler_GetStrategy(t *testing.T) {
 		expectError    bool
 		expectedName   string
 	}{
-		{
-			name:           "serverless strategy",
-			deploymentMode: constants.Serverless,
-			opts: interfaces.ReconcilerOptions{
-				Client: fakeclient.NewClientBuilder().WithScheme(scheme).Build(),
-				Scheme: scheme,
-				IngressConfig: &controllerconfig.IngressConfig{
-					IngressGateway:             "knative-serving/knative-ingress-gateway",
-					LocalGateway:               "knative-serving/knative-local-gateway",
-					IngressDomain:              "example.com",
-					KnativeLocalGatewayService: "knative-local-gateway.istio-system.svc.cluster.local",
-					DomainTemplate:             "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
-				},
-				IsvcConfig: &controllerconfig.InferenceServicesConfig{},
-			},
-			expectError:  false,
-			expectedName: "Serverless",
-		},
 		{
 			name:           "raw deployment strategy",
 			deploymentMode: constants.RawDeployment,
@@ -419,7 +368,7 @@ func TestIngressReconciler_NilFactory(t *testing.T) {
 		IsvcConfig:    &controllerconfig.InferenceServicesConfig{},
 	}
 
-	_, err := reconciler.getStrategy(constants.Serverless, opts)
+	_, err := reconciler.getStrategy(constants.RawDeployment, opts)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "strategy factory is not initialized")
 }
