@@ -726,8 +726,15 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 		case storage.StorageTypeOCI:
 			s.logger.Infof("Starting deletion for model %s", modelInfo)
 			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
+			needsConsiderChildrenPath, inspectErr := s.inspectSharedArtifactMetadata(ctx, task)
+			if inspectErr != nil {
+				if s.requeueDeleteAfterSharedArtifactMetadataInspectionError(task, inspectErr) {
+					return nil
+				}
+				return inspectErr
+			}
 			// check if it needs to skip artifact deletion
-			isSkippingDeletion, isRemoveParent, parentName, parentDir := s.isSkippingArtifactDeletion(ctx, task, destPath, s.hasSharedArtifactMetadata(ctx, task))
+			isSkippingDeletion, isRemoveParent, parentName, parentDir := s.isSkippingArtifactDeletion(ctx, task, destPath, needsConsiderChildrenPath)
 			if !isSkippingDeletion {
 				err = s.deleteModel(destPath, task)
 				if err != nil {
@@ -1297,6 +1304,26 @@ func (s *Gopher) requeueSamePathInFlightReuseWait(task *GopherTask, matchedKey s
 	return true
 }
 
+func (s *Gopher) requeueDeleteAfterSharedArtifactMetadataInspectionError(task *GopherTask, inspectErr error) bool {
+	if task == nil || s.gopherChan == nil {
+		return false
+	}
+	delay := s.samePathWaitDelay
+	if delay <= 0 {
+		delay = defaultSamePathWaitDelay
+	}
+	s.logger.Warnf("Cannot inspect shared artifact metadata for %s during deletion: %v; requeueing after %s", getModelInfoForLogging(task), inspectErr, delay)
+	time.AfterFunc(delay, func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Warnf("Cannot requeue delete task for %s because gopher channel is closed: %v", getModelInfoForLogging(task), r)
+			}
+		}()
+		s.gopherChan <- task
+	})
+	return true
+}
+
 func sameModelStoragePath(currentStorage *v1beta1.StorageSpec, candidateStorage *v1beta1.StorageSpec, modelRootDir string, destPath string) bool {
 	if currentStorage == nil || candidateStorage == nil || currentStorage.Path == nil || candidateStorage.Path == nil {
 		return false
@@ -1508,26 +1535,35 @@ func (s *Gopher) deleteModel(destPath string, task *GopherTask) error {
 }
 
 func (s *Gopher) hasSharedArtifactMetadata(ctx context.Context, task *GopherTask) bool {
-	if task == nil || s.configMapReconciler == nil {
+	hasMetadata, err := s.inspectSharedArtifactMetadata(ctx, task)
+	if err != nil {
+		s.logger.Warnf("%v", err)
 		return false
+	}
+	return hasMetadata
+}
+
+func (s *Gopher) inspectSharedArtifactMetadata(ctx context.Context, task *GopherTask) (bool, error) {
+	if task == nil || s.configMapReconciler == nil {
+		return false, nil
 	}
 	modelTypeAndModelName := s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel)
 	exists, dataEntry, err := s.configMapReconciler.getDataEntryBasedOnModelKey(ctx, modelTypeAndModelName)
 	if err != nil {
-		s.logger.Warnf("cannot inspect artifact metadata for %s during deletion: %v", modelTypeAndModelName, err)
-		return false
+		inspectErr := fmt.Errorf("cannot inspect artifact metadata for %s during deletion: %w", modelTypeAndModelName, err)
+		return false, inspectErr
 	}
 	if !exists {
-		return false
+		return false, nil
 	}
 
 	var entry ModelEntry
 	if err := json.Unmarshal([]byte(dataEntry), &entry); err != nil {
-		s.logger.Warnf("cannot parse artifact metadata for %s during deletion: %v", modelTypeAndModelName, err)
-		return false
+		inspectErr := fmt.Errorf("cannot parse artifact metadata for %s during deletion: %w", modelTypeAndModelName, err)
+		return false, inspectErr
 	}
 	if entry.Config == nil {
-		return false
+		return false, nil
 	}
 	hasParentPath := false
 	for _, parentPath := range entry.Config.Artifact.ParentPath {
@@ -1537,9 +1573,9 @@ func (s *Gopher) hasSharedArtifactMetadata(ctx context.Context, task *GopherTask
 		}
 	}
 	if hasParentPath || len(entry.Config.Artifact.ChildrenPaths) > 0 {
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 func (s *Gopher) deleteParentArtifactIfUnreferenced(ctx context.Context, isRemoveParent bool, parentName string, parentDir string) {

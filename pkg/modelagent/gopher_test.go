@@ -2196,6 +2196,68 @@ func TestProcessTaskDeletesOCIOriginChildAndPreservesExistingParent(t *testing.T
 	assert.NotContains(t, getChildrenPaths(latest.Data[parentKey]), childPath)
 }
 
+func TestProcessTaskRequeuesOCIOriginChildDeletionWhenSharedMetadataReadFails(t *testing.T) {
+	modelID := "Qwen/Qwen3-4B-Instruct-2507"
+	sha := "cdbee75f17c01a7cc42f958dc650907174af0554"
+	tmpDir := t.TempDir()
+	parentPath := filepath.Join(tmpDir, "parent")
+	childPath := filepath.Join(tmpDir, "child")
+	writeMinimalModelConfig(t, parentPath)
+	require.NoError(t, os.Symlink(parentPath, childPath))
+
+	parentKey := constants.GetModelConfigMapKey("default", "parent", false)
+	child := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "child", Namespace: "default", UID: "child-uid"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: stringPtr("oci://n/ns/b/bucket/o/customer-imported-basemodels/qwen/qwen3"),
+				Path:       &childPath,
+			},
+		},
+	}
+	childKey := constants.GetModelConfigMapKey(child.Namespace, child.Name, false)
+	g := newGopherForArtifactReuseProcessTask(t, makeConfigMap("node-1", map[string]string{
+		parentKey: entryJSONWithOrigin(ModelStatusReady, modelID, sha, parentKey, parentPath, []string{childPath}),
+		childKey:  entryJSONWithOrigin(ModelStatusReady, modelID, sha, parentKey, parentPath, []string{}),
+	}), tmpDir)
+	g.gopherChan = make(chan *GopherTask, 1)
+	g.samePathWaitDelay = time.Millisecond
+
+	fakeClient, ok := g.configMapReconciler.kubeClient.(*k8sfake.Clientset)
+	require.True(t, ok)
+	failedInspection := false
+	fakeClient.Fake.PrependReactor("get", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
+		if !failedInspection {
+			failedInspection = true
+			return true, nil, errors.New("temporary configmap read failure")
+		}
+		return false, nil, nil
+	})
+
+	err := g.processTask(&GopherTask{TaskType: Delete, BaseModel: child})
+
+	require.NoError(t, err)
+	_, err = os.Lstat(childPath)
+	assert.NoError(t, err, "child symlink should remain until shared metadata can be inspected")
+	_, err = os.Stat(parentPath)
+	assert.NoError(t, err, "parent artifact should remain")
+
+	latest, err := g.configMapReconciler.kubeClient.CoreV1().ConfigMaps("ome").Get(context.Background(), "node-1", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Contains(t, latest.Data, childKey)
+	assert.Contains(t, getChildrenPaths(latest.Data[parentKey]), childPath)
+
+	select {
+	case requeued := <-g.gopherChan:
+		require.NotNil(t, requeued)
+		assert.Equal(t, Delete, requeued.TaskType)
+		require.NotNil(t, requeued.BaseModel)
+		assert.Equal(t, child.Name, requeued.BaseModel.Name)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected delete task to be requeued")
+	}
+}
+
 func TestProcessTaskDeletesOCIOriginChildAndRemovesOrphanParent(t *testing.T) {
 	modelID := "Qwen/Qwen3-4B-Instruct-2507"
 	sha := "cdbee75f17c01a7cc42f958dc650907174af0554"
