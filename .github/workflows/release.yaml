@@ -98,8 +98,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}:${{ needs.prepare.outputs.tag }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.component.image }}
+          cache-to: type=gha,scope=${{ matrix.component.image }},mode=max,ignore-error=true
           build-args: |
             VERSION=${{ needs.prepare.outputs.version }}
             GIT_TAG=${{ needs.prepare.outputs.tag }}
