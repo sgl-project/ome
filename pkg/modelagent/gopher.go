@@ -1534,15 +1534,6 @@ func (s *Gopher) deleteModel(destPath string, task *GopherTask) error {
 	return err
 }
 
-func (s *Gopher) hasSharedArtifactMetadata(ctx context.Context, task *GopherTask) bool {
-	hasMetadata, err := s.inspectSharedArtifactMetadata(ctx, task)
-	if err != nil {
-		s.logger.Warnf("%v", err)
-		return false
-	}
-	return hasMetadata
-}
-
 func (s *Gopher) inspectSharedArtifactMetadata(ctx context.Context, task *GopherTask) (bool, error) {
 	if task == nil || s.configMapReconciler == nil {
 		return false, nil

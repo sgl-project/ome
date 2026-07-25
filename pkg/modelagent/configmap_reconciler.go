@@ -26,10 +26,6 @@ const (
 	ConfigAttr        = "config"
 	ArtifactAttr      = "artifact"
 	ShaAttr           = "sha"
-	OriginAttr        = "origin"
-	OriginTypeAttr    = "type"
-	HFModelIDAttr     = "hfModelId"
-	HFCommitSHAAttr   = "hfCommitSha"
 	ParentPathAttr    = "parentPath"
 	ChildrenPathsAttr = "childrenPaths"
 )
@@ -1047,100 +1043,6 @@ func (c *ConfigMapReconciler) FindMatchedModelFromConfigMap(configMap *corev1.Co
 	return matchedParentName, matchedParentPath, searchingError
 }
 
-/*
-FindMatchedModelFromConfigMapByArtifactIdentity scans Ready entries in the node
-ConfigMap for an artifact that has the same provenance identity. This is used
-for OCI artifacts that were originally imported from Hugging Face, where
-config.artifact.origin carries the HF model ID and resolved commit SHA.
-
-Returns the parent model key and parent artifact path for the best match,
-preferring the parent that already has the most children so new children keep
-pointing at the established parent artifact.
-*/
-func (c *ConfigMapReconciler) FindMatchedModelFromConfigMapByArtifactIdentity(configMap *corev1.ConfigMap, identity ArtifactIdentity, modelType string, currentModelTypeAndNodeName string) (string, string, error) {
-	var searchingError error
-
-	var matchedParentName, matchedParentPath string
-	var matchedParentChildrenNum = -1
-	for modelKey, jsonStr := range configMap.Data {
-		if !strings.HasPrefix(strings.ToLower(modelKey), strings.ToLower(modelType)) {
-			continue
-		}
-		if strings.EqualFold(modelKey, currentModelTypeAndNodeName) {
-			continue
-		}
-
-		var obj map[string]interface{}
-		if err := json.Unmarshal([]byte(jsonStr), &obj); err != nil {
-			searchingError = fmt.Errorf("fail to Unmarshal %s during FindMatchedModelFromConfigMapByArtifactIdentity: %s", jsonStr, err)
-			c.logger.Errorf(searchingError.Error())
-			continue
-		}
-		status, ok := obj["status"].(string)
-		if !ok || !strings.EqualFold(status, string(ModelStatusReady)) {
-			continue
-		}
-		config, ok := obj[ConfigAttr].(map[string]interface{})
-		if !ok {
-			continue
-		}
-		artifact, ok := config[ArtifactAttr].(map[string]interface{})
-		if !ok || !artifactMatchesIdentity(artifact, identity) {
-			continue
-		}
-
-		rawParent, ok := artifact[ParentPathAttr].(map[string]interface{})
-		if !ok {
-			searchingError = fmt.Errorf("parentPath is not an object")
-			continue
-		}
-		if len(rawParent) != 1 {
-			searchingError = fmt.Errorf("expected exactly one parentPath entry, got %d", len(rawParent))
-			continue
-		}
-
-		for parentName, value := range rawParent {
-			parentPath, ok := value.(string)
-			if !ok {
-				searchingError = fmt.Errorf("parentPath value for %q is not a string", parentName)
-				continue
-			}
-			if strings.EqualFold(parentName, currentModelTypeAndNodeName) {
-				continue
-			}
-
-			childrenNum := len(extractChildrenPaths(artifact))
-			if childrenNum > matchedParentChildrenNum {
-				matchedParentChildrenNum = childrenNum
-				matchedParentName = parentName
-				matchedParentPath = parentPath
-			}
-		}
-	}
-	c.logger.Infof("matched artifact identity parentName: %s, matchedParentPath: %s", matchedParentName, matchedParentPath)
-	return matchedParentName, matchedParentPath, searchingError
-}
-
-func artifactMatchesIdentity(artifact map[string]interface{}, identity ArtifactIdentity) bool {
-	origin, ok := artifact[OriginAttr].(map[string]interface{})
-	if !ok {
-		return false
-	}
-	originType, ok := origin[OriginTypeAttr].(string)
-	if !ok || !strings.EqualFold(originType, identity.OriginType) {
-		return false
-	}
-	hfModelID, ok := origin[HFModelIDAttr].(string)
-	if !ok || hfModelID != identity.HFModelID {
-		return false
-	}
-	hfCommitSHA, ok := origin[HFCommitSHAAttr].(string)
-	if !ok {
-		return false
-	}
-	return strings.EqualFold(hfCommitSHA, identity.HFCommitSHA)
-}
-
 func extractChildrenPaths(artifact map[string]interface{}) []string {
 	// Read childrenPaths leniently and convert to []string
 	children := make([]string, 0)
@@ -1177,21 +1079,6 @@ func (c *ConfigMapReconciler) getModelDataByArtifactSha(ctx context.Context, tar
 		return "", "", fmt.Errorf("failed to get ConfigMap %s: %v", c.nodeName, err)
 	}
 	return c.FindMatchedModelFromConfigMap(cm, targetSha, modelType, currentModelTypeAndNodeName)
-}
-
-// getModelDataByArtifactIdentity fetches the node ConfigMap and searches for a
-// Ready entry with the same normalized artifact identity.
-func (c *ConfigMapReconciler) getModelDataByArtifactIdentity(ctx context.Context, identity ArtifactIdentity, modelType string, currentModelTypeAndNodeName string) (string, string, error) {
-	cm, err := c.kubeClient.CoreV1().ConfigMaps("ome").Get(ctx, c.nodeName, metav1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			c.logger.Warn("cannot find configmap %s", c.nodeName)
-			return "", "", fmt.Errorf("cannot find configmap %s", c.nodeName)
-		}
-		c.logger.Errorf("Failed to get ConfigMap %s: %v", c.nodeName, err)
-		return "", "", fmt.Errorf("failed to get ConfigMap %s: %v", c.nodeName, err)
-	}
-	return c.FindMatchedModelFromConfigMapByArtifactIdentity(cm, identity, modelType, currentModelTypeAndNodeName)
 }
 
 // addPathToChildrenPaths appends newPath to the config.artifact.childrenPaths array if the newPath is not contained in the children paths

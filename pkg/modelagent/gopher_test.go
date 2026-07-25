@@ -952,37 +952,6 @@ func TestShouldRepairHuggingFaceOriginObjectStorageParent(t *testing.T) {
 	assert.False(t, shouldRepairHuggingFaceOriginObjectStorageParent(&GopherTask{TaskType: DownloadOverride}, v1beta1.BaseModelSpec{}))
 }
 
-func TestFindReadyHuggingFaceOriginArtifactMatchesModelIDAndSHA(t *testing.T) {
-	modelID := "Qwen/Qwen3-4B-Instruct-2507"
-	sha := "cdbee75f17c01a7cc42f958dc650907174af0554"
-	parentPath := filepath.Join(t.TempDir(), "parent")
-	currentKey := constants.GetModelConfigMapKey("default", "current", false)
-	oneChildKey := constants.GetModelConfigMapKey("default", "one-child", false)
-	twoChildrenKey := constants.GetModelConfigMapKey("default", "two-children", false)
-	updatingKey := constants.GetModelConfigMapKey("default", "updating", false)
-	wrongModelKey := constants.GetModelConfigMapKey("default", "wrong-model", false)
-	wrongSHAKey := constants.GetModelConfigMapKey("default", "wrong-sha", false)
-	cm := makeConfigMap("node-1", map[string]string{
-		oneChildKey:    entryJSONWithOrigin(ModelStatusReady, modelID, sha, oneChildKey, parentPath, []string{"/child-a"}),
-		twoChildrenKey: entryJSONWithOrigin(ModelStatusReady, modelID, sha, twoChildrenKey, parentPath, []string{"/child-a", "/child-b"}),
-		updatingKey:    entryJSONWithOrigin(ModelStatusUpdating, modelID, sha, updatingKey, parentPath, []string{"/child-a", "/child-b", "/child-c"}),
-		wrongModelKey:  entryJSONWithOrigin(ModelStatusReady, "Qwen/Other", sha, wrongModelKey, parentPath, []string{"/child-a", "/child-b", "/child-c", "/child-d"}),
-		wrongSHAKey:    entryJSONWithOrigin(ModelStatusReady, modelID, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", wrongSHAKey, parentPath, []string{"/child-a", "/child-b", "/child-c", "/child-d", "/child-e", "/child-f"}),
-		currentKey:     entryJSONWithOrigin(ModelStatusReady, modelID, sha, currentKey, parentPath, []string{"/child-a", "/child-b", "/child-c", "/child-d", "/child-e"}),
-	})
-	g := newGopherWithConfigMap(cm)
-
-	matchedKey, matchedPath, err := g.configMapReconciler.FindMatchedModelFromConfigMapByArtifactIdentity(cm, ArtifactIdentity{
-		OriginType:  ArtifactOriginTypeHuggingFace,
-		HFModelID:   modelID,
-		HFCommitSHA: sha,
-	}, "default."+constants.LowerCaseBaseModel, currentKey)
-
-	require.NoError(t, err)
-	assert.Equal(t, twoChildrenKey, matchedKey)
-	assert.Equal(t, parentPath, matchedPath)
-}
-
 func TestReuseHuggingFaceOriginArtifactUsesArtifactParentEntry(t *testing.T) {
 	modelID := "Qwen/Qwen3-4B-Instruct-2507"
 	sha := "cdbee75f17c01a7cc42f958dc650907174af0554"
@@ -2427,7 +2396,7 @@ func TestLinkHuggingFaceOriginArtifactDoesNotParseIncompleteChildEntry(t *testin
 	assert.Zero(t, observedLogs.FilterLevelExact(zapcore.ErrorLevel).Len())
 }
 
-func TestHasSharedArtifactMetadataUsesParentChildRelationships(t *testing.T) {
+func TestInspectSharedArtifactMetadataUsesParentChildRelationships(t *testing.T) {
 	modelID := "Qwen/Qwen3-4B-Instruct-2507"
 	sha := "cdbee75f17c01a7cc42f958dc650907174af0554"
 	model := &v1beta1.BaseModel{
@@ -2438,29 +2407,39 @@ func TestHasSharedArtifactMetadataUsesParentChildRelationships(t *testing.T) {
 	plainGopher := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{
 		currentKey: modelEntryJSON(ModelStatusReady),
 	}))
-	assert.False(t, plainGopher.hasSharedArtifactMetadata(context.Background(), &GopherTask{BaseModel: model}))
+	hasMetadata, err := plainGopher.inspectSharedArtifactMetadata(context.Background(), &GopherTask{BaseModel: model})
+	require.NoError(t, err)
+	assert.False(t, hasMetadata)
 
 	originGopher := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{
 		currentKey: entryJSONWithOrigin(ModelStatusReady, modelID, sha, currentKey, "/models/parent", []string{}),
 	}))
-	assert.True(t, originGopher.hasSharedArtifactMetadata(context.Background(), &GopherTask{BaseModel: model}))
+	hasMetadata, err = originGopher.inspectSharedArtifactMetadata(context.Background(), &GopherTask{BaseModel: model})
+	require.NoError(t, err)
+	assert.True(t, hasMetadata)
 
 	legacyGopher := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{
 		currentKey: entryJSON(sha, currentKey, "/models/parent"),
 	}))
-	assert.True(t, legacyGopher.hasSharedArtifactMetadata(context.Background(), &GopherTask{BaseModel: model}))
+	hasMetadata, err = legacyGopher.inspectSharedArtifactMetadata(context.Background(), &GopherTask{BaseModel: model})
+	require.NoError(t, err)
+	assert.True(t, hasMetadata)
 
 	noParentGopher := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{
 		currentKey: entryJSONWithOrigin(ModelStatusReady, modelID, sha, currentKey, "", []string{}),
 	}))
-	assert.False(t, noParentGopher.hasSharedArtifactMetadata(context.Background(), &GopherTask{BaseModel: model}))
+	hasMetadata, err = noParentGopher.inspectSharedArtifactMetadata(context.Background(), &GopherTask{BaseModel: model})
+	require.NoError(t, err)
+	assert.False(t, hasMetadata)
 
 	annotatedModel := model.DeepCopy()
 	annotatedModel.Annotations = map[string]string{
 		HuggingFaceModelIDAnnotationKey: modelID,
 		HuggingFaceSHAAnnotationKey:     sha,
 	}
-	assert.False(t, plainGopher.hasSharedArtifactMetadata(context.Background(), &GopherTask{BaseModel: annotatedModel}))
+	hasMetadata, err = plainGopher.inspectSharedArtifactMetadata(context.Background(), &GopherTask{BaseModel: annotatedModel})
+	require.NoError(t, err)
+	assert.False(t, hasMetadata)
 }
 
 func TestFindReadyObjectStorageModelWithSamePath(t *testing.T) {
