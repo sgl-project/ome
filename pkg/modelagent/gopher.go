@@ -579,12 +579,12 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 					if !reused {
 						if !reserved {
 							var acquired bool
-							rebuildParentPath, acquired, err = s.acquireHuggingFaceArtifactParentRebuild(ctx, task, hfArtifactParentKey, rebuildParentPath, hfOriginIdentity)
+							rebuildParentPath, acquired, err = s.tryAcquireHuggingFaceArtifactParentRebuild(ctx, hfArtifactParentKey, rebuildParentPath, hfOriginIdentity)
 							if err != nil {
 								return err
 							}
 							if !acquired {
-								return nil
+								return s.waitForHuggingFaceArtifactParent(task, hfArtifactParentKey)
 							}
 						}
 						if err := downloadObjectStorageModel(rebuildParentPath); err != nil {
@@ -850,7 +850,7 @@ func (s *Gopher) captureStartupReadyModels(ctx context.Context) {
 		s.startupHuggingFaceParentValidationMutex.Lock()
 		s.startupHuggingFaceParentValidationKeys = map[string]struct{}{}
 		s.startupHuggingFaceParentValidationTried = map[string]struct{}{}
-		s.startupHuggingFaceParentSnapshotMissing = true
+		s.startupHuggingFaceParentSnapshotMissing = !apierrors.IsNotFound(err)
 		s.startupHuggingFaceParentValidationMutex.Unlock()
 		return
 	}

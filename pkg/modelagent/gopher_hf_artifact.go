@@ -71,10 +71,10 @@ func (s *Gopher) repairHuggingFaceOriginArtifactParent(ctx context.Context, task
 		return nil, false, err
 	}
 	if !acquired {
-		if s.requeueSamePathInFlightReuseWait(task, parentKey) {
-			return nil, false, nil
+		if err := s.waitForHuggingFaceArtifactParent(task, parentKey); err != nil {
+			return nil, false, err
 		}
-		return nil, false, fmt.Errorf("timed out waiting for Hugging Face artifact parent %s to become available for repair", parentKey)
+		return nil, false, nil
 	}
 	if markerErr := removeHuggingFaceArtifactReadyMarker(repairPath); markerErr != nil {
 		if failErr := s.configMapReconciler.markHuggingFaceArtifactParentFailed(ctx, parentKey, identity, repairPath); failErr != nil {
@@ -106,7 +106,7 @@ func (s *Gopher) repairHuggingFaceOriginArtifactParent(ctx context.Context, task
 	return artifact, true, nil
 }
 
-func (s *Gopher) acquireHuggingFaceArtifactParentRebuild(ctx context.Context, task *GopherTask, parentKey string, parentPath string, identity ArtifactIdentity) (string, bool, error) {
+func (s *Gopher) tryAcquireHuggingFaceArtifactParentRebuild(ctx context.Context, parentKey string, parentPath string, identity ArtifactIdentity) (string, bool, error) {
 	rebuildPath, acquired, err := s.configMapReconciler.markHuggingFaceArtifactParentUpdating(ctx, parentKey, identity, parentPath)
 	if err != nil {
 		return "", false, err
@@ -120,10 +120,14 @@ func (s *Gopher) acquireHuggingFaceArtifactParentRebuild(ctx context.Context, ta
 		}
 		return rebuildPath, true, nil
 	}
+	return rebuildPath, false, nil
+}
+
+func (s *Gopher) waitForHuggingFaceArtifactParent(task *GopherTask, parentKey string) error {
 	if s.requeueSamePathInFlightReuseWait(task, parentKey) {
-		return "", false, nil
+		return nil
 	}
-	return "", false, fmt.Errorf("timed out waiting for Hugging Face artifact parent %s to become available for rebuild", parentKey)
+	return fmt.Errorf("timed out waiting for Hugging Face artifact parent %s to become available", parentKey)
 }
 
 func (s *Gopher) linkHuggingFaceOriginArtifact(ctx context.Context, task *GopherTask, name string, destPath string, parentKey string, parentPath string, identity ArtifactIdentity) (*Artifact, error) {

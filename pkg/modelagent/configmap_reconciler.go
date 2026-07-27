@@ -1372,6 +1372,9 @@ func (c *ConfigMapReconciler) setHuggingFaceArtifactParentStatus(ctx context.Con
 	observedParentPath := parentPath
 	updated := false
 	updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
+		observedParentPath = parentPath
+		updated = false
+		acquired := true
 		if currentConfigMap.Data == nil {
 			currentConfigMap.Data = make(map[string]string)
 		}
@@ -1391,31 +1394,56 @@ func (c *ConfigMapReconciler) setHuggingFaceArtifactParentStatus(ctx context.Con
 		if existingDataEntry, exists := currentConfigMap.Data[parentName]; exists {
 			var existing ModelEntry
 			if err := json.Unmarshal([]byte(existingDataEntry), &existing); err != nil {
-				return false, currentConfigMap, fmt.Errorf("failed to parse existing Hugging Face artifact parent entry %s: %w", parentName, err)
+				c.logger.Warnf("Replacing corrupt Hugging Face artifact parent entry %s while setting status %s: %v", parentName, status, err)
+			} else {
+				var existingParentPath string
+				var existingChildrenPaths []string
+				if existing.Config != nil {
+					existingParentPath = existing.Config.Artifact.ParentPath[parentName]
+					existingChildrenPaths = existing.Config.Artifact.ChildrenPaths
+				}
+				if existing.Config == nil || existing.Config.Artifact.Origin == nil {
+					c.logger.Warnf("Repairing invalid Hugging Face artifact parent entry %s while setting status %s because origin metadata is missing", parentName, status)
+					if strings.TrimSpace(existingParentPath) != "" {
+						observedParentPath = existingParentPath
+					}
+					modelEntry.Config.Artifact.ChildrenPaths = existingChildrenPaths
+					if skipIfUpdating && existing.Status == ModelStatusUpdating {
+						acquired = false
+					}
+				} else {
+					origin := existing.Config.Artifact.Origin
+					if !strings.EqualFold(origin.Type, identity.OriginType) || origin.HFModelID != identity.HFModelID || !strings.EqualFold(origin.HFCommitSHA, identity.HFCommitSHA) {
+						return false, currentConfigMap, fmt.Errorf("existing Hugging Face artifact parent entry %s has mismatched origin metadata", parentName)
+					}
+					parentPathMissing := strings.TrimSpace(existingParentPath) == ""
+					if strings.TrimSpace(existingParentPath) != "" {
+						observedParentPath = existingParentPath
+					} else {
+						c.logger.Warnf("Repairing invalid Hugging Face artifact parent entry %s while setting status %s because parent path is missing", parentName, status)
+					}
+					if skipIfUpdating && existing.Status == ModelStatusUpdating {
+						if !parentPathMissing {
+							return false, currentConfigMap, nil
+						}
+						acquired = false
+					}
+					modelEntry = existing
+					modelEntry.Name = parentName
+					modelEntry.Status = status
+					modelEntry.Config.Artifact.Sha = strings.ToLower(identity.HFCommitSHA)
+					modelEntry.Config.Artifact.Origin = identity.toOrigin()
+					if modelEntry.Config.Artifact.ChildrenPaths == nil {
+						modelEntry.Config.Artifact.ChildrenPaths = []string{}
+					}
+				}
+				modelEntry.Config.Artifact.ParentPath = map[string]string{parentName: observedParentPath}
+				if modelEntry.Config.Artifact.ChildrenPaths == nil {
+					modelEntry.Config.Artifact.ChildrenPaths = []string{}
+				}
 			}
-			if existing.Config == nil || existing.Config.Artifact.Origin == nil {
-				return false, currentConfigMap, fmt.Errorf("existing Hugging Face artifact parent entry %s is missing origin metadata", parentName)
-			}
-			origin := existing.Config.Artifact.Origin
-			if !strings.EqualFold(origin.Type, identity.OriginType) || origin.HFModelID != identity.HFModelID || !strings.EqualFold(origin.HFCommitSHA, identity.HFCommitSHA) {
-				return false, currentConfigMap, fmt.Errorf("existing Hugging Face artifact parent entry %s has mismatched origin metadata", parentName)
-			}
-			if existingParentPath := existing.Config.Artifact.ParentPath[parentName]; strings.TrimSpace(existingParentPath) != "" {
-				observedParentPath = existingParentPath
-			}
-			if skipIfUpdating && existing.Status == ModelStatusUpdating {
-				updated = false
-				return false, currentConfigMap, nil
-			}
-			modelEntry = existing
-			modelEntry.Name = parentName
-			modelEntry.Status = status
 			modelEntry.Config.Artifact.Sha = strings.ToLower(identity.HFCommitSHA)
 			modelEntry.Config.Artifact.Origin = identity.toOrigin()
-			modelEntry.Config.Artifact.ParentPath = map[string]string{parentName: observedParentPath}
-			if modelEntry.Config.Artifact.ChildrenPaths == nil {
-				modelEntry.Config.Artifact.ChildrenPaths = []string{}
-			}
 		}
 
 		entryJSON, err := json.Marshal(modelEntry)
@@ -1423,7 +1451,7 @@ func (c *ConfigMapReconciler) setHuggingFaceArtifactParentStatus(ctx context.Con
 			return false, currentConfigMap, err
 		}
 		currentConfigMap.Data[parentName] = string(entryJSON)
-		updated = true
+		updated = acquired
 		return true, currentConfigMap, nil
 	}
 
@@ -1453,32 +1481,13 @@ func (c *ConfigMapReconciler) reserveHuggingFaceArtifactParentEntry(ctx context.
 	var observedStatus ModelStatus
 	var reserved bool
 
-	updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
-		if currentConfigMap.Data == nil {
-			currentConfigMap.Data = make(map[string]string)
+	writeReservation := func(currentConfigMap *corev1.ConfigMap, reservationParentPath string, childrenPaths []string, acquire bool) (bool, *corev1.ConfigMap, error) {
+		if strings.TrimSpace(reservationParentPath) == "" {
+			reservationParentPath = parentPath
 		}
-
-		if existingDataEntry, exists := currentConfigMap.Data[parentName]; exists {
-			var existing ModelEntry
-			if err := json.Unmarshal([]byte(existingDataEntry), &existing); err != nil {
-				return false, currentConfigMap, fmt.Errorf("failed to parse existing Hugging Face artifact parent entry %s: %w", parentName, err)
-			}
-			if existing.Config == nil || existing.Config.Artifact.Origin == nil {
-				return false, currentConfigMap, fmt.Errorf("existing Hugging Face artifact parent entry %s is missing origin metadata", parentName)
-			}
-			origin := existing.Config.Artifact.Origin
-			if !strings.EqualFold(origin.Type, identity.OriginType) || origin.HFModelID != identity.HFModelID || !strings.EqualFold(origin.HFCommitSHA, identity.HFCommitSHA) {
-				return false, currentConfigMap, fmt.Errorf("existing Hugging Face artifact parent entry %s has mismatched origin metadata", parentName)
-			}
-			observedParentPath = existing.Config.Artifact.ParentPath[parentName]
-			if strings.TrimSpace(observedParentPath) == "" {
-				return false, currentConfigMap, fmt.Errorf("existing Hugging Face artifact parent entry %s is missing parent path", parentName)
-			}
-			observedStatus = existing.Status
-			reserved = false
-			return false, currentConfigMap, nil
+		if childrenPaths == nil {
+			childrenPaths = []string{}
 		}
-
 		modelEntry := ModelEntry{
 			Name:   parentName,
 			Status: ModelStatusUpdating,
@@ -1486,8 +1495,8 @@ func (c *ConfigMapReconciler) reserveHuggingFaceArtifactParentEntry(ctx context.
 				Artifact: Artifact{
 					Sha:           strings.ToLower(identity.HFCommitSHA),
 					Origin:        identity.toOrigin(),
-					ParentPath:    map[string]string{parentName: parentPath},
-					ChildrenPaths: []string{},
+					ParentPath:    map[string]string{parentName: reservationParentPath},
+					ChildrenPaths: childrenPaths,
 				},
 			},
 		}
@@ -1496,10 +1505,51 @@ func (c *ConfigMapReconciler) reserveHuggingFaceArtifactParentEntry(ctx context.
 			return false, currentConfigMap, err
 		}
 		currentConfigMap.Data[parentName] = string(entryJSON)
-		observedParentPath = parentPath
+		observedParentPath = reservationParentPath
 		observedStatus = ModelStatusUpdating
-		reserved = true
+		reserved = acquire
 		return true, currentConfigMap, nil
+	}
+
+	updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
+		observedParentPath = ""
+		observedStatus = ""
+		reserved = false
+		if currentConfigMap.Data == nil {
+			currentConfigMap.Data = make(map[string]string)
+		}
+
+		if existingDataEntry, exists := currentConfigMap.Data[parentName]; exists {
+			var existing ModelEntry
+			if err := json.Unmarshal([]byte(existingDataEntry), &existing); err != nil {
+				c.logger.Warnf("Replacing corrupt Hugging Face artifact parent entry %s before reservation: %v", parentName, err)
+				return writeReservation(currentConfigMap, parentPath, nil, true)
+			}
+			var existingParentPath string
+			var existingChildrenPaths []string
+			if existing.Config != nil {
+				existingParentPath = existing.Config.Artifact.ParentPath[parentName]
+				existingChildrenPaths = existing.Config.Artifact.ChildrenPaths
+			}
+			if existing.Config == nil || existing.Config.Artifact.Origin == nil {
+				c.logger.Warnf("Replacing invalid Hugging Face artifact parent entry %s before reservation because origin metadata is missing", parentName)
+				return writeReservation(currentConfigMap, existingParentPath, existingChildrenPaths, existing.Status != ModelStatusUpdating)
+			}
+			origin := existing.Config.Artifact.Origin
+			if !strings.EqualFold(origin.Type, identity.OriginType) || origin.HFModelID != identity.HFModelID || !strings.EqualFold(origin.HFCommitSHA, identity.HFCommitSHA) {
+				return false, currentConfigMap, fmt.Errorf("existing Hugging Face artifact parent entry %s has mismatched origin metadata", parentName)
+			}
+			observedParentPath = existingParentPath
+			if strings.TrimSpace(observedParentPath) == "" {
+				c.logger.Warnf("Replacing invalid Hugging Face artifact parent entry %s before reservation because parent path is missing", parentName)
+				return writeReservation(currentConfigMap, parentPath, existingChildrenPaths, existing.Status != ModelStatusUpdating)
+			}
+			observedStatus = existing.Status
+			reserved = false
+			return false, currentConfigMap, nil
+		}
+
+		return writeReservation(currentConfigMap, parentPath, nil, true)
 	}
 
 	err := c.updateConfigMapWithRetry(ctx, updateConfigMap)

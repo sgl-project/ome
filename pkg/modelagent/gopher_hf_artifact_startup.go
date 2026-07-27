@@ -178,6 +178,7 @@ func (s *Gopher) validateStartupHuggingFaceArtifactParentIfNeeded(ctx context.Co
 	}
 	var validationPath string
 	var acquired bool
+	var parentBusy bool
 	s.startupHuggingFaceParentValidationMutex.Lock()
 	if s.claimStartupHuggingFaceArtifactParentValidationLocked(parentKey) {
 		observedParentKey, parentPath, parentStatus, ok, lookupErr := s.getHuggingFaceArtifactParentWithError(ctx, identity)
@@ -188,20 +189,21 @@ func (s *Gopher) validateStartupHuggingFaceArtifactParentIfNeeded(ctx context.Co
 		}
 		if ok && observedParentKey == parentKey && parentStatus == ModelStatusReady {
 			var err error
-			validationPath, acquired, err = s.acquireHuggingFaceArtifactParentRebuild(ctx, task, parentKey, parentPath, identity)
+			validationPath, acquired, err = s.tryAcquireHuggingFaceArtifactParentRebuild(ctx, parentKey, parentPath, identity)
 			if err != nil {
 				s.restoreStartupHuggingFaceArtifactParentValidationLocked(parentKey)
 				s.startupHuggingFaceParentValidationMutex.Unlock()
 				return false, err
 			}
+			parentBusy = !acquired
 		}
 	}
 	s.startupHuggingFaceParentValidationMutex.Unlock()
+	if parentBusy {
+		return true, s.waitForHuggingFaceArtifactParent(task, parentKey)
+	}
 	if strings.TrimSpace(validationPath) == "" {
 		return false, nil
-	}
-	if !acquired {
-		return true, nil
 	}
 
 	s.logger.Infof("Validating startup Hugging Face artifact parent %s at %s", parentKey, validationPath)
