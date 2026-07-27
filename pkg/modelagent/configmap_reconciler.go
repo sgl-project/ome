@@ -927,7 +927,11 @@ func (c *ConfigMapReconciler) updateConfigMapWithRetry(ctx context.Context, upda
 
 		needUpdate, updatedConfigmap, err := updateConfigmap(latestCM)
 		if err != nil {
-			c.logger.Errorf("failed to compute updated ConfigMap: %s", err)
+			if err == errHuggingFaceArtifactParentUpdating {
+				c.logger.Infof("ConfigMap update deferred because Hugging Face artifact parent is Updating")
+			} else {
+				c.logger.Errorf("failed to compute updated ConfigMap: %s", err)
+			}
 			return err
 		}
 		if !needUpdate {
@@ -1319,6 +1323,7 @@ func (c *ConfigMapReconciler) upsertHuggingFaceArtifactParentEntry(ctx context.C
 		if currentConfigMap.Data == nil {
 			currentConfigMap.Data = make(map[string]string)
 		}
+		recordingChild := strings.TrimSpace(childPath) != ""
 
 		modelEntry := ModelEntry{
 			Name:   parentName,
@@ -1337,6 +1342,9 @@ func (c *ConfigMapReconciler) upsertHuggingFaceArtifactParentEntry(ctx context.C
 			if err := json.Unmarshal([]byte(existingDataEntry), &existing); err != nil {
 				c.logger.Warnf("failed to parse existing Hugging Face artifact parent entry %s, rebuilding it: %v", parentName, err)
 			} else {
+				if recordingChild && existing.Status == ModelStatusUpdating {
+					return false, currentConfigMap, errHuggingFaceArtifactParentUpdating
+				}
 				modelEntry = existing
 				modelEntry.Name = parentName
 				modelEntry.Status = ModelStatusReady
@@ -1352,7 +1360,7 @@ func (c *ConfigMapReconciler) upsertHuggingFaceArtifactParentEntry(ctx context.C
 			}
 		}
 
-		if strings.TrimSpace(childPath) != "" && !containsString(modelEntry.Config.Artifact.ChildrenPaths, childPath) {
+		if recordingChild && !containsString(modelEntry.Config.Artifact.ChildrenPaths, childPath) {
 			modelEntry.Config.Artifact.ChildrenPaths = append(modelEntry.Config.Artifact.ChildrenPaths, childPath)
 		}
 

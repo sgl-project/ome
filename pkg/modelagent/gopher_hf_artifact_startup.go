@@ -61,6 +61,12 @@ func (s *Gopher) recoverStartupHuggingFaceArtifactParentsLocked(ctx context.Cont
 		identity, parentPath, ok := huggingFaceArtifactParentIdentityAndPath(parentKey, entry)
 		if !ok {
 			s.logger.Warnf("Cannot recover Updating Hugging Face artifact parent %s because it is missing valid identity or parent path", parentKey)
+			if err := s.configMapReconciler.deleteConfigMapDataEntry(ctx, parentKey); err != nil {
+				s.logger.Warnf("Cannot delete invalid Updating Hugging Face artifact parent %s during startup recovery: %v", parentKey, err)
+				recovered = false
+			} else {
+				s.logger.Infof("Deleted invalid Updating Hugging Face artifact parent %s during startup recovery so a later child task can rebuild it", parentKey)
+			}
 			continue
 		}
 		if hasHuggingFaceArtifactReadyMarker(parentPath) {

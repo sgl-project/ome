@@ -1308,6 +1308,18 @@ func (s *Gopher) requeueDeleteAfterSharedArtifactMetadataInspectionError(task *G
 	if task == nil || s.gopherChan == nil {
 		return false
 	}
+	now := time.Now()
+	timeout := s.samePathWaitTimeout
+	if timeout <= 0 {
+		timeout = defaultSamePathWaitTimeout
+	}
+	if task.SamePathWaitStartedAt.IsZero() {
+		task.SamePathWaitStartedAt = now
+	} else if now.Sub(task.SamePathWaitStartedAt) >= timeout {
+		s.logger.Warnf("Timed out waiting to inspect shared artifact metadata for %s during deletion: %v", getModelInfoForLogging(task), inspectErr)
+		return false
+	}
+
 	delay := s.samePathWaitDelay
 	if delay <= 0 {
 		delay = defaultSamePathWaitDelay

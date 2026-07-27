@@ -3,6 +3,7 @@ package modelagent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/utils"
 )
+
+var errHuggingFaceArtifactParentUpdating = errors.New("hugging face artifact parent is updating")
 
 func (s *Gopher) buildArtifactAttributeFromIdentity(identity ArtifactIdentity, matchedParentName string, parentPath string, childrenPaths []string) *Artifact {
 	return &Artifact{
@@ -48,6 +51,9 @@ func (s *Gopher) reuseHuggingFaceOriginArtifactIfPossible(ctx context.Context, t
 
 	artifact, err := s.linkHuggingFaceOriginArtifact(ctx, task, name, destPath, matchedModelKey, parentPath, identity)
 	if err != nil {
+		if errors.Is(err, errHuggingFaceArtifactParentUpdating) {
+			return nil, false, nil
+		}
 		return nil, false, err
 	}
 	return artifact, true, nil
@@ -144,6 +150,10 @@ func (s *Gopher) linkHuggingFaceOriginArtifact(ctx context.Context, task *Gopher
 	}
 
 	if err := s.recordHuggingFaceOriginChildPath(ctx, parentKey, parentPath, destPath, identity); err != nil {
+		if errors.Is(err, errHuggingFaceArtifactParentUpdating) {
+			s.logger.Infof("Cannot add OCI model path %s to parent %s because the parent is Updating", destPath, parentKey)
+			return nil, err
+		}
 		s.logger.Errorf("fail to update configmap to add OCI model path %s to parent %s childrenPaths: %s", destPath, parentKey, err)
 		return nil, err
 	}
