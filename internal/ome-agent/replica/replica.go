@@ -38,6 +38,9 @@ var (
 	deleteArtifactUploadLockFunc = func(dataStore *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI) error {
 		return dataStore.DeleteObject(target)
 	}
+	deleteArtifactCompletionMarkerFunc = func(dataStore *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI) error {
+		return dataStore.DeleteObject(target)
+	}
 	deleteStaleArtifactUploadLockFunc = func(dataStore *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, etag string) (bool, error) {
 		return dataStore.DeleteObjectIfMatch(target, etag)
 	}
@@ -54,6 +57,7 @@ type ReplicaAgent struct {
 
 type targetArtifactState struct {
 	Complete               bool
+	CompletionMarked       bool
 	UploadLocked           bool
 	UploadLockModifiedTime *time.Time
 	UploadLockETag         string
@@ -128,11 +132,21 @@ func (r *ReplicaAgent) Start() error {
 		r.writeTerminationLog(err.Error())
 		return err
 	}
+	if lockAcquired {
+		defer r.releaseTargetArtifactUploadLock()
+	}
 	if skipReplication {
 		return nil
 	}
 	if lockAcquired {
-		defer r.releaseTargetArtifactUploadLock()
+		skipReplication, err = r.prepareTargetArtifactAfterLockAcquired()
+		if err != nil {
+			r.writeTerminationLog(err.Error())
+			return err
+		}
+		if skipReplication {
+			return nil
+		}
 	}
 
 	sourceObjs, err := r.listSourceObjects()
@@ -173,20 +187,25 @@ func (r *ReplicaAgent) prepareTargetArtifactUpload() (bool, bool, error) {
 	}
 	reuseAllowed := r.Config.TargetArtifactReuseAllowed
 	if !reuseAllowed {
-		r.Logger.Infof("Target artifact reuse disabled because HF access validation marker is missing; upload lock still applies")
+		r.Logger.Infof("Target artifact reuse disabled; upload lock still applies")
 	}
+	waitDeadline := nowFunc().Add(r.targetArtifactUploadLockTimeout())
 
 	state, err := r.targetArtifactState()
 	if err != nil {
 		return false, false, fmt.Errorf("failed to inspect target artifact state: %w", err)
 	}
 	if state.Complete {
-		if reuseAllowed {
+		if reuseAllowed && r.canReuseCompleteTargetArtifact(state) {
 			r.Logger.Infof("Target artifact is already complete; skipping replication")
 			r.logTargetArtifactSize(state)
 			return false, true, nil
 		}
-		r.Logger.Infof("Target artifact is already complete but reuse is disabled; continuing with upload")
+		if reuseAllowed {
+			r.Logger.Infof("Target artifact is complete but upload lock still exists; waiting for upload lock release")
+		} else {
+			r.Logger.Infof("Target artifact is already complete but reuse is disabled; continuing with upload")
+		}
 	}
 
 	for {
@@ -199,17 +218,19 @@ func (r *ReplicaAgent) prepareTargetArtifactUpload() (bool, bool, error) {
 		}
 
 		r.Logger.Infof("Target artifact upload lock already exists; waiting for completion marker")
-		state, err = r.waitForTargetArtifactStateChange()
+		state, err = r.waitForTargetArtifactStateChange(waitDeadline)
 		if err != nil {
 			return false, false, err
 		}
 		if state.Complete {
-			if reuseAllowed {
+			if reuseAllowed && r.canReuseCompleteTargetArtifact(state) {
 				r.Logger.Infof("Target artifact completed while waiting for upload lock; skipping replication")
 				r.logTargetArtifactSize(state)
 				return false, true, nil
 			}
-			r.Logger.Infof("Target artifact completed while waiting for upload lock but reuse is disabled; continuing with upload")
+			if !reuseAllowed {
+				r.Logger.Infof("Target artifact completed while waiting for upload lock but reuse is disabled; continuing with upload")
+			}
 		}
 		if r.isTargetArtifactUploadLockStale(state) {
 			if err := r.deleteStaleTargetArtifactUploadLock(state); err != nil {
@@ -218,6 +239,12 @@ func (r *ReplicaAgent) prepareTargetArtifactUpload() (bool, bool, error) {
 			continue
 		}
 	}
+}
+
+func (r *ReplicaAgent) canReuseCompleteTargetArtifact(state targetArtifactState) bool {
+	// A complete marker is reusable once no active writer owns the prefix. A
+	// stale lock can be left behind after completion and should not block reuse.
+	return state.Complete && (!state.UploadLocked || r.isTargetArtifactUploadLockStale(state))
 }
 
 func (r *ReplicaAgent) logTargetArtifactSize(state targetArtifactState) {
@@ -249,8 +276,7 @@ func (r *ReplicaAgent) releaseTargetArtifactUploadLock() {
 	}
 }
 
-func (r *ReplicaAgent) waitForTargetArtifactStateChange() (targetArtifactState, error) {
-	deadline := nowFunc().Add(r.targetArtifactUploadLockTimeout())
+func (r *ReplicaAgent) waitForTargetArtifactStateChange(deadline time.Time) (targetArtifactState, error) {
 	for {
 		if !nowFunc().Before(deadline) {
 			return targetArtifactState{}, fmt.Errorf("timed out waiting for target artifact completion marker")
@@ -261,7 +287,7 @@ func (r *ReplicaAgent) waitForTargetArtifactStateChange() (targetArtifactState, 
 		if err != nil {
 			return targetArtifactState{}, fmt.Errorf("failed to inspect target artifact state while waiting for upload lock: %w", err)
 		}
-		if state.Complete || !state.UploadLocked || r.isTargetArtifactUploadLockStale(state) {
+		if !state.UploadLocked || r.isTargetArtifactUploadLockStale(state) {
 			return state, nil
 		}
 	}
@@ -352,6 +378,7 @@ func defaultTargetArtifactState(dataStore *ociobjectstore.OCIOSDataStore, target
 		}
 	}
 
+	state.CompletionMarked = hasCompleteMarker
 	state.Complete = hasCompleteMarker && hasArtifactObject
 	state.UploadLocked = hasUploadLock
 	if artifactSizeBytes > 0 {
@@ -368,6 +395,35 @@ func objectSummaryTime(object objectstorage.ObjectSummary) *time.Time {
 		return &object.TimeCreated.Time
 	}
 	return nil
+}
+
+func (r *ReplicaAgent) prepareTargetArtifactAfterLockAcquired() (bool, error) {
+	if r.ReplicationInput.TargetStorageType != storage.StorageTypeOCI {
+		return false, nil
+	}
+	if r.Config.Target.OCIOSDataStore == nil {
+		return false, fmt.Errorf("target OCI object store data store is nil")
+	}
+
+	state, err := r.targetArtifactState()
+	if err != nil {
+		return false, fmt.Errorf("failed to inspect target artifact state before upload: %w", err)
+	}
+	if r.Config.TargetArtifactReuseAllowed && state.Complete {
+		r.Logger.Infof("Target artifact completed before upload started; skipping replication")
+		r.logTargetArtifactSize(state)
+		return true, nil
+	}
+	if !state.CompletionMarked {
+		return false, nil
+	}
+
+	markerURI := r.targetArtifactCompleteMarkerURI()
+	r.Logger.Infof("Deleting target artifact completion marker before upload at oci://n/%s/b/%s/o/%s", markerURI.Namespace, markerURI.BucketName, markerURI.ObjectName)
+	if err := deleteArtifactCompletionMarkerFunc(r.Config.Target.OCIOSDataStore, markerURI); err != nil {
+		return false, fmt.Errorf("failed to delete target artifact completion marker before upload: %w", err)
+	}
+	return false, nil
 }
 
 func (r *ReplicaAgent) writeCompletionMarker() error {
