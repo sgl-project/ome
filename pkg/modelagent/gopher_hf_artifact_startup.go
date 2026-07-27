@@ -53,6 +53,12 @@ func (s *Gopher) recoverStartupHuggingFaceArtifactParentsLocked(ctx context.Cont
 		var entry ModelEntry
 		if err := json.Unmarshal([]byte(dataEntry), &entry); err != nil {
 			s.logger.Warnf("Cannot parse Hugging Face artifact parent %s during startup recovery: %v", parentKey, err)
+			if err := s.configMapReconciler.deleteInvalidHuggingFaceArtifactParentEntry(ctx, parentKey, ""); err != nil {
+				s.logger.Warnf("Cannot delete corrupt Hugging Face artifact parent %s during startup recovery: %v", parentKey, err)
+				recovered = false
+			} else {
+				s.logger.Infof("Deleted corrupt Hugging Face artifact parent %s during startup recovery so a later child task can rebuild it", parentKey)
+			}
 			continue
 		}
 		if entry.Status != ModelStatusUpdating {
@@ -60,8 +66,11 @@ func (s *Gopher) recoverStartupHuggingFaceArtifactParentsLocked(ctx context.Cont
 		}
 		identity, parentPath, ok := huggingFaceArtifactParentIdentityAndPath(parentKey, entry)
 		if !ok {
+			if entry.Config != nil {
+				parentPath = entry.Config.Artifact.ParentPath[parentKey]
+			}
 			s.logger.Warnf("Cannot recover Updating Hugging Face artifact parent %s because it is missing valid identity or parent path", parentKey)
-			if err := s.configMapReconciler.deleteConfigMapDataEntry(ctx, parentKey); err != nil {
+			if err := s.configMapReconciler.deleteInvalidHuggingFaceArtifactParentEntry(ctx, parentKey, parentPath); err != nil {
 				s.logger.Warnf("Cannot delete invalid Updating Hugging Face artifact parent %s during startup recovery: %v", parentKey, err)
 				recovered = false
 			} else {
@@ -191,7 +200,7 @@ func (s *Gopher) validateStartupHuggingFaceArtifactParentIfNeeded(ctx context.Co
 		if lookupErr != nil {
 			s.restoreStartupHuggingFaceArtifactParentValidationLocked(parentKey)
 			s.startupHuggingFaceParentValidationMutex.Unlock()
-			return false, nil
+			return true, s.waitForHuggingFaceArtifactParent(task, parentKey)
 		}
 		if ok && observedParentKey == parentKey && parentStatus == ModelStatusReady {
 			var err error

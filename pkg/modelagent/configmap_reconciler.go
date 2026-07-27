@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -1319,7 +1321,9 @@ func (c *ConfigMapReconciler) updateConfigMapWithRemovedChildPath(ctx context.Co
 }
 
 func (c *ConfigMapReconciler) upsertHuggingFaceArtifactParentEntry(ctx context.Context, parentName string, identity ArtifactIdentity, parentPath string, childPath string) error {
+	var affectedChildKeys []string
 	updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
+		affectedChildKeys = nil
 		if currentConfigMap.Data == nil {
 			currentConfigMap.Data = make(map[string]string)
 		}
@@ -1363,6 +1367,9 @@ func (c *ConfigMapReconciler) upsertHuggingFaceArtifactParentEntry(ctx context.C
 		if recordingChild && !containsString(modelEntry.Config.Artifact.ChildrenPaths, childPath) {
 			modelEntry.Config.Artifact.ChildrenPaths = append(modelEntry.Config.Artifact.ChildrenPaths, childPath)
 		}
+		if !recordingChild {
+			affectedChildKeys = c.finishHuggingFaceArtifactParentRepair(currentConfigMap, parentName, parentPath, &modelEntry, ModelStatusReady)
+		}
 
 		entryJSON, err := json.Marshal(modelEntry)
 		if err != nil {
@@ -1371,7 +1378,181 @@ func (c *ConfigMapReconciler) upsertHuggingFaceArtifactParentEntry(ctx context.C
 		currentConfigMap.Data[parentName] = string(entryJSON)
 		return true, currentConfigMap, nil
 	}
-	return c.updateConfigMapWithRetry(ctx, updateConfigMap)
+	if err := c.updateConfigMapWithRetry(ctx, updateConfigMap); err != nil {
+		return err
+	}
+	if err := c.updateNodeLabelsForModelConfigMapKeys(ctx, affectedChildKeys, ModelStatusReady); err != nil {
+		c.logger.Warnf("Failed to update child node labels after Hugging Face artifact parent %s became Ready: %v", parentName, err)
+	}
+	return nil
+}
+
+func (c *ConfigMapReconciler) startHuggingFaceArtifactParentRepair(currentConfigMap *corev1.ConfigMap, parentName string, parentPath string, parentEntry *ModelEntry) []string {
+	if currentConfigMap == nil || currentConfigMap.Data == nil || parentEntry == nil {
+		return nil
+	}
+	affectedChildKeys := make([]string, 0)
+	for _, childKey := range c.huggingFaceArtifactChildKeys(currentConfigMap, parentName, parentPath) {
+		dataEntry := currentConfigMap.Data[childKey]
+		var childEntry ModelEntry
+		if err := json.Unmarshal([]byte(dataEntry), &childEntry); err != nil {
+			c.logger.Warnf("Cannot mark child %s Updating for Hugging Face artifact parent %s repair because the entry cannot be parsed: %v", childKey, parentName, err)
+			continue
+		}
+		if childEntry.Status != ModelStatusReady {
+			continue
+		}
+		childEntry.Status = ModelStatusUpdating
+		entryJSON, err := json.Marshal(childEntry)
+		if err != nil {
+			c.logger.Warnf("Cannot mark child %s Updating for Hugging Face artifact parent %s repair because the entry cannot be marshaled: %v", childKey, parentName, err)
+			continue
+		}
+		currentConfigMap.Data[childKey] = string(entryJSON)
+		affectedChildKeys = append(affectedChildKeys, childKey)
+	}
+	if len(affectedChildKeys) == 0 {
+		parentEntry.SharedParentRepair = nil
+		return nil
+	}
+	parentEntry.SharedParentRepair = &SharedParentRepair{AffectedChildKeys: affectedChildKeys}
+	return affectedChildKeys
+}
+
+func (c *ConfigMapReconciler) finishHuggingFaceArtifactParentRepair(currentConfigMap *corev1.ConfigMap, parentName string, parentPath string, parentEntry *ModelEntry, status ModelStatus) []string {
+	if currentConfigMap == nil || currentConfigMap.Data == nil || parentEntry == nil {
+		if parentEntry != nil {
+			parentEntry.SharedParentRepair = nil
+		}
+		return nil
+	}
+	affectedChildKeys := make([]string, 0)
+	if parentEntry.SharedParentRepair != nil {
+		affectedChildKeys = append(affectedChildKeys, parentEntry.SharedParentRepair.AffectedChildKeys...)
+	}
+	if status == ModelStatusFailed {
+		for _, childKey := range c.huggingFaceArtifactChildKeys(currentConfigMap, parentName, parentPath) {
+			if !containsString(affectedChildKeys, childKey) {
+				affectedChildKeys = append(affectedChildKeys, childKey)
+			}
+		}
+	}
+	updatedChildKeys := make([]string, 0, len(affectedChildKeys))
+	for _, childKey := range affectedChildKeys {
+		dataEntry, exists := currentConfigMap.Data[childKey]
+		if !exists {
+			continue
+		}
+		var childEntry ModelEntry
+		if err := json.Unmarshal([]byte(dataEntry), &childEntry); err != nil {
+			c.logger.Warnf("Cannot mark child %s %s after Hugging Face artifact parent %s repair because the entry cannot be parsed: %v", childKey, status, parentName, err)
+			continue
+		}
+		if !modelEntryReferencesHuggingFaceArtifactParent(childEntry, parentName, parentPath) {
+			continue
+		}
+		childEntry.Status = status
+		if status == ModelStatusReady || status == ModelStatusFailed {
+			childEntry.Progress = nil
+		}
+		entryJSON, err := json.Marshal(childEntry)
+		if err != nil {
+			c.logger.Warnf("Cannot mark child %s %s after Hugging Face artifact parent %s repair because the entry cannot be marshaled: %v", childKey, status, parentName, err)
+			continue
+		}
+		currentConfigMap.Data[childKey] = string(entryJSON)
+		updatedChildKeys = append(updatedChildKeys, childKey)
+	}
+	parentEntry.SharedParentRepair = nil
+	return updatedChildKeys
+}
+
+func (c *ConfigMapReconciler) huggingFaceArtifactChildKeys(currentConfigMap *corev1.ConfigMap, parentName string, parentPath string) []string {
+	childKeys := make([]string, 0)
+	for key, dataEntry := range currentConfigMap.Data {
+		if key == parentName || isHuggingFaceArtifactConfigMapKey(key) {
+			continue
+		}
+		var entry ModelEntry
+		if err := json.Unmarshal([]byte(dataEntry), &entry); err != nil {
+			c.logger.Warnf("Cannot inspect child %s for Hugging Face artifact parent %s repair because the entry cannot be parsed: %v", key, parentName, err)
+			continue
+		}
+		if modelEntryReferencesHuggingFaceArtifactParent(entry, parentName, parentPath) {
+			childKeys = append(childKeys, key)
+		}
+	}
+	sort.Strings(childKeys)
+	return childKeys
+}
+
+func modelEntryReferencesHuggingFaceArtifactParent(entry ModelEntry, parentName string, parentPath string) bool {
+	if entry.Config == nil || entry.Config.Artifact.ParentPath == nil {
+		return false
+	}
+	entryParentPath := strings.TrimSpace(entry.Config.Artifact.ParentPath[parentName])
+	if entryParentPath == "" {
+		return false
+	}
+	if strings.TrimSpace(parentPath) == "" {
+		return true
+	}
+	return filepath.Clean(entryParentPath) == filepath.Clean(parentPath)
+}
+
+func (c *ConfigMapReconciler) updateNodeLabelsForModelConfigMapKeys(ctx context.Context, modelKeys []string, status ModelStatus) error {
+	if len(modelKeys) == 0 {
+		return nil
+	}
+	labelsToUpdate := make(map[string]string, len(modelKeys))
+	for _, modelKey := range modelKeys {
+		labelKey, ok := modelLabelKeyFromConfigMapKey(modelKey)
+		if !ok {
+			c.logger.Warnf("Cannot update node label for ConfigMap key %s because it is not a model entry key", modelKey)
+			continue
+		}
+		labelsToUpdate[labelKey] = string(status)
+	}
+	if len(labelsToUpdate) == 0 {
+		return nil
+	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		node, err := c.kubeClient.CoreV1().Nodes().Get(ctx, c.nodeName, metav1.GetOptions{})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				c.logger.Warnf("Node %s not found while updating child model labels for shared artifact parent repair", c.nodeName)
+				return nil
+			}
+			return err
+		}
+		if node.Labels == nil {
+			node.Labels = make(map[string]string)
+		}
+		changed := false
+		for labelKey, labelValue := range labelsToUpdate {
+			if node.Labels[labelKey] == labelValue {
+				continue
+			}
+			node.Labels[labelKey] = labelValue
+			changed = true
+		}
+		if !changed {
+			return nil
+		}
+		_, err = c.kubeClient.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+		return err
+	})
+}
+
+func modelLabelKeyFromConfigMapKey(modelKey string) (string, bool) {
+	namespace, modelName, isClusterBaseModel, ok := constants.ParseModelInfoFromConfigMapKey(modelKey)
+	if !ok {
+		return "", false
+	}
+	if isClusterBaseModel {
+		return constants.GetClusterBaseModelLabel(modelName), true
+	}
+	return constants.GetBaseModelLabel(namespace, modelName), true
 }
 
 // setHuggingFaceArtifactParentStatus updates the synthetic Hugging Face parent
@@ -1379,9 +1560,11 @@ func (c *ConfigMapReconciler) upsertHuggingFaceArtifactParentEntry(ctx context.C
 func (c *ConfigMapReconciler) setHuggingFaceArtifactParentStatus(ctx context.Context, parentName string, identity ArtifactIdentity, parentPath string, status ModelStatus, skipIfUpdating bool) (string, bool, error) {
 	observedParentPath := parentPath
 	updated := false
+	var affectedChildKeys []string
 	updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
 		observedParentPath = parentPath
 		updated = false
+		affectedChildKeys = nil
 		acquired := true
 		if currentConfigMap.Data == nil {
 			currentConfigMap.Data = make(map[string]string)
@@ -1453,6 +1636,14 @@ func (c *ConfigMapReconciler) setHuggingFaceArtifactParentStatus(ctx context.Con
 			modelEntry.Config.Artifact.Sha = strings.ToLower(identity.HFCommitSHA)
 			modelEntry.Config.Artifact.Origin = identity.toOrigin()
 		}
+		switch status {
+		case ModelStatusUpdating:
+			if acquired {
+				affectedChildKeys = c.startHuggingFaceArtifactParentRepair(currentConfigMap, parentName, observedParentPath, &modelEntry)
+			}
+		case ModelStatusReady, ModelStatusFailed:
+			affectedChildKeys = c.finishHuggingFaceArtifactParentRepair(currentConfigMap, parentName, observedParentPath, &modelEntry, status)
+		}
 
 		entryJSON, err := json.Marshal(modelEntry)
 		if err != nil {
@@ -1464,6 +1655,11 @@ func (c *ConfigMapReconciler) setHuggingFaceArtifactParentStatus(ctx context.Con
 	}
 
 	err := c.updateConfigMapWithRetry(ctx, updateConfigMap)
+	if err == nil {
+		if labelErr := c.updateNodeLabelsForModelConfigMapKeys(ctx, affectedChildKeys, status); labelErr != nil {
+			c.logger.Warnf("Failed to update child node labels after Hugging Face artifact parent %s status changed to %s: %v", parentName, status, labelErr)
+		}
+	}
 	return observedParentPath, updated, err
 }
 
@@ -1576,6 +1772,42 @@ func (c *ConfigMapReconciler) deleteConfigMapDataEntry(ctx context.Context, key 
 		return true, currentConfigMap, nil
 	}
 	return c.updateConfigMapWithRetry(ctx, updateConfigMap)
+}
+
+func (c *ConfigMapReconciler) deleteInvalidHuggingFaceArtifactParentEntry(ctx context.Context, parentName string, parentPath string) error {
+	var failedChildKeys []string
+	updateConfigMap := func(currentConfigMap *corev1.ConfigMap) (bool, *corev1.ConfigMap, error) {
+		failedChildKeys = nil
+		effectiveParentPath := parentPath
+		if currentConfigMap.Data == nil {
+			return false, currentConfigMap, nil
+		}
+		dataEntry, exists := currentConfigMap.Data[parentName]
+		if !exists {
+			return false, currentConfigMap, nil
+		}
+		var parentEntry ModelEntry
+		if err := json.Unmarshal([]byte(dataEntry), &parentEntry); err != nil {
+			c.logger.Warnf("Deleting corrupt Hugging Face artifact parent entry %s after marking still-attached children Failed because the entry cannot be parsed: %v", parentName, err)
+			parentEntry = ModelEntry{}
+			failedChildKeys = c.finishHuggingFaceArtifactParentRepair(currentConfigMap, parentName, parentPath, &parentEntry, ModelStatusFailed)
+			delete(currentConfigMap.Data, parentName)
+			return true, currentConfigMap, nil
+		}
+		if strings.TrimSpace(effectiveParentPath) == "" && parentEntry.Config != nil {
+			effectiveParentPath = parentEntry.Config.Artifact.ParentPath[parentName]
+		}
+		failedChildKeys = c.finishHuggingFaceArtifactParentRepair(currentConfigMap, parentName, effectiveParentPath, &parentEntry, ModelStatusFailed)
+		delete(currentConfigMap.Data, parentName)
+		return true, currentConfigMap, nil
+	}
+	if err := c.updateConfigMapWithRetry(ctx, updateConfigMap); err != nil {
+		return err
+	}
+	if err := c.updateNodeLabelsForModelConfigMapKeys(ctx, failedChildKeys, ModelStatusFailed); err != nil {
+		c.logger.Warnf("Failed to update child node labels after invalid Hugging Face artifact parent %s was deleted: %v", parentName, err)
+	}
+	return nil
 }
 
 func containsString(values []string, target string) bool {

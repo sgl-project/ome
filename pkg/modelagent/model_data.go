@@ -83,6 +83,12 @@ type ArtifactIdentity struct {
 	HFCommitSHA string
 }
 
+// SharedParentRepair records child ConfigMap entries temporarily moved out of
+// Ready while a synthetic shared artifact parent is being repaired.
+type SharedParentRepair struct {
+	AffectedChildKeys []string `json:"affectedChildKeys,omitempty"`
+}
+
 // DownloadProgress tracks the progress of a model download
 type DownloadProgress struct {
 	Phase            string  `json:"phase"`            // Scanning, Downloading, Finalizing
@@ -105,10 +111,11 @@ func (p *DownloadProgress) Percentage() float64 {
 // ModelEntry represents an entry in the node model ConfigMap
 // This is the top-level structure stored for each model in the ConfigMap
 type ModelEntry struct {
-	Name     string            `json:"name"`               // Name of the model
-	Status   ModelStatus       `json:"status"`             // Current status of the model on this node
-	Config   *ModelConfig      `json:"config,omitempty"`   // Model configuration, may be nil if just tracking status
-	Progress *DownloadProgress `json:"progress,omitempty"` // Download progress, nil when not downloading
+	Name               string              `json:"name"`                         // Name of the model
+	Status             ModelStatus         `json:"status"`                       // Current status of the model on this node
+	Config             *ModelConfig        `json:"config,omitempty"`             // Model configuration, may be nil if just tracking status
+	Progress           *DownloadProgress   `json:"progress,omitempty"`           // Download progress, nil when not downloading
+	SharedParentRepair *SharedParentRepair `json:"sharedParentRepair,omitempty"` // Internal state for shared artifact parent repair
 }
 
 // ConvertMetadataToModelConfig converts internal ModelMetadata to a client-facing ModelConfig
