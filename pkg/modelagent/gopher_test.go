@@ -677,10 +677,10 @@ func TestIsReservingModelArtifact_NilTaskReturnsFalse(t *testing.T) {
 func TestFilterInternalArtifactObjectSummariesSkipsReplicationControlObjects(t *testing.T) {
 	configName := "models/config.json"
 	weightName := "models/model.safetensors"
-	markerName := "models/" + artifactCompleteMarkerFileName
-	rootMarkerName := artifactCompleteMarkerFileName
-	lockName := "models/" + artifactUploadLockFileName
-	rootLockName := artifactUploadLockFileName
+	markerName := "models/" + constants.ArtifactCompleteMarkerFileName
+	rootMarkerName := constants.ArtifactCompleteMarkerFileName
+	lockName := "models/" + constants.ArtifactUploadLockFileName
+	rootLockName := constants.ArtifactUploadLockFileName
 	size := int64(1)
 
 	objects := []objectstorage.ObjectSummary{
@@ -881,7 +881,7 @@ func TestHuggingFaceArtifactKeyAndCanonicalPath(t *testing.T) {
 	key := huggingFaceArtifactConfigMapKey(identity)
 	path := canonicalHuggingFaceArtifactPath(destPath, identity)
 
-	assert.Contains(t, key, "artifact.huggingface.deepseek-ai.DeepSeek-V4-Pro.")
+	assert.Contains(t, key, constants.HuggingFaceArtifactConfigMapKeyPrefix+"deepseek-ai.DeepSeek-V4-Pro.")
 	assert.Contains(t, key, "."+sha)
 	assert.NotContains(t, key, "/")
 	assert.Equal(t, filepath.Join(filepath.Dir(destPath), constants.ModelArtifactsDirectory, "deepseek-ai", "DeepSeek-V4-Pro", sha), path)
@@ -1539,7 +1539,7 @@ func TestEnsureStartupHuggingFaceArtifactParentsRecoveredDoesNotWaitWhenConfigMa
 	require.True(t, recovered)
 	require.False(t, g.isStartupHuggingFaceArtifactParentRecoveryPending())
 
-	stop, err := g.ensureStartupHuggingFaceArtifactParentsRecovered(context.Background(), &GopherTask{TaskType: Download}, "artifact.huggingface.test")
+	stop, err := g.ensureStartupHuggingFaceArtifactParentsRecovered(context.Background(), &GopherTask{TaskType: Download}, constants.HuggingFaceArtifactConfigMapKeyPrefix+"test")
 
 	require.NoError(t, err)
 	assert.False(t, stop)

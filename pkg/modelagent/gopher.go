@@ -37,11 +37,6 @@ const (
 	Download         GopherTaskType = "Download"
 	DownloadOverride GopherTaskType = "DownloadOverride"
 	Delete           GopherTaskType = "Delete"
-
-	huggingFaceArtifactConfigMapKeyPrefix = "artifact.huggingface."
-	huggingFaceArtifactReadyMarkerFile    = ".ome-hf-artifact-ready"
-	artifactCompleteMarkerFileName        = ".ome-artifact-complete"
-	artifactUploadLockFileName            = ".ome-artifact-upload.lock"
 )
 
 type GopherTask struct {

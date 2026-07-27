@@ -150,11 +150,11 @@ func huggingFaceArtifactIdentityFromAnnotations(annotations map[string]string) (
 }
 
 func huggingFaceArtifactConfigMapKey(identity ArtifactIdentity) string {
-	return huggingFaceArtifactConfigMapKeyPrefix + sanitizeConfigMapKeyComponent(identity.HFModelID) + "." + shortConfigMapKeyHash(identity.HFModelID) + "." + strings.ToLower(identity.HFCommitSHA)
+	return constants.HuggingFaceArtifactConfigMapKeyPrefix + sanitizeConfigMapKeyComponent(identity.HFModelID) + "." + shortConfigMapKeyHash(identity.HFModelID) + "." + strings.ToLower(identity.HFCommitSHA)
 }
 
 func isHuggingFaceArtifactConfigMapKey(key string) bool {
-	return strings.HasPrefix(key, huggingFaceArtifactConfigMapKeyPrefix)
+	return strings.HasPrefix(key, constants.HuggingFaceArtifactConfigMapKeyPrefix)
 }
 
 // shortConfigMapKeyHash keeps the synthetic parent key readable while avoiding
@@ -195,7 +195,7 @@ func canonicalHuggingFaceArtifactPathForTask(task *GopherTask, modelRootDir stri
 }
 
 func huggingFaceArtifactReadyMarkerPath(parentPath string) string {
-	return filepath.Join(parentPath, huggingFaceArtifactReadyMarkerFile)
+	return filepath.Join(parentPath, constants.HuggingFaceArtifactReadyMarkerFileName)
 }
 
 func writeHuggingFaceArtifactReadyMarker(parentPath string) error {

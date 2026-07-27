@@ -1,9 +1,9 @@
 package modelagent
 
 import (
-	"strings"
-
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
+
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 func filterInternalArtifactObjectSummaries(objects []objectstorage.ObjectSummary) []objectstorage.ObjectSummary {
@@ -18,13 +18,5 @@ func filterInternalArtifactObjectSummaries(objects []objectstorage.ObjectSummary
 }
 
 func isInternalArtifactObjectName(objectName string) bool {
-	return isArtifactCompleteMarkerObjectName(objectName) || isArtifactUploadLockObjectName(objectName)
-}
-
-func isArtifactCompleteMarkerObjectName(objectName string) bool {
-	return objectName == artifactCompleteMarkerFileName || strings.HasSuffix(objectName, "/"+artifactCompleteMarkerFileName)
-}
-
-func isArtifactUploadLockObjectName(objectName string) bool {
-	return objectName == artifactUploadLockFileName || strings.HasSuffix(objectName, "/"+artifactUploadLockFileName)
+	return constants.IsInternalArtifactObjectName(objectName)
 }
