@@ -21,6 +21,7 @@ const (
 	CapabilityTextToAudio      Capability = "TEXT_TO_AUDIO"
 	CapabilityImageTextToAudio Capability = "IMAGE_TEXT_TO_AUDIO"
 	CapabilityVideoTextToAudio Capability = "VIDEO_TEXT_TO_AUDIO"
+	CapabilityVideoTextToText  Capability = "VIDEO_TEXT_TO_TEXT"
 	CapabilityAudioToText      Capability = "AUDIO_TO_TEXT"
 	CapabilityAudioToAudio     Capability = "AUDIO_TO_AUDIO"
 	CapabilityAudioTextToText  Capability = "AUDIO_TEXT_TO_TEXT"
@@ -166,14 +167,21 @@ func diffusionRule(hf HuggingFaceModel) []Capability {
 }
 
 func nemotronHNanoRule(hf HuggingFaceModel) []Capability {
-	if !strings.Contains(strings.ToLower(hf.GetModelType()), "nemotronh_nano") {
+	modelType := strings.ToLower(hf.GetModelType())
+	if !strings.Contains(modelType, "nemotronh_nano") {
 		return nil
 	}
-	return []Capability{
+	capabilities := []Capability{
 		CapabilityImageTextToText,
 		CapabilityTextToText,
-		CapabilityAudioToText,
 	}
+	if strings.Contains(modelType, "nemotronh_nano_omni") {
+		capabilities = append(capabilities,
+			CapabilityAudioTextToText,
+			CapabilityVideoTextToText,
+		)
+	}
+	return capabilities
 }
 
 func omniRule(hf HuggingFaceModel) []Capability {
