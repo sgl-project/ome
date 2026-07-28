@@ -46,7 +46,7 @@ spec:
         - name: model-artifact-cache
           hostPath:
             path: {{ .Values.modelAgent.artifactCache.hostPath }}
-            type: DirectoryOrCreate
+            type: Directory
         {{- end }}
         {{- with .Values.modelAgent.extraVolumes }}
         {{- toYaml . | nindent 8 }}
@@ -104,6 +104,7 @@ spec:
         - name: model-artifact-cache
           readOnly: true
           mountPath: {{ .Values.modelAgent.artifactCache.mountPath }}
+          mountPropagation: HostToContainer
         {{- end }}
         {{- with .Values.modelAgent.extraVolumeMounts }}
         {{- toYaml . | nindent 8 }}

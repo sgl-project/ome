@@ -7,12 +7,14 @@ import (
 
 	"sigs.k8s.io/ome/pkg/xet"
 
+	"sigs.k8s.io/ome/internal/ome-agent/replica/artifactcache"
 	"sigs.k8s.io/ome/internal/ome-agent/replica/common"
 
 	"sigs.k8s.io/ome/pkg/afero"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"sigs.k8s.io/ome/pkg/ociobjectstore"
 	testingPkg "sigs.k8s.io/ome/pkg/testing"
@@ -165,6 +167,14 @@ func TestWithViper(t *testing.T) {
 				v.Set("hf_download_timeout", "2h")
 				v.Set("hf_download_stale_progress_timeout", "15m")
 				v.Set("artifact_upload_lock_timeout", "3h")
+				v.Set("hf_access_validated", true)
+				v.Set("model_artifact_cache.enabled", true)
+				v.Set("model_artifact_cache.mode", "fanout")
+				v.Set("model_artifact_cache.root", "/model-artifact-cache")
+				v.Set("model_artifact_cache.key_root", "_artifacts")
+				v.Set("model_artifact_cache.hf_model_id", "Qwen/Qwen3-4B-Instruct-2507")
+				v.Set("model_artifact_cache.hf_commit_sha", "cdbee75f17c01a7cc42f958dc650907174af0554")
+				v.Set("model_artifact_cache.source_root", "/mnt/cache-source")
 				v.Set("source.storage_uri", "oci://n/test-src-namespace/b/test-src-bucket/o/models")
 				v.Set("target.storage_uri", "oci://n/test-tgt-namespace/b/test-tgt-bucket/o/models")
 				return v
@@ -178,6 +188,14 @@ func TestWithViper(t *testing.T) {
 				assert.Equal(t, 2*time.Hour, c.HFDownloadTimeout)
 				assert.Equal(t, 15*time.Minute, c.HFDownloadStaleProgressTimeout)
 				assert.Equal(t, 3*time.Hour, c.ArtifactUploadLockTimeout)
+				assert.True(t, c.HFAccessValidated)
+				assert.True(t, c.ModelArtifactCache.Enabled)
+				assert.Equal(t, "fanout", c.ModelArtifactCache.Mode)
+				assert.Equal(t, "/model-artifact-cache", c.ModelArtifactCache.Root)
+				assert.Equal(t, "_artifacts", c.ModelArtifactCache.KeyRoot)
+				assert.Equal(t, "Qwen/Qwen3-4B-Instruct-2507", c.ModelArtifactCache.HFModelID)
+				assert.Equal(t, "cdbee75f17c01a7cc42f958dc650907174af0554", c.ModelArtifactCache.CommitSHA)
+				assert.Equal(t, "/mnt/cache-source", c.ModelArtifactCache.SourceRoot)
 				assert.Equal(t, "oci://n/test-src-namespace/b/test-src-bucket/o/models", c.Source.StorageURIStr)
 				assert.Equal(t, "oci://n/test-tgt-namespace/b/test-tgt-bucket/o/models", c.Target.StorageURIStr)
 			},
@@ -303,6 +321,50 @@ func TestWithAppParams(t *testing.T) {
 			assert.Equal(t, tt.expectTargetPVC, config.Target.PVCFileSystem)
 		})
 	}
+}
+
+func TestConfigValidateAllowsCredentialFreeFanOut(t *testing.T) {
+	config := &Config{
+		LocalPath:      "/model-artifact-cache/.staging/fanout",
+		NumConnections: 1,
+		ModelArtifactCache: artifactcache.Config{
+			Enabled:    true,
+			Mode:       "fanout",
+			Root:       "/model-artifact-cache",
+			KeyRoot:    "_artifacts",
+			HFModelID:  "Qwen/Qwen3-4B-Instruct-2507",
+			CommitSHA:  "cdbee75f17c01a7cc42f958dc650907174af0554",
+			SourceRoot: "/mnt/cache-source",
+		},
+	}
+
+	require.NoError(t, config.Validate())
+	agent, err := NewReplicaAgent(config)
+	require.NoError(t, err)
+	require.NotNil(t, agent)
+}
+
+func TestConfigValidateRejectsUnsupportedModelArtifactCacheMode(t *testing.T) {
+	config := &Config{
+		LocalPath:      "/model-artifact-cache/.staging/seed",
+		NumConnections: 1,
+		ModelArtifactCache: artifactcache.Config{
+			Enabled:   true,
+			Mode:      "mirror",
+			Root:      "/model-artifact-cache",
+			KeyRoot:   "_artifacts",
+			HFModelID: "Qwen/Qwen3-4B-Instruct-2507",
+			CommitSHA: "cdbee75f17c01a7cc42f958dc650907174af0554",
+		},
+		Source: SourceStruct{
+			StorageURIStr: "hf://Qwen/Qwen3-4B-Instruct-2507@cdbee75f17c01a7cc42f958dc650907174af0554",
+		},
+		Target: TargetStruct{
+			StorageURIStr: "oci://n/namespace/b/bucket/o/model",
+		},
+	}
+
+	require.ErrorContains(t, config.Validate(), "unsupported model artifact cache mode")
 }
 
 func TestConfig_Validate(t *testing.T) {

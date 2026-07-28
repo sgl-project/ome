@@ -34,6 +34,16 @@ enable_size_limit_check: true
 hf_download_timeout: "72h"
 hf_download_stale_progress_timeout: "30m"
 artifact_upload_lock_timeout: "120h"
+hf_access_validated: false
+
+model_artifact_cache:
+  enabled: false
+  mode: "seed"
+  root: "/model-artifact-cache"
+  key_root: "_artifacts"
+  hf_model_id: ""
+  hf_commit_sha: ""
+  source_root: ""
 
 source:
   storage_uri: "oci://n/<namespace>/b/<bucket-name>/o/<object-name>"

@@ -2027,6 +2027,78 @@ func TestProcessTaskRecoversUpdatingHuggingFaceArtifactParentWithReadyMarker(t *
 	assert.Contains(t, parentEntry.Config.Artifact.ChildrenPaths, childPath)
 }
 
+func TestProcessTaskHydratesMountedCacheIntoCanonicalHuggingFaceArtifactParent(t *testing.T) {
+	modelID := "Qwen/Qwen3-4B-Instruct-2507"
+	sha := "cdbee75f17c01a7cc42f958dc650907174af0554"
+	identity := ArtifactIdentity{
+		OriginType:  ArtifactOriginTypeHuggingFace,
+		HFModelID:   modelID,
+		HFCommitSHA: sha,
+	}
+	tmpDir := t.TempDir()
+	cacheMount := t.TempDir()
+	childPath := filepath.Join(tmpDir, "child")
+	parentPath := canonicalHuggingFaceArtifactPath(childPath, identity)
+	cachePath := filepath.Join(cacheMount, defaultMountedArtifactCacheKeyRoot, filepath.FromSlash(modelID), sha)
+	writeMountedArtifactCacheFixture(t, cachePath, map[string]string{
+		"config.json": minimalModelConfigJSON,
+	})
+
+	model := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "child",
+			Namespace: "default",
+			UID:       "child-uid",
+			Annotations: map[string]string{
+				HuggingFaceModelIDAnnotationKey: modelID,
+				HuggingFaceSHAAnnotationKey:     sha,
+			},
+		},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri:     stringPtr("oci://n/ns/b/bucket/o/customer-imported-basemodels/qwen/qwen3/" + sha),
+				Path:           &childPath,
+				DownloadPolicy: dp(v1beta1.ReuseIfExists),
+			},
+		},
+	}
+	g := newGopherForArtifactReuseProcessTask(t, makeConfigMap("node-1", map[string]string{}), tmpDir, map[string]string{
+		"kubernetes.io/hostname": "node-1",
+	})
+	g.baseModelLister = &mockBaseModelLister{models: []*v1beta1.BaseModel{model}}
+	g.modelArtifactCache = ModelArtifactCacheConfig{
+		Enabled: true,
+		Mounts:  []string{cacheMount},
+		KeyRoot: defaultMountedArtifactCacheKeyRoot,
+	}
+
+	err := g.processTaskWithOptions(&GopherTask{
+		TaskType:  Download,
+		BaseModel: model,
+	}, true)
+
+	require.NoError(t, err)
+	childInfo, err := os.Lstat(childPath)
+	require.NoError(t, err)
+	assert.NotZero(t, childInfo.Mode()&os.ModeSymlink)
+	resolvedChild, err := filepath.EvalSymlinks(childPath)
+	require.NoError(t, err)
+	resolvedParent, err := filepath.EvalSymlinks(parentPath)
+	require.NoError(t, err)
+	assert.Equal(t, resolvedParent, resolvedChild)
+	assertFileContent(t, filepath.Join(parentPath, "config.json"), minimalModelConfigJSON)
+	assert.True(t, hasHuggingFaceArtifactReadyMarker(parentPath))
+
+	parentKey := huggingFaceArtifactConfigMapKey(identity)
+	latest, err := g.configMapReconciler.kubeClient.CoreV1().ConfigMaps("ome").Get(context.Background(), "node-1", metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Contains(t, latest.Data, parentKey)
+	var parentEntry ModelEntry
+	require.NoError(t, json.Unmarshal([]byte(latest.Data[parentKey]), &parentEntry))
+	assert.Equal(t, ModelStatusReady, parentEntry.Status)
+	assert.Contains(t, parentEntry.Config.Artifact.ChildrenPaths, childPath)
+}
+
 func TestProcessTaskWithOptionsReusesOCIArtifactByHuggingFaceOrigin(t *testing.T) {
 	modelID := "Qwen/Qwen3-4B-Instruct-2507"
 	sha := "cdbee75f17c01a7cc42f958dc650907174af0554"

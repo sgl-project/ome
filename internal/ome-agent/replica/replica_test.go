@@ -10,6 +10,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/xet"
 
+	"sigs.k8s.io/ome/internal/ome-agent/replica/artifactcache"
 	"sigs.k8s.io/ome/internal/ome-agent/replica/common"
 	"sigs.k8s.io/ome/internal/ome-agent/replica/replicator"
 
@@ -76,6 +77,27 @@ func (f *fakeReplicator) Replicate(objects []common.ReplicationObject) error {
 		return f.onReplicate(objects)
 	}
 	return f.err
+}
+
+type fakeArtifactCacheReplicator struct {
+	fakeReplicator
+	prepared      bool
+	cacheHit      bool
+	cachedObjects []common.ReplicationObject
+	inspectErr    error
+	onPrepare     func() error
+}
+
+func (f *fakeArtifactCacheReplicator) InspectArtifactCache() ([]common.ReplicationObject, bool, error) {
+	return f.cachedObjects, f.cacheHit, f.inspectErr
+}
+
+func (f *fakeArtifactCacheReplicator) PrepareArtifactCache() error {
+	f.prepared = true
+	if f.onPrepare != nil {
+		return f.onPrepare()
+	}
+	return nil
 }
 
 func TestNewReplicaAgent(t *testing.T) {
@@ -651,6 +673,51 @@ func TestReplicaAgent_StartReturnsErrorWhenNumConnectionsInvalid(t *testing.T) {
 	assert.Contains(t, err.Error(), "num_connections")
 }
 
+func TestReplicaAgent_StartFanOutCopiesCacheEntryWithoutObjectStorageReplication(t *testing.T) {
+	sourceRoot := t.TempDir()
+	targetRoot := t.TempDir()
+	cacheConfig := artifactcache.Config{
+		Enabled:    true,
+		Mode:       "fanout",
+		Root:       targetRoot,
+		KeyRoot:    "_artifacts",
+		HFModelID:  "Qwen/Qwen3-4B-Instruct-2507",
+		CommitSHA:  "cdbee75f17c01a7cc42f958dc650907174af0554",
+		SourceRoot: sourceRoot,
+	}
+	sourceConfig := cacheConfig
+	sourceConfig.Root = sourceRoot
+	staging, err := sourceConfig.NewStagingDir()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(staging, "model.safetensors"), []byte("weights"), 0o644))
+	_, _, _, err = sourceConfig.PublishStaging(staging)
+	require.NoError(t, err)
+
+	replicatorCalled := false
+	originalNewReplicator := newReplicatorFunc
+	t.Cleanup(func() { newReplicatorFunc = originalNewReplicator })
+	newReplicatorFunc = func(_ *ReplicaAgent) (replicator.Replicator, error) {
+		replicatorCalled = true
+		return &fakeReplicator{}, nil
+	}
+	agent := &ReplicaAgent{
+		Logger: testingPkg.SetupMockLogger(),
+		Config: Config{
+			NumConnections:     1,
+			ModelArtifactCache: cacheConfig,
+		},
+	}
+
+	err = agent.Start()
+
+	require.NoError(t, err)
+	assert.False(t, replicatorCalled)
+	entry, hit, err := cacheConfig.Inspect(targetRoot)
+	require.NoError(t, err)
+	require.True(t, hit)
+	require.Len(t, entry.Files, 1)
+}
+
 func TestReplicaAgent_StartWritesCompletionMarkerAfterSuccessfulOCITargetReplication(t *testing.T) {
 	agent, cleanup := newTestAgentForCompletionMarker(t)
 	defer cleanup()
@@ -740,6 +807,130 @@ func TestReplicaAgent_StartSkipsReplicationWhenTargetArtifactUploadLockCompletes
 	require.NoError(t, err)
 	assert.False(t, replicatorCalled)
 	assert.Equal(t, 2, stateCalls)
+}
+
+func TestReplicaAgent_StartPreparesCacheBeforeReusingCompletedObjectStorageArtifact(t *testing.T) {
+	agent, cleanup := newTestAgentForCompletionMarker(t)
+	defer cleanup()
+	agent.Config.ModelArtifactCache.Enabled = true
+	agent.Config.ModelArtifactCache.Mode = "seed"
+	agent.ReplicationInput.SourceStorageType = storage.StorageTypeHuggingFace
+
+	sourceObjectsLoaded := false
+	listSourceObjectsFunc = func(_ *ReplicaAgent) ([]common.ReplicationObject, error) {
+		sourceObjectsLoaded = true
+		name := "model.safetensors"
+		size := int64(1)
+		return []common.ReplicationObject{
+			common.ObjectSummaryReplicationObject{ObjectSummary: objectstorage.ObjectSummary{Name: &name, Size: &size}},
+		}, nil
+	}
+	fake := &fakeArtifactCacheReplicator{onPrepare: func() error {
+		assert.True(t, sourceObjectsLoaded)
+		return nil
+	}}
+	newReplicatorFunc = func(_ *ReplicaAgent) (replicator.Replicator, error) {
+		return fake, nil
+	}
+	targetArtifactStateFunc = func(_ *ociobjectstore.OCIOSDataStore, _ ociobjectstore.ObjectURI) (targetArtifactState, error) {
+		return targetArtifactState{Complete: true}, nil
+	}
+
+	err := agent.Start()
+
+	require.NoError(t, err)
+	assert.True(t, fake.prepared)
+	assert.Empty(t, fake.objects)
+}
+
+func TestReplicaAgent_StartReusesCompleteCacheAndObjectStorageWhenHuggingFaceListFails(t *testing.T) {
+	agent, cleanup := newTestAgentForCompletionMarker(t)
+	defer cleanup()
+	agent.Config.ModelArtifactCache.Enabled = true
+	agent.Config.ModelArtifactCache.Mode = "seed"
+	agent.Config.HFAccessValidated = true
+	agent.ReplicationInput.SourceStorageType = storage.StorageTypeHuggingFace
+
+	listCalled := false
+	listSourceObjectsFunc = func(_ *ReplicaAgent) ([]common.ReplicationObject, error) {
+		listCalled = true
+		return nil, errors.New("Hugging Face unavailable")
+	}
+	name := "model.safetensors"
+	size := int64(1)
+	fake := &fakeArtifactCacheReplicator{
+		cacheHit: true,
+		cachedObjects: []common.ReplicationObject{
+			common.ObjectSummaryReplicationObject{ObjectSummary: objectstorage.ObjectSummary{Name: &name, Size: &size}},
+		},
+	}
+	newReplicatorFunc = func(_ *ReplicaAgent) (replicator.Replicator, error) {
+		return fake, nil
+	}
+	targetArtifactStateFunc = func(_ *ociobjectstore.OCIOSDataStore, _ ociobjectstore.ObjectURI) (targetArtifactState, error) {
+		return targetArtifactState{Complete: true}, nil
+	}
+
+	err := agent.Start()
+
+	require.NoError(t, err)
+	assert.False(t, listCalled)
+	assert.True(t, fake.prepared)
+	assert.Empty(t, fake.objects)
+}
+
+func TestReplicaAgent_StartValidatesHuggingFaceAccessBeforeReusingCache(t *testing.T) {
+	agent, cleanup := newTestAgentForCompletionMarker(t)
+	defer cleanup()
+	agent.Config.ModelArtifactCache.Enabled = true
+	agent.Config.ModelArtifactCache.Mode = "seed"
+	agent.ReplicationInput.SourceStorageType = storage.StorageTypeHuggingFace
+
+	listCalled := false
+	listSourceObjectsFunc = func(_ *ReplicaAgent) ([]common.ReplicationObject, error) {
+		listCalled = true
+		return nil, errors.New("Hugging Face access denied")
+	}
+	fake := &fakeArtifactCacheReplicator{cacheHit: true}
+	newReplicatorFunc = func(_ *ReplicaAgent) (replicator.Replicator, error) {
+		return fake, nil
+	}
+
+	err := agent.Start()
+
+	require.ErrorContains(t, err, "Hugging Face access denied")
+	assert.True(t, listCalled)
+	assert.False(t, fake.prepared)
+}
+
+func TestReplicaAgent_StartRepairOnlyStopsAfterPreparingCache(t *testing.T) {
+	agent, cleanup := newTestAgentForCompletionMarker(t)
+	defer cleanup()
+	agent.Config.ModelArtifactCache.Enabled = true
+	agent.Config.ModelArtifactCache.Mode = artifactcache.ModeRepair
+	agent.ReplicationInput.SourceStorageType = storage.StorageTypeHuggingFace
+
+	listSourceObjectsFunc = func(_ *ReplicaAgent) ([]common.ReplicationObject, error) {
+		name := "model.safetensors"
+		size := int64(1)
+		return []common.ReplicationObject{
+			common.ObjectSummaryReplicationObject{ObjectSummary: objectstorage.ObjectSummary{Name: &name, Size: &size}},
+		}, nil
+	}
+	fake := &fakeArtifactCacheReplicator{}
+	newReplicatorFunc = func(_ *ReplicaAgent) (replicator.Replicator, error) {
+		return fake, nil
+	}
+	targetArtifactStateFunc = func(_ *ociobjectstore.OCIOSDataStore, _ ociobjectstore.ObjectURI) (targetArtifactState, error) {
+		t.Fatal("cache repair must not inspect or mutate the Object Storage target")
+		return targetArtifactState{}, nil
+	}
+
+	err := agent.Start()
+
+	require.NoError(t, err)
+	assert.True(t, fake.prepared)
+	assert.Empty(t, fake.objects)
 }
 
 func TestReplicaAgent_StartWaitsWhenCompletedTargetArtifactStillHasActiveUploadLock(t *testing.T) {
@@ -1128,6 +1319,7 @@ func newTestAgentForCompletionMarker(t *testing.T) (*ReplicaAgent, func()) {
 	oldTargetArtifactStateFunc := targetArtifactStateFunc
 	oldSleepFunc := sleepFunc
 	oldNowFunc := nowFunc
+	oldListSourceObjectsFunc := listSourceObjectsFunc
 	cleanup := func() {
 		newReplicatorFunc = oldNewReplicatorFunc
 		uploadCompletionMarkerFunc = oldUploadCompletionMarkerFunc
@@ -1138,6 +1330,7 @@ func newTestAgentForCompletionMarker(t *testing.T) (*ReplicaAgent, func()) {
 		targetArtifactStateFunc = oldTargetArtifactStateFunc
 		sleepFunc = oldSleepFunc
 		nowFunc = oldNowFunc
+		listSourceObjectsFunc = oldListSourceObjectsFunc
 	}
 	tryAcquireArtifactUploadLockFunc = func(_ *ociobjectstore.OCIOSDataStore, _ string, _ ociobjectstore.ObjectURI) (bool, error) {
 		return true, nil

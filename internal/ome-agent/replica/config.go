@@ -2,10 +2,12 @@ package replica
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"sigs.k8s.io/ome/pkg/xet"
 
+	"sigs.k8s.io/ome/internal/ome-agent/replica/artifactcache"
 	"sigs.k8s.io/ome/internal/ome-agent/replica/common"
 
 	"github.com/go-playground/validator/v10"
@@ -21,14 +23,16 @@ import (
 type Config struct {
 	AnotherLogger logging.Interface
 
-	LocalPath                      string        `mapstructure:"local_path" validate:"required"`
-	DownloadSizeLimitGB            int           `mapstructure:"download_size_limit_gb"`
-	EnableSizeLimitCheck           bool          `mapstructure:"enable_size_limit_check"`
-	TargetArtifactReuseAllowed     bool          `mapstructure:"target_artifact_reuse_allowed"`
-	NumConnections                 int           `mapstructure:"num_connections" validate:"gt=0"`
-	HFDownloadTimeout              time.Duration `mapstructure:"hf_download_timeout"`
-	HFDownloadStaleProgressTimeout time.Duration `mapstructure:"hf_download_stale_progress_timeout"`
-	ArtifactUploadLockTimeout      time.Duration `mapstructure:"artifact_upload_lock_timeout"`
+	LocalPath                      string               `mapstructure:"local_path" validate:"required"`
+	DownloadSizeLimitGB            int                  `mapstructure:"download_size_limit_gb"`
+	EnableSizeLimitCheck           bool                 `mapstructure:"enable_size_limit_check"`
+	HFAccessValidated              bool                 `mapstructure:"hf_access_validated"`
+	TargetArtifactReuseAllowed     bool                 `mapstructure:"target_artifact_reuse_allowed"`
+	NumConnections                 int                  `mapstructure:"num_connections" validate:"gt=0"`
+	HFDownloadTimeout              time.Duration        `mapstructure:"hf_download_timeout"`
+	HFDownloadStaleProgressTimeout time.Duration        `mapstructure:"hf_download_stale_progress_timeout"`
+	ArtifactUploadLockTimeout      time.Duration        `mapstructure:"artifact_upload_lock_timeout"`
+	ModelArtifactCache             artifactcache.Config `mapstructure:"model_artifact_cache"`
 
 	Source struct {
 		StorageURIStr  string `mapstructure:"storage_uri" validate:"required"`
@@ -129,6 +133,27 @@ func WithViper(v *viper.Viper) Option {
 }
 
 func (c *Config) Validate() error {
+	if c.isModelArtifactCacheFanOut() {
+		if strings.TrimSpace(c.LocalPath) == "" {
+			return fmt.Errorf("local_path is required for model artifact cache fanout")
+		}
+		if c.NumConnections <= 0 {
+			return fmt.Errorf("num_connections must be greater than 0")
+		}
+		if _, err := c.ModelArtifactCache.EntryPath(c.ModelArtifactCache.Root); err != nil {
+			return fmt.Errorf("invalid model artifact cache target: %w", err)
+		}
+		if _, err := c.ModelArtifactCache.EntryPath(c.ModelArtifactCache.SourceRoot); err != nil {
+			return fmt.Errorf("invalid model artifact cache source: %w", err)
+		}
+		return nil
+	}
+	if c.ModelArtifactCache.Enabled {
+		if _, err := c.ModelArtifactCache.EntryPath(c.ModelArtifactCache.Root); err != nil {
+			return fmt.Errorf("invalid model artifact cache seed configuration: %w", err)
+		}
+	}
+
 	validate := validator.New()
 	if err := validate.Struct(c); err != nil {
 		return err
@@ -141,6 +166,16 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid target storage URI %s - %w", c.Target.StorageURIStr, err)
 	}
 	return nil
+}
+
+func (c *Config) isModelArtifactCacheFanOut() bool {
+	return c.ModelArtifactCache.Enabled &&
+		strings.EqualFold(strings.TrimSpace(c.ModelArtifactCache.Mode), artifactcache.ModeFanOut)
+}
+
+func (c *Config) isModelArtifactCacheRepair() bool {
+	return c.ModelArtifactCache.Enabled &&
+		strings.EqualFold(strings.TrimSpace(c.ModelArtifactCache.Mode), artifactcache.ModeRepair)
 }
 
 func (c *Config) ValidateRequiredDependencies(sourceStorageType storage.StorageType, targetStorageType storage.StorageType) error {

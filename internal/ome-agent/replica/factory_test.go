@@ -3,6 +3,7 @@ package replica
 import (
 	"testing"
 
+	"sigs.k8s.io/ome/internal/ome-agent/replica/artifactcache"
 	"sigs.k8s.io/ome/internal/ome-agent/replica/common"
 	"sigs.k8s.io/ome/internal/ome-agent/replica/replicator"
 
@@ -100,4 +101,30 @@ func TestNewReplicator(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewReplicatorPassesModelArtifactCacheConfigToHFToOCI(t *testing.T) {
+	cacheConfig := artifactcache.Config{
+		Enabled:   true,
+		Mode:      "seed",
+		Root:      "/model-artifact-cache",
+		KeyRoot:   "_artifacts",
+		HFModelID: "Qwen/Qwen3-4B-Instruct-2507",
+		CommitSHA: "cdbee75f17c01a7cc42f958dc650907174af0554",
+	}
+	agent := &ReplicaAgent{
+		Logger: logging.Discard(),
+		Config: Config{ModelArtifactCache: cacheConfig},
+		ReplicationInput: common.ReplicationInput{
+			SourceStorageType: storage.StorageTypeHuggingFace,
+			TargetStorageType: storage.StorageTypeOCI,
+		},
+	}
+
+	implementation, err := NewReplicator(agent)
+
+	require.NoError(t, err)
+	hfToOCI, ok := implementation.(*replicator.HFToOCIReplicator)
+	require.True(t, ok)
+	require.Equal(t, cacheConfig, hfToOCI.Config.ModelArtifactCache)
 }

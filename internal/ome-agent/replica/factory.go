@@ -22,6 +22,7 @@ func NewReplicator(r *ReplicaAgent) (replicator.Replicator, error) {
 				OCIOSDataStore:                 r.Config.Target.OCIOSDataStore,
 				HFDownloadTimeout:              r.Config.HFDownloadTimeout,
 				HFDownloadStaleProgressTimeout: r.Config.HFDownloadStaleProgressTimeout,
+				ModelArtifactCache:             r.Config.ModelArtifactCache,
 			},
 			ReplicationInput: r.ReplicationInput,
 		}, nil

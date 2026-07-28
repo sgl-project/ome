@@ -10,6 +10,7 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 
 	"sigs.k8s.io/ome/internal/ome-agent/replica/common"
+	"sigs.k8s.io/ome/internal/ome-agent/replica/replicator"
 
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/logging"
@@ -45,14 +46,22 @@ var (
 		return dataStore.DeleteObjectIfMatch(target, etag)
 	}
 	targetArtifactStateFunc = defaultTargetArtifactState
-	sleepFunc               = time.Sleep
-	nowFunc                 = time.Now
+	listSourceObjectsFunc   = func(agent *ReplicaAgent) ([]common.ReplicationObject, error) {
+		return agent.listSourceObjects()
+	}
+	sleepFunc = time.Sleep
+	nowFunc   = time.Now
 )
 
 type ReplicaAgent struct {
 	Logger           logging.Interface
 	Config           Config
 	ReplicationInput common.ReplicationInput
+}
+
+type artifactCachePreparer interface {
+	InspectArtifactCache() ([]common.ReplicationObject, bool, error)
+	PrepareArtifactCache() error
 }
 
 type targetArtifactState struct {
@@ -66,6 +75,13 @@ type targetArtifactState struct {
 
 // NewReplicaAgent constructs a new replica agent from the given configuration.
 func NewReplicaAgent(config *Config) (*ReplicaAgent, error) {
+	if config.isModelArtifactCacheFanOut() {
+		return &ReplicaAgent{
+			Logger: config.AnotherLogger,
+			Config: *config,
+		}, nil
+	}
+
 	sourceStorageType, err := storage.GetStorageType(config.Source.StorageURIStr)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -127,6 +143,75 @@ func (r *ReplicaAgent) Start() error {
 		return err
 	}
 
+	if r.Config.isModelArtifactCacheFanOut() {
+		entry, reused, err := r.Config.ModelArtifactCache.FanOut()
+		if err != nil {
+			err = fmt.Errorf("fan out model artifact cache entry: %w", err)
+			r.writeTerminationLog(err.Error())
+			return err
+		}
+		r.Logger.Infof("Model artifact cache fanout completed at %s; reused=%t", entry, reused)
+		return nil
+	}
+
+	var (
+		replicatorImp       replicator.Replicator
+		sourceObjs          []common.ReplicationObject
+		sourceObjectsLoaded bool
+		err                 error
+	)
+	if r.Config.ModelArtifactCache.Enabled &&
+		r.ReplicationInput.SourceStorageType == storage.StorageTypeHuggingFace &&
+		r.ReplicationInput.TargetStorageType == storage.StorageTypeOCI {
+		replicatorImp, err = newReplicatorFunc(r)
+		if err != nil {
+			r.writeTerminationLog(err.Error())
+			return err
+		}
+		preparer, ok := replicatorImp.(artifactCachePreparer)
+		if !ok {
+			err = fmt.Errorf("Hugging Face to OCI replicator does not support model artifact cache preparation")
+			r.writeTerminationLog(err.Error())
+			return err
+		}
+		if !r.Config.HFAccessValidated {
+			sourceObjs, err = listSourceObjectsFunc(r)
+			if err != nil {
+				r.writeTerminationLog(err.Error())
+				return err
+			}
+			r.validateModelSize(sourceObjs)
+			sourceObjectsLoaded = true
+		}
+		cachedObjects, cacheHit, inspectErr := preparer.InspectArtifactCache()
+		err = inspectErr
+		if err != nil {
+			r.writeTerminationLog(err.Error())
+			return err
+		}
+		if cacheHit {
+			sourceObjs = cachedObjects
+			sourceObjectsLoaded = true
+			r.validateModelSize(sourceObjs)
+		} else if !sourceObjectsLoaded {
+			sourceObjs, err = listSourceObjectsFunc(r)
+			if err != nil {
+				r.writeTerminationLog(err.Error())
+				return err
+			}
+			r.validateModelSize(sourceObjs)
+			sourceObjectsLoaded = true
+		}
+		if err = preparer.PrepareArtifactCache(); err != nil {
+			r.writeTerminationLog(err.Error())
+			return err
+		}
+		if r.Config.isModelArtifactCacheRepair() {
+			r.Logger.Infof("Model artifact cache repair completed")
+			return nil
+		}
+	}
+
 	lockAcquired, skipReplication, err := r.prepareTargetArtifactUpload()
 	if err != nil {
 		r.writeTerminationLog(err.Error())
@@ -149,18 +234,21 @@ func (r *ReplicaAgent) Start() error {
 		}
 	}
 
-	sourceObjs, err := r.listSourceObjects()
-	if err != nil {
-		r.writeTerminationLog(err.Error())
-		return err
+	if !sourceObjectsLoaded {
+		sourceObjs, err = listSourceObjectsFunc(r)
+		if err != nil {
+			r.writeTerminationLog(err.Error())
+			return err
+		}
+		r.validateModelSize(sourceObjs)
 	}
 
-	r.validateModelSize(sourceObjs)
-
-	replicatorImp, err := newReplicatorFunc(r)
-	if err != nil {
-		r.writeTerminationLog(err.Error())
-		return err
+	if replicatorImp == nil {
+		replicatorImp, err = newReplicatorFunc(r)
+		if err != nil {
+			r.writeTerminationLog(err.Error())
+			return err
+		}
 	}
 
 	err = replicatorImp.Replicate(sourceObjs)
