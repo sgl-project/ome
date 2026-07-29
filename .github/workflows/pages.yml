@@ -50,7 +50,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./site
-        run: npm install
+        run: npm ci
 
       - name: Build Hugo site
         working-directory: ./site
