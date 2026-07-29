@@ -430,13 +430,13 @@ func TestRDMAInjector_InjectRDMA(t *testing.T) {
 			description: "Existing volumes and mounts should be preserved",
 		},
 		{
-			name: "auto_inject_with_custom_profile",
+			name: "auto_inject_with_b200_profile",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-pod",
 					Annotations: map[string]string{
 						constants.RDMAAutoInjectAnnotationKey: "true",
-						constants.RDMAProfileAnnotationKey:    "oci-roce", // Using existing profile since we only have one defined
+						constants.RDMAProfileAnnotationKey:    B200RDMAProfile,
 					},
 				},
 				Spec: v1.PodSpec{
@@ -453,14 +453,14 @@ func TestRDMAInjector_InjectRDMA(t *testing.T) {
 					Name: "test-pod",
 					Annotations: map[string]string{
 						constants.RDMAAutoInjectAnnotationKey: "true",
-						constants.RDMAProfileAnnotationKey:    "oci-roce",
+						constants.RDMAProfileAnnotationKey:    B200RDMAProfile,
 					},
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
 						{
 							Name: "ome-container",
-							Env:  getExpectedEnvVars(),
+							Env:  getExpectedEnvVars(B200RDMAProfile),
 							VolumeMounts: []v1.VolumeMount{
 								{
 									Name:      DshmVolumeName,
@@ -502,7 +502,7 @@ func TestRDMAInjector_InjectRDMA(t *testing.T) {
 					},
 				},
 			},
-			description: "Pod with custom profile annotation should use that profile",
+			description: "Pod with B200 profile annotation should use the B200 HCA list",
 		},
 		{
 			name: "invalid_profile",
@@ -541,6 +541,71 @@ func TestRDMAInjector_InjectRDMA(t *testing.T) {
 				// Check structure and properties without relying on exact env var order
 				assertPodMatches(t, tt.expectedResult, tt.pod, tt.description)
 			}
+		})
+	}
+}
+
+func TestRDMAInjector_ProfileSelection(t *testing.T) {
+	tests := []struct {
+		name            string
+		instanceType    string
+		explicitProfile string
+		expectedProfile string
+	}{
+		{
+			name:            "B200 shape selects B200 profile",
+			instanceType:    "BM.GPU.B200.8",
+			expectedProfile: B200RDMAProfile,
+		},
+		{
+			name:            "H200 shape keeps default profile",
+			instanceType:    "BM.GPU.H200.8",
+			expectedProfile: DefaultRDMAProfile,
+		},
+		{
+			name:            "generic OCI profile remains shape aware",
+			instanceType:    "BM.GPU.B200.8",
+			explicitProfile: DefaultRDMAProfile,
+			expectedProfile: B200RDMAProfile,
+		},
+		{
+			name:            "explicit shape profile overrides detection",
+			instanceType:    "BM.GPU.H200.8",
+			explicitProfile: B200RDMAProfile,
+			expectedProfile: B200RDMAProfile,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			annotations := map[string]string{
+				constants.RDMAAutoInjectAnnotationKey: "true",
+			}
+			if tt.explicitProfile != "" {
+				annotations[constants.RDMAProfileAnnotationKey] = tt.explicitProfile
+			}
+			pod := &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pod",
+					Annotations: annotations,
+				},
+				Spec: v1.PodSpec{
+					NodeSelector: map[string]string{
+						constants.NodeInstanceShapeLabel: tt.instanceType,
+					},
+					Containers: []v1.Container{
+						{Name: DefaultContainerName},
+					},
+				},
+			}
+
+			err := NewRDMAInjector().InjectRDMA(pod)
+			assert.NoError(t, err)
+
+			expectedEnv := RDMAProfiles[tt.expectedProfile].EnvVars
+			assert.Equal(t, expectedEnv["NCCL_IB_HCA"], getEnvValue(pod.Spec.Containers[0], "NCCL_IB_HCA"))
+			assert.Equal(t, expectedEnv["NVSHMEM_HCA_LIST"], getEnvValue(pod.Spec.Containers[0], "NVSHMEM_HCA_LIST"))
+			assert.Equal(t, expectedEnv["OME_RDMA_HCA_LIST"], getEnvValue(pod.Spec.Containers[0], "OME_RDMA_HCA_LIST"))
 		})
 	}
 }
@@ -817,13 +882,27 @@ func findContainerByName(pod *v1.Pod, name string) *v1.Container {
 }
 
 // Helper function to get expected environment variables for tests
-func getExpectedEnvVars() []v1.EnvVar {
+func getExpectedEnvVars(profileNames ...string) []v1.EnvVar {
+	profileName := DefaultRDMAProfile
+	if len(profileNames) > 0 {
+		profileName = profileNames[0]
+	}
+
 	var envVars []v1.EnvVar
-	for name, value := range RDMAProfiles["oci-roce"].EnvVars {
+	for name, value := range RDMAProfiles[profileName].EnvVars {
 		envVars = append(envVars, v1.EnvVar{
 			Name:  name,
 			Value: value,
 		})
 	}
 	return envVars
+}
+
+func getEnvValue(container v1.Container, name string) string {
+	for _, env := range container.Env {
+		if env.Name == name {
+			return env.Value
+		}
+	}
+	return ""
 }

@@ -62,8 +62,13 @@ These annotations control model encryption and decryption:
 | Annotation                   | Description                                         |
 |------------------------------|-----------------------------------------------------|
 | `rdma.ome.io/auto-inject`    | Enables automatic RDMA injection                    |
-| `rdma.ome.io/profile`        | Specifies the RDMA profile to use                   |
+| `rdma.ome.io/profile`        | Specifies the RDMA profile to use (`oci-roce` or `oci-roce-b200`) |
 | `rdma.ome.io/container-name` | Specifies the container name for RDMA configuration |
+
+The generic `oci-roce` profile is shape-aware: OME selects `oci-roce-b200` for
+Pods whose `node.kubernetes.io/instance-type` selector identifies a B200 shape.
+This also applies when the profile annotation is omitted. Other and unknown
+shapes continue to use the default H100/H200-compatible layout.
 
 
 ### Runtime Revision and Pinning Annotations

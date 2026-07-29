@@ -8,22 +8,43 @@ import (
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils"
 )
 
 const (
 	// DefaultRDMAProfile is the default RDMA profile to use if none is specified
 	DefaultRDMAProfile = "oci-roce"
+	// B200RDMAProfile is the OCI RoCE profile for B200 nodes.
+	B200RDMAProfile = "oci-roce-b200"
 	// DevInfVolumeName is the name of the /dev/infiniband volume
 	DevInfVolumeName = "devinf"
 	// DshmVolumeName is the name of the /dev/shm volume
 	DshmVolumeName = "dshm"
 	// DefaultContainerName is the default container name to inject into if not specified
 	DefaultContainerName = "ome-container"
+
+	defaultOCIRoCEDevices = "mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
+	defaultOCINVSHMEMHCAs = "mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1,mlx5_8:1,mlx5_9:1,mlx5_10:1,mlx5_12:1,mlx5_13:1,mlx5_14:1,mlx5_15:1,mlx5_16:1,mlx5_17:1"
+	b200OCIRoCEDevices    = "mlx5_0,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_9,mlx5_10,mlx5_11"
+	b200OCINVSHMEMHCAs    = "mlx5_0:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_9:1,mlx5_10:1,mlx5_11:1"
 )
 
 // RDMAProfiles is a map of profile names to RDMA configurations
 var RDMAProfiles = map[string]RDMAProfile{
-	"oci-roce": {
+	DefaultRDMAProfile: newOCIRoCEProfile(defaultOCIRoCEDevices, defaultOCINVSHMEMHCAs),
+	B200RDMAProfile:    newOCIRoCEProfile(b200OCIRoCEDevices, b200OCINVSHMEMHCAs),
+}
+
+// RDMAProfile represents configuration parameters for RDMA and NCCL
+type RDMAProfile struct {
+	EnvVars         map[string]string
+	VolumeMounts    []v1.VolumeMount
+	Volumes         []v1.Volume
+	SecurityContext *v1.SecurityContext
+}
+
+func newOCIRoCEProfile(devices, nvshmemHCAs string) RDMAProfile {
+	return RDMAProfile{
 		EnvVars: map[string]string{
 			"NCCL_NET_PLUGIN":            "none",
 			"NCCL_DEBUG":                 "INFO",
@@ -33,7 +54,7 @@ var RDMAProfiles = map[string]RDMAProfile{
 			"NCCL_IB_SPLIT_DATA_ON_QPS":  "0",
 			"NCCL_IB_QPS_PER_CONNECTION": "16",
 			"NCCL_IB_GID_INDEX":          "3",
-			"NCCL_IB_HCA":                "=mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17",
+			"NCCL_IB_HCA":                "=" + devices,
 			"NCCL_IB_TC":                 "41",
 			"NCCL_IB_SL":                 "0",
 			"NCCL_IB_TIMEOUT":            "22",
@@ -46,6 +67,8 @@ var RDMAProfiles = map[string]RDMAProfile{
 			"NCCL_SOCKET_IFNAME":         "eth0",
 			"NCCL_IGNORE_CPU_AFFINITY":   "1",
 			"GLOO_SOCKET_IFNAME":         "eth0",
+			"NVSHMEM_HCA_LIST":           nvshmemHCAs,
+			"OME_RDMA_HCA_LIST":          devices,
 		},
 		VolumeMounts: []v1.VolumeMount{
 			{
@@ -84,16 +107,7 @@ var RDMAProfiles = map[string]RDMAProfile{
 			},
 			Privileged: &[]bool{true}[0],
 		},
-	},
-	// Add other profiles here as needed
-}
-
-// RDMAProfile represents configuration parameters for RDMA and NCCL
-type RDMAProfile struct {
-	EnvVars         map[string]string
-	VolumeMounts    []v1.VolumeMount
-	Volumes         []v1.Volume
-	SecurityContext *v1.SecurityContext
+	}
 }
 
 // RDMAInjector is responsible for injecting RDMA and NCCL configurations
@@ -111,6 +125,11 @@ func (ri *RDMAInjector) InjectRDMA(pod *v1.Pod) error {
 		if profile, ok := pod.ObjectMeta.Annotations[constants.RDMAProfileAnnotationKey]; ok && profile != "" {
 			profileName = profile
 		}
+		// The generic OCI RoCE profile is shape-aware. This preserves existing
+		// runtime annotations while selecting the B200 HCA layout when needed.
+		if profileName == DefaultRDMAProfile {
+			profileName = ri.defaultProfileForPod(pod)
+		}
 
 		profile, ok := RDMAProfiles[profileName]
 		if !ok {
@@ -120,6 +139,24 @@ func (ri *RDMAInjector) InjectRDMA(pod *v1.Pod) error {
 		return ri.injectRDMAConfig(pod, profile)
 	}
 	return nil
+}
+
+// defaultProfileForPod selects a shape-specific profile when the target shape is
+// available in the pod's node selector.
+func (ri *RDMAInjector) defaultProfileForPod(pod *v1.Pod) string {
+	instanceType := pod.Spec.NodeSelector[constants.NodeInstanceShapeLabel]
+	if instanceType == "" {
+		instanceType = pod.Spec.NodeSelector[constants.DeprecatedNodeInstanceShapeLabel]
+	}
+	if instanceType == "" {
+		return DefaultRDMAProfile
+	}
+
+	accelerator, err := utils.GetInstanceTypeShortName(instanceType)
+	if err == nil && accelerator == "B200" {
+		return B200RDMAProfile
+	}
+	return DefaultRDMAProfile
 }
 
 // injectRDMAConfig adds RDMA and NCCL configurations to the specified container in the pod

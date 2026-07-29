@@ -24,6 +24,9 @@ spec:
   protocolVersions:
     - openAI
   engineConfig:
+    annotations:
+      rdma.ome.io/auto-inject: "true"
+      rdma.ome.io/container-name: "ome-container"
     leader:
       tolerations:
         - key: "nvidia.com/gpu"
@@ -62,8 +65,6 @@ spec:
             value: 'true'
           - name: SGLANG_ENABLE_JIT_DEEPGEMM
             value: '0'
-          - name: NVSHMEM_HCA_LIST
-            value: mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1,mlx5_8:1,mlx5_9:1,mlx5_10:1,mlx5_12:1,mlx5_13:1,mlx5_14:1,mlx5_15:1,mlx5_16:1,mlx5_17:1
           - name: NVSHMEM_IB_GID_INDEX
             value: '3'
         command:
@@ -77,7 +78,7 @@ spec:
           - --model-path
           - $(MODEL_PATH)
           - --disaggregation-ib-device
-          - mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17
+          - $(OME_RDMA_HCA_LIST)
           - --chunked-prefill-size
           - "524288"
           - --ep-dispatch-algorithm
@@ -187,8 +188,6 @@ spec:
             value: '0'
           - name: SGLANG_CHUNKED_PREFIX_CACHE_THRESHOLD
             value: '0'
-          - name: NVSHMEM_HCA_LIST
-            value: mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1,mlx5_8:1,mlx5_9:1,mlx5_10:1,mlx5_12:1,mlx5_13:1,mlx5_14:1,mlx5_15:1,mlx5_16:1,mlx5_17:1
           - name: NVSHMEM_IB_GID_INDEX
             value: '3'
         command:
@@ -198,7 +197,7 @@ spec:
           - --model-path
           - $(MODEL_PATH)
           - --disaggregation-ib-device
-          - mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17
+          - $(OME_RDMA_HCA_LIST)
           - --chunked-prefill-size
           - "524288"
           - --ep-dispatch-algorithm
@@ -264,6 +263,9 @@ spec:
               - CAP_SYS_ADMIN
           privileged: true
   decoderConfig:
+    annotations:
+      rdma.ome.io/auto-inject: "true"
+      rdma.ome.io/container-name: "ome-container"
     leader:
       volumes:
         - name: dshm
@@ -302,8 +304,6 @@ spec:
             value: '0'
           - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
             value: '1'
-          - name: NVSHMEM_HCA_LIST
-            value: mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1,mlx5_8:1,mlx5_9:1,mlx5_10:1,mlx5_12:1,mlx5_13:1,mlx5_14:1,mlx5_15:1,mlx5_16:1,mlx5_17:1
           - name: NVSHMEM_IB_GID_INDEX
             value: '3'
         command:
@@ -332,7 +332,7 @@ spec:
           - --mem-fraction-static
           - "0.835"
           - --disaggregation-ib-device
-          - mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17
+          - $(OME_RDMA_HCA_LIST)
           - --cuda-graph-bs
           - "128"
           - --tp-size
@@ -419,8 +419,6 @@ spec:
             value: '0'
           - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
             value: '1'
-          - name: NVSHMEM_HCA_LIST
-            value: mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1,mlx5_8:1,mlx5_9:1,mlx5_10:1,mlx5_12:1,mlx5_13:1,mlx5_14:1,mlx5_15:1,mlx5_16:1,mlx5_17:1
           - name: NVSHMEM_IB_GID_INDEX
             value: '3'
         command:
@@ -445,7 +443,7 @@ spec:
           - --mem-fraction-static
           - "0.835"
           - --disaggregation-ib-device
-          - mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17
+          - $(OME_RDMA_HCA_LIST)
           - --cuda-graph-bs
           - "128"
           - --tp-size
