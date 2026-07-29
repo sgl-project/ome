@@ -201,6 +201,35 @@ func TestFanOutCopiesCompleteEntryAndReusesTargetHit(t *testing.T) {
 	requirePermissions(t, filepath.Join(entry, "model.safetensors"), 0o644)
 }
 
+func TestFanOutReusesStructurallyValidTargetWithoutFullChecksumVerification(t *testing.T) {
+	sourceRoot := t.TempDir()
+	targetRoot := t.TempDir()
+	sourceConfig := testConfig(sourceRoot)
+	staging, err := sourceConfig.NewStagingDir()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(staging, "model.safetensors"), []byte("weights"), 0o644))
+	_, _, _, err = sourceConfig.PublishStaging(staging)
+	require.NoError(t, err)
+
+	targetConfig := testConfig(targetRoot)
+	targetConfig.SourceRoot = sourceRoot
+	entry, reused, err := targetConfig.FanOut()
+	require.NoError(t, err)
+	require.False(t, reused)
+
+	targetFile := filepath.Join(entry, "model.safetensors")
+	require.NoError(t, os.WriteFile(targetFile, []byte("WEIGHTS"), 0o644))
+
+	entry, reused, err = targetConfig.FanOut()
+	require.NoError(t, err)
+	require.True(t, reused)
+	require.FileExists(t, targetFile)
+
+	_, hit, err := targetConfig.Verify(targetRoot)
+	require.ErrorContains(t, err, "checksum mismatch")
+	require.False(t, hit)
+}
+
 func TestFanOutClassifiesCorruptSourceAsUnavailable(t *testing.T) {
 	sourceRoot := t.TempDir()
 	targetRoot := t.TempDir()

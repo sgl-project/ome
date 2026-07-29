@@ -303,7 +303,9 @@ func (c Config) fanOutLocked() (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	_, hit, inspectErr := verifyEntry(targetEntry)
+	// Cache hits use structural inspection so payload verification never blocks
+	// reuse. Transfers verify SHA-256 inline, and Verify remains available to scrubs.
+	_, hit, inspectErr := inspectEntry(targetEntry)
 	if hit {
 		if err := c.EnsureEntryReadable(c.Root); err != nil {
 			return "", false, err
