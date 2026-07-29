@@ -84,8 +84,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}:dev
             ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}:dev-${{ steps.version.outputs.short_sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.component.image }}
+          cache-to: type=gha,scope=${{ matrix.component.image }},mode=max,ignore-error=true
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
             GIT_TAG=dev
