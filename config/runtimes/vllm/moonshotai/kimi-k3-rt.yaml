@@ -1,0 +1,194 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-kimi-k3
+spec:
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-b300-8
+  disabled: false
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.56.2"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: KimiK3ForConditionalGeneration
+      autoSelect: true
+      priority: 1
+      acceleratorConfig:
+        nvidia-b300-8:
+          tensorParallelismOverride:
+            tensorParallelSize: 8
+  modelSizeRange:
+    min: 1400B
+    max: 1600B
+  protocolVersions:
+    - openAI
+  routerConfig:
+    annotations:
+      prometheus.io/path: /metrics
+      prometheus.io/port: "29000"
+      prometheus.io/scrape: "true"
+    labels:
+      logging-forward: enabled
+    runner:
+      name: router
+      image: ghcr.io/lightseekorg/smg:kimi-k3.v2
+      terminationMessagePolicy: FallbackToLogsOnError
+      ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+      resources:
+        requests:
+          cpu: "8"
+          memory: 8Gi
+        limits:
+          cpu: "16"
+          memory: 32Gi
+      args:
+        - --host
+        - 0.0.0.0
+        - --port
+        - "8080"
+        - --model-path
+        - $(MODEL_PATH)
+        - --reasoning-parser
+        - kimi_k3
+        - --tool-call-parser
+        - kimi_k3
+        - --service-discovery
+        - --service-discovery-namespace
+        - $(NAMESPACE)
+        - --service-discovery-port
+        - "8080"
+        - --selector
+        - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+        - --enable-igw
+        - --log-json
+        - --disable-retries
+        - --disable-circuit-breaker
+        - --policy
+        - passthrough
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: INFERENCESERVICE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['ome.io/inferenceservice']
+      readinessProbe:
+        httpGet:
+          path: /readiness
+          port: 8080
+        failureThreshold: 5
+        periodSeconds: 30
+        timeoutSeconds: 10
+      livenessProbe:
+        httpGet:
+          path: /liveness
+          port: 8080
+        failureThreshold: 5
+        periodSeconds: 30
+        timeoutSeconds: 10
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        periodSeconds: 20
+        timeoutSeconds: 10
+        initialDelaySeconds: 30
+  engineConfig:
+    annotations:
+      prometheus.io/path: /metrics
+      prometheus.io/port: "8080"
+      prometheus.io/scrape: "true"
+    labels:
+      logging-forward: enabled
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+    runner:
+      name: ome-container
+      image: ghcr.io/lightseekorg/smg:kimi-k3-vllm-kimi-k3
+      terminationMessagePolicy: FallbackToLogsOnError
+      ports:
+        - containerPort: 8080
+          name: grpc
+          protocol: TCP
+      command:
+        - vllm
+        - serve
+      args:
+        - $(MODEL_PATH)
+        - --grpc
+        - --trust-remote-code
+        - --tensor-parallel-size=8
+        - --load-format=fastsafetensors
+        - --moe-backend=auto
+        - --gpu-memory-utilization=0.90
+        - --kv-cache-dtype=fp8
+        - '--attention-config={"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
+        - --max-num-batched-tokens=32768
+        - --enable-prefix-caching
+        - --served-model-name=vllm-model
+        - --max-model-len=1048576
+        - '--limit-mm-per-prompt={"image":5}'
+        - --enable-chunked-prefill
+        - --enable-log-requests
+        - --port=8080
+      env:
+        - name: VLLM_ENGINE_READY_TIMEOUT_S
+          value: "3600"
+        - name: VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION
+          value: "1"
+        - name: VLLM_ALLREDUCE_USE_FLASHINFER
+          value: "1"
+        - name: VLLM_LOGGING_LEVEL
+          value: "INFO"
+        - name: VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS
+          value: "0"
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 64
+          memory: 256Gi
+          nvidia.com/gpu: 8
+        limits:
+          cpu: 128
+          memory: 512Gi
+          nvidia.com/gpu: 8
+      readinessProbe:
+        grpc:
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 90
+        timeoutSeconds: 60
+      livenessProbe:
+        grpc:
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        grpc:
+          port: 8080
+        failureThreshold: 300
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
