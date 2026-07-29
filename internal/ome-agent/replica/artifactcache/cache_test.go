@@ -58,9 +58,9 @@ func TestPublishStagingCreatesValidImmutableEntry(t *testing.T) {
 	config := testConfig(root)
 	staging, err := config.NewStagingDir()
 	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Join(staging, "weights"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(staging, "config.json"), []byte("{}"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(staging, "weights", "model.safetensors"), []byte("weights"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(staging, "weights"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(staging, "config.json"), []byte("{}"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(staging, "weights", "model.safetensors"), []byte("weights"), 0o600))
 
 	entry, manifest, reused, err := config.PublishStaging(staging)
 
@@ -73,6 +73,19 @@ func TestPublishStagingCreatesValidImmutableEntry(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, hit)
 	require.Equal(t, manifest, inspected)
+	requirePermissions(t, entry, 0o755)
+	requirePermissions(t, filepath.Join(entry, "weights"), 0o755)
+	requirePermissions(t, filepath.Join(entry, "config.json"), 0o644)
+	requirePermissions(t, filepath.Join(entry, "weights", "model.safetensors"), 0o644)
+	requirePermissions(t, filepath.Join(entry, ManifestFileName), 0o644)
+	requirePermissions(t, filepath.Join(entry, ReadyFileName), 0o644)
+}
+
+func requirePermissions(t *testing.T, path string, expected os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, expected, info.Mode().Perm())
 }
 
 func TestInspectAvoidsFullFileChecksumAndVerifyRejectsSameSizeArtifactCorruption(t *testing.T) {
@@ -177,11 +190,15 @@ func TestFanOutCopiesCompleteEntryAndReusesTargetHit(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, reused)
 	require.FileExists(t, filepath.Join(entry, "model.safetensors"))
+	require.NoError(t, os.Chmod(entry, 0o700))
+	require.NoError(t, os.Chmod(filepath.Join(entry, "model.safetensors"), 0o600))
 
 	entry, reused, err = targetConfig.FanOut()
 	require.NoError(t, err)
 	require.True(t, reused)
 	require.FileExists(t, filepath.Join(entry, "model.safetensors"))
+	requirePermissions(t, entry, 0o755)
+	requirePermissions(t, filepath.Join(entry, "model.safetensors"), 0o644)
 }
 
 func TestFanOutClassifiesCorruptSourceAsUnavailable(t *testing.T) {

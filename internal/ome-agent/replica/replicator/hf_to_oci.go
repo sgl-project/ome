@@ -126,6 +126,9 @@ func (r *HFToOCIReplicator) InspectArtifactCache() ([]common.ReplicationObject, 
 	if err != nil {
 		return nil, false, err
 	}
+	if err := r.Config.ModelArtifactCache.EnsureEntryReadable(r.Config.ModelArtifactCache.Root); err != nil {
+		return nil, false, err
+	}
 	r.preparedCacheEntry = entry
 	r.preparedCacheManifest = manifest
 	r.preparedCacheVerified = r.isArtifactCacheRepair()
@@ -145,6 +148,9 @@ func (r *HFToOCIReplicator) prepareArtifactCacheLocked() error {
 	if err == nil && hit {
 		entry, err := r.Config.ModelArtifactCache.EntryPath(r.Config.ModelArtifactCache.Root)
 		if err != nil {
+			return err
+		}
+		if err := r.Config.ModelArtifactCache.EnsureEntryReadable(r.Config.ModelArtifactCache.Root); err != nil {
 			return err
 		}
 		r.preparedCacheEntry = entry

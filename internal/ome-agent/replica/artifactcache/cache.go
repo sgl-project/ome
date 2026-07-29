@@ -157,6 +157,22 @@ func (c Config) Inspect(root string) (Manifest, bool, error) {
 	return inspectEntry(entry)
 }
 
+// EnsureEntryReadable grants read and traversal access needed by read-only
+// cache clients without granting them write access.
+func (c Config) EnsureEntryReadable(root string) error {
+	entry, err := c.EntryPath(root)
+	if err != nil {
+		return err
+	}
+	if err := rejectSymlinkComponents(root, entry); err != nil {
+		return err
+	}
+	if err := makeArtifactTreeReadable(entry); err != nil {
+		return fmt.Errorf("make artifact cache entry readable: %w", err)
+	}
+	return nil
+}
+
 // Verify performs the structural inspection and then validates every file
 // checksum. Use this only when a full read is required; normal cache discovery
 // intentionally remains metadata-only.
@@ -221,6 +237,9 @@ func (c Config) PublishStaging(staging string) (string, Manifest, bool, error) {
 		return "", Manifest{}, false, err
 	}
 	if hit {
+		if err := c.EnsureEntryReadable(c.Root); err != nil {
+			return "", Manifest{}, false, err
+		}
 		_ = c.CleanupScratch(staging)
 		return entry, existing, true, nil
 	}
@@ -232,12 +251,18 @@ func (c Config) PublishStaging(staging string) (string, Manifest, bool, error) {
 	if err := writeManifestAndReady(staging, manifest); err != nil {
 		return "", Manifest{}, false, err
 	}
+	if err := makeArtifactTreeReadable(staging); err != nil {
+		return "", Manifest{}, false, fmt.Errorf("make artifact cache entry readable: %w", err)
+	}
 	if err := os.MkdirAll(filepath.Dir(entry), 0o755); err != nil {
 		return "", Manifest{}, false, fmt.Errorf("create artifact cache identity directory: %w", err)
 	}
 	if err := os.Rename(staging, entry); err != nil {
 		existing, hit, inspectErr := verifyEntry(entry)
 		if inspectErr == nil && hit {
+			if readableErr := c.EnsureEntryReadable(c.Root); readableErr != nil {
+				return "", Manifest{}, false, readableErr
+			}
 			_ = c.CleanupScratch(staging)
 			return entry, existing, true, nil
 		}
@@ -280,6 +305,9 @@ func (c Config) fanOutLocked() (string, bool, error) {
 	}
 	_, hit, inspectErr := verifyEntry(targetEntry)
 	if hit {
+		if err := c.EnsureEntryReadable(c.Root); err != nil {
+			return "", false, err
+		}
 		return targetEntry, true, nil
 	}
 	if _, err := c.RemoveInvalidEntry(); err != nil {
@@ -783,6 +811,31 @@ func writeManifestAndReady(staging string, manifest Manifest) error {
 		return fmt.Errorf("write artifact ready marker: %w", err)
 	}
 	return nil
+}
+
+func makeArtifactTreeReadable(root string) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		permissions := info.Mode().Perm()
+		switch {
+		case info.IsDir():
+			permissions |= 0o555
+		case info.Mode().IsRegular():
+			permissions |= 0o444
+		default:
+			return fmt.Errorf("artifact cache contains unsupported file %q", path)
+		}
+		if permissions == info.Mode().Perm() {
+			return nil
+		}
+		if err := os.Chmod(path, permissions); err != nil {
+			return fmt.Errorf("update permissions for %q: %w", path, err)
+		}
+		return nil
+	})
 }
 
 func validateArtifactFile(file File) error {

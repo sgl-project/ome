@@ -275,6 +275,37 @@ func TestHFToOCIReplicator_PrepareArtifactCacheRepairsCorruptEntry(t *testing.T)
 	require.Equal(t, int64(7), manifest.Files[0].Size)
 }
 
+func TestHFToOCIReplicator_InspectArtifactCacheMakesReusedEntryReadable(t *testing.T) {
+	root := t.TempDir()
+	cacheConfig := artifactcache.Config{
+		Enabled:   true,
+		Mode:      "repair",
+		Root:      root,
+		KeyRoot:   "_artifacts",
+		HFModelID: "Qwen/Qwen3-4B-Instruct-2507",
+		CommitSHA: "cdbee75f17c01a7cc42f958dc650907174af0554",
+	}
+	staging, err := cacheConfig.NewStagingDir()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(staging, "model.safetensors"), []byte("weights"), 0o600))
+	entry, _, _, err := cacheConfig.PublishStaging(staging)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(entry, 0o700))
+	require.NoError(t, os.Chmod(filepath.Join(entry, "model.safetensors"), 0o600))
+
+	replicator := newCacheTestHFToOCIReplicator(cacheConfig)
+	_, hit, err := replicator.InspectArtifactCache()
+
+	require.NoError(t, err)
+	require.True(t, hit)
+	entryInfo, err := os.Stat(entry)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o755), entryInfo.Mode().Perm())
+	fileInfo, err := os.Stat(filepath.Join(entry, "model.safetensors"))
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o644), fileInfo.Mode().Perm())
+}
+
 func newCacheTestHFToOCIReplicator(cacheConfig artifactcache.Config) *HFToOCIReplicator {
 	return &HFToOCIReplicator{
 		Logger: testingPkg.SetupMockLogger(),
