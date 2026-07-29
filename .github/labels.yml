@@ -55,21 +55,6 @@
   description: "OME agent changes"
 
 # =============================================================================
-# Web Console Labels (Pink shades)
-# =============================================================================
-- name: web-console
-  color: "EC4899"
-  description: "Web console changes"
-
-- name: frontend
-  color: "F472B6"
-  description: "Frontend/UI changes"
-
-- name: backend
-  color: "DB2777"
-  description: "Backend API changes"
-
-# =============================================================================
 # Infrastructure Labels (Orange shades)
 # =============================================================================
 - name: helm

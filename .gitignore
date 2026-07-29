@@ -79,17 +79,12 @@ pnpm-debug.log*
 lerna-debug.log*
 .pnpm-store/
 
-# Next.js
-.next/
+# Build output
 out/
 dist/
 build/
 
-# TypeScript
-*.tsbuildinfo
-next-env.d.ts
-
-# Frontend environment files
+# Local environment files
 .env.local
 .env.development.local
 .env.test.local
@@ -97,10 +92,6 @@ next-env.d.ts
 
 # Testing
 coverage/
-.nyc_output/
-
-# Vercel
-.vercel
 
 java-client/target
 java-client/crd

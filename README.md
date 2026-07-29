@@ -31,7 +31,7 @@ Read the [documentation](https://ome-projects.github.io/ome/docs/) to learn more
 
 - **Accelerator Management:** Hardware-aware scheduling through AcceleratorClass resources that define GPU capabilities, discovery patterns, and cost information. Enables intelligent accelerator selection with policies like BestFit, Cheapest, or MostCapable.
 
-- **Web Console:** Modern web interface for managing models, serving runtimes, and inference services with real-time updates and HuggingFace model search integration.
+- **Web Console:** Modern web interface for managing models, serving runtimes, and inference services with real-time updates and HuggingFace model search integration. Developed separately in [ome-projects/ome-console](https://github.com/ome-projects/ome-console).
 
 - **Kubernetes Ecosystem Integration:** Deep integration with modern Kubernetes components including [Kueue](https://kueue.sigs.k8s.io/) for gang scheduling of multi-pod workloads, [LeaderWorkerSet](https://github.com/kubernetes-sigs/lws) for resilient multi-node deployments, [KEDA](https://keda.sh/) for advanced custom metrics-based autoscaling, [K8s Gateway API](https://gateway-api.sigs.k8s.io/) for sophisticated traffic routing, and [Gateway API Inference Extension](https://gateway-api-inference-extension.sigs.k8s.io/) for standardized inference endpoints.
 
