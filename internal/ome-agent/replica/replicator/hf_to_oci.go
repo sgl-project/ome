@@ -25,7 +25,6 @@ type HFToOCIReplicator struct {
 
 	preparedCacheEntry    string
 	preparedCacheManifest artifactcache.Manifest
-	preparedCacheVerified bool
 }
 
 type HFToOCIReplicatorConfig struct {
@@ -59,7 +58,7 @@ func (r *HFToOCIReplicator) Replicate(objects []common.ReplicationObject) error 
 		uploadView, cleanupUploadView, err := r.Config.ModelArtifactCache.NewUploadView(
 			r.preparedCacheEntry,
 			r.preparedCacheManifest,
-			!r.preparedCacheVerified,
+			false,
 		)
 		if err != nil {
 			return fmt.Errorf("create model artifact cache upload view: %w", err)
@@ -131,7 +130,6 @@ func (r *HFToOCIReplicator) InspectArtifactCache() ([]common.ReplicationObject, 
 	}
 	r.preparedCacheEntry = entry
 	r.preparedCacheManifest = manifest
-	r.preparedCacheVerified = r.isArtifactCacheRepair()
 	objects := make([]common.ReplicationObject, 0, len(manifest.Files))
 	for _, file := range manifest.Files {
 		objects = append(objects, artifactCacheReplicationObject{name: file.Name, size: file.Size})
@@ -155,7 +153,6 @@ func (r *HFToOCIReplicator) prepareArtifactCacheLocked() error {
 		}
 		r.preparedCacheEntry = entry
 		r.preparedCacheManifest = manifest
-		r.preparedCacheVerified = r.isArtifactCacheRepair()
 		r.Logger.Infof("Reusing model artifact cache entry %s", entry)
 		return nil
 	}
@@ -196,7 +193,6 @@ func (r *HFToOCIReplicator) prepareArtifactCacheLocked() error {
 	staging = ""
 	r.preparedCacheEntry = entry
 	r.preparedCacheManifest = manifest
-	r.preparedCacheVerified = true
 	r.Logger.Infof("Model artifact cache entry ready at %s; reused=%t", entry, reused)
 	return nil
 }

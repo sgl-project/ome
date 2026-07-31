@@ -198,6 +198,53 @@ func TestHFToOCIReplicator_ReplicateReusesCacheHitWithoutHuggingFaceDownload(t *
 	require.True(t, uploadCalled)
 }
 
+func TestHFToOCIReplicator_ReplicateDoesNotChecksumCacheHitBeforeUpload(t *testing.T) {
+	origDownloadFromHF := downloadFromHFFunc
+	origUploadDirectoryToOCIOSDataStore := uploadDirectoryToOCIOSDataStoreFunc
+	t.Cleanup(func() {
+		downloadFromHFFunc = origDownloadFromHF
+		uploadDirectoryToOCIOSDataStoreFunc = origUploadDirectoryToOCIOSDataStore
+	})
+
+	root := t.TempDir()
+	cacheConfig := artifactcache.Config{
+		Enabled:   true,
+		Mode:      "seed",
+		Root:      root,
+		KeyRoot:   "_artifacts",
+		HFModelID: "Qwen/Qwen3-4B-Instruct-2507",
+		CommitSHA: "cdbee75f17c01a7cc42f958dc650907174af0554",
+	}
+	staging, err := cacheConfig.NewStagingDir()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(staging, "model.safetensors"), []byte("weights"), 0o644))
+	entry, _, _, err := cacheConfig.PublishStaging(staging)
+	require.NoError(t, err)
+
+	// Preserve the manifest size while changing the payload checksum. Normal cache
+	// hits trust immutable identity and structural inspection on the warm path.
+	require.NoError(t, os.WriteFile(filepath.Join(entry, "model.safetensors"), []byte("WEIGHTS"), 0o644))
+
+	downloadFromHFFunc = func(_ common.ReplicationInput, _ *xet.Client, _ string, _ hfDownloadOptions, _ logging.Interface) (string, error) {
+		t.Fatal("Hugging Face download must not run on a structurally valid cache hit")
+		return "", nil
+	}
+	uploadCalled := false
+	uploadDirectoryToOCIOSDataStoreFunc = func(_ *ociobjectstore.OCIOSDataStore, _ ociobjectstore.ObjectURI, localPath string, _ *common.ChecksumConfig, _ int, _ int) error {
+		uploadCalled = true
+		contents, err := os.ReadFile(filepath.Join(localPath, "model.safetensors"))
+		require.NoError(t, err)
+		require.Equal(t, "WEIGHTS", string(contents))
+		return nil
+	}
+	replicator := newCacheTestHFToOCIReplicator(cacheConfig)
+
+	err = replicator.Replicate(CreateCommonMockReplicationObjects(1))
+
+	require.NoError(t, err)
+	require.True(t, uploadCalled)
+}
+
 func TestHFToOCIReplicator_PrepareArtifactCacheSerializesConcurrentCacheMisses(t *testing.T) {
 	origDownloadFromHF := downloadFromHFFunc
 	t.Cleanup(func() { downloadFromHFFunc = origDownloadFromHF })
