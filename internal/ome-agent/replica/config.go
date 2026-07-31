@@ -74,6 +74,9 @@ func defaultConfig() *Config {
 		HFDownloadTimeout:              72 * time.Hour,
 		HFDownloadStaleProgressTimeout: 30 * time.Minute,
 		ArtifactUploadLockTimeout:      120 * time.Hour,
+		ModelArtifactCache: artifactcache.Config{
+			Concurrency: artifactcache.DefaultFanOutConcurrency,
+		},
 	}
 }
 

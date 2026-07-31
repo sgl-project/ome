@@ -3,9 +3,11 @@ package artifactcache
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/iotest"
 	"time"
@@ -429,10 +431,82 @@ func TestCopyManifestFilesRejectsSourceSizeMismatch(t *testing.T) {
 		Name:   "model.safetensors",
 		Size:   100,
 		SHA256: testFileSHA256,
-	}}})
+	}}}, 1)
 
 	require.ErrorContains(t, err, "size mismatch")
 	require.NoFileExists(t, filepath.Join(target, "model.safetensors"))
+}
+
+func TestCopyManifestFilesUsesBoundedConcurrency(t *testing.T) {
+	const (
+		fileCount   = 6
+		concurrency = 3
+	)
+	manifest := Manifest{Files: make([]File, 0, fileCount)}
+	for i := 0; i < fileCount; i++ {
+		manifest.Files = append(manifest.Files, File{
+			Name:   fmt.Sprintf("model-%02d.safetensors", i),
+			Size:   1,
+			SHA256: testFileSHA256,
+		})
+	}
+
+	var active atomic.Int32
+	var maximum atomic.Int32
+	var copied atomic.Int32
+	started := make(chan struct{}, fileCount)
+	release := make(chan struct{})
+	released := false
+	t.Cleanup(func() {
+		if !released {
+			close(release)
+		}
+	})
+	copyFile := func(_, _ string, _ int64, _ string) error {
+		current := active.Add(1)
+		for {
+			observed := maximum.Load()
+			if current <= observed || maximum.CompareAndSwap(observed, current) {
+				break
+			}
+		}
+		started <- struct{}{}
+		<-release
+		active.Add(-1)
+		copied.Add(1)
+		return nil
+	}
+
+	sourceRoot := t.TempDir()
+	targetRoot := t.TempDir()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- copyManifestFilesWithConcurrency(
+			sourceRoot,
+			targetRoot,
+			manifest,
+			concurrency,
+			copyFile,
+		)
+	}()
+	for i := 0; i < concurrency; i++ {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for concurrent copy workers")
+		}
+	}
+	select {
+	case <-started:
+		t.Fatal("fan-out exceeded configured concurrency")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(release)
+	released = true
+	require.NoError(t, <-errCh)
+	require.Equal(t, int32(concurrency), maximum.Load())
+	require.Equal(t, int32(fileCount), copied.Load())
 }
 
 func TestCopyAndHashClassifiesReadFailureAsUnavailableSource(t *testing.T) {

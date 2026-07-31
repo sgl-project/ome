@@ -175,6 +175,7 @@ func TestWithViper(t *testing.T) {
 				v.Set("model_artifact_cache.hf_model_id", "Qwen/Qwen3-4B-Instruct-2507")
 				v.Set("model_artifact_cache.hf_commit_sha", "cdbee75f17c01a7cc42f958dc650907174af0554")
 				v.Set("model_artifact_cache.source_root", "/mnt/cache-source")
+				v.Set("model_artifact_cache.concurrency", 4)
 				v.Set("source.storage_uri", "oci://n/test-src-namespace/b/test-src-bucket/o/models")
 				v.Set("target.storage_uri", "oci://n/test-tgt-namespace/b/test-tgt-bucket/o/models")
 				return v
@@ -196,6 +197,7 @@ func TestWithViper(t *testing.T) {
 				assert.Equal(t, "Qwen/Qwen3-4B-Instruct-2507", c.ModelArtifactCache.HFModelID)
 				assert.Equal(t, "cdbee75f17c01a7cc42f958dc650907174af0554", c.ModelArtifactCache.CommitSHA)
 				assert.Equal(t, "/mnt/cache-source", c.ModelArtifactCache.SourceRoot)
+				assert.Equal(t, 4, c.ModelArtifactCache.Concurrency)
 				assert.Equal(t, "oci://n/test-src-namespace/b/test-src-bucket/o/models", c.Source.StorageURIStr)
 				assert.Equal(t, "oci://n/test-tgt-namespace/b/test-tgt-bucket/o/models", c.Target.StorageURIStr)
 			},
@@ -214,6 +216,7 @@ func TestWithViper(t *testing.T) {
 				assert.Equal(t, 72*time.Hour, c.HFDownloadTimeout)
 				assert.Equal(t, 30*time.Minute, c.HFDownloadStaleProgressTimeout)
 				assert.Equal(t, 120*time.Hour, c.ArtifactUploadLockTimeout)
+				assert.Equal(t, 8, c.ModelArtifactCache.Concurrency)
 			},
 		},
 		{

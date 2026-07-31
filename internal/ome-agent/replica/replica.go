@@ -144,6 +144,7 @@ func (r *ReplicaAgent) Start() error {
 	}
 
 	if r.Config.isModelArtifactCacheFanOut() {
+		r.Logger.Infof("Starting model artifact cache fanout with concurrency=%d", r.Config.ModelArtifactCache.FanOutConcurrency())
 		entry, reused, err := r.Config.ModelArtifactCache.FanOut()
 		if err != nil {
 			err = fmt.Errorf("fan out model artifact cache entry: %w", err)

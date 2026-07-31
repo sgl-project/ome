@@ -22,6 +22,7 @@ const (
 	ModeSeed                       = "seed"
 	ModeFanOut                     = "fanout"
 	ModeRepair                     = "repair"
+	DefaultFanOutConcurrency       = 8
 	FanOutSourceUnavailableMessage = "model artifact cache source unavailable"
 	maxManifestSize                = 64 << 20
 	copyBufferSize                 = 4 << 20
@@ -43,13 +44,14 @@ var scratchNowFunc = time.Now
 var ErrFanOutSourceUnavailable = errors.New(FanOutSourceUnavailableMessage)
 
 type Config struct {
-	Enabled    bool   `mapstructure:"enabled"`
-	Mode       string `mapstructure:"mode"`
-	Root       string `mapstructure:"root"`
-	KeyRoot    string `mapstructure:"key_root"`
-	HFModelID  string `mapstructure:"hf_model_id"`
-	CommitSHA  string `mapstructure:"hf_commit_sha"`
-	SourceRoot string `mapstructure:"source_root"`
+	Enabled     bool   `mapstructure:"enabled"`
+	Mode        string `mapstructure:"mode"`
+	Root        string `mapstructure:"root"`
+	KeyRoot     string `mapstructure:"key_root"`
+	HFModelID   string `mapstructure:"hf_model_id"`
+	CommitSHA   string `mapstructure:"hf_commit_sha"`
+	SourceRoot  string `mapstructure:"source_root"`
+	Concurrency int    `mapstructure:"concurrency"`
 }
 
 type Manifest struct {
@@ -218,6 +220,10 @@ func (c Config) RemoveInvalidEntry() (bool, error) {
 }
 
 func (c Config) PublishStaging(staging string) (string, Manifest, bool, error) {
+	return c.publishStaging(staging, nil)
+}
+
+func (c Config) publishStaging(staging string, verifiedManifest *Manifest) (string, Manifest, bool, error) {
 	entry, err := c.EntryPath(c.Root)
 	if err != nil {
 		return "", Manifest{}, false, err
@@ -244,9 +250,14 @@ func (c Config) PublishStaging(staging string) (string, Manifest, bool, error) {
 		return entry, existing, true, nil
 	}
 
-	manifest, err := buildManifest(staging)
-	if err != nil {
-		return "", Manifest{}, false, err
+	var manifest Manifest
+	if verifiedManifest == nil {
+		manifest, err = buildManifest(staging)
+		if err != nil {
+			return "", Manifest{}, false, err
+		}
+	} else {
+		manifest = *verifiedManifest
 	}
 	if err := writeManifestAndReady(staging, manifest); err != nil {
 		return "", Manifest{}, false, err
@@ -324,11 +335,18 @@ func (c Config) fanOutLocked() (string, bool, error) {
 		return "", false, err
 	}
 	defer c.CleanupScratch(staging)
-	if err := copyManifestFiles(sourceEntry, staging, sourceManifest); err != nil {
+	if err := copyManifestFiles(sourceEntry, staging, sourceManifest, c.FanOutConcurrency()); err != nil {
 		return "", false, err
 	}
-	entry, _, reused, err := c.PublishStaging(staging)
+	entry, _, reused, err := c.publishStaging(staging, &sourceManifest)
 	return entry, reused, err
+}
+
+func (c Config) FanOutConcurrency() int {
+	if c.Concurrency == 0 {
+		return DefaultFanOutConcurrency
+	}
+	return c.Concurrency
 }
 
 func (c Config) NewUploadView(entry string, manifest Manifest, verifyChecksums bool) (string, func() error, error) {
@@ -912,21 +930,88 @@ func rejectSymlinkComponents(root string, path string) error {
 	return nil
 }
 
-func copyManifestFiles(sourceRoot string, targetRoot string, manifest Manifest) error {
+func copyManifestFiles(sourceRoot string, targetRoot string, manifest Manifest, concurrency int) error {
+	return copyManifestFilesWithConcurrency(sourceRoot, targetRoot, manifest, concurrency, copyRegularFile)
+}
+
+type copyFileFunc func(source string, target string, expectedSize int64, expectedSHA256 string) error
+
+func copyManifestFilesWithConcurrency(
+	sourceRoot string,
+	targetRoot string,
+	manifest Manifest,
+	concurrency int,
+	copyFile copyFileFunc,
+) error {
+	if concurrency <= 0 {
+		return fmt.Errorf("fanout concurrency must be greater than 0")
+	}
+	if copyFile == nil {
+		return fmt.Errorf("fanout copy function is nil")
+	}
+	if len(manifest.Files) == 0 {
+		return nil
+	}
+	workerCount := min(concurrency, len(manifest.Files))
+	jobs := make(chan File)
+	firstErr := make(chan error, 1)
+	done := make(chan struct{})
+	var cancelOnce sync.Once
+	cancel := func(err error) {
+		cancelOnce.Do(func() {
+			firstErr <- err
+			close(done)
+		})
+	}
+
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go func() {
+			defer workers.Done()
+			for {
+				select {
+				case <-done:
+					return
+				case file, ok := <-jobs:
+					if !ok {
+						return
+					}
+					if err := validateArtifactFile(file); err != nil {
+						cancel(err)
+						return
+					}
+					source := filepath.Join(sourceRoot, filepath.FromSlash(file.Name))
+					target := filepath.Join(targetRoot, filepath.FromSlash(file.Name))
+					if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+						cancel(fmt.Errorf("create artifact target directory: %w", err))
+						return
+					}
+					if err := copyFile(source, target, file.Size, file.SHA256); err != nil {
+						cancel(fmt.Errorf("copy artifact file %q: %w", file.Name, err))
+						return
+					}
+				}
+			}
+		}()
+	}
+
+sendFiles:
 	for _, file := range manifest.Files {
-		if err := validateArtifactFile(file); err != nil {
-			return err
-		}
-		source := filepath.Join(sourceRoot, filepath.FromSlash(file.Name))
-		target := filepath.Join(targetRoot, filepath.FromSlash(file.Name))
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return fmt.Errorf("create artifact target directory: %w", err)
-		}
-		if err := copyRegularFile(source, target, file.Size, file.SHA256); err != nil {
-			return fmt.Errorf("copy artifact file %q: %w", file.Name, err)
+		select {
+		case <-done:
+			break sendFiles
+		case jobs <- file:
 		}
 	}
-	return nil
+	close(jobs)
+	workers.Wait()
+	select {
+	case err := <-firstErr:
+		return err
+	default:
+		return nil
+	}
 }
 
 func validateRegularFileSize(path string, expectedSize int64) error {
