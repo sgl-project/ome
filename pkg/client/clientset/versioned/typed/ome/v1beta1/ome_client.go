@@ -12,6 +12,7 @@ import (
 
 type OmeV1beta1Interface interface {
 	RESTClient() rest.Interface
+	AcceleratorClassesGetter
 	BaseModelsGetter
 	BenchmarkJobsGetter
 	ClusterBaseModelsGetter
@@ -24,6 +25,10 @@ type OmeV1beta1Interface interface {
 // OmeV1beta1Client is used to interact with features provided by the ome.io group.
 type OmeV1beta1Client struct {
 	restClient rest.Interface
+}
+
+func (c *OmeV1beta1Client) AcceleratorClasses() AcceleratorClassInterface {
+	return newAcceleratorClasses(c)
 }
 
 func (c *OmeV1beta1Client) BaseModels(namespace string) BaseModelInterface {

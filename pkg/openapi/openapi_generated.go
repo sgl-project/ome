@@ -167,7 +167,8 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorClass(ref common.ReferenceCallback) 
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
+				Description: "AcceleratorClass defines a class of accelerators with similar capabilities",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{

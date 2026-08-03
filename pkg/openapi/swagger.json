@@ -47,6 +47,7 @@
       }
     },
     "v1beta1.AcceleratorClass": {
+      "description": "AcceleratorClass defines a class of accelerators with similar capabilities",
       "type": "object",
       "properties": {
         "apiVersion": {

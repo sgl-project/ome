@@ -7,15 +7,16 @@ import (
 )
 
 // AcceleratorClass defines a class of accelerators with similar capabilities
+// +genclient
+// +genclient:nonNamespaced
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:subresource:status
 // +k8s:openapi-gen=true
 // +kubebuilder:printcolumn:name="Vendor",type=string,JSONPath=`.spec.vendor`
 // +kubebuilder:printcolumn:name="Family",type=string,JSONPath=`.spec.family`
 // +kubebuilder:printcolumn:name="Memory",type=string,JSONPath=`.spec.capabilities.memoryGB`
 // +kubebuilder:printcolumn:name="Nodes",type=integer,JSONPath=`.status.availableNodes`
-
 type AcceleratorClass struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
