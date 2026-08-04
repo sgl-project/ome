@@ -81,7 +81,11 @@ func NewScout(ctx context.Context, nodeName string,
 	}
 	nodeShapeAlias, err := utils.GetInstanceTypeShortName(instanceType)
 	if err != nil {
-		return nil, err
+		// A shape alias is only needed for shape-specific TensorRT-LLM artifacts.
+		// CPU nodes do not have an entry in the GPU shape map, but can still
+		// download normal models.
+		logger.Infof("Node %s has no GPU shape alias; continuing without TensorRT-LLM shape filtering: %s", nodeName, err)
+		nodeShapeAlias = ""
 	}
 
 	scout := &Scout{
