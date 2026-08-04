@@ -1,29 +1,31 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-kimi-k3
+  name: srt-inkling-small-nvfp4
 spec:
   acceleratorRequirements:
     acceleratorClasses:
-      - nvidia-b300-8
+      - nvidia-b200-8
   disabled: false
   supportedModelFormats:
     - modelFramework:
+        # Inkling does not declare a transformers_version in config.json.
         name: transformers
-        version: "4.56.2"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: KimiK3ForConditionalGeneration
       autoSelect: true
+      modelArchitecture: InklingForConditionalGeneration
+      version: "1.0.0"
+      quantization: nvfp4
       priority: 1
       acceleratorConfig:
-        nvidia-b300-8:
+        nvidia-b200-8:
           tensorParallelismOverride:
             tensorParallelSize: 8
   modelSizeRange:
-    min: 1400B
-    max: 1600B
+    min: 250B
+    max: 300B
   protocolVersions:
     - openAI
   routerConfig:
@@ -35,7 +37,7 @@ spec:
       logging-forward: enabled
     runner:
       name: router
-      image: ghcr.io/lightseekorg/smg:nightly-20260731-8fe4cdd
+      image: ghcr.io/lightseekorg/smg:nightly-20260731-e3890dd
       terminationMessagePolicy: FallbackToLogsOnError
       ports:
         - containerPort: 8080
@@ -43,11 +45,14 @@ spec:
           protocol: TCP
       resources:
         requests:
-          cpu: "8"
-          memory: 8Gi
+          cpu: "1"
+          memory: 2Gi
         limits:
-          cpu: "16"
-          memory: 32Gi
+          cpu: "8"
+          memory: 16Gi
+      command:
+        - smg
+        - launch
       args:
         - --host
         - 0.0.0.0
@@ -55,10 +60,6 @@ spec:
         - "8080"
         - --model-path
         - $(MODEL_PATH)
-        - --reasoning-parser
-        - kimi_k3
-        - --tool-call-parser
-        - kimi_k3
         - --service-discovery
         - --service-discovery-namespace
         - $(NAMESPACE)
@@ -66,12 +67,18 @@ spec:
         - "8080"
         - --selector
         - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+        - --reasoning-parser
+        - inkling
+        - --tool-call-parser
+        - inkling
+        - --policy
+        - cache_aware
+        - --block-size
+        - "128"
         - --enable-igw
         - --log-json
         - --disable-retries
         - --disable-circuit-breaker
-        - --policy
-        - passthrough
       env:
         - name: NAMESPACE
           valueFrom:
@@ -120,51 +127,59 @@ spec:
           medium: Memory
     runner:
       name: ome-container
-      image: ghcr.io/lightseekorg/smg:v1.9.0-vllm-kimi-k3
+      image: ghcr.io/smg-project/smg:1.9.0-sglang-dev-inkling-dspark
       terminationMessagePolicy: FallbackToLogsOnError
       ports:
         - containerPort: 8080
-          name: grpc
+          name: grpc1
           protocol: TCP
       command:
-        - vllm
-        - serve
+        - python3
+        - -m
+        - sglang.launch_server
       args:
+        - --grpc-mode
+        - --model-path
         - $(MODEL_PATH)
-        - --grpc
+        - --host
+        - 0.0.0.0
+        - --port
+        - "8080"
         - --trust-remote-code
-        - --tensor-parallel-size=8
-        - --load-format=fastsafetensors
-        - --moe-backend=auto
-        - --gpu-memory-utilization=0.90
-        - --kv-cache-dtype=fp8
-        - '--attention-config={"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
-        - --max-num-batched-tokens=32768
-        - --enable-prefix-caching
-        - --served-model-name=vllm-model
-        - --max-model-len=1048576
-        - '--limit-mm-per-prompt={"image":5}'
-        - --enable-chunked-prefill
-        - --enable-log-requests
-        - --port=8080
+        - --tp
+        - "8"
+        - --quantization
+        - modelopt_fp4
+        - --attention-backend
+        - fa4
+        - --page-size
+        - "128"
+        - --fp4-gemm-backend
+        - flashinfer_trtllm
+        - --moe-runner-backend
+        - flashinfer_trtllm_routed
+        - --enable-torch-symm-mem
+        - --mamba-radix-cache-strategy
+        - extra_buffer
+        - --mem-fraction-static
+        - "0.85"
+        - --swa-full-tokens-ratio
+        - "0.1"
+        - --mamba-full-memory-ratio
+        - "0.1"
+        - --enable-multimodal
       env:
-        - name: VLLM_ENGINE_READY_TIMEOUT_S
-          value: "3600"
-        - name: VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION
+        - name: HF_HUB_OFFLINE
           value: "1"
-        - name: VLLM_ALLREDUCE_USE_FLASHINFER
+        - name: SGLANG_ENABLE_UNIFIED_RADIX_TREE
           value: "1"
-        - name: VLLM_LOGGING_LEVEL
-          value: "INFO"
-        - name: VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS
-          value: "0"
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
           cpu: 64
-          memory: 256Gi
+          memory: 512Gi
           nvidia.com/gpu: 8
         limits:
           cpu: 128
@@ -173,9 +188,10 @@ spec:
       readinessProbe:
         grpc:
           port: 8080
+          service: sglang.grpc.scheduler.SglangScheduler
         failureThreshold: 3
         successThreshold: 1
-        periodSeconds: 90
+        periodSeconds: 60
         timeoutSeconds: 60
       livenessProbe:
         grpc:
@@ -184,10 +200,11 @@ spec:
         successThreshold: 1
         periodSeconds: 60
         timeoutSeconds: 60
+      # ~276B of NVFP4 weights is a long cold start; 60 + 200 x 6 = 1260s.
       startupProbe:
         grpc:
           port: 8080
-        failureThreshold: 300
+        failureThreshold: 200
         successThreshold: 1
         periodSeconds: 6
         initialDelaySeconds: 60
