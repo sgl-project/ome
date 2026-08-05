@@ -253,7 +253,32 @@ jobs:
 
       - name: Generate release notes
         id: notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          TAG="${{ needs.prepare.outputs.tag }}"
+
+          # This job runs on every tag push AND on workflow_dispatch, so it can
+          # fire more than once for the same tag. Passing a freshly generated
+          # body_path to action-gh-release overwrites whatever is already on the
+          # release — which silently discards hand-written notes. Preserve them:
+          # only (re)generate the template when nobody has edited it yet, which
+          # we detect by the highlights placeholder still being present.
+          EXISTING="$(gh release view "$TAG" --json body,isDraft 2>/dev/null || echo '{}')"
+          EXISTING_BODY="$(jq -r '.body // ""' <<< "$EXISTING")"
+
+          # Never flip an already-published release back to draft on a re-run.
+          echo "draft=$(jq -r 'if .isDraft == null then true else .isDraft end' <<< "$EXISTING")" >> "$GITHUB_OUTPUT"
+
+          if [[ -n "$EXISTING_BODY" ]] && ! grep -qF 'Add release highlights here' <<< "$EXISTING_BODY"; then
+            # Write the existing body back verbatim so body_path stays valid and
+            # the update is a no-op for the notes.
+            printf '%s\n' "$EXISTING_BODY" > release-notes.md
+            echo "✅ Preserved existing release notes for ${TAG} ($(wc -c < release-notes.md) bytes)"
+            exit 0
+          fi
+
+          echo "📝 No hand-written notes found for ${TAG}; generating the template"
           cat > release-notes.md << EOF
           # OME ${{ needs.prepare.outputs.version }}
 
@@ -328,7 +353,9 @@ jobs:
           name: OME ${{ needs.prepare.outputs.version }}
           tag_name: ${{ needs.prepare.outputs.tag }}
           body_path: release-notes.md
-          draft: true # Create as draft so you can edit before publishing
+          # New releases start as drafts so you can edit before publishing; an
+          # already-published release stays published on a re-run.
+          draft: ${{ steps.notes.outputs.draft }}
           prerelease: ${{ contains(needs.prepare.outputs.tag, 'rc') || contains(needs.prepare.outputs.tag, 'alpha') || contains(needs.prepare.outputs.tag, 'beta') }}
           files: |
             release-assets/*
