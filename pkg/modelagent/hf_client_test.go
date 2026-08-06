@@ -13,6 +13,46 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestResolveHfRevisionUsesRevisionAndToken(t *testing.T) {
+	const token = "hf_test_token"
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		assert.Equal(t, "/api/models/Qwen/Qwen3-8B/revision/feature%2Fbranch", request.URL.EscapedPath())
+		assert.Equal(t, "Bearer "+token, request.Header.Get("Authorization"))
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"sha":"` + testHFCommitSHA + `"}`))
+	}))
+	defer server.Close()
+
+	sha, err := resolveHfRevisionWithEndpoint(
+		context.Background(), "Qwen/Qwen3-8B", "feature/branch", token, server.URL+"/",
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, testHFCommitSHA, sha)
+}
+
+func TestResolveHfRevisionRejectsInvalidSHA(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"sha":"not-a-commit"}`))
+	}))
+	defer server.Close()
+
+	_, err := resolveHfRevisionWithEndpoint(
+		context.Background(), "Qwen/Qwen3-8B", "main", "", server.URL,
+	)
+
+	assert.ErrorContains(t, err, "valid 40-character commit SHA")
+}
+
+func TestResolveHfRevisionRejectsUnsafeModelID(t *testing.T) {
+	_, err := resolveHfRevisionWithEndpoint(
+		context.Background(), "../unsafe/model", "main", "", "https://huggingface.invalid",
+	)
+
+	assert.ErrorContains(t, err, "invalid Hugging Face model ID")
+}
+
 func TestFetchAttributeFromHfModelMetaData(t *testing.T) {
 	tests := []struct {
 		name          string

@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -51,6 +52,88 @@ var (
 // FetchAttributeFromHfModelMetaData retrieves a single top-level attribute from the Hugging Face model metadata endpoint for the provided modelId.
 func FetchAttributeFromHfModelMetaData(ctx context.Context, modelId string, attribute string) (interface{}, error) {
 	return fetchAttributeFromHfModelMetaDataWithEndpoint(ctx, modelId, attribute, DefaultEndpoint)
+}
+
+// ResolveHfRevision returns the immutable commit SHA for an exact
+// model revision. The same token used for the download is sent so private and
+// gated repositories resolve under the caller's actual access.
+func ResolveHfRevision(ctx context.Context, modelID, revision, token string) (string, error) {
+	return resolveHfRevisionWithEndpoint(ctx, modelID, revision, token, DefaultEndpoint)
+}
+
+func resolveHfRevisionWithEndpoint(ctx context.Context, modelID, revision, token, endpoint string) (string, error) {
+	if !isValidHfModelID(modelID) {
+		return "", fmt.Errorf("invalid Hugging Face model ID %q", modelID)
+	}
+	metadataURL, err := hfModelMetaDataUrlWithEndpoint(modelID, endpoint)
+	if err != nil {
+		return "", err
+	}
+	revision = strings.TrimSpace(revision)
+	if revision == "" {
+		revision = "main"
+	}
+	requestURL := metadataURL + "/revision/" + url.PathEscape(revision)
+	const maxRetries = 3
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+		if err != nil {
+			return "", err
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := NewHTTPClientWithTimeout(DefaultRequestTimeout).Do(req)
+		if err != nil {
+			if attempt < maxRetries {
+				if waitErr := waitForHfRetry(ctx, attempt, 10*time.Second); waitErr != nil {
+					return "", waitErr
+				}
+				continue
+			}
+			return "", fmt.Errorf("failed to resolve Hugging Face revision: %w", err)
+		}
+
+		var response struct {
+			SHA string `json:"sha"`
+		}
+		if resp.StatusCode == http.StatusOK {
+			decodeErr := json.NewDecoder(resp.Body).Decode(&response)
+			_ = resp.Body.Close()
+			if decodeErr != nil {
+				return "", fmt.Errorf("failed to decode Hugging Face revision response: %w", decodeErr)
+			}
+			if !isValidHfCommitSHA(response.SHA) {
+				return "", fmt.Errorf("Hugging Face revision did not return a valid 40-character commit SHA")
+			}
+			return strings.ToLower(response.SHA), nil
+		}
+
+		statusCode := resp.StatusCode
+		retryAfter := parseRetryAfter(resp)
+		_ = resp.Body.Close()
+		if (statusCode == http.StatusTooManyRequests || statusCode >= 500) && attempt < maxRetries {
+			if retryAfter <= 0 {
+				retryAfter = 10 * time.Second
+			}
+			if waitErr := waitForHfRetry(ctx, attempt, retryAfter); waitErr != nil {
+				return "", waitErr
+			}
+			continue
+		}
+		return "", fmt.Errorf("failed to resolve Hugging Face revision %s for %s: response status code %d", revision, modelID, statusCode)
+	}
+	return "", fmt.Errorf("failed to resolve Hugging Face revision %s for %s", revision, modelID)
+}
+
+func waitForHfRetry(ctx context.Context, attempt int, baseDelay time.Duration) error {
+	delay := exponentialBackoffWithJitter(attempt+1, baseDelay, 60*time.Second)
+	select {
+	case <-time.After(delay):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // fetchAttributeFromHfModelMetaDataWithEndpoint is the internal implementation that accepts a configurable base endpoint.
@@ -266,6 +349,10 @@ func hfModelMetaDataUrlWithEndpoint(modelId string, endpoint string) (string, er
 		return "", fmt.Errorf("no model name has been specified")
 	}
 	modelId = strings.TrimSpace(modelId)
+	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	if endpoint == "" {
+		return "", fmt.Errorf("no Hugging Face endpoint has been specified")
+	}
 
 	if !modelIdPattern.MatchString(modelId) {
 		return "", fmt.Errorf("invalid model name %q: expected format <namespace>/<model>", modelId)
