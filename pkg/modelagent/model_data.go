@@ -25,6 +25,13 @@ const (
 // ConfigParsingAnnotation is the annotation key to skip config parsing
 const ConfigParsingAnnotation = "ome.oracle.com/skip-config-parsing"
 
+const (
+	ArtifactOriginTypeHf = "huggingface"
+
+	HfModelIDAnnotationKey = "hf-model-id"
+	HfSHAAnnotationKey     = "hf-model-sha"
+)
+
 // ModelMetadata is the metadata produced by the shared modelparser bridge.
 // It is aliased so existing modelagent code (cache, configmap reconciler,
 // gopher) keeps using the unqualified name while the parser implementation
@@ -58,6 +65,15 @@ type ModelConfig struct {
 // Artifact records a model artifact's version (Sha) and storage paths.
 // Aliased to the shared modelparser type.
 type Artifact = modelparser.Artifact
+
+type ArtifactOrigin = modelparser.ArtifactOrigin
+
+// ArtifactIdentity is the normalized immutable identity of shared model bytes.
+type ArtifactIdentity struct {
+	OriginType  string
+	HFModelID   string
+	HFCommitSHA string
+}
 
 // DownloadProgress tracks the progress of a model download
 type DownloadProgress struct {
@@ -128,8 +144,16 @@ func ConvertMetadataToModelConfig(metadata ModelMetadata) *ModelConfig {
 
 	// convert artifact
 	var artifact Artifact
-	if metadata.Artifact.Sha != "" || metadata.Artifact.ParentPath != nil || metadata.Artifact.ChildrenPaths != nil {
+	if metadata.Artifact.Sha != "" || metadata.Artifact.ReservationToken != "" || metadata.Artifact.Origin != nil || metadata.Artifact.ParentPath != nil || metadata.Artifact.ChildrenPaths != nil {
 		currentArtifact := metadata.Artifact
+		var origin *ArtifactOrigin
+		if currentArtifact.Origin != nil {
+			origin = &ArtifactOrigin{
+				Type:        currentArtifact.Origin.Type,
+				HFModelID:   currentArtifact.Origin.HFModelID,
+				HFCommitSHA: currentArtifact.Origin.HFCommitSHA,
+			}
+		}
 		// Deep copy ParentPath to avoid aliasing
 		var parent map[string]string
 		if currentArtifact.ParentPath != nil {
@@ -145,9 +169,11 @@ func ConvertMetadataToModelConfig(metadata ModelMetadata) *ModelConfig {
 			copy(children, currentArtifact.ChildrenPaths)
 		}
 		artifact = Artifact{
-			Sha:           currentArtifact.Sha,
-			ParentPath:    parent,
-			ChildrenPaths: children,
+			Sha:              currentArtifact.Sha,
+			ReservationToken: currentArtifact.ReservationToken,
+			Origin:           origin,
+			ParentPath:       parent,
+			ChildrenPaths:    children,
 		}
 	}
 

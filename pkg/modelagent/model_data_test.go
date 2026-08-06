@@ -204,6 +204,29 @@ func TestConvertMetadataToModelConfig(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "Metadata with artifact origin",
+			metadata: ModelMetadata{
+				Artifact: Artifact{
+					Sha: testHFCommitSHA,
+					Origin: &ArtifactOrigin{
+						Type:        ArtifactOriginTypeHf,
+						HFModelID:   "Qwen/Qwen3-8B",
+						HFCommitSHA: testHFCommitSHA,
+					},
+				},
+			},
+			expected: &ModelConfig{
+				Artifact: Artifact{
+					Sha: testHFCommitSHA,
+					Origin: &ArtifactOrigin{
+						Type:        ArtifactOriginTypeHf,
+						HFModelID:   "Qwen/Qwen3-8B",
+						HFCommitSHA: testHFCommitSHA,
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -218,6 +241,36 @@ func TestConvertMetadataToModelConfig(t *testing.T) {
 					string(resultJSON), string(expectedJSON))
 			}
 		})
+	}
+}
+
+func TestConvertMetadataToModelConfigDeepCopiesArtifactOrigin(t *testing.T) {
+	origin := &ArtifactOrigin{
+		Type:        ArtifactOriginTypeHf,
+		HFModelID:   "Qwen/Qwen3-8B",
+		HFCommitSHA: testHFCommitSHA,
+	}
+
+	converted := ConvertMetadataToModelConfig(ModelMetadata{Artifact: Artifact{Origin: origin}})
+	origin.HFModelID = "Qwen/Changed"
+
+	if converted.Artifact.Origin.HFModelID != "Qwen/Qwen3-8B" {
+		t.Fatalf("converted origin shares mutable input pointer: %#v", converted.Artifact.Origin)
+	}
+}
+
+func TestArtifactWithoutOriginKeepsLegacyJSON(t *testing.T) {
+	encoded, err := json.Marshal(Artifact{
+		Sha:           "abc123",
+		ParentPath:    map[string]string{"model": "/models/model"},
+		ChildrenPaths: []string{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"sha":"abc123","parentPath":{"model":"/models/model"},"childrenPaths":[]}`
+	if string(encoded) != want {
+		t.Fatalf("legacy artifact JSON changed: got %s, want %s", encoded, want)
 	}
 }
 

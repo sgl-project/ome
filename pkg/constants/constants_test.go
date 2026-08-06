@@ -62,3 +62,26 @@ func TestLWSNameTruncates(t *testing.T) {
 		})
 	}
 }
+
+func TestInternalArtifactObjectNames(t *testing.T) {
+	tests := []struct {
+		name       string
+		objectName string
+		want       bool
+	}{
+		{name: "completion marker at root", objectName: ArtifactCompleteMarkerFileName, want: true},
+		{name: "completion marker under prefix", objectName: "models/sha/" + ArtifactCompleteMarkerFileName, want: true},
+		{name: "upload lock at root", objectName: ArtifactUploadLockFileName, want: true},
+		{name: "upload lock under prefix", objectName: "models/sha/" + ArtifactUploadLockFileName, want: true},
+		{name: "regular model file", objectName: "models/sha/config.json"},
+		{name: "similar suffix", objectName: "models/sha/not-" + ArtifactCompleteMarkerFileName},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsInternalArtifactObjectName(tt.objectName); got != tt.want {
+				t.Fatalf("IsInternalArtifactObjectName(%q) = %v, want %v", tt.objectName, got, tt.want)
+			}
+		})
+	}
+}
