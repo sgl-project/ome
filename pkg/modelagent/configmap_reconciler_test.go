@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 	corev1 "k8s.io/api/core/v1"
@@ -399,6 +400,107 @@ func TestRestoreModelInConfigMap(t *testing.T) {
 	// and difficult to mock correctly in a test environment
 	// The conflict handling in restoreModelInConfigMap is robust with 3 retry attempts
 	// which is sufficient for most use cases in Kubernetes
+}
+
+func TestRestoreModelInConfigMapRebuildsHfArtifactKey(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+	modelID := "default.basemodel.model-1"
+	modelPath := "/mnt/data/models/customer-model-store/model-1"
+	artifact := testHfArtifactEntry(t)
+	artifact.Status = HfArtifactStatusReady
+	artifact.Children = map[string]string{modelID: modelPath}
+	artifactJSON, err := json.Marshal(artifact)
+	assert.NoError(t, err)
+
+	_, err = kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Create(ctx, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: reconciler.nodeName, Namespace: reconciler.namespace},
+		Data:       map[string]string{artifact.Key: string(artifactJSON)},
+	}, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	reconciler.cacheMutex.Lock()
+	reconciler.modelCache[modelID] = &CacheEntry{
+		ModelName:   "model-1",
+		ModelStatus: ModelStatusReady,
+	}
+	cacheEntry := reconciler.modelCache[modelID]
+	reconciler.cacheMutex.Unlock()
+
+	reconciler.restoreModelInConfigMap(modelID, cacheEntry)
+
+	configMap, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	assert.NoError(t, err)
+	var restored ModelEntry
+	assert.NoError(t, json.Unmarshal([]byte(configMap.Data[modelID]), &restored))
+	assert.Equal(t, artifact.Key, restored.HfArtifactKey)
+}
+
+func TestRestoreModelInConfigMapRebuildsHfArtifactKeyAfterConflict(t *testing.T) {
+	reconciler, kubeClient, _ := setupConfigMapTest(t)
+	ctx := context.Background()
+	modelID := "default.basemodel.model-1"
+	modelPath := "/mnt/data/models/customer-model-store/model-1"
+	first := testHfArtifactEntry(t)
+	first.Status = HfArtifactStatusReady
+	first.Children = map[string]string{modelID: modelPath}
+	firstJSON, err := json.Marshal(first)
+	require.NoError(t, err)
+
+	secondIdentity, err := newHfArtifactIdentity("Qwen/Qwen3-32B", testHFCommitSHA)
+	require.NoError(t, err)
+	second := HfArtifactEntry{
+		Key:       hfArtifactConfigMapKey(secondIdentity),
+		Status:    HfArtifactStatusReady,
+		Identity:  secondIdentity,
+		LocalPath: canonicalHfArtifactPath(modelPath, secondIdentity),
+		Children:  map[string]string{modelID: modelPath},
+	}
+	secondJSON, err := json.Marshal(second)
+	require.NoError(t, err)
+
+	_, err = kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Create(ctx, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: reconciler.nodeName, Namespace: reconciler.namespace},
+		Data:       map[string]string{first.Key: string(firstJSON)},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	reconciler.cacheMutex.Lock()
+	reconciler.modelCache[modelID] = &CacheEntry{ModelName: "model-1", ModelStatus: ModelStatusReady}
+	cacheEntry := reconciler.modelCache[modelID]
+	reconciler.cacheMutex.Unlock()
+
+	configMapResource := corev1.SchemeGroupVersion.WithResource("configmaps")
+	updateAttempts := 0
+	kubeClient.PrependReactor("update", "configmaps", func(ktesting.Action) (bool, runtime.Object, error) {
+		updateAttempts++
+		if updateAttempts != 1 {
+			return false, nil, nil
+		}
+		current, getErr := kubeClient.Tracker().Get(configMapResource, reconciler.namespace, reconciler.nodeName)
+		if getErr != nil {
+			return true, nil, getErr
+		}
+		latest := current.(*corev1.ConfigMap).DeepCopy()
+		delete(latest.Data, first.Key)
+		latest.Data[second.Key] = string(secondJSON)
+		if updateErr := kubeClient.Tracker().Update(configMapResource, latest, reconciler.namespace); updateErr != nil {
+			return true, nil, updateErr
+		}
+		return true, nil, apierrors.NewConflict(
+			schema.GroupResource{Resource: "configmaps"},
+			reconciler.nodeName,
+			errors.New("simulated parent change"),
+		)
+	})
+
+	reconciler.restoreModelInConfigMap(modelID, cacheEntry)
+
+	assert.Equal(t, 2, updateAttempts)
+	configMap, err := kubeClient.CoreV1().ConfigMaps(reconciler.namespace).Get(ctx, reconciler.nodeName, metav1.GetOptions{})
+	require.NoError(t, err)
+	var restored ModelEntry
+	require.NoError(t, json.Unmarshal([]byte(configMap.Data[modelID]), &restored))
+	assert.Equal(t, second.Key, restored.HfArtifactKey)
 }
 
 // TestDeleteModelFromConfigMap tests the DeleteModelFromConfigMap method

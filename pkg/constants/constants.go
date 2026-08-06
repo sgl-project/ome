@@ -114,8 +114,9 @@ var (
 
 // Model agent Constants
 const (
-	AgentConfigMapKeyName = "agent"
-	TensorRTLLM           = "tensorrtllm"
+	AgentConfigMapKeyName        = "agent"
+	TensorRTLLM                  = "tensorrtllm"
+	HfArtifactConfigMapKeyPrefix = "artifact.huggingface."
 )
 
 // InferenceService Annotations
@@ -417,8 +418,12 @@ const (
 	LLamaVllmFTServingServedModelNamePrefix = "/data"
 )
 
-// DefaultModelLocalMountPath is where models will be mounted by the storage-initializer
-const DefaultModelLocalMountPath = "/mnt/models"
+const (
+	// DefaultModelLocalMountPath is where models will be mounted by the storage-initializer.
+	DefaultModelLocalMountPath = "/mnt/models"
+	// ModelArtifactsDirectory contains node-local artifacts shared by model paths.
+	ModelArtifactsDirectory = "_artifacts"
+)
 
 var (
 	ServiceAnnotationDisallowedList = []string{
