@@ -148,6 +148,28 @@ func TestGopherTaskQueueDeleteSupersedesPendingDownloadsForSameModel(t *testing.
 	assert.Equal(t, 0, queue.len())
 }
 
+func TestGopherTaskQueueOlderDeletePreservesNewerDownload(t *testing.T) {
+	queue := newGopherTaskQueue()
+	model := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "service-ns", UID: "model-uid"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: stringPtr("oci://n/ns/b/bucket/o/model")},
+		},
+	}
+	newerDownload := &GopherTask{TaskType: Download, BaseModel: model, Sequence: 11}
+	olderDelete := &GopherTask{TaskType: Delete, BaseModel: model, Sequence: 10}
+
+	queue.enqueue(newerDownload)
+	queue.enqueue(olderDelete)
+
+	task, ok := queue.popHighPriority()
+	require.True(t, ok)
+	assert.Equal(t, olderDelete, task)
+	task, ok = queue.popHighPriority()
+	require.True(t, ok)
+	assert.Equal(t, newerDownload, task)
+}
+
 func TestGopherTaskQueueDeletePreemptsHighPriorityFIFO(t *testing.T) {
 	queue := newGopherTaskQueue()
 	wait := &GopherTask{

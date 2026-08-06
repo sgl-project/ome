@@ -1285,6 +1285,112 @@ func TestUnregisterActiveDownloadDoesNotRemoveNewerRegistration(t *testing.T) {
 	}
 }
 
+func TestCancelAndWaitForActiveDownloadWaitsForFinalization(t *testing.T) {
+	model := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "service-ns", UID: "model-uid"},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{}))
+	g.samePathWaitTimeout = time.Second
+	g.activeDownloads = map[string]activeDownload{
+		string(model.UID): {token: "download-token", cancel: cancel, done: done},
+	}
+	finalized := make(chan struct{})
+	go func() {
+		<-ctx.Done()
+		time.Sleep(20 * time.Millisecond)
+		close(finalized)
+		close(done)
+		g.unregisterActiveDownload(string(model.UID), "download-token")
+	}()
+
+	err := g.cancelAndWaitForActiveDownload(&GopherTask{TaskType: Delete, BaseModel: model})
+
+	require.NoError(t, err)
+	select {
+	case <-finalized:
+	default:
+		t.Fatal("delete continued before download finalization completed")
+	}
+}
+
+func TestOlderDeleteDoesNotCancelNewerActiveDownload(t *testing.T) {
+	model := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "service-ns", UID: "model-uid"},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{}))
+	g.activeDownloads = map[string]activeDownload{
+		string(model.UID): {token: "newer", seq: 11, cancel: cancel, done: make(chan struct{})},
+	}
+	deleteTask := &GopherTask{TaskType: Delete, BaseModel: model, Sequence: 10}
+
+	g.cancelActiveDownload(deleteTask)
+	err := g.cancelAndWaitForActiveDownload(deleteTask)
+
+	assert.ErrorIs(t, err, errDeleteSupersededByNewerDownload)
+	select {
+	case <-ctx.Done():
+		t.Fatal("older delete must not cancel a newer active download")
+	default:
+	}
+}
+
+func TestRegisterActiveDownloadDoesNotReplaceExistingTask(t *testing.T) {
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{}))
+	firstCtx, firstCancel := context.WithCancel(context.Background())
+	secondCtx, secondCancel := context.WithCancel(context.Background())
+	t.Cleanup(firstCancel)
+	t.Cleanup(secondCancel)
+	first := activeDownload{token: "first", cancel: firstCancel, done: make(chan struct{})}
+	second := activeDownload{token: "second", cancel: secondCancel, done: make(chan struct{})}
+
+	assert.Equal(t, activeDownloadRegistered, g.registerActiveDownload("model-uid", 1, first))
+	assert.Equal(t, activeDownloadBusy, g.registerActiveDownload("model-uid", 2, second))
+
+	g.activeDownloadsMutex.RLock()
+	registered := g.activeDownloads["model-uid"]
+	g.activeDownloadsMutex.RUnlock()
+	assert.Equal(t, "first", registered.token)
+	registered.cancel()
+	select {
+	case <-firstCtx.Done():
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected first download to remain registered")
+	}
+	select {
+	case <-secondCtx.Done():
+		t.Fatal("second download must not replace or cancel the first")
+	default:
+	}
+}
+
+func TestModelDeletionBarrierBlocksNewDownloadRegistration(t *testing.T) {
+	g := newGopherWithConfigMap(makeConfigMap("node-1", map[string]string{}))
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	active := activeDownload{token: "download", cancel: cancel, done: make(chan struct{})}
+
+	g.beginModelDeletion("model-uid", 10)
+	assert.Equal(t, activeDownloadStale, g.registerActiveDownload("model-uid", 9, active))
+	assert.Equal(t, activeDownloadDeleting, g.registerActiveDownload("model-uid", 11, active))
+	g.endModelDeletion("model-uid", 10)
+	assert.Equal(t, activeDownloadStale, g.registerActiveDownload("model-uid", 9, active))
+	assert.Equal(t, activeDownloadRegistered, g.registerActiveDownload("model-uid", 11, active))
+
+	g.activeDownloadsMutex.RLock()
+	registered := g.activeDownloads["model-uid"]
+	g.activeDownloadsMutex.RUnlock()
+	registered.cancel()
+	select {
+	case <-ctx.Done():
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected registration after deletion barrier release")
+	}
+}
+
 func TestShouldUseSamePathObjectStorageReuse(t *testing.T) {
 	tests := []struct {
 		name string

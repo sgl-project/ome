@@ -122,7 +122,8 @@ func removeSupersededTasks(tasks []*GopherTask, deleteTask *GopherTask) []*Gophe
 	}
 	kept := tasks[:0]
 	for _, task := range tasks {
-		if task.TaskType != Delete && getModelUID(task) == modelUID {
+		if task.TaskType != Delete && getModelUID(task) == modelUID &&
+			(deleteTask.Sequence == 0 || task.Sequence == 0 || task.Sequence <= deleteTask.Sequence) {
 			continue
 		}
 		kept = append(kept, task)

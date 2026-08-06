@@ -3,6 +3,7 @@ package modelagent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -47,11 +48,32 @@ type GopherTask struct {
 	SamePathWaitStartedAt  time.Time
 	NormalPriorityOnly     bool
 	RevalidationReplay     bool
+	DeletionBarrierHeld    bool
+	ArtifactCleanupPending bool
+	Sequence               uint64
 }
 
 type activeDownload struct {
 	token  string
 	cancel context.CancelFunc
+	done   chan struct{}
+	seq    uint64
+}
+
+type activeDownloadRegistration string
+
+const (
+	activeDownloadRegistered activeDownloadRegistration = "Registered"
+	activeDownloadBusy       activeDownloadRegistration = "Busy"
+	activeDownloadDeleting   activeDownloadRegistration = "Deleting"
+	activeDownloadStale      activeDownloadRegistration = "Stale"
+)
+
+var errDeleteSupersededByNewerDownload = errors.New("delete superseded by newer download")
+
+type modelDeletionBarrier struct {
+	holders  int
+	sequence uint64
 }
 
 type Gopher struct {
@@ -73,13 +95,19 @@ type Gopher struct {
 
 	// Track active downloads for cancellation
 	activeDownloads      map[string]activeDownload // key: model UID
+	deletingModelUIDs    map[string]modelDeletionBarrier
+	completedDeletionSeq map[string]uint64
 	activeDownloadsMutex sync.RWMutex
+	taskSequence         atomic.Uint64
 
 	taskQueue           *gopherTaskQueue
 	samePathWaitDelay   time.Duration
 	samePathWaitTimeout time.Duration
 
 	startupReadyModelKeys map[string]struct{}
+
+	hfArtifactManager      *HfArtifactManager
+	hfArtifactManagerMutex sync.Mutex
 }
 
 const (
@@ -114,7 +142,7 @@ func NewGopher(
 		samePathWaitTimeout = defaultSamePathWaitTimeout
 	}
 
-	return &Gopher{
+	gopher := &Gopher{
 		modelConfigParser:      modelConfigParser,
 		configMapReconciler:    configMapReconciler,
 		downloadRetry:          downloadRetry,
@@ -128,12 +156,20 @@ func NewGopher(
 		metrics:                metrics,
 		logger:                 logger,
 		activeDownloads:        make(map[string]activeDownload),
+		deletingModelUIDs:      make(map[string]modelDeletionBarrier),
+		completedDeletionSeq:   make(map[string]uint64),
 		baseModelLister:        baseModelLister,
 		clusterBaseModelLister: clusterBaseModelLister,
 		taskQueue:              newGopherTaskQueue(),
 		samePathWaitDelay:      defaultSamePathWaitDelay,
 		samePathWaitTimeout:    samePathWaitTimeout,
-	}, nil
+	}
+	gopher.hfArtifactManager = newHfArtifactManager(
+		newHfArtifactRepository(configMapReconciler),
+		newOSArtifactFileSystem(),
+		logger,
+	)
+	return gopher, nil
 }
 
 func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int, numHighPriorityWorker int) {
@@ -174,6 +210,19 @@ func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int, numHighPriorityWorke
 	s.logger.Info("Received stop signal, shutting down Gopher workers...")
 }
 
+func (s *Gopher) getHfArtifactManager() *HfArtifactManager {
+	s.hfArtifactManagerMutex.Lock()
+	defer s.hfArtifactManagerMutex.Unlock()
+	if s.hfArtifactManager == nil {
+		s.hfArtifactManager = newHfArtifactManager(
+			newHfArtifactRepository(s.configMapReconciler),
+			newOSArtifactFileSystem(),
+			s.logger,
+		)
+	}
+	return s.hfArtifactManager
+}
+
 func (s *Gopher) dispatchTasks(stopCh <-chan struct{}) {
 	for {
 		select {
@@ -195,6 +244,7 @@ func (s *Gopher) enqueueTask(task *GopherTask) {
 	if task == nil {
 		return
 	}
+	s.ensureTaskSequence(task)
 	if s.taskQueue == nil {
 		s.taskQueue = newGopherTaskQueue()
 	}
@@ -252,7 +302,7 @@ func (s *Gopher) cancelActiveDownload(task *GopherTask) {
 	active, isDownloading := s.activeDownloads[modelUID]
 	s.activeDownloadsMutex.RUnlock()
 
-	if isDownloading {
+	if isDownloading && (task.Sequence == 0 || active.seq == 0 || active.seq <= task.Sequence) {
 		s.logger.Infof("Model %s is currently downloading, will cancel it", getModelInfoForLogging(task))
 		active.cancel()
 	}
@@ -307,6 +357,15 @@ func (s *Gopher) safeParseAndUpdateModelConfig(modelPath string, baseModel *v1be
 	ctx := context.Background()
 	s.configMapMutex.Lock()
 	defer s.configMapMutex.Unlock()
+	if artifact != nil {
+		if err := s.configMapReconciler.ReconcileModelArtifact(ctx, &ConfigMapArtifactOp{
+			Artifact:         *artifact,
+			BaseModel:        baseModel,
+			ClusterBaseModel: clusterBaseModel,
+		}); err != nil {
+			return fmt.Errorf("persist model artifact metadata: %w", err)
+		}
+	}
 
 	// First parse the configuration without updating the ConfigMap
 	// This call will return model metadata
@@ -316,7 +375,7 @@ func (s *Gopher) safeParseAndUpdateModelConfig(modelPath string, baseModel *v1be
 	}
 
 	// add artifact info if necessary
-	if artifact != nil {
+	if artifact != nil && metadata != nil {
 		metadata = s.modelConfigParser.PopulateArtifactAttribute(artifact, metadata)
 	}
 
@@ -344,6 +403,7 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 	if task.BaseModel == nil && task.ClusterBaseModel == nil {
 		return fmt.Errorf("gopher got empty task")
 	}
+	s.ensureTaskSequence(task)
 
 	// Get model info for logging
 	modelInfo := getModelInfoForLogging(task)
@@ -380,37 +440,49 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 		}
 	}
 
-	// For Download and DownloadOverride tasks, set the node label to "Updating"
 	if task.TaskType == Download || task.TaskType == DownloadOverride {
+		// Create a cancellable context for this download
+		ctx, cancel = context.WithCancel(context.Background())
+
+		// Register the cancel function
+		activeDownloadToken := fmt.Sprintf("%s-%d", modelUID, time.Now().UnixNano())
+		activeDownloadDone := make(chan struct{})
+		registration := s.registerActiveDownload(modelUID, task.Sequence, activeDownload{
+			token:  activeDownloadToken,
+			cancel: cancel,
+			done:   activeDownloadDone,
+		})
+		if registration != activeDownloadRegistered {
+			cancel()
+			if registration == activeDownloadStale {
+				s.logger.Infof("Dropping stale download task for %s while node-local deletion is active", modelInfo)
+				return nil
+			}
+			if s.requeueSamePathInFlightReuseWait(task, modelInfo) {
+				s.logger.Infof("Deferring duplicate download task for %s while another task is active", modelInfo)
+				return nil
+			}
+			return fmt.Errorf("timed out waiting for active download of %s", modelInfo)
+		}
+
+		// Ensure cleanup on completion
+		defer func() {
+			close(activeDownloadDone)
+			s.unregisterActiveDownload(modelUID, activeDownloadToken)
+			cancel() // Ensure context is cancelled
+		}()
+
+		// Only a registered, current task may recreate Updating state after deletion.
 		s.logger.Infof("Setting model %s status to Updating before download", modelInfo)
 		nodeLabelOp := &NodeLabelOp{
 			ModelStateOnNode: Updating,
 			BaseModel:        task.BaseModel,
 			ClusterBaseModel: task.ClusterBaseModel,
 		}
-
 		if err := s.safeNodeLabelReconciliation(nodeLabelOp); err != nil {
 			s.logger.Errorf("Failed to set model %s status to Updating: %v", modelInfo, err)
-			// Continue with download anyway
+			// Continue with download anyway.
 		}
-
-		// Create a cancellable context for this download
-		ctx, cancel = context.WithCancel(context.Background())
-
-		// Register the cancel function
-		activeDownloadToken := fmt.Sprintf("%s-%d", modelUID, time.Now().UnixNano())
-		s.activeDownloadsMutex.Lock()
-		s.activeDownloads[modelUID] = activeDownload{
-			token:  activeDownloadToken,
-			cancel: cancel,
-		}
-		s.activeDownloadsMutex.Unlock()
-
-		// Ensure cleanup on completion
-		defer func() {
-			s.unregisterActiveDownload(modelUID, activeDownloadToken)
-			cancel() // Ensure context is cancelled
-		}()
 	}
 
 	storageType, err := storage.GetStorageType(*baseModelSpec.Storage.StorageUri)
@@ -439,75 +511,14 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 		downloadStartTime := time.Now()
 		switch storageType {
 		case storage.StorageTypeOCI:
-			osUri, err := getTargetDirPath(&baseModelSpec)
-			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
-			if err != nil {
-				s.logger.Errorf("Failed to get target directory path for model %s: %v", modelInfo, err)
-				return err
+			outcome, processErr := s.processObjectStorageModel(
+				ctx, task, baseModelSpec, modelInfo, modelType, namespace, name, allowFallbackDownload,
+			)
+			if processErr != nil {
+				return processErr
 			}
-			downloadObjectStorageModel := func() error {
-				err = utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
-					downloadErr := s.downloadModel(ctx, osUri, destPath, task)
-					if downloadErr != nil {
-						// Check if context was cancelled
-						if ctx.Err() != nil {
-							s.logger.Infof("Download cancelled for model %s: %v", modelInfo, ctx.Err())
-							return ctx.Err()
-						}
-						s.logger.Errorf("Failed to download model %s (attempt %d/%d): %v",
-							modelInfo, s.downloadRetry, s.downloadRetry, downloadErr)
-					}
-					return downloadErr
-				})
-				if err != nil {
-					s.logger.Errorf("All download attempts failed for model %s: %v", modelInfo, err)
-
-					// Record download failure in metrics
-					errorType := "download_error"
-					if strings.Contains(err.Error(), "MD5") {
-						errorType = "md5_verification_error"
-					}
-					s.metrics.RecordFailedDownload(modelType, namespace, name, errorType)
-
-					s.markModelOnNodeFailed(task)
-					return err
-				}
+			if outcome == modelTaskDeferred {
 				return nil
-			}
-
-			if shouldUseSamePathObjectStorageReuse(task) {
-				if matchedKey, reused := s.findReadyObjectStorageModelWithSamePath(ctx, task, baseModelSpec, destPath); reused {
-					s.logger.Infof("Reusing Ready same-path model artifact for %s/%s from %s at %s", namespace, name, matchedKey, destPath)
-				} else if matchedKey, wait := s.findUpdatingObjectStorageModelWithSamePath(ctx, task, baseModelSpec, destPath); wait &&
-					s.requeueSamePathInFlightReuseWait(task, matchedKey) {
-					return nil
-				} else if !allowFallbackDownload {
-					s.demoteToNormalPriority(task)
-					return nil
-				} else if err := downloadObjectStorageModel(); err != nil {
-					return err
-				}
-			} else if err := downloadObjectStorageModel(); err != nil {
-				return err
-			}
-			// Parse model config and update ConfigMap
-			// We can pass either BaseModel or ClusterBaseModel based on the task's model type
-			var baseModel *v1beta1.BaseModel
-			var clusterBaseModel *v1beta1.ClusterBaseModel
-
-			// Check the actual model type from the task
-			if task.BaseModel != nil {
-				baseModel = task.BaseModel
-				s.logger.Debugf("Using BaseModel %s/%s for config parsing", baseModel.Namespace, baseModel.Name)
-			} else if task.ClusterBaseModel != nil {
-				clusterBaseModel = task.ClusterBaseModel
-				s.logger.Debugf("Using ClusterBaseModel %s for config parsing", clusterBaseModel.Name)
-			} else {
-				s.logger.Warnf("No model object found in task, skipping config parsing")
-			}
-
-			if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel, nil); err != nil {
-				s.logger.Errorf("Failed to parse and update model config: %v", err)
 			}
 		case storage.StorageTypeVendor:
 			s.logger.Infof("Skipping download for model %s", modelInfo)
@@ -515,7 +526,7 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 			s.logger.Infof("Starting Hugging Face download for model %s", modelInfo)
 
 			// Handle Hugging Face model download
-			if err := s.processHuggingFaceModel(ctx, task, baseModelSpec, modelInfo, modelType, namespace, name); err != nil {
+			if err := s.processHfModel(ctx, task, baseModelSpec, modelInfo, modelType, namespace, name); err != nil {
 				// Error is already logged and metrics recorded in the method
 				return err
 			}
@@ -548,13 +559,9 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 
 		if skip, runDeleteCleanup := s.shouldSkipStaleDownloadTask(task); skip {
 			if runDeleteCleanup {
-				s.logger.Infof("Model %s is deleting after download, running cleanup instead of marking Ready", modelInfo)
-				return s.processTask(&GopherTask{
-					TaskType:               Delete,
-					BaseModel:              task.BaseModel,
-					ClusterBaseModel:       task.ClusterBaseModel,
-					TensorRTLLMShapeFilter: task.TensorRTLLMShapeFilter,
-				})
+				s.logger.Infof("Model %s is deleting after download, queueing cleanup instead of marking Ready", modelInfo)
+				s.enqueueDeleteCleanup(task)
+				return nil
 			}
 			s.logger.Infof("Model %s no longer exists after download, skipping Ready update", modelInfo)
 			return nil
@@ -574,35 +581,36 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 			return err
 		}
 	case Delete:
-		// First, cancel any ongoing download for this model
-		s.activeDownloadsMutex.RLock()
-		if active, exists := s.activeDownloads[modelUID]; exists {
-			s.logger.Infof("Cancelling ongoing download for model %s", modelInfo)
-			active.cancel() // This will cancel the download context
+		if !task.DeletionBarrierHeld {
+			s.beginModelDeletion(modelUID, task.Sequence)
+			task.DeletionBarrierHeld = true
 		}
-		s.activeDownloadsMutex.RUnlock()
-
-		// Wait a bit for download to stop
-		time.Sleep(2 * time.Second)
+		keepDeletionBarrier := false
+		defer func() {
+			if !keepDeletionBarrier {
+				s.endModelDeletion(modelUID, task.Sequence)
+				task.DeletionBarrierHeld = false
+			}
+		}()
+		if err := s.cancelAndWaitForActiveDownload(task); err != nil {
+			if errors.Is(err, errDeleteSupersededByNewerDownload) {
+				s.logger.Infof("Skipping stale deletion for %s because a newer download is active", modelInfo)
+				return nil
+			}
+			return err
+		}
 
 		// Now proceed with deletion
 		switch storageType {
 		case storage.StorageTypeOCI:
 			s.logger.Infof("Starting deletion for model %s", modelInfo)
-			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
-			// check if it needs to skip artifact deletion
-			isSkippingDeletion, _, _, _ := s.isSkippingArtifactDeletion(ctx, task, destPath, false)
-			if !isSkippingDeletion {
-				err = s.deleteModel(destPath, task)
-				if err != nil {
-					s.logger.Errorf("Failed to delete model %s: %v", modelInfo, err)
-					return err
-				}
-				if task.BaseModel != nil {
-					s.logger.Infof("Successfully deleted the BaseModel %s in namespace %s", task.BaseModel.Name, task.BaseModel.Namespace)
-				} else {
-					s.logger.Infof("Successfully deleted the ClusterBaseModel %s", task.ClusterBaseModel.Name)
-				}
+			outcome, deleteErr := s.processObjectStorageDelete(ctx, task, baseModelSpec)
+			if deleteErr != nil {
+				return deleteErr
+			}
+			if outcome == modelTaskDeferred {
+				keepDeletionBarrier = true
+				return nil
 			}
 		case storage.StorageTypeVendor:
 			s.logger.Infof("Skipping deletion for model %s", modelInfo)
@@ -674,6 +682,107 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 	}
 
 	return nil
+}
+
+func (s *Gopher) cancelAndWaitForActiveDownload(task *GopherTask) error {
+	modelUID := getModelUID(task)
+	timeout := s.samePathWaitTimeout
+	if timeout <= 0 {
+		timeout = defaultSamePathWaitTimeout
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		s.activeDownloadsMutex.RLock()
+		active, exists := s.activeDownloads[modelUID]
+		s.activeDownloadsMutex.RUnlock()
+		if !exists {
+			return nil
+		}
+		if task.Sequence != 0 && active.seq != 0 && active.seq > task.Sequence {
+			return errDeleteSupersededByNewerDownload
+		}
+		active.cancel()
+		if active.done == nil {
+			return nil
+		}
+		select {
+		case <-active.done:
+			// Recheck in case a newer task registered while the previous one exited.
+		case <-timer.C:
+			return fmt.Errorf("timed out waiting for active download of %s to stop", getModelInfoForLogging(task))
+		}
+	}
+}
+
+func (s *Gopher) registerActiveDownload(modelUID string, sequence uint64, active activeDownload) activeDownloadRegistration {
+	s.activeDownloadsMutex.Lock()
+	defer s.activeDownloadsMutex.Unlock()
+	if s.activeDownloads == nil {
+		s.activeDownloads = make(map[string]activeDownload)
+	}
+	if s.completedDeletionSeq[modelUID] >= sequence && sequence != 0 {
+		return activeDownloadStale
+	}
+	if barrier, deleting := s.deletingModelUIDs[modelUID]; deleting {
+		if sequence != 0 && sequence <= barrier.sequence {
+			return activeDownloadStale
+		}
+		return activeDownloadDeleting
+	}
+	if _, exists := s.activeDownloads[modelUID]; exists {
+		return activeDownloadBusy
+	}
+	active.seq = sequence
+	s.activeDownloads[modelUID] = active
+	return activeDownloadRegistered
+}
+
+func (s *Gopher) beginModelDeletion(modelUID string, sequence uint64) {
+	s.activeDownloadsMutex.Lock()
+	defer s.activeDownloadsMutex.Unlock()
+	if s.deletingModelUIDs == nil {
+		s.deletingModelUIDs = make(map[string]modelDeletionBarrier)
+	}
+	barrier := s.deletingModelUIDs[modelUID]
+	barrier.holders++
+	if sequence > barrier.sequence {
+		barrier.sequence = sequence
+	}
+	s.deletingModelUIDs[modelUID] = barrier
+}
+
+func (s *Gopher) endModelDeletion(modelUID string, sequence uint64) {
+	s.activeDownloadsMutex.Lock()
+	if s.completedDeletionSeq == nil {
+		s.completedDeletionSeq = make(map[string]uint64)
+	}
+	if sequence > s.completedDeletionSeq[modelUID] {
+		s.completedDeletionSeq[modelUID] = sequence
+	}
+	barrier := s.deletingModelUIDs[modelUID]
+	if barrier.holders <= 1 {
+		delete(s.deletingModelUIDs, modelUID)
+	} else {
+		barrier.holders--
+		s.deletingModelUIDs[modelUID] = barrier
+	}
+	s.activeDownloadsMutex.Unlock()
+}
+
+func (s *Gopher) ensureTaskSequence(task *GopherTask) {
+	if task != nil && task.Sequence == 0 {
+		task.Sequence = s.taskSequence.Add(1)
+	}
+}
+
+func (s *Gopher) enqueueDeleteCleanup(task *GopherTask) {
+	s.enqueueTask(&GopherTask{
+		TaskType:               Delete,
+		BaseModel:              task.BaseModel,
+		ClusterBaseModel:       task.ClusterBaseModel,
+		TensorRTLLMShapeFilter: task.TensorRTLLMShapeFilter,
+	})
 }
 
 func (s *Gopher) unregisterActiveDownload(modelUID string, token string) {
@@ -1229,6 +1338,9 @@ func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectUR
 	if err != nil {
 		return fmt.Errorf("failed to list objects: %w", err)
 	}
+	if _, shared := planHfOriginOCIArtifact(task, baseModelSpec, s.modelRootDir, destPath); shared {
+		objects = filterInternalArtifactObjectSummaries(objects)
+	}
 
 	if len(objects) == 0 {
 		return fmt.Errorf("no objects found under namespace %s, bucket %s, object prefix %s", uri.Namespace, uri.BucketName, uri.Prefix)
@@ -1404,10 +1516,10 @@ func (s *Gopher) isReservingModelArtifact(task *GopherTask) bool {
 	return false
 }
 
-// processHuggingFaceModel handles downloading models from Hugging Face Hub.
+// processHfModel handles downloading models from Hugging Face Hub.
 // It extracts model information from the URI, configures the download with proper authentication,
 // performs the download using the hub client, and updates model configuration.
-func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec,
+func (s *Gopher) processHfModel(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec,
 	modelInfo, modelType, namespace, name string) error {
 	// Parse the Hugging Face URI to get modelID and branch
 	hfComponents, err := storage.ParseHuggingFaceStorageURI(*baseModelSpec.Storage.StorageUri)
