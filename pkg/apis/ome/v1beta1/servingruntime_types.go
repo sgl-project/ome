@@ -226,6 +226,15 @@ type ServingRuntimeSpec struct {
 	// AcceleratorRequirements specifies the accelerator requirements for this runtime
 	// +optional
 	AcceleratorRequirements *AcceleratorRequirements `json:"acceleratorRequirements,omitempty"`
+
+	// KVCacheConnectors describes runtime-side support for attaching serving
+	// components to referenced KVCachePools. The InferenceService controller
+	// uses these entries to inject provider-specific connector args, env, and
+	// configuration when a service references a KVCachePool.
+	// +optional
+	// +listType=map
+	// +listMapKey=provider
+	KVCacheConnectors []KVCacheConnectorSpec `json:"kvCacheConnectors,omitempty"`
 }
 
 // AcceleratorRequirements specifies the accelerator requirements for this runtime

@@ -22,6 +22,8 @@ type Interface interface {
 	FineTunedWeights() FineTunedWeightInformer
 	// InferenceServices returns a InferenceServiceInformer.
 	InferenceServices() InferenceServiceInformer
+	// KVCachePools returns a KVCachePoolInformer.
+	KVCachePools() KVCachePoolInformer
 	// ServingRuntimes returns a ServingRuntimeInformer.
 	ServingRuntimes() ServingRuntimeInformer
 }
@@ -70,6 +72,11 @@ func (v *version) FineTunedWeights() FineTunedWeightInformer {
 // InferenceServices returns a InferenceServiceInformer.
 func (v *version) InferenceServices() InferenceServiceInformer {
 	return &inferenceServiceInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// KVCachePools returns a KVCachePoolInformer.
+func (v *version) KVCachePools() KVCachePoolInformer {
+	return &kVCachePoolInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // ServingRuntimes returns a ServingRuntimeInformer.

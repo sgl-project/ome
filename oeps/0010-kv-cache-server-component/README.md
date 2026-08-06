@@ -18,7 +18,7 @@ to the pool.
   - [Naming](#naming)
   - [Deployment Modes](#deployment-modes)
   - [Provider and Backend Model](#provider-and-backend-model)
-  - [External Provider Inputs](#external-provider-inputs)
+  - [Provider Design Inputs](#provider-design-inputs)
   - [User Stories](#user-stories)
     - [Story 1: Pre-create a Node-local LMCache Pool](#story-1-pre-create-a-node-local-lmcache-pool)
     - [Story 2: Bind an InferenceService to an Existing Pool](#story-2-bind-an-inferenceservice-to-an-existing-pool)
@@ -95,11 +95,12 @@ The initial alpha supports four `KVCachePool` deployment modes:
 3. `DistributedStore`
 4. `ProviderManaged`
 
-`NodeLocal` covers LMCache-style one-cache-server-per-node deployments.
+`RawDeployment` covers simple OME-managed Kubernetes Deployment-backed pool
+workloads. `NodeLocal` covers LMCache-style one-cache-server-per-node
+deployments.
 `DistributedStore` covers coordinated store systems such as Mooncake
 master/store deployments. `ProviderManaged` covers providers that expose their
-own controller and CRD, such as LMCache's `LMCacheEngine`. `External` binding
-to infrastructure that OME does not manage is intentionally deferred.
+own controller and CRD, such as LMCache's `LMCacheEngine`.
 
 ## Motivation
 
@@ -135,10 +136,12 @@ namespace.
    alpha.
 4. Add `ServingRuntime.spec.kvCacheConnectors` for runtime-side connector
    support.
-5. Keep the pool API provider-neutral and extensible to LMCache, Mooncake,
-   NIXL-backed configurations, and future providers.
-6. Reuse existing OME workload configuration types where appropriate,
-   including `PodSpec`, `RunnerSpec`, and `ComponentExtensionSpec`.
+5. Keep the pool API provider-neutral and extensible to LMCache CPU RAM,
+   Mooncake, NIXL-backed configurations, and future providers.
+6. Reuse existing OME workload configuration patterns where appropriate,
+   especially `PodSpec`, `ComponentExtensionSpec`, and Kubernetes container
+   fields, without embedding serving-runner-only abstractions such as
+   `RunnerSpec`.
 7. Keep all pool pod/container configuration under `spec.workloads[]`.
 8. Publish normalized connection information in `KVCachePool.status`.
 9. Preserve existing `InferenceService` behavior when `spec.kvCachePool` is
@@ -244,9 +247,6 @@ Mode meanings:
 - `ProviderManaged`: OME owns the `KVCachePool` intent but delegates provider
   implementation resources to a provider controller or provider CRD.
 
-`External` is deferred until OME defines a clear status, ownership, and
-validation contract for infrastructure it does not manage.
-
 ### Provider and Backend Model
 
 The API distinguishes provider from backend.
@@ -256,14 +256,14 @@ provider may expose connection metadata, create provider workloads, or translate
 pool intent into a provider-native CR.
 
 `provider.backends[]` identifies storage or transfer backends used underneath
-the provider. For example, LMCache may be the provider while Mooncake or NIXL
-is configured as a backend.
+the provider. For example, LMCache may be the provider while CPU RAM, Mooncake,
+or NIXL is configured as a backend.
 
 Provider-specific configuration belongs under `provider.config`.
 Backend-specific configuration belongs under `provider.backends[].config`.
 There is no giant top-level `providerConfig` bag.
 
-### External Provider Inputs
+### Provider Design Inputs
 
 The API shape is influenced by these provider designs:
 
@@ -272,9 +272,9 @@ The API shape is influenced by these provider designs:
 2. [LMCache operator](https://docs.lmcache.ai/mp/operator.html) motivates
    `ProviderManaged`, where OME reconciles provider-native resources and
    reflects their connection status.
-3. [LMCache storage backends](https://docs.lmcache.ai/kv_cache/storage_backends/mooncake.html)
+3. [LMCache storage backends](https://docs.lmcache.ai/kv_cache/storage_backends/local_storage.html)
    motivate separating **provider** from **backend** because LMCache can use
-   Mooncake or NIXL beneath the LMCache integration layer.
+   CPU RAM, Mooncake, or NIXL beneath the LMCache integration layer.
 4. [Mooncake Store](https://kvcache-ai.github.io/Mooncake/design/mooncake-store.html)
    motivates `DistributedStore` and named pool workloads such as `master` and
    `store`.
@@ -437,10 +437,6 @@ type KVCacheProviderSpec struct {
     // +required
     Name KVCacheProvider `json:"name"`
 
-    // Version optionally constrains the provider implementation version.
-    // +optional
-    Version *string `json:"version,omitempty"`
-
     // Backends identifies storage or transfer backends used by the provider.
     // +optional
     // +listType=map
@@ -452,7 +448,7 @@ type KVCacheProviderSpec struct {
     Config *runtime.RawExtension `json:"config,omitempty"`
 }
 
-// +kubebuilder:validation:Enum=Local;Mooncake;NIXL;Redis;Filesystem
+// +kubebuilder:validation:Enum=Local;CPURAM;Mooncake;NIXL;Redis
 type KVCacheBackendType string
 
 type KVCacheBackendSpec struct {
@@ -473,7 +469,9 @@ type KVCacheBackendSpec struct {
 Cache policy:
 
 ```go
-// +kubebuilder:validation:Enum=LRU;LFU;FIFO;ProviderDefault
+// KVCacheEvictionPolicy is the desired cache eviction behavior. Leaving the
+// field unset selects the provider's default policy.
+// +kubebuilder:validation:Enum=LRU;LFU;FIFO
 type KVCacheEvictionPolicy string
 
 type KVCachePolicySpec struct {
@@ -482,10 +480,6 @@ type KVCachePolicySpec struct {
     // +optional
     Capacity *resource.Quantity `json:"capacity,omitempty"`
 
-    // TTLSeconds optionally limits cache entry lifetime.
-    // +optional
-    TTLSeconds *int64 `json:"ttlSeconds,omitempty"`
-
     // EvictionPolicy is the desired eviction behavior.
     // +optional
     EvictionPolicy *KVCacheEvictionPolicy `json:"evictionPolicy,omitempty"`
@@ -493,10 +487,6 @@ type KVCachePolicySpec struct {
     // ChunkSize is a provider-neutral chunk/page/block size hint.
     // +optional
     ChunkSize *resource.Quantity `json:"chunkSize,omitempty"`
-
-    // Keyspace optionally scopes generated cache keys.
-    // +optional
-    Keyspace *string `json:"keyspace,omitempty"`
 }
 ```
 
@@ -510,19 +500,22 @@ type KVCachePoolWorkloadSpec struct {
     Name string `json:"name"`
 
     // PodSpec provides pod-level customization for this pool workload.
+    // Container configuration is expressed through PodSpec.Containers.
     // +optional
     PodSpec `json:",inline"`
 
-    // ComponentExtensionSpec reuses OME workload knobs such as replicas,
-    // autoscaling, labels, annotations, PDB, and deployment strategy.
-    // +optional
+    // ComponentExtensionSpec provides replicas, autoscaling, labels,
+    // annotations, and PodDisruptionBudget configuration for this workload.
     ComponentExtensionSpec `json:",inline"`
-
-    // Runner customizes the primary container for this workload.
-    // +optional
-    Runner *RunnerSpec `json:"runner,omitempty"`
 }
 ```
+
+`KVCachePoolWorkloadSpec` intentionally composes the existing
+`ComponentExtensionSpec` instead of adding a parallel pool-specific scaling
+shape. That keeps `minReplicas`, `maxReplicas`, `scaleMetric`, `scaleTarget`,
+`kedaConfig`, labels, annotations, PDB, and deployment strategy behavior aligned
+with OME's existing component API. Provider adapters remain responsible for
+validating which extension fields are meaningful for each deployment mode.
 
 #### InferenceService Extension
 
@@ -589,8 +582,11 @@ type KVCacheConnectorSpec struct {
     // +listType=atomic
     DeploymentModes []KVCachePoolDeploymentMode `json:"deploymentModes,omitempty"`
 
-    // Components provides component-specific connector configuration.
+    // Components provides component-specific connector configuration. Keys
+    // must be one of the InferenceService ComponentType values (engine,
+    // decoder, router, predictor); other keys are rejected at admission.
     // +optional
+    // +kubebuilder:validation:XValidation:rule="self.all(k, k in ['engine','decoder','router','predictor'])",message="components key must be one of engine, decoder, router, predictor"
     Components map[ComponentType]KVCacheConnectorComponentSpec `json:"components,omitempty"`
 }
 
@@ -612,26 +608,33 @@ type KVCacheConnectorComponentSpec struct {
 }
 
 type KVCacheConnectorConfig struct {
-    // ConnectorClass names the runtime connector implementation, such as
-    // LMCacheConnectorV1.
+    // ConnectorClass maps to "kv_connector".
     // +optional
     ConnectorClass *string `json:"connectorClass,omitempty"`
 
-    // Role describes the component role understood by the runtime adapter, such
-    // as kv_both, kv_producer, or kv_consumer.
+    // Role maps to "kv_role".
     // +optional
     Role *string `json:"role,omitempty"`
 
-    // ConnectionRefName optionally selects a named connection entry published
-    // by KVCachePool status.
+    // ExtraConfig maps to "kv_connector_extra_config".
     // +optional
-    ConnectionRefName *string `json:"connectionRefName,omitempty"`
+    // +kubebuilder:pruning:PreserveUnknownFields
+    ExtraConfig *runtime.RawExtension `json:"extraConfig,omitempty"`
+
+    // ConfigMapRef sources the full --kv-transfer-config JSON from a
+    // ConfigMap; when set, the inline fields are ignored.
+    // +optional
+    ConfigMapRef *corev1.LocalObjectReference `json:"configMapRef,omitempty"`
 }
 ```
 
-`KVCacheConnectorConfig` is intentionally typed. It is not a
-`runtime.RawExtension`. Provider-specific escaping remains on the pool provider
-and backend specs.
+`KVCacheConnectorConfig` keeps common runtime connector intent typed while
+allowing narrowly scoped escape hatches for runtime-native transfer config.
+`extraConfig` is limited to the nested connector extra-config payload.
+`configMapRef` is for advanced runtimes that need to own the complete
+`--kv-transfer-config` JSON; when it is set, the inline fields are ignored.
+Provider-specific pool configuration still belongs under `provider.config` or
+`provider.backends[].config`.
 
 #### Status
 
@@ -640,10 +643,6 @@ and backend specs.
 ```go
 type KVCachePoolStatus struct {
     duckv1.Status `json:",inline"`
-
-    // Phase is a coarse lifecycle summary.
-    // +optional
-    Phase KVCachePoolPhase `json:"phase,omitempty"`
 
     // Connection contains normalized connection information consumed by
     // ServingRuntime connector adapters.
@@ -689,8 +688,8 @@ type KVCachePoolPortStatus struct {
 
 type KVCachePoolWorkloadStatus struct {
     Name string `json:"name"`
-    ReadyReplicas int32 `json:"readyReplicas,omitempty"`
-    DesiredReplicas int32 `json:"desiredReplicas,omitempty"`
+    ReadyReplicas int32 `json:"readyReplicas"`
+    DesiredReplicas int32 `json:"desiredReplicas"`
 }
 ```
 
@@ -712,7 +711,7 @@ spec:
     name: LMCache
     backends:
       - name: local-memory
-        type: Local
+        type: CPURAM
     config:
       mode: Multiprocess
       endpointDiscovery: NodeHostIP
@@ -731,33 +730,34 @@ spec:
         - name: shm
           hostPath:
             path: /dev/shm
-      runner:
-        image: lmcache/standalone:nightly
-        command:
-          - /opt/venv/bin/lmcache
-        args:
-          - server
-        ports:
-          - name: transfer
-            containerPort: 6555
-            hostPort: 6555
-          - name: http
-            containerPort: 8080
-            hostPort: 8080
-          - name: metrics
-            containerPort: 9090
-            hostPort: 9090
-        readinessProbe:
-          httpGet:
-            path: /healthcheck
-            port: http
-        resources:
-          requests:
-            cpu: "4"
-            memory: 64Gi
-          limits:
-            cpu: "8"
-            memory: 80Gi
+      containers:
+        - name: server
+          image: lmcache/standalone:nightly
+          command:
+            - /opt/venv/bin/lmcache
+          args:
+            - server
+          ports:
+            - name: transfer
+              containerPort: 6555
+              hostPort: 6555
+            - name: http
+              containerPort: 8080
+              hostPort: 8080
+            - name: metrics
+              containerPort: 9090
+              hostPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+          resources:
+            requests:
+              cpu: "4"
+              memory: 64Gi
+            limits:
+              cpu: "8"
+              memory: 80Gi
 ```
 
 #### LMCache ProviderManaged Pool
@@ -783,12 +783,13 @@ spec:
     - name: server
       nodeSelector:
         node-type: gpu
-      runner:
-        image: lmcache/standalone:nightly
-        resources:
-          requests:
-            cpu: "4"
-            memory: 64Gi
+      containers:
+        - name: server
+          image: lmcache/standalone:nightly
+          resources:
+            requests:
+              cpu: "4"
+              memory: 64Gi
 ```
 
 The provider adapter translates the generic pool and workload intent into the
@@ -816,40 +817,42 @@ spec:
   workloads:
     - name: master
       minReplicas: 1
-      runner:
-        image: mooncake/mooncake-transfer-engine:latest
-        command:
-          - mooncake_master
-        args:
-          - --enable_http_metadata_server=true
-          - --http_metadata_server_host=0.0.0.0
-          - --http_metadata_server_port=8080
-          - --rpc_port=50051
-          - --metrics_port=9003
-        ports:
-          - name: rpc
-            containerPort: 50051
-          - name: metadata
-            containerPort: 8080
-          - name: metrics
-            containerPort: 9003
-        resources:
-          requests:
-            cpu: "4"
-            memory: 8Gi
+      containers:
+        - name: master
+          image: mooncake/mooncake-transfer-engine:latest
+          command:
+            - mooncake_master
+          args:
+            - --enable_http_metadata_server=true
+            - --http_metadata_server_host=0.0.0.0
+            - --http_metadata_server_port=8080
+            - --rpc_port=50051
+            - --metrics_port=9003
+          ports:
+            - name: rpc
+              containerPort: 50051
+            - name: metadata
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9003
+          resources:
+            requests:
+              cpu: "4"
+              memory: 8Gi
     - name: store
       minReplicas: 4
-      runner:
-        image: mooncake/mooncake-transfer-engine:latest
-        command:
-          - mooncake_client
-        ports:
-          - name: rpc
-            containerPort: 50052
-        resources:
-          requests:
-            cpu: "8"
-            memory: 180Gi
+      containers:
+        - name: store
+          image: mooncake/mooncake-transfer-engine:latest
+          command:
+            - mooncake_client
+          ports:
+            - name: rpc
+              containerPort: 50052
+          resources:
+            requests:
+              cpu: "8"
+              memory: 180Gi
       volumes:
         - name: cache-data
           emptyDir: {}
@@ -911,8 +914,6 @@ spec:
     name: vllm-lmcache
   kvCachePool:
     name: lmcache-node-pool
-    kind: KVCachePool
-    apiGroup: ome.io
   engine:
     minReplicas: 2
 ```
@@ -957,7 +958,7 @@ When `spec.kvCachePool` is present:
 
 ### Connector Merge Rules
 
-Connector injection uses a three-way merge:
+Connector injection uses this ordered merge:
 
 ```text
 ServingRuntime component config
@@ -977,6 +978,11 @@ existing runtime/service merge model.
 Environment merge should preserve the same precedence. Generated connector env
 and connector `EnvironmentOverride` should not overwrite explicit
 `InferenceService` component env values.
+
+When `connectorConfig.configMapRef` is set, the runtime connector adapter uses
+that referenced full transfer-config payload instead of generating one from
+`connectorClass`, `role`, and `extraConfig`. The adapter still merges
+`runtimeArgsOverride` and `environmentOverride` with the same precedence rules.
 
 ### Provider Adapter Contracts
 
@@ -1044,7 +1050,7 @@ Provider validation should fail fast for:
 2. unsupported deployment mode for provider;
 3. duplicate workload names;
 4. missing required workload roles for a mode;
-5. missing runner image when a workload requires one;
+5. missing container image when OME must create a workload;
 6. provider config that cannot be decoded by the selected adapter; and
 7. missing connection status from provider-managed resources.
 
@@ -1060,7 +1066,7 @@ Controller-level metrics:
 6. `ome_kvcache_provider_errors_total`
 
 Pool workloads should preserve provider metrics ports configured in
-`workloads[].runner.ports`.
+`workloads[].containers[].ports`.
 
 Recommended labels:
 
@@ -1223,6 +1229,10 @@ references without changing behavior when the field is absent.
 - 2026-05-10: Reworked design to introduce namespace-scoped `KVCachePool` CRD,
   reference-only `InferenceService.spec.kvCachePool`, and runtime-side
   `ServingRuntime.spec.kvCacheConnectors`.
+- 2026-05-11: Aligned the OEP with the alpha implementation by trimming
+  speculative cache-policy fields, using provider defaults by omission,
+  composing `ComponentExtensionSpec` for workload extensions, and adding
+  runtime connector `extraConfig`/`configMapRef` escape hatches.
 
 ## Drawbacks
 
@@ -1267,14 +1277,15 @@ OME could add both namespaced and cluster-scoped variants.
 This proposal defers cluster scope. The initial resource is namespaced to keep
 ownership, RBAC, service discovery, and connection status straightforward.
 
-### Top-level Runner Fields
+### Top-level Pod or Container Fields
 
-OME could put `runner`, `PodSpec`, and scaling fields directly on
-`KVCachePoolSpec`.
+OME could put pod, container, and scaling fields directly on
+`KVCachePoolSpec`, or reuse the `InferenceService` `runner` shape.
 
 This proposal rejects that shape because it conflicts with multi-role providers
 such as Mooncake. All pod and container configuration lives under
-`spec.workloads[]`.
+`spec.workloads[]`, and pool workloads use Kubernetes `containers` rather than
+the serving-component-specific `runner` field.
 
 ### Separate `managementMode`
 
