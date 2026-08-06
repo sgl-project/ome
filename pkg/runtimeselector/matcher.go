@@ -242,6 +242,7 @@ func (m *DefaultRuntimeMatcher) evaluateFormatMatch(model *v1beta1.BaseModelSpec
 				match.FormatMatch = false
 			}
 
+			// TODO: stop populating match.Weight; the field is deprecated and no longer read by the scorer.
 			if match.FormatMatch && format.ModelFormat.Weight > 0 {
 				match.Weight += format.ModelFormat.Weight * int64(match.Priority)
 			}
@@ -261,6 +262,7 @@ func (m *DefaultRuntimeMatcher) evaluateFormatMatch(model *v1beta1.BaseModelSpec
 				match.FrameworkMatch = false
 			}
 
+			// TODO: stop populating match.Weight; the field is deprecated and no longer read by the scorer.
 			if match.FrameworkMatch && format.ModelFramework.Weight > 0 {
 				match.Weight += format.ModelFramework.Weight * int64(match.Priority)
 			}

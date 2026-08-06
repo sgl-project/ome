@@ -21,12 +21,9 @@ func NewDefaultRuntimeScorer(config *Config) RuntimeScorer {
 	}
 }
 
-// CalculateScore returns a score for how well a runtime matches a model.
-// The score is calculated based on:
-// 1. Model format match and weight
-// 2. Model framework match and weight
-// 3. Priority multiplier
-// 4. Model size proximity (if applicable)
+// CalculateScore returns the priority of the best matching auto-select format.
+// Strict format/framework compatibility is enforced separately by the matcher,
+// so a non-zero score here simply means "this runtime matches at this priority".
 func (s *DefaultRuntimeScorer) CalculateScore(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec) (int64, error) {
 	ctx := context.Background()
 	logger := log.FromContext(ctx)
@@ -35,8 +32,7 @@ func (s *DefaultRuntimeScorer) CalculateScore(runtime *v1beta1.ServingRuntimeSpe
 
 	// Go through all supported model formats in runtime
 	for _, supportedFormat := range runtime.SupportedModelFormats {
-		// Skip if autoSelect is explicitly false
-		if supportedFormat.AutoSelect != nil && !(*supportedFormat.AutoSelect) {
+		if !supportedFormat.IsAutoSelectEnabled() {
 			continue
 		}
 
@@ -64,13 +60,27 @@ func (s *DefaultRuntimeScorer) CalculateScore(runtime *v1beta1.ServingRuntimeSpe
 
 // CompareRuntimes compares two runtime matches for a given model.
 // Returns positive if r1 is better, negative if r2 is better, 0 if equal.
+//
+// Tie-breaking order (strict):
+//  1. Scope (namespace-scoped beats cluster-scoped)
+//  2. Priority (higher wins)
+//  3. Model size proximity (closer to the model size wins).
+//  4. Name (alphabetical, deterministic).
 func (s *DefaultRuntimeScorer) CompareRuntimes(r1, r2 RuntimeMatch, model *v1beta1.BaseModelSpec) int {
-	// First, compare by score
+	// Prefer namespace-scoped runtimes over cluster-scoped
+	if r1.IsCluster != r2.IsCluster {
+		if r1.IsCluster {
+			return -1 // r2 is namespace-scoped, prefer it
+		}
+		return 1 // r1 is namespace-scoped, prefer it
+	}
+
+	// Within the same scope, compare by priority (Score is the priority).
 	if r1.Score != r2.Score {
 		return int(r1.Score - r2.Score)
 	}
 
-	// If scores are equal, compare by model size range if available
+	// If still equal, compare by model size range if available
 	if model.ModelParameterSize != nil {
 		r1SizeScore := s.calculateSizeScore(r1, model)
 		r2SizeScore := s.calculateSizeScore(r2, model)
@@ -79,14 +89,6 @@ func (s *DefaultRuntimeScorer) CompareRuntimes(r1, r2 RuntimeMatch, model *v1bet
 			// Lower score is better (closer to model size)
 			return int(r2SizeScore - r1SizeScore)
 		}
-	}
-
-	// If still equal, prefer namespace-scoped runtimes over cluster-scoped
-	if r1.IsCluster != r2.IsCluster {
-		if r1.IsCluster {
-			return -1 // r2 is namespace-scoped, prefer it
-		}
-		return 1 // r1 is namespace-scoped, prefer it
 	}
 
 	// Finally, compare by name for deterministic ordering
@@ -99,23 +101,27 @@ func (s *DefaultRuntimeScorer) CompareRuntimes(r1, r2 RuntimeMatch, model *v1bet
 	return 0
 }
 
-// calculateFormatScore calculates the score for a specific supported format.
-// This matches the exact logic from the original score() function.
+// CalculateFormatScore returns the format's Priority when the model is
+// compatible with the supported format, and 0 otherwise. Weight is intentionally
+// ignored: matcher.go already enforces strict compatibility, so Weight only
+// produced scoring collisions.
 func (s *DefaultRuntimeScorer) CalculateFormatScore(model *v1beta1.BaseModelSpec, supportedFormat v1beta1.SupportedModelFormat, priority int64) int64 {
-	// Compare model format
 	modelFormatMatches := false
 	if supportedFormat.ModelFormat != nil {
 		if supportedFormat.ModelFormat.Name != model.ModelFormat.Name {
 			return 0 // Format name doesn't match
 		}
-		// Compare versions if both are specified
-		if supportedFormat.ModelFormat.Version != nil && model.ModelFormat.Version != nil {
+		switch {
+		case supportedFormat.ModelFormat.Version != nil && model.ModelFormat.Version != nil:
 			modelFormatMatches = s.compareVersions(supportedFormat.ModelFormat, &model.ModelFormat)
 			if !modelFormatMatches {
 				return 0 // Version doesn't match
 			}
-		} else {
+		case supportedFormat.ModelFormat.Version == nil && model.ModelFormat.Version == nil:
 			modelFormatMatches = true
+		default:
+			// Version asymmetry: matcher rejects, so we must too.
+			return 0
 		}
 	}
 
@@ -125,39 +131,25 @@ func (s *DefaultRuntimeScorer) CalculateFormatScore(model *v1beta1.BaseModelSpec
 		if supportedFormat.ModelFramework.Name != model.ModelFramework.Name {
 			return 0 // Framework name doesn't match
 		}
-		// Compare versions if both are specified
-		if supportedFormat.ModelFramework.Version != nil && model.ModelFramework.Version != nil {
+		switch {
+		case supportedFormat.ModelFramework.Version != nil && model.ModelFramework.Version != nil:
 			modelFrameworkMatches = s.compareFrameworkVersions(supportedFormat.ModelFramework, model.ModelFramework)
 			if !modelFrameworkMatches {
 				return 0 // Version doesn't match
 			}
-		} else {
+		case supportedFormat.ModelFramework.Version == nil && model.ModelFramework.Version == nil:
 			modelFrameworkMatches = true
+		default:
+			return 0
 		}
 	}
 
-	// Check the matching condition (same as original line 223-224)
 	if (modelFormatMatches || supportedFormat.ModelFormat == nil) &&
 		(modelFrameworkMatches || (supportedFormat.ModelFramework == nil && model.ModelFramework == nil)) {
-
-		// Calculate weighted score
-		var currentScore int64 = 0
-		if modelFormatMatches && supportedFormat.ModelFormat != nil {
-			weight := supportedFormat.ModelFormat.Weight
-			if weight == 0 {
-				weight = s.config.ModelFormatWeight
-			}
-			currentScore += weight * priority
+		// Require at least one positive match
+		if modelFormatMatches || modelFrameworkMatches {
+			return priority
 		}
-		if modelFrameworkMatches && supportedFormat.ModelFramework != nil {
-			weight := supportedFormat.ModelFramework.Weight
-			if weight == 0 {
-				weight = s.config.ModelFrameworkWeight
-			}
-			currentScore += weight * priority
-		}
-
-		return currentScore
 	}
 
 	return 0

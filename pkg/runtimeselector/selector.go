@@ -115,29 +115,21 @@ func (s *defaultSelector) GetCompatibleRuntimes(ctx context.Context, model *v1be
 		return nil, fmt.Errorf("failed to fetch runtimes: %w", err)
 	}
 
-	var namespaceMatches []RuntimeMatch
-	var clusterMatches []RuntimeMatch
-
-	// Process namespace-scoped runtimes
+	var matches []RuntimeMatch
 	for _, runtime := range collection.NamespaceRuntimes {
 		if match := s.evaluateRuntime(ctx, &runtime.Spec, model, isvc, runtime.Name, false); match != nil {
-			namespaceMatches = append(namespaceMatches, *match)
+			matches = append(matches, *match)
 		}
 	}
-
-	// Process cluster-scoped runtimes
 	for _, runtime := range collection.ClusterRuntimes {
 		if match := s.evaluateRuntime(ctx, &runtime.Spec, model, isvc, runtime.Name, true); match != nil {
-			clusterMatches = append(clusterMatches, *match)
+			matches = append(matches, *match)
 		}
 	}
 
-	// Sort namespace and cluster matches separately
-	s.sortMatches(namespaceMatches, model)
-	s.sortMatches(clusterMatches, model)
-
-	// Append cluster matches after namespace matches (namespace-scoped have priority)
-	matches := append(namespaceMatches, clusterMatches...)
+	// Sort globally
+	// CompareRuntimes orders by scope -> priority -> size -> name.
+	s.sortMatches(matches, model)
 
 	logger.Info("Found compatible runtimes",
 		"model", model.ModelFormat.Name,
@@ -321,6 +313,8 @@ func getModelName(model *v1beta1.BaseModelSpec) string {
 // userSpecifiedRuntime indicates whether the runtime is a user-selected runtime or an automatically selected runtime
 // if userSpecifiedRuntime is true, the function will consider all supportedModelFormats in the runtime
 // if userSpecifiedRuntime is false, the function will only consider supportedModelFormats with autoSelect enabled
+//
+// TODO: pass the format's own Priority (defaulting to DefaultPriority when nil) instead of DefaultPriority for every call, so the highest-priority matching format wins under priority-only scoring.
 func (s *defaultSelector) GetSupportedModelFormat(ctx context.Context, runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, userSpecifiedRuntime bool) *v1beta1.SupportedModelFormat {
 	if runtime.SupportedModelFormats == nil {
 		return nil
