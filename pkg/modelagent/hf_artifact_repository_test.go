@@ -59,6 +59,26 @@ func TestHfArtifactRepositoryReserveLifecycle(t *testing.T) {
 	assert.Equal(t, []string{"/mnt/data/models/customer-model-store/model-1"}, ready.Parent.Children)
 }
 
+func TestHfArtifactRepositoryKeepsFirstRegisteredPath(t *testing.T) {
+	repository, _ := newTestHfArtifactRepository(t, map[string]string{})
+	first := testArtifactParent(t)
+	second := first
+	second.Path = "/other-root/_artifacts/Qwen/Qwen3-8B/" + testHFCommitSHA
+
+	reservation, err := repository.Reserve(context.Background(), first)
+	require.NoError(t, err)
+	busy, err := repository.Reserve(context.Background(), second)
+	require.NoError(t, err)
+	assert.Equal(t, ParentBusy, busy.Outcome)
+	assert.Equal(t, first.Path, busy.Parent.Path)
+
+	require.NoError(t, repository.MarkReady(context.Background(), reservation.Parent))
+	ready, err := repository.Reserve(context.Background(), second)
+	require.NoError(t, err)
+	assert.Equal(t, ParentReady, ready.Outcome)
+	assert.Equal(t, first.Path, ready.Parent.Path)
+}
+
 func TestHfArtifactRepositoryAcquiresFailedParentForRepair(t *testing.T) {
 	repository, _ := newTestHfArtifactRepository(t, map[string]string{})
 	parent := testArtifactParent(t)

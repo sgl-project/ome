@@ -74,12 +74,61 @@ func (r *HfArtifactRepository) Get(ctx context.Context, identity ArtifactIdentit
 	return parent, true, nil
 }
 
+func (r *HfArtifactRepository) ListByChildPath(ctx context.Context, childPath string) ([]ArtifactParent, error) {
+	configMap, err := r.configMaps.getConfigMap(ctx)
+	if err != nil {
+		return nil, err
+	}
+	parents := make([]ArtifactParent, 0)
+	for key, raw := range configMap.Data {
+		if !isHfArtifactConfigMapKey(key) {
+			continue
+		}
+		parent, err := decodeArtifactParent(key, raw)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateDesiredArtifactParent(parent); err != nil {
+			return nil, err
+		}
+		if containsPath(parent.Children, childPath) {
+			parents = append(parents, parent)
+		}
+	}
+	return parents, nil
+}
+
 func (r *HfArtifactRepository) Reserve(ctx context.Context, desired ArtifactParent) (ParentReservation, error) {
 	return r.claim(ctx, desired, false)
 }
 
 func (r *HfArtifactRepository) AcquireRepair(ctx context.Context, desired ArtifactParent) (ParentReservation, error) {
 	return r.claim(ctx, desired, true)
+}
+
+// TakeOverUpdating establishes a fresh owner for startup recovery. It is only
+// safe before workers start, after any owner from the previous process has
+// stopped. This also upgrades Updating entries written before reservation
+// tokens were introduced.
+func (r *HfArtifactRepository) TakeOverUpdating(ctx context.Context, desired ArtifactParent) (ArtifactParent, error) {
+	if err := validateDesiredArtifactParent(desired); err != nil {
+		return ArtifactParent{}, err
+	}
+	reservationToken := uuid.NewString()
+	var result ArtifactParent
+	err := r.configMaps.mutateConfigMapWithRetry(ctx, func(configMap *corev1.ConfigMap) (bool, error) {
+		current, err := existingArtifactParent(configMap.Data, desired)
+		if err != nil {
+			return false, err
+		}
+		if current.Status != ModelStatusUpdating {
+			return false, fmt.Errorf("synthetic parent %s is not Updating", current.Key)
+		}
+		current.ReservationToken = reservationToken
+		result = current
+		return writeArtifactParent(configMap.Data, current)
+	})
+	return result, err
 }
 
 func (r *HfArtifactRepository) claim(ctx context.Context, desired ArtifactParent, repair bool) (ParentReservation, error) {
@@ -109,6 +158,9 @@ func (r *HfArtifactRepository) claim(ctx context.Context, desired ArtifactParent
 		}
 		if err := validateRecordedProvenance(current, desired.Identity); err != nil {
 			return false, err
+		}
+		if current.originPresent && validateDesiredArtifactParent(current) == nil {
+			desired.Path = current.Path
 		}
 
 		if current.Status == ModelStatusUpdating {
@@ -188,6 +240,61 @@ func (r *HfArtifactRepository) AddChild(ctx context.Context, desired ArtifactPar
 		current.Children = append(current.Children, childPath)
 		return writeArtifactParent(configMap.Data, current)
 	})
+}
+
+// AddChildWithArtifact records the parent reference and child provenance in one ConfigMap update.
+func (r *HfArtifactRepository) AddChildWithArtifact(
+	ctx context.Context,
+	desired ArtifactParent,
+	child ArtifactChild,
+	artifact Artifact,
+) error {
+	if err := validateDesiredArtifactParent(desired); err != nil {
+		return err
+	}
+	if strings.TrimSpace(child.Key) == "" || strings.TrimSpace(child.Name) == "" || strings.TrimSpace(child.Path) == "" {
+		return fmt.Errorf("shared artifact child metadata is incomplete")
+	}
+	err := r.configMaps.mutateModelEntryWithRetry(ctx, child.Key, child.UID, false, func(data map[string]string) (bool, error) {
+		current, err := existingArtifactParent(data, desired)
+		if err != nil {
+			return false, err
+		}
+		if current.Status != ModelStatusReady {
+			return false, fmt.Errorf("Hugging Face artifact parent %s is %s", current.Key, current.Status)
+		}
+		if !containsPath(current.Children, child.Path) {
+			current.Children = append(current.Children, child.Path)
+		}
+		if _, err := writeArtifactParent(data, current); err != nil {
+			return false, err
+		}
+
+		entry := ModelEntry{Name: child.Name, Status: ModelStatusUpdating}
+		if raw, exists := data[child.Key]; exists {
+			if err := json.Unmarshal([]byte(raw), &entry); err != nil {
+				return false, fmt.Errorf("decode child model entry %s: %w", child.Key, err)
+			}
+		}
+		if entry.Config == nil {
+			entry.Config = &ModelConfig{}
+		}
+		entry.Config.Artifact = cloneArtifact(artifact)
+		encoded, err := json.Marshal(entry)
+		if err != nil {
+			return false, err
+		}
+		data[child.Key] = string(encoded)
+		return true, nil
+	})
+	if err != nil {
+		return err
+	}
+	if r.configMaps.isModelMutationBlocked(child.Key, child.UID) {
+		return fmt.Errorf("shared artifact child %s is no longer active", child.Key)
+	}
+	r.configMaps.cacheModelArtifact(child.Key, child.Name, child.UID, artifact)
+	return nil
 }
 
 // RemoveChild removes a child reference and claims an empty parent by moving it

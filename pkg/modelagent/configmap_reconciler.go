@@ -71,6 +71,13 @@ type ConfigMapMetadataOp struct {
 	ClusterBaseModel *v1beta1.ClusterBaseModel // Reference to a cluster-scoped BaseModel (nil if using BaseModel)
 }
 
+// ConfigMapArtifactOp updates artifact provenance without depending on model config parsing.
+type ConfigMapArtifactOp struct {
+	Artifact         Artifact
+	BaseModel        *v1beta1.BaseModel
+	ClusterBaseModel *v1beta1.ClusterBaseModel
+}
+
 // ConfigMapProgressOp represents an operation to update model download progress in ConfigMap.
 // It contains the necessary information to identify the model and its progress.
 type ConfigMapProgressOp struct {
@@ -571,6 +578,46 @@ func (c *ConfigMapReconciler) ReconcileModelMetadata(ctx context.Context, op *Co
 	return nil
 }
 
+// ReconcileModelArtifact persists shared-artifact ownership while preserving parsed model metadata.
+func (c *ConfigMapReconciler) ReconcileModelArtifact(ctx context.Context, op *ConfigMapArtifactOp) error {
+	if err := c.updateModelArtifactInConfigMap(ctx, op); err != nil {
+		return err
+	}
+	c.cacheModelArtifact(
+		getModelID(op.BaseModel, op.ClusterBaseModel),
+		getConfigMapModelName(op.BaseModel, op.ClusterBaseModel),
+		getModelResourceUID(op.BaseModel, op.ClusterBaseModel),
+		op.Artifact,
+	)
+	return nil
+}
+
+func (c *ConfigMapReconciler) cacheModelArtifact(modelID, modelName string, modelUID types.UID, artifact Artifact) {
+	artifact = cloneArtifact(artifact)
+	c.cacheMutex.Lock()
+	defer c.cacheMutex.Unlock()
+	if !c.prepareActiveModelLocked(modelID, modelUID) {
+		return
+	}
+	if c.modelCache == nil {
+		c.modelCache = make(map[string]*CacheEntry)
+	}
+	entry, exists := c.modelCache[modelID]
+	if !exists {
+		entry = &CacheEntry{
+			ModelName:   modelName,
+			ModelUID:    modelUID,
+			ModelStatus: ModelStatusUpdating,
+		}
+		c.modelCache[modelID] = entry
+	}
+	if entry.ModelMetadata == nil {
+		entry.ModelMetadata = &ModelMetadata{}
+	}
+	entry.ModelUID = modelUID
+	entry.ModelMetadata.Artifact = artifact
+}
+
 // ReconcileModelProgress updates the ConfigMap with model download progress.
 // This is called periodically during model downloads to track progress.
 // Uses retry logic to handle concurrent updates gracefully.
@@ -967,6 +1014,62 @@ func (c *ConfigMapReconciler) updateModelMetadataInConfigMap(ctx context.Context
 		data[key] = newValue
 		return true, nil
 	})
+}
+
+func (c *ConfigMapReconciler) updateModelArtifactInConfigMap(ctx context.Context, op *ConfigMapArtifactOp) error {
+	key := c.getModelConfigMapKey(op.BaseModel, op.ClusterBaseModel)
+	modelUID := getModelResourceUID(op.BaseModel, op.ClusterBaseModel)
+	modelName := getConfigMapModelName(op.BaseModel, op.ClusterBaseModel)
+	artifact := cloneArtifact(op.Artifact)
+	return c.mutateModelEntryWithRetry(ctx, key, modelUID, false, func(data map[string]string) (bool, error) {
+		entry := ModelEntry{Name: modelName, Status: ModelStatusUpdating}
+		if existing, exists := data[key]; exists {
+			if err := json.Unmarshal([]byte(existing), &entry); err != nil {
+				return false, fmt.Errorf("decode model entry %s before artifact update: %w", key, err)
+			}
+		}
+		if entry.Config == nil {
+			entry.Config = &ModelConfig{}
+		}
+		entry.Config.Artifact = artifact
+		encoded, err := json.Marshal(entry)
+		if err != nil {
+			return false, err
+		}
+		if data[key] == string(encoded) {
+			return false, nil
+		}
+		data[key] = string(encoded)
+		return true, nil
+	})
+}
+
+func getConfigMapModelName(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) string {
+	if baseModel != nil {
+		return baseModel.Name
+	}
+	if clusterBaseModel != nil {
+		return clusterBaseModel.Name
+	}
+	return ""
+}
+
+func cloneArtifact(artifact Artifact) Artifact {
+	cloned := artifact
+	if artifact.Origin != nil {
+		origin := *artifact.Origin
+		cloned.Origin = &origin
+	}
+	if artifact.ParentPath != nil {
+		cloned.ParentPath = make(map[string]string, len(artifact.ParentPath))
+		for key, value := range artifact.ParentPath {
+			cloned.ParentPath[key] = value
+		}
+	}
+	if artifact.ChildrenPaths != nil {
+		cloned.ChildrenPaths = append([]string(nil), artifact.ChildrenPaths...)
+	}
+	return cloned
 }
 
 // updateConfigMapWithRetry A fundamental method to update configmap via a read-modify-write update with retry.
