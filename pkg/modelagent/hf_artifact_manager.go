@@ -40,6 +40,12 @@ type HfArtifactManager struct {
 	files      artifactFileSystem
 	logger     *zap.SugaredLogger
 
+	startupMutex             sync.Mutex
+	startupRecoveryPending   bool
+	startupValidationPending map[string]struct{}
+	startupValidationTried   map[string]struct{}
+	startupSnapshotMissing   bool
+
 	pendingTransitionMutex sync.Mutex
 	pendingTransitions     map[string]map[string]pendingArtifactTransition
 }
@@ -50,10 +56,12 @@ func newHfArtifactManager(
 	logger *zap.SugaredLogger,
 ) *HfArtifactManager {
 	return &HfArtifactManager{
-		repository:         repository,
-		files:              files,
-		logger:             logger,
-		pendingTransitions: map[string]map[string]pendingArtifactTransition{},
+		repository:               repository,
+		files:                    files,
+		logger:                   logger,
+		startupValidationPending: map[string]struct{}{},
+		startupValidationTried:   map[string]struct{}{},
+		pendingTransitions:       map[string]map[string]pendingArtifactTransition{},
 	}
 }
 
@@ -105,6 +113,9 @@ func (m *HfArtifactManager) Repair(
 	}
 	if result, stop := m.retryPendingTransition(plan); stop {
 		return result, nil
+	}
+	if result, stop, err := m.ensureStartupRecovery(ctx, plan); stop || err != nil {
+		return result, err
 	}
 	parent, found, err := m.repository.Get(ctx, plan.Parent.Identity)
 	if err != nil {
@@ -164,6 +175,9 @@ func (m *HfArtifactManager) release(
 	}
 	if result, stop := m.retryPendingTransition(plan); stop {
 		return result, nil
+	}
+	if result, stop, err := m.ensureStartupRecovery(ctx, plan); stop || err != nil {
+		return result, err
 	}
 	parent, found, err := m.repository.Get(ctx, plan.Parent.Identity)
 	if err != nil {
@@ -232,7 +246,10 @@ func (m *HfArtifactManager) prepareForUse(
 	if result, stop := m.retryPendingTransition(plan); stop {
 		return result, true, nil
 	}
-	return ArtifactLifecycleResult{}, false, nil
+	if result, stop, err := m.ensureStartupRecovery(ctx, plan); stop || err != nil {
+		return result, stop, err
+	}
+	return m.validateAtStartupIfNeeded(ctx, plan, download)
 }
 
 func (m *HfArtifactManager) ensureExisting(

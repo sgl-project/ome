@@ -451,6 +451,147 @@ func TestHfArtifactManagerDefersReleaseWhileParentIsUpdating(t *testing.T) {
 	assert.NoError(t, err, "release must preserve the child while its parent is being repaired")
 }
 
+func TestHfArtifactManagerRetriesStartupRecoveryForDeleteOnlyWorkload(t *testing.T) {
+	repository, _ := newTestHfArtifactRepository(t, map[string]string{})
+	manager := newHfArtifactManager(repository, newOSArtifactFileSystem(), zaptest.NewLogger(t).Sugar())
+	childPath := filepath.Join(t.TempDir(), "models", "model-1")
+	plan := testArtifactPlan(t, ArtifactOperationRelease, childPath)
+	_, err := repository.Reserve(context.Background(), plan.Parent)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(childPath), 0o755))
+	require.NoError(t, os.Symlink(plan.Parent.Path, childPath))
+	manager.startupRecoveryPending = true
+
+	result, err := manager.Release(context.Background(), plan)
+
+	require.NoError(t, err)
+	assert.Equal(t, ArtifactLifecycleCompleted, result.Outcome)
+	_, found, getErr := repository.Get(context.Background(), plan.Parent.Identity)
+	require.NoError(t, getErr)
+	assert.False(t, found)
+}
+
+func TestHfArtifactManagerRecoversUpdatingParentsAtStartup(t *testing.T) {
+	root := t.TempDir()
+	readyPlan := testArtifactPlan(t, ArtifactOperationEnsure, filepath.Join(root, "models", "model-1"))
+	readyParent := readyPlan.Parent
+	failedIdentity, err := newHfArtifactIdentity("Qwen/Qwen3-4B", testHFCommitSHA)
+	require.NoError(t, err)
+	failedParent := artifactParentForChild(failedIdentity, filepath.Join(root, "models", "model-2"))
+
+	repository, _ := newTestHfArtifactRepository(t, map[string]string{})
+	readyReservation, err := repository.Reserve(context.Background(), readyParent)
+	require.NoError(t, err)
+	failedReservation, err := repository.Reserve(context.Background(), failedParent)
+	require.NoError(t, err)
+	require.NoError(t, writeTestArtifact(readyParent.Path))
+	require.NoError(t, writeHfArtifactReadyMarker(readyParent.Path, readyReservation.Parent.ReservationToken))
+	manager := newHfArtifactManager(repository, newOSArtifactFileSystem(), zaptest.NewLogger(t).Sugar())
+
+	recovered := manager.InitializeAtStartup(context.Background())
+
+	assert.True(t, recovered)
+	ready, found, err := repository.Get(context.Background(), readyParent.Identity)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, ModelStatusReady, ready.Status)
+	assert.Empty(t, ready.ReservationToken)
+	failed, found, err := repository.Get(context.Background(), failedParent.Identity)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, ModelStatusFailed, failed.Status)
+	assert.Empty(t, failed.ReservationToken)
+	assert.NotEmpty(t, readyReservation.Parent.ReservationToken)
+	assert.NotEmpty(t, failedReservation.Parent.ReservationToken)
+}
+
+func TestHfArtifactManagerRejectsStaleReadyMarkerDuringStartupRecovery(t *testing.T) {
+	repository, _ := newTestHfArtifactRepository(t, map[string]string{})
+	manager := newHfArtifactManager(repository, newOSArtifactFileSystem(), zaptest.NewLogger(t).Sugar())
+	plan := testArtifactPlan(t, ArtifactOperationEnsure, filepath.Join(t.TempDir(), "models", "model-1"))
+	_, err := manager.Ensure(context.Background(), plan, true, writeTestArtifact)
+	require.NoError(t, err)
+	reservation, err := repository.AcquireRepair(context.Background(), plan.Parent)
+	require.NoError(t, err)
+	require.Equal(t, ParentAcquired, reservation.Outcome)
+	restarted := newHfArtifactManager(repository, newOSArtifactFileSystem(), zaptest.NewLogger(t).Sugar())
+
+	recovered := restarted.InitializeAtStartup(context.Background())
+
+	assert.True(t, recovered)
+	parent, found, getErr := repository.Get(context.Background(), plan.Parent.Identity)
+	require.NoError(t, getErr)
+	require.True(t, found)
+	assert.Equal(t, ModelStatusFailed, parent.Status)
+}
+
+func TestHfArtifactManagerRecoversLegacyUpdatingParentWithoutReservationToken(t *testing.T) {
+	plan := testArtifactPlan(t, ArtifactOperationEnsure, filepath.Join(t.TempDir(), "models", "model-1"))
+	legacyUpdating := plan.Parent
+	legacyUpdating.Status = ModelStatusUpdating
+	encoded, err := json.Marshal(modelEntryFromArtifactParent(legacyUpdating))
+	require.NoError(t, err)
+	repository, _ := newTestHfArtifactRepository(t, map[string]string{plan.Parent.Key: string(encoded)})
+	require.NoError(t, writeTestArtifact(plan.Parent.Path))
+	require.NoError(t, writeHfArtifactReadyMarker(plan.Parent.Path))
+	manager := newHfArtifactManager(repository, newOSArtifactFileSystem(), zaptest.NewLogger(t).Sugar())
+
+	recovered := manager.InitializeAtStartup(context.Background())
+
+	assert.True(t, recovered)
+	parent, found, err := repository.Get(context.Background(), plan.Parent.Identity)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, ModelStatusReady, parent.Status)
+}
+
+func TestHfArtifactManagerDeletesInvalidUpdatingParentAtStartup(t *testing.T) {
+	parent := testArtifactParent(t)
+	invalid, err := json.Marshal(ModelEntry{
+		Name:   parent.Key,
+		Status: ModelStatusUpdating,
+		Config: &ModelConfig{Artifact: Artifact{
+			ParentPath: map[string]string{parent.Key: parent.Path},
+		}},
+	})
+	require.NoError(t, err)
+	repository, client := newTestHfArtifactRepository(t, map[string]string{parent.Key: string(invalid)})
+	manager := newHfArtifactManager(repository, newOSArtifactFileSystem(), zaptest.NewLogger(t).Sugar())
+
+	recovered := manager.InitializeAtStartup(context.Background())
+
+	assert.True(t, recovered)
+	configMap, err := client.CoreV1().ConfigMaps("ome").Get(context.Background(), "node-1", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.NotContains(t, configMap.Data, parent.Key)
+}
+
+func TestHfArtifactManagerValidatesReadyParentOnceAfterRestart(t *testing.T) {
+	repository, _ := newTestHfArtifactRepository(t, map[string]string{})
+	plan := testArtifactPlan(t, ArtifactOperationEnsure, filepath.Join(t.TempDir(), "models", "model-1"))
+	reservation, err := repository.Reserve(context.Background(), plan.Parent)
+	require.NoError(t, err)
+	require.NoError(t, writeTestArtifact(plan.Parent.Path))
+	require.NoError(t, writeHfArtifactReadyMarker(plan.Parent.Path))
+	require.NoError(t, repository.MarkReady(context.Background(), reservation.Parent))
+	manager := newHfArtifactManager(repository, newOSArtifactFileSystem(), zaptest.NewLogger(t).Sugar())
+	require.True(t, manager.InitializeAtStartup(context.Background()))
+	var validations atomic.Int32
+	download := func(path string) error {
+		validations.Add(1)
+		return writeTestArtifact(path)
+	}
+
+	_, err = manager.Ensure(context.Background(), plan, true, download)
+	require.NoError(t, err)
+	second := plan
+	second.ChildPath = filepath.Join(filepath.Dir(plan.ChildPath), "model-2")
+	_, err = manager.Ensure(context.Background(), second, true, download)
+	require.NoError(t, err)
+
+	assert.Equal(t, int32(1), validations.Load())
+}
+
 func testArtifactPlan(t *testing.T, operation ArtifactOperation, childPath string) ArtifactPlan {
 	t.Helper()
 	identity, err := newHfArtifactIdentity("Qwen/Qwen3-8B", testHFCommitSHA)

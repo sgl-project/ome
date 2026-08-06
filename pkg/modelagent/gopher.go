@@ -173,6 +173,10 @@ func NewGopher(
 }
 
 func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int, numHighPriorityWorker int) {
+	startupArtifactCtx, cancelStartupArtifact := context.WithTimeout(context.Background(), defaultStartupReadySnapshotTimeout)
+	s.getHfArtifactManager().InitializeAtStartup(startupArtifactCtx)
+	cancelStartupArtifact()
+
 	startupSnapshotCtx, cancelStartupSnapshot := context.WithTimeout(context.Background(), defaultStartupReadySnapshotTimeout)
 	defer cancelStartupSnapshot()
 	s.captureStartupReadyModels(startupSnapshotCtx)
