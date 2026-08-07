@@ -10,3 +10,4 @@ resources:
   - ome.io_benchmarkjobs.yaml
   - ome.io_acceleratorclasses.yaml
   - ome.io_inferencereplicas.yaml
+  - ome.io_workloadclusters.yaml

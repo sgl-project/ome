@@ -48,6 +48,10 @@ func (c *FakeOmeV1beta1) ServingRuntimes(namespace string) v1beta1.ServingRuntim
 	return newFakeServingRuntimes(c, namespace)
 }
 
+func (c *FakeOmeV1beta1) WorkloadClusters() v1beta1.WorkloadClusterInterface {
+	return newFakeWorkloadClusters(c)
+}
+
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
 func (c *FakeOmeV1beta1) RESTClient() rest.Interface {

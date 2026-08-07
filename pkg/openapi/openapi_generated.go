@@ -43,6 +43,8 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidatePlacement":             schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModel":               schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":           schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterConnectionSource":        schema_pkg_apis_ome_v1beta1_ClusterConnectionSource(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterProfileRef":              schema_pkg_apis_ome_v1beta1_ClusterProfileRef(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterServingRuntime":          schema_pkg_apis_ome_v1beta1_ClusterServingRuntime(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterServingRuntimeList":      schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler":            schema_pkg_apis_ome_v1beta1_ComponentAutoscaler(ref),
@@ -85,6 +87,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceTermination":            schema_pkg_apis_ome_v1beta1_InstanceTermination(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaAutoscaler":                 schema_pkg_apis_ome_v1beta1_KedaAutoscaler(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig":                     schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KubeConfigSource":               schema_pkg_apis_ome_v1beta1_KubeConfigSource(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LeaderSpec":                     schema_pkg_apis_ome_v1beta1_LeaderSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec":                  schema_pkg_apis_ome_v1beta1_LifecycleSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleStatus":                schema_pkg_apis_ome_v1beta1_LifecycleStatus(ref),
@@ -107,6 +110,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.OMENativeInstanceStatus":        schema_pkg_apis_ome_v1beta1_OMENativeInstanceStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ObjectReference":                schema_pkg_apis_ome_v1beta1_ObjectReference(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ParentReference":                schema_pkg_apis_ome_v1beta1_ParentReference(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementSpec":                  schema_pkg_apis_ome_v1beta1_PlacementSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementStatus":                schema_pkg_apis_ome_v1beta1_PlacementStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PodOverride":                    schema_pkg_apis_ome_v1beta1_PodOverride(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PodSpec":                        schema_pkg_apis_ome_v1beta1_PodSpec(ref),
@@ -136,6 +140,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeRef":              schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeSpec":             schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeStatus":           schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SplitSpec":                      schema_pkg_apis_ome_v1beta1_SplitSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.StorageSpec":                    schema_pkg_apis_ome_v1beta1_StorageSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SupportedModelFormat":           schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SupportedRuntime":               schema_pkg_apis_ome_v1beta1_SupportedRuntime(ref),
@@ -145,6 +150,10 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.UpdateStrategy":                 schema_pkg_apis_ome_v1beta1_UpdateStrategy(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerPodSpec":                  schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerSpec":                     schema_pkg_apis_ome_v1beta1_WorkerSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkloadCluster":                schema_pkg_apis_ome_v1beta1_WorkloadCluster(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkloadClusterList":            schema_pkg_apis_ome_v1beta1_WorkloadClusterList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkloadClusterSpec":            schema_pkg_apis_ome_v1beta1_WorkloadClusterSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkloadClusterStatus":          schema_pkg_apis_ome_v1beta1_WorkloadClusterStatus(ref),
 	}
 }
 
@@ -2096,6 +2105,51 @@ func schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref common.ReferenceCallba
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModel"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ClusterConnectionSource(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ClusterConnectionSource is a pluggable connection (modeled on Kueue's MultiKueueCluster.ClusterSource): exactly one of an in-cluster kubeconfig Secret or a SIG-Multicluster ClusterProfile reference.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kubeConfig": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KubeConfigSource"),
+						},
+					},
+					"clusterProfileRef": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterProfileRef"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterProfileRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KubeConfigSource"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ClusterProfileRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ClusterProfileRef references a SIG-Multicluster cluster-inventory-api ClusterProfile. Phase 1 records the reference but does not yet resolve it.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -5263,11 +5317,17 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref common.ReferenceCallba
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicy"),
 						},
 					},
+					"placement": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Placement declares how the multi-cluster control plane selects and orders the workload clusters this InferenceService is placed onto. When nil, the control plane falls back to the ome.io/accelerator-requirements and ome.io/cluster-selector annotations (unchanged legacy behavior). Only consulted on the control-plane cluster; ignored in single-cluster deployments. Alpha; the API may change without notice.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementSpec"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.DecoderSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.EngineSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicy", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficSpec"},
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.DecoderSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.EngineSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicy", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficSpec"},
 	}
 }
 
@@ -5767,6 +5827,36 @@ func schema_pkg_apis_ome_v1beta1_KedaConfig(ref common.ReferenceCallback) common
 		},
 		Dependencies: []string{
 			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalerAuthenticationRef"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_KubeConfigSource(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KubeConfigSource points at a Secret holding a kubeconfig for the cluster.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"secretRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SecretRef is the Secret holding the kubeconfig.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("k8s.io/api/core/v1.SecretReference"),
+						},
+					},
+					"key": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Key is the Secret data key holding the kubeconfig. Defaults to \"kubeconfig\".",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"secretRef"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.SecretReference"},
 	}
 }
 
@@ -7455,6 +7545,48 @@ func schema_pkg_apis_ome_v1beta1_ParentReference(ref common.ReferenceCallback) c
 				},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_PlacementSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PlacementSpec declares how the control plane selects the workload clusters an InferenceService is placed onto, and how many of them serve it. It subsumes the legacy ome.io/accelerator-requirements and ome.io/cluster-selector annotations in a typed, schema-validated form; when this field is nil the control plane still honors those annotations for backward compatibility.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"mode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Mode is the placement cardinality: Single (one cluster), All (every candidate), or Split (replicas distributed across clusters). Defaults to Single. All and Split are rejected by admission on a control plane whose build does not yet implement them.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"requirements": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Requirements is the intrinsic capability selector a candidate workload cluster MUST satisfy, expressed as a Kubernetes label-selector string matched against WorkloadCluster labels (e.g. \"accelerator in (gb300, tpu7x)\"). It is the structured equivalent of the ome.io/accelerator-requirements annotation. Empty means no intrinsic requirement.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"clusterSelector": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ClusterSelector is an optional operator-imposed routing overlay (label-selector string) AND-ed onto Requirements to further narrow candidates (e.g. \"provider=cloud-a\"). Structured equivalent of the ome.io/cluster-selector annotation.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"split": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Split tunes Split mode (distributing replicas across clusters). Only consulted when Mode is Split; ignored otherwise. Nil means Split defaults: distribute the engine's minReplicas, packed onto the fewest clusters.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SplitSpec"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SplitSpec"},
 	}
 }
 
@@ -10582,6 +10714,47 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref common.ReferenceCallba
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_SplitSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SplitSpec tunes how Split mode distributes replicas across candidate clusters. All fields are optional and degrade to the documented default — no in-code magic values.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"replicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Replicas is the fleet-wide desired replica count to distribute across homes. Unset falls back to the engine component's minReplicas (the guaranteed floor) — the count OME actually guarantees running and thus the one worth spreading. maxReplicas is deliberately NOT used (it is an autoscaling ceiling that stays a per-home local concern).",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"spread": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Spread selects the apportionment policy. False (default) is Packed: fan out in preference order and fill the fewest clusters the fleet's quota forces (better locality, fewer endpoint backends). True is Balanced: apportion ~evenly (ceil(N/candidates)) so replicas spread across more clusters (blast-radius resilience over locality).",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"maxReplicasPerCluster": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxReplicasPerCluster caps how many replicas one cluster may hold. It bounds the over-request the fractional fan-out makes, and — combined with Spread — is the lever that forces the fill to move on before a cluster is full (deliberate spread without reading capacity). Zero means no cap.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"minReplicasPerCluster": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinReplicasPerCluster is the anti-sliver floor: a home that admits fewer than this is dropped and its replicas returned to the deficit, so the placement does not keep a home serving a tiny, uneconomical fraction. Zero keeps any home that admitted >=1.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -11660,5 +11833,160 @@ func schema_pkg_apis_ome_v1beta1_WorkerSpec(ref common.ReferenceCallback) common
 		},
 		Dependencies: []string{
 			"k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_WorkloadCluster(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "WorkloadCluster registers a workload cluster OME can place workloads onto typically a GPU cluster. Cluster-scoped: it is fleet-level infrastructure, not a namespaced workload.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkloadClusterSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkloadClusterStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkloadClusterSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkloadClusterStatus"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_WorkloadClusterList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkloadCluster"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkloadCluster"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_WorkloadClusterSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"clusterSource": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ClusterSource is how the control plane connects to this cluster.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterConnectionSource"),
+						},
+					},
+				},
+				Required: []string{"clusterSource"},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterConnectionSource"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_WorkloadClusterStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "type",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions report connection health ONLY (the Ready condition). Never capacity, never Kueue/quota state.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
 	}
 }
