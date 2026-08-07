@@ -34,6 +34,14 @@ type ClusterServingRuntimeListerExpansion interface{}
 // FineTunedWeightLister.
 type FineTunedWeightListerExpansion interface{}
 
+// InferenceReplicaListerExpansion allows custom methods to be added to
+// InferenceReplicaLister.
+type InferenceReplicaListerExpansion interface{}
+
+// InferenceReplicaNamespaceListerExpansion allows custom methods to be added to
+// InferenceReplicaNamespaceLister.
+type InferenceReplicaNamespaceListerExpansion interface{}
+
 // InferenceServiceListerExpansion allows custom methods to be added to
 // InferenceServiceLister.
 type InferenceServiceListerExpansion interface{}

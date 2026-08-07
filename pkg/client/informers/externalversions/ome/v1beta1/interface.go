@@ -20,6 +20,8 @@ type Interface interface {
 	ClusterServingRuntimes() ClusterServingRuntimeInformer
 	// FineTunedWeights returns a FineTunedWeightInformer.
 	FineTunedWeights() FineTunedWeightInformer
+	// InferenceReplicas returns a InferenceReplicaInformer.
+	InferenceReplicas() InferenceReplicaInformer
 	// InferenceServices returns a InferenceServiceInformer.
 	InferenceServices() InferenceServiceInformer
 	// ServingRuntimes returns a ServingRuntimeInformer.
@@ -65,6 +67,11 @@ func (v *version) ClusterServingRuntimes() ClusterServingRuntimeInformer {
 // FineTunedWeights returns a FineTunedWeightInformer.
 func (v *version) FineTunedWeights() FineTunedWeightInformer {
 	return &fineTunedWeightInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// InferenceReplicas returns a InferenceReplicaInformer.
+func (v *version) InferenceReplicas() InferenceReplicaInformer {
+	return &inferenceReplicaInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // InferenceServices returns a InferenceServiceInformer.

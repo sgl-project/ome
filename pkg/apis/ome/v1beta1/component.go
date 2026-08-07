@@ -43,6 +43,27 @@ type ComponentExtensionSpec struct {
 	DeploymentStrategy *appsv1.DeploymentStrategy `json:"deploymentStrategy,omitempty"`
 
 	KedaConfig *KedaConfig `json:"kedaConfig,omitempty"`
+
+	// ServicePortAppProtocols maps generated Service port names to their
+	// Kubernetes appProtocol values. Declared ports use their container port name.
+	// +optional
+	ServicePortAppProtocols map[string]string `json:"servicePortAppProtocols,omitempty"`
+
+	// Lifecycle groups OMENative-specific lifecycle policies for this
+	// Component. Applies only when the Component resolves to deploymentMode
+	// OMENative (spec.deploymentMode or the per-Component
+	// ome.io/deploymentMode annotation); ignored otherwise. The status
+	// counterpart is status.components.<component>.lifecycle.
+	// +optional
+	Lifecycle *LifecycleSpec `json:"lifecycle,omitempty"`
+
+	// Autoscaler configures the per-Component autoscaler dispatch and the
+	// underlying KEDA / HPA configuration. When set, it takes precedence
+	// over the legacy ScaleTarget / ScaleMetric fields and the
+	// ome.io/autoscalerClass annotation for this Component.
+	// Alpha. The API may change without notice.
+	// +optional
+	Autoscaler *ComponentAutoscaler `json:"autoscaler,omitempty"`
 }
 
 // ScaleMetric enum

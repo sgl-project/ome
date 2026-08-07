@@ -36,6 +36,10 @@ func (c *FakeOmeV1beta1) FineTunedWeights() v1beta1.FineTunedWeightInterface {
 	return newFakeFineTunedWeights(c)
 }
 
+func (c *FakeOmeV1beta1) InferenceReplicas(namespace string) v1beta1.InferenceReplicaInterface {
+	return newFakeInferenceReplicas(c, namespace)
+}
+
 func (c *FakeOmeV1beta1) InferenceServices(namespace string) v1beta1.InferenceServiceInterface {
 	return newFakeInferenceServices(c, namespace)
 }

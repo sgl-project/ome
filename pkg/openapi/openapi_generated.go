@@ -39,8 +39,11 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":       schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterServingRuntime":      schema_pkg_apis_ome_v1beta1_ClusterServingRuntime(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterServingRuntimeList":  schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler":        schema_pkg_apis_ome_v1beta1_ComponentAutoscaler(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscalerStatus":  schema_pkg_apis_ome_v1beta1_ComponentAutoscalerStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentExtensionSpec":     schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":        schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentTrafficTarget":     schema_pkg_apis_ome_v1beta1_ComponentTrafficTarget(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.DecoderSpec":                schema_pkg_apis_ome_v1beta1_DecoderSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec":     schema_pkg_apis_ome_v1beta1_DiffusionComponentSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.DiffusionPipelineSpec":      schema_pkg_apis_ome_v1beta1_DiffusionPipelineSpec(ref),
@@ -51,14 +54,30 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeight":            schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeightList":        schema_pkg_apis_ome_v1beta1_FineTunedWeightList(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeightSpec":        schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HPAAutoscaler":              schema_pkg_apis_ome_v1beta1_HPAAutoscaler(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HuggingFaceSecretReference": schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InPlaceUpdateStrategy":      schema_pkg_apis_ome_v1beta1_InPlaceUpdateStrategy(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplica":           schema_pkg_apis_ome_v1beta1_InferenceReplica(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaList":       schema_pkg_apis_ome_v1beta1_InferenceReplicaList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaPacing":     schema_pkg_apis_ome_v1beta1_InferenceReplicaPacing(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaSpec":       schema_pkg_apis_ome_v1beta1_InferenceReplicaSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaStatus":     schema_pkg_apis_ome_v1beta1_InferenceReplicaStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceService":           schema_pkg_apis_ome_v1beta1_InferenceService(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceServiceList":       schema_pkg_apis_ome_v1beta1_InferenceServiceList(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceServiceReference":  schema_pkg_apis_ome_v1beta1_InferenceServiceReference(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceServiceSpec":       schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceServiceStatus":     schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceOperation":          schema_pkg_apis_ome_v1beta1_InstanceOperation(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceTermination":        schema_pkg_apis_ome_v1beta1_InstanceTermination(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaAutoscaler":             schema_pkg_apis_ome_v1beta1_KedaAutoscaler(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig":                 schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LeaderSpec":                 schema_pkg_apis_ome_v1beta1_LeaderSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec":              schema_pkg_apis_ome_v1beta1_LifecycleSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleStatus":            schema_pkg_apis_ome_v1beta1_LifecycleStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationEvent":             schema_pkg_apis_ome_v1beta1_MigrationEvent(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationHistoryEntry":      schema_pkg_apis_ome_v1beta1_MigrationHistoryEntry(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationPolicy":            schema_pkg_apis_ome_v1beta1_MigrationPolicy(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationStatus":            schema_pkg_apis_ome_v1beta1_MigrationStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelCopies":                schema_pkg_apis_ome_v1beta1_ModelCopies(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelExtensionSpec":         schema_pkg_apis_ome_v1beta1_ModelExtensionSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelFormat":                schema_pkg_apis_ome_v1beta1_ModelFormat(ref),
@@ -68,12 +87,20 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec":         schema_pkg_apis_ome_v1beta1_ModelSizeRangeSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatus":                schema_pkg_apis_ome_v1beta1_ModelStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatusSpec":            schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.OMENativeInstanceStatus":    schema_pkg_apis_ome_v1beta1_OMENativeInstanceStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ObjectReference":            schema_pkg_apis_ome_v1beta1_ObjectReference(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ParentReference":            schema_pkg_apis_ome_v1beta1_ParentReference(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PodOverride":                schema_pkg_apis_ome_v1beta1_PodOverride(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PodSpec":                    schema_pkg_apis_ome_v1beta1_PodSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ProportionalPolicy":         schema_pkg_apis_ome_v1beta1_ProportionalPolicy(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RetryBlock":                 schema_pkg_apis_ome_v1beta1_RetryBlock(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RollingUpdate":              schema_pkg_apis_ome_v1beta1_RollingUpdate(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterSpec":                 schema_pkg_apis_ome_v1beta1_RouterSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.Runner":                     schema_pkg_apis_ome_v1beta1_Runner(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec":                 schema_pkg_apis_ome_v1beta1_RunnerSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScaleTargetRef":             schema_pkg_apis_ome_v1beta1_ScaleTargetRef(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalerAuthenticationRef":    schema_pkg_apis_ome_v1beta1_ScalerAuthenticationRef(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicy":              schema_pkg_apis_ome_v1beta1_ScalingPolicy(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServiceMetadata":            schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntime":             schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":         schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
@@ -85,6 +112,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SupportedModelFormat":       schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SupportedRuntime":           schema_pkg_apis_ome_v1beta1_SupportedRuntime(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TensorParallelismConfig":    schema_pkg_apis_ome_v1beta1_TensorParallelismConfig(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.UpdateStrategy":             schema_pkg_apis_ome_v1beta1_UpdateStrategy(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerPodSpec":              schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerSpec":                 schema_pkg_apis_ome_v1beta1_WorkerSpec(ref),
 	}
@@ -1800,6 +1828,120 @@ func schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref common.ReferenceC
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_ComponentAutoscaler(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ComponentAutoscaler configures the autoscaler for a single Component (engine / decoder / router). Takes priority over the legacy ome.io/autoscalerClass annotation for this Component. Alpha. The API may change without notice. This is the only supported way to configure per-Component autoscaling on an ISVC — the legacy ScaleTarget / ScaleMetric fields have been removed from ComponentExtensionSpec.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"class": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Class selects the autoscaler implementation.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"keda": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Keda holds KEDA-specific configuration. Required when Class == \"KEDA\".",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaAutoscaler"),
+						},
+					},
+					"hpa": {
+						SchemaProps: spec.SchemaProps{
+							Description: "HPA holds HorizontalPodAutoscaler-specific configuration. Optional when Class == \"HPA\"; if absent the controller emits a default CPU=80% HPA.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HPAAutoscaler"),
+						},
+					},
+				},
+				Required: []string{"class"},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HPAAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaAutoscaler"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ComponentAutoscalerStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ComponentAutoscalerStatus reports per-Component autoscaler state on the InferenceService. Mirrors the resolved ComponentAutoscaler block plus the live HPA / ScaledObject metrics so an operator can read the authoritative scaler shape, who owns it, and what it's currently doing — all from the parent ISVC without chasing IRs and scalers separately.\n\nPopulated by the ISVC status writer for OMENative-managed Components. The writer degrades gracefully when a Component has no live scaler — ManagedBy reports \"none\" and counters stay zero without crashing.\n\nAlpha. The shape may change without notice.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"class": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Class echoes the resolved autoscaler class as picked by ResolveComponentAutoscaler. One of HPA | KEDA | External | None. Mirrors the input that drove dispatch so the operator can confirm the inheritance chain landed on the expected class.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"managedBy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ManagedBy reports who owns the underlying scaler object. Distinguished from Class because none and external are dispatch-equivalent (both => delete any OME-managed HPA / SO); the surface-level distinction lives here.\n  - \"ome\": OME emitted the HPA / ScaledObject; conditions and\n    replica counters below mirror its live status.\n  - \"external\": operator-owned scaler; OME publishes\n    scaleTargetRef and stays out. Conditions empty.\n  - \"none\": no scaler at all. Conditions empty; counters zero.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"specSource": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SpecSource reports which layer of the ISVC -> runtime -> default inheritance chain produced the resolved Autoscaler block. One of \"isvc\" | \"runtime\" | \"default\". Mirrors autoscaler.SpecSource so the operator can debug which layer is contributing the live config.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"currentReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CurrentReplicas is mirrored from the HPA / ScaledObject status. Zero when ManagedBy != \"ome\" or when the scaler has not yet reported.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"desiredReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DesiredReplicas is mirrored from the HPA / ScaledObject status. Zero when ManagedBy != \"ome\" or when the scaler has not yet reported.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"lastScaleTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastScaleTime mirrors the HPA / ScaledObject's last scale event. Nil when ManagedBy != \"ome\", when the scaler has not yet reported, or when no scaling has occurred since the scaler was created.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions mirrors the HPA's or ScaledObject's conditions verbatim (HPA: ScalingActive / AbleToScale / ScalingLimited; ScaledObject: Ready / Active / Fallback / Paused). Empty when ManagedBy != \"ome\" — operator-owned scalers are surfaced via scaleTargetRef instead.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -1897,11 +2039,39 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 							Ref: ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig"),
 						},
 					},
+					"servicePortAppProtocols": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServicePortAppProtocols maps generated Service port names to their Kubernetes appProtocol values. Declared ports use their container port name.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"lifecycle": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Lifecycle groups OMENative-specific lifecycle policies for this Component. Applies only when the Component resolves to deploymentMode OMENative (spec.deploymentMode or the per-Component ome.io/deploymentMode annotation); ignored otherwise. The status counterpart is status.components.<component>.lifecycle.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec"),
+						},
+					},
+					"autoscaler": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Autoscaler configures the per-Component autoscaler dispatch and the underlying KEDA / HPA configuration. When set, it takes precedence over the legacy ScaleTarget / ScaleMetric fields and the ome.io/autoscalerClass annotation for this Component. Alpha. The API may change without notice.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig"},
+			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec"},
 	}
 }
 
@@ -1955,6 +2125,50 @@ func schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref common.ReferenceCallbac
 		},
 		Dependencies: []string{
 			"knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelection"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ComponentTrafficTarget(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ComponentTrafficTarget describes the percentage of traffic routed to one revision of one Component. RevisionName is the per-revision Service name produced by OMENative's coordination layer (e.g. `llama-engine-rev-abc123`), which the HTTPRoute builder consumes directly as a backend reference.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"revisionName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RevisionName is the per-revision Service name for this target.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"percent": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Percent is the percentage of traffic the consumer should route to RevisionName. Sum across all entries for one Component is 100.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"tag": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Tag is an optional short identifier for the target (e.g. \"latest\", \"prev\"). Cosmetic; not used by the consumer.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"latestRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LatestRevision is true when this entry corresponds to the LatestRolledoutRevision for the Component.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"revisionName", "percent"},
+			},
+		},
 	}
 }
 
@@ -2523,6 +2737,34 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 							Ref: ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig"),
 						},
 					},
+					"servicePortAppProtocols": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServicePortAppProtocols maps generated Service port names to their Kubernetes appProtocol values. Declared ports use their container port name.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"lifecycle": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Lifecycle groups OMENative-specific lifecycle policies for this Component. Applies only when the Component resolves to deploymentMode OMENative (spec.deploymentMode or the per-Component ome.io/deploymentMode annotation); ignored otherwise. The status counterpart is status.components.<component>.lifecycle.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec"),
+						},
+					},
+					"autoscaler": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Autoscaler configures the per-Component autoscaler dispatch and the underlying KEDA / HPA configuration. When set, it takes precedence over the legacy ScaleTarget / ScaleMetric fields and the ome.io/autoscalerClass annotation for this Component. Alpha. The API may change without notice.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler"),
+						},
+					},
 					"runner": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Runner container override for customizing the main container This is essentially a container spec that can override the default container Defines the main decoder container configuration, including image, resource requests/limits, environment variables, and command.",
@@ -2551,7 +2793,7 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LeaderSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerSpec"},
+			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LeaderSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerSpec"},
 	}
 }
 
@@ -3283,6 +3525,34 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 							Ref: ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig"),
 						},
 					},
+					"servicePortAppProtocols": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServicePortAppProtocols maps generated Service port names to their Kubernetes appProtocol values. Declared ports use their container port name.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"lifecycle": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Lifecycle groups OMENative-specific lifecycle policies for this Component. Applies only when the Component resolves to deploymentMode OMENative (spec.deploymentMode or the per-Component ome.io/deploymentMode annotation); ignored otherwise. The status counterpart is status.components.<component>.lifecycle.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec"),
+						},
+					},
+					"autoscaler": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Autoscaler configures the per-Component autoscaler dispatch and the underlying KEDA / HPA configuration. When set, it takes precedence over the legacy ScaleTarget / ScaleMetric fields and the ome.io/autoscalerClass annotation for this Component. Alpha. The API may change without notice.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler"),
+						},
+					},
 					"runner": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Runner container override for customizing the engine container This is essentially a container spec that can override the default container Defines the main model runner container configuration, including image, resource requests/limits, environment variables, and command.",
@@ -3311,7 +3581,7 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LeaderSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerSpec"},
+			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LeaderSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerSpec"},
 	}
 }
 
@@ -3555,6 +3825,46 @@ func schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref common.ReferenceCallbac
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_HPAAutoscaler(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "HPAAutoscaler holds HorizontalPodAutoscaler configuration passed through verbatim. Alpha. The API may change without notice.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"metrics": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Metrics are passed through verbatim to autoscalingv2.HorizontalPodAutoscalerSpec.Metrics. Supports Resource, ContainerResource, Pods, Object, and External metric sources. If empty, the controller defaults to a single CPU=80% Resource metric.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/autoscaling/v2.MetricSpec"),
+									},
+								},
+							},
+						},
+					},
+					"behavior": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Behavior controls scaling stabilization windows and per-direction policies.",
+							Ref:         ref("k8s.io/api/autoscaling/v2.HorizontalPodAutoscalerBehavior"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/api/autoscaling/v2.HorizontalPodAutoscalerBehavior", "k8s.io/api/autoscaling/v2.MetricSpec"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -3573,6 +3883,474 @@ func schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref common.Reference
 				},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InPlaceUpdateStrategy(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InPlaceUpdateStrategy tunes per-pod lifecycle drain timing.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"gracePeriodSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "GracePeriodSeconds is the time OMENative waits between marking the pod not-ready and applying an in-place mutation. SurgeThenDrain also waits this long after EndpointSlice removal before deleting the old pod, allowing persistent load-balancer connections to drain while its workers remain available.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"markNotReadyDuringLifecycle": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MarkNotReadyDuringLifecycle, when true, flips ome.io/serving=False on the pod before the in-place mutation so EndpointSlice drains traffic first. Defaults to true.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InferenceReplica(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InferenceReplica is the per-Component workload abstraction for OMENative-managed InferenceService Components. One InferenceReplica exists per (ISVC, Component) tuple. The ISVC controller writes the spec; the InferenceReplica controller writes the status.\n\nThe scale subresource lets HPA/KEDA target the InferenceReplica directly rather than indirecting through the parent ISVC.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaStatus"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InferenceReplicaList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InferenceReplicaList contains a list of InferenceReplica objects.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplica"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplica"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InferenceReplicaPacing(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InferenceReplicaPacing is the per-replica projection of the active RolloutCoordinationGroup pacing. Mirrors the corresponding RollingUpdate subset so the projection is a verbatim copy.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"partition": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Partition holds back updates for Instances whose index is less than Partition. Mirrors RollingUpdate.Partition. 0 (the default) updates all Instances. Used for canary holds.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"maxUnavailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxUnavailable caps in-rollout disruption. Accepts either a raw count or a percent string. When nil, the InferenceReplica controller falls back to its own default (currently 25%).",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+						},
+					},
+					"rollbackToRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RollbackToRevision, when set, names a ControllerRevision the InferenceReplica must roll every Instance back to — overriding the rendered desired template with that revision's stored pod template (and using it as the update target). The InferenceService controller sets this during a canary rollback so the forward-roll machinery drains the canary pods back onto the stable revision. Empty in steady state.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InferenceReplicaSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InferenceReplicaSpec is the desired state of one (ISVC, Component) workload. The InferenceService controller is the sole writer; the admission webhook rejects writes from other actors that lack the ome.io/controller-write annotation.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"parentRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ParentRef names the InferenceService that owns this replica. Set by the ISVC controller at create time; immutable thereafter.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ParentReference"),
+						},
+					},
+					"component": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Component is one of engine | decoder | router. Immutable; moving a workload between Component slots requires recreating the InferenceReplica.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"replicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Replicas is the desired Instance count. The HPA / KEDA scale subresource writes this field. Defaults to 1 when omitted.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"minReadySeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinReadySeconds is propagated from the ISVC spec.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"topologyKey": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologyKey is the resolved gang co-location node-label key for this Component, projected verbatim from the effective ISVC↔runtime component spec (spec.<component>.topologyKey, else the runtime component-config value). When set on a multi-node Component, the InferenceReplica controller auto-generates the per-Instance worker→leader podAffinity that co-locates every worker onto its gang's leader on a node sharing this label value. Nil means no auto-generated gang affinity.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"runners": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Runners is the fully-rendered set of pod templates per Instance. MUST be non-empty. Single-pod Instances have one Runner with Name=\"default\" and Size=1; multi-node Instances typically have Name=\"leader\" (Size=1) plus Name=\"worker\" (Size=N).\n\nThe InferenceService controller is the sole writer of this field. The InferenceReplica controller treats each Runner.Template as opaque input (same contract appsv1.Deployment.spec.template uses).",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.Runner"),
+									},
+								},
+							},
+						},
+					},
+					"lifecycle": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Lifecycle holds the OMENative lifecycle policies (RestartPolicy, UpdateStrategy, ReadyPolicy, InstanceReadyTimeout, MigrationPolicy). Reuses the existing LifecycleSpec type so the projection from ISVC.spec.<component>.lifecycle is a verbatim copy.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec"),
+						},
+					},
+					"pacing": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Pacing is the InferenceService controller's projection of the active RolloutCoordinationGroup pacing for this replica. Written by the ISVC controller; read by the InferenceReplica controller. Includes Partition (canary hold) and MaxUnavailable (rollout budget). Nil means independent rollout.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaPacing"),
+						},
+					},
+					"autoscaler": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Autoscaler is the live autoscaler configuration that downstream scalers (HPA / KEDA / external) target. The ISVC controller projects the per-Component autoscaler defaults from ISVC.spec.<component>.autoscaler onto the corresponding IR at create time + on subsequent reconciles. External autoscalers may also write directly to this field via the /scale subresource without going through the ISVC controller.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler"),
+						},
+					},
+					"paused": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Paused, when true, stops the InferenceReplica controller from initiating any new Update / Restart / Create operations. In-flight operations resume on unpause.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"parentRef", "component", "runners"},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaPacing", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ParentReference", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.Runner"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InferenceReplicaStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InferenceReplicaStatus is the observed state of one InferenceReplica. The InferenceReplica controller is the sole writer. Fields mirror the legacy LifecycleStatus shape so the dual-write window can byte-compare the two.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedGeneration is the InferenceReplica.metadata.generation the most recent status flush reflects.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"replicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Replicas is the total Instance count (any phase).",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"readyReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReadyReplicas is the number of Instances whose every pod is Ready.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"servingReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServingReplicas is the number of Instances whose every pod is both ContainersReady AND has serving=True on the controller-managed readiness gate (i.e., actually in the load balancer rotation). MaxUnavailable budgets are computed against this count, not ReadyReplicas, so \"missing from traffic\" reflects reality during in-place updates.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"availableReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AvailableReplicas is the number of Instances that have been Ready for at least MinReadySeconds.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"updatedReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UpdatedReplicas is the number of Instances on UpdateRevision.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"updatedReadyReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UpdatedReadyReplicas is the number of Instances on UpdateRevision that are fully Ready. UpdatedReadyReplicas / Replicas drives MaxUnavailable rollout pacing.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"currentRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CurrentRevision names the ControllerRevision currently serving traffic. Set by the InferenceReplica controller.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"updateRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UpdateRevision names the ControllerRevision being rolled out.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"collisionCount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CollisionCount is the salt folded into ControllerRevision hash input after a name collision is observed, so retries produce a different revision name. Same pattern as StatefulSet.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"labelSelector": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LabelSelector identifies pods of this InferenceReplica for the HPA scale subresource. Must match the legacy componentLabelSelectorString formula so existing HPAs continue to resolve unchanged.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"instanceStatuses": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"index",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "InstanceStatuses reports per-Instance state. Reuses the existing OMENativeInstanceStatus type to enable byte-equality diffs against the legacy ISVC.status subtree during the migration window.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.OMENativeInstanceStatus"),
+									},
+								},
+							},
+						},
+					},
+					"retryBlocks": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"targetRevision",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "RetryBlocks records per-target-revision retry authority for update attempts. Revision-scoped: one block per failed target revision, shared by every Instance attempting it — allocating a new Instance cannot evade the block.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RetryBlock"),
+									},
+								},
+							},
+						},
+					},
+					"migrations": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"requestUUID",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "requestUUID",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Migrations is the authoritative set of migration records for this InferenceReplica — one entry per request UUID. Manual entries are resumable processes born Accepted; Auto entries are born-terminal Relocated records. Executors select on non-terminal phase only — terminal entries are records, never work. Non-terminal entries are never trimmed; terminal entries are pruned once older than the migration-capacity rate window, so the list stays bounded. Full history remains in the audit ledger and events.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationStatus"),
+									},
+								},
+							},
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions reports InferenceReplica-level conditions. Defined types include Available, Progressing, FailedScale, FailedUpdate, GangSchedulingUnavailable, OperationStuck.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+					"traffic": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"revisionName",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Traffic reports per-revision traffic weights for this InferenceReplica. Each entry corresponds to one revision currently receiving traffic. The ISVC controller mirrors this onto ISVC.status.components[c].traffic[] for the HTTPRoute builder.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentTrafficTarget"),
+									},
+								},
+							},
+						},
+					},
+					"coordinationGroupRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CoordinationGroupRef back-references the RolloutCoordinationGroup this replica is currently bound into (if any). Lets operators find the owning coord group from the child without parsing the ISVC spec.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentTrafficTarget", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.OMENativeInstanceStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RetryBlock"},
 	}
 }
 
@@ -3862,6 +4640,252 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref common.ReferenceCall
 		},
 		Dependencies: []string{
 			"knative.dev/pkg/apis.Condition", "knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatus"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InstanceOperation(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InstanceOperation is the recovery anchor written before any destructive action against an Instance and cleared on completion.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"id": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ID is the idempotency key for this operation. Retries with the same ID are a no-op.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type identifies the operation kind: Create, Update, Restart, Migrate, Delete.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"step": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Step is the fine-grained resume point within the operation (e.g., Drain, DeletePods, WaitZero, Recreate, WaitReady).",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"startedAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StartedAt is when this operation began.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"lastProgressAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastProgressAt is when the operation last advanced. Used for stall detection.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"deadline": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Deadline is the hard timeout for the current Step. Zero (null) means the step clock is parked (e.g. while the instance's pods are admission-gated); optional + nullable so the parked null is accepted by the apiserver.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"retryCount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RetryCount is the per-step escalation counter.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"targetRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TargetRevision is the ControllerRevision the operation is converging toward.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reason is a short cause string for the operation.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"surgeIndex": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SurgeIndex is the Instance index allocated for a surge replacement. Set only when Type=Migrate.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"fromNode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "FromNode is the node the migrating Instance is being moved off. Set only when Type=Migrate.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"hintTargetNodes": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "HintTargetNodes is the caller-supplied preferred-node list for a migration. Set only when Type=Migrate.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"requestUUID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestUUID is the migration request UUID. Set only when Type=Migrate.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"id", "type", "step", "startedAt", "lastProgressAt"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InstanceTermination(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InstanceTermination captures the container-termination diagnostics of a pod that failed or was escalated, preserved on OMENativeInstanceStatus so the trace survives the recreate that deletes the pod.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"podName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PodName is the name of the pod that failed or was escalated.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"containerName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ContainerName is the container the diagnostics were read from. Empty when the signal is pod-level (e.g. a pod-phase Failed with no per-container terminated state available).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reason is the kubelet reason for the termination or wedge — a terminated-state reason (OOMKilled, Error, ContainerCannotRun) or a terminal waiting-state reason (CrashLoopBackOff, ImagePullBackOff, CreateContainerError). Falls back to \"PodFailed\" when only the pod phase is available.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"exitCode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ExitCode is the container's exit code when the diagnostics came from a terminated state. Nil when the pod was stuck in a waiting state (no process ever ran to produce an exit code).",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Message is the kubelet-supplied detail message, if any.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"time": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Time is when OMENative recorded this termination (reconcile time, not the kubelet transition time, which isn't always exposed).",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+				},
+				Required: []string{"podName"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_KedaAutoscaler(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KedaAutoscaler holds KEDA ScaledObject configuration passed through verbatim. Alpha. The API may change without notice.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"triggers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Triggers are passed through verbatim to kedav1.ScaledObjectSpec.Triggers. The full KEDA trigger surface (prometheus, cron, external, kafka, ...) is supported.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/kedacore/keda/v2/apis/keda/v1alpha1.ScaleTriggers"),
+									},
+								},
+							},
+						},
+					},
+					"advanced": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Advanced ScaledObject configuration — horizontalPodAutoscalerConfig, restoreToOriginalReplicaCount.",
+							Ref:         ref("github.com/kedacore/keda/v2/apis/keda/v1alpha1.AdvancedConfig"),
+						},
+					},
+					"pollingInterval": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PollingInterval is the interval, in seconds, at which KEDA checks each trigger. Defaults to the KEDA-side default when unset.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"cooldownPeriod": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CooldownPeriod is the time, in seconds, KEDA waits before scaling down after the last trigger fires. Defaults to the KEDA-side default when unset.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"idleReplicaCount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IdleReplicaCount enables scaling to a fixed count when no triggers fire (commonly 0 for scale-to-zero). Must be strictly less than the effective MinReplicaCount.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"fallback": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Fallback policy applied when the metric source becomes unavailable.",
+							Ref:         ref("github.com/kedacore/keda/v2/apis/keda/v1alpha1.Fallback"),
+						},
+					},
+				},
+				Required: []string{"triggers"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kedacore/keda/v2/apis/keda/v1alpha1.AdvancedConfig", "github.com/kedacore/keda/v2/apis/keda/v1alpha1.Fallback", "github.com/kedacore/keda/v2/apis/keda/v1alpha1.ScaleTriggers"},
 	}
 }
 
@@ -4417,6 +5441,472 @@ func schema_pkg_apis_ome_v1beta1_LeaderSpec(ref common.ReferenceCallback) common
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_LifecycleSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "LifecycleSpec groups OMENative-specific lifecycle policies on a Component. Embedded via ComponentExtensionSpec.Lifecycle; all fields are no-ops unless the Component is annotated ome.io/deploymentMode=OMENative. Nested under `lifecycle:` so the fields don't collide with corev1.PodSpec fields (notably restartPolicy) that are also inlined into EngineSpec / DecoderSpec / RouterSpec.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"restartPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RestartPolicy controls what OMENative does when a managed pod fails. Distinct from the inlined corev1.PodSpec.RestartPolicy: that one tells kubelet whether to restart a container in-place; this one tells the OMENative controller whether to recreate the whole Instance.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"updateStrategy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UpdateStrategy controls how OMENative rolls template changes across the Component's Instances.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.UpdateStrategy"),
+						},
+					},
+					"readyPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReadyPolicy controls how Instance-level readiness is aggregated from the underlying pods.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"instanceReadyTimeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "InstanceReadyTimeout is OMENative's upper bound for waiting on a newly-created Instance to become Ready (during migration, rollout, or initial creation).",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"migrationPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MigrationPolicy controls whether and how OMENative honors a migration request annotation for this Component.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationPolicy"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationPolicy", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.UpdateStrategy"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_LifecycleStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "LifecycleStatus reports OMENative-managed lifecycle state for one Component. Nil when the Component does not use OMENative. Counterpart of the LifecycleSpec sub-block on ComponentExtensionSpec.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedGeneration is the InferenceService.metadata.generation reflected by this block.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"currentRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CurrentRevision names the ControllerRevision currently serving traffic.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"updateRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UpdateRevision names the ControllerRevision being rolled out.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"collisionCount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CollisionCount is the salt folded into ControllerRevision hash input after a name collision is observed, so retries produce a different revision name. Same pattern as StatefulSet.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"labelSelector": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LabelSelector identifies pods of this Component for HPA-style consumers.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"replicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Replicas is the total Instance count (any phase).",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"readyReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReadyReplicas is the number of Instances whose every pod is Ready.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"servingReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServingReplicas is the number of Instances whose every pod is BOTH ContainersReady AND has serving=True on the controller-managed readiness gate — i.e., the pod is actually in the load balancer's rotation. This is the count operators care about for traffic availability, and the count MaxUnavailable budgets gate against.\n\nDiverges from ReadyReplicas during in-place updates and any other scenario where the controller flips the serving gate to False while containers remain technically Ready.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"availableReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AvailableReplicas is the number of Instances that have been Ready continuously for at least MinReadySeconds.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"updatedReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UpdatedReplicas is the number of Instances on UpdateRevision.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"updatedReadyReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UpdatedReadyReplicas is the number of Instances on UpdateRevision and fully Ready. UpdatedReadyReplicas / Replicas drives maxUnavailable rollout pacing.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions reports Component-level conditions. Defined types include Available, Progressing, FailedScale, FailedUpdate, GangSchedulingUnavailable, OperationStuck.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MigrationEvent(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MigrationEvent is one observation logged during a migration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"at": {
+						SchemaProps: spec.SchemaProps{
+							Description: "At is the time the event was recorded.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Message describes the observation.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"at", "message"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MigrationHistoryEntry(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MigrationHistoryEntry is one entry of the rolling MigrationHistory window recorded on InferenceServiceStatus.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"id": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ID is the request UUID supplied by the caller.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"component": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Component identifies which Component was migrated.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"instance": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Instance is the original Instance index that was migrated away from.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"replacementInstance": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReplacementInstance is the Instance index allocated for the surge replacement. Nil when the migration was rejected before allocation. Distinct from index 0, which is a valid replacement index after sparse migration.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"mode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Mode is the migration mechanism. Always `surge` in v1.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Phase is the current lifecycle phase.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"requestedAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestedAt is the time the request annotation was first observed.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"startedAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StartedAt is the time the controller began executing the migration.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"completedAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CompletedAt is the time the migration reached a terminal phase.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reason is the caller-supplied reason (e.g., \"fragmentation\").",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"requestedBy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestedBy identifies the caller that wrote the request annotation.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"events": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Events records observations made during the migration.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationEvent"),
+									},
+								},
+							},
+						},
+					},
+					"outcomeReason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "OutcomeReason is a short machine-readable reason describing why the migration ended in its terminal phase (e.g., \"InstanceReadyTimeout\").",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"id", "component", "instance", "mode", "phase", "requestedAt"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationEvent"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MigrationPolicy(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MigrationPolicy controls whether and how OMENative honors migration requests (both automatic deadline-disposition relocation and explicit annotation-triggered migration).",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"mode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Mode gates migration: Auto enables both deadline-disposition relocation and explicit migration requests; Never disables both. Defaults to Auto.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MigrationStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MigrationStatus is one migration request's authoritative record on the InferenceReplica. status.migrations is the single source of truth for migration work: executors resume from non-terminal entries; the audit ledger and events are history, not work.\n\nLifecycle contract:\n  - Manual entries (Trigger=Manual) are resumable processes: born\n    Accepted, they walk Accepted -> SurgePending -> SurgeReady ->\n    Draining -> Completed | Failed.\n  - Auto entries (Trigger=Auto) are born-terminal Relocated records\n    mirroring a relocation directive; Succeeded is stamped post-hoc\n    when the relocated Instance next reaches Ready.\n  - Executors select on non-terminal phase only — terminal entries\n    are records, never work.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"requestUUID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestUUID uniquely identifies the migration request. Manual: supplied by the requester. Auto: generated by the controller.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"trigger": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Trigger records who initiated the migration.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"sourceInstance": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SourceInstance is the Instance index being migrated away from.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"surgeInstance": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SurgeInstance is the Instance index allocated for the surge replacement. Manual only; nil until allocated. Distinct from index 0, which is a valid surge index.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"allocatedAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AllocatedAt is when the surge Instance index was allocated — the start of execution. Nil while the entry is queued (Accepted but not yet picked up by the executor). The capacity gate counts execution from this stamp, never queued intent.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"fromNode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "FromNode is the node the source is being moved off. Auto: the excluded node.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"hintTargetNodes": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "HintTargetNodes are requester-supplied preferred placement targets for the surge replacement. Rendered as preferred (soft) node affinity; the scheduler may pick other nodes.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Phase is the migration lifecycle phase. See MigrationPhase for the Manual chain, the Auto born-terminal rule, and the terminal set.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"attempt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Attempt is the relocation attempt ordinal. Auto: N of autoMigrate.maxAttempts.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reason is the requester-supplied reason (Manual) or the disposition branch that produced the entry (Auto).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Message describes the current blocker (non-terminal) or the terminal outcome.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"startedAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StartedAt is when the entry was created.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"deadline": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Deadline is when a non-terminal entry expires. Manual: accept time plus InstanceReadyTimeout.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"completedAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CompletedAt is when the entry reached a terminal phase.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"succeeded": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Succeeded reports the post-hoc outcome. Auto: stamped true when the relocated Instance next reaches Ready.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"requestUUID", "trigger", "sourceInstance", "phase", "startedAt", "deadline"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_ModelCopies(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -4826,6 +6316,162 @@ func schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref common.ReferenceCallback) c
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_OMENativeInstanceStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OMENativeInstanceStatus reports state for one OMENative Instance.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"index": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Index is the stable Instance ordinal. Values may be sparse after surge migration.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"incarnation": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Incarnation increments each time the Instance is recreated (full recreate update, restart-on-loss). In-place updates do not increment. Stamped on pods via the `ome.io/instance-incarnation` label.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Phase is the lifecycle phase of the Instance.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"runningRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RunningRevision is the ControllerRevision the live pods are running.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"targetRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TargetRevision is the ControllerRevision the live pods are converging toward.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"podCount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PodCount is the total number of pods owned by this Instance.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"readyPodCount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReadyPodCount is the number of pods reporting Ready=True.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"servingPodCount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServingPodCount is the number of pods that are BOTH ContainersReady AND have serving=True on the controller-managed readiness gate — i.e., pods actually in the load balancer rotation. Diverges from ReadyPodCount whenever the controller flips the serving gate (in-place updates, drain steps, etc.). MaxUnavailable budgets are computed against the serving count, not the ready count, so that \"missing from traffic\" reflects reality.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"availablePodCount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AvailablePodCount is the number of pods ready for at least MinReadySeconds.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"scheduledPodCount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ScheduledPodCount is the number of pods with Spec.NodeName set.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"admitted": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Admitted is true when this Instance's pods have left the Kueue admission scheduling gate (quota granted): the Instance has pods and none are admission-gated. False while gated/queued or before pods exist. Used by the control plane to decide the fan-out race winner.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"nodesOccupied": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "NodesOccupied is the set of node names hosting pods of this Instance.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions reports Instance-level conditions. Defined types include AllPodsScheduled, AllPodsReady, AllPodsAvailable, Drained, Failed, ProgressDeadlineExceeded.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+					"operation": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Operation is the durable record of an in-flight destructive action against this Instance. Set before the action starts, cleared after it completes. Lets a crashed controller resume work without diffing pod state.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceOperation"),
+						},
+					},
+					"activeOrdinal": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ActiveOrdinal identifies which of two pod-naming slots (0 or 1) currently holds the canonical pod for this single-pod Instance. SurgeThenDrain alternates between slots: the surge creates a new pod at `1 - ActiveOrdinal`, waits Ready, drains the old pod, then advances ActiveOrdinal to the new slot. Stays 0 for InPlace and Recreate strategies (those reuse the same pod name). Defaults to 0 on initial create.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"lastFailure": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastFailure preserves the diagnostics of the pod whose failure (or stuck-pod escalation) last triggered a recreate of this Instance. OMENative drains and deletes every gang pod on recreate, so the failing pod and its container termination state vanish from the cluster — this field is the surviving trace operators read when a multi-node Instance keeps recreating. Set on the first pass of a failure-driven Restart and on stuck-pod escalation; left untouched by revision-roll recreates (those carry their cause in Operation.Reason instead) so the most recent genuine failure isn't overwritten by a clean rollout.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceTermination"),
+						},
+					},
+				},
+				Required: []string{"index", "phase"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceOperation", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceTermination"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -4843,6 +6489,27 @@ func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) c
 					"namespace": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Namespace of the referenced object",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ParentReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ParentReference holds the InferenceService owner reference info. Distinct from the OwnerReference list because the InferenceReplica controller composes the parent's name into per-IR label and Service names without re-reading the metadata field.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the name of the parent InferenceService.",
+							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -5493,6 +7160,140 @@ func schema_pkg_apis_ome_v1beta1_PodSpec(ref common.ReferenceCallback) common.Op
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_ProportionalPolicy(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ProportionalPolicy specifies the anchor Component and per-follower replica ratios for ScalingProportional. Alpha. The API may change without notice.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"anchor": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Anchor is the Component whose replica count drives followers.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ratios": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Ratios maps each follower Component to its replica ratio relative to the anchor. A ratio of 1.0 means parity; 0.25 means one follower per four anchor replicas (rounded up). Components not listed scale independently.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"anchor"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RetryBlock(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RetryBlock is the persisted per-revision retry authority. The subject is the owning IR plus TargetRevision.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"targetRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TargetRevision is the ControllerRevision name this block scopes.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"attemptsStarted": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AttemptsStarted counts lifecycle attempts at this revision. Kubelet container restarts are diagnostic and not counted here.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"nextRetryAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NextRetryAt is the persisted resume time while State=Backoff. Never recomputed from process-local history (restart-safe).",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"firstFailureAt": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"lastFailureAt": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reason is the operator-facing last-failure summary.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"targetRevision", "state", "attemptsStarted"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RollingUpdate(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RollingUpdate paces rollout across Instances of one Component.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"partition": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Partition holds back updates for Instances whose index is < Partition. 0 (the default) updates all Instances. Used for canary holds.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"maxUnavailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxUnavailable is the maximum number of Instances (or fraction) allowed to be in a non-Ready state during the rollout. Accepts either an absolute integer count (e.g. 2) or a percent string (e.g. \"25%\"). Percent values resolve to ceil(replicas * percent / 100) at reconcile time so the budget scales with the Component's replica count.",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+						},
+					},
+					"maxSurge": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxSurge is the maximum number of extra Instances (or fraction) the rollout may create above the Component's desired replica count during a rolling update. Accepts either an absolute integer count (e.g. 1) or a percent string (e.g. \"25%\"). Percent values resolve to ceil(replicas * percent / 100) at reconcile time. Mirrors the semantics of upstream appsv1.Deployment.Strategy.RollingUpdate.MaxSurge — extra capacity is created and brought to Ready before old Instances are drained, enabling zero-capacity-dip rollouts.\n\nWhen the Component participates in a RolloutCoordinationGroup with a non-zero CoordinationPacing.MaxSurge, the group-wide ceiling caps the per-Component MaxSurge.",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -6058,6 +7859,34 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 							Ref: ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig"),
 						},
 					},
+					"servicePortAppProtocols": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServicePortAppProtocols maps generated Service port names to their Kubernetes appProtocol values. Declared ports use their container port name.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"lifecycle": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Lifecycle groups OMENative-specific lifecycle policies for this Component. Applies only when the Component resolves to deploymentMode OMENative (spec.deploymentMode or the per-Component ome.io/deploymentMode annotation); ignored otherwise. The status counterpart is status.components.<component>.lifecycle.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec"),
+						},
+					},
+					"autoscaler": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Autoscaler configures the per-Component autoscaler dispatch and the underlying KEDA / HPA configuration. When set, it takes precedence over the legacy ScaleTarget / ScaleMetric fields and the ome.io/autoscalerClass annotation for this Component. Alpha. The API may change without notice.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler"),
+						},
+					},
 					"runner": {
 						SchemaProps: spec.SchemaProps{
 							Description: "This is essentially a container spec that can override the default container",
@@ -6084,7 +7913,46 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec"},
+			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_Runner(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Runner is one logical pod role within an Instance.\n\nSingle-pod Instances declare one Runner named \"default\" with Size=1. Multi-node Instances declare \"leader\" (Size=1) + \"worker\" (Size>=1).\n\nThe revision hash includes every Runner's Template; a worker-only image bump still triggers a coordinated rollout across the whole Instance because tensor-parallel weights require leader+workers to move together.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the Runner role within the Instance.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"size": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Size is the pod count for this Runner per Instance. Constraints:\n  - \"default\" Size MUST equal 1\n  - \"leader\" Size MUST equal 1\n  - \"worker\" Size MUST be >= 1",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"template": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Template is the fully-rendered pod template for this Runner. Labels include ome.io/runner=<name>. The InferenceReplica controller stamps OME_RUNNER (leader|worker|default) and, for non-leader pods, OME_LEADER_ADDRESS (short-form DNS, matching LWS conventions) onto the rendered pod at create.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("k8s.io/api/core/v1.PodTemplateSpec"),
+						},
+					},
+				},
+				Required: []string{"name", "size", "template"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.PodTemplateSpec"},
 	}
 }
 
@@ -6386,6 +8254,44 @@ func schema_pkg_apis_ome_v1beta1_RunnerSpec(ref common.ReferenceCallback) common
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_ScaleTargetRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ScaleTargetRef is a stripped-down reference to the canonical scale target for a Component — the InferenceReplica (for OMENative) or the underlying Deployment (for RawDeployment). Published on status.components.<comp>.scaleTargetRef so an external scaler knows which object to point at (the same GroupKind the user would target with kubectl scale <kind>/<name>).\n\nEmpty when the Component has no active scaler (e.g., legacy RawDeployment Components that have not migrated to the new Autoscaler block).\n\nAlpha. The shape may change without notice.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion of the scale target — e.g. \"ome.io/v1beta1\" for the IR-managed OMENative path; \"apps/v1\" for RawDeployment.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind of the scale target — e.g. \"InferenceReplica\" for the IR-managed OMENative path; \"Deployment\" for RawDeployment.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the scale target. Namespace is always the same as the owning ISVC.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"apiVersion", "kind", "name"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_ScalerAuthenticationRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -6411,6 +8317,36 @@ func schema_pkg_apis_ome_v1beta1_ScalerAuthenticationRef(ref common.ReferenceCal
 				},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ScalingPolicy(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ScalingPolicy defines coordination between the Components of an InferenceService. Alpha. The API may change without notice.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"mode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Mode selects the coordination strategy.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"proportional": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Proportional configuration; required when Mode == \"proportional\".",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ProportionalPolicy"),
+						},
+					},
+				},
+				Required: []string{"mode"},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ProportionalPolicy"},
 	}
 }
 
@@ -7322,6 +9258,40 @@ func schema_pkg_apis_ome_v1beta1_TensorParallelismConfig(ref common.ReferenceCal
 				},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_UpdateStrategy(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "UpdateStrategy controls how OMENative rolls template changes across an Instance's pods.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type selects the rollout mechanism. Defaults to SurgeThenDrain for safety — preserves serving capacity throughout the rollout.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"rollingUpdate": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RollingUpdate paces the rollout across Instances of the Component.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RollingUpdate"),
+						},
+					},
+					"inPlaceUpdateStrategy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "InPlaceUpdateStrategy tunes the per-pod in-place update sequence. Ignored when Type is RecreatePod.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InPlaceUpdateStrategy"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InPlaceUpdateStrategy", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RollingUpdate"},
 	}
 }
 

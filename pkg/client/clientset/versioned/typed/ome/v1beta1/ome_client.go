@@ -18,6 +18,7 @@ type OmeV1beta1Interface interface {
 	ClusterBaseModelsGetter
 	ClusterServingRuntimesGetter
 	FineTunedWeightsGetter
+	InferenceReplicasGetter
 	InferenceServicesGetter
 	ServingRuntimesGetter
 }
@@ -49,6 +50,10 @@ func (c *OmeV1beta1Client) ClusterServingRuntimes() ClusterServingRuntimeInterfa
 
 func (c *OmeV1beta1Client) FineTunedWeights() FineTunedWeightInterface {
 	return newFineTunedWeights(c)
+}
+
+func (c *OmeV1beta1Client) InferenceReplicas(namespace string) InferenceReplicaInterface {
+	return newInferenceReplicas(c, namespace)
 }
 
 func (c *OmeV1beta1Client) InferenceServices(namespace string) InferenceServiceInterface {
