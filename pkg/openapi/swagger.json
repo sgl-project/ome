@@ -1101,6 +1101,28 @@
         }
       }
     },
+    "v1beta1.ClusterConnectionSource": {
+      "description": "ClusterConnectionSource is a pluggable connection (modeled on Kueue's MultiKueueCluster.ClusterSource): exactly one of an in-cluster kubeconfig Secret or a SIG-Multicluster ClusterProfile reference.",
+      "type": "object",
+      "properties": {
+        "clusterProfileRef": {
+          "$ref": "#/definitions/v1beta1.ClusterProfileRef"
+        },
+        "kubeConfig": {
+          "$ref": "#/definitions/v1beta1.KubeConfigSource"
+        }
+      }
+    },
+    "v1beta1.ClusterProfileRef": {
+      "description": "ClusterProfileRef references a SIG-Multicluster cluster-inventory-api ClusterProfile. Phase 1 records the reference but does not yet resolve it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
     "v1beta1.ClusterServingRuntime": {
       "description": "ClusterServingRuntime is the Schema for the servingruntimes API",
       "type": "object",
@@ -2904,6 +2926,10 @@
           "description": "Model defines the model to be used for inference, referencing either a BaseModel or a custom model. This allows models to be managed independently of the serving configuration.",
           "$ref": "#/definitions/v1beta1.ModelRef"
         },
+        "placement": {
+          "description": "Placement declares how the multi-cluster control plane selects and orders the workload clusters this InferenceService is placed onto. When nil, the control plane falls back to the ome.io/accelerator-requirements and ome.io/cluster-selector annotations (unchanged legacy behavior). Only consulted on the control-plane cluster; ignored in single-cluster deployments. Alpha; the API may change without notice.",
+          "$ref": "#/definitions/v1beta1.PlacementSpec"
+        },
         "rollout": {
           "description": "Rollout is the single home for rollout configuration on this InferenceService: an ordered list of rollout groups, each polymorphic in its progression (canary | blueGreen | rollingUpdate). Sequencing is the group list order; a group's Components roll together.",
           "$ref": "#/definitions/v1beta1.RolloutSpec"
@@ -3212,6 +3238,24 @@
         "scalingThreshold": {
           "description": "ScalingThreshold sets the numerical threshold against which the result of the Prometheus query will be compared. Depending on the ScalingOperator, this threshold determines when to scale the number of replicas up or down.\n\nExample:\n  \"10\" - The Autoscaler will compare the metric value to 10.",
           "type": "string"
+        }
+      }
+    },
+    "v1beta1.KubeConfigSource": {
+      "description": "KubeConfigSource points at a Secret holding a kubeconfig for the cluster.",
+      "type": "object",
+      "required": [
+        "secretRef"
+      ],
+      "properties": {
+        "key": {
+          "description": "Key is the Secret data key holding the kubeconfig. Defaults to \"kubeconfig\".",
+          "type": "string"
+        },
+        "secretRef": {
+          "description": "SecretRef is the Secret holding the kubeconfig.",
+          "default": {},
+          "$ref": "#/definitions/v1.SecretReference"
         }
       }
     },
@@ -4197,6 +4241,28 @@
           "description": "Name is the name of the parent InferenceService.",
           "type": "string",
           "default": ""
+        }
+      }
+    },
+    "v1beta1.PlacementSpec": {
+      "description": "PlacementSpec declares how the control plane selects the workload clusters an InferenceService is placed onto, and how many of them serve it. It subsumes the legacy ome.io/accelerator-requirements and ome.io/cluster-selector annotations in a typed, schema-validated form; when this field is nil the control plane still honors those annotations for backward compatibility.",
+      "type": "object",
+      "properties": {
+        "clusterSelector": {
+          "description": "ClusterSelector is an optional operator-imposed routing overlay (label-selector string) AND-ed onto Requirements to further narrow candidates (e.g. \"provider=cloud-a\"). Structured equivalent of the ome.io/cluster-selector annotation.",
+          "type": "string"
+        },
+        "mode": {
+          "description": "Mode is the placement cardinality: Single (one cluster), All (every candidate), or Split (replicas distributed across clusters). Defaults to Single. All and Split are rejected by admission on a control plane whose build does not yet implement them.",
+          "type": "string"
+        },
+        "requirements": {
+          "description": "Requirements is the intrinsic capability selector a candidate workload cluster MUST satisfy, expressed as a Kubernetes label-selector string matched against WorkloadCluster labels (e.g. \"accelerator in (gb300, tpu7x)\"). It is the structured equivalent of the ome.io/accelerator-requirements annotation. Empty means no intrinsic requirement.",
+          "type": "string"
+        },
+        "split": {
+          "description": "Split tunes Split mode (distributing replicas across clusters). Only consulted when Mode is Split; ignored otherwise. Nil means Split defaults: distribute the engine's minReplicas, packed onto the fewest clusters.",
+          "$ref": "#/definitions/v1beta1.SplitSpec"
         }
       }
     },
@@ -5948,6 +6014,31 @@
       "description": "ServingRuntimeStatus defines the observed state of ServingRuntime",
       "type": "object"
     },
+    "v1beta1.SplitSpec": {
+      "description": "SplitSpec tunes how Split mode distributes replicas across candidate clusters. All fields are optional and degrade to the documented default — no in-code magic values.",
+      "type": "object",
+      "properties": {
+        "maxReplicasPerCluster": {
+          "description": "MaxReplicasPerCluster caps how many replicas one cluster may hold. It bounds the over-request the fractional fan-out makes, and — combined with Spread — is the lever that forces the fill to move on before a cluster is full (deliberate spread without reading capacity). Zero means no cap.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "minReplicasPerCluster": {
+          "description": "MinReplicasPerCluster is the anti-sliver floor: a home that admits fewer than this is dropped and its replicas returned to the deficit, so the placement does not keep a home serving a tiny, uneconomical fraction. Zero keeps any home that admitted \u003e=1.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "replicas": {
+          "description": "Replicas is the fleet-wide desired replica count to distribute across homes. Unset falls back to the engine component's minReplicas (the guaranteed floor) — the count OME actually guarantees running and thus the one worth spreading. maxReplicas is deliberately NOT used (it is an autoscaling ceiling that stays a per-home local concern).",
+          "type": "integer",
+          "format": "int32"
+        },
+        "spread": {
+          "description": "Spread selects the apportionment policy. False (default) is Packed: fan out in preference order and fill the fewest clusters the fleet's quota forces (better locality, fewer endpoint backends). True is Balanced: apportion ~evenly (ceil(N/candidates)) so replicas spread across more clusters (blast-radius resilience over locality).",
+          "type": "boolean"
+        }
+      }
+    },
     "v1beta1.StorageSpec": {
       "type": "object",
       "required": [
@@ -6550,6 +6641,91 @@
           "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
+        }
+      }
+    },
+    "v1beta1.WorkloadCluster": {
+      "description": "WorkloadCluster registers a workload cluster OME can place workloads onto typically a GPU cluster. Cluster-scoped: it is fleet-level infrastructure, not a namespaced workload.",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.WorkloadClusterSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.WorkloadClusterStatus"
+        }
+      }
+    },
+    "v1beta1.WorkloadClusterList": {
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.WorkloadCluster"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.WorkloadClusterSpec": {
+      "type": "object",
+      "required": [
+        "clusterSource"
+      ],
+      "properties": {
+        "clusterSource": {
+          "description": "ClusterSource is how the control plane connects to this cluster.",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.ClusterConnectionSource"
+        }
+      }
+    },
+    "v1beta1.WorkloadClusterStatus": {
+      "type": "object",
+      "properties": {
+        "conditions": {
+          "description": "Conditions report connection health ONLY (the Ready condition). Never capacity, never Kueue/quota state.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-map-keys": [
+            "type"
+          ],
+          "x-kubernetes-list-type": "map",
+          "x-kubernetes-patch-merge-key": "type",
+          "x-kubernetes-patch-strategy": "merge"
         }
       }
     }

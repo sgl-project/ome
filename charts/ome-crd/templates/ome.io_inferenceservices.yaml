@@ -25782,6 +25782,34 @@ spec:
                   required:
                     - name
                   type: object
+                placement:
+                  properties:
+                    clusterSelector:
+                      type: string
+                    mode:
+                      default: Single
+                      enum:
+                        - Single
+                        - All
+                        - Split
+                      type: string
+                    requirements:
+                      type: string
+                    split:
+                      properties:
+                        maxReplicasPerCluster:
+                          format: int32
+                          type: integer
+                        minReplicasPerCluster:
+                          format: int32
+                          type: integer
+                        replicas:
+                          format: int32
+                          type: integer
+                        spread:
+                          type: boolean
+                      type: object
+                  type: object
                 rollout:
                   properties:
                     groups:

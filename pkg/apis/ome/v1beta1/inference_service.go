@@ -89,6 +89,15 @@ type InferenceServiceSpec struct {
 	// may change without notice.
 	// +optional
 	ScalingPolicy *ScalingPolicy `json:"scalingPolicy,omitempty"`
+
+	// Placement declares how the multi-cluster control plane selects and orders
+	// the workload clusters this InferenceService is placed onto. When nil, the
+	// control plane falls back to the ome.io/accelerator-requirements and
+	// ome.io/cluster-selector annotations (unchanged legacy behavior). Only
+	// consulted on the control-plane cluster; ignored in single-cluster
+	// deployments. Alpha; the API may change without notice.
+	// +optional
+	Placement *PlacementSpec `json:"placement,omitempty"`
 }
 
 // AcceleratorSelector defines how to select accelerators for the InferenceService
