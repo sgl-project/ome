@@ -246,3 +246,41 @@ webhooks:
           - UPDATE
         resources:
           - clusterbasemodels
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: inferencereplica.ome.io
+webhooks:
+  # InferenceReplica is a controller-only CRD: this webhook rejects
+  # direct user writes unless the ome.io/controller-write=true annotation
+  # is present (set by the ISVC controller's client on every write).
+  # See pkg/webhook/admission/inferencereplica/validator.go for the
+  # exact rejection rules.
+  - clientConfig:
+      caBundle: Cg==
+      service:
+        name: $(webhookServiceName)
+        namespace: $(omeNamespace)
+        path: /validate-ome-io-v1beta1-inferencereplica
+    failurePolicy: Fail
+    name: inferencereplica.ome-webhook-server.validator
+    sideEffects: None
+    admissionReviewVersions: ["v1"]
+    # Skip on objects already being deleted: finalizer-only patches
+    # shouldn't trigger spec-invariant checks (would deadlock GC of
+    # owned InferenceReplicas during ISVC cascade delete).
+    matchConditions:
+      - name: skip-deletion
+        expression: "!has(object.metadata.deletionTimestamp)"
+    rules:
+      - apiGroups:
+          - ome.io
+        apiVersions:
+          - v1beta1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - inferencereplicas

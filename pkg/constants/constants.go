@@ -157,6 +157,16 @@ var (
 	IngressPathTemplate            = OMEAPIGroupName + "/ingress-path-template"
 	IngressDisableIstioVirtualHost = OMEAPIGroupName + "/ingress-disable-istio-virtualhost"
 	IngressDisableCreation         = OMEAPIGroupName + "/ingress-disable-creation"
+
+	// InferenceReplica is a controller-only CRD: the validating webhook
+	// rejects direct user writes unless this annotation is set to "true".
+	// The ISVC controller (and only the ISVC controller) stamps the
+	// annotation on every Create / Update of an InferenceReplica it owns.
+	// Convention enforcement, not a security boundary — RBAC restricting
+	// write on inferencereplicas to the OME ServiceAccount is the actual
+	// guard.
+	InferenceReplicaControllerWriteAnnotationKey = OMEAPIGroupName + "/controller-write"
+	InferenceReplicaControllerWriteAnnotationVal = "true"
 )
 
 // InferenceService Annotations for model encryption and decryption

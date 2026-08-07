@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -15,7 +16,184 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/runtimeselector"
+	"sigs.k8s.io/ome/pkg/validation"
 )
+
+// =============================================================================
+// VALIDATOR INTERFACE TESTS
+// =============================================================================
+
+func TestValidateClusterBaseModelPVCNamespace(t *testing.T) {
+	pvc := func(uri string) *v1beta1.BaseModelSpec {
+		return &v1beta1.BaseModelSpec{Storage: &v1beta1.StorageSpec{StorageUri: stringPtr(uri)}}
+	}
+	clusterMeta := &metav1.ObjectMeta{Name: "shared-llama"}
+	namespacedMeta := &metav1.ObjectMeta{Name: "llama", Namespace: "models"}
+	isvc := func(ns string) *v1beta1.InferenceService {
+		return &v1beta1.InferenceService{
+			ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: ns},
+			Spec:       v1beta1.InferenceServiceSpec{Model: &v1beta1.ModelRef{Name: "shared-llama"}},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		spec    *v1beta1.BaseModelSpec
+		meta    *metav1.ObjectMeta
+		isvc    *v1beta1.InferenceService
+		wantErr bool
+	}{
+		{name: "namespaced BaseModel: skip", spec: pvc("pvc://my-pvc/p"), meta: namespacedMeta, isvc: isvc("models")},
+		{name: "ClusterBaseModel non-PVC: skip", spec: pvc("oci://n/ns/b/bucket/o/path"), meta: clusterMeta, isvc: isvc("team-foo")},
+		{name: "ClusterBaseModel PVC same ns: ok", spec: pvc("pvc://team-foo:my-pvc/p"), meta: clusterMeta, isvc: isvc("team-foo")},
+		{name: "ClusterBaseModel PVC missing ns prefix: defer to BaseModel webhook", spec: pvc("pvc://my-pvc/p"), meta: clusterMeta, isvc: isvc("team-foo")},
+		{name: "ClusterBaseModel PVC cross-ns: reject", spec: pvc("pvc://shared:my-pvc/p"), meta: clusterMeta, isvc: isvc("team-foo"), wantErr: true},
+		{name: "spec nil: skip", spec: nil, meta: clusterMeta, isvc: isvc("team-foo")},
+		{name: "spec storage nil: skip", spec: &v1beta1.BaseModelSpec{}, meta: clusterMeta, isvc: isvc("team-foo")},
+		{name: "spec storage uri nil: skip", spec: &v1beta1.BaseModelSpec{Storage: &v1beta1.StorageSpec{}}, meta: clusterMeta, isvc: isvc("team-foo")},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateClusterBaseModelPVCNamespace(tc.spec, tc.meta, tc.isvc)
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestInferenceServiceValidator_ValidateCreate(t *testing.T) {
+	tests := []struct {
+		name    string
+		isvc    *v1beta1.InferenceService
+		wantErr bool
+	}{
+		{
+			name: "valid inference service",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{Name: "test-runtime"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid name format",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "Test-ISVC", // Invalid name format
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{Name: "test-runtime"},
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &InferenceServiceValidator{}
+			warnings, err := v.ValidateCreate(context.Background(), tt.isvc)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Nil(t, warnings)
+			}
+		})
+	}
+}
+
+func TestInferenceServiceValidator_ValidateUpdate(t *testing.T) {
+	tests := []struct {
+		name    string
+		oldIsvc *v1beta1.InferenceService
+		newIsvc *v1beta1.InferenceService
+		wantErr bool
+	}{
+		{
+			name: "valid update",
+			oldIsvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{Name: "test-runtime"},
+				},
+			},
+			newIsvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{Name: "test-runtime"},
+				},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &InferenceServiceValidator{}
+			warnings, err := v.ValidateUpdate(context.Background(), tt.oldIsvc, tt.newIsvc)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Nil(t, warnings)
+			}
+		})
+	}
+}
+
+func TestInferenceServiceValidator_ValidateDelete(t *testing.T) {
+	tests := []struct {
+		name    string
+		isvc    *v1beta1.InferenceService
+		wantErr bool
+	}{
+		{
+			name: "valid inference service",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &InferenceServiceValidator{}
+			warnings, err := v.ValidateDelete(context.Background(), tt.isvc)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Nil(t, warnings)
+			}
+		})
+	}
+}
 
 // Test error paths in ValidateCreate, ValidateUpdate, ValidateDelete
 func TestValidatorErrorPaths(t *testing.T) {
@@ -90,7 +268,7 @@ func TestInferenceService_NameValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateInferenceServiceName(tt.isvc)
+			err := validation.ValidateInferenceServiceName(tt.isvc.Name)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -188,7 +366,7 @@ func TestInferenceService_AutoscalerValidation(t *testing.T) {
 				},
 			}
 
-			err := validateInferenceServiceAutoscaler(isvc)
+			err := func() error { _, err := validation.ValidateAutoscalerConfig(isvc); return err }()
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -253,7 +431,7 @@ func TestInferenceService_TargetUtilizationValidation(t *testing.T) {
 				},
 			}
 
-			err := validateAutoscalerTargetUtilizationPercentage(isvc)
+			err := validation.ValidateAutoscalerTargetUtilizationPercentage(isvc)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -266,20 +444,20 @@ func TestInferenceService_TargetUtilizationValidation(t *testing.T) {
 
 // Test missing branches in validateHPAMetrics
 func TestValidateHPAMetrics_AllMetrics(t *testing.T) {
-	validMetrics := []v1beta1.ScaleMetric{
-		v1beta1.ScaleMetric(constants.AutoScalerMetricsCPU),
-		v1beta1.ScaleMetric(constants.AutoScalerMetricsMemory),
+	validMetrics := []string{
+		string(constants.AutoScalerMetricsCPU),
+		string(constants.AutoScalerMetricsMemory),
 	}
 
 	for _, metric := range validMetrics {
-		t.Run(string(metric), func(t *testing.T) {
-			err := validateHPAMetrics(metric)
+		t.Run(metric, func(t *testing.T) {
+			err := validation.ValidateHPAMetrics(metric)
 			assert.NoError(t, err)
 		})
 	}
 
 	t.Run("invalid metric", func(t *testing.T) {
-		err := validateHPAMetrics("invalid-metric")
+		err := validation.ValidateHPAMetrics("invalid-metric")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "is not a supported metric")
 	})
@@ -338,12 +516,176 @@ func TestInferenceService_EngineDecoderValidation(t *testing.T) {
 				isvc.Spec.Decoder = &v1beta1.DecoderSpec{}
 			}
 
-			err := validateEngineDecoderConfiguration(isvc)
+			err := validation.ValidateEngineDecoderConfig(&isvc.Spec)
 
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.errMsg != "" {
 					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestInferenceService_OMENativeEngineDecoderCoupling(t *testing.T) {
+	annot := func(mode string) v1beta1.ComponentExtensionSpec {
+		return v1beta1.ComponentExtensionSpec{
+			Annotations: map[string]string{constants.DeploymentMode: mode},
+		}
+	}
+	withRunner := &v1beta1.RunnerSpec{Container: v1.Container{Image: "test-image:latest"}}
+
+	tests := []struct {
+		name    string
+		isvc    *v1beta1.InferenceService
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "engine and decoder both OMENative - passes",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{Name: "test-runtime"},
+					Engine: &v1beta1.EngineSpec{
+						ComponentExtensionSpec: annot(string(constants.OMENative)),
+						Runner:                 withRunner,
+					},
+					Decoder: &v1beta1.DecoderSpec{
+						ComponentExtensionSpec: annot(string(constants.OMENative)),
+					},
+				},
+			},
+		},
+		{
+			name: "engine OMENative, decoder unset - rejected",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine: &v1beta1.EngineSpec{
+						ComponentExtensionSpec: annot(string(constants.OMENative)),
+						Runner:                 withRunner,
+					},
+					Decoder: &v1beta1.DecoderSpec{},
+				},
+			},
+			wantErr: true,
+			errMsg:  "InvalidDeploymentModeCombination",
+		},
+		{
+			name: "engine OMENative, decoder RawDeployment - rejected",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine: &v1beta1.EngineSpec{
+						ComponentExtensionSpec: annot(string(constants.OMENative)),
+						Runner:                 withRunner,
+					},
+					Decoder: &v1beta1.DecoderSpec{
+						ComponentExtensionSpec: annot(string(constants.RawDeployment)),
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "InvalidDeploymentModeCombination",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &InferenceServiceValidator{}
+			_, err := v.ValidateCreate(context.Background(), tt.isvc)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestInferenceService_LeaderWorkerPairing(t *testing.T) {
+	sizePtr := func(v int) *int { return &v }
+	withRunner := &v1beta1.RunnerSpec{Container: v1.Container{Image: "test-image:latest"}}
+
+	tests := []struct {
+		name    string
+		isvc    *v1beta1.InferenceService
+		wantErr bool
+		errSub  string
+	}{
+		{
+			name: "engine: leader + worker(size=3) - valid",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{Name: "test-runtime"},
+					Engine: &v1beta1.EngineSpec{
+						Runner: withRunner,
+						Leader: &v1beta1.LeaderSpec{},
+						Worker: &v1beta1.WorkerSpec{Size: sizePtr(3)},
+					},
+				},
+			},
+		},
+		{
+			name: "engine: leader only - rejected",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine: &v1beta1.EngineSpec{
+						Runner: withRunner,
+						Leader: &v1beta1.LeaderSpec{},
+					},
+				},
+			},
+			wantErr: true,
+			errSub:  "InvalidLeaderWorkerPairing",
+		},
+		{
+			name: "engine: worker only - rejected",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine: &v1beta1.EngineSpec{
+						Runner: withRunner,
+						Worker: &v1beta1.WorkerSpec{Size: sizePtr(3)},
+					},
+				},
+			},
+			wantErr: true,
+			errSub:  "InvalidLeaderWorkerPairing",
+		},
+		{
+			name: "decoder: leader only - rejected",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine: &v1beta1.EngineSpec{Runner: withRunner},
+					Decoder: &v1beta1.DecoderSpec{
+						Leader: &v1beta1.LeaderSpec{},
+					},
+				},
+			},
+			wantErr: true,
+			errSub:  "decoder.leader",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &InferenceServiceValidator{}
+			_, err := v.ValidateCreate(context.Background(), tt.isvc)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errSub != "" {
+					assert.Contains(t, err.Error(), tt.errSub)
 				}
 			} else {
 				assert.NoError(t, err)
@@ -595,11 +937,7 @@ func TestInferenceService_RuntimeResolution(t *testing.T) {
 					Name:      "test-isvc",
 					Namespace: "default",
 				},
-				Spec: v1beta1.InferenceServiceSpec{
-					Model: &v1beta1.ModelRef{
-						Name: "enabled-model",
-					},
-				},
+				Spec: v1beta1.InferenceServiceSpec{},
 			},
 			wantErr: false,
 		},
@@ -922,7 +1260,155 @@ func TestValidateInferenceService_ComprehensiveErrorPaths(t *testing.T) {
 				},
 			},
 			wantErr: true,
-			errMsg:  "model reference is required",
+			errMsg:  "at least one of spec.model or spec.runtime must be set",
+		},
+		{
+			// Lean path: model omitted, runtime named explicitly. The
+			// validator must accept this — model parsing + runtime
+			// auto-select is skipped by the controller, and the runtime
+			// is fetched as-is.
+			name: "no model + runtime named (lean path) - passes",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-lean", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{Name: "test-runtime"},
+					Engine:  &v1beta1.EngineSpec{},
+				},
+			},
+		},
+		{
+			// Lean path failure: only spec.runtime.name=="" — caught by
+			// the same Model-OR-Runtime rule.
+			name: "no model + empty runtime name should fail",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-lean-bad", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{Name: ""},
+					Engine:  &v1beta1.EngineSpec{},
+				},
+			},
+			wantErr: true,
+			errMsg:  "at least one of spec.model or spec.runtime must be set",
+		},
+		// Explicit-pin admission validation.
+		{
+			name: "explicit revision pin with autoSync=false (cluster) passes",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "pin-ok", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{
+						Name:     "srt-llama-pd",
+						AutoSync: boolPtr(false),
+						Revision: stringPtr("cr-srt-llama-pd-abc12345"),
+					},
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+		},
+		{
+			name: "explicit revision pin with autoSync=true rejected",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "pin-conflict", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{
+						Name:     "srt-llama-pd",
+						AutoSync: boolPtr(true),
+						Revision: stringPtr("cr-srt-llama-pd-abc12345"),
+					},
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+			wantErr: true,
+			errMsg:  "AutoSync=true would silently ignore the pin",
+		},
+		{
+			name: "explicit revision pin with autoSync omitted (defaults true) rejected",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "pin-defaultsync", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{
+						Name:     "srt-llama-pd",
+						Revision: stringPtr("cr-srt-llama-pd-abc12345"),
+					},
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+			wantErr: true,
+			errMsg:  "AutoSync=true would silently ignore the pin",
+		},
+		{
+			name: "explicit revision pin naming a DIFFERENT runtime rejected",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "pin-wrong-runtime", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{
+						Name:     "srt-llama-pd",
+						AutoSync: boolPtr(false),
+						Revision: stringPtr("cr-srt-other-abc12345"),
+					},
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+			wantErr: true,
+			errMsg:  "does not match the expected naming convention",
+		},
+		{
+			name: "explicit revision pin with malformed hash rejected",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "pin-bad-hash", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{
+						Name:     "srt-llama-pd",
+						AutoSync: boolPtr(false),
+						Revision: stringPtr("cr-srt-llama-pd-XYZ"),
+					},
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+			wantErr: true,
+			errMsg:  "does not match the expected naming convention",
+		},
+		{
+			name: "explicit revision pin for namespaced runtime (correct scope) passes",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "pin-ns-ok", Namespace: "team-a"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{
+						Name:     "srt-foo",
+						Kind:     stringPtr("ServingRuntime"),
+						AutoSync: boolPtr(false),
+						Revision: stringPtr("r-team-a-srt-foo-abc12345"),
+					},
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+		},
+		{
+			name: "explicit revision pin for namespaced runtime, wrong namespace prefix rejected",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "pin-ns-bad", Namespace: "team-a"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{
+						Name:     "srt-foo",
+						Kind:     stringPtr("ServingRuntime"),
+						AutoSync: boolPtr(false),
+						Revision: stringPtr("r-team-b-srt-foo-abc12345"),
+					},
+					Engine: &v1beta1.EngineSpec{},
+				},
+			},
+			wantErr: true,
+			errMsg:  "does not match the expected naming convention",
+		},
+		{
+			name: "no explicit revision pin → validator no-op",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "no-pin", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Runtime: &v1beta1.ServingRuntimeRef{Name: "srt-llama-pd", AutoSync: boolPtr(false)},
+					Engine:  &v1beta1.EngineSpec{},
+				},
+			},
 		},
 	}
 
@@ -1149,7 +1635,154 @@ func TestResolveModelAndRuntime_Comprehensive(t *testing.T) {
 	}
 }
 
-// Test edge cases and warning scenarios
+func TestResolveModelAndRuntime_ExplicitRuntimeCompatIsAdvisory(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = v1beta1.AddToScheme(scheme)
+
+	// llama model.
+	llamaModel := &v1beta1.ClusterBaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "llama-model"},
+		Spec: v1beta1.BaseModelSpec{
+			ModelArchitecture:  stringPtr("llama"),
+			ModelParameterSize: stringPtr("7B"),
+			ModelFormat: v1beta1.ModelFormat{
+				Name:    "llama",
+				Version: stringPtr("1.0.0"),
+			},
+		},
+	}
+
+	// A generic runtime that only *declares* support for a different
+	// architecture/format ("gpt"). It does not enumerate "llama", so the
+	// compatibility matcher reports a mismatch — but the operator named it
+	// explicitly, so admission should warn-and-admit rather than reject.
+	genericRuntime := &v1beta1.ClusterServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "generic-runtime"},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{
+					ModelFormat:       &v1beta1.ModelFormat{Name: "gpt", Version: stringPtr("1.0.0")},
+					ModelArchitecture: stringPtr("gpt"),
+					AutoSelect:        boolPtr(true),
+				},
+			},
+		},
+	}
+
+	// A runtime that genuinely declares support for llama.
+	matchingRuntime := &v1beta1.ClusterServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "matching-runtime"},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{
+					ModelFormat:       &v1beta1.ModelFormat{Name: "llama", Version: stringPtr("1.0.0"), Weight: int64(1)},
+					ModelArchitecture: stringPtr("llama"),
+					AutoSelect:        boolPtr(true),
+				},
+			},
+		},
+	}
+
+	t.Run("explicit runtime + format mismatch is admitted with advisory warning", func(t *testing.T) {
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(llamaModel.DeepCopy(), genericRuntime.DeepCopy()).
+			Build()
+		validator := &InferenceServiceValidator{
+			Client:          fakeClient,
+			RuntimeSelector: runtimeselector.New(fakeClient),
+		}
+		isvc := &v1beta1.InferenceService{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-isvc", Namespace: "default"},
+			Spec: v1beta1.InferenceServiceSpec{
+				Model:   &v1beta1.ModelRef{Name: "llama-model"},
+				Runtime: &v1beta1.ServingRuntimeRef{Name: "generic-runtime"},
+			},
+		}
+
+		warnings, err := validator.resolveModelAndRuntime(context.Background(), isvc, admission.Warnings{})
+
+		assert.NoError(t, err, "explicit-runtime compat mismatch must be admitted, not rejected")
+		assert.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], "does not declare support for model")
+		assert.Contains(t, warnings[0], "proceeding because the runtime was named explicitly")
+		// The dropped success-warning phrasing must not reappear.
+		assert.NotContains(t, warnings[0], "is valid for model")
+	})
+
+	t.Run("explicit runtime that matches is admitted with no warning", func(t *testing.T) {
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(llamaModel.DeepCopy(), matchingRuntime.DeepCopy()).
+			Build()
+		validator := &InferenceServiceValidator{
+			Client:          fakeClient,
+			RuntimeSelector: runtimeselector.New(fakeClient),
+		}
+		isvc := &v1beta1.InferenceService{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-isvc", Namespace: "default"},
+			Spec: v1beta1.InferenceServiceSpec{
+				Model:   &v1beta1.ModelRef{Name: "llama-model"},
+				Runtime: &v1beta1.ServingRuntimeRef{Name: "matching-runtime"},
+			},
+		}
+
+		warnings, err := validator.resolveModelAndRuntime(context.Background(), isvc, admission.Warnings{})
+
+		assert.NoError(t, err)
+		assert.Empty(t, warnings, "a matching explicit runtime emits no advisory warning")
+	})
+
+	t.Run("explicit runtime not found still hard-fails", func(t *testing.T) {
+		// A non-existent runtime is not a declared-format mismatch; it must
+		// stay a hard error even on the explicit path.
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(llamaModel.DeepCopy()).
+			Build()
+		validator := &InferenceServiceValidator{
+			Client:          fakeClient,
+			RuntimeSelector: runtimeselector.New(fakeClient),
+		}
+		isvc := &v1beta1.InferenceService{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-isvc", Namespace: "default"},
+			Spec: v1beta1.InferenceServiceSpec{
+				Model:   &v1beta1.ModelRef{Name: "llama-model"},
+				Runtime: &v1beta1.ServingRuntimeRef{Name: "does-not-exist"},
+			},
+		}
+
+		_, err := validator.resolveModelAndRuntime(context.Background(), isvc, admission.Warnings{})
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("auto-select with no matching runtime still hard-fails", func(t *testing.T) {
+		// Same model, only the non-matching generic runtime present, and NO
+		// explicit runtime named: OME is choosing, so compat MUST gate.
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(llamaModel.DeepCopy(), genericRuntime.DeepCopy()).
+			Build()
+		validator := &InferenceServiceValidator{
+			Client:          fakeClient,
+			RuntimeSelector: runtimeselector.New(fakeClient),
+		}
+		isvc := &v1beta1.InferenceService{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-isvc", Namespace: "default"},
+			Spec: v1beta1.InferenceServiceSpec{
+				Model: &v1beta1.ModelRef{Name: "llama-model"},
+			},
+		}
+
+		_, err := validator.resolveModelAndRuntime(context.Background(), isvc, admission.Warnings{})
+
+		assert.Error(t, err, "auto-select must still reject when nothing supports the model")
+		assert.Contains(t, err.Error(), "no supporting runtime found for model llama-model")
+	})
+}
+
 func TestResolveModelAndRuntime_EdgeCases(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = v1beta1.AddToScheme(scheme)
@@ -1811,7 +2444,155 @@ func TestValidateInferenceService_ModelExistsIntegration(t *testing.T) {
 }
 
 // =============================================================================
-// KEDA VALIDATION TESTS
+// HELPER FUNCTIONS
+// =============================================================================
+
+func boolPtr(b bool) *bool {
+	return &b
+}
+
+// TestValidateOverlays_StructuralChecks covers the schema-level overlay
+// rejections (duplicates, self-reference, env-name collision) that fire
+// before any apiserver lookups happen — no fake client needed.
+func TestValidateOverlays_StructuralChecks(t *testing.T) {
+	v := &InferenceServiceValidator{}
+	clusterKind := "ClusterBaseModel"
+	apiGroup := "ome.io"
+	tests := []struct {
+		name     string
+		overlays []v1beta1.ModelOverlayRef
+		wantErr  string // empty = expect success
+	}{
+		{
+			name:     "empty overlays accepted",
+			overlays: nil,
+		},
+		{
+			name: "single overlay accepted",
+			overlays: []v1beta1.ModelOverlayRef{
+				{Name: "foo-pvc", Kind: &clusterKind, APIGroup: &apiGroup},
+			},
+		},
+		{
+			name: "empty overlay name rejected",
+			overlays: []v1beta1.ModelOverlayRef{
+				{Name: "", Kind: &clusterKind, APIGroup: &apiGroup},
+			},
+			wantErr: "overlay name cannot be empty",
+		},
+		{
+			name: "overlay matching primary rejected",
+			overlays: []v1beta1.ModelOverlayRef{
+				{Name: "primary", Kind: &clusterKind, APIGroup: &apiGroup},
+			},
+			wantErr: "must not reference the primary model",
+		},
+		{
+			name: "duplicate overlay name rejected",
+			overlays: []v1beta1.ModelOverlayRef{
+				{Name: "foo-pvc"}, {Name: "foo-pvc"},
+			},
+			wantErr: "declared more than once",
+		},
+		{
+			name: "sanitized env-var collision rejected",
+			overlays: []v1beta1.ModelOverlayRef{
+				{Name: "foo-bar"}, {Name: "foo_bar"},
+			},
+			wantErr: "both sanitize to env var OVERLAY_FOO_BAR_MODEL_PATH",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			isvc := &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "x", Namespace: "default"},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model: &v1beta1.ModelRef{Name: "primary", Overlays: tc.overlays},
+				},
+			}
+			err := v.validateOverlays(isvc)
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestDeploymentStrategyWarnings pins the footgun warning: deploymentStrategy is
+// raw-only, so setting it on an OMENative/PD component is a silent no-op and must
+// warn (pointing at lifecycle.updateStrategy); raw and no-strategy must not warn.
+func TestDeploymentStrategyWarnings(t *testing.T) {
+	strategy := func() *appsv1.DeploymentStrategy {
+		return &appsv1.DeploymentStrategy{Type: appsv1.RollingUpdateDeploymentStrategyType}
+	}
+	engineWith := &v1beta1.EngineSpec{
+		ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{DeploymentStrategy: strategy()},
+	}
+	modeAnn := func(m constants.DeploymentModeType) map[string]string {
+		return map[string]string{constants.DeploymentMode: string(m)}
+	}
+
+	tests := []struct {
+		name    string
+		isvc    *v1beta1.InferenceService
+		wantLen int
+	}{
+		{
+			name: "OMENative engine with deploymentStrategy warns",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Annotations: modeAnn(constants.OMENative)},
+				Spec:       v1beta1.InferenceServiceSpec{Engine: engineWith},
+			},
+			wantLen: 1,
+		},
+		{
+			name: "RawDeployment engine with deploymentStrategy does not warn (honored)",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Annotations: modeAnn(constants.RawDeployment)},
+				Spec:       v1beta1.InferenceServiceSpec{Engine: engineWith},
+			},
+			wantLen: 0,
+		},
+		{
+			name: "OMENative without deploymentStrategy does not warn",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Annotations: modeAnn(constants.OMENative)},
+				Spec:       v1beta1.InferenceServiceSpec{Engine: &v1beta1.EngineSpec{}},
+			},
+			wantLen: 0,
+		},
+		{
+			name: "no resolved mode does not warn",
+			isvc: &v1beta1.InferenceService{
+				Spec: v1beta1.InferenceServiceSpec{Engine: engineWith},
+			},
+			wantLen: 0,
+		},
+		{
+			name: "PD decoder with deploymentStrategy warns",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Annotations: modeAnn(constants.PDDisaggregated)},
+				Spec: v1beta1.InferenceServiceSpec{
+					Decoder: &v1beta1.DecoderSpec{
+						ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{DeploymentStrategy: strategy()},
+					},
+				},
+			},
+			wantLen: 1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Len(t, deploymentStrategyWarnings(tt.isvc), tt.wantLen)
+		})
+	}
+}
+
+// =============================================================================
+// MIGRATION-REQUEST ANNOTATION VALIDATION (mailbox admission)
 // =============================================================================
 
 func TestValidateKEDAConfig(t *testing.T) {
@@ -2341,7 +3122,3 @@ func TestInferenceService_KEDAAutoscalerIntegration(t *testing.T) {
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
-
-func boolPtr(b bool) *bool {
-	return &b
-}
