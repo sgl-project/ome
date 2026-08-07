@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strings"
 
-	rayutils "github.com/ray-project/kuberay/ray-operator/controllers/ray/utils"
 	"k8s.io/apimachinery/pkg/types"
 	"knative.dev/pkg/network"
 )
@@ -169,9 +168,6 @@ var (
 
 // Label Constants
 var (
-	RayScheduler                          = "ray.io/scheduler-name"
-	RayPrioriyClass                       = "ray.io/priority-class-name"
-	RayClusterUnavailableSince            = "raycluster/unavailable-since"
 	VolcanoQueueName                      = "volcano.sh/queue-name"
 	VolcanoScheduler                      = "volcano"
 	InferenceServiceBaseModelNameLabelKey = "base-model-name"
@@ -359,12 +355,10 @@ const (
 const (
 	MainContainerName               = "ome-container"
 	TrainingMainContainerName       = "trainer"
-	MultiNodeProberContainerName    = "multinode-prober"
 	StorageInitializerContainerName = "storage-initializer"
 	ModelInitContainerName          = "model-init"
 	FineTunedAdapterContainerName   = "fine-tuned-adapter"
 	ServingSidecarContainerName     = "serving-sidecar"
-	MultiNodeProberContainerPort    = 8080
 )
 
 // Model Agents Constants
@@ -456,7 +450,6 @@ type DeploymentModeType string
 
 const (
 	RawDeployment     DeploymentModeType = "RawDeployment"
-	MultiNodeRayVLLM  DeploymentModeType = "MultiNodeRayVLLM"
 	PDDisaggregated   DeploymentModeType = "PDDisaggregated"
 	MultiNode         DeploymentModeType = "MultiNode"
 	VirtualDeployment DeploymentModeType = "VirtualDeployment"
@@ -466,7 +459,7 @@ const (
 // IsValid checks if the deployment mode is valid
 func (d DeploymentModeType) IsValid() bool {
 	switch d {
-	case RawDeployment, MultiNodeRayVLLM, MultiNode, VirtualDeployment, OMENative:
+	case RawDeployment, MultiNode, VirtualDeployment, OMENative:
 		return true
 	default:
 		return false
@@ -492,7 +485,6 @@ const (
 // CRD Kinds
 const (
 	IstioVirtualServiceKind = "VirtualService"
-	RayClusterKind          = "RayCluster"
 	VolcanoQueueKind        = "Queue"
 	KEDAScaledObjectKind    = "ScaledObject"
 	VolcanoJobKind          = "Job"
@@ -711,10 +703,6 @@ func exact(regexp string) string {
 
 func optional(regexp string) string {
 	return "(" + regexp + ")?"
-}
-
-func DefaultRayHeadServiceName(name string, index int) string {
-	return rayutils.CheckName(fmt.Sprintf("%s-%d", name, index))
 }
 
 // Kubernetes naming constraints

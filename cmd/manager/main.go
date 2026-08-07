@@ -9,7 +9,6 @@ import (
 	"time"
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
-	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	zaplog "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	istionetworking "istio.io/api/networking/v1beta1"
@@ -233,7 +232,6 @@ func main() {
 		kind         string
 		addToScheme  func(*runtime.Scheme) error
 	}{
-		{ray.SchemeGroupVersion, constants.RayClusterKind, ray.AddToScheme},
 		{lws.SchemeGroupVersion, constants.LWSKind, lws.AddToScheme},
 		{volcano.SchemeGroupVersion, constants.VolcanoQueueKind, volcano.AddToScheme},
 		{volcanobatch.SchemeGroupVersion, constants.VolcanoJobKind, volcanobatch.AddToScheme},

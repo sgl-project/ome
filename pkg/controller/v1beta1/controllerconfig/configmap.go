@@ -16,7 +16,6 @@ import (
 const (
 	IngressConfigKeyName   = "ingress"
 	DeployConfigName       = "deploy"
-	MultiNodeProberName    = "multinodeProber"
 	BenchmarkJobConfigName = "benchmarkjob"
 	OmeAgentConfigName     = "omeAgent"
 
@@ -47,8 +46,6 @@ type PodConfig struct {
 
 // +kubebuilder:object:generate=false
 type InferenceServicesConfig struct {
-	// MultiNodeProber contains all MultiNodeProber Configuration
-	MultiNodeProber MultiNodeProberConfig `json:"multinodeProber"`
 }
 
 // +kubebuilder:object:generate=false
@@ -78,20 +75,6 @@ type IngressConfig struct {
 	PathTemplate             string    `json:"pathTemplate,omitempty"`
 	DisableIngressCreation   bool      `json:"disableIngressCreation,omitempty"`
 	EnableGatewayAPI         bool      `json:"enableGatewayAPI,omitempty"`
-}
-
-// +kubebuilder:object:generate=false
-type MultiNodeProberConfig struct {
-	Image                       string `json:"image"`
-	CPURequest                  string `json:"cpuRequest"`
-	MemoryRequest               string `json:"memoryRequest"`
-	CPULimit                    string `json:"cpuLimit"`
-	MemoryLimit                 string `json:"memoryLimit"`
-	StartupFailureThreshold     int32  `json:"startupFailureThreshold"`
-	StartupPeriodSeconds        int32  `json:"startupPeriodSeconds"`
-	StartupInitialDelaySeconds  int32  `json:"startupInitialDelaySeconds"`
-	StartupTimeoutSeconds       int32  `json:"startupTimeoutSeconds"`
-	UnavailableThresholdSeconds int32  `json:"unavailableThresholdSeconds"`
 }
 
 // +kubebuilder:object:generate=false
@@ -135,19 +118,10 @@ type OmeAgentConfig struct {
 }
 
 func NewInferenceServicesConfig(clientset kubernetes.Interface) (*InferenceServicesConfig, error) {
-	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
-	if err != nil {
+	if _, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{}); err != nil {
 		return nil, err
 	}
-	icfg := &InferenceServicesConfig{}
-	for _, err := range []error{
-		getComponentConfig(MultiNodeProberName, configMap, &icfg.MultiNodeProber),
-	} {
-		if err != nil {
-			return nil, err
-		}
-	}
-	return icfg, nil
+	return &InferenceServicesConfig{}, nil
 }
 
 func NewIngressConfig(clientset kubernetes.Interface) (*IngressConfig, error) {
@@ -223,22 +197,6 @@ func NewDeployConfig(clientset kubernetes.Interface) (*DeployConfig, error) {
 		}
 	}
 	return deployConfig, nil
-}
-
-func NewMultiNodeProberConfig(clientset kubernetes.Interface) (*MultiNodeProberConfig, error) {
-	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	multiNodeProberConfig := &MultiNodeProberConfig{}
-	for _, err := range []error{
-		getComponentConfig(MultiNodeProberName, configMap, &multiNodeProberConfig),
-	} {
-		if err != nil {
-			return nil, err
-		}
-	}
-	return multiNodeProberConfig, nil
 }
 
 func NewBenchmarkJobConfig(clientset kubernetes.Interface) (*BenchmarkJobConfig, error) {

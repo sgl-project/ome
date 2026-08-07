@@ -30,9 +30,6 @@ jobs:
           - name: model-agent
             dockerfile: dockerfiles/model-agent.Dockerfile
             image: model-agent
-          - name: multinode-prober
-            dockerfile: dockerfiles/multinode-prober.Dockerfile
-            image: multinode-prober
           - name: ome-agent
             dockerfile: dockerfiles/ome-agent.Dockerfile
             image: ome-agent
@@ -156,7 +153,6 @@ jobs:
               # Update all image tags to use dev
               yq eval -i ".ome.version = \"dev\"" ${dev_chart}/values.yaml
               yq eval -i ".ome.benchmarkJob.tag = \"dev\"" ${dev_chart}/values.yaml
-              yq eval -i ".ome.multinodeProber.tag = \"dev\"" ${dev_chart}/values.yaml
               yq eval -i ".ome.omeAgent.tag = \"dev\"" ${dev_chart}/values.yaml
               yq eval -i ".modelAgent.image.tag = \"dev\"" ${dev_chart}/values.yaml
             fi
@@ -195,7 +191,6 @@ jobs:
           echo "| OME Manager | \`ghcr.io/moirai-internal/ome-manager:dev\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Model Agent | \`ghcr.io/moirai-internal/model-agent:dev\` |" >> $GITHUB_STEP_SUMMARY
           echo "| OME Agent | \`ghcr.io/moirai-internal/ome-agent:dev\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Multinode Prober | \`ghcr.io/moirai-internal/multinode-prober:dev\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📦 Helm Charts" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

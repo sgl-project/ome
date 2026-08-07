@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/services"
-	raycluster "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/istiosidecar"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/istiosidecar"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/lws"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
 )
@@ -25,7 +25,7 @@ type MultiNodeReconciler struct {
 	scheme       *runtime.Scheme
 	LWS          *lws.LWSReconciler
 	URL          *knapis.URL
-	IstioSidecar *raycluster.IstioSidecarReconciler
+	IstioSidecar *istiosidecar.IstioSidecarReconciler
 	Service      *service.ServiceReconciler
 }
 
@@ -47,14 +47,14 @@ func NewMultiNodeReconciler(client client.Client,
 	if ok && istioSidecarInjection == "true" {
 		enabled = true
 	}
-	selector := map[string]string{"ray.io/node-type": "head"}
+	selector := map[string]string{lwsSpec.WorkerIndexLabelKey: "0"}
 
 	return &MultiNodeReconciler{
 		client:       client,
 		scheme:       scheme,
 		LWS:          lws.NewLWSReconciler(client, scheme, headPodSpec, workerPodSpec, int32(workerSize), componentExt, componentMeta),
 		URL:          url,
-		IstioSidecar: raycluster.NewIstioSidecarReconciler(client, scheme, componentMeta, enabled),
+		IstioSidecar: istiosidecar.NewIstioSidecarReconciler(client, scheme, componentMeta, enabled),
 		Service:      service.NewServiceReconciler(client, scheme, componentMeta, componentExt, headPodSpec, selector),
 	}, nil
 }

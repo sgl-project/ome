@@ -77,39 +77,6 @@ func (sr *StatusReconciler) PropagateMultiNodeStatus(
 	status.ObservedGeneration = lws.Generation
 }
 
-// PropagateMultiNodeRayVLLMStatus propagates status from multiple deployments
-func (sr *StatusReconciler) PropagateMultiNodeRayVLLMStatus(
-	status *v1beta1.InferenceServiceStatus,
-	component v1beta1.ComponentType,
-	deployments []*appsv1.Deployment,
-	url *apis.URL) {
-
-	statusSpec := sr.initializeComponentStatus(status, component)
-
-	firstDeployment, err := sr.getFirstDeployment(deployments)
-	if err != nil {
-		// Handle error case gracefully - set a default state
-		sr.setCondition(status, sr.getReadyConditionsMap()[component], &apis.Condition{
-			Type:    sr.getReadyConditionsMap()[component],
-			Status:  v1.ConditionFalse,
-			Reason:  "NoDeployments",
-			Message: "No deployments available",
-		})
-		return
-	}
-
-	statusSpec.LatestCreatedRevision = firstDeployment.GetObjectMeta().GetAnnotations()["deployment.kubernetes.io/revision"]
-
-	condition := sr.getMultiDeploymentCondition(deployments, appsv1.DeploymentAvailable)
-	if condition != nil && condition.Status == v1.ConditionTrue {
-		statusSpec.URL = url
-	}
-	readyCondition := sr.getReadyConditionsMap()[component]
-	sr.setCondition(status, readyCondition, condition)
-	status.Components[component] = statusSpec
-	status.ObservedGeneration = firstDeployment.Status.ObservedGeneration
-}
-
 // PropagateModelStatus propagates model status from pod information
 func (sr *StatusReconciler) PropagateModelStatus(
 	status *v1beta1.InferenceServiceStatus,

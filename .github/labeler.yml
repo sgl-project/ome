@@ -157,9 +157,7 @@ multi-node:
   - changed-files:
     - any-glob-to-any-file:
       - 'pkg/controller/v1beta1/inferenceservice/reconcilers/multinode/**/*'
-      - 'pkg/controller/v1beta1/inferenceservice/reconcilers/multinodevllm/**/*'
       - 'pkg/controller/v1beta1/inferenceservice/reconcilers/lws/**/*'
-      - 'cmd/multinode-prober/**/*'
 
 # Accelerator
 accelerator:

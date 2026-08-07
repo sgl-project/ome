@@ -170,14 +170,6 @@ func TestGetDeploymentModeFromAnnotations(t *testing.T) {
 			expectedFound: true,
 		},
 		{
-			name: "valid MultiNodeRayVLLM mode",
-			annotations: map[string]string{
-				constants.DeploymentMode: string(constants.MultiNodeRayVLLM),
-			},
-			expectedMode:  constants.MultiNodeRayVLLM,
-			expectedFound: true,
-		},
-		{
 			name: "valid MultiNode mode",
 			annotations: map[string]string{
 				constants.DeploymentMode: string(constants.MultiNode),

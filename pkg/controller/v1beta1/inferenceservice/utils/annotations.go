@@ -72,13 +72,7 @@ func SetPodLabelsFromAnnotations(metadata *metav1.ObjectMeta) {
 		} else {
 			// Volcano case
 			metadata.Labels[constants.VolcanoQueueName] = dac
-			metadata.Labels[constants.RayPrioriyClass] = constants.DedicatedAiClusterPreemptionPriorityClass
 		}
-	}
-
-	// Always set the RayScheduler label if the annotation exists.
-	if _, ok := metadata.Annotations[constants.VolcanoScheduler]; ok {
-		metadata.Labels[constants.RayScheduler] = constants.VolcanoScheduler
 	}
 }
 
