@@ -104,7 +104,7 @@ func TestConvertToReplicationObjectsFromFileInfo(t *testing.T) {
 				entries := make([]afero.FileEntry, 0, len(paths))
 				for i, p := range paths {
 					content := []byte(fmt.Sprintf("data%d", i))
-					afero.WriteFile(fs, p, content, 0644)
+					_ = afero.WriteFile(fs, p, content, 0644)
 					fileInfo, _ := fs.Stat(p)
 					entries = append(entries, afero.FileEntry{FileInfo: fileInfo, FilePath: p})
 				}

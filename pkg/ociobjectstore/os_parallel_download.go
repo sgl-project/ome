@@ -168,9 +168,9 @@ func (cds *OCIOSDataStore) MultipartDownload(source ObjectURI, target string, op
 		}
 
 		// Use pooled buffer for streaming copy
-		buf := BufferPool.Get().([]byte)
-		_, err = io.CopyBuffer(tmpFile, tempFile, buf)
-		BufferPool.Put(buf)
+		bufp := BufferPool.Get().(*[]byte)
+		_, err = io.CopyBuffer(tmpFile, tempFile, *bufp)
+		BufferPool.Put(bufp)
 
 		if err != nil {
 			os.Remove(tempTargetFilePath)
@@ -314,9 +314,9 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 				tempFilePath = tempFile.Name()
 
 				// Stream data directly to temp file using pooled buffer
-				buf := BufferPool.Get().([]byte)
-				written, streamErr := io.CopyBuffer(tempFile, resp.Content, buf)
-				BufferPool.Put(buf)
+				bufp := BufferPool.Get().(*[]byte)
+				written, streamErr := io.CopyBuffer(tempFile, resp.Content, *bufp)
+				BufferPool.Put(bufp)
 
 				closeErr := resp.Content.Close()
 				syncErr := tempFile.Sync()

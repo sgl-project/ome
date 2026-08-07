@@ -586,7 +586,9 @@ func GetHfFileMetadata(ctx context.Context, repoID, filename string, opts ...Dow
 
 	// Apply options
 	for _, opt := range opts {
-		opt(config)
+		if err := opt(config); err != nil {
+			return nil, fmt.Errorf("failed to apply download option: %w", err)
+		}
 	}
 
 	// Construct URL

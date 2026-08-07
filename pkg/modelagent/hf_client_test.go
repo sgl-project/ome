@@ -82,19 +82,19 @@ func createMockHfMetaDataServer(statusCode int, attribute string, modelId string
 							attribute: "e815299b0bcbac849fa540c768ef21845365c9eb",
 						}
 						bytes, _ := json.Marshal(data)
-						writer.Write(bytes)
+						_, _ = writer.Write(bytes)
 					} else {
 						// Return valid JSON without the requested attribute
 						data := map[string]interface{}{
 							"sha": "e815299b0bcbac849fa540c768ef21845365c9eb",
 						}
 						bytes, _ := json.Marshal(data)
-						writer.Write(bytes)
+						_, _ = writer.Write(bytes)
 					}
 				}
 			} else {
 				writer.WriteHeader(statusCode)
-				writer.Write([]byte("Repository not found"))
+				_, _ = writer.Write([]byte("Repository not found"))
 			}
 		}
 	}))
