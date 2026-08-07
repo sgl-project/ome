@@ -1070,7 +1070,7 @@ func TestValidateComponentsAutoscalers(t *testing.T) {
 
 // TestValidateAutoscalerAnnotationConflict covers the rule
 // that the legacy ome.io/autoscalerClass annotation cannot coexist
-// with a per-Component Autoscaler block; the validator pre-empts the
+// with a per-Component Autoscaler block; the validator preempts the
 // confused "two sources of truth" state by forcing operators to pick
 // one.
 func TestValidateAutoscalerAnnotationConflict(t *testing.T) {

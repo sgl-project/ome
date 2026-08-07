@@ -488,7 +488,7 @@ const (
 	// ReasonAutoscalerAnnotationConflict rejects an ISVC that carries
 	// both the legacy ome.io/autoscalerClass annotation AND a new
 	// Autoscaler block on any Component. The
-	// per-Component Autoscaler block wins; this validation pre-empts
+	// per-Component Autoscaler block wins; this validation preempts
 	// confusion by forcing operators to remove the annotation.
 	ReasonAutoscalerAnnotationConflict = "AutoscalerAnnotationConflict"
 
@@ -695,7 +695,7 @@ func validateHPAMetricSpec(idx int, m autoscalingv2.MetricSpec) error {
 // ValidateAutoscalerAnnotationConflict rejects an InferenceService that
 // declares the legacy ome.io/autoscalerClass annotation AND a new
 // Autoscaler block on any Component. The
-// per-Component Autoscaler block wins; this validator pre-empts confusion
+// per-Component Autoscaler block wins; this validator preempts confusion
 // by forcing the operator to pick one.
 //
 // Returns nil when the annotation is absent OR when no Component
@@ -753,7 +753,7 @@ func ValidateAutoscalerAnnotationConflict(isvc *v1beta1.InferenceService) error 
 //
 // rawObj is typically req.AdmissionRequest.Object.Raw from the
 // admission.Request — the raw JSON bytes BEFORE the Go decoder strips
-// unknown fields. Returns nil when rawObj is empty / unparseable (the
+// unknown fields. Returns nil when rawObj is empty / unparsable (the
 // caller's primary validation will surface the parse failure) and when
 // no legacy fields are populated on any Component.
 func ValidateLegacyAutoscalerFieldsRaw(rawObj []byte) error {
