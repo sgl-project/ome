@@ -4,14 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -177,27 +174,4 @@ func getCoreResourceTypes() []schema.GroupVersionKind {
 		{Group: "", Version: "v1", Kind: "ServiceAccount"},
 		{Group: "", Version: "v1", Kind: "PersistentVolumeClaim"},
 	}
-}
-
-// isDeploymentReady checks if a deployment is ready by verifying the Available condition
-func (r *InferenceServiceReconciler) isDeploymentReady(ctx context.Context, name, namespace string) (bool, error) {
-	deployment := &appsv1.Deployment{}
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, deployment)
-
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			// Deployment doesn't exist yet, not ready
-			return false, nil
-		}
-		return false, fmt.Errorf("failed to get deployment %s: %w", name, err)
-	}
-
-	// Check if deployment is available
-	for _, condition := range deployment.Status.Conditions {
-		if condition.Type == appsv1.DeploymentAvailable && condition.Status == corev1.ConditionTrue {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }

@@ -87,8 +87,9 @@ func RemovePodAnnotations(metadata *metav1.ObjectMeta, annotationsToRemove []str
 func ResolveIngressConfig(baseConfig *controllerconfig.IngressConfig, annotations map[string]string) *controllerconfig.IngressConfig {
 	// Start with a copy of the base config to avoid modifying the original
 	resolved := &controllerconfig.IngressConfig{
-		IngressGateway:           baseConfig.IngressGateway,
-		IngressServiceName:       baseConfig.IngressServiceName,
+		IngressGateway:     baseConfig.IngressGateway,     //nolint:staticcheck // deprecated but deliberately copied so old controller images keep starting against newer config maps
+		IngressServiceName: baseConfig.IngressServiceName, //nolint:staticcheck // same back-compat guarantee as IngressGateway
+
 		OmeIngressGateway:        baseConfig.OmeIngressGateway,
 		IngressDomain:            baseConfig.IngressDomain,
 		IngressClassName:         baseConfig.IngressClassName,

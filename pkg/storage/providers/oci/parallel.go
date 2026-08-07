@@ -19,11 +19,13 @@ const (
 	maxPartRetries   = 3
 )
 
-// BufferPool provides reusable buffers to reduce memory allocations
+// BufferPool provides reusable buffers to reduce memory allocations.
+// Stores *[]byte so Get/Put avoid re-boxing the slice header on every cycle.
 var BufferPool = sync.Pool{
 	New: func() interface{} {
 		// Use 1MB buffer by default
-		return make([]byte, 1024*1024)
+		b := make([]byte, 1024*1024)
+		return &b
 	},
 }
 
@@ -160,9 +162,9 @@ func (p *OCIProvider) parallelDownload(ctx context.Context, source *ociURI, targ
 		}
 
 		// Copy from temp file to final file
-		buf := BufferPool.Get().([]byte)
-		written, err := io.CopyBuffer(file, tempFile, buf)
-		BufferPool.Put(buf)
+		bufp := BufferPool.Get().(*[]byte)
+		written, err := io.CopyBuffer(file, tempFile, *bufp)
+		BufferPool.Put(bufp)
 		tempFile.Close()
 
 		if err != nil {
@@ -293,9 +295,9 @@ func (p *OCIProvider) downloadChunkToTemp(ctx context.Context, source *ociURI, c
 		tempFilePath = tempFile.Name()
 
 		// Copy the chunk data to temp file using pooled buffer
-		buf := BufferPool.Get().([]byte)
-		written, err := io.CopyBuffer(tempFile, response.Content, buf)
-		BufferPool.Put(buf)
+		bufp := BufferPool.Get().(*[]byte)
+		written, err := io.CopyBuffer(tempFile, response.Content, *bufp)
+		BufferPool.Put(bufp)
 		response.Content.Close()
 
 		// Sync and close temp file

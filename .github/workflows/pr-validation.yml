@@ -250,10 +250,53 @@ jobs:
             -t local/model-agent:pr-test
           echo "✅ Multi-arch build validation successful"
 
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Run golangci-lint
+        run: make ci-lint
+
+  generate-drift:
+    name: Generated Code Drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Regenerate manifests and code
+        run: make manifests generate
+
+      - name: Verify no drift
+        run: |
+          git diff --exit-code || {
+            echo "::error::make manifests generate produced changes — regenerate and commit them"
+            exit 1
+          }
+
   summary:
     name: PR Validation Summary
     runs-on: ubuntu-latest
-    needs: [pre-commit-checks, test-and-build, docker-validation]
+    needs: [pre-commit-checks, test-and-build, docker-validation, lint, generate-drift]
     if: always()
     steps:
       - name: PR Status Summary
@@ -267,7 +310,9 @@ jobs:
             const jobs = {
               'pre-commit-checks': '${{ needs.pre-commit-checks.result }}',
               'test-and-build': '${{ needs.test-and-build.result }}',
-              'docker-validation': '${{ needs.docker-validation.result }}'
+              'docker-validation': '${{ needs.docker-validation.result }}',
+              'lint': '${{ needs.lint.result }}',
+              'generate-drift': '${{ needs.generate-drift.result }}'
             };
 
             let allPassed = true;

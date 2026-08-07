@@ -508,7 +508,3 @@ func setDecoderReady(isvc *v1beta1.InferenceService) {
 		Status: corev1.ConditionTrue,
 	})
 }
-
-func stringPtr(s string) *string {
-	return &s
-}
