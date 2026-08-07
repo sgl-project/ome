@@ -3,10 +3,30 @@ package v1beta1
 import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 // InferenceServiceSpec is the top level type for this resource
 type InferenceServiceSpec struct {
+
+	// DeploymentMode selects the dispatch backend that drives every
+	// Component on this InferenceService. When set, it propagates to
+	// the Engine, Decoder, and Router resolver at read-time without
+	// mutating per-Component annotations — `kubectl get -o yaml` stays
+	// clean. A per-Component
+	// `ome.io/deploymentMode` annotation still wins as an explicit
+	// override (the escape hatch is preserved for backward compat and
+	// mixed-mode experiments).
+	//
+	// Valid values:
+	//   - "OMENative"     — Native lifecycle-managed pods (also
+	//     handles multi-node serving when Leader/Worker are present)
+	//   - "RawDeployment" — Kubernetes Deployment/HPA-backed dispatch
+	//
+	// +kubebuilder:validation:Enum=OMENative;RawDeployment
+	// +optional
+	DeploymentMode *constants.DeploymentModeType `json:"deploymentMode,omitempty"`
 
 	// Engine defines the serving engine spec
 	// This provides detailed container and pod specifications for model serving.
@@ -48,6 +68,27 @@ type InferenceServiceSpec struct {
 	// AcceleratorSelector specifies accelerator selection preferences
 	// +optional
 	AcceleratorSelector *AcceleratorSelector `json:"acceleratorSelector,omitempty"`
+
+	// Traffic configures the load-balancing policy applied to all
+	// HTTPRoutes OME emits for this InferenceService. See the
+	// TrafficSpec doc for details.
+	// +optional
+	Traffic *TrafficSpec `json:"traffic,omitempty"`
+
+	// Rollout is the single home for rollout configuration on this
+	// InferenceService: an ordered list of rollout groups, each polymorphic in
+	// its progression (canary | blueGreen | rollingUpdate). Sequencing is the
+	// group list order; a group's Components roll together.
+	// +optional
+	Rollout *RolloutSpec `json:"rollout,omitempty"`
+
+	// ScalingPolicy coordinates replica counts across Components when more
+	// than one autoscaler would otherwise drift (e.g., engine + decoder in
+	// a PD-disaggregated service that requires 1:1 sharding). When nil,
+	// every Component autoscales independently. Alpha. The API
+	// may change without notice.
+	// +optional
+	ScalingPolicy *ScalingPolicy `json:"scalingPolicy,omitempty"`
 }
 
 // AcceleratorSelector defines how to select accelerators for the InferenceService
@@ -125,6 +166,31 @@ const (
 	FirstAvailablePolicy AcceleratorSelectionPolicy = "FirstAvailable"
 )
 
+// GetRolloutGroups returns the ordered rollout groups (spec.rollout.groups), or
+// nil if spec.rollout is unset. Nil-safe on a nil receiver so callers can drop
+// their own guards.
+func (s *InferenceServiceSpec) GetRolloutGroups() []RolloutGroup {
+	if s == nil || s.Rollout == nil {
+		return nil
+	}
+	return s.Rollout.Groups
+}
+
+// GetCanaryGroup returns the first rollout group whose progression is canary, or
+// nil if none. Admission rejects more than one canary group, so there is at most
+// one; a canary group may span multiple Components (primary-driven). Nil-safe.
+func (s *InferenceServiceSpec) GetCanaryGroup() *RolloutGroup {
+	if s == nil || s.Rollout == nil {
+		return nil
+	}
+	for i := range s.Rollout.Groups {
+		if s.Rollout.Groups[i].Canary != nil {
+			return &s.Rollout.Groups[i]
+		}
+	}
+	return nil
+}
+
 // EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments)
 // Provides a comprehensive specification for deploying model serving containers and pods.
 // It allows for complete Kubernetes pod configuration including main containers,
@@ -163,6 +229,18 @@ type EngineSpec struct {
 	// AcceleratorOverride allows overriding the global accelerator selection for this component
 	// +optional
 	AcceleratorOverride *AcceleratorSelector `json:"acceleratorOverride,omitempty"`
+
+	// TopologyKey is the node-label key (e.g. an NVLink/RDMA fabric-domain label)
+	// used to co-locate all pods of one multi-node (leader+worker) gang
+	// into a single network / NVLink topology domain. When set on a
+	// multi-node component, OME auto-generates the per-instance
+	// worker→leader podAffinity that anchors every worker to its gang's
+	// leader on a node sharing this label value — so users no longer
+	// hand-write that affinity. Only meaningful for multi-node components;
+	// ignored for single-pod (no leader to anchor to). Unset means no
+	// auto-generated gang affinity.
+	// +optional
+	TopologyKey *string `json:"topologyKey,omitempty"`
 }
 
 // DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment)
@@ -202,6 +280,18 @@ type DecoderSpec struct {
 	// AcceleratorOverride allows overriding the global accelerator selection for this component
 	// +optional
 	AcceleratorOverride *AcceleratorSelector `json:"acceleratorOverride,omitempty"`
+
+	// TopologyKey is the node-label key (e.g. an NVLink/RDMA fabric-domain label)
+	// used to co-locate all pods of one multi-node (leader+worker) gang
+	// into a single network / NVLink topology domain. When set on a
+	// multi-node component, OME auto-generates the per-instance
+	// worker→leader podAffinity that anchors every worker to its gang's
+	// leader on a node sharing this label value — so users no longer
+	// hand-write that affinity. Only meaningful for multi-node components;
+	// ignored for single-pod (no leader to anchor to). Unset means no
+	// auto-generated gang affinity.
+	// +optional
+	TopologyKey *string `json:"topologyKey,omitempty"`
 }
 
 // LeaderSpec defines the configuration for a leader node in a multi-node component
@@ -291,6 +381,29 @@ type ModelRef struct {
 	// +optional
 	// +listType=atomic
 	FineTunedWeights []string `json:"fineTunedWeights,omitempty"`
+
+	// Overlays declares additional BaseModels attached to every serving
+	// pod alongside the primary. Each overlay is mounted or
+	// env-addressable at /opt/ml/model-overlays/<name> and
+	// exposed via OVERLAY_<UPPERCASED_NAME>_MODEL_PATH. Runner selects
+	// at request time; OME does not detect failures or auto-swap.
+	// Disabled or NotReady overlays are silently omitted.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	Overlays []ModelOverlayRef `json:"overlays,omitempty"`
+}
+
+// ModelOverlayRef references a BaseModel attached as an overlay.
+// Narrower than ModelRef on purpose: no nested Overlays (type-system
+// forbids recursion) and no FineTunedWeights (weight composition lives
+// on the primary).
+type ModelOverlayRef struct {
+	Name string `json:"name"`
+	// +kubebuilder:default="ClusterBaseModel"
+	Kind *string `json:"kind,omitempty"`
+	// +kubebuilder:default="ome.io"
+	APIGroup *string `json:"apiGroup,omitempty"`
 }
 
 type ServingRuntimeRef struct {

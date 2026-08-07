@@ -13,7 +13,7 @@ type InferenceServiceStatus struct {
 	// - EngineReady: engine readiness condition; <br/>
 	// - DecoderReady: decoder readiness condition; <br/>
 	// - RouterReady: router readiness condition; <br/>
-	// - IngressReady: ingress readiness condition; <br/>
+	// - IngressReady: ingress resource readiness; <br/>
 	// - Ready: aggregated condition; <br/>
 	duckv1.Status `json:",inline"`
 	// Addressable endpoint for the InferenceService
@@ -23,10 +23,53 @@ type InferenceServiceStatus struct {
 	// It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-level-suffix}
 	// +optional
 	URL *apis.URL `json:"url,omitempty"`
+	// Addresses lists every reachable endpoint for this service — one per gateway
+	// its route attaches to, plus the cluster-local address. Each entry's Name
+	// carries the operator-declared class (see IngressGatewaySpec.Class):
+	// "internal", "external", "cluster-local", or any config-defined value.
+	// Derived from the same builder that produces the HTTPRoutes, so it never
+	// drifts from the actual routing. status.url is the primary gateway entry and
+	// status.address is the "cluster-local" entry — both projections of this list.
+	// +optional
+	// +listType=atomic
+	Addresses []duckv1.Addressable `json:"addresses,omitempty"`
 	// Statuses for the components of the InferenceService
 	Components map[ComponentType]ComponentStatusSpec `json:"components,omitempty"`
 	// Model related statuses
 	ModelStatus ModelStatus `json:"modelStatus,omitempty"`
+	// MigrationHistory is a rolling window of OMENative migration requests
+	// processed against this InferenceService. Bounded to the most recent
+	// entries; older entries are dropped (and optionally archived to a
+	// controller-owned ConfigMap).
+	// +optional
+	// +listType=atomic
+	MigrationHistory []MigrationHistoryEntry `json:"migrationHistory,omitempty"`
+
+	// MountedOverlays lists overlays the controller attached to the
+	// pod spec. Skipped overlays (disabled, NotReady, NotFound) surface
+	// via the OverlaysReady condition.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	MountedOverlays []MountedOverlay `json:"mountedOverlays,omitempty"`
+
+	// Traffic reflects the resolved backend traffic policy
+	// and the emitted policy resource. Populated only when traffic
+	// intent is declared via spec.traffic or any ome.io/* traffic
+	// annotation; otherwise nil so older clients see nothing.
+	// +optional
+	Traffic *TrafficStatus `json:"traffic,omitempty"`
+
+	// Canary tracks an in-progress spec.rollout.canary rollout (the step
+	// state machine). Absent when no canary is running.
+	// +optional
+	Canary *CanaryStatus `json:"canary,omitempty"`
+
+	// Placement reports multi-cluster placement of this ISVC, set by
+	// the control-plane fan-out controller. Empty on workload clusters and on
+	// single-cluster deployments.
+	// +optional
+	Placement *PlacementStatus `json:"placement,omitempty"`
 
 	// PinnedRevisionName is the ControllerRevision (OME ns) driving
 	// pod specs. Empty when autoSync is true.
@@ -38,19 +81,33 @@ type InferenceServiceStatus struct {
 	// when the live annotation differs from this.
 	// +optional
 	LastRuntimeSyncToken string `json:"lastRuntimeSyncToken,omitempty"`
+
+	// RolloutCoordination reports per-group cross-Component
+	// coordination state for the InferenceService. Populated only
+	// when spec.rollout declares blueGreen/rollingUpdate groups
+	// (canary groups report under status.canary instead).
+	// +optional
+	RolloutCoordination *RolloutCoordinationStatus `json:"rolloutCoordination,omitempty"`
+}
+
+// MountedOverlay records one overlay the controller wired into the
+// current pod spec.
+type MountedOverlay struct {
+	Name   string `json:"name"`
+	EnvVar string `json:"envVar"`
+	// MountPath is empty for Sharded overlays (fetched at runtime).
+	// +optional
+	MountPath    string `json:"mountPath,omitempty"`
+	Distribution string `json:"distribution"`
 }
 
 // ComponentStatusSpec describes the state of the component
 type ComponentStatusSpec struct {
-	// Latest revision name that is in ready state
-	// +optional
-	LatestReadyRevision string `json:"latestReadyRevision,omitempty"`
 	// Latest revision name that is created
 	// +optional
 	LatestCreatedRevision string `json:"latestCreatedRevision,omitempty"`
-	// URL holds the primary url that will distribute traffic over the provided traffic targets.
-	// This will be one the REST or gRPC endpoints that are available.
-	// It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-level-suffix}
+	// URL holds the primary url for this component.
+	// It generally has the form http[s]://{name}.{namespace}.{cluster-level-suffix}
 	// +optional
 	URL *apis.URL `json:"url,omitempty"`
 	// REST endpoint of the component if available.
@@ -59,12 +116,87 @@ type ComponentStatusSpec struct {
 	// Addressable endpoint for the InferenceService
 	// +optional
 	Address *duckv1.Addressable `json:"address,omitempty"`
+
+	// Lifecycle reports OMENative-managed lifecycle state for this Component
+	// when the Component resolves to deploymentMode OMENative
+	// (spec.deploymentMode or the per-Component ome.io/deploymentMode
+	// annotation).
+	// Counterpart of the LifecycleSpec sub-block on ComponentExtensionSpec.
+	// Nil otherwise.
+	// +optional
+	Lifecycle *LifecycleStatus `json:"lifecycle,omitempty"`
+
+	// RolloutPhase reflects the current rollout state for this
+	// Component. One of Stable, Canarying,
+	// BlueGreenStandby, Pending, Paused, Promoting, RollingBack,
+	// RolledBack, Failed. Empty when no rollout is in flight on this
+	// Component (also empty for Components on deployment modes that
+	// haven't implemented the rollout contract yet — e.g. RawDeployment
+	// in alpha).
+	// +optional
+	// +kubebuilder:validation:Enum=Stable;Canarying;BlueGreenStandby;Pending;Paused;Promoting;RollingBack;RolledBack;Failed
+	RolloutPhase RolloutPhase `json:"rolloutPhase,omitempty"`
+
+	// LatestReadyRevision names the most recent ControllerRevision
+	// whose pods reached Ready. Equal to LatestRolledoutRevision once
+	// the rollout completes; set ahead of it during in-flight rollouts.
+	// +optional
+	LatestReadyRevision string `json:"latestReadyRevision,omitempty"`
+
+	// LatestRolledoutRevision names the most recent ControllerRevision
+	// that fully owns this Component's traffic (i.e., the rollout has
+	// completed). Drives the consumer-side HTTPRoute backendRef.
+	// +optional
+	LatestRolledoutRevision string `json:"latestRolledoutRevision,omitempty"`
+
+	// PreviousRolledoutRevision names the prior rolled-out
+	// ControllerRevision, retained for diagnosis and traffic
+	// reference during partial rollbacks.
+	// +optional
+	PreviousRolledoutRevision string `json:"previousRolledoutRevision,omitempty"`
+
+	// Traffic reports per-revision traffic weights for this
+	// Component. Each entry corresponds to one revision currently
+	// receiving traffic. The HTTPRoute builder reads this to
+	// emit weighted backendRefs.
+	// +optional
+	// +listType=map
+	// +listMapKey=revisionName
+	Traffic []ComponentTrafficTarget `json:"traffic,omitempty"`
+
+	// Autoscaler reports the per-Component autoscaler state — resolved
+	// Class / ManagedBy / SpecSource and (when ManagedBy == "ome") live
+	// CurrentReplicas / DesiredReplicas / LastScaleTime / Conditions
+	// mirrored from the underlying HPA or ScaledObject. Populated by
+	// the ISVC status writer; nil for Components that don't go through
+	// the new resolver yet (e.g., RawDeployment Components that haven't
+	// migrated). See ComponentAutoscalerStatus for the full field
+	// semantics.
+	// +optional
+	Autoscaler *ComponentAutoscalerStatus `json:"autoscaler,omitempty"`
+
+	// ScaleTargetRef is the canonical scale target for this Component.
+	// For OMENative-managed Components this points at the
+	// InferenceReplica's /scale subresource; for RawDeployment-managed
+	// Components it points at the underlying Deployment. Published so
+	// external scalers (when Autoscaler.ManagedBy == "external") know
+	// the GroupKind they should target. Populated whenever the
+	// Component has a defined scale target — independent of whether an
+	// OME-managed HPA / SO is active.
+	// +optional
+	ScaleTargetRef *ScaleTargetRef `json:"scaleTargetRef,omitempty"`
+
 	// SelectedAccelerator shows which AcceleratorClass was selected
 	// +optional
 	SelectedAccelerator *AcceleratorSelection `json:"selectedAccelerator,omitempty"`
 }
 
-// AcceleratorSelection shows what accelerator was selected and why
+// ComponentTrafficTarget describes the percentage of traffic routed to
+// one revision of one Component. RevisionName is the per-revision
+// Service name produced by OMENative's coordination layer (e.g.
+// `llama-engine-rev-abc123`), which the HTTPRoute builder
+// consumes directly as a backend reference.
+
 type AcceleratorSelection struct {
 	// AcceleratorClass that was selected
 	AcceleratorClass string `json:"acceleratorClass"`
@@ -112,7 +244,7 @@ type ComponentTrafficTarget struct {
 // ComponentType contains the different types of components of the service
 type ComponentType string
 
-// ComponentType enum values
+// ComponentType Enum
 const (
 	RouterComponent  ComponentType = "router"
 	EngineComponent  ComponentType = "engine"
@@ -125,14 +257,21 @@ const (
 	EngineReady apis.ConditionType = "EngineReady"
 	// DecoderReady is set when decoder pods are ready.
 	DecoderReady apis.ConditionType = "DecoderReady"
-	// IngressReady is set when Ingress is created
-	IngressReady apis.ConditionType = "IngressReady"
-)
-
-// RouterConditionType represents a Router condition value
-const (
 	// RouterReady is set when router has reported readiness.
 	RouterReady apis.ConditionType = "RouterReady"
+	// IngressReady is set when Ingress is created
+	IngressReady apis.ConditionType = "IngressReady"
+	// OverlaysReady is True iff every declared overlay was attached.
+	// False with a reason when one or more were skipped; informational —
+	// the primary still drives the deployment.
+	OverlaysReady apis.ConditionType = "OverlaysReady"
+	// RuntimeReady is False with reason=RuntimeNotFound when the ISVC's
+	// spec.runtime (or the auto-selected runtime) cannot be resolved.
+	// Advisory only — NOT a dependent of the aggregate Ready condition
+	// (conditionSet), so a currently-serving ISVC whose spec is edited to
+	// point at a missing runtime stays Ready=True on its running pods; only
+	// the new spec is withheld until the runtime exists.
+	RuntimeReady apis.ConditionType = "RuntimeReady"
 )
 
 type ModelStatus struct {
@@ -274,10 +413,6 @@ var conditionSet = apis.NewLivingConditionSet(
 
 var _ apis.ConditionsAccessor = (*InferenceServiceStatus)(nil)
 
-func (ss *InferenceServiceStatus) InitializeConditions() {
-	conditionSet.Manage(ss).InitializeConditions()
-}
-
 // IsReady returns the overall readiness for the inference service.
 func (ss *InferenceServiceStatus) IsReady() bool {
 	return conditionSet.Manage(ss).IsHappy()
@@ -292,12 +427,6 @@ func (ss *InferenceServiceStatus) GetCondition(t apis.ConditionType) *apis.Condi
 func (ss *InferenceServiceStatus) IsConditionReady(t apis.ConditionType) bool {
 	condition := conditionSet.Manage(ss).GetCondition(t)
 	return condition != nil && condition.Status == v1.ConditionTrue
-}
-
-// IsConditionFalse returns if a given condition is False
-func (ss *InferenceServiceStatus) IsConditionFalse(t apis.ConditionType) bool {
-	condition := conditionSet.Manage(ss).GetCondition(t)
-	return condition != nil && condition.Status == v1.ConditionFalse
 }
 
 // IsConditionUnknown returns if a given condition is Unknown
@@ -335,4 +464,104 @@ func (ss *InferenceServiceStatus) SetCondition(conditionType apis.ConditionType,
 	case condition.Status == v1.ConditionFalse:
 		conditionSet.Manage(ss).MarkFalse(conditionType, condition.Reason, condition.Message)
 	}
+}
+
+// PlacementPhase is the coarse state of an InferenceService's multi-cluster placement.
+// +kubebuilder:validation:Enum=Pending;Racing;Placed;Failed
+
+func (ss *InferenceServiceStatus) IsConditionFalse(t apis.ConditionType) bool {
+	condition := conditionSet.Manage(ss).GetCondition(t)
+	return condition != nil && condition.Status == v1.ConditionFalse
+}
+
+// IsConditionUnknown returns if a given condition is Unknown
+
+func (ss *InferenceServiceStatus) InitializeConditions() {
+	conditionSet.Manage(ss).InitializeConditions()
+}
+
+// IsReady returns the overall readiness for the inference service.
+type PlacementPhase string
+
+const (
+	// PlacementPhasePending: no candidate cluster matched, or none connected yet.
+	PlacementPhasePending PlacementPhase = "Pending"
+	// PlacementPhaseRacing: fanned out to candidates; no cluster has admitted yet.
+	PlacementPhaseRacing PlacementPhase = "Racing"
+	// PlacementPhasePlaced: a candidate was admitted and won the race.
+	PlacementPhasePlaced PlacementPhase = "Placed"
+	// PlacementPhaseFailed: the winning placement failed terminally.
+	PlacementPhaseFailed PlacementPhase = "Failed"
+)
+
+// CandidatePlacementPhase is the per-cluster state of a fan-out candidate.
+// +kubebuilder:validation:Enum=Placed;Admitted
+type CandidatePlacementPhase string
+
+const (
+	// CandidatePhasePlaced: derived ISVC created on this candidate; racing.
+	CandidatePhasePlaced CandidatePlacementPhase = "Placed"
+	// CandidatePhaseAdmitted: this candidate's Kueue admitted the pods (won).
+	CandidatePhaseAdmitted CandidatePlacementPhase = "Admitted"
+)
+
+// PlacementStatus is the multi-cluster placement status: which workload
+// cluster an InferenceService is placed on and a coarse phase.
+type PlacementStatus struct {
+	// Cluster is the WorkloadCluster the ISVC is currently placed on. Empty
+	// while pending (no candidate yet, or transport not connected).
+	// +optional
+	Cluster string `json:"cluster,omitempty"`
+
+	// Phase is a coarse placement state.
+	// +optional
+	Phase PlacementPhase `json:"phase,omitempty"`
+
+	// Endpoint is the externally-addressable URL of the winning cluster's
+	// placement, mirrored from the derived InferenceService's status.url once it
+	// is admitted AND addressable. Empty while pending/racing/failed or before
+	// the winner reports a URL. An external global LB/DNS consumes this to route
+	// traffic to the winning cluster.
+	// +optional
+	Endpoint *apis.URL `json:"endpoint,omitempty"`
+
+	// Candidates are the clusters this ISVC has been fanned out to during the
+	// placement race. Populated by the control plane.
+	// +optional
+	// +listType=map
+	// +listMapKey=cluster
+	Candidates []CandidatePlacement `json:"candidates,omitempty"`
+}
+
+// CandidatePlacement is the per-cluster state of a fan-out candidate in the
+// placement race.
+type CandidatePlacement struct {
+	// Cluster is the WorkloadCluster name.
+	Cluster string `json:"cluster"`
+	// Phase is the candidate's state.
+	// +optional
+	Phase CandidatePlacementPhase `json:"phase,omitempty"`
+
+	// Endpoint is this candidate's own externally-addressable URL, mirrored from
+	// its derived InferenceService's status.url once admitted AND addressable.
+	// In Single mode only the winner carries one and the top-level
+	// PlacementStatus.Endpoint is authoritative; in All/Split mode every serving
+	// home carries its own, and this list is the source of truth an external
+	// LB/DNS consumes to route across homes. Empty until the home is addressable.
+	// +optional
+	Endpoint *apis.URL `json:"endpoint,omitempty"`
+
+	// AdmittedReplicas is how many replicas this home's Kueue has admitted (only
+	// meaningful in Split, where a home serves a fraction of the desired count).
+	// It drives global accounting — the control plane sums it across homes to
+	// decide whether the desired count is met. Zero/unset outside Split.
+	// +optional
+	AdmittedReplicas int32 `json:"admittedReplicas,omitempty"`
+
+	// ReadyReplicas is how many of this home's replicas are serving traffic. In
+	// Split it is the weight an external LB uses to split traffic across homes
+	// (traffic follows where the replicas actually landed). Zero/unset outside
+	// Split.
+	// +optional
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
 }

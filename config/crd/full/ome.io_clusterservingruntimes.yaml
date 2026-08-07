@@ -9606,6 +9606,8 @@ spec:
                         type: object
                       type: array
                       x-kubernetes-list-type: atomic
+                    topologyKey:
+                      type: string
                     topologySpreadConstraints:
                       items:
                         properties:
@@ -23125,6 +23127,8 @@ spec:
                         type: object
                       type: array
                       x-kubernetes-list-type: atomic
+                    topologyKey:
+                      type: string
                     topologySpreadConstraints:
                       items:
                         properties:
