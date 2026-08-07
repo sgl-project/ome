@@ -758,7 +758,7 @@ func TestIsReaderEmpty(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create temp file: %v", err)
 				}
-				tmpFile.WriteString("test content")
+				_, _ = tmpFile.WriteString("test content")
 				tmpFile.Close()
 				t.Cleanup(func() {
 					os.Remove(tmpFile.Name())

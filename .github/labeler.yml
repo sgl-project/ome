@@ -46,14 +46,12 @@ webhook:
 storage:
   - changed-files:
     - any-glob-to-any-file:
-      - 'pkg/storage/**/*'
       - 'pkg/ociobjectstore/**/*'
 
 # Authentication
 auth:
   - changed-files:
     - any-glob-to-any-file:
-      - 'pkg/auth/**/*'
       - 'pkg/principals/**/*'
       - 'pkg/vault/**/*'
 

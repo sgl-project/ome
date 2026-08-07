@@ -1442,8 +1442,7 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 		}
 		s.logger.Infof("successfully add the new path to childrenPath for model: %s", name)
 
-		childrenPaths := make([]string, 0)
-		childrenPaths, _, _, _ = s.parseModelConfigDataEntry(ctx, s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel))
+		childrenPaths, _, _, _ := s.parseModelConfigDataEntry(ctx, s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel))
 		artifact = s.modelConfigParser.BuildArtifactAttribute(shaStr, matchedModelTypeAndModeName, parentPath, childrenPaths)
 	} else {
 		childrenPaths := make([]string, 0)

@@ -34,11 +34,13 @@ func TrimObjectPrefix(objectPath string, prefix string) string {
 	return strings.Replace(objectPath, prefix, "", 1) // Remove only the first occurrence
 }
 
-// BufferPool provides reusable buffers to reduce memory allocations
+// BufferPool provides reusable buffers to reduce memory allocations.
+// Stores *[]byte so Get/Put avoid re-boxing the slice header on every cycle.
 var BufferPool = sync.Pool{
 	New: func() interface{} {
 		// Use 1MB buffer by default instead of 8MB
-		return make([]byte, 1024*1024)
+		b := make([]byte, 1024*1024)
+		return &b
 	},
 }
 
@@ -46,20 +48,21 @@ var BufferPool = sync.Pool{
 var LargeBufferPool = sync.Pool{
 	New: func() interface{} {
 		// 4MB buffer for large files
-		return make([]byte, 4*1024*1024)
+		b := make([]byte, 4*1024*1024)
+		return &b
 	},
 }
 
 // getOptimalBuffer returns the best buffer size based on file size
-func getOptimalBuffer(fileSize int64) []byte {
+func getOptimalBuffer(fileSize int64) *[]byte {
 	if fileSize > 10*1024*1024 { // > 10MB
-		return LargeBufferPool.Get().([]byte)
+		return LargeBufferPool.Get().(*[]byte)
 	}
-	return BufferPool.Get().([]byte)
+	return BufferPool.Get().(*[]byte)
 }
 
 // returnBuffer returns buffer to appropriate pool
-func returnBuffer(buf []byte, fileSize int64) {
+func returnBuffer(buf *[]byte, fileSize int64) {
 	if fileSize > 10*1024*1024 {
 		LargeBufferPool.Put(buf)
 	} else {
@@ -94,7 +97,7 @@ func CopyByFilePath(sourceFilePath string, targetFilePath string) error {
 	buf := getOptimalBuffer(fileSize)
 	defer returnBuffer(buf, fileSize)
 
-	if _, err = io.CopyBuffer(targetFile, sourceFile, buf); err != nil {
+	if _, err = io.CopyBuffer(targetFile, sourceFile, *buf); err != nil {
 		return fmt.Errorf("failed to copy source file %s to target path %s: %s", sourceFilePath, targetFilePath, err.Error())
 	}
 	// Ensure data is flushed to disk
@@ -116,10 +119,10 @@ func CopyReaderToFilePath(source io.Reader, targetFilePath string) error {
 	defer targetFile.Close()
 
 	// Use default buffer from pool (we don't know size ahead of time)
-	buf := BufferPool.Get().([]byte)
-	defer BufferPool.Put(buf)
+	bufp := BufferPool.Get().(*[]byte)
+	defer BufferPool.Put(bufp)
 
-	if _, err = io.CopyBuffer(targetFile, source, buf); err != nil {
+	if _, err = io.CopyBuffer(targetFile, source, *bufp); err != nil {
 		return fmt.Errorf("failed to copy source to target path %s: %s", targetFilePath, err.Error())
 	}
 	// Ensure data is flushed to disk
