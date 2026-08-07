@@ -16,11 +16,9 @@ import (
 
 // downloadChunk represents a chunk to be downloaded
 type downloadChunk struct {
-	index      int
-	start      int64
-	end        int64
-	tempFile   string
-	retryCount int
+	index int
+	start int64
+	end   int64
 }
 
 // downloadResult represents the result of a chunk download

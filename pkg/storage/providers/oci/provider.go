@@ -577,9 +577,9 @@ func (p *OCIProvider) simpleDownload(ctx context.Context, source *ociURI, target
 		p.logger.WithField("bytes", written).Debug("Downloaded object")
 	} else {
 		// Use buffer pool for efficient copying
-		buf := BufferPool.Get().([]byte)
-		_, err = io.CopyBuffer(file, response.Content, buf)
-		BufferPool.Put(buf)
+		bufp := BufferPool.Get().(*[]byte)
+		_, err = io.CopyBuffer(file, response.Content, *bufp)
+		BufferPool.Put(bufp)
 		if err != nil {
 			return err
 		}
