@@ -82,6 +82,33 @@ type AcceleratorSelection struct {
 	ResourceRequests map[string]string `json:"resourceRequests,omitempty"`
 }
 
+// ComponentTrafficTarget describes the percentage of traffic routed to
+// one revision of one Component. RevisionName is the per-revision
+// Service name produced by OMENative's coordination layer (e.g.
+// `llama-engine-rev-abc123`), which the HTTPRoute builder
+// consumes directly as a backend reference.
+type ComponentTrafficTarget struct {
+	// RevisionName is the per-revision Service name for this target.
+	RevisionName string `json:"revisionName"`
+
+	// Percent is the percentage of traffic the consumer should route
+	// to RevisionName. Sum across all entries for one Component is
+	// 100.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	Percent int32 `json:"percent"`
+
+	// Tag is an optional short identifier for the target (e.g.
+	// "latest", "prev"). Cosmetic; not used by the consumer.
+	// +optional
+	Tag string `json:"tag,omitempty"`
+
+	// LatestRevision is true when this entry corresponds to the
+	// LatestRolledoutRevision for the Component.
+	// +optional
+	LatestRevision bool `json:"latestRevision,omitempty"`
+}
+
 // ComponentType contains the different types of components of the service
 type ComponentType string
 

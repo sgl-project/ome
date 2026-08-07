@@ -18,6 +18,8 @@ func RegisterDefaults(scheme *runtime.Scheme) error {
 	scheme.AddTypeDefaultingFunc(&BenchmarkJobList{}, func(obj interface{}) { SetObjectDefaults_BenchmarkJobList(obj.(*BenchmarkJobList)) })
 	scheme.AddTypeDefaultingFunc(&ClusterServingRuntime{}, func(obj interface{}) { SetObjectDefaults_ClusterServingRuntime(obj.(*ClusterServingRuntime)) })
 	scheme.AddTypeDefaultingFunc(&ClusterServingRuntimeList{}, func(obj interface{}) { SetObjectDefaults_ClusterServingRuntimeList(obj.(*ClusterServingRuntimeList)) })
+	scheme.AddTypeDefaultingFunc(&InferenceReplica{}, func(obj interface{}) { SetObjectDefaults_InferenceReplica(obj.(*InferenceReplica)) })
+	scheme.AddTypeDefaultingFunc(&InferenceReplicaList{}, func(obj interface{}) { SetObjectDefaults_InferenceReplicaList(obj.(*InferenceReplicaList)) })
 	scheme.AddTypeDefaultingFunc(&InferenceService{}, func(obj interface{}) { SetObjectDefaults_InferenceService(obj.(*InferenceService)) })
 	scheme.AddTypeDefaultingFunc(&InferenceServiceList{}, func(obj interface{}) { SetObjectDefaults_InferenceServiceList(obj.(*InferenceServiceList)) })
 	scheme.AddTypeDefaultingFunc(&ServingRuntime{}, func(obj interface{}) { SetObjectDefaults_ServingRuntime(obj.(*ServingRuntime)) })
@@ -1493,6 +1495,163 @@ func SetObjectDefaults_ClusterServingRuntimeList(in *ClusterServingRuntimeList) 
 	for i := range in.Items {
 		a := &in.Items[i]
 		SetObjectDefaults_ClusterServingRuntime(a)
+	}
+}
+
+func SetObjectDefaults_InferenceReplica(in *InferenceReplica) {
+	for i := range in.Spec.Runners {
+		a := &in.Spec.Runners[i]
+		for j := range a.Template.Spec.Volumes {
+			b := &a.Template.Spec.Volumes[j]
+			if b.VolumeSource.ISCSI != nil {
+				if b.VolumeSource.ISCSI.ISCSIInterface == "" {
+					b.VolumeSource.ISCSI.ISCSIInterface = "default"
+				}
+			}
+			if b.VolumeSource.RBD != nil {
+				if b.VolumeSource.RBD.RBDPool == "" {
+					b.VolumeSource.RBD.RBDPool = "rbd"
+				}
+				if b.VolumeSource.RBD.RadosUser == "" {
+					b.VolumeSource.RBD.RadosUser = "admin"
+				}
+				if b.VolumeSource.RBD.Keyring == "" {
+					b.VolumeSource.RBD.Keyring = "/etc/ceph/keyring"
+				}
+			}
+			if b.VolumeSource.AzureDisk != nil {
+				if b.VolumeSource.AzureDisk.CachingMode == nil {
+					ptrVar1 := v1.AzureDataDiskCachingMode(v1.AzureDataDiskCachingReadWrite)
+					b.VolumeSource.AzureDisk.CachingMode = &ptrVar1
+				}
+				if b.VolumeSource.AzureDisk.FSType == nil {
+					var ptrVar1 string = "ext4"
+					b.VolumeSource.AzureDisk.FSType = &ptrVar1
+				}
+				if b.VolumeSource.AzureDisk.ReadOnly == nil {
+					var ptrVar1 bool = false
+					b.VolumeSource.AzureDisk.ReadOnly = &ptrVar1
+				}
+				if b.VolumeSource.AzureDisk.Kind == nil {
+					ptrVar1 := v1.AzureDataDiskKind(v1.AzureSharedBlobDisk)
+					b.VolumeSource.AzureDisk.Kind = &ptrVar1
+				}
+			}
+			if b.VolumeSource.ScaleIO != nil {
+				if b.VolumeSource.ScaleIO.StorageMode == "" {
+					b.VolumeSource.ScaleIO.StorageMode = "ThinProvisioned"
+				}
+				if b.VolumeSource.ScaleIO.FSType == "" {
+					b.VolumeSource.ScaleIO.FSType = "xfs"
+				}
+			}
+		}
+		for j := range a.Template.Spec.InitContainers {
+			b := &a.Template.Spec.InitContainers[j]
+			for k := range b.Ports {
+				c := &b.Ports[k]
+				if c.Protocol == "" {
+					c.Protocol = "TCP"
+				}
+			}
+			if b.LivenessProbe != nil {
+				if b.LivenessProbe.ProbeHandler.GRPC != nil {
+					if b.LivenessProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.LivenessProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+			if b.ReadinessProbe != nil {
+				if b.ReadinessProbe.ProbeHandler.GRPC != nil {
+					if b.ReadinessProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.ReadinessProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+			if b.StartupProbe != nil {
+				if b.StartupProbe.ProbeHandler.GRPC != nil {
+					if b.StartupProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.StartupProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+		}
+		for j := range a.Template.Spec.Containers {
+			b := &a.Template.Spec.Containers[j]
+			for k := range b.Ports {
+				c := &b.Ports[k]
+				if c.Protocol == "" {
+					c.Protocol = "TCP"
+				}
+			}
+			if b.LivenessProbe != nil {
+				if b.LivenessProbe.ProbeHandler.GRPC != nil {
+					if b.LivenessProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.LivenessProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+			if b.ReadinessProbe != nil {
+				if b.ReadinessProbe.ProbeHandler.GRPC != nil {
+					if b.ReadinessProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.ReadinessProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+			if b.StartupProbe != nil {
+				if b.StartupProbe.ProbeHandler.GRPC != nil {
+					if b.StartupProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.StartupProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+		}
+		for j := range a.Template.Spec.EphemeralContainers {
+			b := &a.Template.Spec.EphemeralContainers[j]
+			for k := range b.EphemeralContainerCommon.Ports {
+				c := &b.EphemeralContainerCommon.Ports[k]
+				if c.Protocol == "" {
+					c.Protocol = "TCP"
+				}
+			}
+			if b.EphemeralContainerCommon.LivenessProbe != nil {
+				if b.EphemeralContainerCommon.LivenessProbe.ProbeHandler.GRPC != nil {
+					if b.EphemeralContainerCommon.LivenessProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.EphemeralContainerCommon.LivenessProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+			if b.EphemeralContainerCommon.ReadinessProbe != nil {
+				if b.EphemeralContainerCommon.ReadinessProbe.ProbeHandler.GRPC != nil {
+					if b.EphemeralContainerCommon.ReadinessProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.EphemeralContainerCommon.ReadinessProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+			if b.EphemeralContainerCommon.StartupProbe != nil {
+				if b.EphemeralContainerCommon.StartupProbe.ProbeHandler.GRPC != nil {
+					if b.EphemeralContainerCommon.StartupProbe.ProbeHandler.GRPC.Service == nil {
+						var ptrVar1 string = ""
+						b.EphemeralContainerCommon.StartupProbe.ProbeHandler.GRPC.Service = &ptrVar1
+					}
+				}
+			}
+		}
+	}
+}
+
+func SetObjectDefaults_InferenceReplicaList(in *InferenceReplicaList) {
+	for i := range in.Items {
+		a := &in.Items[i]
+		SetObjectDefaults_InferenceReplica(a)
 	}
 }
 

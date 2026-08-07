@@ -460,12 +460,13 @@ const (
 	PDDisaggregated   DeploymentModeType = "PDDisaggregated"
 	MultiNode         DeploymentModeType = "MultiNode"
 	VirtualDeployment DeploymentModeType = "VirtualDeployment"
+	OMENative         DeploymentModeType = "OMENative"
 )
 
 // IsValid checks if the deployment mode is valid
 func (d DeploymentModeType) IsValid() bool {
 	switch d {
-	case RawDeployment, MultiNodeRayVLLM, MultiNode, VirtualDeployment:
+	case RawDeployment, MultiNodeRayVLLM, MultiNode, VirtualDeployment, OMENative:
 		return true
 	default:
 		return false

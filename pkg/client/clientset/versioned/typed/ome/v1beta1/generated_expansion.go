@@ -14,6 +14,8 @@ type ClusterServingRuntimeExpansion interface{}
 
 type FineTunedWeightExpansion interface{}
 
+type InferenceReplicaExpansion interface{}
+
 type InferenceServiceExpansion interface{}
 
 type ServingRuntimeExpansion interface{}

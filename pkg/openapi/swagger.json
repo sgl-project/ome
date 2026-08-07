@@ -945,6 +945,72 @@
         }
       }
     },
+    "v1beta1.ComponentAutoscaler": {
+      "description": "ComponentAutoscaler configures the autoscaler for a single Component (engine / decoder / router). Takes priority over the legacy ome.io/autoscalerClass annotation for this Component. Alpha. The API may change without notice. This is the only supported way to configure per-Component autoscaling on an ISVC — the legacy ScaleTarget / ScaleMetric fields have been removed from ComponentExtensionSpec.",
+      "type": "object",
+      "required": [
+        "class"
+      ],
+      "properties": {
+        "class": {
+          "description": "Class selects the autoscaler implementation.",
+          "type": "string",
+          "default": ""
+        },
+        "hpa": {
+          "description": "HPA holds HorizontalPodAutoscaler-specific configuration. Optional when Class == \"HPA\"; if absent the controller emits a default CPU=80% HPA.",
+          "$ref": "#/definitions/v1beta1.HPAAutoscaler"
+        },
+        "keda": {
+          "description": "Keda holds KEDA-specific configuration. Required when Class == \"KEDA\".",
+          "$ref": "#/definitions/v1beta1.KedaAutoscaler"
+        }
+      }
+    },
+    "v1beta1.ComponentAutoscalerStatus": {
+      "description": "ComponentAutoscalerStatus reports per-Component autoscaler state on the InferenceService. Mirrors the resolved ComponentAutoscaler block plus the live HPA / ScaledObject metrics so an operator can read the authoritative scaler shape, who owns it, and what it's currently doing — all from the parent ISVC without chasing IRs and scalers separately.\n\nPopulated by the ISVC status writer for OMENative-managed Components. The writer degrades gracefully when a Component has no live scaler — ManagedBy reports \"none\" and counters stay zero without crashing.\n\nAlpha. The shape may change without notice.",
+      "type": "object",
+      "properties": {
+        "class": {
+          "description": "Class echoes the resolved autoscaler class as picked by ResolveComponentAutoscaler. One of HPA | KEDA | External | None. Mirrors the input that drove dispatch so the operator can confirm the inheritance chain landed on the expected class.",
+          "type": "string"
+        },
+        "conditions": {
+          "description": "Conditions mirrors the HPA's or ScaledObject's conditions verbatim (HPA: ScalingActive / AbleToScale / ScalingLimited; ScaledObject: Ready / Active / Fallback / Paused). Empty when ManagedBy != \"ome\" — operator-owned scalers are surfaced via scaleTargetRef instead.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-map-keys": [
+            "type"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "currentReplicas": {
+          "description": "CurrentReplicas is mirrored from the HPA / ScaledObject status. Zero when ManagedBy != \"ome\" or when the scaler has not yet reported.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "desiredReplicas": {
+          "description": "DesiredReplicas is mirrored from the HPA / ScaledObject status. Zero when ManagedBy != \"ome\" or when the scaler has not yet reported.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "lastScaleTime": {
+          "description": "LastScaleTime mirrors the HPA / ScaledObject's last scale event. Nil when ManagedBy != \"ome\", when the scaler has not yet reported, or when no scaling has occurred since the scaler was created.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "managedBy": {
+          "description": "ManagedBy reports who owns the underlying scaler object. Distinguished from Class because none and external are dispatch-equivalent (both =\u003e delete any OME-managed HPA / SO); the surface-level distinction lives here.\n  - \"ome\": OME emitted the HPA / ScaledObject; conditions and\n    replica counters below mirror its live status.\n  - \"external\": operator-owned scaler; OME publishes\n    scaleTargetRef and stays out. Conditions empty.\n  - \"none\": no scaler at all. Conditions empty; counters zero.",
+          "type": "string"
+        },
+        "specSource": {
+          "description": "SpecSource reports which layer of the ISVC -\u003e runtime -\u003e default inheritance chain produced the resolved Autoscaler block. One of \"isvc\" | \"runtime\" | \"default\". Mirrors autoscaler.SpecSource so the operator can debug which layer is contributing the live config.",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.ComponentExtensionSpec": {
       "description": "ComponentExtensionSpec defines the deployment configuration for a given InferenceService component",
       "type": "object",
@@ -956,6 +1022,10 @@
             "type": "string",
             "default": ""
           }
+        },
+        "autoscaler": {
+          "description": "Autoscaler configures the per-Component autoscaler dispatch and the underlying KEDA / HPA configuration. When set, it takes precedence over the legacy ScaleTarget / ScaleMetric fields and the ome.io/autoscalerClass annotation for this Component. Alpha. The API may change without notice.",
+          "$ref": "#/definitions/v1beta1.ComponentAutoscaler"
         },
         "deploymentStrategy": {
           "description": "The deployment strategy to use to replace existing pods with new ones. Only applicable for raw deployment mode.",
@@ -971,6 +1041,10 @@
             "type": "string",
             "default": ""
           }
+        },
+        "lifecycle": {
+          "description": "Lifecycle groups OMENative-specific lifecycle policies for this Component. Applies only when the Component resolves to deploymentMode OMENative (spec.deploymentMode or the per-Component ome.io/deploymentMode annotation); ignored otherwise. The status counterpart is status.components.\u003ccomponent\u003e.lifecycle.",
+          "$ref": "#/definitions/v1beta1.LifecycleSpec"
         },
         "maxReplicas": {
           "description": "Maximum number of replicas for autoscaling.",
@@ -998,6 +1072,14 @@
           "description": "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for.",
           "type": "integer",
           "format": "int32"
+        },
+        "servicePortAppProtocols": {
+          "description": "ServicePortAppProtocols maps generated Service port names to their Kubernetes appProtocol values. Declared ports use their container port name.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
         },
         "timeoutSeconds": {
           "description": "TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.",
@@ -1036,6 +1118,35 @@
         }
       }
     },
+    "v1beta1.ComponentTrafficTarget": {
+      "description": "ComponentTrafficTarget describes the percentage of traffic routed to one revision of one Component. RevisionName is the per-revision Service name produced by OMENative's coordination layer (e.g. `llama-engine-rev-abc123`), which the HTTPRoute builder consumes directly as a backend reference.",
+      "type": "object",
+      "required": [
+        "revisionName",
+        "percent"
+      ],
+      "properties": {
+        "latestRevision": {
+          "description": "LatestRevision is true when this entry corresponds to the LatestRolledoutRevision for the Component.",
+          "type": "boolean"
+        },
+        "percent": {
+          "description": "Percent is the percentage of traffic the consumer should route to RevisionName. Sum across all entries for one Component is 100.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "revisionName": {
+          "description": "RevisionName is the per-revision Service name for this target.",
+          "type": "string",
+          "default": ""
+        },
+        "tag": {
+          "description": "Tag is an optional short identifier for the target (e.g. \"latest\", \"prev\"). Cosmetic; not used by the consumer.",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.DecoderSpec": {
       "description": "DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment) Used specifically for prefill-decode disaggregated deployments to handle the token generation phase. Similar to EngineSpec in structure, it allows for detailed pod and container configuration, but is specifically used for the decode phase when separating prefill and decode processes.",
       "type": "object",
@@ -1064,6 +1175,10 @@
         "automountServiceAccountToken": {
           "description": "AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.",
           "type": "boolean"
+        },
+        "autoscaler": {
+          "description": "Autoscaler configures the per-Component autoscaler dispatch and the underlying KEDA / HPA configuration. When set, it takes precedence over the legacy ScaleTarget / ScaleMetric fields and the ome.io/autoscalerClass annotation for this Component. Alpha. The API may change without notice.",
+          "$ref": "#/definitions/v1beta1.ComponentAutoscaler"
         },
         "containers": {
           "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
@@ -1185,6 +1300,10 @@
         "leader": {
           "description": "Leader node configuration (only used for MultiNode deployment) Defines the pod and container spec for the leader node that coordinates distributed token generation in multi-node deployments.",
           "$ref": "#/definitions/v1beta1.LeaderSpec"
+        },
+        "lifecycle": {
+          "description": "Lifecycle groups OMENative-specific lifecycle policies for this Component. Applies only when the Component resolves to deploymentMode OMENative (spec.deploymentMode or the per-Component ome.io/deploymentMode annotation); ignored otherwise. The status counterpart is status.components.\u003ccomponent\u003e.lifecycle.",
+          "$ref": "#/definitions/v1beta1.LifecycleSpec"
         },
         "maxReplicas": {
           "description": "Maximum number of replicas for autoscaling.",
@@ -1314,6 +1433,14 @@
         "serviceAccountName": {
           "description": "ServiceAccountName is the name of the ServiceAccount to use to run this pod. More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/",
           "type": "string"
+        },
+        "servicePortAppProtocols": {
+          "description": "ServicePortAppProtocols maps generated Service port names to their Kubernetes appProtocol values. Declared ports use their container port name.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
         },
         "setHostnameAsFQDN": {
           "description": "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
@@ -1501,6 +1628,10 @@
           "description": "AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.",
           "type": "boolean"
         },
+        "autoscaler": {
+          "description": "Autoscaler configures the per-Component autoscaler dispatch and the underlying KEDA / HPA configuration. When set, it takes precedence over the legacy ScaleTarget / ScaleMetric fields and the ome.io/autoscalerClass annotation for this Component. Alpha. The API may change without notice.",
+          "$ref": "#/definitions/v1beta1.ComponentAutoscaler"
+        },
         "containers": {
           "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
           "type": "array",
@@ -1621,6 +1752,10 @@
         "leader": {
           "description": "Leader node configuration (only used for MultiNode deployment) Defines the pod and container spec for the leader node that coordinates distributed inference in multi-node deployments.",
           "$ref": "#/definitions/v1beta1.LeaderSpec"
+        },
+        "lifecycle": {
+          "description": "Lifecycle groups OMENative-specific lifecycle policies for this Component. Applies only when the Component resolves to deploymentMode OMENative (spec.deploymentMode or the per-Component ome.io/deploymentMode annotation); ignored otherwise. The status counterpart is status.components.\u003ccomponent\u003e.lifecycle.",
+          "$ref": "#/definitions/v1beta1.LifecycleSpec"
         },
         "maxReplicas": {
           "description": "Maximum number of replicas for autoscaling.",
@@ -1750,6 +1885,14 @@
         "serviceAccountName": {
           "description": "ServiceAccountName is the name of the ServiceAccount to use to run this pod. More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/",
           "type": "string"
+        },
+        "servicePortAppProtocols": {
+          "description": "ServicePortAppProtocols maps generated Service port names to their Kubernetes appProtocol values. Declared ports use their container port name.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
         },
         "setHostnameAsFQDN": {
           "description": "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
@@ -1958,6 +2101,25 @@
         }
       }
     },
+    "v1beta1.HPAAutoscaler": {
+      "description": "HPAAutoscaler holds HorizontalPodAutoscaler configuration passed through verbatim. Alpha. The API may change without notice.",
+      "type": "object",
+      "properties": {
+        "behavior": {
+          "description": "Behavior controls scaling stabilization windows and per-direction policies.",
+          "$ref": "#/definitions/k8s.io.api.autoscaling.v2.HorizontalPodAutoscalerBehavior"
+        },
+        "metrics": {
+          "description": "Metrics are passed through verbatim to autoscalingv2.HorizontalPodAutoscalerSpec.Metrics. Supports Resource, ContainerResource, Pods, Object, and External metric sources. If empty, the controller defaults to a single CPU=80% Resource metric.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/k8s.io.api.autoscaling.v2.MetricSpec"
+          },
+          "x-kubernetes-list-type": "atomic"
+        }
+      }
+    },
     "v1beta1.HuggingFaceSecretReference": {
       "description": "HuggingFaceSecretReference defines a reference to a Kubernetes Secret containing the Hugging Face API key. This secret must reside in the same namespace as the BenchmarkJob. Cross-namespace references are not allowed for security and simplicity.",
       "type": "object",
@@ -1966,6 +2128,281 @@
           "description": "Name of the secret containing the Hugging Face API key. The secret must reside in the same namespace as the BenchmarkJob.",
           "type": "string",
           "default": ""
+        }
+      }
+    },
+    "v1beta1.InPlaceUpdateStrategy": {
+      "description": "InPlaceUpdateStrategy tunes per-pod lifecycle drain timing.",
+      "type": "object",
+      "properties": {
+        "gracePeriodSeconds": {
+          "description": "GracePeriodSeconds is the time OMENative waits between marking the pod not-ready and applying an in-place mutation. SurgeThenDrain also waits this long after EndpointSlice removal before deleting the old pod, allowing persistent load-balancer connections to drain while its workers remain available.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "markNotReadyDuringLifecycle": {
+          "description": "MarkNotReadyDuringLifecycle, when true, flips ome.io/serving=False on the pod before the in-place mutation so EndpointSlice drains traffic first. Defaults to true.",
+          "type": "boolean"
+        }
+      }
+    },
+    "v1beta1.InferenceReplica": {
+      "description": "InferenceReplica is the per-Component workload abstraction for OMENative-managed InferenceService Components. One InferenceReplica exists per (ISVC, Component) tuple. The ISVC controller writes the spec; the InferenceReplica controller writes the status.\n\nThe scale subresource lets HPA/KEDA target the InferenceReplica directly rather than indirecting through the parent ISVC.",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.InferenceReplicaSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.InferenceReplicaStatus"
+        }
+      }
+    },
+    "v1beta1.InferenceReplicaList": {
+      "description": "InferenceReplicaList contains a list of InferenceReplica objects.",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.InferenceReplica"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.InferenceReplicaPacing": {
+      "description": "InferenceReplicaPacing is the per-replica projection of the active RolloutCoordinationGroup pacing. Mirrors the corresponding RollingUpdate subset so the projection is a verbatim copy.",
+      "type": "object",
+      "properties": {
+        "maxUnavailable": {
+          "description": "MaxUnavailable caps in-rollout disruption. Accepts either a raw count or a percent string. When nil, the InferenceReplica controller falls back to its own default (currently 25%).",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
+        },
+        "partition": {
+          "description": "Partition holds back updates for Instances whose index is less than Partition. Mirrors RollingUpdate.Partition. 0 (the default) updates all Instances. Used for canary holds.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "rollbackToRevision": {
+          "description": "RollbackToRevision, when set, names a ControllerRevision the InferenceReplica must roll every Instance back to — overriding the rendered desired template with that revision's stored pod template (and using it as the update target). The InferenceService controller sets this during a canary rollback so the forward-roll machinery drains the canary pods back onto the stable revision. Empty in steady state.",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.InferenceReplicaSpec": {
+      "description": "InferenceReplicaSpec is the desired state of one (ISVC, Component) workload. The InferenceService controller is the sole writer; the admission webhook rejects writes from other actors that lack the ome.io/controller-write annotation.",
+      "type": "object",
+      "required": [
+        "parentRef",
+        "component",
+        "runners"
+      ],
+      "properties": {
+        "autoscaler": {
+          "description": "Autoscaler is the live autoscaler configuration that downstream scalers (HPA / KEDA / external) target. The ISVC controller projects the per-Component autoscaler defaults from ISVC.spec.\u003ccomponent\u003e.autoscaler onto the corresponding IR at create time + on subsequent reconciles. External autoscalers may also write directly to this field via the /scale subresource without going through the ISVC controller.",
+          "$ref": "#/definitions/v1beta1.ComponentAutoscaler"
+        },
+        "component": {
+          "description": "Component is one of engine | decoder | router. Immutable; moving a workload between Component slots requires recreating the InferenceReplica.",
+          "type": "string",
+          "default": ""
+        },
+        "lifecycle": {
+          "description": "Lifecycle holds the OMENative lifecycle policies (RestartPolicy, UpdateStrategy, ReadyPolicy, InstanceReadyTimeout, MigrationPolicy). Reuses the existing LifecycleSpec type so the projection from ISVC.spec.\u003ccomponent\u003e.lifecycle is a verbatim copy.",
+          "$ref": "#/definitions/v1beta1.LifecycleSpec"
+        },
+        "minReadySeconds": {
+          "description": "MinReadySeconds is propagated from the ISVC spec.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "pacing": {
+          "description": "Pacing is the InferenceService controller's projection of the active RolloutCoordinationGroup pacing for this replica. Written by the ISVC controller; read by the InferenceReplica controller. Includes Partition (canary hold) and MaxUnavailable (rollout budget). Nil means independent rollout.",
+          "$ref": "#/definitions/v1beta1.InferenceReplicaPacing"
+        },
+        "parentRef": {
+          "description": "ParentRef names the InferenceService that owns this replica. Set by the ISVC controller at create time; immutable thereafter.",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.ParentReference"
+        },
+        "paused": {
+          "description": "Paused, when true, stops the InferenceReplica controller from initiating any new Update / Restart / Create operations. In-flight operations resume on unpause.",
+          "type": "boolean"
+        },
+        "replicas": {
+          "description": "Replicas is the desired Instance count. The HPA / KEDA scale subresource writes this field. Defaults to 1 when omitted.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "runners": {
+          "description": "Runners is the fully-rendered set of pod templates per Instance. MUST be non-empty. Single-pod Instances have one Runner with Name=\"default\" and Size=1; multi-node Instances typically have Name=\"leader\" (Size=1) plus Name=\"worker\" (Size=N).\n\nThe InferenceService controller is the sole writer of this field. The InferenceReplica controller treats each Runner.Template as opaque input (same contract appsv1.Deployment.spec.template uses).",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.Runner"
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "topologyKey": {
+          "description": "TopologyKey is the resolved gang co-location node-label key for this Component, projected verbatim from the effective ISVC↔runtime component spec (spec.\u003ccomponent\u003e.topologyKey, else the runtime component-config value). When set on a multi-node Component, the InferenceReplica controller auto-generates the per-Instance worker→leader podAffinity that co-locates every worker onto its gang's leader on a node sharing this label value. Nil means no auto-generated gang affinity.",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.InferenceReplicaStatus": {
+      "description": "InferenceReplicaStatus is the observed state of one InferenceReplica. The InferenceReplica controller is the sole writer. Fields mirror the legacy LifecycleStatus shape so the dual-write window can byte-compare the two.",
+      "type": "object",
+      "properties": {
+        "availableReplicas": {
+          "description": "AvailableReplicas is the number of Instances that have been Ready for at least MinReadySeconds.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "collisionCount": {
+          "description": "CollisionCount is the salt folded into ControllerRevision hash input after a name collision is observed, so retries produce a different revision name. Same pattern as StatefulSet.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "conditions": {
+          "description": "Conditions reports InferenceReplica-level conditions. Defined types include Available, Progressing, FailedScale, FailedUpdate, GangSchedulingUnavailable, OperationStuck.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-map-keys": [
+            "type"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "coordinationGroupRef": {
+          "description": "CoordinationGroupRef back-references the RolloutCoordinationGroup this replica is currently bound into (if any). Lets operators find the owning coord group from the child without parsing the ISVC spec.",
+          "type": "string"
+        },
+        "currentRevision": {
+          "description": "CurrentRevision names the ControllerRevision currently serving traffic. Set by the InferenceReplica controller.",
+          "type": "string"
+        },
+        "instanceStatuses": {
+          "description": "InstanceStatuses reports per-Instance state. Reuses the existing OMENativeInstanceStatus type to enable byte-equality diffs against the legacy ISVC.status subtree during the migration window.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.OMENativeInstanceStatus"
+          },
+          "x-kubernetes-list-map-keys": [
+            "index"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "labelSelector": {
+          "description": "LabelSelector identifies pods of this InferenceReplica for the HPA scale subresource. Must match the legacy componentLabelSelectorString formula so existing HPAs continue to resolve unchanged.",
+          "type": "string"
+        },
+        "migrations": {
+          "description": "Migrations is the authoritative set of migration records for this InferenceReplica — one entry per request UUID. Manual entries are resumable processes born Accepted; Auto entries are born-terminal Relocated records. Executors select on non-terminal phase only — terminal entries are records, never work. Non-terminal entries are never trimmed; terminal entries are pruned once older than the migration-capacity rate window, so the list stays bounded. Full history remains in the audit ledger and events.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.MigrationStatus"
+          },
+          "x-kubernetes-list-map-keys": [
+            "requestUUID"
+          ],
+          "x-kubernetes-list-type": "map",
+          "x-kubernetes-patch-merge-key": "requestUUID",
+          "x-kubernetes-patch-strategy": "merge"
+        },
+        "observedGeneration": {
+          "description": "ObservedGeneration is the InferenceReplica.metadata.generation the most recent status flush reflects.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "readyReplicas": {
+          "description": "ReadyReplicas is the number of Instances whose every pod is Ready.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "replicas": {
+          "description": "Replicas is the total Instance count (any phase).",
+          "type": "integer",
+          "format": "int32"
+        },
+        "retryBlocks": {
+          "description": "RetryBlocks records per-target-revision retry authority for update attempts. Revision-scoped: one block per failed target revision, shared by every Instance attempting it — allocating a new Instance cannot evade the block.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.RetryBlock"
+          },
+          "x-kubernetes-list-map-keys": [
+            "targetRevision"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "servingReplicas": {
+          "description": "ServingReplicas is the number of Instances whose every pod is both ContainersReady AND has serving=True on the controller-managed readiness gate (i.e., actually in the load balancer rotation). MaxUnavailable budgets are computed against this count, not ReadyReplicas, so \"missing from traffic\" reflects reality during in-place updates.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "traffic": {
+          "description": "Traffic reports per-revision traffic weights for this InferenceReplica. Each entry corresponds to one revision currently receiving traffic. The ISVC controller mirrors this onto ISVC.status.components[c].traffic[] for the HTTPRoute builder.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.ComponentTrafficTarget"
+          },
+          "x-kubernetes-list-map-keys": [
+            "revisionName"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "updateRevision": {
+          "description": "UpdateRevision names the ControllerRevision being rolled out.",
+          "type": "string"
+        },
+        "updatedReadyReplicas": {
+          "description": "UpdatedReadyReplicas is the number of Instances on UpdateRevision that are fully Ready. UpdatedReadyReplicas / Replicas drives MaxUnavailable rollout pacing.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "updatedReplicas": {
+          "description": "UpdatedReplicas is the number of Instances on UpdateRevision.",
+          "type": "integer",
+          "format": "int32"
         }
       }
     },
@@ -2132,6 +2569,157 @@
         "url": {
           "description": "URL holds the url that will distribute traffic over the provided traffic targets. It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-level-suffix}",
           "$ref": "#/definitions/knative.URL"
+        }
+      }
+    },
+    "v1beta1.InstanceOperation": {
+      "description": "InstanceOperation is the recovery anchor written before any destructive action against an Instance and cleared on completion.",
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "step",
+        "startedAt",
+        "lastProgressAt"
+      ],
+      "properties": {
+        "deadline": {
+          "description": "Deadline is the hard timeout for the current Step. Zero (null) means the step clock is parked (e.g. while the instance's pods are admission-gated); optional + nullable so the parked null is accepted by the apiserver.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "fromNode": {
+          "description": "FromNode is the node the migrating Instance is being moved off. Set only when Type=Migrate.",
+          "type": "string"
+        },
+        "hintTargetNodes": {
+          "description": "HintTargetNodes is the caller-supplied preferred-node list for a migration. Set only when Type=Migrate.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "id": {
+          "description": "ID is the idempotency key for this operation. Retries with the same ID are a no-op.",
+          "type": "string",
+          "default": ""
+        },
+        "lastProgressAt": {
+          "description": "LastProgressAt is when the operation last advanced. Used for stall detection.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "reason": {
+          "description": "Reason is a short cause string for the operation.",
+          "type": "string"
+        },
+        "requestUUID": {
+          "description": "RequestUUID is the migration request UUID. Set only when Type=Migrate.",
+          "type": "string"
+        },
+        "retryCount": {
+          "description": "RetryCount is the per-step escalation counter.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "startedAt": {
+          "description": "StartedAt is when this operation began.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "step": {
+          "description": "Step is the fine-grained resume point within the operation (e.g., Drain, DeletePods, WaitZero, Recreate, WaitReady).",
+          "type": "string",
+          "default": ""
+        },
+        "surgeIndex": {
+          "description": "SurgeIndex is the Instance index allocated for a surge replacement. Set only when Type=Migrate.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "targetRevision": {
+          "description": "TargetRevision is the ControllerRevision the operation is converging toward.",
+          "type": "string"
+        },
+        "type": {
+          "description": "Type identifies the operation kind: Create, Update, Restart, Migrate, Delete.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.InstanceTermination": {
+      "description": "InstanceTermination captures the container-termination diagnostics of a pod that failed or was escalated, preserved on OMENativeInstanceStatus so the trace survives the recreate that deletes the pod.",
+      "type": "object",
+      "required": [
+        "podName"
+      ],
+      "properties": {
+        "containerName": {
+          "description": "ContainerName is the container the diagnostics were read from. Empty when the signal is pod-level (e.g. a pod-phase Failed with no per-container terminated state available).",
+          "type": "string"
+        },
+        "exitCode": {
+          "description": "ExitCode is the container's exit code when the diagnostics came from a terminated state. Nil when the pod was stuck in a waiting state (no process ever ran to produce an exit code).",
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "description": "Message is the kubelet-supplied detail message, if any.",
+          "type": "string"
+        },
+        "podName": {
+          "description": "PodName is the name of the pod that failed or was escalated.",
+          "type": "string",
+          "default": ""
+        },
+        "reason": {
+          "description": "Reason is the kubelet reason for the termination or wedge — a terminated-state reason (OOMKilled, Error, ContainerCannotRun) or a terminal waiting-state reason (CrashLoopBackOff, ImagePullBackOff, CreateContainerError). Falls back to \"PodFailed\" when only the pod phase is available.",
+          "type": "string"
+        },
+        "time": {
+          "description": "Time is when OMENative recorded this termination (reconcile time, not the kubelet transition time, which isn't always exposed).",
+          "$ref": "#/definitions/v1.Time"
+        }
+      }
+    },
+    "v1beta1.KedaAutoscaler": {
+      "description": "KedaAutoscaler holds KEDA ScaledObject configuration passed through verbatim. Alpha. The API may change without notice.",
+      "type": "object",
+      "required": [
+        "triggers"
+      ],
+      "properties": {
+        "advanced": {
+          "description": "Advanced ScaledObject configuration — horizontalPodAutoscalerConfig, restoreToOriginalReplicaCount.",
+          "$ref": "#/definitions/github.com.kedacore.keda.v2.apis.keda.v1alpha1.AdvancedConfig"
+        },
+        "cooldownPeriod": {
+          "description": "CooldownPeriod is the time, in seconds, KEDA waits before scaling down after the last trigger fires. Defaults to the KEDA-side default when unset.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "fallback": {
+          "description": "Fallback policy applied when the metric source becomes unavailable.",
+          "$ref": "#/definitions/github.com.kedacore.keda.v2.apis.keda.v1alpha1.Fallback"
+        },
+        "idleReplicaCount": {
+          "description": "IdleReplicaCount enables scaling to a fixed count when no triggers fire (commonly 0 for scale-to-zero). Must be strictly less than the effective MinReplicaCount.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "pollingInterval": {
+          "description": "PollingInterval is the interval, in seconds, at which KEDA checks each trigger. Defaults to the KEDA-side default when unset.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "triggers": {
+          "description": "Triggers are passed through verbatim to kedav1.ScaledObjectSpec.Triggers. The full KEDA trigger surface (prometheus, cron, external, kafka, ...) is supported.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/github.com.kedacore.keda.v2.apis.keda.v1alpha1.ScaleTriggers"
+          },
+          "x-kubernetes-list-type": "atomic"
         }
       }
     },
@@ -2447,6 +3035,295 @@
         }
       }
     },
+    "v1beta1.LifecycleSpec": {
+      "description": "LifecycleSpec groups OMENative-specific lifecycle policies on a Component. Embedded via ComponentExtensionSpec.Lifecycle; all fields are no-ops unless the Component is annotated ome.io/deploymentMode=OMENative. Nested under `lifecycle:` so the fields don't collide with corev1.PodSpec fields (notably restartPolicy) that are also inlined into EngineSpec / DecoderSpec / RouterSpec.",
+      "type": "object",
+      "properties": {
+        "instanceReadyTimeout": {
+          "description": "InstanceReadyTimeout is OMENative's upper bound for waiting on a newly-created Instance to become Ready (during migration, rollout, or initial creation).",
+          "$ref": "#/definitions/v1.Duration"
+        },
+        "migrationPolicy": {
+          "description": "MigrationPolicy controls whether and how OMENative honors a migration request annotation for this Component.",
+          "$ref": "#/definitions/v1beta1.MigrationPolicy"
+        },
+        "readyPolicy": {
+          "description": "ReadyPolicy controls how Instance-level readiness is aggregated from the underlying pods.",
+          "type": "string"
+        },
+        "restartPolicy": {
+          "description": "RestartPolicy controls what OMENative does when a managed pod fails. Distinct from the inlined corev1.PodSpec.RestartPolicy: that one tells kubelet whether to restart a container in-place; this one tells the OMENative controller whether to recreate the whole Instance.",
+          "type": "string"
+        },
+        "updateStrategy": {
+          "description": "UpdateStrategy controls how OMENative rolls template changes across the Component's Instances.",
+          "$ref": "#/definitions/v1beta1.UpdateStrategy"
+        }
+      }
+    },
+    "v1beta1.LifecycleStatus": {
+      "description": "LifecycleStatus reports OMENative-managed lifecycle state for one Component. Nil when the Component does not use OMENative. Counterpart of the LifecycleSpec sub-block on ComponentExtensionSpec.",
+      "type": "object",
+      "properties": {
+        "availableReplicas": {
+          "description": "AvailableReplicas is the number of Instances that have been Ready continuously for at least MinReadySeconds.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "collisionCount": {
+          "description": "CollisionCount is the salt folded into ControllerRevision hash input after a name collision is observed, so retries produce a different revision name. Same pattern as StatefulSet.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "conditions": {
+          "description": "Conditions reports Component-level conditions. Defined types include Available, Progressing, FailedScale, FailedUpdate, GangSchedulingUnavailable, OperationStuck.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-map-keys": [
+            "type"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "currentRevision": {
+          "description": "CurrentRevision names the ControllerRevision currently serving traffic.",
+          "type": "string"
+        },
+        "labelSelector": {
+          "description": "LabelSelector identifies pods of this Component for HPA-style consumers.",
+          "type": "string"
+        },
+        "observedGeneration": {
+          "description": "ObservedGeneration is the InferenceService.metadata.generation reflected by this block.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "readyReplicas": {
+          "description": "ReadyReplicas is the number of Instances whose every pod is Ready.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "replicas": {
+          "description": "Replicas is the total Instance count (any phase).",
+          "type": "integer",
+          "format": "int32"
+        },
+        "servingReplicas": {
+          "description": "ServingReplicas is the number of Instances whose every pod is BOTH ContainersReady AND has serving=True on the controller-managed readiness gate — i.e., the pod is actually in the load balancer's rotation. This is the count operators care about for traffic availability, and the count MaxUnavailable budgets gate against.\n\nDiverges from ReadyReplicas during in-place updates and any other scenario where the controller flips the serving gate to False while containers remain technically Ready.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "updateRevision": {
+          "description": "UpdateRevision names the ControllerRevision being rolled out.",
+          "type": "string"
+        },
+        "updatedReadyReplicas": {
+          "description": "UpdatedReadyReplicas is the number of Instances on UpdateRevision and fully Ready. UpdatedReadyReplicas / Replicas drives maxUnavailable rollout pacing.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "updatedReplicas": {
+          "description": "UpdatedReplicas is the number of Instances on UpdateRevision.",
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1beta1.MigrationEvent": {
+      "description": "MigrationEvent is one observation logged during a migration.",
+      "type": "object",
+      "required": [
+        "at",
+        "message"
+      ],
+      "properties": {
+        "at": {
+          "description": "At is the time the event was recorded.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "message": {
+          "description": "Message describes the observation.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.MigrationHistoryEntry": {
+      "description": "MigrationHistoryEntry is one entry of the rolling MigrationHistory window recorded on InferenceServiceStatus.",
+      "type": "object",
+      "required": [
+        "id",
+        "component",
+        "instance",
+        "mode",
+        "phase",
+        "requestedAt"
+      ],
+      "properties": {
+        "completedAt": {
+          "description": "CompletedAt is the time the migration reached a terminal phase.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "component": {
+          "description": "Component identifies which Component was migrated.",
+          "type": "string",
+          "default": ""
+        },
+        "events": {
+          "description": "Events records observations made during the migration.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.MigrationEvent"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "id": {
+          "description": "ID is the request UUID supplied by the caller.",
+          "type": "string",
+          "default": ""
+        },
+        "instance": {
+          "description": "Instance is the original Instance index that was migrated away from.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "mode": {
+          "description": "Mode is the migration mechanism. Always `surge` in v1.",
+          "type": "string",
+          "default": ""
+        },
+        "outcomeReason": {
+          "description": "OutcomeReason is a short machine-readable reason describing why the migration ended in its terminal phase (e.g., \"InstanceReadyTimeout\").",
+          "type": "string"
+        },
+        "phase": {
+          "description": "Phase is the current lifecycle phase.",
+          "type": "string",
+          "default": ""
+        },
+        "reason": {
+          "description": "Reason is the caller-supplied reason (e.g., \"fragmentation\").",
+          "type": "string"
+        },
+        "replacementInstance": {
+          "description": "ReplacementInstance is the Instance index allocated for the surge replacement. Nil when the migration was rejected before allocation. Distinct from index 0, which is a valid replacement index after sparse migration.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "requestedAt": {
+          "description": "RequestedAt is the time the request annotation was first observed.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "requestedBy": {
+          "description": "RequestedBy identifies the caller that wrote the request annotation.",
+          "type": "string"
+        },
+        "startedAt": {
+          "description": "StartedAt is the time the controller began executing the migration.",
+          "$ref": "#/definitions/v1.Time"
+        }
+      }
+    },
+    "v1beta1.MigrationPolicy": {
+      "description": "MigrationPolicy controls whether and how OMENative honors migration requests (both automatic deadline-disposition relocation and explicit annotation-triggered migration).",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "Mode gates migration: Auto enables both deadline-disposition relocation and explicit migration requests; Never disables both. Defaults to Auto.",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.MigrationStatus": {
+      "description": "MigrationStatus is one migration request's authoritative record on the InferenceReplica. status.migrations is the single source of truth for migration work: executors resume from non-terminal entries; the audit ledger and events are history, not work.\n\nLifecycle contract:\n  - Manual entries (Trigger=Manual) are resumable processes: born\n    Accepted, they walk Accepted -\u003e SurgePending -\u003e SurgeReady -\u003e\n    Draining -\u003e Completed | Failed.\n  - Auto entries (Trigger=Auto) are born-terminal Relocated records\n    mirroring a relocation directive; Succeeded is stamped post-hoc\n    when the relocated Instance next reaches Ready.\n  - Executors select on non-terminal phase only — terminal entries\n    are records, never work.",
+      "type": "object",
+      "required": [
+        "requestUUID",
+        "trigger",
+        "sourceInstance",
+        "phase",
+        "startedAt",
+        "deadline"
+      ],
+      "properties": {
+        "allocatedAt": {
+          "description": "AllocatedAt is when the surge Instance index was allocated — the start of execution. Nil while the entry is queued (Accepted but not yet picked up by the executor). The capacity gate counts execution from this stamp, never queued intent.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "attempt": {
+          "description": "Attempt is the relocation attempt ordinal. Auto: N of autoMigrate.maxAttempts.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "completedAt": {
+          "description": "CompletedAt is when the entry reached a terminal phase.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "deadline": {
+          "description": "Deadline is when a non-terminal entry expires. Manual: accept time plus InstanceReadyTimeout.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "fromNode": {
+          "description": "FromNode is the node the source is being moved off. Auto: the excluded node.",
+          "type": "string"
+        },
+        "hintTargetNodes": {
+          "description": "HintTargetNodes are requester-supplied preferred placement targets for the surge replacement. Rendered as preferred (soft) node affinity; the scheduler may pick other nodes.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "message": {
+          "description": "Message describes the current blocker (non-terminal) or the terminal outcome.",
+          "type": "string"
+        },
+        "phase": {
+          "description": "Phase is the migration lifecycle phase. See MigrationPhase for the Manual chain, the Auto born-terminal rule, and the terminal set.",
+          "type": "string",
+          "default": ""
+        },
+        "reason": {
+          "description": "Reason is the requester-supplied reason (Manual) or the disposition branch that produced the entry (Auto).",
+          "type": "string"
+        },
+        "requestUUID": {
+          "description": "RequestUUID uniquely identifies the migration request. Manual: supplied by the requester. Auto: generated by the controller.",
+          "type": "string",
+          "default": ""
+        },
+        "sourceInstance": {
+          "description": "SourceInstance is the Instance index being migrated away from.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "startedAt": {
+          "description": "StartedAt is when the entry was created.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "succeeded": {
+          "description": "Succeeded reports the post-hoc outcome. Auto: stamped true when the relocated Instance next reaches Ready.",
+          "type": "boolean"
+        },
+        "surgeInstance": {
+          "description": "SurgeInstance is the Instance index allocated for the surge replacement. Manual only; nil until allocated. Distinct from index 0, which is a valid surge index.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "trigger": {
+          "description": "Trigger records who initiated the migration.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
     "v1beta1.ModelCopies": {
       "type": "object",
       "required": [
@@ -2673,6 +3550,103 @@
         }
       }
     },
+    "v1beta1.OMENativeInstanceStatus": {
+      "description": "OMENativeInstanceStatus reports state for one OMENative Instance.",
+      "type": "object",
+      "required": [
+        "index",
+        "phase"
+      ],
+      "properties": {
+        "activeOrdinal": {
+          "description": "ActiveOrdinal identifies which of two pod-naming slots (0 or 1) currently holds the canonical pod for this single-pod Instance. SurgeThenDrain alternates between slots: the surge creates a new pod at `1 - ActiveOrdinal`, waits Ready, drains the old pod, then advances ActiveOrdinal to the new slot. Stays 0 for InPlace and Recreate strategies (those reuse the same pod name). Defaults to 0 on initial create.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "admitted": {
+          "description": "Admitted is true when this Instance's pods have left the Kueue admission scheduling gate (quota granted): the Instance has pods and none are admission-gated. False while gated/queued or before pods exist. Used by the control plane to decide the fan-out race winner.",
+          "type": "boolean"
+        },
+        "availablePodCount": {
+          "description": "AvailablePodCount is the number of pods ready for at least MinReadySeconds.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "conditions": {
+          "description": "Conditions reports Instance-level conditions. Defined types include AllPodsScheduled, AllPodsReady, AllPodsAvailable, Drained, Failed, ProgressDeadlineExceeded.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-map-keys": [
+            "type"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "incarnation": {
+          "description": "Incarnation increments each time the Instance is recreated (full recreate update, restart-on-loss). In-place updates do not increment. Stamped on pods via the `ome.io/instance-incarnation` label.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "index": {
+          "description": "Index is the stable Instance ordinal. Values may be sparse after surge migration.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "lastFailure": {
+          "description": "LastFailure preserves the diagnostics of the pod whose failure (or stuck-pod escalation) last triggered a recreate of this Instance. OMENative drains and deletes every gang pod on recreate, so the failing pod and its container termination state vanish from the cluster — this field is the surviving trace operators read when a multi-node Instance keeps recreating. Set on the first pass of a failure-driven Restart and on stuck-pod escalation; left untouched by revision-roll recreates (those carry their cause in Operation.Reason instead) so the most recent genuine failure isn't overwritten by a clean rollout.",
+          "$ref": "#/definitions/v1beta1.InstanceTermination"
+        },
+        "nodesOccupied": {
+          "description": "NodesOccupied is the set of node names hosting pods of this Instance.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "set"
+        },
+        "operation": {
+          "description": "Operation is the durable record of an in-flight destructive action against this Instance. Set before the action starts, cleared after it completes. Lets a crashed controller resume work without diffing pod state.",
+          "$ref": "#/definitions/v1beta1.InstanceOperation"
+        },
+        "phase": {
+          "description": "Phase is the lifecycle phase of the Instance.",
+          "type": "string",
+          "default": ""
+        },
+        "podCount": {
+          "description": "PodCount is the total number of pods owned by this Instance.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "readyPodCount": {
+          "description": "ReadyPodCount is the number of pods reporting Ready=True.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "runningRevision": {
+          "description": "RunningRevision is the ControllerRevision the live pods are running.",
+          "type": "string"
+        },
+        "scheduledPodCount": {
+          "description": "ScheduledPodCount is the number of pods with Spec.NodeName set.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "servingPodCount": {
+          "description": "ServingPodCount is the number of pods that are BOTH ContainersReady AND have serving=True on the controller-managed readiness gate — i.e., pods actually in the load balancer rotation. Diverges from ReadyPodCount whenever the controller flips the serving gate (in-place updates, drain steps, etc.). MaxUnavailable budgets are computed against the serving count, not the ready count, so that \"missing from traffic\" reflects reality.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "targetRevision": {
+          "description": "TargetRevision is the ControllerRevision the live pods are converging toward.",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.ObjectReference": {
       "description": "ObjectReference contains enough information to let you inspect or modify the referred object.",
       "type": "object",
@@ -2684,6 +3658,17 @@
         "namespace": {
           "description": "Namespace of the referenced object",
           "type": "string"
+        }
+      }
+    },
+    "v1beta1.ParentReference": {
+      "description": "ParentReference holds the InferenceService owner reference info. Distinct from the OwnerReference list because the InferenceReplica controller composes the parent's name into per-IR label and Service names without re-reading the metadata field.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Name is the name of the parent InferenceService.",
+          "type": "string",
+          "default": ""
         }
       }
     },
@@ -3040,6 +4025,86 @@
         }
       }
     },
+    "v1beta1.ProportionalPolicy": {
+      "description": "ProportionalPolicy specifies the anchor Component and per-follower replica ratios for ScalingProportional. Alpha. The API may change without notice.",
+      "type": "object",
+      "required": [
+        "anchor"
+      ],
+      "properties": {
+        "anchor": {
+          "description": "Anchor is the Component whose replica count drives followers.",
+          "type": "string",
+          "default": ""
+        },
+        "ratios": {
+          "description": "Ratios maps each follower Component to its replica ratio relative to the anchor. A ratio of 1.0 means parity; 0.25 means one follower per four anchor replicas (rounded up). Components not listed scale independently.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/resource.Quantity"
+          }
+        }
+      }
+    },
+    "v1beta1.RetryBlock": {
+      "description": "RetryBlock is the persisted per-revision retry authority. The subject is the owning IR plus TargetRevision.",
+      "type": "object",
+      "required": [
+        "targetRevision",
+        "state",
+        "attemptsStarted"
+      ],
+      "properties": {
+        "attemptsStarted": {
+          "description": "AttemptsStarted counts lifecycle attempts at this revision. Kubelet container restarts are diagnostic and not counted here.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "firstFailureAt": {
+          "$ref": "#/definitions/v1.Time"
+        },
+        "lastFailureAt": {
+          "$ref": "#/definitions/v1.Time"
+        },
+        "nextRetryAt": {
+          "description": "NextRetryAt is the persisted resume time while State=Backoff. Never recomputed from process-local history (restart-safe).",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "reason": {
+          "description": "Reason is the operator-facing last-failure summary.",
+          "type": "string"
+        },
+        "state": {
+          "type": "string",
+          "default": ""
+        },
+        "targetRevision": {
+          "description": "TargetRevision is the ControllerRevision name this block scopes.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.RollingUpdate": {
+      "description": "RollingUpdate paces rollout across Instances of one Component.",
+      "type": "object",
+      "properties": {
+        "maxSurge": {
+          "description": "MaxSurge is the maximum number of extra Instances (or fraction) the rollout may create above the Component's desired replica count during a rolling update. Accepts either an absolute integer count (e.g. 1) or a percent string (e.g. \"25%\"). Percent values resolve to ceil(replicas * percent / 100) at reconcile time. Mirrors the semantics of upstream appsv1.Deployment.Strategy.RollingUpdate.MaxSurge — extra capacity is created and brought to Ready before old Instances are drained, enabling zero-capacity-dip rollouts.\n\nWhen the Component participates in a RolloutCoordinationGroup with a non-zero CoordinationPacing.MaxSurge, the group-wide ceiling caps the per-Component MaxSurge.",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
+        },
+        "maxUnavailable": {
+          "description": "MaxUnavailable is the maximum number of Instances (or fraction) allowed to be in a non-Ready state during the rollout. Accepts either an absolute integer count (e.g. 2) or a percent string (e.g. \"25%\"). Percent values resolve to ceil(replicas * percent / 100) at reconcile time so the budget scales with the Component's replica count.",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
+        },
+        "partition": {
+          "description": "Partition holds back updates for Instances whose index is \u003c Partition. 0 (the default) updates all Instances. Used for canary holds.",
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
     "v1beta1.RouterSpec": {
       "description": "RouterSpec defines the configuration for the Router component, which handles request routing",
       "type": "object",
@@ -3064,6 +4129,10 @@
         "automountServiceAccountToken": {
           "description": "AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.",
           "type": "boolean"
+        },
+        "autoscaler": {
+          "description": "Autoscaler configures the per-Component autoscaler dispatch and the underlying KEDA / HPA configuration. When set, it takes precedence over the legacy ScaleTarget / ScaleMetric fields and the ome.io/autoscalerClass annotation for this Component. Alpha. The API may change without notice.",
+          "$ref": "#/definitions/v1beta1.ComponentAutoscaler"
         },
         "config": {
           "description": "Additional configuration parameters for the runner This can include framework-specific settings",
@@ -3189,6 +4258,10 @@
             "type": "string",
             "default": ""
           }
+        },
+        "lifecycle": {
+          "description": "Lifecycle groups OMENative-specific lifecycle policies for this Component. Applies only when the Component resolves to deploymentMode OMENative (spec.deploymentMode or the per-Component ome.io/deploymentMode annotation); ignored otherwise. The status counterpart is status.components.\u003ccomponent\u003e.lifecycle.",
+          "$ref": "#/definitions/v1beta1.LifecycleSpec"
         },
         "maxReplicas": {
           "description": "Maximum number of replicas for autoscaling.",
@@ -3319,6 +4392,14 @@
           "description": "ServiceAccountName is the name of the ServiceAccount to use to run this pod. More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/",
           "type": "string"
         },
+        "servicePortAppProtocols": {
+          "description": "ServicePortAppProtocols maps generated Service port names to their Kubernetes appProtocol values. Declared ports use their container port name.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
         "setHostnameAsFQDN": {
           "description": "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
           "type": "boolean"
@@ -3378,6 +4459,33 @@
           "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
+        }
+      }
+    },
+    "v1beta1.Runner": {
+      "description": "Runner is one logical pod role within an Instance.\n\nSingle-pod Instances declare one Runner named \"default\" with Size=1. Multi-node Instances declare \"leader\" (Size=1) + \"worker\" (Size\u003e=1).\n\nThe revision hash includes every Runner's Template; a worker-only image bump still triggers a coordinated rollout across the whole Instance because tensor-parallel weights require leader+workers to move together.",
+      "type": "object",
+      "required": [
+        "name",
+        "size",
+        "template"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name is the Runner role within the Instance.",
+          "type": "string",
+          "default": ""
+        },
+        "size": {
+          "description": "Size is the pod count for this Runner per Instance. Constraints:\n  - \"default\" Size MUST equal 1\n  - \"leader\" Size MUST equal 1\n  - \"worker\" Size MUST be \u003e= 1",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "template": {
+          "description": "Template is the fully-rendered pod template for this Runner. Labels include ome.io/runner=\u003cname\u003e. The InferenceReplica controller stamps OME_RUNNER (leader|worker|default) and, for non-leader pods, OME_LEADER_ADDRESS (short-form DNS, matching LWS conventions) onto the rendered pod at create.",
+          "default": {},
+          "$ref": "#/definitions/v1.PodTemplateSpec"
         }
       }
     },
@@ -3546,6 +4654,32 @@
         }
       }
     },
+    "v1beta1.ScaleTargetRef": {
+      "description": "ScaleTargetRef is a stripped-down reference to the canonical scale target for a Component — the InferenceReplica (for OMENative) or the underlying Deployment (for RawDeployment). Published on status.components.\u003ccomp\u003e.scaleTargetRef so an external scaler knows which object to point at (the same GroupKind the user would target with kubectl scale \u003ckind\u003e/\u003cname\u003e).\n\nEmpty when the Component has no active scaler (e.g., legacy RawDeployment Components that have not migrated to the new Autoscaler block).\n\nAlpha. The shape may change without notice.",
+      "type": "object",
+      "required": [
+        "apiVersion",
+        "kind",
+        "name"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion of the scale target — e.g. \"ome.io/v1beta1\" for the IR-managed OMENative path; \"apps/v1\" for RawDeployment.",
+          "type": "string",
+          "default": ""
+        },
+        "kind": {
+          "description": "Kind of the scale target — e.g. \"InferenceReplica\" for the IR-managed OMENative path; \"Deployment\" for RawDeployment.",
+          "type": "string",
+          "default": ""
+        },
+        "name": {
+          "description": "Name of the scale target. Namespace is always the same as the owning ISVC.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
     "v1beta1.ScalerAuthenticationRef": {
       "description": "ScalerAuthenticationRef points to a KEDA TriggerAuthentication or ClusterTriggerAuthentication resource that contains the credentials for authenticating with the scaler's target (e.g., Prometheus server).",
       "type": "object",
@@ -3558,6 +4692,24 @@
           "description": "Name of the TriggerAuthentication or ClusterTriggerAuthentication resource.",
           "type": "string",
           "default": ""
+        }
+      }
+    },
+    "v1beta1.ScalingPolicy": {
+      "description": "ScalingPolicy defines coordination between the Components of an InferenceService. Alpha. The API may change without notice.",
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "description": "Mode selects the coordination strategy.",
+          "type": "string",
+          "default": ""
+        },
+        "proportional": {
+          "description": "Proportional configuration; required when Mode == \"proportional\".",
+          "$ref": "#/definitions/v1beta1.ProportionalPolicy"
         }
       }
     },
@@ -4068,6 +5220,24 @@
           "description": "tensorParallelSize specifies the size of the tensor parallelism",
           "type": "integer",
           "format": "int64"
+        }
+      }
+    },
+    "v1beta1.UpdateStrategy": {
+      "description": "UpdateStrategy controls how OMENative rolls template changes across an Instance's pods.",
+      "type": "object",
+      "properties": {
+        "inPlaceUpdateStrategy": {
+          "description": "InPlaceUpdateStrategy tunes the per-pod in-place update sequence. Ignored when Type is RecreatePod.",
+          "$ref": "#/definitions/v1beta1.InPlaceUpdateStrategy"
+        },
+        "rollingUpdate": {
+          "description": "RollingUpdate paces the rollout across Instances of the Component.",
+          "$ref": "#/definitions/v1beta1.RollingUpdate"
+        },
+        "type": {
+          "description": "Type selects the rollout mechanism. Defaults to SurgeThenDrain for safety — preserves serving capacity throughout the rollout.",
+          "type": "string"
         }
       }
     },
