@@ -165,11 +165,15 @@ manifests: controller-gen yq ## 📄 Generate WebhookConfiguration, ClusterRole 
 generate: controller-gen ## 🔄 Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations and client-go libraries.
 	@echo "\n📦 Code Generation Process Starting..."
 	@echo "\n🔧 Step 1: Setting up Go environment..."
-	@go env -w GOFLAGS=-mod=mod
+	@# Use an inline GOFLAGS export instead of `go env -w`, which writes
+	@# to ~/.config/go/env. That path is read-only in many sandboxed
+	@# code-agent environments and made this target fail with cryptic
+	@# permission errors. Inline export is per-recipe and survives to the
+	@# sub-scripts invoked below.
 	@echo "✅ Go environment configured"
 
 	@echo "\n🔄 Step 2: Generating Kubernetes client-go code..."
-	@if ! hack/update-codegen.sh 2>generate.err; then \
+	@if ! GOFLAGS=-mod=mod hack/update-codegen.sh 2>generate.err; then \
 		echo "❌ Error during code generation:"; \
 		cat generate.err; \
 		rm generate.err; \
@@ -179,7 +183,7 @@ generate: controller-gen ## 🔄 Generate code containing DeepCopy, DeepCopyInto
 	@echo "✅ Client-go code generation complete"
 
 	@echo "\n📝 Step 3: Generating OpenAPI specifications..."
-	@if ! hack/update-openapigen.sh 2>openapi.err; then \
+	@if ! GOFLAGS=-mod=mod hack/update-openapigen.sh 2>openapi.err; then \
 		echo "❌ Error during OpenAPI generation:"; \
 		cat openapi.err; \
 		rm openapi.err; \
