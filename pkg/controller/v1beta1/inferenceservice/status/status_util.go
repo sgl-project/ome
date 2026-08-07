@@ -36,14 +36,6 @@ func (sr *StatusReconciler) getFirstPod(podList *v1.PodList) (*v1.Pod, error) {
 	return &podList.Items[0], nil
 }
 
-// getFirstDeployment safely returns the first deployment from a deployment slice
-func (sr *StatusReconciler) getFirstDeployment(deployments []*appsv1.Deployment) (*appsv1.Deployment, error) {
-	if len(deployments) == 0 {
-		return nil, fmt.Errorf("deployment list is empty")
-	}
-	return deployments[0], nil
-}
-
 // getDeploymentCondition extracts condition from deployment
 func (sr *StatusReconciler) getDeploymentCondition(deployment *appsv1.Deployment, conditionType appsv1.DeploymentConditionType) *apis.Condition {
 	condition := apis.Condition{}
@@ -96,56 +88,6 @@ func (sr *StatusReconciler) getLWSConditions(lws *lwsspec.LeaderWorkerSet, condi
 			break
 		}
 	}
-	return &condition
-}
-
-// getMultiDeploymentCondition checks conditions across multiple deployments
-func (sr *StatusReconciler) getMultiDeploymentCondition(deployments []*appsv1.Deployment, conditionType appsv1.DeploymentConditionType) *apis.Condition {
-	condition := apis.Condition{}
-	allDeploymentsAvailable := true
-
-	if len(deployments) == 0 {
-		return &apis.Condition{
-			Type:    apis.ConditionType(conditionType),
-			Status:  v1.ConditionFalse,
-			Reason:  "NoDeployments",
-			Message: "No deployments available",
-		}
-	}
-
-	for _, d := range deployments {
-		if d.Status.Conditions == nil {
-			allDeploymentsAvailable = false
-			break
-		}
-		for _, con := range d.Status.Conditions {
-			if con.Type == conditionType && con.Status == v1.ConditionFalse {
-				allDeploymentsAvailable = false
-				break
-			}
-		}
-	}
-
-	if allDeploymentsAvailable {
-		// Safely access the first deployment's conditions
-		firstDeployment := deployments[0]
-		if len(firstDeployment.Status.Conditions) > 0 {
-			condition.Type = apis.ConditionType(conditionType)
-			condition.Status = v1.ConditionTrue
-			condition.Message = firstDeployment.Status.Conditions[0].Message
-			condition.LastTransitionTime = apis.VolatileTime{
-				Inner: firstDeployment.Status.Conditions[0].LastTransitionTime,
-			}
-			condition.Reason = firstDeployment.Status.Conditions[0].Reason
-		} else {
-			// Fallback if no conditions exist
-			condition.Type = apis.ConditionType(conditionType)
-			condition.Status = v1.ConditionTrue
-			condition.Message = "All deployments available"
-			condition.Reason = "Available"
-		}
-	}
-
 	return &condition
 }
 

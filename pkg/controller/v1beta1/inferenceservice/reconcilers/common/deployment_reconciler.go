@@ -13,7 +13,6 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinode"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinodevllm"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/raw"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/status"
 )
@@ -83,35 +82,6 @@ func (r *DeploymentReconciler) ReconcileMultiNodeDeployment(
 	return ctrl.Result{}, nil
 }
 
-// ReconcileMultiNodeRayVLLMDeployment handles multi-node Ray VLLM deployment
-func (r *DeploymentReconciler) ReconcileMultiNodeRayVLLMDeployment(
-	isvc *v1beta1.InferenceService,
-	objectMeta metav1.ObjectMeta,
-	podSpec *v1.PodSpec,
-	componentSpec *v1beta1.ComponentExtensionSpec,
-	componentType v1beta1.ComponentType,
-) (ctrl.Result, error) {
-	r.Log.Info("PipelineParallelism is enabled, using MultiNodeRayVLLM deployment",
-		"component", componentType, "inferenceService", isvc.Name, "namespace", isvc.Namespace)
-
-	reconciler, err := multinodevllm.NewMultiNodeVllmReconciler(r.Client, r.Clientset, r.Scheme, objectMeta, componentSpec, podSpec)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to create MultiNodeVllmReconciler for %s", componentType)
-	}
-
-	if err := r.setMultiNodeRayVLLMReferences(isvc, reconciler); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	_, result, err := reconciler.Reconcile()
-	if err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile %s", componentType)
-	}
-
-	r.StatusManager.PropagateMultiNodeRayVLLMStatus(&isvc.Status, componentType, reconciler.MultiNodeProber.Deployments, reconciler.URL)
-	return result, nil
-}
-
 // setRawReferences sets the necessary references for raw deployment
 func (r *DeploymentReconciler) setRawReferences(isvc *v1beta1.InferenceService, reconciler *raw.RawKubeReconciler) error {
 	if err := controllerutil.SetControllerReference(isvc, reconciler.Deployment.Deployment, r.Scheme); err != nil {
@@ -134,19 +104,4 @@ func (r *DeploymentReconciler) setMultiNodeReferences(isvc *v1beta1.InferenceSer
 		return errors.Wrapf(err, "failed to set lws owner reference")
 	}
 	return controllerutil.SetControllerReference(isvc, mnr.Service.Service, r.Scheme)
-}
-
-// setMultiNodeRayVLLMReferences sets the necessary references for multi-node Ray VLLM deployment
-func (r *DeploymentReconciler) setMultiNodeRayVLLMReferences(isvc *v1beta1.InferenceService, reconciler *multinodevllm.MultiNodeVllmReconciler) error {
-	for _, ray := range reconciler.Ray.RayClusters {
-		if err := controllerutil.SetControllerReference(isvc, ray, r.Scheme); err != nil {
-			return errors.Wrapf(err, "failed to set ray owner reference")
-		}
-	}
-	for _, dply := range reconciler.MultiNodeProber.Deployments {
-		if err := controllerutil.SetControllerReference(isvc, dply, r.Scheme); err != nil {
-			return errors.Wrapf(err, "failed to set prober owner reference")
-		}
-	}
-	return controllerutil.SetControllerReference(isvc, reconciler.RawMultiNodeService.Service, r.Scheme)
 }

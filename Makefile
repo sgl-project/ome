@@ -295,12 +295,6 @@ ome-agent: xet-build ## 🔄 Build ome-agent binary.
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/ome-agent ./cmd/ome-agent
 	@echo "✅ Build complete"
 
-.PHONY: multinode-prober
-multinode-prober: ## 🔍 Build multinode-prober binary.
-	@echo "🔍 Building multinode-prober..."
-	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/multinode-prober ./cmd/multinode-prober
-	@echo "✅ Build complete"
-
 .PHONY: run-ome-manager
 run-ome-manager: manifests generate fmt vet ## Run ome-manager binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
 	@echo "🏃‍♂️ Running ome-manager..."
@@ -352,16 +346,6 @@ model-agent-image: fmt vet ## Build model-agent image.
 		. -f dockerfiles/model-agent.Dockerfile -t $(REGISTRY)/model-agent:$(TAG)
 	@echo "✅ Image built"
 
-.PHONY: multinode-prober-image
-multinode-prober-image: fmt vet ## Build multinode-prober image.
-	@echo "🚀 Building multinode-prober image..."
-	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
-		--build-arg VERSION=$(GIT_TAG) \
-		--build-arg GIT_TAG=$(GIT_TAG) \
-		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		. -f dockerfiles/multinode-prober.Dockerfile -t $(REGISTRY)/multinode-prober:$(TAG)
-	@echo "✅ Image built"
-
 .PHONY: ome-agent-image
 ome-agent-image: fmt vet xet-build ## Build ome-agent image.
 	@echo "🚀 Building ome-agent image..."
@@ -384,7 +368,6 @@ build-all-images: fmt vet ## 🚀 Build all images for current architecture
 	@echo "🚀 Building all OME images for $(ARCH)..."
 	@$(MAKE) ome-image
 	@$(MAKE) model-agent-image
-	@$(MAKE) multinode-prober-image
 	@$(MAKE) ome-agent-image
 	@echo "✅ All images built successfully"
 
@@ -401,11 +384,6 @@ build-all-images-multiarch: fmt vet docker-buildx-setup ## 🌍 Build all images
 		--build-arg GIT_TAG=$(GIT_TAG) \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		. -f dockerfiles/model-agent.Dockerfile -t $(REGISTRY)/model-agent:$(TAG) --push
-	$(DOCKER_BUILD_CMD) buildx build --platform=linux/amd64,linux/arm64 \
-		--build-arg VERSION=$(GIT_TAG) \
-		--build-arg GIT_TAG=$(GIT_TAG) \
-		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		. -f dockerfiles/multinode-prober.Dockerfile -t $(REGISTRY)/multinode-prober:$(TAG) --push
 	$(DOCKER_BUILD_CMD) buildx build --platform=linux/amd64,linux/arm64 \
 		--build-arg VERSION=$(GIT_TAG) \
 		--build-arg GIT_TAG=$(GIT_TAG) \
@@ -512,12 +490,6 @@ push-manager-image: ome-image ## Push manager image to registry.
 push-model-agent-image: model-agent-image ## Push model-agent image to registry.
 	@echo "🚀 Pushing model-agent image to registry..."
 	$(DOCKER_BUILD_CMD) push $(REGISTRY)/model-agent:$(TAG)
-	@echo "✅ Image pushed"
-
-.PHONY: push-multinode-prober-image
-push-multinode-prober-image: multinode-prober-image ## Push multinode-prober image to registry.
-	@echo "🚀 Pushing multinode-prober image to registry..."
-	$(DOCKER_BUILD_CMD) push $(REGISTRY)/multinode-prober:$(TAG)
 	@echo "✅ Image pushed"
 
 .PHONY: push-ome-agent-image

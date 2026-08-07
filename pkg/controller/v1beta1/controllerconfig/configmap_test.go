@@ -54,26 +54,11 @@ func TestNewInferenceServicesConfig(t *testing.T) {
 		validateConfig func(*testing.T, *InferenceServicesConfig)
 	}{
 		{
-			name: "valid config",
-			configMapData: map[string]string{
-
-				MultiNodeProberName: `{
-					"image": "test-image",
-					"cpuRequest": "100m",
-					"memoryRequest": "100Mi",
-					"cpuLimit": "200m",
-					"memoryLimit": "200Mi",
-					"startupFailureThreshold": 3,
-					"startupPeriodSeconds": 10,
-					"startupInitialDelaySeconds": 5,
-					"startupTimeoutSeconds": 30,
-					"unavailableThresholdSeconds": 60
-				}`,
-			},
+			name:          "valid config",
+			configMapData: map[string]string{},
 			expectedError: false,
 			validateConfig: func(t *testing.T, cfg *InferenceServicesConfig) {
-				assert.Equal(t, "test-image", cfg.MultiNodeProber.Image)
-				assert.Equal(t, "100m", cfg.MultiNodeProber.CPURequest)
+				assert.NotNil(t, cfg)
 			},
 		},
 		{

@@ -1541,19 +1541,6 @@ func TestDetermineEngineDeploymentMode(t *testing.T) {
 			expectedMode: constants.MultiNode,
 		},
 		{
-			name: "annotation with MultiNodeRayVLLM takes highest precedence",
-			engine: &v1beta1.EngineSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					Annotations: map[string]string{
-						constants.DeploymentMode: string(constants.MultiNodeRayVLLM),
-					},
-					MinReplicas: intPtr(1),
-				},
-				Leader: &v1beta1.LeaderSpec{},
-			},
-			expectedMode: constants.MultiNodeRayVLLM,
-		},
-		{
 			name: "annotation with MultiNode takes highest precedence",
 			engine: &v1beta1.EngineSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{

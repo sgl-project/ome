@@ -154,8 +154,6 @@ func (e *Engine) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta 
 		return e.deploymentReconciler.ReconcileRawDeployment(isvc, objectMeta, podSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
 	case constants.MultiNode:
 		return e.deploymentReconciler.ReconcileMultiNodeDeployment(isvc, objectMeta, podSpec, workerSize, workerPodSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
-	case constants.MultiNodeRayVLLM:
-		return e.deploymentReconciler.ReconcileMultiNodeRayVLLMDeployment(isvc, objectMeta, podSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for engine")
 	}
@@ -258,7 +256,7 @@ func (e *Engine) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *me
 	var runnerSpec *v1beta1.RunnerSpec
 
 	switch deploymentMode {
-	case constants.MultiNode, constants.MultiNodeRayVLLM:
+	case constants.MultiNode:
 		// For multi-node, use leader spec
 		if e.engineSpec.Leader != nil {
 			basePodSpec = e.engineSpec.Leader.PodSpec

@@ -44,20 +44,6 @@ data:
         ]
     }
 
-  multinodeProber: |-
-    {
-      "image" : "ghcr.io/moirai-internal/multinode-prober:v1.2.1",
-      "memoryRequest": "100Mi",
-      "memoryLimit": "100Mi",
-      "cpuRequest": "100m",
-      "cpuLimit": "100m",
-      "startupFailureThreshold": 150,
-      "startupPeriodSeconds": 30,
-      "startupTimeoutSeconds": 60,
-      "startupInitialDelaySeconds": 200,
-      "unavailableThresholdSeconds": 1800
-    }
-
   kedaConfig: |-
     {
       "enableKeda" : true,

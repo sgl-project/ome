@@ -16,18 +16,6 @@ ome:
     memoryRequest: "2Gi"
     cpuLimit: "2"
     memoryLimit: "2Gi"
-  multinodeProber:
-    image: multinode-prober
-    tag: *defaultVersion
-    memoryRequest: 100Mi
-    cpuRequest: 100m
-    memoryLimit: 100Mi
-    cpuLimit: 100m
-    startupFailureThreshold: 150
-    startupPeriodSeconds: 30
-    startupTimeoutSeconds: 60
-    startupInitialDelaySeconds: 120
-    unavailableThresholdSeconds: 600
   controller:
     replicaCount: 3
     deploymentMode: "RawDeployment"

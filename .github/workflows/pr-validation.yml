@@ -146,7 +146,7 @@ jobs:
     needs: pre-commit-checks
     strategy:
       matrix:
-        image: [ome-image, model-agent-image, multinode-prober-image, ome-agent-image]
+        image: [ome-image, model-agent-image, ome-agent-image]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
