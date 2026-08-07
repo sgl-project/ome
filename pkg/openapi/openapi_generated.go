@@ -12,109 +12,139 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorCapabilities":    schema_pkg_apis_ome_v1beta1_AcceleratorCapabilities(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorClass":           schema_pkg_apis_ome_v1beta1_AcceleratorClass(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorClassList":       schema_pkg_apis_ome_v1beta1_AcceleratorClassList(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorClassSpec":       schema_pkg_apis_ome_v1beta1_AcceleratorClassSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorClassStatus":     schema_pkg_apis_ome_v1beta1_AcceleratorClassStatus(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorConstraints":     schema_pkg_apis_ome_v1beta1_AcceleratorConstraints(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorCost":            schema_pkg_apis_ome_v1beta1_AcceleratorCost(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorDiscovery":       schema_pkg_apis_ome_v1beta1_AcceleratorDiscovery(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorIntegration":     schema_pkg_apis_ome_v1beta1_AcceleratorIntegration(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorLatency":         schema_pkg_apis_ome_v1beta1_AcceleratorLatency(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorModelConfig":     schema_pkg_apis_ome_v1beta1_AcceleratorModelConfig(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorPerformance":     schema_pkg_apis_ome_v1beta1_AcceleratorPerformance(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorRequirements":    schema_pkg_apis_ome_v1beta1_AcceleratorRequirements(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorResource":        schema_pkg_apis_ome_v1beta1_AcceleratorResource(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelection":       schema_pkg_apis_ome_v1beta1_AcceleratorSelection(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector":        schema_pkg_apis_ome_v1beta1_AcceleratorSelector(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BaseModel":                  schema_pkg_apis_ome_v1beta1_BaseModel(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BaseModelList":              schema_pkg_apis_ome_v1beta1_BaseModelList(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BaseModelSpec":              schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BenchmarkJob":               schema_pkg_apis_ome_v1beta1_BenchmarkJob(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BenchmarkJobList":           schema_pkg_apis_ome_v1beta1_BenchmarkJobList(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BenchmarkJobSpec":           schema_pkg_apis_ome_v1beta1_BenchmarkJobSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BenchmarkJobStatus":         schema_pkg_apis_ome_v1beta1_BenchmarkJobStatus(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModel":           schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":       schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterServingRuntime":      schema_pkg_apis_ome_v1beta1_ClusterServingRuntime(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterServingRuntimeList":  schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler":        schema_pkg_apis_ome_v1beta1_ComponentAutoscaler(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscalerStatus":  schema_pkg_apis_ome_v1beta1_ComponentAutoscalerStatus(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentExtensionSpec":     schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":        schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentTrafficTarget":     schema_pkg_apis_ome_v1beta1_ComponentTrafficTarget(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.DecoderSpec":                schema_pkg_apis_ome_v1beta1_DecoderSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec":     schema_pkg_apis_ome_v1beta1_DiffusionComponentSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.DiffusionPipelineSpec":      schema_pkg_apis_ome_v1beta1_DiffusionPipelineSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.Endpoint":                   schema_pkg_apis_ome_v1beta1_Endpoint(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.EndpointSpec":               schema_pkg_apis_ome_v1beta1_EndpointSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.EngineSpec":                 schema_pkg_apis_ome_v1beta1_EngineSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FailureInfo":                schema_pkg_apis_ome_v1beta1_FailureInfo(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeight":            schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeightList":        schema_pkg_apis_ome_v1beta1_FineTunedWeightList(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeightSpec":        schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HPAAutoscaler":              schema_pkg_apis_ome_v1beta1_HPAAutoscaler(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HuggingFaceSecretReference": schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InPlaceUpdateStrategy":      schema_pkg_apis_ome_v1beta1_InPlaceUpdateStrategy(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplica":           schema_pkg_apis_ome_v1beta1_InferenceReplica(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaList":       schema_pkg_apis_ome_v1beta1_InferenceReplicaList(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaPacing":     schema_pkg_apis_ome_v1beta1_InferenceReplicaPacing(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaSpec":       schema_pkg_apis_ome_v1beta1_InferenceReplicaSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaStatus":     schema_pkg_apis_ome_v1beta1_InferenceReplicaStatus(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceService":           schema_pkg_apis_ome_v1beta1_InferenceService(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceServiceList":       schema_pkg_apis_ome_v1beta1_InferenceServiceList(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceServiceReference":  schema_pkg_apis_ome_v1beta1_InferenceServiceReference(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceServiceSpec":       schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceServiceStatus":     schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceOperation":          schema_pkg_apis_ome_v1beta1_InstanceOperation(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceTermination":        schema_pkg_apis_ome_v1beta1_InstanceTermination(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaAutoscaler":             schema_pkg_apis_ome_v1beta1_KedaAutoscaler(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig":                 schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LeaderSpec":                 schema_pkg_apis_ome_v1beta1_LeaderSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec":              schema_pkg_apis_ome_v1beta1_LifecycleSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleStatus":            schema_pkg_apis_ome_v1beta1_LifecycleStatus(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationEvent":             schema_pkg_apis_ome_v1beta1_MigrationEvent(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationHistoryEntry":      schema_pkg_apis_ome_v1beta1_MigrationHistoryEntry(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationPolicy":            schema_pkg_apis_ome_v1beta1_MigrationPolicy(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationStatus":            schema_pkg_apis_ome_v1beta1_MigrationStatus(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelCopies":                schema_pkg_apis_ome_v1beta1_ModelCopies(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelExtensionSpec":         schema_pkg_apis_ome_v1beta1_ModelExtensionSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelFormat":                schema_pkg_apis_ome_v1beta1_ModelFormat(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec":         schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelRef":                   schema_pkg_apis_ome_v1beta1_ModelRef(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelRevisionStates":        schema_pkg_apis_ome_v1beta1_ModelRevisionStates(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec":         schema_pkg_apis_ome_v1beta1_ModelSizeRangeSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatus":                schema_pkg_apis_ome_v1beta1_ModelStatus(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatusSpec":            schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.OMENativeInstanceStatus":    schema_pkg_apis_ome_v1beta1_OMENativeInstanceStatus(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ObjectReference":            schema_pkg_apis_ome_v1beta1_ObjectReference(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ParentReference":            schema_pkg_apis_ome_v1beta1_ParentReference(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PodOverride":                schema_pkg_apis_ome_v1beta1_PodOverride(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PodSpec":                    schema_pkg_apis_ome_v1beta1_PodSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ProportionalPolicy":         schema_pkg_apis_ome_v1beta1_ProportionalPolicy(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RetryBlock":                 schema_pkg_apis_ome_v1beta1_RetryBlock(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RollingUpdate":              schema_pkg_apis_ome_v1beta1_RollingUpdate(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterSpec":                 schema_pkg_apis_ome_v1beta1_RouterSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.Runner":                     schema_pkg_apis_ome_v1beta1_Runner(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec":                 schema_pkg_apis_ome_v1beta1_RunnerSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScaleTargetRef":             schema_pkg_apis_ome_v1beta1_ScaleTargetRef(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalerAuthenticationRef":    schema_pkg_apis_ome_v1beta1_ScalerAuthenticationRef(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicy":              schema_pkg_apis_ome_v1beta1_ScalingPolicy(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServiceMetadata":            schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntime":             schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":         schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimePodSpec":      schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeRef":          schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeSpec":         schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeStatus":       schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.StorageSpec":                schema_pkg_apis_ome_v1beta1_StorageSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SupportedModelFormat":       schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SupportedRuntime":           schema_pkg_apis_ome_v1beta1_SupportedRuntime(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TensorParallelismConfig":    schema_pkg_apis_ome_v1beta1_TensorParallelismConfig(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.UpdateStrategy":             schema_pkg_apis_ome_v1beta1_UpdateStrategy(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerPodSpec":              schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerSpec":                 schema_pkg_apis_ome_v1beta1_WorkerSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorCapabilities":        schema_pkg_apis_ome_v1beta1_AcceleratorCapabilities(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorClass":               schema_pkg_apis_ome_v1beta1_AcceleratorClass(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorClassList":           schema_pkg_apis_ome_v1beta1_AcceleratorClassList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorClassSpec":           schema_pkg_apis_ome_v1beta1_AcceleratorClassSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorClassStatus":         schema_pkg_apis_ome_v1beta1_AcceleratorClassStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorConstraints":         schema_pkg_apis_ome_v1beta1_AcceleratorConstraints(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorCost":                schema_pkg_apis_ome_v1beta1_AcceleratorCost(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorDiscovery":           schema_pkg_apis_ome_v1beta1_AcceleratorDiscovery(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorIntegration":         schema_pkg_apis_ome_v1beta1_AcceleratorIntegration(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorLatency":             schema_pkg_apis_ome_v1beta1_AcceleratorLatency(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorModelConfig":         schema_pkg_apis_ome_v1beta1_AcceleratorModelConfig(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorPerformance":         schema_pkg_apis_ome_v1beta1_AcceleratorPerformance(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorRequirements":        schema_pkg_apis_ome_v1beta1_AcceleratorRequirements(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorResource":            schema_pkg_apis_ome_v1beta1_AcceleratorResource(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelection":           schema_pkg_apis_ome_v1beta1_AcceleratorSelection(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector":            schema_pkg_apis_ome_v1beta1_AcceleratorSelector(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AnalysisMetric":                 schema_pkg_apis_ome_v1beta1_AnalysisMetric(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AnalysisMetricResult":           schema_pkg_apis_ome_v1beta1_AnalysisMetricResult(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AnalysisPrometheus":             schema_pkg_apis_ome_v1beta1_AnalysisPrometheus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BackendPolicyRef":               schema_pkg_apis_ome_v1beta1_BackendPolicyRef(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BaseModel":                      schema_pkg_apis_ome_v1beta1_BaseModel(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BaseModelList":                  schema_pkg_apis_ome_v1beta1_BaseModelList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BaseModelSpec":                  schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BenchmarkJob":                   schema_pkg_apis_ome_v1beta1_BenchmarkJob(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BenchmarkJobList":               schema_pkg_apis_ome_v1beta1_BenchmarkJobList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BenchmarkJobSpec":               schema_pkg_apis_ome_v1beta1_BenchmarkJobSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BenchmarkJobStatus":             schema_pkg_apis_ome_v1beta1_BenchmarkJobStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CanaryStatus":                   schema_pkg_apis_ome_v1beta1_CanaryStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidatePlacement":             schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModel":               schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":           schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterServingRuntime":          schema_pkg_apis_ome_v1beta1_ClusterServingRuntime(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterServingRuntimeList":      schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler":            schema_pkg_apis_ome_v1beta1_ComponentAutoscaler(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscalerStatus":      schema_pkg_apis_ome_v1beta1_ComponentAutoscalerStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentExtensionSpec":         schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":            schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentTrafficTarget":         schema_pkg_apis_ome_v1beta1_ComponentTrafficTarget(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ConsistentHashSpec":             schema_pkg_apis_ome_v1beta1_ConsistentHashSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CoordinationPacing":             schema_pkg_apis_ome_v1beta1_CoordinationPacing(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.DecoderSpec":                    schema_pkg_apis_ome_v1beta1_DecoderSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.DiffusionComponentSpec":         schema_pkg_apis_ome_v1beta1_DiffusionComponentSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.DiffusionPipelineSpec":          schema_pkg_apis_ome_v1beta1_DiffusionPipelineSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.Endpoint":                       schema_pkg_apis_ome_v1beta1_Endpoint(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.EndpointOverrideSpec":           schema_pkg_apis_ome_v1beta1_EndpointOverrideSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.EndpointSpec":                   schema_pkg_apis_ome_v1beta1_EndpointSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.EngineSpec":                     schema_pkg_apis_ome_v1beta1_EngineSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FailureInfo":                    schema_pkg_apis_ome_v1beta1_FailureInfo(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeight":                schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeightList":            schema_pkg_apis_ome_v1beta1_FineTunedWeightList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeightSpec":            schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupBlueGreen":                 schema_pkg_apis_ome_v1beta1_GroupBlueGreen(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupCanary":                    schema_pkg_apis_ome_v1beta1_GroupCanary(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupRollingUpdate":             schema_pkg_apis_ome_v1beta1_GroupRollingUpdate(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HPAAutoscaler":                  schema_pkg_apis_ome_v1beta1_HPAAutoscaler(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HashCookie":                     schema_pkg_apis_ome_v1beta1_HashCookie(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HashHeader":                     schema_pkg_apis_ome_v1beta1_HashHeader(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HuggingFaceSecretReference":     schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InPlaceUpdateStrategy":          schema_pkg_apis_ome_v1beta1_InPlaceUpdateStrategy(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplica":               schema_pkg_apis_ome_v1beta1_InferenceReplica(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaList":           schema_pkg_apis_ome_v1beta1_InferenceReplicaList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaPacing":         schema_pkg_apis_ome_v1beta1_InferenceReplicaPacing(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaSpec":           schema_pkg_apis_ome_v1beta1_InferenceReplicaSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceReplicaStatus":         schema_pkg_apis_ome_v1beta1_InferenceReplicaStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceService":               schema_pkg_apis_ome_v1beta1_InferenceService(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceServiceList":           schema_pkg_apis_ome_v1beta1_InferenceServiceList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceServiceReference":      schema_pkg_apis_ome_v1beta1_InferenceServiceReference(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceServiceSpec":           schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InferenceServiceStatus":         schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceOperation":              schema_pkg_apis_ome_v1beta1_InstanceOperation(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceTermination":            schema_pkg_apis_ome_v1beta1_InstanceTermination(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaAutoscaler":                 schema_pkg_apis_ome_v1beta1_KedaAutoscaler(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig":                     schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LeaderSpec":                     schema_pkg_apis_ome_v1beta1_LeaderSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec":                  schema_pkg_apis_ome_v1beta1_LifecycleSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleStatus":                schema_pkg_apis_ome_v1beta1_LifecycleStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MaintainRatio":                  schema_pkg_apis_ome_v1beta1_MaintainRatio(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationEvent":                 schema_pkg_apis_ome_v1beta1_MigrationEvent(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationHistoryEntry":          schema_pkg_apis_ome_v1beta1_MigrationHistoryEntry(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationPolicy":                schema_pkg_apis_ome_v1beta1_MigrationPolicy(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationStatus":                schema_pkg_apis_ome_v1beta1_MigrationStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelCopies":                    schema_pkg_apis_ome_v1beta1_ModelCopies(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelExtensionSpec":             schema_pkg_apis_ome_v1beta1_ModelExtensionSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelFormat":                    schema_pkg_apis_ome_v1beta1_ModelFormat(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec":             schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelOverlayRef":                schema_pkg_apis_ome_v1beta1_ModelOverlayRef(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelRef":                       schema_pkg_apis_ome_v1beta1_ModelRef(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelRevisionStates":            schema_pkg_apis_ome_v1beta1_ModelRevisionStates(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec":             schema_pkg_apis_ome_v1beta1_ModelSizeRangeSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatus":                    schema_pkg_apis_ome_v1beta1_ModelStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatusSpec":                schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MountedOverlay":                 schema_pkg_apis_ome_v1beta1_MountedOverlay(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.OMENativeInstanceStatus":        schema_pkg_apis_ome_v1beta1_OMENativeInstanceStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ObjectReference":                schema_pkg_apis_ome_v1beta1_ObjectReference(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ParentReference":                schema_pkg_apis_ome_v1beta1_ParentReference(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementStatus":                schema_pkg_apis_ome_v1beta1_PlacementStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PodOverride":                    schema_pkg_apis_ome_v1beta1_PodOverride(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PodSpec":                        schema_pkg_apis_ome_v1beta1_PodSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ProportionalPolicy":             schema_pkg_apis_ome_v1beta1_ProportionalPolicy(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RetryBlock":                     schema_pkg_apis_ome_v1beta1_RetryBlock(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RollingUpdate":                  schema_pkg_apis_ome_v1beta1_RollingUpdate(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutAnalysis":                schema_pkg_apis_ome_v1beta1_RolloutAnalysis(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationGroup":       schema_pkg_apis_ome_v1beta1_RolloutCoordinationGroup(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationGroupStatus": schema_pkg_apis_ome_v1beta1_RolloutCoordinationGroupStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationRatio":       schema_pkg_apis_ome_v1beta1_RolloutCoordinationRatio(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationSpec":        schema_pkg_apis_ome_v1beta1_RolloutCoordinationSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationStatus":      schema_pkg_apis_ome_v1beta1_RolloutCoordinationStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroup":                   schema_pkg_apis_ome_v1beta1_RolloutGroup(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroupStep":               schema_pkg_apis_ome_v1beta1_RolloutGroupStep(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPause":                   schema_pkg_apis_ome_v1beta1_RolloutPause(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutSpec":                    schema_pkg_apis_ome_v1beta1_RolloutSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterSpec":                     schema_pkg_apis_ome_v1beta1_RouterSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.Runner":                         schema_pkg_apis_ome_v1beta1_Runner(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec":                     schema_pkg_apis_ome_v1beta1_RunnerSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScaleTargetRef":                 schema_pkg_apis_ome_v1beta1_ScaleTargetRef(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalerAuthenticationRef":        schema_pkg_apis_ome_v1beta1_ScalerAuthenticationRef(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicy":                  schema_pkg_apis_ome_v1beta1_ScalingPolicy(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServiceMetadata":                schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntime":                 schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":             schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimePodSpec":          schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeRef":              schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeSpec":             schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeStatus":           schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.StorageSpec":                    schema_pkg_apis_ome_v1beta1_StorageSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SupportedModelFormat":           schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SupportedRuntime":               schema_pkg_apis_ome_v1beta1_SupportedRuntime(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TensorParallelismConfig":        schema_pkg_apis_ome_v1beta1_TensorParallelismConfig(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficSpec":                    schema_pkg_apis_ome_v1beta1_TrafficSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficStatus":                  schema_pkg_apis_ome_v1beta1_TrafficStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.UpdateStrategy":                 schema_pkg_apis_ome_v1beta1_UpdateStrategy(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerPodSpec":                  schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerSpec":                     schema_pkg_apis_ome_v1beta1_WorkerSpec(ref),
 	}
 }
 
@@ -968,8 +998,7 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorSelection(ref common.ReferenceCallba
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "AcceleratorSelection shows what accelerator was selected and why",
-				Type:        []string{"object"},
+				Type: []string{"object"},
 				Properties: map[string]spec.Schema{
 					"acceleratorClass": {
 						SchemaProps: spec.SchemaProps{
@@ -1057,6 +1086,200 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorSelector(ref common.ReferenceCallbac
 		},
 		Dependencies: []string{
 			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorConstraints"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AnalysisMetric(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AnalysisMetric is one success condition: a PromQL query whose scalar result is compared against Threshold with Operator. A multi-series result is reduced by max (the worst series) before comparison.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name identifies the metric in status and events; unique within Metrics.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"query": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Query is a PromQL expression, templated with the rollout's revision context before execution. Available variables: {{.Namespace}}, {{.ISVCName}}, {{.Component}}, {{.CanaryService}}, {{.StableService}}, {{.CanaryRevision}}, {{.StableRevision}}. The query must reduce to a single value.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"operator": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Operator is the comparison applied as \"result <Operator> Threshold\" to decide whether this metric passes.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"threshold": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Threshold is the bound the query result is compared against. Parsed as a float (e.g. \"0.05\", \"200\", \"1.5\"); admission rejects a non-numeric value.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"name", "query", "operator", "threshold"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AnalysisMetricResult(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AnalysisMetricResult is the last observed evaluation of one AnalysisMetric. Value is a string (not a float) because the Kubernetes API convention avoids floating-point fields; it is for display only.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name matches the AnalysisMetric.Name this result is for.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"value": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Value is the query result at the last sample, formatted for display (e.g. \"0.012\"). Empty when the sample was inconclusive.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"threshold": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Threshold echoes the bound that was applied, so the result is self-describing in status.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"operator": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Operator echoes the comparison that was applied.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"passed": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Passed is whether this metric satisfied its condition at the last sample.",
+							Default:     false,
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Message carries the reason when a metric did not pass or could not be evaluated (e.g. \"no data\", a query error).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"time": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Time is when this result was recorded.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+				},
+				Required: []string{"name", "passed"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AnalysisPrometheus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AnalysisPrometheus locates and authenticates to the Prometheus the analysis queries.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"serverAddress": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServerAddress is the base URL of the Prometheus HTTP API (e.g. http://prometheus.monitoring.svc:9090). Optional: when empty, the operator-configured default source (canaryAnalysis.bundledPrometheusAddress) is used; if that is also unset the analysis has no source and its samples read inconclusive. Admission does not check the source — an unreachable or missing source surfaces controller-side as an inconclusive sample, not a rejection.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"authRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AuthRef points at a Secret key (in the InferenceService's namespace) holding a bearer token sent as \"Authorization: Bearer <token>\". Omit for an unauthenticated Prometheus (the bundled one). TLS/mTLS is not yet supported.",
+							Ref:         ref("k8s.io/api/core/v1.SecretKeySelector"),
+						},
+					},
+					"headers": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Headers are extra HTTP headers sent on every Prometheus query — e.g. \"X-Scope-OrgID\" for a multi-tenant Cortex/Thanos/Mimir front-end that scopes queries by tenant. Without the tenant header such a backend returns no data, which the gate reads as a permanent stall. Plaintext (not secret); use AuthRef for the bearer token.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.SecretKeySelector"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_BackendPolicyRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "BackendPolicyRef identifies the OME-emitted backend policy resource sibling to the InferenceService.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion of the resource (e.g. \"gateway.envoyproxy.io/v1alpha1\").",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind of the resource (e.g. \"BackendTrafficPolicy\").",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the resource, in the same namespace as the InferenceService.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"apiVersion", "kind", "name"},
+			},
+		},
 	}
 }
 
@@ -1636,6 +1859,150 @@ func schema_pkg_apis_ome_v1beta1_BenchmarkJobStatus(ref common.ReferenceCallback
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_CanaryStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CanaryStatus tracks progress of a spec.rollout.groups[].canary rollout. It is the executor's persistent state machine: which step is active, when it was entered (Auto promotion measures Pause.Duration from here), and which revision is the canary. Absent when no canary is in progress.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"canaryRevisionHash": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CanaryRevisionHash is the revision hash being rolled out.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"currentStep": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CurrentStep is the zero-based index into spec.rollout.groups[i].canary.steps.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"stepEnteredTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StepEnteredTime is when CurrentStep was entered. Auto promotion measures Pause.Duration from this timestamp.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"observedTrafficWeight": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedTrafficWeight is the external traffic weight currently programmed for the canary revision (mirrors the active step's TrafficWeight once applied).",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"rolledBackRevisionHash": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RolledBackRevisionHash is set when a rollback (ome.io/rollout-rollback) abandons a canary: it records the rejected revision hash. While set, the component is held on the stable revision and the rejected revision is NOT retried — even after the annotation is cleared. The rollout re-arms only when a different target revision appears (a fresh spec change / fix).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"analysisFailedChecks": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AnalysisFailedChecks counts failing analysis samples in the CURRENT step (reset to zero on each advance). Auto-rollback fires when it reaches Analysis.FailureLimit. Set only under Promotion=Analysis.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"lastEvaluationTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastEvaluationTime is when the analysis metrics were last sampled. The controller throttles sampling to at most once per Analysis.Interval using this timestamp, so a burst of unrelated reconciles cannot over-count failures. Set only under Promotion=Analysis.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"lastConclusiveEvaluationTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastConclusiveEvaluationTime is when analysis last produced a conclusive sample (pass or fail — i.e. Prometheus answered). The stall timeout is measured from here: a long run of inconclusive samples escalates to Failed. Set only under Promotion=Analysis.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"metricResults": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "MetricResults is the most recent per-metric evaluation, for observability (kubectl get isvc shows why a step held or rolled back). Set only under Promotion=Analysis.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AnalysisMetricResult"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"currentStep", "observedTrafficWeight"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AnalysisMetricResult"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CandidatePlacement is the per-cluster state of a fan-out candidate in the placement race.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"cluster": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Cluster is the WorkloadCluster name.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Phase is the candidate's state.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"endpoint": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Endpoint is this candidate's own externally-addressable URL, mirrored from its derived InferenceService's status.url once admitted AND addressable. In Single mode only the winner carries one and the top-level PlacementStatus.Endpoint is authoritative; in All/Split mode every serving home carries its own, and this list is the source of truth an external LB/DNS consumes to route across homes. Empty until the home is addressable.",
+							Ref:         ref("knative.dev/pkg/apis.URL"),
+						},
+					},
+					"admittedReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AdmittedReplicas is how many replicas this home's Kueue has admitted (only meaningful in Split, where a home serves a fraction of the desired count). It drives global accounting — the control plane sums it across homes to decide whether the desired count is met. Zero/unset outside Split.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"readyReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReadyReplicas is how many of this home's replicas are serving traffic. In Split it is the weight an external LB uses to split traffic across homes (traffic follows where the replicas actually landed). Zero/unset outside Split.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"cluster"},
+			},
+		},
+		Dependencies: []string{
+			"knative.dev/pkg/apis.URL"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -2082,13 +2449,6 @@ func schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref common.ReferenceCallbac
 				Description: "ComponentStatusSpec describes the state of the component",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"latestReadyRevision": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Latest revision name that is in ready state",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 					"latestCreatedRevision": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Latest revision name that is created",
@@ -2098,7 +2458,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref common.ReferenceCallbac
 					},
 					"url": {
 						SchemaProps: spec.SchemaProps{
-							Description: "URL holds the primary url that will distribute traffic over the provided traffic targets. This will be one the REST or gRPC endpoints that are available. It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-level-suffix}",
+							Description: "URL holds the primary url for this component. It generally has the form http[s]://{name}.{namespace}.{cluster-level-suffix}",
 							Ref:         ref("knative.dev/pkg/apis.URL"),
 						},
 					},
@@ -2114,6 +2474,74 @@ func schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref common.ReferenceCallbac
 							Ref:         ref("knative.dev/pkg/apis/duck/v1.Addressable"),
 						},
 					},
+					"lifecycle": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Lifecycle reports OMENative-managed lifecycle state for this Component when the Component resolves to deploymentMode OMENative (spec.deploymentMode or the per-Component ome.io/deploymentMode annotation). Counterpart of the LifecycleSpec sub-block on ComponentExtensionSpec. Nil otherwise.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleStatus"),
+						},
+					},
+					"rolloutPhase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RolloutPhase reflects the current rollout state for this Component. One of Stable, Canarying, BlueGreenStandby, Pending, Paused, Promoting, RollingBack, RolledBack, Failed. Empty when no rollout is in flight on this Component (also empty for Components on deployment modes that haven't implemented the rollout contract yet — e.g. RawDeployment in alpha).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"latestReadyRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LatestReadyRevision names the most recent ControllerRevision whose pods reached Ready. Equal to LatestRolledoutRevision once the rollout completes; set ahead of it during in-flight rollouts.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"latestRolledoutRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LatestRolledoutRevision names the most recent ControllerRevision that fully owns this Component's traffic (i.e., the rollout has completed). Drives the consumer-side HTTPRoute backendRef.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"previousRolledoutRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PreviousRolledoutRevision names the prior rolled-out ControllerRevision, retained for diagnosis and traffic reference during partial rollbacks.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"traffic": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"revisionName",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Traffic reports per-revision traffic weights for this Component. Each entry corresponds to one revision currently receiving traffic. The HTTPRoute builder reads this to emit weighted backendRefs.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentTrafficTarget"),
+									},
+								},
+							},
+						},
+					},
+					"autoscaler": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Autoscaler reports the per-Component autoscaler state — resolved Class / ManagedBy / SpecSource and (when ManagedBy == \"ome\") live CurrentReplicas / DesiredReplicas / LastScaleTime / Conditions mirrored from the underlying HPA or ScaledObject. Populated by the ISVC status writer; nil for Components that don't go through the new resolver yet (e.g., RawDeployment Components that haven't migrated). See ComponentAutoscalerStatus for the full field semantics.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscalerStatus"),
+						},
+					},
+					"scaleTargetRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ScaleTargetRef is the canonical scale target for this Component. For OMENative-managed Components this points at the InferenceReplica's /scale subresource; for RawDeployment-managed Components it points at the underlying Deployment. Published so external scalers (when Autoscaler.ManagedBy == \"external\") know the GroupKind they should target. Populated whenever the Component has a defined scale target — independent of whether an OME-managed HPA / SO is active.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScaleTargetRef"),
+						},
+					},
 					"selectedAccelerator": {
 						SchemaProps: spec.SchemaProps{
 							Description: "SelectedAccelerator shows which AcceleratorClass was selected",
@@ -2124,7 +2552,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref common.ReferenceCallbac
 			},
 		},
 		Dependencies: []string{
-			"knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelection"},
+			"knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelection", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscalerStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentTrafficTarget", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScaleTargetRef"},
 	}
 }
 
@@ -2169,6 +2597,96 @@ func schema_pkg_apis_ome_v1beta1_ComponentTrafficTarget(ref common.ReferenceCall
 				Required: []string{"revisionName", "percent"},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ConsistentHashSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ConsistentHashSpec selects what request attribute to hash on when LoadBalancingType=ConsistentHash. Exactly one of Headers or Cookie must be set when Type is Header or Cookie respectively; both forbidden when Type is SourceIP.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type selects the hash source.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"headers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Headers to hash on. Required when Type=Header (one or more). Multiple headers are concatenated by the translator before hashing. Forbidden when Type is not Header.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HashHeader"),
+									},
+								},
+							},
+						},
+					},
+					"cookie": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Cookie configuration. Required when Type=Cookie. Forbidden when Type is not Cookie.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HashCookie"),
+						},
+					},
+				},
+				Required: []string{"type"},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HashCookie", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HashHeader"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_CoordinationPacing(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CoordinationPacing controls how surge / drain pacing is computed within a coordination group.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type selects the pacing computation.\n  - PerComponent: each Component's lifecycle.updateStrategy\n    rollingUpdate applies independently. Group-wide MaxSurge\n    still applies on top. Default.\n  - RatioBalanced: pacing surges proportionally across all\n    Components in the group, never letting the cross-Component\n    ratio drift past the original.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"maxSurge": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxSurge is the maximum fraction (or absolute count) of pods OMENative may add above the desired Component replica count during a coordinated rollout. Applies group-wide. Default: 25%.",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+						},
+					},
+					"maxUnavailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxUnavailable is the maximum fraction (or absolute count) of pods that may be not-Ready at once during the rollout. Applies group-wide. Default: 0.",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+						},
+					},
+					"ratioTolerancePercent": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RatioTolerancePercent bounds how far the components in a RatioBalanced group may drift from their starting proportion during a roll. The ratio is taken larger-pool : smaller-pool, so it is direction-independent — prefill:decode and decode:prefill are the same constraint — and is anchored to the counts observed when the roll began. A surge OR drain is paused whenever a step would push any component pair's live serving proportion outside starting_ratio ± this percent, and resumes once the pools rebalance. Example: a group that starts 2:1 with a value of 5 holds the live proportion between 1.9:1 and 2.1:1. For three or more components every pair is checked. Default: 5 (i.e. 5%).",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
 	}
 }
 
@@ -2789,6 +3307,13 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector"),
 						},
 					},
+					"topologyKey": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologyKey is the node-label key (e.g. an NVLink/RDMA fabric-domain label) used to co-locate all pods of one multi-node (leader+worker) gang into a single network / NVLink topology domain. When set on a multi-node component, OME auto-generates the per-instance worker→leader podAffinity that anchors every worker to its gang's leader on a node sharing this label value — so users no longer hand-write that affinity. Only meaningful for multi-node components; ignored for single-pod (no leader to anchor to). Unset means no auto-generated gang affinity.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},
@@ -2930,6 +3455,49 @@ func schema_pkg_apis_ome_v1beta1_Endpoint(ref common.ReferenceCallback) common.O
 				Required: []string{"url", "apiFormat"},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_EndpointOverrideSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "EndpointOverrideSpec configures Envoy Gateway's loadBalancer endpoint-override feature. When a request carries an endpoint reference (typically a header), the gateway routes the request to that exact endpoint if healthy, otherwise falls back to the configured LoadBalancer Algorithm.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type selects where to read the endpoint override from.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"headers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Headers to read the endpoint reference from. Required when Type=Header. Each header value must be \"<host>:<port>\" or \"<ip>:<port>\".",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HashHeader"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"type"},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HashHeader"},
 	}
 }
 
@@ -3577,6 +4145,13 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector"),
 						},
 					},
+					"topologyKey": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologyKey is the node-label key (e.g. an NVLink/RDMA fabric-domain label) used to co-locate all pods of one multi-node (leader+worker) gang into a single network / NVLink topology domain. When set on a multi-node component, OME auto-generates the per-instance worker→leader podAffinity that anchors every worker to its gang's leader on a node sharing this label value — so users no longer hand-write that affinity. Only meaningful for multi-node components; ignored for single-pod (no leader to anchor to). Unset means no auto-generated gang affinity.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},
@@ -3825,6 +4400,91 @@ func schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref common.ReferenceCallbac
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_GroupBlueGreen(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GroupBlueGreen surges the full new set alongside the old, waits for Ready, then flips traffic atomically. It is also the default progression a group falls back to when none of canary/blueGreen/rollingUpdate is set. It carries no traffic steps (the flip is all-or-nothing); surge sequencing across Components is the group-level Order field, not a blue-green-specific knob. Empty today, reserved for future blue-green-specific options (e.g. a pre-flip verification window).",
+				Type:        []string{"object"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_GroupCanary(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GroupCanary is the stepped progression: bring up new-revision capacity and shift service-level traffic through an ordered list of steps. How the canary advances is a PER-STEP property (see RolloutGroupStep): each step is metric-gated (analysis), timed, manual, or immediate. Prometheus here is the shared metrics SOURCE every analysis step queries — declared once, not on each step.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"steps": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Steps is the ordered progression of capacity + service-level traffic. The final step must reach 100% traffic for the rollout to complete.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroupStep"),
+									},
+								},
+							},
+						},
+					},
+					"prometheus": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Prometheus is the metrics source (connection) shared by every analysis step in this canary: where to query and how to authenticate. When omitted (or when its serverAddress is empty), the operator-configured default source (canaryAnalysis.bundledPrometheusAddress) is used; if that is also unset the analysis has no source and its samples read inconclusive. It is only the source — WHAT to check is each step's analysis — and it gates nothing by itself.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AnalysisPrometheus"),
+						},
+					},
+					"scaleDownDelaySeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ScaleDownDelaySeconds is the wait between shifting traffic off the old revision and scaling its pods down, to drain in-flight requests.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AnalysisPrometheus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroupStep"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_GroupRollingUpdate(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GroupRollingUpdate replaces pods gradually, paced by the surge/unavailable budget. Mixed revisions are tolerated during the window.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"maxSurge": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxSurge is the maximum pods (fraction or absolute) above desired during the roll. Default 25%.",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+						},
+					},
+					"maxUnavailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxUnavailable is the maximum pods (fraction or absolute) that may be not-Ready at once during the roll. Default 25% (matches the Kubernetes Deployment convention; a default of 0 would deadlock single-replica rolls).",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_HPAAutoscaler(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -3862,6 +4522,55 @@ func schema_pkg_apis_ome_v1beta1_HPAAutoscaler(ref common.ReferenceCallback) com
 		},
 		Dependencies: []string{
 			"k8s.io/api/autoscaling/v2.HorizontalPodAutoscalerBehavior", "k8s.io/api/autoscaling/v2.MetricSpec"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_HashCookie(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "HashCookie names a cookie and an optional TTL for auto-issuance.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the cookie name.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ttlSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TTLSeconds, when greater than zero, makes the gateway auto-issue the cookie if absent on the request. When zero or unset, the client is responsible for sending the cookie.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_HashHeader(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "HashHeader names a single request header to include in the consistent-hash input.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the header name (case-insensitive per HTTP).",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -4487,6 +5196,13 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref common.ReferenceCallba
 				Description: "InferenceServiceSpec is the top level type for this resource",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
+					"deploymentMode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DeploymentMode selects the dispatch backend that drives every Component on this InferenceService. When set, it propagates to the Engine, Decoder, and Router resolver at read-time without mutating per-Component annotations — `kubectl get -o yaml` stays clean. A per-Component `ome.io/deploymentMode` annotation still wins as an explicit override (the escape hatch is preserved for backward compat and mixed-mode experiments).\n\nValid values:\n  - \"OMENative\"     — Native lifecycle-managed pods (also\n    handles multi-node serving when Leader/Worker are present)\n  - \"RawDeployment\" — Kubernetes Deployment/HPA-backed dispatch",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"engine": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Engine defines the serving engine spec This provides detailed container and pod specifications for model serving. It allows defining the model runner (container spec), as well as complete pod specifications including init containers, sidecar containers, and other pod-level configurations. Engine can also be configured for multi-node deployments using leader and worker specifications.",
@@ -4529,11 +5245,29 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref common.ReferenceCallba
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector"),
 						},
 					},
+					"traffic": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Traffic configures the load-balancing policy applied to all HTTPRoutes OME emits for this InferenceService. See the TrafficSpec doc for details.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficSpec"),
+						},
+					},
+					"rollout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Rollout is the single home for rollout configuration on this InferenceService: an ordered list of rollout groups, each polymorphic in its progression (canary | blueGreen | rollingUpdate). Sequencing is the group list order; a group's Components roll together.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutSpec"),
+						},
+					},
+					"scalingPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ScalingPolicy coordinates replica counts across Components when more than one autoscaler would otherwise drift (e.g., engine + decoder in a PD-disaggregated service that requires 1:1 sharding). When nil, every Component autoscales independently. Alpha. The API may change without notice.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicy"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.DecoderSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.EngineSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeRef"},
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.DecoderSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.EngineSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicy", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficSpec"},
 	}
 }
 
@@ -4599,6 +5333,25 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref common.ReferenceCall
 							Ref:         ref("knative.dev/pkg/apis.URL"),
 						},
 					},
+					"addresses": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Addresses lists every reachable endpoint for this service — one per gateway its route attaches to, plus the cluster-local address. Each entry's Name carries the operator-declared class (see IngressGatewaySpec.Class): \"internal\", \"external\", \"cluster-local\", or any config-defined value. Derived from the same builder that produces the HTTPRoutes, so it never drifts from the actual routing. status.url is the primary gateway entry and status.address is the \"cluster-local\" entry — both projections of this list.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("knative.dev/pkg/apis/duck/v1.Addressable"),
+									},
+								},
+							},
+						},
+					},
 					"components": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Statuses for the components of the InferenceService",
@@ -4621,6 +5374,65 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref common.ReferenceCall
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatus"),
 						},
 					},
+					"migrationHistory": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "MigrationHistory is a rolling window of OMENative migration requests processed against this InferenceService. Bounded to the most recent entries; older entries are dropped (and optionally archived to a controller-owned ConfigMap).",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationHistoryEntry"),
+									},
+								},
+							},
+						},
+					},
+					"mountedOverlays": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "MountedOverlays lists overlays the controller attached to the pod spec. Skipped overlays (disabled, NotReady, NotFound) surface via the OverlaysReady condition.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MountedOverlay"),
+									},
+								},
+							},
+						},
+					},
+					"traffic": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Traffic reflects the resolved backend traffic policy and the emitted policy resource. Populated only when traffic intent is declared via spec.traffic or any ome.io/* traffic annotation; otherwise nil so older clients see nothing.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficStatus"),
+						},
+					},
+					"canary": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Canary tracks an in-progress spec.rollout.canary rollout (the step state machine). Absent when no canary is running.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CanaryStatus"),
+						},
+					},
+					"placement": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Placement reports multi-cluster placement of this ISVC, set by the control-plane fan-out controller. Empty on workload clusters and on single-cluster deployments.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementStatus"),
+						},
+					},
 					"pinnedRevisionName": {
 						SchemaProps: spec.SchemaProps{
 							Description: "PinnedRevisionName is the ControllerRevision (OME ns) driving pod specs. Empty when autoSync is true.",
@@ -4635,11 +5447,17 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref common.ReferenceCall
 							Format:      "",
 						},
 					},
+					"rolloutCoordination": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RolloutCoordination reports per-group cross-Component coordination state for the InferenceService. Populated only when spec.rollout declares blueGreen/rollingUpdate groups (canary groups report under status.canary instead).",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationStatus"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"knative.dev/pkg/apis.Condition", "knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatus"},
+			"knative.dev/pkg/apis.Condition", "knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CanaryStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationHistoryEntry", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MountedOverlay", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficStatus"},
 	}
 }
 
@@ -5602,6 +6420,28 @@ func schema_pkg_apis_ome_v1beta1_LifecycleStatus(ref common.ReferenceCallback) c
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_MaintainRatio(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MaintainRatio bounds how far a multi-Component group may drift from the cross-Component replica ratio observed at rollout start (e.g. prefill:decode).",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"tolerance": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Tolerance is the maximum percentage drift from the starting ratio. A roll step that would exceed it is paused until the pools rebalance. Default 5.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"tolerance"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_MigrationEvent(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -6063,6 +6903,38 @@ func schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref common.ReferenceCallback
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_ModelOverlayRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ModelOverlayRef references a BaseModel attached as an overlay. Narrower than ModelRef on purpose: no nested Overlays (type-system forbids recursion) and no FineTunedWeights (weight composition lives on the primary).",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"apiGroup": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_ModelRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -6111,9 +6983,33 @@ func schema_pkg_apis_ome_v1beta1_ModelRef(ref common.ReferenceCallback) common.O
 							},
 						},
 					},
+					"overlays": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Overlays declares additional BaseModels attached to every serving pod alongside the primary. Each overlay is mounted or env-addressable at /opt/ml/model-overlays/<name> and exposed via OVERLAY_<UPPERCASED_NAME>_MODEL_PATH. Runner selects at request time; OME does not detect failures or auto-swap. Disabled or NotReady overlays are silently omitted.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelOverlayRef"),
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelOverlayRef"},
 	}
 }
 
@@ -6313,6 +7209,48 @@ func schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref common.ReferenceCallback) c
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MountedOverlay(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MountedOverlay records one overlay the controller wired into the current pod spec.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"envVar": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"mountPath": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MountPath is empty for Sharded overlays (fetched at runtime).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"distribution": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+				},
+				Required: []string{"name", "envVar", "distribution"},
+			},
+		},
 	}
 }
 
@@ -6517,6 +7455,63 @@ func schema_pkg_apis_ome_v1beta1_ParentReference(ref common.ReferenceCallback) c
 				},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_PlacementStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PlacementStatus is the multi-cluster placement status: which workload cluster an InferenceService is placed on and a coarse phase.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"cluster": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Cluster is the WorkloadCluster the ISVC is currently placed on. Empty while pending (no candidate yet, or transport not connected).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Phase is a coarse placement state.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"endpoint": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Endpoint is the externally-addressable URL of the winning cluster's placement, mirrored from the derived InferenceService's status.url once it is admitted AND addressable. Empty while pending/racing/failed or before the winner reports a URL. An external global LB/DNS consumes this to route traffic to the winning cluster.",
+							Ref:         ref("knative.dev/pkg/apis.URL"),
+						},
+					},
+					"candidates": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"cluster",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Candidates are the clusters this ISVC has been fanned out to during the placement race. Populated by the control plane.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidatePlacement"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"knative.dev/pkg/apis.URL", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidatePlacement"},
 	}
 }
 
@@ -7291,6 +8286,585 @@ func schema_pkg_apis_ome_v1beta1_RollingUpdate(ref common.ReferenceCallback) com
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutAnalysis(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutAnalysis is a step's metric gate: the checks (metrics) and policy (interval, failureLimit, onInconclusive, initialDelay) that decide advance, hold, or rollback for the step it is set on. It does NOT carry the metrics source — that is GroupCanary.Prometheus, shared by all analysis steps.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"interval": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Interval is the sampling cadence — how often the controller re-evaluates the metrics while a step bakes. It also bounds the requeue while holding.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"initialDelay": {
+						SchemaProps: spec.SchemaProps{
+							Description: "InitialDelay is a warm-up after a step's pods become Ready and traffic is applied, before the first sample. New pods need a moment before their metrics mean anything; sampling immediately would read cold-start noise.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"failureLimit": {
+						SchemaProps: spec.SchemaProps{
+							Description: "FailureLimit is the number of failing samples, counted PER STEP (reset on advance), that triggers auto-rollback. FailureLimit=1 rolls back on the first bad sample.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"onInconclusive": {
+						SchemaProps: spec.SchemaProps{
+							Description: "OnInconclusive selects what to do when a sample cannot be completed (Prometheus unreachable, query error, or empty result) past the stall timeout — distinct from a metric breach.\n  - Hold (default): keep traffic at the current step and escalate to Failed\n    for an operator decision. A monitoring outage is not evidence the canary\n    is bad.\n  - Rollback: fail-safe — treat \"can't tell\" as \"assume bad\" and roll back.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metrics": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Metrics are the success conditions. A sample passes only when EVERY metric passes (AND). At least one is required; an analysis with no metrics could never fail and would gate nothing.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AnalysisMetric"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"interval", "failureLimit", "metrics"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AnalysisMetric"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutCoordinationGroup(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutCoordinationGroup binds a set of Components under one coordination policy.\n\nUnused — superseded by spec.rollout.groups[] (RolloutGroup); retained for compatibility, scheduled for removal.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"components": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Components lists the Component names included in this group. Valid values: \"router\", \"engine\", \"decoder\".",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"policy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Policy selects the coordination semantic for this group.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"pacing": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Pacing controls how surge / drain pacing is computed within the group. When omitted, defaults to per-Component pacing.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CoordinationPacing"),
+						},
+					},
+					"order": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Order has two meanings depending on Policy:\n  - BlueGreen: pins the surge sequence within the single rollout\n    unit (decoder surges first, then engine, etc.) but all\n    Components traffic-shift together once every set is Ready.\n    Optional; default no ordering (parallel surge).\n  - Sequential: REQUIRED. Pins the order in which Components\n    walk their full state machine. The next Component cannot\n    enter Surging until the previous Component is back at Idle\n    on the new revision.\n  - Independent / RollingUpdate: ignored.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"soak": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Soak is the duration the coordination layer waits AFTER a Sequential Component reaches Idle on the new revision BEFORE the next Component in Order begins its rollout. Lets operators validate one Component under live production traffic before risking the next. Only honored for Policy=Sequential.\n\nDefault: 0 (no wait — the next Component starts immediately).",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+				},
+				Required: []string{"components", "policy"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CoordinationPacing"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutCoordinationGroupStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutCoordinationGroupStatus reports the observed state of one coordination group.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name uniquely identifies the group within the RolloutCoordinationStatus. Auto-derived from the group index (stringified) on first observation.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"components": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Components mirrors spec.rollout.groups[i].components for operator readability.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"policy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Policy mirrors the spec policy.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"order": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Order mirrors the spec order (Sequential / BlueGreen-ordered).",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Phase reports the base coordination phase. Metric-stable enum.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"compositePhase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CompositePhase is a human-readable composite of Phase plus the active Component for Sequential / per-Component-aware policies (e.g. \"decoder.Surging\", \"Sequential.AwaitingNextComponent\"). Operator-facing; metrics use Phase, not CompositePhase.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"currentComponent": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CurrentComponent names the Component the group is actively reconciling (Sequential policy). Empty otherwise.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"previousComponent": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PreviousComponent names the most recently completed Component in a Sequential group's order. Empty when no Component has yet reached Idle on the new revision.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"observedSurge": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedSurge is the IntOrString surge target applied during the current Surging / Waiting phase. Empty when the group is Idle.",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+						},
+					},
+					"observedRatio": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedRatio reports cross-Component ratio snapshots when the group uses RatioBalanced pacing. Nil for PerComponent pacing.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationRatio"),
+						},
+					},
+					"lastTransitionTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastTransitionTime is when Phase last changed.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Message is a short operator-facing explanation of the current Phase. Set on Failed / RollingBack / Paused phases.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationRatio"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutCoordinationRatio(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutCoordinationRatio is the cross-Component ratio snapshot used by RatioBalanced pacing.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"original": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Original is the snapshot of desired replica counts per Component at rollout start. The keys are ComponentType strings.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: 0,
+										Type:    []string{"integer"},
+										Format:  "int32",
+									},
+								},
+							},
+						},
+					},
+					"current": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Current reports the live replica counts per Component.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: 0,
+										Type:    []string{"integer"},
+										Format:  "int32",
+									},
+								},
+							},
+						},
+					},
+					"newPods": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NewPods reports the new-revision pod counts per Component.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: 0,
+										Type:    []string{"integer"},
+										Format:  "int32",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutCoordinationSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutCoordinationSpec declares cross-Component rollout coupling for OMENative-managed Components. Each group lists the Components that roll together and the policy that governs their coordination. Components not listed in any group roll independently.\n\nUnused — superseded by spec.rollout (RolloutSpec); retained for compatibility, scheduled for removal.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"groups": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Groups is the list of coordination groups. Each group binds a set of Components under one policy. A Component may appear in at most one group; webhook rejects multi-membership.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationGroup"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationGroup"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutCoordinationStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutCoordinationStatus reports per-group coordination state for the InferenceService.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"groups": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Groups reports the observed state of each declared rollout group, indexed by position in spec.rollout.groups[].",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationGroupStatus"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationGroupStatus"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutGroup(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutGroup is a set of Components that roll together, advancing through at most one progression. The progression is a presence-based one-of: set Canary, BlueGreen, or RollingUpdate — or none, which defaults to BlueGreen. Omitting it is the ergonomic spelling for \"just roll this group\" and for a single-Component group in a sequence (`components: [decoder]` then `components: [engine]`), where the empty `blueGreen: {}` selector would be pure ceremony.\n\nFailure mode if mis-set: two progressions is ambiguous (which one drives traffic?) and is rejected by the rule below.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"components": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Components lists the Component names in this group (they roll together). Valid values: \"router\", \"engine\", \"decoder\".",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"order": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Order optionally pins the sequence in which this group's Components roll. It is honored today only when the group resolves to the internal Sequential path (a run of single-Component groups); on a multi-Component blueGreen, rollingUpdate, or canary group the Components currently advance together and Order is not yet applied as a surge sequence. Ignored on single-Component groups. Must reference only Components in this group.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"canary": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Canary advances the group through explicit capacity + service-level-traffic steps with optional gates. One-of progression.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupCanary"),
+						},
+					},
+					"blueGreen": {
+						SchemaProps: spec.SchemaProps{
+							Description: "BlueGreen surges the full new set, then flips traffic atomically. One-of progression.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupBlueGreen"),
+						},
+					},
+					"rollingUpdate": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RollingUpdate replaces pods gradually within the surge/unavailable budget, tolerating mixed revisions during the window. One-of progression.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupRollingUpdate"),
+						},
+					},
+					"soak": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Soak is the wait AFTER this group completes, before the next group begins. It is honored only when the rollout is a sequence of single-Component blueGreen groups (the run that collapses to the internal Sequential state machine); ignored on the last group. Admission rejects a soak the engine would silently drop — on a canary, multi-Component, or rollingUpdate group, or on a rollout that does not collapse to that sequence.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"maintainRatio": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaintainRatio guards the cross-Component replica ratio while this group rolls. Meaningful only on multi-Component blueGreen/rollingUpdate groups (e.g. a PD engine+decoder pair); ignored on single-Component groups and rejected by admission on canary groups (the canary engine does not enforce it).",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MaintainRatio"),
+						},
+					},
+				},
+				Required: []string{"components"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupBlueGreen", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupCanary", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupRollingUpdate", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MaintainRatio"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutGroupStep(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutGroupStep is one stage of a canary progression. Capacity and traffic are INDEPENDENT: capacity is the per-Component new-revision pod count; traffic is the service-level percentage of requests on the new revision. The independence allows \"capacity ahead of traffic\" (run 50% pods, send 10% traffic) for warm-up.\n\nHow the step advances (its gate) is resolved in order:\n  - Analysis set → metric-gated (queries GroupCanary.Prometheus); Pause.Duration,\n    if any, is the minimum bake before a passing sample advances.\n  - else Pause with Duration → timed: advance once Duration elapses.\n  - else Pause → manual: hold for the ome.io/rollout-promote annotation.\n  - else → advance as soon as capacity + traffic converge.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"capacity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Capacity is the fraction of desired replicas to run on the new revision at this step. Percentage (\"25%\") or absolute (\"3\"). Per-Component.",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+						},
+					},
+					"traffic": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Traffic is the service-level percentage of requests routed to the new revision at this step (0-100). Not per-Component.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"pause": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Pause holds the step: with a Duration it is a timed advance (or, when Analysis is set, the bake window); without one it is a manual hold for the ome.io/rollout-promote annotation. Absent (and no Analysis) advances immediately.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPause"),
+						},
+					},
+					"analysis": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Analysis opts this step into metric-gated promotion: it carries the checks (metrics) and policy (interval, failureLimit, onInconclusive) for THIS step. The metrics source is GroupCanary.Prometheus, shared by all analysis steps. Absent leaves the step manual/timed/immediate per Pause.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutAnalysis"),
+						},
+					},
+				},
+				Required: []string{"capacity", "traffic"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutAnalysis", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPause"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutPause(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutPause holds a rollout at a step boundary; its meaning depends on the step's gate (see RolloutGroupStep):\n  - manual step (Pause, no Duration): wait for the ome.io/rollout-promote\n    annotation.\n  - timed step (Pause with Duration, no Analysis): advance after Duration.\n  - analysis step (Analysis set): Duration is the minimum bake time before a\n    passing sample may advance.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"duration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Duration to pause at this step; see the type doc for how each gate uses it.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutSpec is the single rollout surface for an InferenceService: an ordered list of rollout groups. There is no coordination-vs-canary fork — sequencing is the list order, and canary is one progression a group may choose.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"groups": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Groups is the ORDERED list of rollout groups. Sequence is the list position: group N reaches completion before group N+1 begins. Components listed together in one group roll together (a coupled unit); Components not listed in any group roll independently (the default). To roll Components one-at-a-time, put each in its own group, in order — a group needs only its components; the progression may be omitted and defaults to blueGreen.\n\nCross-group sequencing is currently enforced only for a run of single-Component blueGreen groups (the classic one-at-a-time shape); mixed progressions and multi-Component ordered groups roll concurrently on their disjoint Components today — the general group sequencer is a follow-on.\n\nOnly meaningful for OMENative-managed Components.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroup"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroup"},
 	}
 }
 
@@ -9258,6 +10832,110 @@ func schema_pkg_apis_ome_v1beta1_TensorParallelismConfig(ref common.ReferenceCal
 				},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_TrafficSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TrafficSpec configures the load-balancing policy applied to all HTTPRoutes OME emits for the InferenceService. The translated backend policy resource (e.g. Envoy Gateway BackendTrafficPolicy) targets every OME-managed HTTPRoute via targetRefs, so behavior is consistent whether clients address the top-level URL or a per-Component subdomain.\n\nFor less-common settings (circuit breaker, retries, sub-second timeouts), see the ome.io/* annotation contract on the InferenceService metadata.\n\nFor Component-specific routing (one Component needs a different LB algorithm), hand-author a separate BackendTrafficPolicy targeting only that Component's HTTPRoute — OME defers to the hand-authored policy.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"algorithm": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Algorithm selects the load-balancing algorithm. Absent = the Gateway implementation's default (LeastRequest for Envoy Gateway).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"consistentHash": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ConsistentHash configures the hash key. Required when Algorithm=ConsistentHash; rejected otherwise (webhook).",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ConsistentHashSpec"),
+						},
+					},
+					"endpointOverride": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EndpointOverride routes requests to a specific pod when a request header (e.g. \"X-Endpoint-HostPort: 10.0.0.5:30000\") is present and the endpoint is healthy; falls back to the configured Algorithm when the endpoint is unhealthy or the header is absent.\n\nEnvoy Gateway only in alpha (no Istio equivalent). Translators that do not support endpoint override surface this as an UnsupportedField condition on the InferenceService.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.EndpointOverrideSpec"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ConsistentHashSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.EndpointOverrideSpec"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_TrafficStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TrafficStatus reflects the resolved backend traffic policy and the emitted policy resource (e.g. Envoy Gateway BackendTrafficPolicy) for an InferenceService. Lives at InferenceServiceStatus.Traffic. Populated only when traffic intent is declared via spec.traffic or any ome.io/* traffic annotation; otherwise nil so older clients see nothing.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"algorithm": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Algorithm reflects the resolved load-balancing algorithm. One of RoundRobin | LeastRequest | Random | ConsistentHash | Default. \"Default\" means no Algorithm was set on spec.traffic and the Gateway implementation default applies.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"backendPolicyResource": {
+						SchemaProps: spec.SchemaProps{
+							Description: "BackendPolicyResource references the OME-emitted backend policy (typically a gateway.envoyproxy.io/v1alpha1.BackendTrafficPolicy). Empty when no policy was emitted (e.g. translator deferred to a conflicting hand-authored policy).",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BackendPolicyRef"),
+						},
+					},
+					"targetedHTTPRoutes": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "TargetedHTTPRoutes lists the HTTPRoute names the emitted policy targets. Operators read this to understand which routes the policy applies to without inspecting the emitted resource. Empty when no policy was emitted.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions surface translation, conflict, and gateway-acceptance state. The well-known condition type is BackendPolicyReady.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BackendPolicyRef"},
 	}
 }
 
