@@ -49,6 +49,7 @@ import (
 	"sigs.k8s.io/ome/pkg/version"
 	basemodelwebhook "sigs.k8s.io/ome/pkg/webhook/admission/basemodel"
 	"sigs.k8s.io/ome/pkg/webhook/admission/benchmark"
+	inferencereplicawebhook "sigs.k8s.io/ome/pkg/webhook/admission/inferencereplica"
 	"sigs.k8s.io/ome/pkg/webhook/admission/isvc"
 	"sigs.k8s.io/ome/pkg/webhook/admission/pod"
 	runtimerevisionwebhook "sigs.k8s.io/ome/pkg/webhook/admission/runtimerevision"
@@ -373,6 +374,10 @@ func main() {
 		setupLog.Info("Registering ClusterBaseModel validator webhook to the webhook server")
 		hookServer.Register("/validate-ome-io-v1beta1-clusterbasemodel", &webhook.Admission{
 			Handler: &basemodelwebhook.ClusterBaseModelValidator{Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
+
+		hookServer.Register("/validate-ome-io-v1beta1-inferencereplica", &webhook.Admission{
+			Handler: &inferencereplicawebhook.Validator{Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
 		if err = ctrl.NewWebhookManagedBy(mgr).

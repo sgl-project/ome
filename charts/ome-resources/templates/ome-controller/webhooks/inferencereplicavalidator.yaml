@@ -1,0 +1,34 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: inferencereplica.ome.io
+  annotations:
+    cert-manager.io/inject-ca-from: ome/serving-cert
+webhooks:
+  # InferenceReplica is a controller-only CRD: this webhook rejects
+  # direct user writes unless the ome.io/controller-write=true annotation
+  # is present (set by the ISVC controller's client on every write).
+  - clientConfig:
+      caBundle: Cg==
+      service:
+        name: ome-webhook-server-service
+        namespace: {{ .Release.Namespace }}
+        path: /validate-ome-io-v1beta1-inferencereplica
+    failurePolicy: Fail
+    name: inferencereplica.ome-webhook-server.validator
+    sideEffects: None
+    admissionReviewVersions: ["v1"]
+    matchConditions:
+      - name: skip-deletion
+        expression: "!has(object.metadata.deletionTimestamp)"
+    rules:
+      - apiGroups:
+          - ome.io
+        apiVersions:
+          - v1beta1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - inferencereplicas

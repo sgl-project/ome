@@ -2,8 +2,11 @@ package isvc
 
 import (
 	"context"
+	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -14,16 +17,12 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 )
 
-var (
-	// logger for the mutating webhook.
-	mutatorLogger = logf.Log.WithName("inferenceservice-v1beta1-mutating-webhook")
-)
+var mutatorLogger = logf.Log.WithName("inferenceservice-v1beta1-mutating-webhook")
 
-// InferenceServiceDefaulter is responsible for setting default values on the InferenceService
-// when created or updated.
-//
-// NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
-// as it is used only for temporary operations and does not need to be deeply copied.
+// InferenceServiceDefaulter wires the webhook framework into the
+// DefaultInferenceService entrypoint. The kubebuilder markers below
+// suppress DeepCopy + OpenAPI codegen since this is a stateless
+// wired-once helper, not a persisted CR.
 // +kubebuilder:object:generate=false
 // +k8s:openapi-gen=false
 type InferenceServiceDefaulter struct {
@@ -40,104 +39,274 @@ func (d *InferenceServiceDefaulter) Default(ctx context.Context, obj runtime.Obj
 		mutatorLogger.Error(err, "Unable to convert object to InferenceService")
 		return err
 	}
-	mutatorLogger.Info("Defaulting InferenceService", "namespace", isvc.Namespace, "name", isvc.Name)
 	deployConfig, err := controllerconfig.NewDeployConfig(d.ClientSet)
 	if err != nil {
 		mutatorLogger.Error(err, "Failed to get deploy config")
 		return err
 	}
-	if err = DefaultInferenceService(ctx, d.Client, isvc, deployConfig); err != nil {
-		return err
-	}
-	return nil
+	return DefaultInferenceService(ctx, d.Client, isvc, deployConfig)
 }
 
-// DefaultInferenceService sets default values on the InferenceService
+// DefaultInferenceService sets default values on the InferenceService.
 func DefaultInferenceService(ctx context.Context, c client.Client, isvc *v1beta1.InferenceService, deployConfig *controllerconfig.DeployConfig) error {
-	// Create annotations map if it doesn't exist
 	if isvc.ObjectMeta.Annotations == nil {
 		isvc.ObjectMeta.Annotations = map[string]string{}
 	}
 
-	// Determine deployment mode based on components
-	_, modeExists := isvc.ObjectMeta.Annotations[constants.DeploymentMode]
-	if !modeExists {
-		// If both Engine and Decoder are specified, set the mode for PD disaggregated deployment
+	if _, modeExists := isvc.ObjectMeta.Annotations[constants.DeploymentMode]; !modeExists {
+		// Engine + Decoder ⇒ PDDisaggregated.
+		// Engine + Leader + Worker (size>0) ⇒ OMENative (native multi-node).
+		// Otherwise fall back to deployConfig.DefaultDeploymentMode
+		// (only RawDeployment is honored — other modes require an
+		// explicit operator annotation).
 		if isvc.Spec.Engine != nil && isvc.Spec.Decoder != nil {
-			// Use the PDDisaggregated deployment mode for PD disaggregated deployments
 			isvc.ObjectMeta.Annotations[constants.DeploymentMode] = string(constants.PDDisaggregated)
 		} else if isvc.Spec.Engine != nil {
-			// Check for MultiNode mode: leader and worker with worker.size > 0
 			if isvc.Spec.Engine.Leader != nil &&
 				isvc.Spec.Engine.Worker != nil &&
 				isvc.Spec.Engine.Worker.Size != nil &&
 				*isvc.Spec.Engine.Worker.Size > 0 {
-				isvc.ObjectMeta.Annotations[constants.DeploymentMode] = string(constants.MultiNode)
+				isvc.ObjectMeta.Annotations[constants.DeploymentMode] = string(constants.OMENative)
 			} else if deployConfig != nil && deployConfig.DefaultDeploymentMode == string(constants.RawDeployment) {
-				// Default to RawDeployment mode if not MultiNode
 				isvc.ObjectMeta.Annotations[constants.DeploymentMode] = deployConfig.DefaultDeploymentMode
 			}
 		} else if deployConfig != nil && deployConfig.DefaultDeploymentMode == string(constants.RawDeployment) {
-			// Apply default deployment mode from config if provided
 			isvc.ObjectMeta.Annotations[constants.DeploymentMode] = deployConfig.DefaultDeploymentMode
 		}
 	}
 
-	// Set default values for Engine component if present
+	// resolvedMode is the effective deployment mode after the ObjectMeta
+	// resolution above: the canonical top-level ome.io/deploymentMode
+	// annotation (set explicitly by the operator or by the leader+worker
+	// heuristic), falling back to spec.DeploymentMode. Components must
+	// resolve OMENative from it so a multi-node engine declared the normal
+	// way (top-level annotation, no spec.deploymentMode) still receives
+	// defaultOMENativeComponent — including the rollout budget defaults
+	// that keep its rollouts capped.
+	resolvedMode := isvc.Spec.DeploymentMode
+	if m := isvc.ObjectMeta.Annotations[constants.DeploymentMode]; m != "" {
+		mm := constants.DeploymentModeType(m)
+		resolvedMode = &mm
+	}
+
 	if isvc.Spec.Engine != nil {
-		defaultEngine(isvc.Spec.Engine)
+		defaultEngine(isvc.Spec.Engine, resolvedMode)
 	}
-
-	// Set default values for Decoder component if present
 	if isvc.Spec.Decoder != nil {
-		defaultDecoder(isvc.Spec.Decoder)
+		defaultDecoder(isvc.Spec.Decoder, resolvedMode)
 	}
-
-	// Set default values for Router component if present
 	if isvc.Spec.Router != nil {
-		defaultRouter(isvc.Spec.Router)
+		defaultRouter(isvc.Spec.Router, resolvedMode)
 	}
+	// Rollout pacing/structure defaults are applied at runtime by the resolve
+	// layer (coordination.ResolveGroups), not at admission.
 	return nil
 }
 
-// defaultEngine sets default values for the Engine component
-func defaultEngine(engine *v1beta1.EngineSpec) {
-	// Set default replica values if not set
+func defaultEngine(engine *v1beta1.EngineSpec, specMode *constants.DeploymentModeType) {
 	if engine.MinReplicas == nil {
-		minReplicas := 1 // MinReplicas is *int, not *int32
+		minReplicas := 1
 		engine.MinReplicas = &minReplicas
 	}
-
-	// MaxReplicas is not a pointer type, so check if it's 0 (default value)
+	// MaxReplicas is a non-pointer int — 0 means "not set".
 	if engine.MaxReplicas == 0 {
 		engine.MaxReplicas = 3
 	}
+	defaultWorkerSize(engine.Leader, engine.Worker)
+	defaultOMENativeComponent(&engine.ComponentExtensionSpec, engineIsMultiPod(engine), specMode)
 }
 
-// defaultDecoder sets default values for the Decoder component
-func defaultDecoder(decoder *v1beta1.DecoderSpec) {
-	// Set default replica values if not set
+func defaultDecoder(decoder *v1beta1.DecoderSpec, specMode *constants.DeploymentModeType) {
 	if decoder.MinReplicas == nil {
-		minReplicas := 1 // MinReplicas is *int, not *int32
+		minReplicas := 1
 		decoder.MinReplicas = &minReplicas
 	}
-
-	// MaxReplicas is not a pointer type, so check if it's 0 (default value)
 	if decoder.MaxReplicas == 0 {
 		decoder.MaxReplicas = 3
 	}
+	defaultWorkerSize(decoder.Leader, decoder.Worker)
+	defaultOMENativeComponent(&decoder.ComponentExtensionSpec, decoderIsMultiPod(decoder), specMode)
 }
 
-// defaultRouter sets default values for the Router component
-func defaultRouter(router *v1beta1.RouterSpec) {
-	// Set default replica values if not set
+// defaultWorkerSize fills Worker.Size=1 when a multi-pod pairing is
+// declared (Leader set AND Worker set) but Worker.Size is nil. Acts
+// only when both halves of the pairing are present — pure
+// leader-without-worker or worker-without-leader specs are left
+// untouched (the validator rejects them later with the appropriate
+// reason).
+//
+// Treats nil Size as the operator-friendly "minimum-viable
+// multi-pod" default; if the operator wants more workers they set
+// Size explicitly. A Size of 0 is preserved (and rejected at
+// validation as WorkerSizeMustBePositive) so we don't quietly turn
+// the operator's "no workers, please" mistake into a 2-pod gang.
+//
+// Must run BEFORE engineIsMultiPod / decoderIsMultiPod so the
+// downstream multi-pod detection sees the defaulted Size and stamps
+// the gang lifecycle policies (RecreateInstance restart, AllPodReady
+// readiness, SurgeThenDrain update).
+func defaultWorkerSize(leader *v1beta1.LeaderSpec, worker *v1beta1.WorkerSpec) {
+	if leader == nil || worker == nil {
+		return
+	}
+	if worker.Size != nil {
+		return
+	}
+	size := 1
+	worker.Size = &size
+}
+
+func defaultRouter(router *v1beta1.RouterSpec, specMode *constants.DeploymentModeType) {
 	if router.MinReplicas == nil {
-		minReplicas := 1 // MinReplicas is *int, not *int32
+		minReplicas := 1
 		router.MinReplicas = &minReplicas
 	}
-
-	// MaxReplicas is not a pointer type, so check if it's 0 (default value)
 	if router.MaxReplicas == 0 {
 		router.MaxReplicas = 2
 	}
+	// Router has no Leader/Worker; always single-pod.
+	defaultOMENativeComponent(&router.ComponentExtensionSpec, false, specMode)
+}
+
+// engineIsMultiPod reports whether the Engine spawns more than one pod per
+// Instance — true when a Leader is declared or when Worker.Size > 0.
+func engineIsMultiPod(engine *v1beta1.EngineSpec) bool {
+	if engine == nil {
+		return false
+	}
+	if engine.Leader != nil {
+		return true
+	}
+	return engine.Worker != nil && engine.Worker.Size != nil && *engine.Worker.Size > 0
+}
+
+// decoderIsMultiPod reports whether the Decoder spawns more than one pod per
+// Instance — true when a Leader is declared or when Worker.Size > 0.
+func decoderIsMultiPod(decoder *v1beta1.DecoderSpec) bool {
+	if decoder == nil {
+		return false
+	}
+	if decoder.Leader != nil {
+		return true
+	}
+	return decoder.Worker != nil && decoder.Worker.Size != nil && *decoder.Worker.Size > 0
+}
+
+// defaultOMENativeComponent fills in lifecycle-policy defaults on
+// the Component's omenative sub-block. Only acts when the Component
+// resolves to OMENative — either via its own
+// ome.io/deploymentMode annotation or via the top-level
+// spec.deploymentMode field (per-Component annotation wins). For any
+// other mode the block is left untouched. multiPod toggles the
+// restart/ready policy defaults: a multi-pod Instance defaults to group
+// restart + AllPodReady aggregation; a single-pod Instance defaults to
+// None for both.
+//
+// Multi-pod defaults:
+//
+//   - RestartPolicy = RecreateInstanceOnPodRestart (gang restart)
+//   - ReadyPolicy = AllPodReady (Instance Ready iff every pod Ready)
+//   - UpdateStrategy.Type = SurgeThenDrain (same default as single-pod;
+//     multi-pod gangs surge as a unit via the gang-surge path)
+func defaultOMENativeComponent(ext *v1beta1.ComponentExtensionSpec, multiPod bool, specMode *constants.DeploymentModeType) {
+	if ext == nil {
+		return
+	}
+	if !componentResolvesToOMENative(ext.Annotations, specMode) {
+		return
+	}
+	if ext.Lifecycle == nil {
+		ext.Lifecycle = &v1beta1.LifecycleSpec{}
+	}
+	spec := ext.Lifecycle
+
+	if spec.RestartPolicy == nil {
+		rp := v1beta1.InstanceRestartPolicyNone
+		if multiPod {
+			rp = v1beta1.InstanceRestartPolicyRecreateInstance
+		}
+		spec.RestartPolicy = &rp
+	}
+
+	if spec.UpdateStrategy == nil {
+		spec.UpdateStrategy = &v1beta1.UpdateStrategy{}
+	}
+	if spec.UpdateStrategy.Type == "" {
+		// SurgeThenDrain is the default. Single-pod Instances get a real
+		// zero-downtime surge (new pod at the alternate ordinal, drain
+		// the old, promote); multi-pod gangs surge a whole replacement
+		// gang at a fresh surge index before the source drains. Either
+		// way it is safer than in-place because the MaxUnavailable gate
+		// throttles drains.
+		spec.UpdateStrategy.Type = v1beta1.UpdateStrategySurgeThenDrain
+	}
+	if spec.UpdateStrategy.InPlaceUpdateStrategy == nil {
+		spec.UpdateStrategy.InPlaceUpdateStrategy = &v1beta1.InPlaceUpdateStrategy{}
+	}
+	if spec.UpdateStrategy.InPlaceUpdateStrategy.GracePeriodSeconds == nil {
+		grace := int32(30)
+		spec.UpdateStrategy.InPlaceUpdateStrategy.GracePeriodSeconds = &grace
+	}
+	if spec.UpdateStrategy.InPlaceUpdateStrategy.MarkNotReadyDuringLifecycle == nil {
+		mark := true
+		spec.UpdateStrategy.InPlaceUpdateStrategy.MarkNotReadyDuringLifecycle = &mark
+	}
+
+	// Default the per-Component rollout budgets so an unset RollingUpdate
+	// never resolves to the uncapped BudgetNoLimit. Without a cap the
+	// dispatcher can start every Instance's surge/drain in a single
+	// reconcile pass, draining an entire fleet at once on a spec bump.
+	// 25% mirrors the upstream appsv1.Deployment RollingUpdate defaults and
+	// paces both the surge path (gated on MaxSurge) and the recreate path
+	// (gated on MaxUnavailable). Percent values scale with replica count at
+	// reconcile time, so this is safe from tiny to large Components.
+	if spec.UpdateStrategy.RollingUpdate == nil {
+		spec.UpdateStrategy.RollingUpdate = &v1beta1.RollingUpdate{}
+	}
+	if spec.UpdateStrategy.RollingUpdate.MaxSurge == nil {
+		ms := intstr.FromString("25%")
+		spec.UpdateStrategy.RollingUpdate.MaxSurge = &ms
+	}
+	if spec.UpdateStrategy.RollingUpdate.MaxUnavailable == nil {
+		mu := intstr.FromString("25%")
+		spec.UpdateStrategy.RollingUpdate.MaxUnavailable = &mu
+	}
+
+	if spec.ReadyPolicy == nil {
+		rp := v1beta1.InstanceReadyPolicyNone
+		if multiPod {
+			rp = v1beta1.InstanceReadyPolicyAllPodReady
+		}
+		spec.ReadyPolicy = &rp
+	}
+
+	if spec.InstanceReadyTimeout == nil {
+		spec.InstanceReadyTimeout = &metav1.Duration{Duration: 30 * time.Minute}
+	}
+
+	if spec.MigrationPolicy == nil {
+		spec.MigrationPolicy = &v1beta1.MigrationPolicy{}
+	}
+	if spec.MigrationPolicy.Mode == "" {
+		spec.MigrationPolicy.Mode = v1beta1.MigrationPolicyModeAuto
+	}
+}
+
+// componentResolvesToOMENative reports whether a Component dispatches
+// to the OMENative backend after applying the precedence chain:
+//  1. Per-Component ome.io/deploymentMode annotation (escape hatch).
+//  2. Top-level spec.deploymentMode (typed default).
+//
+// Returns false when neither resolves to OMENative. Used by the
+// lifecycle-policy defaulter so spec.deploymentMode=OMENative also
+// triggers the OMENative defaults without forcing operators to repeat
+// the annotation on every Component.
+func componentResolvesToOMENative(annotations map[string]string, specMode *constants.DeploymentModeType) bool {
+	if annotations[constants.DeploymentMode] != "" {
+		return annotations[constants.DeploymentMode] == string(constants.OMENative)
+	}
+	if specMode != nil {
+		return *specMode == constants.OMENative
+	}
+	return false
 }
