@@ -16,7 +16,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_ORG: moirai-internal
   # Go version
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.26'
 
 jobs:
   build-and-push-images:
