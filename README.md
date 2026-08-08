@@ -1,6 +1,7 @@
 # OME (Open Model Engine) — Kubernetes Operator for LLM Serving
 
 [![Go Report](https://goreportcard.com/badge/sigs.k8s.io/ome)](https://goreportcard.com/report/sigs.k8s.io/ome)
+[![codecov](https://codecov.io/gh/ome-projects/ome/graph/badge.svg)](https://codecov.io/gh/ome-projects/ome)
 [![Latest Release](https://img.shields.io/github/v/release/ome-projects/ome?include_prereleases)](https://github.com/ome-projects/ome/releases/latest)
 [![API Reference](https://img.shields.io/badge/API-v1beta1-blue)](https://ome-projects.github.io/ome/docs/reference/ome.v1beta1/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)

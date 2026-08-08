@@ -97,6 +97,15 @@ jobs:
             coverage-pkg.out
             coverage-internal.out
 
+      - name: Upload coverage to Codecov
+        if: matrix.test-suite == 'unit'
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage-cmd.out,coverage-pkg.out,coverage-internal.out
+          flags: unit
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   build:
     name: Build
     runs-on: ubuntu-latest
