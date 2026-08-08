@@ -533,6 +533,9 @@ artifacts: kustomize ## Generate artifacts for release.
 GOTOOLCHAIN      ?= go1.25.0+auto # https://github.com/golang/go/issues/75031
 XET_LIB_PATH     := $(shell pwd)/pkg/xet/target/release
 EXCLUDE_PATTERNS := "pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/|pkg/modelconfig/examples/|pkg/hfutil/hub/samples/"
+# Keep this floor moving toward the 85% coverage goal. Override it locally with
+# `make coverage COVER_MIN=<percent>` when evaluating an incremental increase.
+COVER_MIN        ?= 50
 
 # Define test packages
 TEST_PACKAGES     := $(shell go list ./... | grep -v -E '(pkg/apis|pkg/testing|pkg/openapi|pkg/client)')
@@ -584,8 +587,10 @@ test-no-xet: fmt vet manifests envtest ## 🧪 Run tests excluding ome-agent
 	$(call run_go_test,$(INTERNAL_PACKAGES),internal,-no-xet)
 	@echo "\n🎉 All tests completed successfully (excluding ome-agent)!"
 
-.PHONY: coverage
-coverage: ## Show coverage summary and enforce threshold
+.PHONY: coverage cover-check
+coverage: cover-check ## Show coverage summary and enforce threshold
+
+cover-check: ## Enforce the minimum average coverage (COVER_MIN, currently 50)
 	@echo "\n---------- Coverage Summary ----------"
 	@for part in cmd pkg internal; do \
 		echo "\n$$part Coverage:"; \
@@ -598,8 +603,8 @@ coverage: ## Show coverage summary and enforce threshold
 	echo "CMD: $$cmd_cov%"; echo "PKG: $$pkg_cov%"; echo "Internal: $$int_cov%"; \
 	avg_cov=$$(awk "BEGIN {printf \"%.2f\", ($$cmd_cov + $$pkg_cov + $$int_cov) / 3}"); \
 	echo "\nAverage Coverage: $$avg_cov%"; \
-	if awk "BEGIN {exit !($$avg_cov < 48)}"; then \
-		echo "❌ Average coverage $$avg_cov% is below threshold of 48%"; \
+	if awk "BEGIN {exit !($$avg_cov < $(COVER_MIN))}"; then \
+		echo "❌ Average coverage $$avg_cov% is below threshold of $(COVER_MIN)%"; \
 		exit 1; \
 	fi
 .PHONY: integration-test
