@@ -1568,3 +1568,24 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 		})
 	}
 }
+
+// A lean InferenceService carries no model at all; both selector entry
+// points must reject a nil model with a typed error instead of
+// dereferencing it.
+func TestSelectRuntime_NilModelReturnsError(t *testing.T) {
+	selector := New(fake.NewClientBuilder().Build())
+	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "lean", Namespace: "default"}}
+
+	_, err := selector.SelectRuntime(context.Background(), nil, isvc)
+	assert.Error(t, err)
+	assert.IsType(t, &ModelValidationError{}, err)
+}
+
+func TestValidateRuntime_NilModelReturnsError(t *testing.T) {
+	selector := New(fake.NewClientBuilder().Build())
+	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "lean", Namespace: "default"}}
+
+	err := selector.ValidateRuntime(context.Background(), "some-runtime", nil, isvc)
+	assert.Error(t, err)
+	assert.IsType(t, &ModelValidationError{}, err)
+}

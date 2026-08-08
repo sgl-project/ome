@@ -39,14 +39,15 @@ func NewWithConfig(config *Config) Selector {
 func (s *defaultSelector) SelectRuntime(ctx context.Context, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) (*RuntimeSelection, error) {
 	namespace := isvc.Namespace
 	logger := log.FromContext(ctx)
-	logger.Info("Selecting runtime for model",
-		"model", model.ModelFormat.Name,
-		"namespace", namespace)
 
-	// Validate model
+	// Validate model before anything dereferences it (a lean
+	// InferenceService carries no model at all).
 	if err := s.validateModel(model); err != nil {
 		return nil, err
 	}
+	logger.Info("Selecting runtime for model",
+		"model", model.ModelFormat.Name,
+		"namespace", namespace)
 
 	// Get all compatible runtimes
 	matches, err := s.GetCompatibleRuntimes(ctx, model, isvc, namespace)
@@ -150,15 +151,16 @@ func (s *defaultSelector) GetCompatibleRuntimes(ctx context.Context, model *v1be
 func (s *defaultSelector) ValidateRuntime(ctx context.Context, runtimeName string, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) error {
 	namespace := isvc.Namespace
 	logger := log.FromContext(ctx)
+
+	// Validate model before anything dereferences it (a lean
+	// InferenceService carries no model at all).
+	if err := s.validateModel(model); err != nil {
+		return err
+	}
 	logger.V(1).Info("Validating runtime",
 		"runtime", runtimeName,
 		"model", model.ModelFormat.Name,
 		"namespace", namespace)
-
-	// Validate model
-	if err := s.validateModel(model); err != nil {
-		return err
-	}
 
 	// Get the specific runtime
 	runtimeSpec, isCluster, err := s.fetcher.GetRuntime(ctx, runtimeName, namespace)
