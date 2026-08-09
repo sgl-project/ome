@@ -14,7 +14,6 @@ type RuntimeCompatibilityError struct {
 	DetailedError error
 }
 
-// Error implements the error interface.
 func (e *RuntimeCompatibilityError) Error() string {
 	if e.DetailedError != nil {
 		return fmt.Sprintf("runtime %s does not support model %s: %s (%v)",
@@ -24,7 +23,6 @@ func (e *RuntimeCompatibilityError) Error() string {
 		e.RuntimeName, e.ModelName, e.Reason)
 }
 
-// Unwrap returns the underlying error.
 func (e *RuntimeCompatibilityError) Unwrap() error {
 	return e.DetailedError
 }
@@ -34,13 +32,12 @@ type NoRuntimeFoundError struct {
 	ModelName          string
 	ModelFormat        string
 	Namespace          string
-	ExcludedRuntimes   map[string]error // Map of runtime name to exclusion reason
+	ExcludedRuntimes   map[string]error
 	TotalRuntimes      int
 	NamespacedRuntimes int
 	ClusterRuntimes    int
 }
 
-// Error implements the error interface.
 func (e *NoRuntimeFoundError) Error() string {
 	var sb strings.Builder
 
@@ -70,7 +67,6 @@ type RuntimeNotFoundError struct {
 	Namespace   string
 }
 
-// Error implements the error interface.
 func (e *RuntimeNotFoundError) Error() string {
 	return fmt.Sprintf("runtime %s not found in namespace %s or at cluster scope",
 		e.RuntimeName, e.Namespace)
@@ -82,7 +78,6 @@ type RuntimeDisabledError struct {
 	IsCluster   bool
 }
 
-// Error implements the error interface.
 func (e *RuntimeDisabledError) Error() string {
 	scope := "namespace-scoped"
 	if e.IsCluster {
@@ -97,7 +92,6 @@ type ModelValidationError struct {
 	Message string
 }
 
-// Error implements the error interface.
 func (e *ModelValidationError) Error() string {
 	return fmt.Sprintf("invalid model specification: %s: %s", e.Field, e.Message)
 }
@@ -108,36 +102,30 @@ type ConfigurationError struct {
 	Message   string
 }
 
-// Error implements the error interface.
 func (e *ConfigurationError) Error() string {
 	return fmt.Sprintf("configuration error in %s: %s", e.Component, e.Message)
 }
 
-// IsRuntimeCompatibilityError checks if an error is a RuntimeCompatibilityError.
 func IsRuntimeCompatibilityError(err error) bool {
 	_, ok := err.(*RuntimeCompatibilityError)
 	return ok
 }
 
-// IsNoRuntimeFoundError checks if an error is a NoRuntimeFoundError.
 func IsNoRuntimeFoundError(err error) bool {
 	_, ok := err.(*NoRuntimeFoundError)
 	return ok
 }
 
-// IsRuntimeNotFoundError checks if an error is a RuntimeNotFoundError.
 func IsRuntimeNotFoundError(err error) bool {
 	_, ok := err.(*RuntimeNotFoundError)
 	return ok
 }
 
-// IsRuntimeDisabledError checks if an error is a RuntimeDisabledError.
 func IsRuntimeDisabledError(err error) bool {
 	_, ok := err.(*RuntimeDisabledError)
 	return ok
 }
 
-// IsModelValidationError checks if an error is a ModelValidationError.
 func IsModelValidationError(err error) bool {
 	_, ok := err.(*ModelValidationError)
 	return ok

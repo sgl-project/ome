@@ -14,7 +14,6 @@ import (
 func TestFetchRuntimes(t *testing.T) {
 	ctx := context.Background()
 
-	// Create test data
 	now := metav1.Now()
 	earlier := metav1.NewTime(now.Add(-1 * time.Hour))
 
@@ -57,7 +56,6 @@ func TestFetchRuntimes(t *testing.T) {
 		},
 	}
 
-	// Create fake client with test data
 	fakeClient := createFakeClient()
 	for _, rt := range runtimes {
 		assert.NoError(t, fakeClient.Create(ctx, &rt))
@@ -66,23 +64,18 @@ func TestFetchRuntimes(t *testing.T) {
 		assert.NoError(t, fakeClient.Create(ctx, &rt))
 	}
 
-	// Create fetcher
 	fetcher := NewDefaultRuntimeFetcher(fakeClient)
 
-	// Test fetching from a specific namespace
 	collection, err := fetcher.FetchRuntimes(ctx, "default")
 	assert.NoError(t, err)
 	assert.NotNil(t, collection)
 
-	// Verify namespace runtimes (should only get "default" namespace)
+	// FetchRuntimes scopes namespace runtimes and sorts newest-first.
 	assert.Len(t, collection.NamespaceRuntimes, 2)
-	// Verify sorting - newer first
 	assert.Equal(t, "runtime-a", collection.NamespaceRuntimes[0].Name)
 	assert.Equal(t, "runtime-b", collection.NamespaceRuntimes[1].Name)
 
-	// Verify cluster runtimes (should get all)
 	assert.Len(t, collection.ClusterRuntimes, 2)
-	// Verify sorting - newer first
 	assert.Equal(t, "cluster-runtime-a", collection.ClusterRuntimes[0].Name)
 	assert.Equal(t, "cluster-runtime-b", collection.ClusterRuntimes[1].Name)
 }
@@ -90,7 +83,6 @@ func TestFetchRuntimes(t *testing.T) {
 func TestGetRuntime(t *testing.T) {
 	ctx := context.Background()
 
-	// Create test data
 	namespaceRuntime := &v1beta1.ServingRuntime{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "namespace-runtime",
@@ -122,12 +114,10 @@ func TestGetRuntime(t *testing.T) {
 		},
 	}
 
-	// Create fake client with test data
 	fakeClient := createFakeClient()
 	assert.NoError(t, fakeClient.Create(ctx, namespaceRuntime))
 	assert.NoError(t, fakeClient.Create(ctx, clusterRuntime))
 
-	// Create fetcher
 	fetcher := NewDefaultRuntimeFetcher(fakeClient)
 
 	tests := []struct {
@@ -191,7 +181,6 @@ func TestGetRuntime(t *testing.T) {
 }
 
 func TestSortingWithSameTimestamp(t *testing.T) {
-	// Test that when timestamps are equal, sorting is by name
 	sameTime := metav1.Now()
 
 	runtimes := &v1beta1.ServingRuntimeList{
@@ -219,7 +208,6 @@ func TestSortingWithSameTimestamp(t *testing.T) {
 
 	sortServingRuntimeList(runtimes)
 
-	// Should be sorted alphabetically when timestamps are equal
 	assert.Equal(t, "alpha", runtimes.Items[0].Name)
 	assert.Equal(t, "beta", runtimes.Items[1].Name)
 	assert.Equal(t, "zebra", runtimes.Items[2].Name)

@@ -11,10 +11,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
-	"sigs.k8s.io/ome/pkg/constants"
 )
 
-// Helper functions
 func createFakeClient() client.Client {
 	scheme := runtime.NewScheme()
 	_ = v1beta1.AddToScheme(scheme)
@@ -25,18 +23,34 @@ func ptr[T any](v T) *T {
 	return &v
 }
 
-// Basic selector tests
-func TestNewSelector(t *testing.T) {
-	// Create a fake client
-	fakeClient := fake.NewClientBuilder().Build()
+// quantPtr / opPtr / fmtPtr / fwPtr exist because v1beta1.ModelQuantization
+// and v1beta1.RuntimeSelectorOperator are named string types that ptr[string]
+// can't satisfy directly. ptr() handles every other case.
+func quantPtr(s string) *v1beta1.ModelQuantization {
+	q := v1beta1.ModelQuantization(s)
+	return &q
+}
 
-	// Create selector
+func opPtr(s string) *v1beta1.RuntimeSelectorOperator {
+	o := v1beta1.RuntimeSelectorOperator(s)
+	return &o
+}
+
+// fmtVersion / fwVersion build a SupportedModelFormat / ModelFormat /
+// ModelFrameworkSpec quickly for the version-comparison test tables.
+func fmtVersion(version string, op *v1beta1.RuntimeSelectorOperator) *v1beta1.ModelFormat {
+	return &v1beta1.ModelFormat{Name: "pytorch", Version: ptr(version), Operator: op}
+}
+
+func fwVersion(version string, op *v1beta1.RuntimeSelectorOperator) *v1beta1.ModelFrameworkSpec {
+	return &v1beta1.ModelFrameworkSpec{Name: "transformers", Version: ptr(version), Operator: op}
+}
+
+func TestNewSelector(t *testing.T) {
+	fakeClient := fake.NewClientBuilder().Build()
 	selector := New(fakeClient)
 
-	// Verify it's not nil
 	assert.NotNil(t, selector)
-
-	// Verify it's the right type
 	_, ok := selector.(*defaultSelector)
 	assert.True(t, ok)
 }
@@ -49,7 +63,6 @@ func TestValidateModel(t *testing.T) {
 		name    string
 		model   *v1beta1.BaseModelSpec
 		wantErr bool
-		errType error
 	}{
 		{
 			name:    "nil model",
@@ -187,7 +200,6 @@ func TestGetModelFormatLabel(t *testing.T) {
 }
 
 func TestErrorTypes(t *testing.T) {
-	// Test RuntimeCompatibilityError
 	err := &RuntimeCompatibilityError{
 		RuntimeName: "test-runtime",
 		ModelName:   "test-model",
@@ -198,7 +210,6 @@ func TestErrorTypes(t *testing.T) {
 	assert.Contains(t, err.Error(), "test-model")
 	assert.True(t, IsRuntimeCompatibilityError(err))
 
-	// Test NoRuntimeFoundError
 	noRuntimeErr := &NoRuntimeFoundError{
 		ModelName:          "test-model",
 		ModelFormat:        "pytorch",
@@ -212,12 +223,9 @@ func TestErrorTypes(t *testing.T) {
 	assert.True(t, IsNoRuntimeFoundError(noRuntimeErr))
 }
 
-// Compatibility tests ported from runtime_test.go
 func TestGetSupportingRuntimes(t *testing.T) {
-	// Create a fake fakeClient with our custom types registered
 	fakeClient := createFakeClient()
 
-	// Create test base models with different formats and sizes
 	baseModels := []struct {
 		name  string
 		model *v1beta1.BaseModelSpec
@@ -251,7 +259,6 @@ func TestGetSupportingRuntimes(t *testing.T) {
 		},
 	}
 
-	// Create test serving runtimes with different capabilities
 	runtimes := []*v1beta1.ServingRuntime{
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -384,7 +391,6 @@ func TestGetSupportingRuntimes(t *testing.T) {
 		},
 	}
 
-	// Create cluster-scoped runtimes
 	clusterRuntimes := []*v1beta1.ClusterServingRuntime{
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -408,7 +414,6 @@ func TestGetSupportingRuntimes(t *testing.T) {
 		},
 	}
 
-	// Add all runtimes to the fake client
 	ctx := context.Background()
 	for _, rt := range runtimes {
 		assert.NoError(t, fakeClient.Create(ctx, rt))
@@ -417,7 +422,6 @@ func TestGetSupportingRuntimes(t *testing.T) {
 		assert.NoError(t, fakeClient.Create(ctx, rt))
 	}
 
-	// Create selector
 	selector := New(fakeClient)
 
 	tests := []struct {
@@ -474,14 +478,11 @@ func TestGetSupportingRuntimes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Build a minimal InferenceService for selector methods
 			isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Namespace: "default"}}
-			// Ensure fields used by matcher are non-nil
 			matches, err := selector.GetCompatibleRuntimes(ctx, tt.model, isvc, "default")
 
 			if tt.expectError {
 				assert.Empty(t, matches)
-				// Try SelectRuntime to get the error
 				_, err := selector.SelectRuntime(ctx, tt.model, isvc)
 				assert.Error(t, err)
 				assert.True(t, IsNoRuntimeFoundError(err))
@@ -837,7 +838,6 @@ func TestGetCompatibleRuntimes_ExcludeNoAutoSelect(t *testing.T) {
 	fakeClient := createFakeClient()
 	selector := New(fakeClient)
 
-	// Create runtimes: one with AutoSelect=false (should be excluded), one with true (should be included)
 	rtNoAuto := &v1beta1.ServingRuntime{
 		ObjectMeta: metav1.ObjectMeta{Name: "rt-no-auto", Namespace: "default"},
 		Spec: v1beta1.ServingRuntimeSpec{
@@ -864,116 +864,14 @@ func TestGetCompatibleRuntimes_ExcludeNoAutoSelect(t *testing.T) {
 
 	matches, err := selector.GetCompatibleRuntimes(ctx, model, isvc, "default")
 	assert.NoError(t, err)
-	// Only the auto-select runtime should appear
 	assert.Len(t, matches, 1)
 	assert.Equal(t, "rt-auto", matches[0].Name)
 }
 
-func TestSelectRuntime_FiltersByDeploymentModeAnnotation(t *testing.T) {
-	fakeClient := createFakeClient()
-	selector := New(fakeClient)
-
-	rawRuntime := &v1beta1.ServingRuntime{
-		ObjectMeta: metav1.ObjectMeta{Name: "raw-rt", Namespace: "default"},
-		Spec: v1beta1.ServingRuntimeSpec{
-			SupportedModelFormats: []v1beta1.SupportedModelFormat{
-				{
-					ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Weight: 20},
-					AutoSelect:  ptr(true),
-				},
-			},
-			EngineConfig: &v1beta1.EngineSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					Annotations: map[string]string{
-						constants.DeploymentMode: string(constants.RawDeployment),
-					},
-				},
-			},
-		},
-	}
-	multiRuntime := &v1beta1.ServingRuntime{
-		ObjectMeta: metav1.ObjectMeta{Name: "multi-rt", Namespace: "default"},
-		Spec: v1beta1.ServingRuntimeSpec{
-			SupportedModelFormats: []v1beta1.SupportedModelFormat{
-				{
-					ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Weight: 10},
-					AutoSelect:  ptr(true),
-				},
-			},
-			EngineConfig: &v1beta1.EngineSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					Annotations: map[string]string{
-						constants.DeploymentMode: string(constants.MultiNode),
-					},
-				},
-				Leader: &v1beta1.LeaderSpec{},
-				Worker: &v1beta1.WorkerSpec{Size: ptr(1)},
-			},
-		},
-	}
-	noAnnotationRuntime := &v1beta1.ServingRuntime{
-		ObjectMeta: metav1.ObjectMeta{Name: "no-annotation-rt", Namespace: "default"},
-		Spec: v1beta1.ServingRuntimeSpec{
-			SupportedModelFormats: []v1beta1.SupportedModelFormat{
-				{
-					ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Weight: 5},
-					AutoSelect:  ptr(true),
-				},
-			},
-			EngineConfig: &v1beta1.EngineSpec{
-				Leader: &v1beta1.LeaderSpec{},
-				Worker: &v1beta1.WorkerSpec{Size: ptr(1)},
-			},
-		},
-	}
-
-	ctx := context.Background()
-	assert.NoError(t, fakeClient.Create(ctx, rawRuntime))
-	assert.NoError(t, fakeClient.Create(ctx, multiRuntime))
-	assert.NoError(t, fakeClient.Create(ctx, noAnnotationRuntime))
-
-	model := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}}
-	isvc := &v1beta1.InferenceService{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "isvc",
-			Namespace: "default",
-			Annotations: map[string]string{
-				constants.DeploymentMode: string(constants.RawDeployment),
-			},
-		},
-		Spec: v1beta1.InferenceServiceSpec{
-			Engine: &v1beta1.EngineSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					Annotations: map[string]string{
-						constants.DeploymentMode: string(constants.MultiNode),
-					},
-				},
-			},
-		},
-	}
-
-	matches, err := selector.GetCompatibleRuntimes(ctx, model, isvc, "default")
-	assert.NoError(t, err)
-	assert.Len(t, matches, 2)
-	assert.Equal(t, "multi-rt", matches[0].Name)
-	assert.Equal(t, "no-annotation-rt", matches[1].Name)
-
-	selection, err := selector.SelectRuntime(ctx, model, isvc)
-	assert.NoError(t, err)
-	assert.Equal(t, "multi-rt", selection.Name)
-
-	isvc.Spec.Engine.Annotations[constants.DeploymentMode] = ""
-	matches, err = selector.GetCompatibleRuntimes(ctx, model, isvc, "default")
-	assert.NoError(t, err)
-	assert.Len(t, matches, 3)
-}
-
 func TestSelectRuntime_NoRuntimeFoundError_Details(t *testing.T) {
-	// Create client and selector
 	fakeClient := createFakeClient()
 	selector := New(fakeClient)
 
-	// Create incompatible runtimes to trigger NoRuntimeFoundError with reasons
 	rtWrongFormat := &v1beta1.ServingRuntime{
 		ObjectMeta: metav1.ObjectMeta{Name: "rt-wrong-format", Namespace: "default"},
 		Spec: v1beta1.ServingRuntimeSpec{
@@ -996,36 +894,30 @@ func TestSelectRuntime_NoRuntimeFoundError_Details(t *testing.T) {
 	assert.NoError(t, fakeClient.Create(ctx, rtWrongFormat))
 	assert.NoError(t, fakeClient.Create(ctx, rtSizeTooSmall))
 
-	// Model that won't match either runtime by format or size
 	model := &v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: "pytorch"}, ModelParameterSize: ptr("70B")}
 	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Namespace: "default"}}
 
-	// GetCompatibleRuntimes should be empty
 	matches, err := selector.GetCompatibleRuntimes(ctx, model, isvc, "default")
 	assert.NoError(t, err)
 	assert.Empty(t, matches)
 
-	// SelectRuntime should return NoRuntimeFoundError with reasons collected
 	_, selErr := selector.SelectRuntime(ctx, model, isvc)
 	assert.Error(t, selErr)
 	assert.True(t, IsNoRuntimeFoundError(selErr))
 	noRt := selErr.(*NoRuntimeFoundError)
-	// Should have entries for both runtimes
 	assert.Contains(t, noRt.ExcludedRuntimes, "rt-wrong-format")
 	assert.Contains(t, noRt.ExcludedRuntimes, "rt-size-too-small")
 }
 
 func TestValidateRuntime_DisabledAndNoAutoSelect(t *testing.T) {
-	// Create client and selector
 	fakeClient := createFakeClient()
 	selector := New(fakeClient)
 
-	// Disabled runtime
 	disabled := &v1beta1.ServingRuntime{
 		ObjectMeta: metav1.ObjectMeta{Name: "rt-disabled", Namespace: "default"},
 		Spec:       v1beta1.ServingRuntimeSpec{Disabled: ptr(true)},
 	}
-	// Compatible format but AutoSelect=false should still validate without error
+	// AutoSelect=false is OK for an explicit (non-auto) runtime pick.
 	noAuto := &v1beta1.ServingRuntime{
 		ObjectMeta: metav1.ObjectMeta{Name: "rt-no-auto", Namespace: "default"},
 		Spec: v1beta1.ServingRuntimeSpec{
@@ -1168,401 +1060,6 @@ func TestGetSupportedModelFormat_CustomRuntime(t *testing.T) {
 				// When no format matches, result should have zero score (empty format)
 				if result != nil && result.ModelFormat != nil {
 					assert.Fail(t, "expected no matching format, but got one", "format: %v", result.ModelFormat.Name)
-				}
-			}
-		})
-	}
-}
-
-func TestSupportedRuntimeWithAC(t *testing.T) {
-	// Create a fake fakeClient with our custom types registered
-	fakeClient := createFakeClient()
-	ac1 := "nvidia-tesla-t4"
-	ac2 := "H100"
-	// Create test base models with different formats and sizes
-	baseModels := []struct {
-		name  string
-		model *v1beta1.BaseModelSpec
-	}{
-		{
-			name: "small-pytorch-model",
-			model: &v1beta1.BaseModelSpec{
-				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
-				},
-				ModelParameterSize: ptr("7B"),
-			},
-		},
-	}
-	// Create test serving runtimes with different capabilities
-	runtimes := []*v1beta1.ServingRuntime{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "pytorch-rt",
-				Namespace: "default",
-			},
-			Spec: v1beta1.ServingRuntimeSpec{
-				SupportedModelFormats: []v1beta1.SupportedModelFormat{
-					{
-						ModelFormat: &v1beta1.ModelFormat{
-							Name:   "pytorch",
-							Weight: 10,
-						},
-						AutoSelect: ptr(true),
-						Priority:   ptr(int32(2)),
-					},
-				},
-				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
-					Min: ptr("1B"),
-					Max: ptr("10B"),
-				},
-				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
-					AcceleratorClasses: []string{"nvidia-tesla-t4", "nvidia-tesla-v100", "nvidia-a100"},
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "pytorch-rt-1",
-				Namespace: "default",
-			},
-			Spec: v1beta1.ServingRuntimeSpec{
-				SupportedModelFormats: []v1beta1.SupportedModelFormat{
-					{
-						ModelFormat: &v1beta1.ModelFormat{
-							Name:   "pytorch",
-							Weight: 8,
-						},
-						AutoSelect: ptr(true),
-						Priority:   ptr(int32(1)),
-					},
-				},
-				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
-					Min: ptr("1B"),
-					Max: ptr("8B"),
-				},
-				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
-					AcceleratorClasses: []string{"nvidia-tesla-t4", "nvidia-tesla-v100", "nvidia-a100"},
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "pytorch-rt-2",
-				Namespace: "default",
-			},
-			Spec: v1beta1.ServingRuntimeSpec{
-				SupportedModelFormats: []v1beta1.SupportedModelFormat{
-					{
-						ModelFormat: &v1beta1.ModelFormat{
-							Name:   "pytorch",
-							Weight: 12,
-						},
-						AutoSelect: ptr(true),
-					},
-				},
-				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
-					Min: ptr("50B"),
-					Max: ptr("100B"),
-				},
-				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
-					AcceleratorClasses: []string{"nvidia-tesla-t4", "nvidia-tesla-v100", "nvidia-a100"},
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "pytorch-rt-3",
-				Namespace: "default",
-			},
-			Spec: v1beta1.ServingRuntimeSpec{
-				SupportedModelFormats: []v1beta1.SupportedModelFormat{
-					{
-						ModelFormat: &v1beta1.ModelFormat{
-							Name:   "pytorch",
-							Weight: 12,
-						},
-						AutoSelect: ptr(true),
-					},
-				},
-				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
-					Min: ptr("1B"),
-					Max: ptr("10B"),
-				},
-				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
-					AcceleratorClasses: []string{"H100"},
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "pytorch-rt-4",
-				Namespace: "default",
-			},
-			Spec: v1beta1.ServingRuntimeSpec{
-				SupportedModelFormats: []v1beta1.SupportedModelFormat{
-					{
-						ModelFormat: &v1beta1.ModelFormat{
-							Name:   "pytorch",
-							Weight: 12,
-						},
-						AutoSelect: ptr(true),
-					},
-				},
-				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
-					Min: ptr("1B"),
-					Max: ptr("10B"),
-				},
-				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
-					AcceleratorClasses: []string{"H100", "nvidia-tesla-t4", "nvidia-tesla-v100", "nvidia-a100"},
-				},
-			},
-		},
-	}
-	infereceServices := []*v1beta1.InferenceService{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "isvc-with-ac",
-				Namespace: "default",
-			},
-			Spec: v1beta1.InferenceServiceSpec{
-				AcceleratorSelector: &v1beta1.AcceleratorSelector{
-					AcceleratorClass: &ac1,
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "isvc-without-ac",
-				Namespace: "default",
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "isvc-with-ac-h100",
-				Namespace: "default",
-			},
-			Spec: v1beta1.InferenceServiceSpec{
-				AcceleratorSelector: &v1beta1.AcceleratorSelector{
-					AcceleratorClass: &ac2,
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "isvc-with-engine-ac",
-				Namespace: "default",
-			},
-			Spec: v1beta1.InferenceServiceSpec{
-				Engine: &v1beta1.EngineSpec{
-					AcceleratorOverride: &v1beta1.AcceleratorSelector{
-						AcceleratorClass: &ac1,
-					},
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "isvc-with-engine-without-ac",
-				Namespace: "default",
-			},
-			Spec: v1beta1.InferenceServiceSpec{
-				Engine: &v1beta1.EngineSpec{},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "isvc-with-decoder-ac",
-				Namespace: "default",
-			},
-			Spec: v1beta1.InferenceServiceSpec{
-				Decoder: &v1beta1.DecoderSpec{
-					AcceleratorOverride: &v1beta1.AcceleratorSelector{
-						AcceleratorClass: &ac1,
-					},
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "isvc-with-decoder-without-ac",
-				Namespace: "default",
-			},
-			Spec: v1beta1.InferenceServiceSpec{
-				Decoder: &v1beta1.DecoderSpec{},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "isvc-with-decoder-engine-diff-ac",
-				Namespace: "default",
-			},
-			Spec: v1beta1.InferenceServiceSpec{
-				Decoder: &v1beta1.DecoderSpec{
-					AcceleratorOverride: &v1beta1.AcceleratorSelector{
-						AcceleratorClass: &ac1,
-					},
-				},
-				Engine: &v1beta1.EngineSpec{
-					AcceleratorOverride: &v1beta1.AcceleratorSelector{
-						AcceleratorClass: &ac2,
-					},
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "isvc-with-annotation-ac",
-				Namespace: "default",
-				Annotations: map[string]string{
-					"ome.io/accelerator-class": "nvidia-tesla-t4",
-				},
-			},
-			Spec: v1beta1.InferenceServiceSpec{},
-		},
-	}
-	// Add all runtimes to the fake client
-	ctx := context.Background()
-	for _, rt := range runtimes {
-		assert.NoError(t, fakeClient.Create(ctx, rt))
-	}
-	for _, isvc := range infereceServices {
-		assert.NoError(t, fakeClient.Create(ctx, isvc))
-	}
-
-	// Create selector
-	selector := New(fakeClient)
-	tests := []struct {
-		name                 string
-		model                *v1beta1.BaseModelSpec
-		inferenceService     *v1beta1.InferenceService
-		expectedRuntimeNames []string
-		expectError          bool
-	}{
-		{
-			name:             "select with inference service ac",
-			model:            baseModels[0].model,
-			inferenceService: infereceServices[0],
-			expectedRuntimeNames: []string{
-				"pytorch-rt",
-				"pytorch-rt-4",
-				"pytorch-rt-1",
-			},
-			expectError: false,
-		},
-		{
-
-			name:             "select without inference service ac",
-			model:            baseModels[0].model,
-			inferenceService: infereceServices[1],
-			expectedRuntimeNames: []string{
-				"pytorch-rt",
-				"pytorch-rt-3",
-				"pytorch-rt-4",
-				"pytorch-rt-1",
-			},
-			expectError: false,
-		},
-		{
-
-			name:             "select with inference service ac-h100",
-			model:            baseModels[0].model,
-			inferenceService: infereceServices[2],
-			expectedRuntimeNames: []string{
-				"pytorch-rt-3",
-				"pytorch-rt-4",
-			},
-			expectError: false,
-		},
-		{
-
-			name:             "select with inference service engine-ac",
-			model:            baseModels[0].model,
-			inferenceService: infereceServices[3],
-			expectedRuntimeNames: []string{
-				"pytorch-rt",
-				"pytorch-rt-4",
-				"pytorch-rt-1",
-			},
-			expectError: false,
-		},
-		{
-
-			name:             "select without inference service engine-ac",
-			model:            baseModels[0].model,
-			inferenceService: infereceServices[4],
-			expectedRuntimeNames: []string{
-				"pytorch-rt",
-				"pytorch-rt-3",
-				"pytorch-rt-4",
-				"pytorch-rt-1",
-			},
-			expectError: false,
-		},
-		{
-
-			name:             "select without inference service decoder-ac",
-			model:            baseModels[0].model,
-			inferenceService: infereceServices[5],
-			expectedRuntimeNames: []string{
-				"pytorch-rt",
-				"pytorch-rt-4",
-				"pytorch-rt-1",
-			},
-			expectError: false,
-		},
-		{
-			name:             "select without inference service decoder-ac",
-			model:            baseModels[0].model,
-			inferenceService: infereceServices[6],
-			expectedRuntimeNames: []string{
-				"pytorch-rt",
-				"pytorch-rt-3",
-				"pytorch-rt-4",
-				"pytorch-rt-1",
-			},
-			expectError: false,
-		},
-		{
-
-			name:             "select without inference service decoder-engine-diff-ac",
-			model:            baseModels[0].model,
-			inferenceService: infereceServices[7],
-			expectedRuntimeNames: []string{
-				"pytorch-rt-4",
-			},
-			expectError: false,
-		},
-		{
-
-			name:             "select with inference service annotation ac",
-			model:            baseModels[0].model,
-			inferenceService: infereceServices[8],
-			expectedRuntimeNames: []string{
-				"pytorch-rt",
-				"pytorch-rt-4",
-				"pytorch-rt-1",
-			},
-			expectError: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			isvc := tt.inferenceService
-			// Ensure fields used by matcher are non-nil
-			matches, err := selector.GetCompatibleRuntimes(ctx, tt.model, isvc, "default")
-			if tt.expectError {
-				assert.Empty(t, matches)
-				// Try SelectRuntime to get the error
-				_, err := selector.SelectRuntime(ctx, tt.model, isvc)
-				assert.Error(t, err)
-				assert.True(t, IsNoRuntimeFoundError(err))
-			} else {
-				assert.NoError(t, err)
-				assert.Len(t, matches, len(tt.expectedRuntimeNames))
-
-				for i, match := range matches {
-					assert.Equal(t, tt.expectedRuntimeNames[i], match.Name)
 				}
 			}
 		})

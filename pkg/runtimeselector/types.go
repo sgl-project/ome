@@ -9,175 +9,151 @@ import (
 )
 
 // Selector is the main interface for runtime selection.
-// It provides methods to select, validate, and list compatible runtimes for models.
 type Selector interface {
-	// SelectRuntime finds the best runtime for a given model.
-	// It returns the highest scoring runtime that supports the model.
-	// If no compatible runtime is found, it returns an error.
+	// SelectRuntime returns the highest-scoring runtime that supports the
+	// model, or a *NoRuntimeFoundError if no compatible runtime exists.
 	SelectRuntime(ctx context.Context, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) (*RuntimeSelection, error)
 
-	// GetCompatibleRuntimes returns all compatible runtimes sorted by priority.
-	// This is useful for debugging and for showing available options.
+	// GetCompatibleRuntimes returns all compatible runtimes sorted by score
+	// (best first). Useful for debugging and listing available options.
 	GetCompatibleRuntimes(ctx context.Context, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, namespace string) ([]RuntimeMatch, error)
 
-	// ValidateRuntime checks if a specific runtime supports a model.
-	// It returns nil if the runtime is compatible, or an error explaining why it's not.
+	// ValidateRuntime returns nil if the named runtime is compatible, or an
+	// error explaining why it isn't. Used to validate user-pinned runtimes.
 	ValidateRuntime(ctx context.Context, runtimeName string, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) error
 
-	// GetRuntime fetches a specific runtime by name.
-	// Returns the runtime spec and whether it's cluster-scoped.
+	// GetRuntime fetches a runtime by name. The bool return reports whether
+	// the resolved runtime was cluster-scoped.
 	GetRuntime(ctx context.Context, name string, namespace string) (*v1beta1.ServingRuntimeSpec, bool, error)
 
-	// GetSupportedModelFormat fetches a supportedModelFormat in runtime
-	// userSpecifiedRuntime indicates whether the runtime is a user-selected runtime or an automatically selected runtime
-	// if userSpecifiedRuntime is true, the function will consider all supportedModelFormats in the runtime
-	// if userSpecifiedRuntime is false, the function will only consider supportedModelFormats with autoSelect enabled
+	// GetSupportedModelFormat picks the best SupportedModelFormat for a
+	// runtime-model pair. When userSpecifiedRuntime is true all
+	// SupportedModelFormats are considered; otherwise only ones with
+	// AutoSelect=true are eligible (matching SelectRuntime's behaviour).
 	GetSupportedModelFormat(ctx context.Context, runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, userSpecifiedRuntime bool) *v1beta1.SupportedModelFormat
 }
 
 // RuntimeSelection represents the selected runtime with metadata.
 type RuntimeSelection struct {
-	// Name is the name of the selected runtime
-	Name string
-
-	// Spec is the runtime specification
-	Spec *v1beta1.ServingRuntimeSpec
-
-	// Score is the calculated compatibility score
-	Score int64
-
-	// IsCluster indicates if this is a ClusterServingRuntime (true) or namespace-scoped ServingRuntime (false)
+	Name      string
+	Spec      *v1beta1.ServingRuntimeSpec
+	Score     int64
 	IsCluster bool
 }
 
-// RuntimeMatch represents a runtime that matches the model with detailed scoring information.
+// RuntimeMatch is a RuntimeSelection enriched with the per-dimension match
+// details that drove its score, useful for debugging selection decisions.
 type RuntimeMatch struct {
-	// Embedded RuntimeSelection provides basic runtime info
 	RuntimeSelection
-
-	// MatchDetails provides detailed information about why this runtime matches
 	MatchDetails MatchDetails
 }
 
-// MatchDetails contains detailed information about runtime-model compatibility.
+// MatchDetails records which dimensions of runtime-model compatibility
+// contributed to (or excluded) a match. Fields default to true for
+// dimensions that the matcher silently accepts when neither side specifies
+// them (e.g. ArchitectureMatch is true when both model and runtime omit
+// ModelArchitecture).
 type MatchDetails struct {
-	// FormatMatch indicates if the model format is compatible
-	FormatMatch bool
-
-	// FrameworkMatch indicates if the model framework is compatible
-	FrameworkMatch bool
-
-	// SizeMatch indicates if the model size is within the runtime's supported range
-	SizeMatch bool
-
-	// ArchitectureMatch indicates if the model architecture is compatible
-	ArchitectureMatch bool
-
-	// DiffusionPipelineMatch indicates if the diffusion pipeline metadata is compatible
-	DiffusionPipelineMatch bool
-
-	// QuantizationMatch indicates if the model quantization is compatible
-	QuantizationMatch bool
-
-	// Priority is the runtime's priority for this model format
-	Priority int32
-
-	// Weight is the total weight used in scoring
-	Weight int64
-
-	// AutoSelectEnabled indicates if this runtime can be auto-selected
-	AutoSelectEnabled bool
-
-	// Reasons contains human-readable reasons for match/mismatch
-	Reasons []string
+	FormatMatch             bool
+	FrameworkMatch          bool
+	SizeMatch               bool
+	ArchitectureMatch       bool
+	DiffusionPipelineMatch  bool
+	QuantizationMatch       bool
+	ModelCacheProviderMatch bool
+	Priority                int32
+	Weight                  int64
+	AutoSelectEnabled       bool
+	Reasons                 []string
 }
 
 // RuntimeFetcher abstracts the fetching of runtime resources.
 type RuntimeFetcher interface {
-	// FetchRuntimes returns both namespace and cluster scoped runtimes.
-	// The implementation should use cached client for efficiency.
 	FetchRuntimes(ctx context.Context, namespace string) (*RuntimeCollection, error)
-
-	// GetRuntime fetches a specific runtime by name.
-	// It first checks namespace-scoped runtimes, then cluster-scoped ones.
 	GetRuntime(ctx context.Context, name string, namespace string) (*v1beta1.ServingRuntimeSpec, bool, error)
 }
 
 // RuntimeCollection holds both namespace and cluster scoped runtimes.
 type RuntimeCollection struct {
-	// NamespaceRuntimes contains namespace-scoped ServingRuntimes
 	NamespaceRuntimes []v1beta1.ServingRuntime
+	ClusterRuntimes   []v1beta1.ClusterServingRuntime
+}
 
-	// ClusterRuntimes contains cluster-scoped ClusterServingRuntimes
-	ClusterRuntimes []v1beta1.ClusterServingRuntime
+// forEach invokes fn for every runtime in the collection, namespace-scoped
+// first then cluster-scoped. isCluster reports the scope of the current item.
+func (c *RuntimeCollection) forEach(fn func(name string, spec *v1beta1.ServingRuntimeSpec, isCluster bool)) {
+	for i := range c.NamespaceRuntimes {
+		rt := &c.NamespaceRuntimes[i]
+		fn(rt.Name, &rt.Spec, false)
+	}
+	for i := range c.ClusterRuntimes {
+		rt := &c.ClusterRuntimes[i]
+		fn(rt.Name, &rt.Spec, true)
+	}
 }
 
 // RuntimeMatcher handles compatibility checking between runtimes and models.
 type RuntimeMatcher interface {
-	// IsCompatible checks if a runtime can serve a model.
-	// Returns true if compatible, false otherwise.
 	IsCompatible(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, runtimeName string) (bool, error)
 
-	// GetCompatibilityDetails returns detailed compatibility information.
-	// This includes specific reasons for compatibility or incompatibility.
+	// GetCompatibilityDetails returns the same compatible/incompatible verdict
+	// as IsCompatible, plus per-dimension match info and the
+	// human-readable reasons exposed in NoRuntimeFoundError.
 	GetCompatibilityDetails(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, runtimeName string) (*CompatibilityReport, error)
 }
 
 // CompatibilityReport provides detailed compatibility analysis.
 type CompatibilityReport struct {
-	// IsCompatible indicates overall compatibility
-	IsCompatible bool
-
-	// MatchDetails provides detailed matching information
-	MatchDetails MatchDetails
-
-	// IncompatibilityReasons lists specific reasons why the runtime is incompatible
+	IsCompatible           bool
+	MatchDetails           MatchDetails
 	IncompatibilityReasons []string
-
-	// Warnings lists non-critical compatibility concerns
-	Warnings []string
+	Warnings               []string
 }
 
 // RuntimeScorer calculates scores for runtime-model pairs.
 type RuntimeScorer interface {
-	// CalculateScore returns a score for how well a runtime matches a model.
-	// Higher scores indicate better matches.
+	// CalculateScore returns a score >= 0; higher means a better match.
 	CalculateScore(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec) (int64, error)
 
-	// CompareRuntimes compares two runtimes for a given model.
-	// Returns positive if r1 is better, negative if r2 is better, 0 if equal.
+	// CompareRuntimes returns positive if r1 is better, negative if r2 is
+	// better, 0 if equal. Used as a sort comparator.
 	CompareRuntimes(r1, r2 RuntimeMatch, model *v1beta1.BaseModelSpec) int
 
-	// CalculateFormatScore calculates the score contribution for a specific model format.
-	// Higher scores indicate better matches.
 	CalculateFormatScore(model *v1beta1.BaseModelSpec, supportedFormat v1beta1.SupportedModelFormat, priority int64) int64
 }
 
 // Config holds configuration for the runtime selector.
 type Config struct {
-	// Client is the Kubernetes client (uses controller-runtime cache)
 	Client client.Client
 
-	// EnableDetailedLogging enables verbose logging for debugging
+	// EnableDetailedLogging is retained for backward compatibility with
+	// external callers; it is currently a no-op (verbose logs use
+	// log.V() levels driven by the global log config instead).
 	EnableDetailedLogging bool
 
-	// DefaultPriority is used when a runtime doesn't specify priority
+	// DefaultPriority is the multiplier used when a SupportedModelFormat
+	// doesn't set Priority explicitly.
 	DefaultPriority int32
 
-	// ModelFormatWeight is the default weight for model format matching
-	ModelFormatWeight int64
-
-	// ModelFrameworkWeight is the default weight for model framework matching
+	// ModelFormatWeight / ModelFrameworkWeight are the fallback weights used
+	// when the runtime author sets weight=0 on a supported format. Tuned so
+	// format matches outweigh framework matches at equal priority.
+	ModelFormatWeight    int64
 	ModelFrameworkWeight int64
+
+	// ModelCacheProvider is the cluster-configured cache provider name; only
+	// runtimes whose formats list this provider are eligible for sharded
+	// BaseModels (Distribution == DistributionSharded).
+	ModelCacheProvider string
 }
 
-// NewConfig creates a new Config with default values.
+// NewConfig returns a Config with the default scoring constants:
+// priority=1, format weight 10, framework weight 5.
 func NewConfig(client client.Client) *Config {
 	return &Config{
-		Client:                client,
-		EnableDetailedLogging: false,
-		DefaultPriority:       1,
-		ModelFormatWeight:     10,
-		ModelFrameworkWeight:  5,
+		Client:               client,
+		DefaultPriority:      1,
+		ModelFormatWeight:    10,
+		ModelFrameworkWeight: 5,
 	}
 }

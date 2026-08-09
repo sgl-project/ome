@@ -11,7 +11,6 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-// defaultSelector is the default implementation of the Selector interface.
 type defaultSelector struct {
 	config  *Config
 	fetcher RuntimeFetcher
@@ -19,13 +18,10 @@ type defaultSelector struct {
 	scorer  RuntimeScorer
 }
 
-// New creates a new Selector with default implementations.
 func New(client client.Client) Selector {
-	config := NewConfig(client)
-	return NewWithConfig(config)
+	return NewWithConfig(NewConfig(client))
 }
 
-// NewWithConfig creates a new Selector with the provided configuration.
 func NewWithConfig(config *Config) Selector {
 	return &defaultSelector{
 		config:  config,
@@ -35,50 +31,31 @@ func NewWithConfig(config *Config) Selector {
 	}
 }
 
-// SelectRuntime finds the best runtime for a given model.
 func (s *defaultSelector) SelectRuntime(ctx context.Context, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) (*RuntimeSelection, error) {
 	namespace := isvc.Namespace
 	logger := log.FromContext(ctx)
 
-	// Validate model before anything dereferences it (a lean
-	// InferenceService carries no model at all).
 	if err := s.validateModel(model); err != nil {
 		return nil, err
 	}
-	logger.Info("Selecting runtime for model",
-		"model", model.ModelFormat.Name,
-		"namespace", namespace)
 
-	// Get all compatible runtimes
 	matches, err := s.GetCompatibleRuntimes(ctx, model, isvc, namespace)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(matches) == 0 {
-		// Build detailed error with exclusion reasons
 		collection, _ := s.fetcher.FetchRuntimes(ctx, namespace)
 		excludedRuntimes := make(map[string]error)
-
-		// Check namespace runtimes
-		for _, rt := range collection.NamespaceRuntimes {
-			if compatible, _ := s.matcher.IsCompatible(&rt.Spec, model, isvc, rt.Name); !compatible {
-				report, _ := s.matcher.GetCompatibilityDetails(&rt.Spec, model, isvc, rt.Name)
-				if report != nil && len(report.IncompatibilityReasons) > 0 {
-					excludedRuntimes[rt.Name] = fmt.Errorf("%s", report.IncompatibilityReasons[0])
-				}
+		collection.forEach(func(name string, spec *v1beta1.ServingRuntimeSpec, _ bool) {
+			if compatible, _ := s.matcher.IsCompatible(spec, model, isvc, name); compatible {
+				return
 			}
-		}
-
-		// Check cluster runtimes
-		for _, rt := range collection.ClusterRuntimes {
-			if compatible, _ := s.matcher.IsCompatible(&rt.Spec, model, isvc, rt.Name); !compatible {
-				report, _ := s.matcher.GetCompatibilityDetails(&rt.Spec, model, isvc, rt.Name)
-				if report != nil && len(report.IncompatibilityReasons) > 0 {
-					excludedRuntimes[rt.Name] = fmt.Errorf("%s", report.IncompatibilityReasons[0])
-				}
+			report, _ := s.matcher.GetCompatibilityDetails(spec, model, isvc, name)
+			if report != nil && len(report.IncompatibilityReasons) > 0 {
+				excludedRuntimes[name] = fmt.Errorf("%s", report.IncompatibilityReasons[0])
 			}
-		}
+		})
 
 		return nil, &NoRuntimeFoundError{
 			ModelName:          getModelName(model),
@@ -91,84 +68,70 @@ func (s *defaultSelector) SelectRuntime(ctx context.Context, model *v1beta1.Base
 		}
 	}
 
-	// Return the best match (first one after sorting)
 	best := matches[0]
 	logger.Info("Selected runtime",
 		"runtime", best.Name,
 		"score", best.Score,
-		"isCluster", best.IsCluster)
+		"isCluster", best.IsCluster,
+		"model", model.ModelFormat.Name,
+		"namespace", namespace,
+		"candidates", len(matches))
 
 	return &best.RuntimeSelection, nil
 }
 
-// GetCompatibleRuntimes returns all compatible runtimes sorted by priority.
 func (s *defaultSelector) GetCompatibleRuntimes(ctx context.Context, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, namespace string) ([]RuntimeMatch, error) {
 	logger := log.FromContext(ctx)
 
-	// Validate model
 	if err := s.validateModel(model); err != nil {
 		return nil, err
 	}
 
-	// Fetch all runtimes
 	collection, err := s.fetcher.FetchRuntimes(ctx, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch runtimes: %w", err)
 	}
 
-	var namespaceMatches []RuntimeMatch
-	var clusterMatches []RuntimeMatch
-
-	// Process namespace-scoped runtimes
-	for _, runtime := range collection.NamespaceRuntimes {
-		if match := s.evaluateRuntime(ctx, &runtime.Spec, model, isvc, runtime.Name, false); match != nil {
+	var namespaceMatches, clusterMatches []RuntimeMatch
+	collection.forEach(func(name string, spec *v1beta1.ServingRuntimeSpec, isCluster bool) {
+		match := s.evaluateRuntime(ctx, spec, model, isvc, name, isCluster)
+		if match == nil {
+			return
+		}
+		if isCluster {
+			clusterMatches = append(clusterMatches, *match)
+		} else {
 			namespaceMatches = append(namespaceMatches, *match)
 		}
-	}
+	})
 
-	// Process cluster-scoped runtimes
-	for _, runtime := range collection.ClusterRuntimes {
-		if match := s.evaluateRuntime(ctx, &runtime.Spec, model, isvc, runtime.Name, true); match != nil {
-			clusterMatches = append(clusterMatches, *match)
-		}
-	}
-
-	// Sort namespace and cluster matches separately
+	// Namespace-scoped runtimes always win against cluster runtimes — sort
+	// each list independently, then concatenate.
 	s.sortMatches(namespaceMatches, model)
 	s.sortMatches(clusterMatches, model)
-
-	// Append cluster matches after namespace matches (namespace-scoped have priority)
 	matches := append(namespaceMatches, clusterMatches...)
 
-	logger.Info("Found compatible runtimes",
+	logger.V(1).Info("Compatible runtimes evaluated",
 		"model", model.ModelFormat.Name,
-		"count", len(matches))
+		"namespace", namespace,
+		"matches", len(matches),
+		"considered", len(collection.NamespaceRuntimes)+len(collection.ClusterRuntimes))
 
 	return matches, nil
 }
 
-// ValidateRuntime checks if a specific runtime supports a model.
 func (s *defaultSelector) ValidateRuntime(ctx context.Context, runtimeName string, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) error {
 	namespace := isvc.Namespace
-	logger := log.FromContext(ctx)
 
-	// Validate model before anything dereferences it (a lean
-	// InferenceService carries no model at all).
 	if err := s.validateModel(model); err != nil {
 		return err
 	}
-	logger.V(1).Info("Validating runtime",
-		"runtime", runtimeName,
-		"model", model.ModelFormat.Name,
-		"namespace", namespace)
 
-	// Get the specific runtime
 	runtimeSpec, isCluster, err := s.fetcher.GetRuntime(ctx, runtimeName, namespace)
 	if err != nil {
 		return err
 	}
 
-	// Check if runtime is disabled
 	if runtimeSpec.IsDisabled() {
 		return &RuntimeDisabledError{
 			RuntimeName: runtimeName,
@@ -176,16 +139,13 @@ func (s *defaultSelector) ValidateRuntime(ctx context.Context, runtimeName strin
 		}
 	}
 
-	// Check compatibility
 	compatible, err := s.matcher.IsCompatible(runtimeSpec, model, isvc, runtimeName)
 	if err != nil {
 		return err
 	}
 
 	if !compatible {
-		// Get detailed compatibility report for better error message
 		report, _ := s.matcher.GetCompatibilityDetails(runtimeSpec, model, isvc, runtimeName)
-
 		reason := "incompatible model format"
 		if report != nil && len(report.IncompatibilityReasons) > 0 {
 			reason = report.IncompatibilityReasons[0]
@@ -199,34 +159,17 @@ func (s *defaultSelector) ValidateRuntime(ctx context.Context, runtimeName strin
 		}
 	}
 
-	// Check if runtime has auto-select enabled
-	hasAutoSelect := false
-	for _, format := range runtimeSpec.SupportedModelFormats {
-		if format.AutoSelect != nil && *format.AutoSelect {
-			hasAutoSelect = true
-			break
-		}
-	}
-
-	if !hasAutoSelect {
-		logger.V(1).Info("Runtime does not have auto-select enabled but is compatible",
-			"runtime", runtimeName)
-	}
-
 	return nil
 }
 
-// evaluateRuntime evaluates a single runtime for compatibility and scoring.
 func (s *defaultSelector) evaluateRuntime(ctx context.Context, spec *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, name string, isCluster bool) *RuntimeMatch {
 	logger := log.FromContext(ctx)
 
-	// Skip disabled runtimes
 	if spec.IsDisabled() {
 		logger.V(2).Info("Skipping disabled runtime", "runtime", name)
 		return nil
 	}
 
-	// Check basic compatibility (mimics RuntimeSupportsModel)
 	report, err := s.matcher.GetCompatibilityDetails(spec, model, isvc, name)
 	if err != nil {
 		logger.Error(err, "Failed to get compatibility details", "runtime", name)
@@ -240,28 +183,20 @@ func (s *defaultSelector) evaluateRuntime(ctx context.Context, spec *v1beta1.Ser
 		return nil
 	}
 
-	// Check if runtime has auto-select enabled for at least one supported format
-	hasAutoSelect := false
-	for _, format := range spec.SupportedModelFormats {
-		if format.AutoSelect != nil && *format.AutoSelect {
-			hasAutoSelect = true
-			break
-		}
-	}
-
-	if !hasAutoSelect {
+	if !runtimeHasAutoSelectFormat(spec) {
 		logger.V(2).Info("Runtime does not have auto-select enabled", "runtime", name)
 		return nil
 	}
 
-	// Calculate score
 	score, err := s.scorer.CalculateScore(spec, model)
 	if err != nil {
 		logger.Error(err, "Failed to calculate score", "runtime", name)
 		return nil
 	}
 
-	// Skip runtimes with score <= 0 (indicates no format/framework match or autoselect is false)
+	// Zero score means none of the supported formats produced a match
+	// (format/framework name or version mismatch). Exclude these so they
+	// don't pollute the ranked candidate list.
 	if score <= 0 {
 		logger.V(2).Info("Runtime has non-positive score", "runtime", name, "score", score)
 		return nil
@@ -278,20 +213,16 @@ func (s *defaultSelector) evaluateRuntime(ctx context.Context, spec *v1beta1.Ser
 	}
 }
 
-// sortMatches sorts runtime matches by score and other criteria.
 func (s *defaultSelector) sortMatches(matches []RuntimeMatch, model *v1beta1.BaseModelSpec) {
 	sort.Slice(matches, func(i, j int) bool {
-		comparison := s.scorer.CompareRuntimes(matches[i], matches[j], model)
-		return comparison > 0
+		return s.scorer.CompareRuntimes(matches[i], matches[j], model) > 0
 	})
 }
 
-// GetRuntime fetches a specific runtime by name.
 func (s *defaultSelector) GetRuntime(ctx context.Context, name string, namespace string) (*v1beta1.ServingRuntimeSpec, bool, error) {
 	return s.fetcher.GetRuntime(ctx, name, namespace)
 }
 
-// validateModel performs basic validation on the model specification.
 func (s *defaultSelector) validateModel(model *v1beta1.BaseModelSpec) error {
 	if model == nil {
 		return &ModelValidationError{
@@ -310,21 +241,18 @@ func (s *defaultSelector) validateModel(model *v1beta1.BaseModelSpec) error {
 	return nil
 }
 
-// getModelName extracts a name from the model spec if available.
 func getModelName(model *v1beta1.BaseModelSpec) string {
-	// This is a placeholder - in practice, you might get this from annotations or other fields
 	if model.ModelFormat.Name != "" {
 		return model.ModelFormat.Name
 	}
 	return "unknown"
 }
 
-// GetSupportedModelFormat fetches a supportedModelFormat in runtime
-// userSpecifiedRuntime indicates whether the runtime is a user-selected runtime or an automatically selected runtime
-// if userSpecifiedRuntime is true, the function will consider all supportedModelFormats in the runtime
-// if userSpecifiedRuntime is false, the function will only consider supportedModelFormats with autoSelect enabled
 func (s *defaultSelector) GetSupportedModelFormat(ctx context.Context, runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, userSpecifiedRuntime bool) *v1beta1.SupportedModelFormat {
-	if runtime.SupportedModelFormats == nil {
+	// Lean path (no model): downstream components treat a nil
+	// SupportedModelFormat as "no model-format metadata available", which is
+	// the right shape for runtime-only ISVCs that don't use model parsing.
+	if model == nil || runtime == nil || runtime.SupportedModelFormats == nil {
 		return nil
 	}
 	maxScore := int64(0)

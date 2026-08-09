@@ -275,21 +275,39 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// Get the runtime spec using selector
 			rtSpec, _, err := r.RuntimeSelector.GetRuntime(ctx, rtName, isvc.Namespace)
 			if err != nil {
+				if runtimeselector.IsRuntimeNotFoundError(err) {
+					// A named-but-missing runtime is a permanent user-config error,
+					// not a transient failure. Don't error+requeue (which hot-loops
+					// and spams ERROR logs) and don't touch a currently-serving
+					// ISVC — surface it as an advisory condition + event and wait
+					// for the ServingRuntime watch to re-trigger once the runtime
+					// exists.
+					return r.markRuntimeUnresolved(isvc, deploymentMode, rtName, err)
+				}
 				r.Log.Error(err, "Failed to get runtime spec", "runtime", rtName)
 				r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeFetchError", err.Error())
 				return reconcile.Result{}, err
 			}
+			r.clearRuntimeUnresolved(isvc)
 			rt = rtSpec
 		}
 	} else if baseModel != nil {
 		// Auto-select runtime
 		selection, err := r.RuntimeSelector.SelectRuntime(ctx, baseModel, isvc)
 		if err != nil {
+			if runtimeselector.IsNoRuntimeFoundError(err) || runtimeselector.IsRuntimeNotFoundError(err) {
+				// No compatible runtime exists for the model yet — same
+				// permanent-config, non-destructive treatment as the explicit
+				// path: advisory condition + event, no error requeue, self-heals
+				// when a matching runtime is created (watch re-triggers).
+				return r.markRuntimeUnresolved(isvc, deploymentMode, isvc.Spec.Model.Name, err)
+			}
 			r.Log.Error(err, "Failed to auto-select runtime", "model", isvc.Spec.Model.Name)
 			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeSelectionError",
 				"Failed to find runtime for model %s: %v", isvc.Spec.Model.Name, err)
 			return reconcile.Result{}, err
 		}
+		r.clearRuntimeUnresolved(isvc)
 		rt = selection.Spec
 		rtName = selection.Name
 		r.Log.Info("Auto-selected runtime", "runtime", rtName, "model", isvc.Spec.Model.Name)
@@ -551,6 +569,44 @@ func (r *InferenceServiceReconciler) handleVirtualDeployment(isvc *v1beta1.Infer
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// markRuntimeUnresolved handles the "runtime cannot be resolved" case — a
+// named runtime that doesn't exist, or no compatible runtime for the model.
+// It is deliberately NON-DESTRUCTIVE: the reconcile bails before the child
+// create/update/delete, so a currently-serving ISVC keeps running its
+// existing pods. The problem is surfaced as the advisory RuntimeReady=False
+// condition (NOT a dependent of the aggregate Ready, so a healthy ISVC stays
+// Ready=True) plus a Warning event, then status is persisted and the
+// reconcile returns WITHOUT an error — so the controller does not
+// hot-requeue or spam ERROR logs. The ServingRuntime / ClusterServingRuntime
+// watch re-triggers reconcile when a matching runtime is created, so this
+// self-heals.
+func (r *InferenceServiceReconciler) markRuntimeUnresolved(isvc *v1beta1.InferenceService, deploymentMode constants.DeploymentModeType, runtimeRef string, cause error) (reconcile.Result, error) {
+	r.Log.Info("Runtime not found; awaiting runtime creation (ISVC left unchanged)",
+		"runtime", runtimeRef, "InferenceService", isvc.Name)
+	r.Recorder.Event(isvc, v1.EventTypeWarning, "RuntimeNotFound", cause.Error())
+	isvc.Status.SetCondition(v1beta1.RuntimeReady, &knapis.Condition{
+		Type:    v1beta1.RuntimeReady,
+		Status:  v1.ConditionFalse,
+		Reason:  "RuntimeNotFound",
+		Message: cause.Error(),
+	})
+	if err := r.updateStatus(isvc, deploymentMode); err != nil {
+		return reconcile.Result{}, err
+	}
+	return reconcile.Result{}, nil
+}
+
+func (r *InferenceServiceReconciler) clearRuntimeUnresolved(isvc *v1beta1.InferenceService) {
+	if isvc.Status.GetCondition(v1beta1.RuntimeReady) == nil {
+		return
+	}
+	isvc.Status.SetCondition(v1beta1.RuntimeReady, &knapis.Condition{
+		Type:   v1beta1.RuntimeReady,
+		Status: v1.ConditionTrue,
+		Reason: "RuntimeResolved",
+	})
 }
 
 func (r *InferenceServiceReconciler) updateStatus(desiredService *v1beta1.InferenceService, deploymentMode constants.DeploymentModeType) error {
