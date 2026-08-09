@@ -239,32 +239,36 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 			rt = pin.spec
 		} else {
-			if err := r.RuntimeSelector.ValidateRuntime(ctx, rtName, baseModel, isvc); err != nil {
-				// The operator named this runtime explicitly, so OME should not
-				// block on the runtime's *declared* supportedModelFormats: a
-				// generic runtime (e.g. sglang) can serve many architectures it
-				// never enumerates. Downgrade a pure compatibility mismatch
-				// (format / architecture / framework) to an advisory event and
-				// proceed — the deliberate choice wins over the declaration.
-				//
-				// This mirrors the admission webhook (explicit-runtime compat
-				// is advisory). Without the same downgrade here, the webhook
-				// admits the ISVC but this reconcile hard-fails, so it never
-				// gets pods.
-				//
-				// Everything else stays a hard error: a not-found / disabled
-				// runtime or a malformed model genuinely cannot run.
-				if runtimeselector.IsRuntimeCompatibilityError(err) {
-					r.Log.Info("Runtime named explicitly; proceeding despite declared-format mismatch",
-						"runtime", rtName, "model", isvc.Spec.Model.Name, "details", err.Error())
-					r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeCompatibilityAdvisory",
-						"Runtime %s does not declare support for model %s (%v); proceeding because the runtime was named explicitly",
-						rtName, isvc.Spec.Model.Name, err)
-				} else {
-					r.Log.Error(err, "Runtime validation failed", "runtime", rtName, "model", isvc.Spec.Model.Name)
-					r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeValidationError",
-						"Runtime %s does not support model %s: %v", rtName, isvc.Spec.Model.Name, err)
-					return reconcile.Result{}, err
+			// A lean InferenceService (no spec.model) can still name a
+			// runtime explicitly; there is no model to validate against.
+			if baseModel != nil {
+				if err := r.RuntimeSelector.ValidateRuntime(ctx, rtName, baseModel, isvc); err != nil {
+					// The operator named this runtime explicitly, so OME should not
+					// block on the runtime's *declared* supportedModelFormats: a
+					// generic runtime (e.g. sglang) can serve many architectures it
+					// never enumerates. Downgrade a pure compatibility mismatch
+					// (format / architecture / framework) to an advisory event and
+					// proceed — the deliberate choice wins over the declaration.
+					//
+					// This mirrors the admission webhook (explicit-runtime compat
+					// is advisory). Without the same downgrade here, the webhook
+					// admits the ISVC but this reconcile hard-fails, so it never
+					// gets pods.
+					//
+					// Everything else stays a hard error: a not-found / disabled
+					// runtime or a malformed model genuinely cannot run.
+					if runtimeselector.IsRuntimeCompatibilityError(err) {
+						r.Log.Info("Runtime named explicitly; proceeding despite declared-format mismatch",
+							"runtime", rtName, "model", isvc.Spec.Model.Name, "details", err.Error())
+						r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeCompatibilityAdvisory",
+							"Runtime %s does not declare support for model %s (%v); proceeding because the runtime was named explicitly",
+							rtName, isvc.Spec.Model.Name, err)
+					} else {
+						r.Log.Error(err, "Runtime validation failed", "runtime", rtName, "model", isvc.Spec.Model.Name)
+						r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeValidationError",
+							"Runtime %s does not support model %s: %v", rtName, isvc.Spec.Model.Name, err)
+						return reconcile.Result{}, err
+					}
 				}
 			}
 
@@ -277,7 +281,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 			rt = rtSpec
 		}
-	} else {
+	} else if baseModel != nil {
 		// Auto-select runtime
 		selection, err := r.RuntimeSelector.SelectRuntime(ctx, baseModel, isvc)
 		if err != nil {
@@ -289,6 +293,14 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		rt = selection.Spec
 		rtName = selection.Name
 		r.Log.Info("Auto-selected runtime", "runtime", rtName, "model", isvc.Spec.Model.Name)
+	} else {
+		// No model and no runtime: nothing to select from. The admission
+		// webhook rejects the shapes that cannot work; this is a defensive
+		// guard for direct writes that bypass admission.
+		err := fmt.Errorf("InferenceService must specify spec.runtime when spec.model is omitted")
+		r.Log.Error(err, "Cannot reconcile", "Name", isvc.Name)
+		r.Recorder.Event(isvc, v1.EventTypeWarning, "RuntimeSelectionError", err.Error())
+		return reconcile.Result{}, err
 	}
 
 	// Step 3: Merge rt and isvc specs to get final engine, decoder, and router specs
