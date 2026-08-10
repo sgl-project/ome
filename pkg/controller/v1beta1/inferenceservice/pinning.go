@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/runtimerevision"
+	"sigs.k8s.io/ome/pkg/runtimeselector"
 )
 
 // pinResult tells the caller how to proceed after the pinning helper
@@ -37,6 +38,8 @@ type pinResult struct {
 //   - Otherwise → set RuntimeDrifted=True, skip children.
 //   - Explicit spec.runtime.revision set → fetch that revision; if
 //     missing, RuntimeDrifted=True (Reason=RevisionMissing) + skip.
+//   - Source runtime deleted but a pin resolves → keep serving the
+//     pinned revision, RuntimeDrifted=True (Reason=SourceRuntimeMissing).
 func (r *InferenceServiceReconciler) resolvePinnedRuntime(
 	ctx context.Context,
 	isvc *v1beta1.InferenceService,
@@ -47,14 +50,21 @@ func (r *InferenceServiceReconciler) resolvePinnedRuntime(
 	omeNS := constants.OMENamespace
 
 	// Resolve the LIVE spec once — needed for hash compare, and to
-	// seed the first-reconcile pin / advance on ack.
-	liveSpec, _, err := r.RuntimeSelector.GetRuntime(ctx, runtimeName, isvc.Namespace)
-	if err != nil {
-		return pinResult{}, fmt.Errorf("resolve live runtime %s: %w", runtimeName, err)
+	// seed the first-reconcile pin / advance on ack. A deleted source
+	// runtime is tolerated when a pin exists: pinning's whole point is
+	// that the ISVC keeps serving the pinned revision, so the gap
+	// surfaces as RuntimeDrifted instead of a hard reconcile error.
+	liveSpec, _, liveErr := r.RuntimeSelector.GetRuntime(ctx, runtimeName, isvc.Namespace)
+	sourceMissing := runtimeselector.IsRuntimeNotFoundError(liveErr)
+	if liveErr != nil && !sourceMissing {
+		return pinResult{}, fmt.Errorf("resolve live runtime %s: %w", runtimeName, liveErr)
 	}
-	_, liveHash, err := runtimerevision.Hash(liveSpec)
-	if err != nil {
-		return pinResult{}, err
+	var liveHash string
+	if !sourceMissing {
+		var err error
+		if _, liveHash, err = runtimerevision.Hash(liveSpec); err != nil {
+			return pinResult{}, err
+		}
 	}
 
 	// Explicit revision pin overrides everything else.
@@ -81,12 +91,21 @@ func (r *InferenceServiceReconciler) resolvePinnedRuntime(
 			return pinResult{}, err
 		}
 		isvc.Status.PinnedRevisionName = pinName
-		clearRuntimeDriftedCondition(isvc)
+		if sourceMissing {
+			setRuntimeDriftedCondition(isvc, v1.ConditionTrue, "SourceRuntimeMissing",
+				fmt.Sprintf("runtime %s not found; serving from pinned revision %s", runtimeName, pinName))
+		} else {
+			clearRuntimeDriftedCondition(isvc)
+		}
 		return pinResult{spec: pinned}, nil
 	}
 
 	// First reconcile: nothing pinned yet → create-or-find from live.
+	// With no pin AND no live source there is nothing to serve from.
 	if isvc.Status.PinnedRevisionName == "" {
+		if sourceMissing {
+			return pinResult{}, fmt.Errorf("resolve live runtime %s: %w", runtimeName, liveErr)
+		}
 		revName, err := runtimerevision.FindOrCreate(ctx, r.Client, omeNS, kind, sourceNS, runtimeName, liveSpec)
 		if err != nil {
 			return pinResult{}, fmt.Errorf("create initial pin for %s: %w", runtimeName, err)
@@ -106,6 +125,16 @@ func (r *InferenceServiceReconciler) resolvePinnedRuntime(
 		}
 		return pinResult{}, err
 	}
+
+	// Source deleted but the pin resolves: keep serving it. Hash compare
+	// and sync-ack advance are meaningless without a live spec.
+	if sourceMissing {
+		setRuntimeDriftedCondition(isvc, v1.ConditionTrue, "SourceRuntimeMissing",
+			fmt.Sprintf("runtime %s not found; serving from pinned revision %s",
+				runtimeName, isvc.Status.PinnedRevisionName))
+		return pinResult{spec: pinned}, nil
+	}
+
 	_, pinnedHash, err := runtimerevision.Hash(pinned)
 	if err != nil {
 		return pinResult{}, err

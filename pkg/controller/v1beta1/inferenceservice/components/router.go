@@ -2,6 +2,7 @@ package components
 
 import (
 	"context"
+	"sort"
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -229,9 +230,7 @@ func (r *Router) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *me
 	if r.routerSpec.Runner != nil {
 		if r.routerSpec.Config != nil {
 			r.Log.Info("Adding config to router env", "inference service", isvc.Name, "namespace", isvc.Namespace)
-			for k, v := range r.routerSpec.Config {
-				r.routerSpec.Runner.Env = append(r.routerSpec.Runner.Env, v1.EnvVar{Name: k, Value: v})
-			}
+			r.routerSpec.Runner.Env = append(r.routerSpec.Runner.Env, configEnvVars(r.routerSpec.Config)...)
 		}
 	}
 	// Use common pod spec reconciler for base logic
@@ -271,4 +270,20 @@ func (r *Router) ValidateSpec() error {
 	}
 	// Add more validation logic as needed
 	return nil
+}
+
+// configEnvVars converts a component config map to env vars in sorted
+// key order — map iteration order would churn the pod template hash
+// across reconciles and trigger spurious rollouts.
+func configEnvVars(config map[string]string) []v1.EnvVar {
+	keys := make([]string, 0, len(config))
+	for k := range config {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	envs := make([]v1.EnvVar, 0, len(keys))
+	for _, k := range keys {
+		envs = append(envs, v1.EnvVar{Name: k, Value: config[k]})
+	}
+	return envs
 }
