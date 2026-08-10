@@ -27,6 +27,7 @@ import (
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	"knative.dev/pkg/network"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -528,6 +529,11 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if err = r.updateStatus(isvc, deploymentMode); err != nil {
+		// A terminal status conflict is benign — requeue and re-reconcile
+		// off fresh state instead of surfacing an ERROR-level failure.
+		if apierrors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
 		return reconcile.Result{}, err
 	}
@@ -564,6 +570,11 @@ func (r *InferenceServiceReconciler) handleVirtualDeployment(isvc *v1beta1.Infer
 	}})
 
 	if err := r.updateStatus(isvc, constants.VirtualDeployment); err != nil {
+		// A terminal status conflict is benign — requeue and re-reconcile
+		// off fresh state instead of surfacing an ERROR-level failure.
+		if apierrors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
 		return reconcile.Result{}, err
 	}
@@ -672,6 +683,14 @@ func (r *InferenceServiceReconciler) ensureIngressDisableAnnotation(isvc *v1beta
 func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployConfig *controllerconfig.DeployConfig, ingressConfig *controllerconfig.IngressConfig) error {
 	r.ClientConfig = mgr.GetConfig()
 
+	// Register the spec.runtime.name cache index so runtime events
+	// fan out to referencing ISVCs through the cache index instead of
+	// scanning every cached InferenceService — see
+	// isvcsReferencingRuntime.
+	if err := registerISVCRuntimeNameIndex(context.Background(), mgr.GetFieldIndexer()); err != nil {
+		return err
+	}
+
 	// NEW: Initialize StatusReconciler
 	r.StatusManager = status.NewStatusReconciler()
 
@@ -697,17 +716,17 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 	}
 
 	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
-		For(&v1beta1.InferenceService{}).
+		For(&v1beta1.InferenceService{}, builder.WithPredicates(isvcReconcileTriggerPredicate())).
 		Owns(&appsv1.Deployment{}).
 		Owns(&v1.Service{}).
 		Owns(&v1.ConfigMap{}).
 		Owns(&v1.PersistentVolume{}).
 		Owns(&v1.PersistentVolumeClaim{}).
-		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
+		Owns(&autoscalingv2.HorizontalPodAutoscaler{}, builder.WithPredicates(ownedStatusIgnoringPredicate())).
 		Owns(&policyv1.PodDisruptionBudget{})
 
 	if kedaFound {
-		ctrlBuilder = ctrlBuilder.Owns(&kedav1.ScaledObject{})
+		ctrlBuilder = ctrlBuilder.Owns(&kedav1.ScaledObject{}, builder.WithPredicates(ownedStatusIgnoringPredicate()))
 	} else {
 		r.Log.Info("The InferenceService controller won't watch keda.sh/v1/ScaledObject resources because the CRD is not available.")
 	}
@@ -724,16 +743,17 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 		r.Log.Info("The InferenceService controller won't watch networking.istio.io/v1beta1/VirtualService resources because the CRD is not available.")
 	}
 
-	// Add watches for ServingRuntime and ClusterServingRuntime to populate cache
+	// Add watches for ServingRuntime and ClusterServingRuntime. Runtime
+	// events fan out to EVERY ISVC referencing the runtime: autoSync=true
+	// (float) ISVCs re-render from the live runtime and roll forward;
+	// autoSync=false (pinned) ISVCs run drift detection and warn. Without
+	// this fan-out a runtime change never triggers a float ISVC's reconcile,
+	// so the edit silently fails to propagate — see isvcsReferencingRuntime.
 	ctrlBuilder = ctrlBuilder.
 		Watches(&v1beta1.ServingRuntime{},
-			handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []reconcile.Request {
-				return nil // Just populate cache
-			})).
+			handler.EnqueueRequestsFromMapFunc(r.isvcsReferencingRuntime)).
 		Watches(&v1beta1.ClusterServingRuntime{},
-			handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []reconcile.Request {
-				return nil // Just populate cache
-			}))
+			handler.EnqueueRequestsFromMapFunc(r.isvcsReferencingRuntime))
 
 	return ctrlBuilder.Complete(r)
 }
@@ -767,4 +787,136 @@ func (r *InferenceServiceReconciler) setExternalServiceURL(ctx context.Context, 
 	}
 
 	return nil
+}
+
+// referencing the runtime; with it MatchingFields narrows the list to
+// the referencing ISVCs in O(matched). Registered on the manager cache
+// in SetupWithManager (see registerISVCRuntimeNameIndex).
+//
+// The field name is an internal index identifier (a code constant), not
+// a behavioral/user-facing value — no config surface is required.
+const isvcRuntimeNameIndexField = "spec.runtime.name"
+
+// isvcRuntimeNameIndexExtractor is the cache IndexerFunc registered for
+// isvcRuntimeNameIndexField. It returns the ISVC's spec.runtime.name, or
+// nil when the runtime ref (or its name) is absent — the unindexed
+// match below skips those identically.
+func isvcRuntimeNameIndexExtractor(obj client.Object) []string {
+	isvc, ok := obj.(*v1beta1.InferenceService)
+	if !ok {
+		return nil
+	}
+	if isvc.Spec.Runtime == nil || isvc.Spec.Runtime.Name == "" {
+		return nil
+	}
+	return []string{isvc.Spec.Runtime.Name}
+}
+
+// isvcRuntimeUnresolvedIndexField indexes auto-select ISVCs (no
+// spec.runtime.name) currently stuck with RuntimeReady=False. The name
+// index above cannot cover them — they reference no runtime by name — so
+// without this index a runtime created AFTER the ISVC never re-triggers
+// its reconcile and markRuntimeUnresolved becomes an absorbing state.
+// Internal index identifier, like isvcRuntimeNameIndexField.
+const isvcRuntimeUnresolvedIndexField = "status.runtimeUnresolved"
+
+// isvcRuntimeUnresolvedIndexValue is the single bucket value for
+// isvcRuntimeUnresolvedIndexField (membership index, not a lookup key).
+const isvcRuntimeUnresolvedIndexValue = "true"
+
+func isvcRuntimeUnresolvedIndexExtractor(obj client.Object) []string {
+	isvc, ok := obj.(*v1beta1.InferenceService)
+	if !ok {
+		return nil
+	}
+	if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" {
+		// Named references fan out via the name index.
+		return nil
+	}
+	cond := isvc.Status.GetCondition(v1beta1.RuntimeReady)
+	if cond == nil || cond.Status != v1.ConditionFalse {
+		return nil
+	}
+	return []string{isvcRuntimeUnresolvedIndexValue}
+}
+
+// registerISVCRuntimeNameIndex installs the runtime fan-out indexes on the
+// supplied indexer (mgr.GetFieldIndexer()). Call once during manager
+// setup, before Start, so isvcsReferencingRuntime resolves
+// referencing ISVCs through the indexes instead of scanning every cached
+// InferenceService.
+func registerISVCRuntimeNameIndex(ctx context.Context, indexer client.FieldIndexer) error {
+	if err := indexer.IndexField(ctx, &v1beta1.InferenceService{}, isvcRuntimeNameIndexField, isvcRuntimeNameIndexExtractor); err != nil {
+		return err
+	}
+	return indexer.IndexField(ctx, &v1beta1.InferenceService{}, isvcRuntimeUnresolvedIndexField, isvcRuntimeUnresolvedIndexExtractor)
+}
+
+// isvcsReferencingRuntime returns reconcile requests for EVERY ISVC whose
+// spec.runtime.name matches obj (respecting namespaced-SR scope), regardless
+// of autoSync. Both float and pinned consumers must be re-reconciled on a
+// runtime change:
+//
+//   - autoSync=true (default, "float"): the reconcile re-renders the pod
+//     spec from the LIVE runtime, so a runtime edit rolls the ISVC forward.
+//     Fanning these out is the whole point — without it a runtime change
+//     never triggers the float ISVC's reconcile, so it silently fails to
+//     propagate until some unrelated event happens to wake the ISVC. That
+//     used to be masked by frequent incidental reconciles; once those were
+//     trimmed (event-filter predicates, scoped informers), runtime edits
+//     stopped reaching float ISVCs entirely.
+//
+//   - autoSync=false ("pinned"): the reconcile runs drift detection and
+//     warns the operator that the runtime edit was rejected; it does not roll.
+//
+// NOTE: fanning out float ISVCs means a runtime edit rolls them. For
+// RawDeployment that is a safe native rolling update; for OMENative it
+// rolls per the Component's updateStrategy — an OMENative ISVC on
+// RecreatePod with no rollout budget is recreated wholesale.
+func (r *InferenceServiceReconciler) isvcsReferencingRuntime(ctx context.Context, obj client.Object) []reconcile.Request {
+	runtimeName := obj.GetName()
+	runtimeNamespace := obj.GetNamespace() // empty for cluster-scoped
+
+	// Narrow to ISVCs whose spec.runtime.name matches via the field index;
+	// the in-memory kind/namespace-scope filter below still applies.
+	var isvcs v1beta1.InferenceServiceList
+	if err := r.List(ctx, &isvcs, client.MatchingFields{isvcRuntimeNameIndexField: runtimeName}); err != nil {
+		r.Log.Error(err, "fan-out runtime event: list InferenceServices failed")
+		return nil
+	}
+
+	var reqs []reconcile.Request
+	for i := range isvcs.Items {
+		isvc := &isvcs.Items[i]
+		if isvc.Spec.Runtime == nil || isvc.Spec.Runtime.Name != runtimeName {
+			continue
+		}
+		// Namespaced SR only matches same-namespace ISVCs; a cluster-scoped
+		// runtime (empty namespace) matches ISVCs in any namespace.
+		if runtimeNamespace != "" && isvc.Namespace != runtimeNamespace {
+			continue
+		}
+		reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{
+			Namespace: isvc.Namespace, Name: isvc.Name,
+		}})
+	}
+
+	// Also wake auto-select ISVCs parked on RuntimeReady=False: the new or
+	// edited runtime may be the compatible one they are waiting for, and no
+	// name reference exists to fan them out through the index above.
+	var unresolved v1beta1.InferenceServiceList
+	if err := r.List(ctx, &unresolved, client.MatchingFields{isvcRuntimeUnresolvedIndexField: isvcRuntimeUnresolvedIndexValue}); err != nil {
+		r.Log.Error(err, "fan-out runtime event: list unresolved InferenceServices failed")
+		return reqs
+	}
+	for i := range unresolved.Items {
+		isvc := &unresolved.Items[i]
+		if runtimeNamespace != "" && isvc.Namespace != runtimeNamespace {
+			continue
+		}
+		reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{
+			Namespace: isvc.Namespace, Name: isvc.Name,
+		}})
+	}
+	return reqs
 }
