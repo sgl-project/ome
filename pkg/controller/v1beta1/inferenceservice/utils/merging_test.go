@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 func TestMergeArgs(t *testing.T) {
@@ -556,4 +558,66 @@ func TestOverrideKeyValueInSlice(t *testing.T) {
 			assert.Equal(t, tt.expectedArgs, result)
 		})
 	}
+}
+
+// TestMergeSchedulerName pins the fill-only contract of the top-level
+// schedulerName back-fill: empty levels gain the runtime's top-level
+// name, already-set levels keep theirs, and absent inputs are no-ops.
+func TestMergeSchedulerName(t *testing.T) {
+	runtimeWithScheduler := func() *v1beta1.ServingRuntimeSpec {
+		return &v1beta1.ServingRuntimeSpec{
+			ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{SchedulerName: "custom-scheduler"},
+		}
+	}
+
+	t.Run("fills every empty pod-spec level", func(t *testing.T) {
+		engine := &v1beta1.EngineSpec{
+			Leader: &v1beta1.LeaderSpec{},
+			Worker: &v1beta1.WorkerSpec{Size: ptrInt(2)},
+		}
+		decoder := &v1beta1.DecoderSpec{
+			Leader: &v1beta1.LeaderSpec{},
+			Worker: &v1beta1.WorkerSpec{Size: ptrInt(1)},
+		}
+		router := &v1beta1.RouterSpec{}
+
+		MergeSchedulerName(runtimeWithScheduler(), engine, decoder, router)
+
+		assert.Equal(t, "custom-scheduler", engine.SchedulerName)
+		assert.Equal(t, "custom-scheduler", engine.Leader.SchedulerName)
+		assert.Equal(t, "custom-scheduler", engine.Worker.SchedulerName)
+		assert.Equal(t, "custom-scheduler", decoder.SchedulerName)
+		assert.Equal(t, "custom-scheduler", decoder.Leader.SchedulerName)
+		assert.Equal(t, "custom-scheduler", decoder.Worker.SchedulerName)
+		assert.Equal(t, "custom-scheduler", router.SchedulerName)
+	})
+
+	t.Run("set levels always win", func(t *testing.T) {
+		engine := &v1beta1.EngineSpec{
+			PodSpec: v1beta1.PodSpec{SchedulerName: "component-scheduler"},
+			Leader:  &v1beta1.LeaderSpec{PodSpec: v1beta1.PodSpec{SchedulerName: "leader-scheduler"}},
+			Worker:  &v1beta1.WorkerSpec{Size: ptrInt(2)},
+		}
+
+		MergeSchedulerName(runtimeWithScheduler(), engine, nil, nil)
+
+		assert.Equal(t, "component-scheduler", engine.SchedulerName)
+		assert.Equal(t, "leader-scheduler", engine.Leader.SchedulerName)
+		assert.Equal(t, "custom-scheduler", engine.Worker.SchedulerName,
+			"an unset worker level must still gain the top-level name")
+	})
+
+	t.Run("empty top-level name is a no-op", func(t *testing.T) {
+		engine := &v1beta1.EngineSpec{Leader: &v1beta1.LeaderSpec{}}
+
+		MergeSchedulerName(&v1beta1.ServingRuntimeSpec{}, engine, nil, nil)
+
+		assert.Empty(t, engine.SchedulerName)
+		assert.Empty(t, engine.Leader.SchedulerName)
+	})
+
+	t.Run("nil runtime and nil components do not panic", func(t *testing.T) {
+		MergeSchedulerName(nil, &v1beta1.EngineSpec{}, nil, nil)
+		MergeSchedulerName(runtimeWithScheduler(), nil, nil, nil)
+	})
 }
