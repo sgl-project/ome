@@ -1,5 +1,5 @@
 {
-  "_name_or_path": "/home/linghao/.cache/huggingface/hub/models--meta-llama--Meta-Llama-3.1-8B-Instruct/snapshots/5206a32e0bd3067aef1ce90f5528ade7d866253f",
+  "_name_or_path": "meta-llama/Meta-Llama-3.1-8B-Instruct",
   "architectures": [
     "LlamaForCausalLM"
   ],
