@@ -139,6 +139,24 @@ jobs:
           make ome-manager
           make model-agent
 
+  cli-cross-compile:
+    name: CLI cross-compile (CGO_ENABLED=0)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Cross-compile kubectl-ome
+        run: make kubectl-ome-cross
+
   # Docker builds only validate Dockerfile/build-context breakage —
   # test-and-build already compiles and tests the same code natively —
   # so they run only when a docker-relevant path actually changed.
