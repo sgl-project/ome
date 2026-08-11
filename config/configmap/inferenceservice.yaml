@@ -27,7 +27,7 @@ data:
 
   modelInit: |-
     {
-        "image" : "ghcr.io/moirai-internal/ome-agent:v1.2.1",
+        "image" : "ghcr.io/moirai-internal/ome-agent:v1.2.2",
         "memoryRequest": "320Gi",
         "memoryLimit": "320Gi",
         "cpuRequest": "15",
