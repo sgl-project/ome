@@ -607,6 +607,54 @@ cover-check: ## Enforce the minimum average coverage (COVER_MIN, currently 50)
 		echo "❌ Average coverage $$avg_cov% is below threshold of $(COVER_MIN)%"; \
 		exit 1; \
 	fi
+DEP_CRDS_DIR := tests/integration/dep-crds
+
+# Each <bundle>-crds target copies CRD YAMLs from the corresponding
+# go.mod module into tests/integration/dep-crds/<bundle>/ for
+# integration suites that need optional CRDs installed. The YAMLs are
+# gitignored and regenerated here — the go.mod pin is the single source
+# of truth for versions, so committing them would only add a drift
+# surface. CI runs `make dep-crds` to catch a module restructuring the
+# copied paths after a go.mod bump.
+#
+# Pattern follows kueue/Makefile-deps.mk: locate via `go list -m
+# -mod=readonly`, copy via `cp -f`, never write to GOPATH.
+
+.PHONY: dep-crds
+dep-crds: keda-crds gateway-api-crds scheduler-plugins-crds kueue-crds ## 🧪 Vendor optional-CRD YAMLs from go.mod modules
+
+.PHONY: keda-crds
+keda-crds: ## Vendor github.com/kedacore/keda CRDs (keda.sh — ScaledObject, ScaledJob, TriggerAuthentication, ClusterTriggerAuthentication)
+	@mkdir -p $(DEP_CRDS_DIR)/keda
+	@KEDA_DIR=$$(go list -m -mod=readonly -f "{{.Dir}}" github.com/kedacore/keda/v2 2>/dev/null) ; \
+	if [ -z "$$KEDA_DIR" ]; then echo "github.com/kedacore/keda/v2 not in go.mod; skipping keda-crds" >&2; exit 0; fi ; \
+	cp -f "$$KEDA_DIR/config/crd/bases/"*.yaml $(DEP_CRDS_DIR)/keda/ ; \
+	echo "✅ Vendored KEDA CRDs to $(DEP_CRDS_DIR)/keda/"
+
+.PHONY: gateway-api-crds
+gateway-api-crds: ## Vendor sigs.k8s.io/gateway-api standard-channel CRDs (HTTPRoute)
+	@mkdir -p $(DEP_CRDS_DIR)/gateway-api
+	@GA_DIR=$$(go list -m -mod=readonly -f "{{.Dir}}" sigs.k8s.io/gateway-api 2>/dev/null) ; \
+	if [ -z "$$GA_DIR" ]; then echo "sigs.k8s.io/gateway-api not in go.mod; skipping gateway-api-crds" >&2; exit 0; fi ; \
+	cp -f "$$GA_DIR/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml" $(DEP_CRDS_DIR)/gateway-api/ ; \
+	echo "✅ Vendored Gateway API CRDs to $(DEP_CRDS_DIR)/gateway-api/"
+
+.PHONY: scheduler-plugins-crds
+scheduler-plugins-crds: ## Vendor sigs.k8s.io/scheduler-plugins CRDs (scheduling.x-k8s.io — PodGroup)
+	@mkdir -p $(DEP_CRDS_DIR)/scheduler-plugins
+	@SP_DIR=$$(go list -m -mod=readonly -f "{{.Dir}}" sigs.k8s.io/scheduler-plugins 2>/dev/null) ; \
+	if [ -z "$$SP_DIR" ]; then echo "sigs.k8s.io/scheduler-plugins not in go.mod; skipping scheduler-plugins-crds" >&2; exit 0; fi ; \
+	cp -f "$$SP_DIR/config/crd/bases/scheduling.x-k8s.io_podgroups.yaml" $(DEP_CRDS_DIR)/scheduler-plugins/ ; \
+	echo "✅ Vendored scheduler-plugins CRDs to $(DEP_CRDS_DIR)/scheduler-plugins/"
+
+.PHONY: kueue-crds
+kueue-crds: ## Vendor sigs.k8s.io/kueue CRDs (kueue.x-k8s.io — ResourceFlavor, ClusterQueue, LocalQueue, Workload, …)
+	@mkdir -p $(DEP_CRDS_DIR)/kueue
+	@KUEUE_DIR=$$(go list -m -mod=readonly -f "{{.Dir}}" sigs.k8s.io/kueue 2>/dev/null) ; \
+	if [ -z "$$KUEUE_DIR" ]; then echo "sigs.k8s.io/kueue not in go.mod; skipping kueue-crds" >&2; exit 0; fi ; \
+	cp -f "$$KUEUE_DIR/config/components/crd/bases/"*.yaml $(DEP_CRDS_DIR)/kueue/ ; \
+	echo "✅ Vendored Kueue CRDs to $(DEP_CRDS_DIR)/kueue/"
+
 .PHONY: integration-test
 integration-test: fmt vet manifests envtest ## 🧪 Run integration tests
 	@echo "🧪 Running integration tests..."
