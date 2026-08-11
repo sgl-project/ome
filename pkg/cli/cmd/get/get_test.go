@@ -146,6 +146,25 @@ func TestGetModelsListYAMLEnvelope(t *testing.T) {
 	assert.Len(t, doc.Items, 2)
 }
 
+// TestGetEmptyListJSONEnvelopeHasEmptyItemsArray pins the round-2 fix: an
+// empty result set's -o json output must have an empty items ARRAY, never a
+// null items field -- naive consumers like `jq '.items[]'` error on null.
+func TestGetEmptyListJSONEnvelopeHasEmptyItemsArray(t *testing.T) {
+	f := factory.Static{OME: omefake.NewSimpleClientset(), NS: "team-a"}
+	out, err := execute(t, f, "workloadclusters", "-o", "json")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "null", "no field of an empty List envelope should render as null")
+
+	var list struct {
+		Kind  string            `json:"kind"`
+		Items []json.RawMessage `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out), &list), "must be a single valid JSON document")
+	assert.Equal(t, "List", list.Kind)
+	assert.NotNil(t, list.Items, "items must unmarshal as an empty array, not null")
+	assert.Len(t, list.Items, 0)
+}
+
 // TestGetAllNamespacesWarnsOnClusterScoped pins Finding 2a: -A on a
 // cluster-scoped resource is accepted (not an error, kubectl parity) but
 // warns instead of silently doing nothing.

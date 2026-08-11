@@ -111,7 +111,7 @@ func (o *Options) Run(ctx context.Context, f factory.Factory) error {
 		if o.Name != "" {
 			return printers.PrintObj(objs[0], o.Output, o.Out)
 		}
-		list := &corev1.List{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "List"}}
+		list := &corev1.List{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "List"}, Items: []runtime.RawExtension{}}
 		for _, obj := range objs {
 			list.Items = append(list.Items, runtime.RawExtension{Object: obj})
 		}
