@@ -621,3 +621,16 @@ func TestMergeSchedulerName(t *testing.T) {
 		MergeSchedulerName(runtimeWithScheduler(), nil, nil, nil)
 	})
 }
+
+func TestMergeEngineSpecPreservesRuntimeServicePortAppProtocols(t *testing.T) {
+	runtimeEngine := &v1beta1.EngineSpec{
+		ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+			ServicePortAppProtocols: map[string]string{"http": "kubernetes.io/h2c"},
+		},
+	}
+
+	merged, err := MergeEngineSpec(runtimeEngine, &v1beta1.EngineSpec{})
+
+	assert.NoError(t, err)
+	assert.Equal(t, runtimeEngine.ServicePortAppProtocols, merged.ServicePortAppProtocols)
+}
