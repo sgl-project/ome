@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
@@ -61,6 +62,11 @@ import (
 const (
 	LeaderLockName          = "ome-controller-manager-leader-lock"
 	LeaderElectionNamespace = "ome"
+
+	// multiClusterRoleControlPlane is the --multicluster-role value that makes
+	// this manager the multi-cluster fan-out control plane: it runs the placement
+	// controller and disables the local InferenceService reconcilers.
+	multiClusterRoleControlPlane = "control-plane"
 )
 
 var (
@@ -68,6 +74,17 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 	tlsOpts  []func(*tls.Config)
 )
+
+// splitAndTrim splits a comma-separated list, trims spaces, and drops empties.
+func splitAndTrim(csv string) []string {
+	var out []string
+	for _, p := range strings.Split(csv, ",") {
+		if s := strings.TrimSpace(p); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
 
 // registerOptionalScheme attempts to register a scheme if its CRD is available
 func registerOptionalScheme(cfg *rest.Config, s *runtime.Scheme, groupVersion schema.GroupVersion, kind string, addToScheme func(*runtime.Scheme) error) error {
@@ -107,7 +124,16 @@ type Options struct {
 	leaderElectionNamespace    string
 	runtimeRevisionRetention   int
 	runtimeRevisionGracePeriod time.Duration
-	zapOpts                    zap.Options
+	// Multi-cluster topology, identity, and security: these decide which
+	// controllers run and the manager's identity, so they are deploy-time flags.
+	// The tunables live in the inferenceservice-config ConfigMap
+	// (controllerconfig.MultiClusterConfig), loaded at startup.
+	enableMultiCluster        bool
+	multiClusterRole          string
+	allowExecCredentials      bool
+	execCredentialAllowedCmds string
+	placementControlPlaneID   string
+	zapOpts                   zap.Options
 }
 
 // DefaultOptions returns the default values for the program options.
@@ -123,6 +149,10 @@ func DefaultOptions() Options {
 		leaderElectionNamespace:    LeaderElectionNamespace,
 		runtimeRevisionRetention:   10,
 		runtimeRevisionGracePeriod: 24 * time.Hour,
+		enableMultiCluster:         false,
+		multiClusterRole:           "",
+		allowExecCredentials:       false,
+		execCredentialAllowedCmds:  "aws,gke-gcloud-auth-plugin,kubelogin",
 		zapOpts: zap.Options{
 			TimeEncoder: zapcore.RFC3339TimeEncoder,
 			ZapOpts:     []zaplog.Option{zaplog.AddCaller()},
@@ -150,6 +180,25 @@ func GetOptions() Options {
 		"Number of ControllerRevision snapshots to retain per source runtime before garbage collection.")
 	flag.DurationVar(&opts.runtimeRevisionGracePeriod, "runtime-revision-grace-period", opts.runtimeRevisionGracePeriod,
 		"How long a runtime-revision snapshot must stay unreferenced and over-retention before GC deletes it.")
+	flag.BoolVar(&opts.enableMultiCluster, "enable-multicluster", opts.enableMultiCluster,
+		"Enable the multi-cluster controllers (WorkloadCluster registry). Alpha; default off.")
+	flag.StringVar(&opts.multiClusterRole, "multicluster-role", opts.multiClusterRole,
+		"Multi-cluster role. \"control-plane\" makes this the fan-out placer: it runs "+
+			"the placement controller (which clones InferenceServices onto workload clusters) and "+
+			"DISABLES the local InferenceService reconcilers. Empty (default) is a normal "+
+			"single-cluster / workload-cluster manager. \"control-plane\" implies --enable-multicluster.")
+	flag.BoolVar(&opts.allowExecCredentials, "allow-exec-credentials", opts.allowExecCredentials,
+		"Allow WorkloadCluster kubeconfigs to use an exec credential plugin (e.g. aws, gke-gcloud-auth-plugin) "+
+			"for short-lived cloud tokens. Default false. The plugin command must also appear in "+
+			"--exec-credential-allowed-commands, and its binary must be present in the manager image. "+
+			"SECURITY: an exec block runs a command in the controller pod; keep WorkloadCluster kubeconfig Secrets admin-only.")
+	flag.StringVar(&opts.execCredentialAllowedCmds, "exec-credential-allowed-commands", opts.execCredentialAllowedCmds,
+		"Comma-separated allowlist of exec credential plugin command basenames permitted when --allow-exec-credentials is set.")
+	flag.StringVar(&opts.placementControlPlaneID, "placement-control-plane-id", opts.placementControlPlaneID,
+		"identity stamped on every derived InferenceService this control plane creates. "+
+			"Required when multiple control planes share a workload cluster so each control plane's GC "+
+			"only reaps its OWN deriveds; the chart supplies a per-control-plane value. Empty (default) "+
+			"keeps single-control-plane behavior (no identity stamping or GC scoping).")
 	opts.zapOpts.BindFlags(flag.CommandLine)
 	flag.Parse()
 	return opts
@@ -257,6 +306,15 @@ func main() {
 		}
 	}
 
+	// Multi-cluster role resolution. On the control plane the placement (fan-out)
+	// controller owns InferenceServices — it clones them onto workload clusters —
+	// so the local ISVC and model/runtime reconcilers must NOT run here.
+	isControlPlane := options.multiClusterRole == multiClusterRoleControlPlane
+	if options.multiClusterRole != "" && !isControlPlane {
+		setupLog.Error(fmt.Errorf("invalid --multicluster-role %q (want %q or empty)", options.multiClusterRole, multiClusterRoleControlPlane), "bad flag")
+		os.Exit(1)
+	}
+
 	// Setup Event Broadcaster
 	// Select the active traffic translator based on
 	// installed backend-policy CRDs (Envoy Gateway BackendTrafficPolicy,
@@ -274,84 +332,107 @@ func main() {
 
 	setupLog.Info("Configuring event broadcaster")
 	eventBroadcaster := record.NewBroadcaster()
-	setupLog.Info("Setting up InferenceService controller")
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
-	if err = (&v1beta1isvccontroller.InferenceServiceReconciler{
-		Client:            mgr.GetClient(),
-		Clientset:         clientSet,
-		Log:               ctrl.Log.WithName("InferenceService"),
-		Scheme:            mgr.GetScheme(),
-		Recorder:          eventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-		TrafficReconciler: trafficReconciler,
-	}).SetupWithManager(mgr, deployConfig, ingressConfig); err != nil {
-		setupLog.Error(err, "Failed to create InferenceService controller")
-		os.Exit(1)
+	if isControlPlane {
+		setupLog.Info("control-plane role: local InferenceService reconciler disabled; placement controller owns ISVCs")
+	} else {
+		setupLog.Info("Setting up InferenceService controller")
+		if err = (&v1beta1isvccontroller.InferenceServiceReconciler{
+			Client:            mgr.GetClient(),
+			Clientset:         clientSet,
+			Log:               ctrl.Log.WithName("InferenceService"),
+			Scheme:            mgr.GetScheme(),
+			Recorder:          eventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+			TrafficReconciler: trafficReconciler,
+		}).SetupWithManager(mgr, deployConfig, ingressConfig); err != nil {
+			setupLog.Error(err, "Failed to create InferenceService controller")
+			os.Exit(1)
+		}
 	}
 
-	// Setup BaseModel and ClusterBaseModel controllers with the manager
-	setupLog.Info("Setting up BaseModel controller")
-	if err = (&v1beta1basemodelcontroller.BaseModelReconciler{
-		Client:         mgr.GetClient(),
-		Log:            ctrl.Log.WithName("BaseModel"),
-		Scheme:         mgr.GetScheme(),
-		OmeAgentConfig: omeAgentConfig,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create BaseModel controller")
-		os.Exit(1)
+	// The control plane owns no workloads, models, or runtimes — those live on the
+	// workload clusters. Running the model/runtime lifecycle controllers here would
+	// reconcile against an empty local catalog (no-op at best, churn at worst), so
+	// gate them off under the control-plane role.
+	if isControlPlane {
+		setupLog.Info("control-plane role: BaseModel/ClusterBaseModel/BenchmarkJob/AcceleratorClass/RuntimeRevisionGC controllers disabled")
+	} else {
+		// Setup BaseModel and ClusterBaseModel controllers with the manager
+		setupLog.Info("Setting up BaseModel controller")
+		if err = (&v1beta1basemodelcontroller.BaseModelReconciler{
+			Client:         mgr.GetClient(),
+			Log:            ctrl.Log.WithName("BaseModel"),
+			Scheme:         mgr.GetScheme(),
+			OmeAgentConfig: omeAgentConfig,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create BaseModel controller")
+			os.Exit(1)
+		}
+
+		setupLog.Info("Setting up ClusterBaseModel controller")
+		if err = (&v1beta1basemodelcontroller.ClusterBaseModelReconciler{
+			Client:         mgr.GetClient(),
+			Log:            ctrl.Log.WithName("ClusterBaseModel"),
+			Scheme:         mgr.GetScheme(),
+			OmeAgentConfig: omeAgentConfig,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create ClusterBaseModel controller")
+			os.Exit(1)
+		}
+
+		benchmarkJobEventBroadcaster := record.NewBroadcaster()
+		setupLog.Info("Setting up BenchmarkJob controller")
+		benchmarkJobEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+		if err = (&v1beta1benchmarkjobcontroller.BenchmarkJobReconciler{
+			Client:    mgr.GetClient(),
+			Clientset: clientSet,
+			Log:       ctrl.Log.WithName("BenchmarkJob"),
+			Scheme:    mgr.GetScheme(),
+			Recorder:  benchmarkJobEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create Benchmark Job controller")
+			os.Exit(1)
+		}
+
+		// Setup AcceleratorClass controller
+		acceleratorClassEventBroadcaster := record.NewBroadcaster()
+		setupLog.Info("Setting up AcceleratorClass controller")
+		acceleratorClassEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+		if err = (&v1beta1acceleratorclasscontroller.AcceleratorClassReconciler{
+			Client:   mgr.GetClient(),
+			Log:      ctrl.Log.WithName("AcceleratorClass"),
+			Scheme:   mgr.GetScheme(),
+			Recorder: acceleratorClassEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create AcceleratorClass controller")
+			os.Exit(1)
+		}
+
+		setupLog.Info("Setting up runtime-revision GC controller",
+			"retention", options.runtimeRevisionRetention,
+			"gracePeriod", options.runtimeRevisionGracePeriod)
+		if err = (&v1beta1runtimerevisioncontroller.GCReconciler{
+			Client:              mgr.GetClient(),
+			Log:                 ctrl.Log.WithName("RuntimeRevisionGC"),
+			Scheme:              mgr.GetScheme(),
+			OMENamespace:        constants.OMENamespace,
+			RetentionPerRuntime: options.runtimeRevisionRetention,
+			GracePeriod:         options.runtimeRevisionGracePeriod,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create runtime-revision GC controller")
+			os.Exit(1)
+		}
 	}
 
-	setupLog.Info("Setting up ClusterBaseModel controller")
-	if err = (&v1beta1basemodelcontroller.ClusterBaseModelReconciler{
-		Client:         mgr.GetClient(),
-		Log:            ctrl.Log.WithName("ClusterBaseModel"),
-		Scheme:         mgr.GetScheme(),
-		OmeAgentConfig: omeAgentConfig,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create ClusterBaseModel controller")
-		os.Exit(1)
-	}
-
-	benchmarkJobEventBroadcaster := record.NewBroadcaster()
-	setupLog.Info("Setting up BenchmarkJob controller")
-	benchmarkJobEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
-	if err = (&v1beta1benchmarkjobcontroller.BenchmarkJobReconciler{
-		Client:    mgr.GetClient(),
-		Clientset: clientSet,
-		Log:       ctrl.Log.WithName("BenchmarkJob"),
-		Scheme:    mgr.GetScheme(),
-		Recorder:  benchmarkJobEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create Benchmark Job controller")
-		os.Exit(1)
-	}
-
-	// Setup AcceleratorClass controller
-	acceleratorClassEventBroadcaster := record.NewBroadcaster()
-	setupLog.Info("Setting up AcceleratorClass controller")
-	acceleratorClassEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
-	if err = (&v1beta1acceleratorclasscontroller.AcceleratorClassReconciler{
-		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("AcceleratorClass"),
-		Scheme:   mgr.GetScheme(),
-		Recorder: acceleratorClassEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create AcceleratorClass controller")
-		os.Exit(1)
-	}
-
-	setupLog.Info("Setting up runtime-revision GC controller",
-		"retention", options.runtimeRevisionRetention,
-		"gracePeriod", options.runtimeRevisionGracePeriod)
-	if err = (&v1beta1runtimerevisioncontroller.GCReconciler{
-		Client:              mgr.GetClient(),
-		Log:                 ctrl.Log.WithName("RuntimeRevisionGC"),
-		Scheme:              mgr.GetScheme(),
-		OMENamespace:        constants.OMENamespace,
-		RetentionPerRuntime: options.runtimeRevisionRetention,
-		GracePeriod:         options.runtimeRevisionGracePeriod,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create runtime-revision GC controller")
-		os.Exit(1)
+	// Multi-cluster: the WorkloadCluster registry/transport runs when multi-cluster
+	// is enabled OR this is the control plane (which requires it). The control plane
+	// additionally runs the placement (fan-out) controller, its GC, and the endpoint
+	// publisher — see setupMultiCluster.
+	if options.enableMultiCluster || isControlPlane {
+		if err = setupMultiCluster(mgr, clientSet, options, isControlPlane); err != nil {
+			setupLog.Error(err, "Failed to set up multi-cluster")
+			os.Exit(1)
+		}
 	}
 
 	if options.enableWebhook {
