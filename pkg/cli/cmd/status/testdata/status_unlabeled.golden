@@ -1,0 +1,19 @@
+Name:       orphan-pods
+Namespace:  team-b
+Ready:      true
+Runtime:    (auto-selected)
+
+Conditions:
+  TYPE    STATUS   REASON   MESSAGE
+  Ready   True     -        -
+
+Components:
+  engine   revision -
+    POD                    PHASE     READY   RESTARTS   NODE
+    orphan-pods-engine-1   Running   0/0     0          -
+  (unlabeled)   revision -
+    POD                     PHASE     READY   RESTARTS   NODE
+    orphan-pods-stray-7f8   Running   0/0     0          -
+
+Model Status:
+  Transition: -

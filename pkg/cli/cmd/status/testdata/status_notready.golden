@@ -1,0 +1,26 @@
+Name:       llama-70b
+Namespace:  team-a
+Ready:      false
+Model:      llama-3-3-70b
+Runtime:    srt-llama-70b
+
+Conditions:
+  TYPE           STATUS   REASON            MESSAGE
+  EngineReady    True     -                 -
+  DecoderReady   False    RevisionFailed    0/1 replicas ready
+  Ready          False    DecoderNotReady   -
+
+Components:
+  engine   revision llama-70b-engine-00002
+    POD                        PHASE     READY   RESTARTS   NODE
+    llama-70b-engine-5d4-x2p   Running   2/2     0          gpu-node-1
+  decoder   revision llama-70b-decoder-00002
+    POD                         PHASE     READY   RESTARTS   NODE
+    llama-70b-decoder-7c9-k4m   Pending   0/2     0          -
+
+Model Status:
+  Transition: -
+
+Recent Warning Events:
+  OBJECT                          REASON             MESSAGE
+  Pod/llama-70b-decoder-7c9-k4m   FailedScheduling   0/12 nodes: insufficient nvidia.com/gpu
