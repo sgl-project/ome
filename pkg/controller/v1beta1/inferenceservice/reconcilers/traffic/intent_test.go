@@ -193,7 +193,7 @@ func TestResolve_PassthroughCountsAsIntent(t *testing.T) {
 
 func TestResolve_MalformedAnnotationsSilentlySkipped(t *testing.T) {
 	// The webhook rejects these at admission, so production never
-	// hits this path. Resolve is defensive: an unparseable value
+	// hits this path. Resolve is defensive: an unparsable value
 	// produces nil rather than a panic. This protects controllers
 	// that observe the API in a half-applied state (e.g. just after
 	// CRD upgrade) from crash-looping.
