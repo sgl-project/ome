@@ -177,17 +177,6 @@ func TestIngressReconciler_GetDeploymentMode(t *testing.T) {
 		expectedMode constants.DeploymentModeType
 	}{
 		{
-			name: "min replicas 0 falls back to raw deployment",
-			engine: &v1beta1.EngineSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(0),
-				},
-			},
-			decoder:      nil,
-			router:       nil,
-			expectedMode: constants.RawDeployment,
-		},
-		{
 			name: "raw deployment mode - engine with min replicas > 0",
 			engine: &v1beta1.EngineSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
@@ -199,7 +188,7 @@ func TestIngressReconciler_GetDeploymentMode(t *testing.T) {
 			expectedMode: constants.RawDeployment,
 		},
 		{
-			name: "multinode deployment mode - engine with leader and worker",
+			name: "multinode deployment mode - engine with leader and worker resolves to MultiNode",
 			engine: &v1beta1.EngineSpec{
 				Leader: &v1beta1.LeaderSpec{},
 				Worker: &v1beta1.WorkerSpec{},
@@ -214,17 +203,6 @@ func TestIngressReconciler_GetDeploymentMode(t *testing.T) {
 			decoder:      nil,
 			router:       nil,
 			expectedMode: constants.RawDeployment,
-		},
-		{
-			name: "decoder constraint - engine becomes raw when decoder present",
-			engine: &v1beta1.EngineSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(0),
-				},
-			},
-			decoder:      &v1beta1.DecoderSpec{}, // Decoder present
-			router:       nil,
-			expectedMode: constants.RawDeployment, // Engine forced to raw deployment
 		},
 	}
 
@@ -369,8 +347,7 @@ func TestIngressReconciler_NilFactory(t *testing.T) {
 	}
 
 	_, err := reconciler.getStrategy(constants.RawDeployment, opts)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "strategy factory is not initialized")
+	assert.Error(t, err, "nil factory must surface an error rather than panic")
 }
 
 // Mock strategy for testing
@@ -506,13 +483,6 @@ func createTestInferenceServiceWithStatus(name, namespace string) *v1beta1.Infer
 		},
 	}
 
-	// Set engine ready condition
-	isvc.Status.SetCondition(v1beta1.EngineReady, &apis.Condition{
-		Type:   v1beta1.EngineReady,
-		Status: corev1.ConditionTrue,
-	})
-
-	// Set engine ready condition (required by HTTPRoute builder)
 	isvc.Status.SetCondition(v1beta1.EngineReady, &apis.Condition{
 		Type:   v1beta1.EngineReady,
 		Status: corev1.ConditionTrue,

@@ -36,7 +36,7 @@ type KubernetesIngressStrategy struct {
 
 // NewKubernetesIngressStrategy creates a new Kubernetes Ingress strategy
 func NewKubernetesIngressStrategy(opts interfaces.ReconcilerOptions, domainService interfaces.DomainService, pathService interfaces.PathService) interfaces.IngressStrategy {
-	builder := builders.NewIngressBuilder(opts.Scheme, opts.IngressConfig, opts.IsvcConfig, domainService, pathService)
+	builder := builders.NewIngressBuilder(opts.Client, opts.Scheme, opts.IngressConfig, opts.IsvcConfig, domainService, pathService)
 
 	return &KubernetesIngressStrategy{
 		client:        opts.Client,
@@ -70,7 +70,7 @@ func (k *KubernetesIngressStrategy) Reconcile(ctx context.Context, isvc *v1beta1
 				Reason:  "ComponentNotReady",
 				Message: "Target service not ready for ingress creation",
 			})
-			klog.Info("Builder returned nil ingress - component not ready for ingress ", "isvc: ", isvc.Name)
+			klog.V(1).InfoS("Builder returned nil ingress; component not ready", "isvc", isvc.Name)
 			return nil
 		}
 
@@ -146,11 +146,11 @@ func (k *KubernetesIngressStrategy) createRawURL(isvc *v1beta1.InferenceService)
 
 func (k *KubernetesIngressStrategy) getRawServiceHost(isvc *v1beta1.InferenceService) string {
 	if isvc.Spec.Router != nil {
-		routerName := isvc.Name + "-router"
-		return routerName + "." + isvc.Namespace + ".svc.cluster.local"
+		return constants.RouterServiceName(isvc.Name) + "." + isvc.Namespace + ".svc.cluster.local"
 	}
-	engineName := isvc.Name
-	return engineName + "." + isvc.Namespace + ".svc.cluster.local"
+	// Engine Service is named "<isvc>-engine" (constants.EngineServiceName) —
+	// the same name GetTargetServicePort resolves the port from.
+	return constants.EngineServiceName(isvc.Name) + "." + isvc.Namespace + ".svc.cluster.local"
 }
 
 func (k *KubernetesIngressStrategy) semanticIngressEquals(desired, existing *netv1.Ingress) bool {

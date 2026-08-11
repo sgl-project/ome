@@ -94,6 +94,27 @@ func GetTargetServicePort(ctx context.Context, c client.Client, isvc *v1beta1.In
 	return port, nil
 }
 
+// ResolveServicePort returns the first port of the named Service, which is
+// the authoritative serving port a component exposes (Services are built
+// from the merged runner's containerPort before ingress runs). It falls
+// back to defaultPort when the client is nil or the Service can't be read
+// — e.g. during early reconciles before the Service exists.
+func ResolveServicePort(ctx context.Context, c client.Client, namespace, serviceName string, defaultPort int32) int32 {
+	if c == nil {
+		return defaultPort
+	}
+
+	service := &corev1.Service{}
+	// Service names are truncated to 63 chars on creation; match that here.
+	if err := c.Get(ctx, types.NamespacedName{Name: constants.TruncateNameWithMaxLength(serviceName, 63), Namespace: namespace}, service); err != nil {
+		return defaultPort
+	}
+	if len(service.Spec.Ports) > 0 {
+		return service.Spec.Ports[0].Port
+	}
+	return defaultPort
+}
+
 // AddNodeSelectorForModelReadyNode adds a node selector to the pod spec
 // for scheduling pods on nodes where the base model is ready.
 // This is used by both InferenceService and BenchmarkJob controllers to ensure pods

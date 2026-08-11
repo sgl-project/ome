@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -19,9 +20,11 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/builders"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/traffic"
 )
 
 const (
@@ -31,27 +34,30 @@ const (
 
 // GatewayAPIStrategy handles ingress for Gateway API (raw deployment mode)
 type GatewayAPIStrategy struct {
-	client        client.Client
-	scheme        *runtime.Scheme
-	ingressConfig *controllerconfig.IngressConfig
-	isvcConfig    *controllerconfig.InferenceServicesConfig
-	domainService interfaces.DomainService
-	pathService   interfaces.PathService
-	builder       interfaces.HTTPRouteBuilder
+	client               client.Client
+	scheme               *runtime.Scheme
+	ingressConfig        *controllerconfig.IngressConfig
+	isvcConfig           *controllerconfig.InferenceServicesConfig
+	domainService        interfaces.DomainService
+	pathService          interfaces.PathService
+	httpRouteBuilder     interfaces.HTTPRouteBuilder
+	trafficPolicyBuilder *builders.BackendTrafficPolicyBuilder
 }
 
 // NewGatewayAPIStrategy creates a new Gateway API strategy
 func NewGatewayAPIStrategy(opts interfaces.ReconcilerOptions, domainService interfaces.DomainService, pathService interfaces.PathService) interfaces.IngressStrategy {
-	builder := builders.NewHTTPRouteBuilder(opts.IngressConfig, opts.IsvcConfig, domainService, pathService)
+	httpRouteBuilder := builders.NewHTTPRouteBuilder(opts.Client, opts.IngressConfig, opts.IsvcConfig, domainService, pathService)
+	trafficPolicyBuilder := builders.NewBackendTrafficPolicyBuilder(opts.IngressConfig)
 
 	return &GatewayAPIStrategy{
-		client:        opts.Client,
-		scheme:        opts.Scheme,
-		ingressConfig: opts.IngressConfig,
-		isvcConfig:    opts.IsvcConfig,
-		domainService: domainService,
-		pathService:   pathService,
-		builder:       builder,
+		client:               opts.Client,
+		scheme:               opts.Scheme,
+		ingressConfig:        opts.IngressConfig,
+		isvcConfig:           opts.IsvcConfig,
+		domainService:        domainService,
+		pathService:          pathService,
+		httpRouteBuilder:     httpRouteBuilder,
+		trafficPolicyBuilder: trafficPolicyBuilder,
 	}
 }
 
@@ -60,37 +66,72 @@ func (g *GatewayAPIStrategy) GetName() string {
 }
 
 func (g *GatewayAPIStrategy) Reconcile(ctx context.Context, isvc *v1beta1.InferenceService) error {
-	var err error
-
 	if !g.ingressConfig.DisableIngressCreation {
+		// Track readiness across the pass: each reconcile/check below sets
+		// IngressReady=False itself when it finds a problem, and True is
+		// only stamped at the end when nothing did — an unconditional True
+		// here would overwrite those False conditions every pass.
+		ingressReady := true
+
 		// Reconcile component HTTPRoutes
-		if err := g.reconcileComponentHTTPRoute(ctx, isvc, builders.EngineComponent); err != nil {
+		ready, err := g.reconcileComponentHTTPRoute(ctx, isvc, builders.EngineComponent)
+		if err != nil {
 			return err
 		}
+		ingressReady = ingressReady && ready
 		if isvc.Spec.Router != nil {
-			if err := g.reconcileComponentHTTPRoute(ctx, isvc, builders.RouterComponent); err != nil {
+			ready, err = g.reconcileComponentHTTPRoute(ctx, isvc, builders.RouterComponent)
+			if err != nil {
 				return err
 			}
+			ingressReady = ingressReady && ready
 		}
 		if isvc.Spec.Decoder != nil {
-			if err := g.reconcileComponentHTTPRoute(ctx, isvc, builders.DecoderComponent); err != nil {
+			ready, err = g.reconcileComponentHTTPRoute(ctx, isvc, builders.DecoderComponent)
+			if err != nil {
+				return err
+			}
+			ingressReady = ingressReady && ready
+		}
+		ready, err = g.reconcileComponentHTTPRoute(ctx, isvc, builders.TopLevelComponent)
+		if err != nil {
+			return err
+		}
+		ingressReady = ingressReady && ready
+
+		// The default BTP (ConsistentHash on configured headers) is
+		// emitted here only when the operator has NOT declared any
+		// traffic intent. When intent is declared, the per-ISVC
+		// traffic.Reconciler owns the BTP — both reconcilers writing
+		// the same resource name would fight on every loop.
+		ownsBackendTrafficPolicy := !traffic.Resolve(isvc).HasIntent()
+		if ownsBackendTrafficPolicy {
+			if err := g.reconcileBackendTrafficPolicy(ctx, isvc); err != nil {
 				return err
 			}
 		}
-		if err := g.reconcileComponentHTTPRoute(ctx, isvc, builders.TopLevelComponent); err != nil {
+
+		// Check HTTPRoute and (optionally) BackendTrafficPolicy statuses
+		routesProgrammed, err := g.checkHTTPRouteStatuses(ctx, isvc)
+		if err != nil {
 			return err
 		}
+		ingressReady = ingressReady && routesProgrammed
 
-		// Check HTTPRoute statuses
-		if err := g.checkHTTPRouteStatuses(ctx, isvc); err != nil {
-			return err
+		if ownsBackendTrafficPolicy {
+			policyAccepted, err := g.checkBackendTrafficPolicyStatus(ctx, isvc)
+			if err != nil {
+				return err
+			}
+			ingressReady = ingressReady && policyAccepted
 		}
 
-		// If we are here, then all the HTTPRoutes are ready, Mark ingress as ready
-		isvc.Status.SetCondition(v1beta1.IngressReady, &knapis.Condition{
-			Type:   v1beta1.IngressReady,
-			Status: corev1.ConditionTrue,
-		})
+		if ingressReady {
+			isvc.Status.SetCondition(v1beta1.IngressReady, &knapis.Condition{
+				Type:   v1beta1.IngressReady,
+				Status: corev1.ConditionTrue,
+			})
+		}
 	} else {
 		// Ingress creation is disabled. We set it to true as the isvc condition depends on it.
 		isvc.Status.SetCondition(v1beta1.IngressReady, &knapis.Condition{
@@ -99,26 +140,65 @@ func (g *GatewayAPIStrategy) Reconcile(ctx context.Context, isvc *v1beta1.Infere
 		})
 	}
 
-	// Set status URL and Address
-	isvc.Status.URL, err = g.createRawURL(isvc)
+	// Set status URL, Address, and Addresses — all derived from the same builder
+	// that produces the HTTPRoutes, so they cannot drift from routing.
+	return g.setStatusEndpoints(isvc)
+}
+
+// setStatusEndpoints derives status.addresses (one entry per gateway the route
+// attaches to, tagged with the operator-declared class, plus the cluster-local
+// address) from the shared endpoint builder, and projects the two
+// backward-compatible fields from it: status.url = the primary gateway endpoint,
+// status.address = the cluster-local endpoint. Because all three come from one
+// renderer, they cannot disagree with the HTTPRoutes.
+func (g *GatewayAPIStrategy) setStatusEndpoints(isvc *v1beta1.InferenceService) error {
+	endpoints, err := g.httpRouteBuilder.Endpoints(isvc, isvc.Name)
 	if err != nil {
 		return err
 	}
-	isvc.Status.Address = &duckv1.Addressable{
+
+	addresses := make([]duckv1.Addressable, 0, len(endpoints)+1)
+	var primary *knapis.URL
+	for _, ep := range endpoints {
+		addr := duckv1.Addressable{
+			URL: &knapis.URL{Scheme: ep.Scheme, Host: ep.Host, Path: ep.Path},
+		}
+		if ep.Class != "" {
+			addr.Name = ptr.To(ep.Class)
+		}
+		addresses = append(addresses, addr)
+		if ep.Primary {
+			primary = addr.URL
+		}
+	}
+
+	// Cluster-local endpoint (unchanged semantics) — projected to status.address
+	// and also listed in status.addresses, tagged "cluster-local".
+	clusterLocal := duckv1.Addressable{
+		Name: ptr.To(interfaces.ClusterLocalEndpointClass),
 		URL: &knapis.URL{
-			Host:   g.getRawServiceHost(isvc),
 			Scheme: g.ingressConfig.UrlScheme,
-			Path:   "",
+			Host:   g.getRawServiceHost(isvc),
 		},
+	}
+	addresses = append(addresses, clusterLocal)
+
+	isvc.Status.Addresses = addresses
+	isvc.Status.Address = &duckv1.Addressable{URL: clusterLocal.URL}
+	if primary != nil {
+		isvc.Status.URL = primary
 	}
 	return nil
 }
 
-func (g *GatewayAPIStrategy) reconcileComponentHTTPRoute(ctx context.Context, isvc *v1beta1.InferenceService, componentType string) error {
+// reconcileComponentHTTPRoute ensures the component's HTTPRoute exists and
+// matches the desired spec. It returns ready=false (with IngressReady=False
+// already set on the ISVC) when the component is not yet ready for a route.
+func (g *GatewayAPIStrategy) reconcileComponentHTTPRoute(ctx context.Context, isvc *v1beta1.InferenceService, componentType string) (bool, error) {
 	// Use builder to create the HTTPRoute
-	desired, err := g.builder.BuildHTTPRoute(ctx, isvc, componentType)
+	desired, err := g.httpRouteBuilder.BuildHTTPRoute(ctx, isvc, componentType)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if desired == nil {
 		// Set ingress condition to indicate component not ready
@@ -128,54 +208,114 @@ func (g *GatewayAPIStrategy) reconcileComponentHTTPRoute(ctx context.Context, is
 			Reason:  "ComponentNotReady",
 			Message: fmt.Sprintf("%s component not ready for HTTPRoute creation", componentType),
 		})
-		klog.Info("Builder returned nil HTTPRoute - component not ready", "isvc", isvc.Name, "component", componentType)
-		return nil
+		klog.V(1).InfoS("Builder returned nil HTTPRoute; component not ready", "isvc", isvc.Name, "component", componentType)
+		return false, nil
 	}
 
 	httpRoute, ok := desired.(*gatewayapiv1.HTTPRoute)
 	if !ok {
-		return fmt.Errorf("builder returned unexpected type %T, expected *gatewayapiv1.HTTPRoute", desired)
+		return false, fmt.Errorf("builder returned unexpected type %T, expected *gatewayapiv1.HTTPRoute", desired)
+	}
+	if httpRoute == nil {
+		// Defensive: BuildHTTPRoute now returns interface-nil for not-ready
+		// components, but guard here too so any future caller that hands us
+		// a typed-nil pointer (e.g. via a stub builder in tests, or a future
+		// dispatcher regression) does not crash the reconciler in
+		// controllerutil.SetControllerReference below.
+		isvc.Status.SetCondition(v1beta1.IngressReady, &knapis.Condition{
+			Type:    v1beta1.IngressReady,
+			Status:  corev1.ConditionFalse,
+			Reason:  "ComponentNotReady",
+			Message: fmt.Sprintf("%s component not ready for HTTPRoute creation", componentType),
+		})
+		klog.V(1).InfoS("Builder returned typed-nil HTTPRoute; component not ready", "isvc", isvc.Name, "component", componentType)
+		return false, nil
 	}
 
 	if err := controllerutil.SetControllerReference(isvc, httpRoute, g.scheme); err != nil {
-		return fmt.Errorf("failed to set controller reference for %s HttpRoute %s: %w", componentType, httpRoute.Name, err)
+		return false, fmt.Errorf("failed to set controller reference for %s HttpRoute %s: %w", componentType, httpRoute.Name, err)
 	}
 
 	existing := &gatewayapiv1.HTTPRoute{}
 	err = g.client.Get(ctx, types.NamespacedName{Name: httpRoute.Name, Namespace: isvc.Namespace}, existing)
 	if err != nil {
 		if apierr.IsNotFound(err) {
-			if err := g.client.Create(ctx, httpRoute); err != nil {
-				return fmt.Errorf("failed to create %s HttpRoute %s: %w", componentType, httpRoute.Name, err)
+			createErr := g.client.Create(ctx, httpRoute)
+			if createErr != nil && !apierr.IsAlreadyExists(createErr) {
+				return false, fmt.Errorf("failed to create %s HttpRoute %s: %w", componentType, httpRoute.Name, createErr)
 			}
-		} else {
-			return err
+			// A route created this pass (or one the cache-backed client
+			// cannot see yet: AlreadyExists on a NotFound Get means the
+			// informer lags the server) has no verified gateway status,
+			// so it must not count toward IngressReady=True this pass.
+			// The HTTPRoute watch re-enqueues the ISVC once the route is
+			// observed, and readiness is decided from its real status then.
+			isvc.Status.SetCondition(v1beta1.IngressReady, &knapis.Condition{
+				Type:    v1beta1.IngressReady,
+				Status:  corev1.ConditionFalse,
+				Reason:  HTTPRouteParentStatusNotAvailable,
+				Message: fmt.Sprintf("%s HTTPRoute awaiting gateway programming", componentType),
+			})
+			return false, nil
 		}
+		return false, err
 	} else {
 		// Set ResourceVersion which is required for update operation.
 		httpRoute.ResourceVersion = existing.ResourceVersion
 		// Do a dry-run update to avoid diffs generated by default values.
 		if err := g.client.Update(ctx, httpRoute, client.DryRunAll); err != nil {
-			return fmt.Errorf("failed to perform dry-run update for %s HttpRoute %s: %w", componentType, httpRoute.Name, err)
+			return false, fmt.Errorf("failed to perform dry-run update for %s HttpRoute %s: %w", componentType, httpRoute.Name, err)
 		}
 		if !g.semanticHttpRouteEquals(httpRoute, existing) {
 			if err := g.client.Update(ctx, httpRoute); err != nil {
-				return fmt.Errorf("failed to update %s HttpRoute %s: %w", componentType, httpRoute.Name, err)
+				return false, fmt.Errorf("failed to update %s HttpRoute %s: %w", componentType, httpRoute.Name, err)
 			}
+		}
+	}
+	return true, nil
+}
+
+func (g *GatewayAPIStrategy) reconcileBackendTrafficPolicy(ctx context.Context, isvc *v1beta1.InferenceService) error {
+	policy := g.trafficPolicyBuilder.Build(isvc)
+
+	if err := controllerutil.SetControllerReference(isvc, policy, g.scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for BackendTrafficPolicy %s: %w", isvc.Name, err)
+	}
+
+	existing := &unstructured.Unstructured{}
+	existing.SetGroupVersionKind(builders.BackendTrafficPolicyGVK)
+	err := g.client.Get(ctx, types.NamespacedName{Name: isvc.Name, Namespace: isvc.Namespace}, existing)
+	if err != nil {
+		if apierr.IsNotFound(err) {
+			if err := g.client.Create(ctx, policy); err != nil {
+				return fmt.Errorf("failed to create BackendTrafficPolicy %s: %w", isvc.Name, err)
+			}
+		} else {
+			return err
+		}
+	} else {
+		policy.SetResourceVersion(existing.GetResourceVersion())
+		if err := g.client.Update(ctx, policy); err != nil {
+			return fmt.Errorf("failed to update BackendTrafficPolicy %s: %w", isvc.Name, err)
 		}
 	}
 	return nil
 }
 
-func (g *GatewayAPIStrategy) checkHTTPRouteStatuses(ctx context.Context, isvc *v1beta1.InferenceService) error {
+// checkHTTPRouteStatuses returns ready=false (with IngressReady=False set)
+// when any existing HTTPRoute has not been programmed by its gateway yet.
+func (g *GatewayAPIStrategy) checkHTTPRouteStatuses(ctx context.Context, isvc *v1beta1.InferenceService) (bool, error) {
+	// The engine HTTPRoute is always emitted as "<isvc>-engine" (distinct
+	// from the top-level "<isvc>"); these lookups must match the
+	// builder-produced names.
 	components := []struct {
 		name      string
 		condition func() bool
 	}{
-		{isvc.Name, func() bool { return true }},                                  // Engine
+		{constants.EngineServiceName(isvc.Name), func() bool { return true }},     // Engine: "<isvc>-engine"
 		{isvc.Name + "-router", func() bool { return isvc.Spec.Router != nil }},   // Router
 		{isvc.Name + "-decoder", func() bool { return isvc.Spec.Decoder != nil }}, // Decoder
-		{isvc.Name, func() bool { return true }},                                  // Top level (same as engine for HTTPRoute names)
+		{isvc.Name, func() bool { return true }},                                  // Top level: "<isvc>"
 	}
 
 	for _, comp := range components {
@@ -188,7 +328,18 @@ func (g *GatewayAPIStrategy) checkHTTPRouteStatuses(ctx context.Context, isvc *v
 			Name:      comp.name,
 			Namespace: isvc.Namespace,
 		}, httpRoute); err != nil {
-			return err
+			if apierr.IsNotFound(err) {
+				// NotFound here means reconcileComponentHTTPRoute either
+				// skipped the route (component not Ready) or created it so
+				// recently the cache has not observed it yet — and in both
+				// cases it already set IngressReady=False and reported
+				// not-ready, so this pass cannot conclude True. Keep
+				// iterating so any component with an existing HTTPRoute
+				// still has its status checked; the HTTPRoute watch
+				// re-enqueues once the route materializes.
+				continue
+			}
+			return false, err
 		}
 
 		if ready, reason, message := g.isHTTPRouteReady(httpRoute.Status); !ready {
@@ -199,21 +350,50 @@ func (g *GatewayAPIStrategy) checkHTTPRouteStatuses(ctx context.Context, isvc *v
 				Reason:  *reason,
 				Message: fmt.Sprintf("%s %s", componentType, *message),
 			})
-			return nil
+			return false, nil
 		}
 	}
-	return nil
+	return true, nil
 }
 
-func (g *GatewayAPIStrategy) createRawURL(isvc *v1beta1.InferenceService) (*knapis.URL, error) {
-	var err error
-	url := &knapis.URL{}
-	url.Scheme = g.ingressConfig.UrlScheme
-	url.Host, err = g.domainService.GenerateDomainName(isvc.Name, isvc.ObjectMeta, g.ingressConfig)
-	if err != nil {
-		return nil, err
+// checkBackendTrafficPolicyStatus returns ready=false (with
+// IngressReady=False set) when the default BTP reports a False condition.
+func (g *GatewayAPIStrategy) checkBackendTrafficPolicyStatus(ctx context.Context, isvc *v1beta1.InferenceService) (bool, error) {
+	policy := &unstructured.Unstructured{}
+	policy.SetGroupVersionKind(builders.BackendTrafficPolicyGVK)
+	if err := g.client.Get(ctx, types.NamespacedName{Name: isvc.Name, Namespace: isvc.Namespace}, policy); err != nil {
+		if apierr.IsNotFound(err) {
+			return true, nil
+		}
+		return false, err
 	}
-	return url, nil
+
+	status, ok := policy.Object["status"].(map[string]interface{})
+	if !ok {
+		return true, nil
+	}
+	conditions, ok := status["conditions"].([]interface{})
+	if !ok {
+		return true, nil
+	}
+	for _, c := range conditions {
+		cond, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if cond["status"] == "False" {
+			reason, _ := cond["reason"].(string)
+			message, _ := cond["message"].(string)
+			isvc.Status.SetCondition(v1beta1.IngressReady, &knapis.Condition{
+				Type:    v1beta1.IngressReady,
+				Status:  corev1.ConditionFalse,
+				Reason:  reason,
+				Message: fmt.Sprintf("BackendTrafficPolicy: %s", message),
+			})
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (g *GatewayAPIStrategy) getRawServiceHost(isvc *v1beta1.InferenceService) string {
@@ -221,7 +401,8 @@ func (g *GatewayAPIStrategy) getRawServiceHost(isvc *v1beta1.InferenceService) s
 		routerName := isvc.Name + "-router" // Actual router service name
 		return routerName + "." + isvc.Namespace + ".svc.cluster.local"
 	}
-	engineName := isvc.Name // Actual engine service name
+	// Engine Service is named "<isvc>-engine" (constants.EngineServiceName).
+	engineName := constants.EngineServiceName(isvc.Name)
 	return engineName + "." + isvc.Namespace + ".svc.cluster.local"
 }
 
@@ -244,15 +425,18 @@ func (g *GatewayAPIStrategy) isHTTPRouteReady(httpRouteStatus gatewayapiv1.HTTPR
 	return true, nil, nil
 }
 
-// getComponentType returns the component type name for display purposes
+// getComponentType returns the component type name for display purposes.
+// Engine HTTPRoute is "<isvc>-engine", top-level is "<isvc>".
 func (g *GatewayAPIStrategy) getComponentType(name string, isvc *v1beta1.InferenceService) string {
-	switch {
-	case name == isvc.Name: // Engine service name
+	switch name {
+	case constants.EngineServiceName(isvc.Name): // "<isvc>-engine"
 		return "Engine"
-	case name == isvc.Name+"-router": // Router service name
+	case isvc.Name + "-router":
 		return "Router"
-	case name == isvc.Name+"-decoder": // Decoder service name
+	case isvc.Name + "-decoder":
 		return "Decoder"
+	case isvc.Name:
+		return "TopLevel"
 	default:
 		return "Component"
 	}
