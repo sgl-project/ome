@@ -10,6 +10,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"strings"
+
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/ome/pkg/constants"
 )
 
@@ -24,6 +27,11 @@ const (
 
 	DefaultUrlScheme = "http"
 )
+
+// DefaultConsistentHashHeaders is the fallback request-header list used as the
+// consistent-hash key for generated backend traffic policies when the ingress
+// config does not set consistentHashHeaders.
+var DefaultConsistentHashHeaders = []string{"x-routing-key"}
 
 type SecretConfig struct {
 	WriteToCommonNamespace bool   `json:"writeToCommonNamespace"`
@@ -65,7 +73,15 @@ type IngressConfig struct {
 	IngressGateway     string `json:"ingressGateway,omitempty"`
 	IngressServiceName string `json:"ingressService,omitempty"`
 
-	OmeIngressGateway        string    `json:"omeIngressGateway,omitempty"`
+	OmeIngressGateway string `json:"omeIngressGateway,omitempty"`
+	// OmeIngressGatewayClass labels the primary (OmeIngressGateway) gateway's
+	// endpoints in status ("internal", "external", ...) — the analogue of
+	// IngressGatewaySpec.Class for the cluster-default primary gateway. Free-form;
+	// NO in-code default (config-driven per the no-hardcoded-magic-values
+	// constraint). Must match the RFC-1123 label form so it is safe as a
+	// selector / metrics / path token; invalid values are rejected at config-load.
+	// Empty ⇒ the primary endpoint carries no class.
+	OmeIngressGatewayClass   string    `json:"omeIngressGatewayClass,omitempty"`
 	IngressDomain            string    `json:"ingressDomain,omitempty"`
 	IngressClassName         *string   `json:"ingressClassName,omitempty"`
 	AdditionalIngressDomains *[]string `json:"additionalIngressDomains,omitempty"`
@@ -75,6 +91,78 @@ type IngressConfig struct {
 	PathTemplate             string    `json:"pathTemplate,omitempty"`
 	DisableIngressCreation   bool      `json:"disableIngressCreation,omitempty"`
 	EnableGatewayAPI         bool      `json:"enableGatewayAPI,omitempty"`
+	ConsistentHashHeaders    []string  `json:"consistentHashHeaders,omitempty"`
+	// PerISVCSubdomain opts into a per-ISVC subdomain ingress scheme:
+	// each ISVC is reached at its own host (matching status.url, rendered
+	// from DomainTemplate) with a root path, instead of the default shared
+	// "<SharedHostPrefix>.<IngressDomain>" host plus a "/<namespace>/<service>/"
+	// path prefix. Default false preserves the shared-host scheme.
+	PerISVCSubdomain bool `json:"perISVCSubdomain,omitempty"`
+	// SharedHostPrefix is the subdomain label prepended to IngressDomain in the
+	// shared-host scheme (PerISVCSubdomain=false): "<SharedHostPrefix>.<IngressDomain>".
+	// There is intentionally NO in-code default — the value is supplied via the
+	// inferenceservice-config ConfigMap (set by the Helm chart / GitOps), so the
+	// host label is never a hardcoded magic string. Empty yields the bare
+	// IngressDomain (no prefix).
+	SharedHostPrefix string `json:"sharedHostPrefix,omitempty"`
+	// AdditionalIngressGateways attaches each generated HTTPRoute to extra
+	// gateways beyond the primary OmeIngressGateway — e.g. an external gateway
+	// alongside the internal one. Each entry contributes its own parentRef and a
+	// hostname rendered from its own IngressDomain. Empty preserves the
+	// single-gateway behavior.
+	AdditionalIngressGateways []IngressGatewaySpec `json:"additionalIngressGateways,omitempty"`
+	// DefaultRouteTimeoutSeconds is the cluster-default Gateway API request
+	// timeout (HTTPRouteRule.Timeouts.Request) applied to every generated route
+	// whose ISVC does not set a per-component spec.<component>.timeoutSeconds
+	// override. There is intentionally NO in-code default — the value is supplied
+	// via the inferenceservice-config ConfigMap (Helm chart / GitOps), so the
+	// timeout is never a hardcoded magic number. nil or non-positive means OME
+	// imposes no route timeout and the gateway's own default applies.
+	DefaultRouteTimeoutSeconds *int64 `json:"defaultRouteTimeoutSeconds,omitempty"`
+	// NamespaceIngressGateways maps an ISVC's namespace to the gateway(s) its
+	// generated HTTPRoutes attach to, overriding the cluster-default primary
+	// gateway (OmeIngressGateway/IngressDomain) and AdditionalIngressGateways for
+	// ISVCs in that namespace. Namespaces absent from the map fall back to the
+	// cluster defaults. This lets one OME controller serve per-namespace Gateways
+	// (each with its own TLS cert and DNS) while the route hostname is unchanged —
+	// it is still rendered from DomainTemplate, which already embeds the
+	// namespace ("<isvc>.<namespace>.<domain>").
+	// A per-ISVC "ome.io/ingress-gateway" (or "ome.io/ingress-additional-gateways")
+	// annotation still takes precedence over this namespace default.
+	NamespaceIngressGateways map[string]NamespaceIngressGateway `json:"namespaceIngressGateways,omitempty"`
+}
+
+// IngressGatewaySpec identifies one gateway an HTTPRoute attaches to, plus the
+// domain used to build that gateway's hostname for the route.
+type IngressGatewaySpec struct {
+	// OmeIngressGateway is the gateway parentRef in "namespace/name" form.
+	OmeIngressGateway string `json:"omeIngressGateway"`
+	// IngressDomain is the domain used to render this gateway's route hostname
+	// (same scheme as the primary: per-ISVC subdomain or shared-host prefix).
+	IngressDomain string `json:"ingressDomain"`
+	// Class labels this gateway's endpoints in status ("internal", "external",
+	// "exp", ...). Free-form; NO in-code default (config-driven per the
+	// no-hardcoded-magic-values constraint). Must match the RFC-1123 label form
+	// [a-z0-9]([-a-z0-9]*[a-z0-9])? so it is safe as a selector / metrics / path
+	// token; invalid values are rejected at config-load. Empty ⇒ the endpoint
+	// carries no class.
+	Class string `json:"class,omitempty"`
+}
+
+// NamespaceIngressGateway is the per-namespace gateway override applied to every
+// ISVC in a namespace (keyed by namespace in IngressConfig.NamespaceIngressGateways):
+// the primary gateway its HTTPRoutes attach to plus any additional gateways,
+// replacing the cluster defaults for that namespace.
+type NamespaceIngressGateway struct {
+	// Primary is the primary gateway (parentRef "namespace/name") and the domain
+	// used to render its route hostname for ISVCs in this namespace. When
+	// OmeIngressGateway is empty the cluster-default primary is kept.
+	Primary IngressGatewaySpec `json:"primary"`
+	// Additional attaches each generated HTTPRoute to extra gateways beyond the
+	// primary (e.g. an external gateway alongside the internal one), replacing the
+	// cluster-default AdditionalIngressGateways for this namespace. nil keeps the
+	// cluster default; an explicit empty list means "no additional gateways".
+	Additional []IngressGatewaySpec `json:"additional,omitempty"`
 }
 
 // +kubebuilder:object:generate=false
@@ -149,6 +237,13 @@ func NewIngressConfig(clientset kubernetes.Interface) (*IngressConfig, error) {
 				return nil, fmt.Errorf("invalid ingress config - ingressDomain is required if pathTemplate is given")
 			}
 		}
+
+		// An endpoint class is copied verbatim into status and
+		// used as a selector / metrics / path token, so reject a malformed one at
+		// config-load rather than emit an invalid status value later.
+		if err := validateIngressGatewayClasses(ingressConfig); err != nil {
+			return nil, err
+		}
 	}
 
 	if ingressConfig.DomainTemplate == "" {
@@ -163,7 +258,52 @@ func NewIngressConfig(clientset kubernetes.Interface) (*IngressConfig, error) {
 		ingressConfig.UrlScheme = DefaultUrlScheme
 	}
 
+	if len(ingressConfig.ConsistentHashHeaders) == 0 {
+		ingressConfig.ConsistentHashHeaders = DefaultConsistentHashHeaders
+	}
+
 	return ingressConfig, nil
+}
+
+// validateIngressGatewayClasses rejects any endpoint class that is not a valid
+// RFC-1123 DNS label. The class is copied verbatim onto status endpoints and is
+// meant to be safe as a selector key / metrics dimension / path segment,
+// so a malformed value is a config error, not something to
+// sanitize silently. Empty classes are allowed (endpoint carries no class).
+func validateIngressGatewayClasses(cfg *IngressConfig) error {
+	if err := validateIngressClass("omeIngressGatewayClass", cfg.OmeIngressGatewayClass); err != nil {
+		return err
+	}
+	for i := range cfg.AdditionalIngressGateways {
+		field := fmt.Sprintf("additionalIngressGateways[%d].class", i)
+		if err := validateIngressClass(field, cfg.AdditionalIngressGateways[i].Class); err != nil {
+			return err
+		}
+	}
+	for ns, ng := range cfg.NamespaceIngressGateways {
+		field := fmt.Sprintf("namespaceIngressGateways[%q].primary.class", ns)
+		if err := validateIngressClass(field, ng.Primary.Class); err != nil {
+			return err
+		}
+		for i := range ng.Additional {
+			field := fmt.Sprintf("namespaceIngressGateways[%q].additional[%d].class", ns, i)
+			if err := validateIngressClass(field, ng.Additional[i].Class); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateIngressClass(field, class string) error {
+	if class == "" {
+		return nil
+	}
+	if errs := validation.IsDNS1123Label(class); len(errs) > 0 {
+		return fmt.Errorf("invalid ingress config - %s %q must be an RFC-1123 label: %s",
+			field, class, strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 func getComponentConfig(key string, configMap *v1.ConfigMap, componentConfig interface{}) error {

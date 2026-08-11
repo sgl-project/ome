@@ -64,8 +64,8 @@ func TestDefaultStrategyFactory_CreateStrategyWithOptions(t *testing.T) {
 			expectedError:    false,
 		},
 		{
-			name:           "multinode deployment mode with kubernetes ingress",
-			deploymentMode: string(constants.MultiNode),
+			name:           "omenative deployment mode with kubernetes ingress",
+			deploymentMode: string(constants.OMENative),
 			opts: interfaces.ReconcilerOptions{
 				Client: createFakeClient(t),
 				Scheme: createScheme(t),
@@ -83,8 +83,8 @@ func TestDefaultStrategyFactory_CreateStrategyWithOptions(t *testing.T) {
 			expectedError:    false,
 		},
 		{
-			name:           "multinode deployment mode with gateway api",
-			deploymentMode: string(constants.MultiNode),
+			name:           "omenative deployment mode with gateway api",
+			deploymentMode: string(constants.OMENative),
 			opts: interfaces.ReconcilerOptions{
 				Client: createFakeClient(t),
 				Scheme: createScheme(t),
@@ -319,9 +319,7 @@ func TestDefaultStrategyFactory_NilOptions(t *testing.T) {
 					_, _ = factory.CreateStrategyWithOptions(string(constants.RawDeployment), tt.opts)
 				})
 			} else {
-				// Should not panic, though it might return an error
 				strategy, err := factory.CreateStrategyWithOptions(string(constants.RawDeployment), tt.opts)
-				// We don't assert error/success here as different nil values might be handled differently
 				_ = strategy
 				_ = err
 			}

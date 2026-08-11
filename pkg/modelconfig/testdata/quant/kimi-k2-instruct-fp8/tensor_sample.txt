@@ -1,4 +1,4 @@
-# First 50 tensor names from /Users/simolin/workspace/mslsrc/ome/pkg/modelconfig/testdata/quant/kimi-k2-instruct-fp8//model.safetensors.index.json
+# First 50 tensor names from model.safetensors.index.json
 # Total tensors in index: 139644
 # Format: tensor_name
 lm_head.weight

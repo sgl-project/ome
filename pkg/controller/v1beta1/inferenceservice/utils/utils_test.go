@@ -1594,7 +1594,7 @@ func TestDetermineEngineDeploymentMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DetermineEngineDeploymentMode(tt.engine)
+			result := DetermineEngineDeploymentMode(tt.engine, nil)
 			assert.Equal(t, tt.expectedMode, result)
 		})
 	}

@@ -488,9 +488,9 @@ func TestJoinWithTailOverlap(t *testing.T) {
 		},
 		{
 			name:      "Multiple directories",
-			directory: "/Users/simolin/mnt/models/intfloat/e5-mistral-7b-instruct",
+			directory: "/mnt/models/intfloat/e5-mistral-7b-instruct",
 			object:    "intfloat/e5-mistral-7b-instruct/lora/adapter_model.bin",
-			expected:  "/Users/simolin/mnt/models/intfloat/e5-mistral-7b-instruct/lora/adapter_model.bin",
+			expected:  "/mnt/models/intfloat/e5-mistral-7b-instruct/lora/adapter_model.bin",
 		},
 	}
 
