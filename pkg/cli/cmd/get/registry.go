@@ -143,10 +143,13 @@ func baseModelColumns(withScope bool) []column {
 	}
 	if withScope {
 		cols = append(cols, column{Name: "SCOPE", Extract: func(o runtime.Object) string {
-			if _, ok := o.(*v1beta1.ClusterBaseModel); ok {
+			switch o.(type) {
+			case *v1beta1.ClusterBaseModel:
 				return "Cluster"
+			case *v1beta1.BaseModel:
+				return "Namespaced"
 			}
-			return "Namespaced"
+			return "?"
 		}})
 	}
 	spec := func(o runtime.Object) *v1beta1.BaseModelSpec {
@@ -174,12 +177,39 @@ func baseModelColumns(withScope bool) []column {
 		return *p
 	}
 	cols = append(cols,
-		column{Name: "ARCH", Extract: func(o runtime.Object) string { return deref(spec(o).ModelArchitecture) }},
-		column{Name: "PARAMS", Extract: func(o runtime.Object) string { return deref(spec(o).ModelParameterSize) }},
-		column{Name: "FORMAT", Extract: func(o runtime.Object) string { return printers.OrDash(spec(o).ModelFormat.Name) }},
-		column{Name: "STATE", Extract: func(o runtime.Object) string { return printers.OrDash(string(status(o).State)) }},
+		column{Name: "ARCH", Extract: func(o runtime.Object) string {
+			s := spec(o)
+			if s == nil {
+				return "?"
+			}
+			return deref(s.ModelArchitecture)
+		}},
+		column{Name: "PARAMS", Extract: func(o runtime.Object) string {
+			s := spec(o)
+			if s == nil {
+				return "?"
+			}
+			return deref(s.ModelParameterSize)
+		}},
+		column{Name: "FORMAT", Extract: func(o runtime.Object) string {
+			s := spec(o)
+			if s == nil {
+				return "?"
+			}
+			return printers.OrDash(s.ModelFormat.Name)
+		}},
+		column{Name: "STATE", Extract: func(o runtime.Object) string {
+			s := status(o)
+			if s == nil {
+				return "?"
+			}
+			return printers.OrDash(string(s.State))
+		}},
 		column{Name: "AGE", Extract: func(o runtime.Object) string {
-			acc, _ := o.(metav1.Object)
+			acc, ok := o.(metav1.Object)
+			if !ok {
+				return "?"
+			}
 			return printers.Age(metav1.Time{Time: acc.GetCreationTimestamp().Time})
 		}},
 	)
@@ -305,25 +335,39 @@ func runtimeColumns(withScope bool) []column {
 	}
 	cols := []column{
 		{Name: "NAME", Extract: func(o runtime.Object) string {
-			acc, _ := o.(metav1.Object)
+			acc, ok := o.(metav1.Object)
+			if !ok {
+				return "?"
+			}
 			return acc.GetName()
 		}},
 	}
 	if withScope {
 		cols = append(cols, column{Name: "SCOPE", Extract: func(o runtime.Object) string {
-			if _, ok := o.(*v1beta1.ClusterServingRuntime); ok {
+			switch o.(type) {
+			case *v1beta1.ClusterServingRuntime:
 				return "Cluster"
+			case *v1beta1.ServingRuntime:
+				return "Namespaced"
 			}
-			return "Namespaced"
+			return "?"
 		}})
 	}
 	cols = append(cols,
 		column{Name: "DISABLED", Extract: func(o runtime.Object) string {
-			d := spec(o).Disabled
+			s := spec(o)
+			if s == nil {
+				return "?"
+			}
+			d := s.Disabled
 			return fmt.Sprintf("%t", d != nil && *d)
 		}},
 		column{Name: "FORMATS", Extract: func(o runtime.Object) string {
-			fmts := spec(o).SupportedModelFormats
+			s := spec(o)
+			if s == nil {
+				return "?"
+			}
+			fmts := s.SupportedModelFormats
 			names := make([]string, 0, len(fmts))
 			for _, sf := range fmts {
 				names = append(names, sf.Name)
@@ -334,7 +378,10 @@ func runtimeColumns(withScope bool) []column {
 			return printers.OrDash(strings.Join(names, ","))
 		}},
 		column{Name: "AGE", Extract: func(o runtime.Object) string {
-			acc, _ := o.(metav1.Object)
+			acc, ok := o.(metav1.Object)
+			if !ok {
+				return "?"
+			}
 			return printers.Age(metav1.Time{Time: acc.GetCreationTimestamp().Time})
 		}},
 	)
