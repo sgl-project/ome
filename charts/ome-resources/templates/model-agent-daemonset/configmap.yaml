@@ -1,3 +1,4 @@
+{{- if .Values.modelAgent.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,3 +8,4 @@ data:
   # Instance-type -> short-name map. Source of truth: values.yaml
   # modelAgent.instanceTypeMap (rendered via the ome.instanceTypeMap helper).
   instance-type-map: {{ include "ome.instanceTypeMap" . | quote }}
+{{- end }}
