@@ -108,7 +108,7 @@ func (o *explainOptions) Run(ctx context.Context, f factory.Factory) error {
 		})
 	}
 	for _, c := range candidates {
-		if matched[runtimeKey{c.name, c.isCluster}] {
+		if matched[runtimeKey(c)] {
 			continue
 		}
 		reason := "supports the model but has no supportedModelFormats[].autoSelect=true entry, so automatic selection skips it (pin it explicitly via spec.runtime.name instead)"
