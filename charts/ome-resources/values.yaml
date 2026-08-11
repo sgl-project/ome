@@ -91,9 +91,9 @@ ome:
     scalingOperator: "GreaterThanOrEqual"
 modelAgent:
   # Deploy the model-agent DaemonSet (node-local model download/cache).
-  # Disable for installs whose runtimes fetch models themselves and that
-  # run InferenceServices without a BaseModel reference.
-  enabled: true
+  # Required for BaseModel/ClusterBaseModel-backed model resolution.
+  # Installs whose runtimes fetch models themselves can leave this off.
+  enabled: false
   hostPath: /mnt/data/models
   priorityClassName: system-node-critical
   serviceAccountName: ome-model-agent
