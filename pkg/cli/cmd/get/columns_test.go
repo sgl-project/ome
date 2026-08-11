@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 
@@ -117,6 +118,80 @@ func TestModelAndRuntimeColumnsWrongType(t *testing.T) {
 			case domainTypedColumn[c.Name]:
 				assert.Equal(t, "?", got, "%s/%s", resource, c.Name)
 			}
+		}
+	}
+}
+
+func TestLongTailColumns(t *testing.T) {
+	mt := "LoRA"
+	base := "llama-3-3-70b"
+	cases := []struct {
+		resource string
+		obj      runtime.Object
+		want     map[string]string
+	}{
+		{"acceleratorclasses", &v1beta1.AcceleratorClass{
+			ObjectMeta: metav1.ObjectMeta{Name: "h100"},
+			Spec:       v1beta1.AcceleratorClassSpec{Vendor: "nvidia", Family: "hopper"},
+		}, map[string]string{"NAME": "h100", "VENDOR": "nvidia", "FAMILY": "hopper"}},
+		{"benchmarkjobs", &v1beta1.BenchmarkJob{
+			ObjectMeta: metav1.ObjectMeta{Name: "bj"},
+			Status:     v1beta1.BenchmarkJobStatus{State: "Running"},
+		}, map[string]string{"NAME": "bj", "STATE": "Running"}},
+		{"finetunedweights", &v1beta1.FineTunedWeight{
+			ObjectMeta: metav1.ObjectMeta{Name: "ftw"},
+			Spec: v1beta1.FineTunedWeightSpec{
+				ModelType:    &mt,
+				BaseModelRef: v1beta1.ObjectReference{Name: &base},
+			},
+		}, map[string]string{"NAME": "ftw", "TYPE": "LoRA", "BASEMODEL": "llama-3-3-70b"}},
+		{"inferencereplicas", &v1beta1.InferenceReplica{
+			ObjectMeta: metav1.ObjectMeta{Name: "rep"},
+			Spec: v1beta1.InferenceReplicaSpec{
+				Component: v1beta1.EngineComponent,
+				ParentRef: v1beta1.ParentReference{Name: "llama-70b"},
+			},
+			Status: v1beta1.InferenceReplicaStatus{Replicas: 3},
+		}, map[string]string{"NAME": "rep", "COMPONENT": "engine", "PARENT": "llama-70b", "REPLICAS": "3"}},
+		{"workloadclusters", &v1beta1.WorkloadCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "wc"},
+			Status: v1beta1.WorkloadClusterStatus{Conditions: []metav1.Condition{{
+				Type: "Ready", Status: metav1.ConditionTrue,
+			}}},
+		}, map[string]string{"NAME": "wc", "READY": "True"}},
+	}
+	for _, tc := range cases {
+		e, err := resolve(tc.resource)
+		require.NoError(t, err, tc.resource)
+		got := map[string]string{}
+		for _, c := range e.Columns {
+			got[c.Name] = c.Extract(tc.obj)
+		}
+		for k, v := range tc.want {
+			assert.Equal(t, v, got[k], "%s/%s", tc.resource, k)
+		}
+	}
+}
+
+// TestLongTailColumnsWrongType extends the nil-safety guarantee pinned by
+// TestModelAndRuntimeColumnsWrongType (see its doc comment) to the five Task
+// 2.3 entries. Unlike models/runtimes, none of these entries merge multiple
+// concrete kinds behind one column set -- each is a single domain type -- so
+// every column here (including NAME/AGE) guards on that entry's own type and
+// reports "?" for any other kind; no metav1.Object broad-guard exception
+// applies.
+func TestLongTailColumnsWrongType(t *testing.T) {
+	wrong := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "not-a-long-tail-resource"}}
+	for _, resource := range []string{
+		"acceleratorclasses", "benchmarkjobs", "finetunedweights",
+		"inferencereplicas", "workloadclusters",
+	} {
+		e, err := resolve(resource)
+		require.NoError(t, err, resource)
+		for _, c := range e.Columns {
+			var got string
+			assert.NotPanics(t, func() { got = c.Extract(wrong) }, "%s/%s", resource, c.Name)
+			assert.Equal(t, "?", got, "%s/%s", resource, c.Name)
 		}
 	}
 }

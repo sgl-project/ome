@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"knative.dev/pkg/apis"
@@ -64,6 +65,32 @@ func resolve(resource string) (*entry, error) {
 // runtime.Object.
 func nameCol[T runtime.Object](extract func(T) string) func(runtime.Object) string {
 	return func(o runtime.Object) string { return extract(o.(T)) }
+}
+
+// safeCol is nameCol's nil-safe sibling: a wrong-typed object returns "?"
+// instead of panicking through a failed type assertion. The Task 2.3
+// long-tail entries (acceleratorclasses, benchmarkjobs, finetunedweights,
+// inferencereplicas, workloadclusters) use this instead of nameCol because
+// TestLongTailColumnsWrongType requires every one of their columns to
+// survive an object of the wrong resource kind.
+func safeCol[T runtime.Object](extract func(T) string) func(runtime.Object) string {
+	return func(o runtime.Object) string {
+		t, ok := o.(T)
+		if !ok {
+			return "?"
+		}
+		return extract(t)
+	}
+}
+
+// derefOrDash dereferences a *string for column rendering, substituting "-"
+// for a nil pointer (mirrors baseModelColumns' local deref helper, promoted
+// to package scope since finetunedweights needs it for two separate fields).
+func derefOrDash(p *string) string {
+	if p == nil {
+		return "-"
+	}
+	return printers.OrDash(*p)
 }
 
 var isvcEntry = &entry{
@@ -491,6 +518,185 @@ var clusterServingRuntimesEntry = &entry{
 	},
 }
 
+var acceleratorClassesEntry = &entry{
+	Canonical:  "acceleratorclasses",
+	Aliases:    []string{"acceleratorclass", "ac"},
+	Namespaced: false,
+	Columns: []column{
+		{Name: "NAME", Extract: safeCol(func(a *v1beta1.AcceleratorClass) string { return a.Name })},
+		{Name: "VENDOR", Extract: safeCol(func(a *v1beta1.AcceleratorClass) string { return printers.OrDash(a.Spec.Vendor) })},
+		{Name: "FAMILY", Extract: safeCol(func(a *v1beta1.AcceleratorClass) string { return printers.OrDash(a.Spec.Family) })},
+		{Name: "AGE", Extract: safeCol(func(a *v1beta1.AcceleratorClass) string { return printers.Age(a.CreationTimestamp) })},
+	},
+	List: func(ctx context.Context, f factory.Factory, ns string, opts metav1.ListOptions) ([]runtime.Object, error) {
+		c, err := f.OMEClient()
+		if err != nil {
+			return nil, err
+		}
+		l, err := c.OmeV1beta1().AcceleratorClasses().List(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]runtime.Object, 0, len(l.Items))
+		for i := range l.Items {
+			out = append(out, &l.Items[i])
+		}
+		return out, nil
+	},
+	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
+		c, err := f.OMEClient()
+		if err != nil {
+			return nil, err
+		}
+		return c.OmeV1beta1().AcceleratorClasses().Get(ctx, name, metav1.GetOptions{})
+	},
+}
+
+var benchmarkJobsEntry = &entry{
+	Canonical:  "benchmarkjobs",
+	Aliases:    []string{"benchmarkjob", "bj"},
+	Namespaced: true,
+	Columns: []column{
+		{Name: "NAME", Extract: safeCol(func(b *v1beta1.BenchmarkJob) string { return b.Name })},
+		{Name: "STATE", Extract: safeCol(func(b *v1beta1.BenchmarkJob) string { return printers.OrDash(b.Status.State) })},
+		{Name: "AGE", Extract: safeCol(func(b *v1beta1.BenchmarkJob) string { return printers.Age(b.CreationTimestamp) })},
+	},
+	List: func(ctx context.Context, f factory.Factory, ns string, opts metav1.ListOptions) ([]runtime.Object, error) {
+		c, err := f.OMEClient()
+		if err != nil {
+			return nil, err
+		}
+		l, err := c.OmeV1beta1().BenchmarkJobs(ns).List(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]runtime.Object, 0, len(l.Items))
+		for i := range l.Items {
+			out = append(out, &l.Items[i])
+		}
+		return out, nil
+	},
+	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
+		c, err := f.OMEClient()
+		if err != nil {
+			return nil, err
+		}
+		return c.OmeV1beta1().BenchmarkJobs(ns).Get(ctx, name, metav1.GetOptions{})
+	},
+}
+
+// fineTunedWeightsEntry is cluster-scoped: FineTunedWeight carries
+// +genclient:nonNamespaced and +kubebuilder:resource:scope="Cluster" (see
+// pkg/apis/ome/v1beta1/model.go), so the generated FineTunedWeights() getter
+// takes no namespace argument -- unlike BenchmarkJobs/InferenceReplicas.
+var fineTunedWeightsEntry = &entry{
+	Canonical:  "finetunedweights",
+	Aliases:    []string{"finetunedweight", "ftw"},
+	Namespaced: false,
+	Columns: []column{
+		{Name: "NAME", Extract: safeCol(func(w *v1beta1.FineTunedWeight) string { return w.Name })},
+		{Name: "TYPE", Extract: safeCol(func(w *v1beta1.FineTunedWeight) string { return derefOrDash(w.Spec.ModelType) })},
+		{Name: "BASEMODEL", Extract: safeCol(func(w *v1beta1.FineTunedWeight) string { return derefOrDash(w.Spec.BaseModelRef.Name) })},
+		{Name: "AGE", Extract: safeCol(func(w *v1beta1.FineTunedWeight) string { return printers.Age(w.CreationTimestamp) })},
+	},
+	List: func(ctx context.Context, f factory.Factory, ns string, opts metav1.ListOptions) ([]runtime.Object, error) {
+		c, err := f.OMEClient()
+		if err != nil {
+			return nil, err
+		}
+		l, err := c.OmeV1beta1().FineTunedWeights().List(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]runtime.Object, 0, len(l.Items))
+		for i := range l.Items {
+			out = append(out, &l.Items[i])
+		}
+		return out, nil
+	},
+	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
+		c, err := f.OMEClient()
+		if err != nil {
+			return nil, err
+		}
+		return c.OmeV1beta1().FineTunedWeights().Get(ctx, name, metav1.GetOptions{})
+	},
+}
+
+var inferenceReplicasEntry = &entry{
+	Canonical:  "inferencereplicas",
+	Aliases:    []string{"inferencereplica", "ir"},
+	Namespaced: true,
+	Columns: []column{
+		{Name: "NAME", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return r.Name })},
+		{Name: "COMPONENT", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return printers.OrDash(string(r.Spec.Component)) })},
+		{Name: "PARENT", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return printers.OrDash(r.Spec.ParentRef.Name) })},
+		{Name: "REPLICAS", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return fmt.Sprintf("%d", r.Status.Replicas) })},
+		{Name: "AGE", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return printers.Age(r.CreationTimestamp) })},
+	},
+	List: func(ctx context.Context, f factory.Factory, ns string, opts metav1.ListOptions) ([]runtime.Object, error) {
+		c, err := f.OMEClient()
+		if err != nil {
+			return nil, err
+		}
+		l, err := c.OmeV1beta1().InferenceReplicas(ns).List(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]runtime.Object, 0, len(l.Items))
+		for i := range l.Items {
+			out = append(out, &l.Items[i])
+		}
+		return out, nil
+	},
+	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
+		c, err := f.OMEClient()
+		if err != nil {
+			return nil, err
+		}
+		return c.OmeV1beta1().InferenceReplicas(ns).Get(ctx, name, metav1.GetOptions{})
+	},
+}
+
+var workloadClustersEntry = &entry{
+	Canonical:  "workloadclusters",
+	Aliases:    []string{"workloadcluster", "wc"},
+	Namespaced: false,
+	Columns: []column{
+		{Name: "NAME", Extract: safeCol(func(w *v1beta1.WorkloadCluster) string { return w.Name })},
+		{Name: "READY", Extract: safeCol(func(w *v1beta1.WorkloadCluster) string {
+			c := meta.FindStatusCondition(w.Status.Conditions, v1beta1.WorkloadClusterReady)
+			if c == nil {
+				return "Unknown"
+			}
+			return string(c.Status)
+		})},
+		{Name: "AGE", Extract: safeCol(func(w *v1beta1.WorkloadCluster) string { return printers.Age(w.CreationTimestamp) })},
+	},
+	List: func(ctx context.Context, f factory.Factory, ns string, opts metav1.ListOptions) ([]runtime.Object, error) {
+		c, err := f.OMEClient()
+		if err != nil {
+			return nil, err
+		}
+		l, err := c.OmeV1beta1().WorkloadClusters().List(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]runtime.Object, 0, len(l.Items))
+		for i := range l.Items {
+			out = append(out, &l.Items[i])
+		}
+		return out, nil
+	},
+	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
+		c, err := f.OMEClient()
+		if err != nil {
+			return nil, err
+		}
+		return c.OmeV1beta1().WorkloadClusters().Get(ctx, name, metav1.GetOptions{})
+	},
+}
+
 // registry lists every resource `kubectl ome get` knows how to render. Adding
 // a resource means adding an entry here, never a new command.
 var registry = []*entry{
@@ -498,6 +704,6 @@ var registry = []*entry{
 	modelsEntry,
 	baseModelsEntry, clusterBaseModelsEntry,
 	runtimesEntry, servingRuntimesEntry, clusterServingRuntimesEntry,
-	// Task 2.3 appends: acceleratorClassesEntry, benchmarkJobsEntry,
-	// fineTunedWeightsEntry, inferenceReplicasEntry, workloadClustersEntry
+	acceleratorClassesEntry, benchmarkJobsEntry,
+	fineTunedWeightsEntry, inferenceReplicasEntry, workloadClustersEntry,
 }
