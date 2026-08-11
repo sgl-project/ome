@@ -1,0 +1,3 @@
+NAME            SCOPE        ARCH               PARAMS   FORMAT   STATE   AGE
+ns-model        Namespaced   LlamaForCausalLM   -        -        -       -
+cluster-model   Cluster      LlamaForCausalLM   -        -        -       -
