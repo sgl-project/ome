@@ -23,6 +23,11 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "sigs.k8s.io/*"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # KEDA tracks the k8s minor: its controller-runtime floor moves with
+      # each minor, so standalone bumps resolve an incompatible module graph.
+      # KEDA minors ride the k8s matrix migration instead.
+      - dependency-name: "github.com/kedacore/keda/v2"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   # Tools Go module
   - package-ecosystem: "gomod"
