@@ -129,7 +129,7 @@ func writeComponent(w io.Writer, label string, spec v1beta1.ComponentStatusSpec,
 		}
 		podTable.Rows = append(podTable.Rows, []string{
 			"    " + p.Name, string(p.Status.Phase),
-			fmt.Sprintf("%d/%d", ready, len(p.Status.ContainerStatuses)),
+			fmt.Sprintf("%d/%d", ready, len(p.Spec.Containers)),
 			fmt.Sprintf("%d", restarts), printers.OrDash(p.Spec.NodeName),
 		})
 	}
@@ -142,7 +142,7 @@ func writeComponent(w io.Writer, label string, spec v1beta1.ComponentStatusSpec,
 // dropped from the report.
 func writeOptionalSection(w io.Writer, name string, present bool) {
 	if present {
-		fmt.Fprintf(w, "  %s: present (see -o yaml for detail)\n", name)
+		fmt.Fprintf(w, "  %s: present (inspect with kubectl get inferenceservice -o yaml)\n", name)
 	}
 }
 
