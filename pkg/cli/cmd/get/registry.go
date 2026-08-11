@@ -397,7 +397,12 @@ func runtimeColumns(withScope bool) []column {
 			fmts := s.SupportedModelFormats
 			names := make([]string, 0, len(fmts))
 			for _, sf := range fmts {
-				names = append(names, sf.Name)
+				switch {
+				case sf.Name != "":
+					names = append(names, sf.Name)
+				case sf.ModelFormat != nil && sf.ModelFormat.Name != "":
+					names = append(names, sf.ModelFormat.Name)
+				}
 			}
 			if len(names) > 3 {
 				return strings.Join(names[:3], ",") + fmt.Sprintf(",+%d", len(names)-3)

@@ -195,3 +195,97 @@ func TestLongTailColumnsWrongType(t *testing.T) {
 		}
 	}
 }
+
+// TestRuntimeFormatsColumnFallback pins a fix for the FORMATS column rendering "-"
+// on clusters running older OME operators that populate the deprecated flat
+// .name field instead of the nested .modelFormat.name. The column now falls back
+// to .modelFormat.name when the flat field is unset, maintaining version-skew
+// tolerance (OEP-0011).
+func TestRuntimeFormatsColumnFallback(t *testing.T) {
+	e, err := resolve("runtimes")
+	require.NoError(t, err)
+
+	cases := []struct {
+		name     string
+		runtime  runtime.Object
+		expected string
+	}{
+		{
+			name: "nested modelFormat.name only (old operator v1.2.1)",
+			runtime: &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{Name: "old-runtime"},
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							Name:        "", // deprecated field empty
+							ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"},
+						},
+					},
+				},
+			},
+			expected: "safetensors",
+		},
+		{
+			name: "mixed: flat name and nested modelFormat.name",
+			runtime: &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{Name: "mixed-runtime"},
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							Name:        "onnx", // new field
+							ModelFormat: &v1beta1.ModelFormat{Name: "onnx"},
+						},
+						{
+							Name:        "", // deprecated field empty
+							ModelFormat: &v1beta1.ModelFormat{Name: "safetensors"},
+						},
+					},
+				},
+			},
+			expected: "onnx,safetensors",
+		},
+		{
+			name: "both empty (neither flat nor nested)",
+			runtime: &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{Name: "empty-runtime"},
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							Name:        "",
+							ModelFormat: &v1beta1.ModelFormat{Name: ""},
+						},
+					},
+				},
+			},
+			expected: "-",
+		},
+		{
+			name: "nil ModelFormat with empty Name",
+			runtime: &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{Name: "nil-modelformat"},
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							Name:        "",
+							ModelFormat: nil,
+						},
+					},
+				},
+			},
+			expected: "-",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ""
+			for _, c := range e.Columns {
+				if c.Name == "FORMATS" {
+					got = c.Extract(tc.runtime)
+					break
+				}
+			}
+			assert.Equal(t, tc.expected, got)
+		})
+	}
+}
