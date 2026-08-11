@@ -29,10 +29,40 @@ ome:
         gatewayService: istio-ingressgateway.istio-system.svc.cluster.local
         className: istio
       omeIngressGateway: ""
+      # Class label for the primary gateway's endpoints in InferenceService
+      # status ("internal", "external", ...). Free-form; the OME binary has NO
+      # built-in default. Must be an RFC-1123 label (invalid values are rejected
+      # at config-load). Empty => the primary endpoint carries no class.
+      omeIngressGatewayClass: ""
       additionalIngressDomains: null
       pathTemplate: ""
       disableIngressCreation: true
       enableGatewayAPI: false
+      # Opt-in: serve each ISVC on its own subdomain (matching status.url)
+      # with a root path instead of the shared <prefix>.<domain> host + path prefix.
+      perISVCSubdomain: false
+      # Shared-host scheme (perISVCSubdomain=false) host label:
+      # "<sharedHostPrefix>.<domain>". The OME binary has NO built-in default —
+      # this chart value is the source of truth. Empty string => bare <domain>
+      # (no prefix).
+      sharedHostPrefix: ""
+      # Attach each generated HTTPRoute to extra gateways beyond the primary one
+      # (e.g. an external gateway alongside the internal). Each entry adds a
+      # parentRef + a hostname rendered from its own domain. Empty => single gateway.
+      # Example:
+      #   additionalIngressGateways:
+      #     - omeIngressGateway: "envoy-gateway-system/external-gateway"
+      #       ingressDomain: "external.example.com"
+      #       class: "external"
+      additionalIngressGateways: []
+      # Per-namespace gateway overrides: map an ISVC namespace to the gateway(s)
+      # its routes attach to, replacing the cluster-default primary/additional
+      # gateways for that namespace. Empty => cluster defaults everywhere.
+      namespaceIngressGateways: {}
+      # Cluster-default Gateway API request timeout (seconds) for generated
+      # routes; unset => no route timeout is imposed and the gateway's own
+      # default applies.
+      # defaultRouteTimeoutSeconds: 60
     nodeSelector: {}
     tolerations: []
     topologySpreadConstraints: []

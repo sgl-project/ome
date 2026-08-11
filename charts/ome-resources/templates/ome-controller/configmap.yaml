@@ -11,6 +11,7 @@ data:
         "ingressGateway" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.gateway }}",
         "ingressService" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.gatewayService }}",
         "omeIngressGateway" : "{{ .Values.ome.controller.ingressGateway.omeIngressGateway | default "" }}",
+        "omeIngressGatewayClass" : "{{ .Values.ome.controller.ingressGateway.omeIngressGatewayClass | default "" }}",
         "ingressDomain"  : "{{ .Values.ome.controller.ingressGateway.domain }}",
         "ingressClassName" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.className }}",
         "additionalIngressDomains" : {{ .Values.ome.controller.ingressGateway.additionalIngressDomains | default "null" }},
@@ -19,7 +20,14 @@ data:
         "disableIstioVirtualHost": {{ .Values.ome.controller.ingressGateway.disableIstioVirtualHost }},
         "pathTemplate": "{{ .Values.ome.controller.ingressGateway.pathTemplate | default "" }}",
         "disableIngressCreation": {{ .Values.ome.controller.ingressGateway.disableIngressCreation | default false }},
-        "enableGatewayAPI": {{ .Values.ome.controller.ingressGateway.enableGatewayAPI | default false }}
+        "enableGatewayAPI": {{ .Values.ome.controller.ingressGateway.enableGatewayAPI | default false }},
+        "perISVCSubdomain": {{ .Values.ome.controller.ingressGateway.perISVCSubdomain | default false }},
+        "sharedHostPrefix": "{{ .Values.ome.controller.ingressGateway.sharedHostPrefix | default "" }}",
+        {{- if not (kindIs "invalid" .Values.ome.controller.ingressGateway.defaultRouteTimeoutSeconds) }}
+        "defaultRouteTimeoutSeconds": {{ .Values.ome.controller.ingressGateway.defaultRouteTimeoutSeconds }},
+        {{- end }}
+        "additionalIngressGateways": {{ .Values.ome.controller.ingressGateway.additionalIngressGateways | default list | toJson }},
+        "namespaceIngressGateways": {{ .Values.ome.controller.ingressGateway.namespaceIngressGateways | default dict | toJson }}
     }
   deploy: |-
     {

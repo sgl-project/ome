@@ -91,7 +91,7 @@ func (r *IngressReconciler) ReconcileWithDeploymentMode(ctx context.Context, isv
 		return fmt.Errorf("failed to get ingress strategy for deployment mode %s: %w", deploymentMode, err)
 	}
 
-	mainLog.Info("Using ingress strategy",
+	mainLog.V(1).Info("Using ingress strategy",
 		"strategy", strategy.GetName(),
 		"isvc", isvc.Name)
 
@@ -113,7 +113,7 @@ func (r *IngressReconciler) getDeploymentMode(isvc *v1beta1.InferenceService, en
 	entrypointComponent := isvcutils.DetermineEntrypointComponent(isvc)
 
 	// Determine deployment modes for all components
-	engineMode, decoderMode, routerMode, err := isvcutils.DetermineDeploymentModes(engine, decoder, router, nil)
+	engineMode, decoderMode, routerMode, err := isvcutils.DetermineDeploymentModes(engine, decoder, router, nil, isvc.Spec.DeploymentMode)
 	if err != nil {
 		mainLog.Error(err, "Failed to determine deployment modes, falling back to RawDeployment", "isvc", isvc.Name)
 		return constants.RawDeployment

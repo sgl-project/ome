@@ -1,4 +1,4 @@
-# First 50 tensor names from /Users/simolin/workspace/mslsrc/ome/pkg/modelconfig/testdata/quant/nvidia-llama-3-1-8b-nvfp4//model.safetensors.index.json
+# First 50 tensor names from model.safetensors.index.json
 # Total tensors in index: 1027
 # Format: tensor_name
 lm_head.weight

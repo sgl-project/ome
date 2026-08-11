@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -85,22 +86,11 @@ func RemovePodAnnotations(metadata *metav1.ObjectMeta, annotationsToRemove []str
 // ResolveIngressConfig creates an effective ingress configuration by merging
 // global defaults from configMap with per-service annotation overrides
 func ResolveIngressConfig(baseConfig *controllerconfig.IngressConfig, annotations map[string]string) *controllerconfig.IngressConfig {
-	// Start with a copy of the base config to avoid modifying the original
-	resolved := &controllerconfig.IngressConfig{
-		IngressGateway:     baseConfig.IngressGateway,     //nolint:staticcheck // deprecated but deliberately copied so old controller images keep starting against newer config maps
-		IngressServiceName: baseConfig.IngressServiceName, //nolint:staticcheck // same back-compat guarantee as IngressGateway
-
-		OmeIngressGateway:        baseConfig.OmeIngressGateway,
-		IngressDomain:            baseConfig.IngressDomain,
-		IngressClassName:         baseConfig.IngressClassName,
-		AdditionalIngressDomains: baseConfig.AdditionalIngressDomains,
-		DomainTemplate:           baseConfig.DomainTemplate,
-		UrlScheme:                baseConfig.UrlScheme,
-		DisableIstioVirtualHost:  baseConfig.DisableIstioVirtualHost,
-		PathTemplate:             baseConfig.PathTemplate,
-		DisableIngressCreation:   baseConfig.DisableIngressCreation,
-		EnableGatewayAPI:         baseConfig.EnableGatewayAPI,
-	}
+	// Copy all fields of the base config so the effective config can never
+	// silently drop a newly added one; the overrides below replace fields
+	// rather than mutate the original's shared slices/pointers.
+	resolvedCopy := *baseConfig
+	resolved := &resolvedCopy
 
 	// Override with annotation values if present
 	if domainTemplate, exists := annotations[constants.IngressDomainTemplate]; exists && domainTemplate != "" {
@@ -129,12 +119,38 @@ func ResolveIngressConfig(baseConfig *controllerconfig.IngressConfig, annotation
 	}
 
 	// Boolean overrides
+	if disableCreation, exists := annotations[constants.IngressDisableCreation]; exists {
+		resolved.DisableIngressCreation = disableCreation == "true"
+	}
+
 	if disableVirtualHost, exists := annotations[constants.IngressDisableIstioVirtualHost]; exists {
 		resolved.DisableIstioVirtualHost = disableVirtualHost == "true"
 	}
 
-	if disableCreation, exists := annotations[constants.IngressDisableCreation]; exists {
-		resolved.DisableIngressCreation = disableCreation == "true"
+	// Gateway / host-scheme overrides — let a single ISVC target a different
+	// gateway or host scheme than the cluster default (e.g. expose just this
+	// ISVC on an external gateway, or use a per-ISVC subdomain).
+	if gateway, exists := annotations[constants.IngressGatewayOverride]; exists && gateway != "" {
+		resolved.OmeIngressGateway = gateway
+	}
+
+	if perISVC, exists := annotations[constants.IngressPerISVCSubdomain]; exists {
+		resolved.PerISVCSubdomain = perISVC == "true"
+	}
+
+	// SharedHostPrefix overrides on bare presence so an explicit empty value can
+	// mean "no prefix" (bare domain) for this ISVC.
+	if prefix, exists := annotations[constants.IngressSharedHostPrefix]; exists {
+		resolved.SharedHostPrefix = prefix
+	}
+
+	// AdditionalIngressGateways is a JSON array of {omeIngressGateway, ingressDomain}.
+	// A malformed value is ignored (keeps the base) — the webhook validates format.
+	if additionalGateways, exists := annotations[constants.IngressAdditionalGateways]; exists && additionalGateways != "" {
+		var gateways []controllerconfig.IngressGatewaySpec
+		if err := json.Unmarshal([]byte(additionalGateways), &gateways); err == nil {
+			resolved.AdditionalIngressGateways = gateways
+		}
 	}
 
 	return resolved

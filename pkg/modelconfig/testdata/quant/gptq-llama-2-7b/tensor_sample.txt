@@ -1,4 +1,4 @@
-# First 50 tensor entries from GPTQ model.safetensors header
+# First 50 tensor names from model.safetensors.index.json
 # Total tensors: 1219
 # Format: tensor_name dtype shape
 lm_head.weight F16 [32000, 4096]
