@@ -43,6 +43,8 @@ import (
 	v1beta1benchmarkjobcontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/benchmark"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	v1beta1isvccontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/traffic"
+	trafficfactory "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/traffic/factory"
 	v1beta1runtimerevisioncontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/runtimerevision"
 	"sigs.k8s.io/ome/pkg/runtimeselector"
 	"sigs.k8s.io/ome/pkg/utils"
@@ -256,16 +258,31 @@ func main() {
 	}
 
 	// Setup Event Broadcaster
+	// Select the active traffic translator based on
+	// installed backend-policy CRDs (Envoy Gateway BackendTrafficPolicy,
+	// Istio DestinationRule, else Noop). The selection is process-
+	// level — the translator stays stable for the controller's
+	// lifetime — so we build it once at startup.
+	setupLog.Info("Selecting traffic translator")
+	trafficTranslator, err := trafficfactory.New(cfg)
+	if err != nil {
+		setupLog.Error(err, "Failed to select traffic translator")
+		os.Exit(1)
+	}
+	setupLog.Info("Selected traffic translator", "translator", trafficTranslator.Name())
+	trafficReconciler := traffic.NewReconciler(mgr.GetClient(), mgr.GetScheme(), trafficTranslator)
+
 	setupLog.Info("Configuring event broadcaster")
 	eventBroadcaster := record.NewBroadcaster()
 	setupLog.Info("Setting up InferenceService controller")
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
 	if err = (&v1beta1isvccontroller.InferenceServiceReconciler{
-		Client:    mgr.GetClient(),
-		Clientset: clientSet,
-		Log:       ctrl.Log.WithName("InferenceService"),
-		Scheme:    mgr.GetScheme(),
-		Recorder:  eventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+		Client:            mgr.GetClient(),
+		Clientset:         clientSet,
+		Log:               ctrl.Log.WithName("InferenceService"),
+		Scheme:            mgr.GetScheme(),
+		Recorder:          eventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+		TrafficReconciler: trafficReconciler,
 	}).SetupWithManager(mgr, deployConfig, ingressConfig); err != nil {
 		setupLog.Error(err, "Failed to create InferenceService controller")
 		os.Exit(1)

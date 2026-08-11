@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/external_service"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
 	multimodelconfig "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/traffic"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/status"
 	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"sigs.k8s.io/ome/pkg/runtimeselector"
@@ -117,6 +118,11 @@ type InferenceServiceReconciler struct {
 	StatusManager            *status.StatusReconciler
 	RuntimeSelector          runtimeselector.Selector
 	AcceleratorClassSelector acceleratorclassselector.Selector
+	// TrafficReconciler is the backend-policy reconciler.
+	// Built from the active translator at controller startup; the
+	// active translator is selected by traffic/factory.New based on
+	// installed Gateway-implementation CRDs.
+	TrafficReconciler *traffic.Reconciler
 }
 
 func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -482,6 +488,30 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	r.Log.Info("Reconciling external service for inference service", "isvc", isvc.Name)
 	if err := externalServiceReconciler.Reconcile(ctx, isvc); err != nil {
 		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile external service")
+	}
+
+	// Traffic management reconciler. Skipped when the InferenceService
+	// declares no traffic intent (spec.traffic or ome.io/* annotation).
+	// The reconciler invokes the active translator (chosen at startup
+	// by the factory), applies the emitted backend policy resource,
+	// and returns the TrafficStatus to write back. A nil reconciler
+	// means the controller was set up without traffic management
+	// (legitimate for tests / minimal configurations).
+	if r.TrafficReconciler != nil {
+		targetRoutes := traffic.ComputeTargetHTTPRoutes(isvc, mergedDecoder != nil, mergedRouter != nil)
+		trafficStatus, err := r.TrafficReconciler.Reconcile(ctx, isvc, targetRoutes)
+		if err != nil {
+			r.Log.Error(err, "Failed to reconcile traffic policy",
+				"namespace", isvc.Namespace, "inferenceService", isvc.Name,
+				"translator", r.TrafficReconciler.TranslatorName())
+			r.Recorder.Event(isvc, v1.EventTypeWarning, "TrafficReconcileError", err.Error())
+			// Surface the status even on error so operators see the
+			// TranslationFailed reason without waiting for the next
+			// successful reconcile.
+			isvc.Status.Traffic = trafficStatus
+			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile traffic policy")
+		}
+		isvc.Status.Traffic = trafficStatus
 	}
 
 	// Set Status.Address for external service and add ingress disable annotation when ingress is disabled
