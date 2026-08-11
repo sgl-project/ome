@@ -293,6 +293,9 @@ jobs:
             exit 1
           }
 
+      - name: Vendor optional CRDs
+        run: make dep-crds
+
   summary:
     name: PR Validation Summary
     runs-on: ubuntu-latest
