@@ -10,10 +10,10 @@ Conditions:
 Components:
   engine   revision -
     POD                    PHASE     READY   RESTARTS   NODE
-    orphan-pods-engine-1   Running   0/0     0          -
+    orphan-pods-engine-1   Running   1/1     0          -
   (unlabeled)   revision -
     POD                     PHASE     READY   RESTARTS   NODE
-    orphan-pods-stray-7f8   Running   0/0     0          -
+    orphan-pods-stray-7f8   Running   1/1     0          -
 
 Model Status:
   Transition: -
