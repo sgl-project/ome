@@ -2,16 +2,19 @@ package servingruntime
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/onsi/gomega"
 	"google.golang.org/protobuf/proto"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
@@ -2198,4 +2201,76 @@ func TestValidateAcceleratorClasses(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestValidator_SpecOnlyChecksRunWithNoExistingRuntimes verifies that
+// the spec-only model-format priority check is enforced even when no
+// other runtime exists (the check used to live inside the loop over
+// existing runtimes, so the first runtime admitted escaped it).
+func TestValidator_SpecOnlyChecksRunWithNoExistingRuntimes(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1beta1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add scheme: %v", err)
+	}
+	decoder := admission.NewDecoder(scheme)
+
+	// Same auto-selected format name at two different priorities —
+	// invalid per validateModelFormatPrioritySame.
+	spec := v1beta1.ServingRuntimeSpec{
+		SupportedModelFormats: []v1beta1.SupportedModelFormat{
+			{Name: "safetensors", AutoSelect: proto.Bool(true), Priority: proto.Int32(1)},
+			{Name: "safetensors", AutoSelect: proto.Bool(true), Priority: proto.Int32(2)},
+		},
+		ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+			Containers: []corev1.Container{{Name: "ome-container"}},
+		},
+	}
+
+	t.Run("clusterservingruntime", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		csr := &v1beta1.ClusterServingRuntime{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "ome.io/v1beta1", Kind: "ClusterServingRuntime"},
+			ObjectMeta: metav1.ObjectMeta{Name: "rt-solo"},
+			Spec:       spec,
+		}
+		raw, err := json.Marshal(csr)
+		g.Expect(err).To(gomega.BeNil())
+
+		validator := &ClusterServingRuntimeValidator{
+			Client:  fake.NewClientBuilder().WithScheme(scheme).Build(),
+			Decoder: decoder,
+		}
+		resp := validator.Handle(context.Background(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: raw},
+		}})
+
+		g.Expect(resp.Allowed).To(gomega.BeFalse(),
+			"conflicting per-format priorities must be rejected even with no existing CSRs")
+		g.Expect(resp.Result.Message).To(gomega.ContainSubstring("safetensors"))
+	})
+
+	t.Run("servingruntime", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		sr := &v1beta1.ServingRuntime{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "ome.io/v1beta1", Kind: "ServingRuntime"},
+			ObjectMeta: metav1.ObjectMeta{Name: "rt-solo", Namespace: "test"},
+			Spec:       spec,
+		}
+		raw, err := json.Marshal(sr)
+		g.Expect(err).To(gomega.BeNil())
+
+		validator := &ServingRuntimeValidator{
+			Client:  fake.NewClientBuilder().WithScheme(scheme).Build(),
+			Decoder: decoder,
+		}
+		resp := validator.Handle(context.Background(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: raw},
+		}})
+
+		g.Expect(resp.Allowed).To(gomega.BeFalse(),
+			"conflicting per-format priorities must be rejected even with no existing SRs in the namespace")
+		g.Expect(resp.Result.Message).To(gomega.ContainSubstring("safetensors"))
+	})
 }

@@ -44,7 +44,7 @@ func (mutator *Mutator) Handle(ctx context.Context, req admission.Request) admis
 
 	log.Info("mutating pod", "name", podName)
 
-	configMap, err := mutator.Clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(),
+	configMap, err := mutator.Clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(ctx,
 		constants.InferenceServiceConfigMapName, metav1.GetOptions{})
 	if err != nil {
 		log.Error(err, "Failed to find config map", "name", constants.InferenceServiceConfigMapName)

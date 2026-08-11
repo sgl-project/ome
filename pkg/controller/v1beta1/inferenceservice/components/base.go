@@ -434,11 +434,18 @@ func ProcessBaseAnnotations(b *BaseComponentFields, isvc *v1beta1.InferenceServi
 
 		// Add fine-tuned weight ft strategy
 		fineTunedWeightFTStrategy, err := isvcutils.GetValueFromRawExtension(b.FineTunedWeights[0].Spec.HyperParameters, constants.StrategyConfigKey)
-		if err != nil || fineTunedWeightFTStrategy == nil {
+		if err != nil {
 			b.Log.Error(err, "Error getting hyper-parameter strategy from FineTunedWeight", "FineTunedWeight", b.FineTunedWeights[0].Name, "namespace", isvc.Namespace)
 			return nil, err
 		}
-		annotations[constants.FineTunedWeightFTStrategyKey] = fineTunedWeightFTStrategy.(string)
+		if fineTunedWeightFTStrategy == nil {
+			return nil, fmt.Errorf("hyper-parameter %q not set on FineTunedWeight %s", constants.StrategyConfigKey, b.FineTunedWeights[0].Name)
+		}
+		strategy, ok := fineTunedWeightFTStrategy.(string)
+		if !ok {
+			return nil, fmt.Errorf("hyper-parameter %q on FineTunedWeight %s must be a string, got %T", constants.StrategyConfigKey, b.FineTunedWeights[0].Name, fineTunedWeightFTStrategy)
+		}
+		annotations[constants.FineTunedWeightFTStrategyKey] = strategy
 	}
 
 	if b.FineTunedServingWithMergedWeights {
@@ -523,7 +530,11 @@ func ProcessBaseLabels(b *BaseComponentFields, isvc *v1beta1.InferenceService, c
 
 		fineTunedWeightFTStrategy := ""
 		if ftStrategyParameter != nil {
-			fineTunedWeightFTStrategy = ftStrategyParameter.(string)
+			s, ok := ftStrategyParameter.(string)
+			if !ok {
+				return nil, fmt.Errorf("hyper-parameter %q on FineTunedWeight %s must be a string, got %T", constants.StrategyConfigKey, b.FineTunedWeights[0].Name, ftStrategyParameter)
+			}
+			fineTunedWeightFTStrategy = s
 		}
 		labels[constants.FineTunedWeightFTStrategyLabelKey] = fineTunedWeightFTStrategy
 

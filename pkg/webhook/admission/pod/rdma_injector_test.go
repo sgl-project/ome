@@ -827,3 +827,66 @@ func getExpectedEnvVars() []v1.EnvVar {
 	}
 	return envVars
 }
+
+// TestRDMAInjector_injectContainerConfig_NilProfileSecurityContext verifies
+// that a profile without a securityContext does not panic or alter the
+// container's existing security context.
+func TestRDMAInjector_injectContainerConfig_NilProfileSecurityContext(t *testing.T) {
+	injector := NewRDMAInjector()
+	profile := RDMAProfile{EnvVars: map[string]string{"NCCL_DEBUG": "INFO"}}
+
+	tests := []struct {
+		name            string
+		securityContext *v1.SecurityContext
+	}{
+		{name: "container_without_security_context", securityContext: nil},
+		{name: "container_with_nil_capabilities", securityContext: &v1.SecurityContext{}},
+		{
+			name: "container_with_capabilities",
+			securityContext: &v1.SecurityContext{
+				Capabilities: &v1.Capabilities{Add: []v1.Capability{"IPC_LOCK"}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			container := &v1.Container{
+				Name:            "ome-container",
+				SecurityContext: tt.securityContext.DeepCopy(),
+			}
+			assert.NotPanics(t, func() {
+				injector.injectContainerConfig(container, profile)
+			})
+			assert.Equal(t, tt.securityContext, container.SecurityContext,
+				"a profile without a securityContext must not change the container's")
+		})
+	}
+}
+
+// TestRDMAInjector_injectContainerConfig_EnvDedup verifies that env vars
+// already present on the container win over profile values and that
+// re-running the injector (webhook reinvocation) does not stack duplicates.
+func TestRDMAInjector_injectContainerConfig_EnvDedup(t *testing.T) {
+	injector := NewRDMAInjector()
+	profile := RDMAProfiles["oci-roce"]
+
+	container := &v1.Container{
+		Name: "ome-container",
+		Env:  []v1.EnvVar{{Name: "NCCL_DEBUG", Value: "WARN"}},
+	}
+
+	injector.injectContainerConfig(container, profile)
+	injector.injectContainerConfig(container, profile)
+
+	assert.Len(t, container.Env, len(profile.EnvVars),
+		"each env name must appear exactly once after repeated injection")
+	count := 0
+	for _, env := range container.Env {
+		if env.Name == "NCCL_DEBUG" {
+			count++
+			assert.Equal(t, "WARN", env.Value, "pre-existing env value must be preserved")
+		}
+	}
+	assert.Equal(t, 1, count, "NCCL_DEBUG must not be duplicated")
+}

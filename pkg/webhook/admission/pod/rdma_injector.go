@@ -173,8 +173,17 @@ func (ri *RDMAInjector) injectContainerConfig(container *v1.Container, profile R
 	// Sort keys for stable ordering
 	sort.Strings(keys)
 
-	// Add environment variables in sorted order
+	// Add environment variables in sorted order. Existing env vars are
+	// authoritative: skip profile entries already present so operator
+	// overrides survive and webhook reinvocation doesn't stack duplicates.
+	existingEnv := make(map[string]struct{}, len(container.Env))
+	for _, env := range container.Env {
+		existingEnv[env.Name] = struct{}{}
+	}
 	for _, name := range keys {
+		if _, ok := existingEnv[name]; ok {
+			continue
+		}
 		container.Env = append(container.Env, v1.EnvVar{
 			Name:  name,
 			Value: profile.EnvVars[name],
@@ -186,6 +195,11 @@ func (ri *RDMAInjector) injectContainerConfig(container *v1.Container, profile R
 		if !ri.volumeMountExists(container, mount.Name) {
 			container.VolumeMounts = append(container.VolumeMounts, mount)
 		}
+	}
+
+	// Profiles without a securityContext leave the container's untouched.
+	if profile.SecurityContext == nil {
+		return
 	}
 
 	// Set security context if not already set
