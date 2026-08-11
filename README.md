@@ -1,6 +1,5 @@
 # OME (Open Model Engine) — Kubernetes Operator for LLM Serving
 
-[![Go Report](https://goreportcard.com/badge/sigs.k8s.io/ome)](https://goreportcard.com/report/sigs.k8s.io/ome)
 [![codecov](https://codecov.io/gh/ome-projects/ome/graph/badge.svg)](https://codecov.io/gh/ome-projects/ome)
 [![Latest Release](https://img.shields.io/github/v/release/ome-projects/ome?include_prereleases)](https://github.com/ome-projects/ome/releases/latest)
 [![API Reference](https://img.shields.io/badge/API-v1beta1-blue)](https://ome-projects.github.io/ome/docs/reference/ome.v1beta1/)
@@ -20,15 +19,15 @@ Read the [documentation](https://ome-projects.github.io/ome/docs/) to learn more
 
 ## Features Overview
 
-- **Model Management:** Models are first-class citizen custom resources in OME. Sophisticated model parsing extracts architecture, parameter count, and capabilities directly from model files. Supports distributed storage with automated repair, double encryption, namespace scoping, and multiple formats (SafeTensors, PyTorch, TensorRT, ONNX). See the [supported models reference](config/models/SUPPORTED_MODELS.md) for a comprehensive list of pre-configured models including Llama, Qwen, DeepSeek, Gemma, Phi, and 80+ other model families.
+- **Model Management:** Models are first-class citizen custom resources in OME. Sophisticated model parsing extracts architecture, parameter count, and capabilities directly from model files. Supports distributed storage with automated repair, double encryption, namespace scoping, and multiple formats (SafeTensors, PyTorch, TensorRT, ONNX). See the [supported models reference](config/models/SUPPORTED_MODELS.md) for the comprehensive catalog of 200+ pre-configured models, including the Llama, Qwen, DeepSeek, Gemma, and Phi families.
 
 - **Intelligent Runtime Selection:** Automatic matching of models to optimal runtime configurations through weighted scoring based on architecture, format, quantization, parameter size, and framework compatibility.
 
-- **Optimized Deployments:** Supports multiple deployment patterns including prefill-decode disaggregation, multi-node inference, and traditional Kubernetes deployments with advanced scaling controls.
+- **Optimized Deployments:** Supports multiple deployment patterns including prefill-decode disaggregation, multi-node inference, and traditional Kubernetes deployments, with canary and blue-green rollout strategies and advanced scaling controls.
 
 - **Resource Optimization:** Specialized GPU bin-packing scheduling with dynamic re-optimization to maximize cluster efficiency while ensuring high availability.
 
-- **Runtime Integrations:** First-class support for [**SGLang**](https://github.com/sgl-project/sglang) - the most advanced inference engine with cache-aware load balancing, multi-node deployment, prefill-decode disaggregated serving, multi-LoRA adapter serving, and much more. Also supports [**vLLM**](https://github.com/vllm-project/vllm) for high-throughput inference and Triton for general model inference.
+- **Runtime Integrations:** First-class support for [**SGLang**](https://github.com/sgl-project/sglang) - the most advanced inference engine with cache-aware load balancing, multi-node deployment, prefill-decode disaggregated serving, multi-LoRA adapter serving, and much more. Also supports [**vLLM**](https://github.com/vllm-project/vllm) for high-throughput inference.
 
 - **Accelerator Management:** Hardware-aware scheduling through AcceleratorClass resources that define GPU capabilities, discovery patterns, and cost information. Enables intelligent accelerator selection with policies like BestFit, Cheapest, or MostCapable.
 
@@ -64,23 +63,7 @@ helm upgrade --install ome-crd oci://ghcr.io/moirai-internal/charts/ome-crd --na
 helm upgrade --install ome oci://ghcr.io/moirai-internal/charts/ome-resources --namespace ome
 ```
 
-### Option 2: Helm Repository
-
-Install using the traditional Helm repository:
-
-```bash
-# Add the OME Helm repository
-helm repo add ome https://ome-projects.github.io/ome
-helm repo update
-
-# Install OME CRDs first
-helm upgrade --install ome-crd ome/ome-crd --namespace ome --create-namespace
-
-# Install OME resources
-helm upgrade --install ome ome/ome-resources --namespace ome
-```
-
-### Option 3: Install from Source
+### Option 2: Install from Source
 
 For development or customization:
 
@@ -92,6 +75,14 @@ cd ome
 # Install from local charts
 helm install ome-crd charts/ome-crd --namespace ome --create-namespace
 helm install ome charts/ome-resources --namespace ome
+```
+
+### Optional: Serving Resources
+
+The `ome-serving` chart deploys a set of pre-configured ClusterBaseModels, ClusterServingRuntimes, and InferenceServices on top of the core installation:
+
+```bash
+helm upgrade --install ome-serving oci://ghcr.io/moirai-internal/charts/ome-serving --namespace ome
 ```
 
 Read the [installation guide](https://ome-projects.github.io/ome/docs/installation/) for more options and advanced configurations.
@@ -122,9 +113,13 @@ OME's controller automatically:
 
 High-level overview of the main priorities:
 
-- Enhanced model parsing for additional model families and architectures
-- Support for model quantization and optimization workflows
-- Federation across multiple Kubernetes clusters
+- Unified multi-cluster workload management (APIs merged; reconciliation in development)
+- Multi-cloud model storage and authentication
+- PVC-backed model storage
+- KV cache pooling
+- Model Context Protocol (MCP) gateway support
+- Accelerator-aware runtime selection for heterogeneous GPU clusters
+- A kubectl plugin for managing OME resources from the command line
 
 ## Community and Support
 
