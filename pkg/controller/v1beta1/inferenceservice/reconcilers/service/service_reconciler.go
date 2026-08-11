@@ -40,7 +40,7 @@ func NewServiceReconciler(client client.Client,
 	return &ServiceReconciler{
 		client:       client,
 		scheme:       scheme,
-		Service:      buildService(componentMeta, podSpec, Selector),
+		Service:      buildService(componentMeta, componentExt, podSpec, Selector),
 		componentExt: componentExt,
 	}
 }
@@ -98,6 +98,7 @@ func buildServiceWithLoadBalancer(
 // that should not be applied to Services. These annotations are defined in component specs
 // (like engineConfig.annotations) for pod-level configurations but have no effect on Services.
 func buildService(componentMeta metav1.ObjectMeta,
+	componentExt *v1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec,
 	selector map[string]string,
 ) *corev1.Service {
@@ -106,7 +107,11 @@ func buildService(componentMeta metav1.ObjectMeta,
 	serviceMeta := componentMeta.DeepCopy()
 	serviceMeta.Annotations = utils.FilterPodOnlyAnnotations(componentMeta.Annotations)
 
-	servicePorts := buildServicePorts(podSpec)
+	var appProtocols map[string]string
+	if componentExt != nil {
+		appProtocols = componentExt.ServicePortAppProtocols
+	}
+	servicePorts := buildServicePorts(podSpec, appProtocols)
 	serviceType := determineServiceType(*serviceMeta)
 	if selector == nil {
 		selector = map[string]string{"app": constants.TruncateNameWithMaxLength(serviceMeta.Name, 63)}
@@ -116,31 +121,31 @@ func buildService(componentMeta metav1.ObjectMeta,
 }
 
 // buildServicePorts creates service ports configuration from pod spec
-func buildServicePorts(podSpec *corev1.PodSpec) []corev1.ServicePort {
+func buildServicePorts(podSpec *corev1.PodSpec, appProtocols map[string]string) []corev1.ServicePort {
 	if len(podSpec.Containers) == 0 {
 		return nil
 	}
 
 	container := podSpec.Containers[0]
 	if len(container.Ports) == 0 {
-		return []corev1.ServicePort{buildDefaultServicePort(container.Name)}
+		return []corev1.ServicePort{buildDefaultServicePort(container.Name, appProtocols[container.Name])}
 	}
 
 	servicePorts := make([]corev1.ServicePort, 0, len(container.Ports))
 	for _, port := range container.Ports {
-		servicePorts = append(servicePorts, buildServicePort(port))
+		servicePorts = append(servicePorts, buildServicePort(port, appProtocols[port.Name]))
 	}
 	return servicePorts
 }
 
 // buildServicePort creates a ServicePort from a ContainerPort
-func buildServicePort(containerPort corev1.ContainerPort) corev1.ServicePort {
+func buildServicePort(containerPort corev1.ContainerPort, appProtocol string) corev1.ServicePort {
 	protocol := containerPort.Protocol
 	if protocol == "" {
 		protocol = corev1.ProtocolTCP
 	}
 
-	return corev1.ServicePort{
+	servicePort := corev1.ServicePort{
 		Name: containerPort.Name,
 		Port: containerPort.ContainerPort,
 		TargetPort: intstr.IntOrString{
@@ -149,12 +154,16 @@ func buildServicePort(containerPort corev1.ContainerPort) corev1.ServicePort {
 		},
 		Protocol: protocol,
 	}
+	if appProtocol != "" {
+		servicePort.AppProtocol = &appProtocol
+	}
+	return servicePort
 }
 
 // buildDefaultServicePort creates a default ServicePort
-func buildDefaultServicePort(name string) corev1.ServicePort {
+func buildDefaultServicePort(name, appProtocol string) corev1.ServicePort {
 	port, _ := strconv.Atoi(constants.InferenceServiceDefaultHttpPort)
-	return corev1.ServicePort{
+	servicePort := corev1.ServicePort{
 		Name: name,
 		Port: constants.CommonISVCPort,
 		TargetPort: intstr.IntOrString{
@@ -163,6 +172,10 @@ func buildDefaultServicePort(name string) corev1.ServicePort {
 		},
 		Protocol: corev1.ProtocolTCP,
 	}
+	if appProtocol != "" {
+		servicePort.AppProtocol = &appProtocol
+	}
+	return servicePort
 }
 
 // Reconcile ensures the Service matches the desired state
@@ -218,11 +231,13 @@ func (r *ServiceReconciler) handleReconcileAction(checkResult constants.CheckRes
 		}
 		return r.Service, nil
 	case constants.CheckResultUpdate:
-		if err := r.client.Update(ctx, r.Service); err != nil {
+		existingService.Spec.Ports = r.Service.Spec.Ports
+		existingService.Spec.Selector = r.Service.Spec.Selector
+		if err := r.client.Update(ctx, existingService); err != nil {
 			log.Error(err, "Failed to update Service", "namespace", r.Service.Namespace, "name", r.Service.Name)
 			return nil, err
 		}
-		return r.Service, nil
+		return existingService, nil
 	default:
 		return existingService, nil
 	}

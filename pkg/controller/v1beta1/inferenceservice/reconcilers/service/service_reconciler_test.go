@@ -1,12 +1,17 @@
 package service
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 )
 
@@ -173,7 +178,7 @@ func TestBuildServiceFiltersAnnotations(t *testing.T) {
 
 	for name, scenario := range scenarios {
 		t.Run(name, func(t *testing.T) {
-			service := buildService(scenario.componentMeta, podSpec, nil)
+			service := buildService(scenario.componentMeta, nil, podSpec, nil)
 
 			// Check that expected annotations are present
 			for key, expectedValue := range scenario.expectedAnnotations {
@@ -218,7 +223,7 @@ func TestBuildServicePreservesOtherMetadata(t *testing.T) {
 		}},
 	}
 
-	service := buildService(componentMeta, podSpec, nil)
+	service := buildService(componentMeta, nil, podSpec, nil)
 
 	// Name and Namespace should be preserved
 	if service.Name != "test-service" {
@@ -265,7 +270,7 @@ func TestBuildServiceWithNilAnnotations(t *testing.T) {
 	}
 
 	// Should not panic with nil annotations
-	service := buildService(componentMeta, podSpec, nil)
+	service := buildService(componentMeta, nil, podSpec, nil)
 
 	if service == nil {
 		t.Error("Expected service to be created, got nil")
@@ -288,12 +293,88 @@ func TestBuildServiceWithEmptyAnnotations(t *testing.T) {
 		}},
 	}
 
-	service := buildService(componentMeta, podSpec, nil)
+	service := buildService(componentMeta, nil, podSpec, nil)
 
 	if service == nil {
 		t.Fatal("Expected service to be created, got nil")
 	}
 	if len(service.Annotations) != 0 {
 		t.Errorf("Expected empty annotations, got %v", service.Annotations)
+	}
+}
+func TestBuildServiceSetsConfiguredPortAppProtocols(t *testing.T) {
+	podSpec := &corev1.PodSpec{
+		Containers: []corev1.Container{{
+			Name: "router",
+			Ports: []corev1.ContainerPort{
+				{Name: "http", ContainerPort: 8000},
+				{Name: "metrics", ContainerPort: 29000},
+			},
+		}},
+	}
+	componentExt := &v1beta1.ComponentExtensionSpec{
+		ServicePortAppProtocols: map[string]string{
+			"http": "kubernetes.io/h2c",
+		},
+	}
+
+	service := buildService(metav1.ObjectMeta{Name: "test-service"}, componentExt, podSpec, nil)
+
+	if got := service.Spec.Ports[0].AppProtocol; got == nil || *got != "kubernetes.io/h2c" {
+		t.Errorf("http appProtocol: got %v, want kubernetes.io/h2c", got)
+	}
+	if got := service.Spec.Ports[1].AppProtocol; got != nil {
+		t.Errorf("metrics appProtocol: got %q, want nil", *got)
+	}
+}
+
+func TestServiceReconcilerAddsAppProtocolToExistingService(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add corev1: %v", err)
+	}
+	existing := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-service", Namespace: "default"},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: "10.0.0.1",
+			Selector:  map[string]string{"app": "test-service"},
+			Ports: []corev1.ServicePort{{
+				Name: "http",
+				Port: 8000,
+			}},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
+	podSpec := &corev1.PodSpec{Containers: []corev1.Container{{
+		Name: "router",
+		Ports: []corev1.ContainerPort{{
+			Name:          "http",
+			ContainerPort: 8000,
+		}},
+	}}}
+	componentExt := &v1beta1.ComponentExtensionSpec{
+		ServicePortAppProtocols: map[string]string{"http": "kubernetes.io/h2c"},
+	}
+	reconciler := NewServiceReconciler(
+		c,
+		scheme,
+		metav1.ObjectMeta{Name: "test-service", Namespace: "default"},
+		componentExt,
+		podSpec,
+		nil,
+	)
+
+	if _, err := reconciler.Reconcile(); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	got := &corev1.Service{}
+	if err := c.Get(context.Background(), client.ObjectKey{Name: "test-service", Namespace: "default"}, got); err != nil {
+		t.Fatalf("get Service after reconcile: %v", err)
+	}
+	if got.Spec.ClusterIP != existing.Spec.ClusterIP {
+		t.Errorf("ClusterIP: got %q, want %q", got.Spec.ClusterIP, existing.Spec.ClusterIP)
+	}
+	if got.Spec.Ports[0].AppProtocol == nil || *got.Spec.Ports[0].AppProtocol != "kubernetes.io/h2c" {
+		t.Errorf("appProtocol: got %v, want kubernetes.io/h2c", got.Spec.Ports[0].AppProtocol)
 	}
 }
