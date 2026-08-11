@@ -40,7 +40,13 @@ func Unzip(zippedFile string, extractingDir string) error {
 		path := filepath.Join(extractingDir, f.Name)
 
 		// Reject entries that resolve outside the extraction directory (zip-slip).
-		if path != filepath.Clean(extractingDir) && !strings.HasPrefix(path, filepath.Clean(extractingDir)+string(os.PathSeparator)) {
+		cleanDest := filepath.Clean(extractingDir)
+		if path == cleanDest {
+			// The entry resolves to the extraction directory itself
+			// (e.g. a "./" entry); there is nothing to write.
+			return nil
+		}
+		if !strings.HasPrefix(path, cleanDest+string(os.PathSeparator)) {
 			return fmt.Errorf("archive entry %q escapes the extraction directory", f.Name)
 		}
 
