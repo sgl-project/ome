@@ -32,8 +32,6 @@ const (
 // config does not set consistentHashHeaders.
 var DefaultConsistentHashHeaders = []string{"x-routing-key"}
 
-const ()
-
 type SecretConfig struct {
 	WriteToCommonNamespace bool   `json:"writeToCommonNamespace"`
 	Namespace              string `json:"namespace"`
