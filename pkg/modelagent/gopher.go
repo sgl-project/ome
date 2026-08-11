@@ -916,16 +916,16 @@ func (s *Gopher) getHuggingFaceToken(task *GopherTask, baseModelSpec v1beta1.Bas
 				if baseModelSpec.Storage.Parameters != nil {
 					if customKey, exists := (*baseModelSpec.Storage.Parameters)["secretKey"]; exists && customKey != "" {
 						secretKeyName = customKey
-						s.logger.Infof("Using custom secret key name '%s' for model %s", secretKeyName, modelInfo)
+						s.logger.Infof("Using custom secret key from storage parameters for model %s", modelInfo)
 					}
 				}
 
 				// Try to get the token using the determined key name
 				if tokenBytes, exists := secret.Data[secretKeyName]; exists {
 					hfToken = string(tokenBytes)
-					s.logger.Infof("Successfully retrieved Hugging Face token from secret %s in namespace %s using key '%s'", *baseModelSpec.Storage.StorageKey, namespace, secretKeyName)
+					s.logger.Infof("Successfully retrieved Hugging Face token from secret %s in namespace %s", *baseModelSpec.Storage.StorageKey, namespace)
 				} else {
-					s.logger.Warnf("Secret %s in namespace %s does not contain key '%s'", *baseModelSpec.Storage.StorageKey, namespace, secretKeyName)
+					s.logger.Warnf("Secret %s in namespace %s does not contain the configured token key", *baseModelSpec.Storage.StorageKey, namespace)
 				}
 			}
 		} else {
