@@ -2,7 +2,7 @@ title: kubectl-ome Plugin CLI
 oep-number: 0011
 authors:
   - "@pallasathena92"
-status: provisional
+status: implementable
 creation-date: 2026-08-11
 reviewers:
   - TBD
