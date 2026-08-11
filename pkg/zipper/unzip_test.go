@@ -280,3 +280,24 @@ func TestUnzipWithInvalidExtractionPath(t *testing.T) {
 		}
 	}
 }
+
+func TestUnzipRejectsPathTraversal(t *testing.T) {
+	tmpDir := t.TempDir()
+	zipFile := filepath.Join(tmpDir, "evil.zip")
+	createTestZip(t, zipFile, map[string]string{
+		"../escaped.txt": "outside",
+	})
+
+	extractDir := filepath.Join(tmpDir, "extract")
+	if err := os.MkdirAll(extractDir, 0o755); err != nil {
+		t.Fatalf("Failed to create extraction dir: %v", err)
+	}
+
+	if err := Unzip(zipFile, extractDir); err == nil {
+		t.Fatal("Unzip accepted an archive entry that escapes the extraction directory")
+	}
+
+	if _, err := os.Stat(filepath.Join(tmpDir, "escaped.txt")); err == nil {
+		t.Fatal("Unzip wrote a file outside the extraction directory")
+	}
+}
