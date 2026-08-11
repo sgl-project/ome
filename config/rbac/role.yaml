@@ -12,6 +12,7 @@ rules:
   - persistentvolumeclaims
   - persistentvolumes
   - pods
+  - secrets
   - serviceaccounts
   - services
   verbs:
@@ -31,16 +32,6 @@ rules:
   - get
   - list
   - watch
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - create
-  - delete
-  - get
-  - patch
-  - update
 - apiGroups:
   - admissionregistration.k8s.io
   resources:
@@ -191,6 +182,7 @@ rules:
   - inferenceservices/finalizers
   - servingruntimes
   - servingruntimes/finalizers
+  - workloadclusters
   verbs:
   - create
   - delete
@@ -218,6 +210,7 @@ rules:
   - finetunedweights/status
   - inferenceservices/status
   - servingruntimes/status
+  - workloadclusters/status
   verbs:
   - get
   - patch
