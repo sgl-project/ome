@@ -2,9 +2,11 @@ package zipper
 
 import (
 	"archive/zip"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func Unzip(zippedFile string, extractingDir string) error {
@@ -36,6 +38,11 @@ func Unzip(zippedFile string, extractingDir string) error {
 		}()
 
 		path := filepath.Join(extractingDir, f.Name)
+
+		// Reject entries that resolve outside the extraction directory (zip-slip).
+		if path != filepath.Clean(extractingDir) && !strings.HasPrefix(path, filepath.Clean(extractingDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("archive entry %q escapes the extraction directory", f.Name)
+		}
 
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(path, 0777); err != nil {
