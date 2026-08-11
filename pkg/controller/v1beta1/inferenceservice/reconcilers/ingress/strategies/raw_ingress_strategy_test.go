@@ -38,7 +38,7 @@ func TestKubernetesIngressStrategy_Reconcile(t *testing.T) {
 		expectIngressCreation bool
 	}{
 		{
-			name: "successful reconcile with engine only",
+			name: "successful reconcile with predictor only",
 			isvc: createTestInferenceServiceRaw("test-isvc", "default"),
 			ingressConfig: &controllerconfig.IngressConfig{
 				EnableGatewayAPI:       false,
@@ -248,9 +248,11 @@ func TestKubernetesIngressStrategy_GetRawServiceHost(t *testing.T) {
 			expectedHost: "test-isvc-router.default.svc.cluster.local",
 		},
 		{
+			// Engine Service is named "<isvc>-engine" (constants.EngineServiceName).
+			// Pre-fix this returned "<isvc>" which doesn't resolve to a real Service.
 			name:         "without router",
 			isvc:         createTestInferenceServiceRaw("test-isvc", "default"),
-			expectedHost: "test-isvc.default.svc.cluster.local",
+			expectedHost: "test-isvc-engine.default.svc.cluster.local",
 		},
 	}
 
@@ -393,11 +395,6 @@ func setComponentStatusReadyRaw(isvc *v1beta1.InferenceService) {
 		Status: corev1.ConditionTrue,
 	})
 
-	isvc.Status.SetCondition(v1beta1.EngineReady, &apis.Condition{
-		Type:   v1beta1.EngineReady,
-		Status: corev1.ConditionTrue,
-	})
-
 	if isvc.Spec.Router != nil {
 		isvc.Status.SetCondition(v1beta1.RouterReady, &apis.Condition{
 			Type:   v1beta1.RouterReady,
@@ -446,8 +443,10 @@ func TestKubernetesIngressStrategy_URLWithPort(t *testing.T) {
 					},
 				},
 			},
-			expectedURLHost:     "test-isvc.default.example.com:8081",
-			expectedAddressHost: "test-isvc.default.svc.cluster.local:8081",
+			expectedURLHost: "test-isvc.default.example.com:8081",
+			// Cluster-local address targets the actual engine Service
+			// ("<isvc>-engine") — the same one the port was read from.
+			expectedAddressHost: "test-isvc-engine.default.svc.cluster.local:8081",
 		},
 		{
 			name: "with router and custom port",
@@ -489,7 +488,7 @@ func TestKubernetesIngressStrategy_URLWithPort(t *testing.T) {
 			},
 			services:            []corev1.Service{}, // No services
 			expectedURLHost:     "test-isvc.default.example.com:8080",
-			expectedAddressHost: "test-isvc.default.svc.cluster.local:8080",
+			expectedAddressHost: "test-isvc-engine.default.svc.cluster.local:8080",
 		},
 	}
 
@@ -531,6 +530,7 @@ func TestKubernetesIngressStrategy_URLWithPort(t *testing.T) {
 	}
 }
 
+// stringPtr returns a pointer to the given string.
 func stringPtr(s string) *string {
 	return &s
 }

@@ -161,6 +161,13 @@ var (
 	IngressPathTemplate            = OMEAPIGroupName + "/ingress-path-template"
 	IngressDisableIstioVirtualHost = OMEAPIGroupName + "/ingress-disable-istio-virtualhost"
 	IngressDisableCreation         = OMEAPIGroupName + "/ingress-disable-creation"
+	IngressConsistentHashHeaders   = OMEAPIGroupName + "/ingress-consistent-hash-headers"
+	// Gateway/host selection overrides (per-ISVC; mirror the cluster ingress config
+	// so a single ISVC can target a different gateway or host scheme).
+	IngressGatewayOverride    = OMEAPIGroupName + "/ingress-gateway"
+	IngressPerISVCSubdomain   = OMEAPIGroupName + "/ingress-per-isvc-subdomain"
+	IngressSharedHostPrefix   = OMEAPIGroupName + "/ingress-shared-host-prefix"
+	IngressAdditionalGateways = OMEAPIGroupName + "/ingress-additional-gateways"
 
 	// InferenceReplica is a controller-only CRD: the validating webhook
 	// rejects direct user writes unless this annotation is set to "true".

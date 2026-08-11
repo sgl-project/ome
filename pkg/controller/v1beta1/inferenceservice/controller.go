@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	v1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -337,7 +338,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Step 4: Determine deployment modes based on merged specs
-	engineDeploymentMode, decoderDeploymentMode, routerDeploymentMode, err := isvcutils.DetermineDeploymentModes(mergedEngine, mergedDecoder, mergedRouter, rt)
+	engineDeploymentMode, decoderDeploymentMode, routerDeploymentMode, err := isvcutils.DetermineDeploymentModes(mergedEngine, mergedDecoder, mergedRouter, rt, isvc.Spec.DeploymentMode)
 	if err != nil {
 		r.Log.Error(err, "Failed to determine deployment modes", "Name", isvc.Name)
 		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "DeploymentModeError", err.Error())
@@ -780,6 +781,25 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 		ctrlBuilder = ctrlBuilder.Owns(&istioclientv1beta1.VirtualService{})
 	} else {
 		r.Log.Info("The InferenceService controller won't watch networking.istio.io/v1beta1/VirtualService resources because the CRD is not available.")
+	}
+
+	// Gateway-API HTTPRoutes are owned by the ISVC, and IngressReady gates
+	// on the route's parent (Gateway) programming status. Watch them so a
+	// gateway flipping a route to programmed re-reconciles the ISVC —
+	// otherwise IngressReady=False would persist until an unrelated event.
+	// Scheme registration is conditional on EnableGatewayAPI (see
+	// cmd/manager), so gate on both the scheme and the CRD being present.
+	const httpRouteKind = "HTTPRoute"
+	if mgr.GetScheme().Recognizes(gatewayapiv1.SchemeGroupVersion.WithKind(httpRouteKind)) {
+		httpRouteFound, err := utils.IsCrdAvailable(r.ClientConfig, gatewayapiv1.SchemeGroupVersion.String(), httpRouteKind)
+		if err != nil {
+			return err
+		}
+		if httpRouteFound {
+			ctrlBuilder = ctrlBuilder.Owns(&gatewayapiv1.HTTPRoute{})
+		} else {
+			r.Log.Info("The InferenceService controller won't watch gateway.networking.k8s.io/v1/HTTPRoute resources because the CRD is not available.")
+		}
 	}
 
 	// Add watches for ServingRuntime and ClusterServingRuntime. Runtime

@@ -14,6 +14,7 @@ import (
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/services"
 )
@@ -69,7 +70,7 @@ func TestIngressBuilder_BuildIngress(t *testing.T) {
 			expectedEngine: true,
 		},
 		{
-			name:          "engine not ready",
+			name:          "predictor not ready",
 			isvc:          createTestInferenceServiceIngress("test-isvc", "default"),
 			expectNil:     true,
 			expectedError: false,
@@ -151,7 +152,7 @@ func TestIngressBuilder_BuildRouterRules(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			builder := createIngressBuilder()
 
-			rules, err := builder.buildRouterRules(tt.isvc)
+			rules, err := builder.buildRouterRules(context.Background(), tt.isvc)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -182,7 +183,7 @@ func TestIngressBuilder_BuildDecoderRules(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			builder := createIngressBuilder()
 
-			rules, err := builder.buildDecoderRules(tt.isvc)
+			rules, err := builder.buildDecoderRules(context.Background(), tt.isvc)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -213,7 +214,7 @@ func TestIngressBuilder_BuildEngineOnlyRules(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			builder := createIngressBuilder()
 
-			rules, err := builder.buildEngineOnlyRules(tt.isvc)
+			rules, err := builder.buildEngineOnlyRules(context.Background(), tt.isvc)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -222,6 +223,63 @@ func TestIngressBuilder_BuildEngineOnlyRules(t *testing.T) {
 				assert.Len(t, rules, tt.expectedRules)
 			}
 		})
+	}
+}
+
+// TestIngressBuilder_BackendUsesComponentServicePort verifies the raw
+// Ingress backend port follows each component Service's real port rather
+// than the hardcoded CommonISVCPort. A runtime on a non-default port
+// otherwise produced a backend pointing at a port the Service doesn't
+// expose.
+func TestIngressBuilder_BackendUsesComponentServicePort(t *testing.T) {
+	const customPort int32 = 8000
+
+	isvc := createTestInferenceServiceWithRouterAndDecoderIngress("test-isvc", "default")
+	setEngineReadyIngress(isvc)
+	setRouterReadyIngress(isvc)
+	setDecoderReadyIngress(isvc)
+
+	builder := createIngressBuilder()
+	builder.client = fakeClientWithServices(t,
+		newServicePort("test-isvc-engine", "default", customPort),
+		newServicePort("test-isvc-router", "default", customPort),
+		newServicePort("test-isvc-decoder", "default", customPort),
+	)
+
+	result, err := builder.BuildIngress(context.Background(), isvc)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	ingress := result.(*netv1.Ingress)
+
+	require.NotEmpty(t, ingress.Spec.Rules)
+	for _, rule := range ingress.Spec.Rules {
+		for _, p := range rule.HTTP.Paths {
+			assert.Equal(t, customPort, p.Backend.Service.Port.Number,
+				"backend for %s must use the component Service port", rule.Host)
+		}
+	}
+}
+
+// TestIngressBuilder_BackendFallsBackToDefaultPort verifies the backend
+// port falls back to constants.CommonISVCPort when the Service can't be
+// resolved (nil client).
+func TestIngressBuilder_BackendFallsBackToDefaultPort(t *testing.T) {
+	isvc := createTestInferenceServiceIngress("test-isvc", "default")
+	setEngineReadyIngress(isvc)
+
+	// createIngressBuilder leaves client nil -> fallback path.
+	builder := createIngressBuilder()
+
+	result, err := builder.BuildIngress(context.Background(), isvc)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	ingress := result.(*netv1.Ingress)
+
+	require.NotEmpty(t, ingress.Spec.Rules)
+	for _, rule := range ingress.Spec.Rules {
+		for _, p := range rule.HTTP.Paths {
+			assert.Equal(t, int32(constants.CommonISVCPort), p.Backend.Service.Port.Number)
+		}
 	}
 }
 
@@ -481,10 +539,6 @@ func createTestInferenceServiceWithRouterAndDecoderIngress(name, namespace strin
 }
 
 func setEngineReadyIngress(isvc *v1beta1.InferenceService) {
-	isvc.Status.SetCondition(v1beta1.EngineReady, &knativeapis.Condition{
-		Type:   v1beta1.EngineReady,
-		Status: corev1.ConditionTrue,
-	})
 	isvc.Status.SetCondition(v1beta1.EngineReady, &knativeapis.Condition{
 		Type:   v1beta1.EngineReady,
 		Status: corev1.ConditionTrue,
