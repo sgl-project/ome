@@ -149,3 +149,27 @@ func TestMergeRuntimeSpecs_SchedulerNamePrecedence(t *testing.T) {
 		assert.Equal(t, "custom-scheduler", engine.Worker.SchedulerName)
 	})
 }
+
+// TestReconcileBaseModel_LeanPath pins that an InferenceService without
+// a model reference resolves to no base model and no error — the lean
+// path where the operator names the runtime directly. A nil client
+// proves the path returns before any API access.
+func TestReconcileBaseModel_LeanPath(t *testing.T) {
+	t.Run("nil model", func(t *testing.T) {
+		isvc := &v1beta1.InferenceService{}
+		spec, meta, err := ReconcileBaseModel(nil, isvc)
+		require.NoError(t, err)
+		assert.Nil(t, spec)
+		assert.Nil(t, meta)
+	})
+
+	t.Run("empty model name", func(t *testing.T) {
+		isvc := &v1beta1.InferenceService{
+			Spec: v1beta1.InferenceServiceSpec{Model: &v1beta1.ModelRef{Name: ""}},
+		}
+		spec, meta, err := ReconcileBaseModel(nil, isvc)
+		require.NoError(t, err)
+		assert.Nil(t, spec)
+		assert.Nil(t, meta)
+	})
+}

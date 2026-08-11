@@ -47,10 +47,13 @@ func GetFineTunedWeight(cl client.Client, name string) (*v1beta1.FineTunedWeight
 	return nil, goerrors.New("No FineTunedWeight with the name: " + name)
 }
 
-// ReconcileBaseModel retrieves and validates the base model for an InferenceService
+// ReconcileBaseModel retrieves and validates the base model for an
+// InferenceService. Returns (nil, nil, nil) when the ISVC has no model
+// reference — the lean path where the operator specifies the runtime
+// directly and skips model-parsing/auto-selection.
 func ReconcileBaseModel(cl client.Client, isvc *v1beta1.InferenceService) (*v1beta1.BaseModelSpec, *metav1.ObjectMeta, error) {
 	if isvc.Spec.Model == nil || isvc.Spec.Model.Name == "" {
-		return nil, nil, goerrors.New("model reference is required")
+		return nil, nil, nil
 	}
 
 	baseModel, baseModelMeta, err := GetBaseModel(cl, isvc.Spec.Model.Name, isvc.Namespace)
