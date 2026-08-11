@@ -5,6 +5,7 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 
+	"sigs.k8s.io/ome/pkg/cli/cmd/version"
 	"sigs.k8s.io/ome/pkg/cli/factory"
 )
 
@@ -32,14 +33,7 @@ component-aware log streaming.`,
 
 	// Command families. Keep alphabetical.
 	// (get/status/runtime/logs are added by later PRs; version below.)
-	cmd.AddCommand(newVersionPlaceholder(f, streams)) // replaced in Task 1.4
+	cmd.AddCommand(version.NewCmd(f, streams))
 
 	return cmd
-}
-
-func newVersionPlaceholder(_ factory.Factory, streams genericiooptions.IOStreams) *cobra.Command {
-	return &cobra.Command{Use: "version", Short: "Print version", RunE: func(*cobra.Command, []string) error {
-		_, err := streams.Out.Write([]byte("dev\n"))
-		return err
-	}}
 }
