@@ -102,8 +102,9 @@ func getHPAMetrics(metadata metav1.ObjectMeta, componentExt *v1beta1.ComponentEx
 
 func getTargetUtilization(metadata metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec) int32 {
 	if value, ok := metadata.Annotations[constants.TargetUtilizationPercentage]; ok {
-		utilization, _ := strconv.Atoi(value)
-		return int32(utilization) // #nosec G109
+		if utilization, err := strconv.ParseInt(value, 10, 32); err == nil {
+			return int32(utilization)
+		}
 	}
 	if componentExt.ScaleTarget != nil {
 		return int32(*componentExt.ScaleTarget)

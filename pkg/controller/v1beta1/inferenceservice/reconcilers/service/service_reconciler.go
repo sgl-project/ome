@@ -162,7 +162,7 @@ func buildServicePort(containerPort corev1.ContainerPort, appProtocol string) co
 
 // buildDefaultServicePort creates a default ServicePort
 func buildDefaultServicePort(name, appProtocol string) corev1.ServicePort {
-	port, _ := strconv.Atoi(constants.InferenceServiceDefaultHttpPort)
+	port, _ := strconv.ParseInt(constants.InferenceServiceDefaultHttpPort, 10, 32)
 	servicePort := corev1.ServicePort{
 		Name: name,
 		Port: constants.CommonISVCPort,

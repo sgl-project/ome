@@ -35,7 +35,7 @@ func NewIstioSidecarReconciler(client kclient.Client, scheme *runtime.Scheme, co
 }
 
 func createSidecar(componentMeta metav1.ObjectMeta) *istioclientv1beta1.Sidecar {
-	portInt, _ := strconv.Atoi(constants.InferenceServiceDefaultHttpPort)
+	portInt, _ := strconv.ParseUint(constants.InferenceServiceDefaultHttpPort, 10, 32)
 	return &istioclientv1beta1.Sidecar{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      componentMeta.Name,
