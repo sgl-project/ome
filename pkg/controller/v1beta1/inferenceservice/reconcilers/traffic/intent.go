@@ -251,7 +251,7 @@ func parseInt32(value string) *int32 {
 	if value == "" {
 		return nil
 	}
-	n, err := strconv.Atoi(value)
+	n, err := strconv.ParseInt(value, 10, 32)
 	if err != nil {
 		return nil
 	}
