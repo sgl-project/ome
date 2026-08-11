@@ -96,5 +96,12 @@ func MergeRuntimeSpecs(isvc *v1beta1.InferenceService, runtime *v1beta1.ServingR
 		return nil, nil, nil, goerrors.Wrap(err, "failed to merge router specs")
 	}
 
+	// The renderers read only the merged component specs, so this is the
+	// one seam where the runtime's top-level schedulerName can reach a
+	// pod. Applied after the component merges so every more specific
+	// level (component / leader / worker, from either side) keeps
+	// precedence.
+	MergeSchedulerName(runtime, mergedEngine, mergedDecoder, mergedRouter)
+
 	return mergedEngine, mergedDecoder, mergedRouter, nil
 }

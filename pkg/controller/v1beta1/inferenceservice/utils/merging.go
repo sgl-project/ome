@@ -218,6 +218,47 @@ func MergeNodeSelector(runtime *v1beta1.ServingRuntimeSpec, acceleratorClass *v1
 	return mergedNodeSelector
 }
 
+// MergeSchedulerName back-fills the runtime's top-level schedulerName
+// into every pod-spec level of the merged component specs (component,
+// leader, worker) so whichever template the renderer selects carries
+// it. Fill-only — a name set at any of those levels (by the
+// InferenceService or the runtime's component config) always wins, and
+// with nothing set anywhere the field stays empty so the cluster's
+// default scheduler applies.
+func MergeSchedulerName(runtime *v1beta1.ServingRuntimeSpec, engine *v1beta1.EngineSpec, decoder *v1beta1.DecoderSpec, router *v1beta1.RouterSpec) {
+	if runtime == nil || runtime.ServingRuntimePodSpec.SchedulerName == "" {
+		return
+	}
+	name := runtime.ServingRuntimePodSpec.SchedulerName
+
+	fill := func(spec *v1beta1.PodSpec) {
+		if spec.SchedulerName == "" {
+			spec.SchedulerName = name
+		}
+	}
+	if engine != nil {
+		fill(&engine.PodSpec)
+		if engine.Leader != nil {
+			fill(&engine.Leader.PodSpec)
+		}
+		if engine.Worker != nil {
+			fill(&engine.Worker.PodSpec)
+		}
+	}
+	if decoder != nil {
+		fill(&decoder.PodSpec)
+		if decoder.Leader != nil {
+			fill(&decoder.Leader.PodSpec)
+		}
+		if decoder.Worker != nil {
+			fill(&decoder.Worker.PodSpec)
+		}
+	}
+	if router != nil {
+		fill(&router.PodSpec)
+	}
+}
+
 // MergeResource merges resource requests and limits from runtime, accelerator class, and container spec.
 // It only merges resources from the runtime and accelerator class when the user has not explicitly specified resources in the InferenceService spec.
 // The acceleratorClass takes precedence and overrides the runtime resource, if it existed.
