@@ -139,6 +139,24 @@ jobs:
           make ome-manager
           make model-agent
 
+  cli-cross-compile:
+    name: CLI cross-compile (CGO_ENABLED=0)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Cross-compile kubectl-ome
+        run: make kubectl-ome-cross
+
   # Docker builds only validate Dockerfile/build-context breakage —
   # test-and-build already compiles and tests the same code natively —
   # so they run only when a docker-relevant path actually changed.
@@ -325,7 +343,7 @@ jobs:
   summary:
     name: PR Validation Summary
     runs-on: ubuntu-latest
-    needs: [pre-commit-checks, test-and-build, docker-validation, lint, generate-drift]
+    needs: [pre-commit-checks, test-and-build, cli-cross-compile, docker-validation, lint, generate-drift]
     if: always()
     steps:
       - name: PR Status Summary
@@ -339,6 +357,7 @@ jobs:
             const jobs = {
               'pre-commit-checks': '${{ needs.pre-commit-checks.result }}',
               'test-and-build': '${{ needs.test-and-build.result }}',
+              'cli-cross-compile': '${{ needs.cli-cross-compile.result }}',
               'docker-validation': '${{ needs.docker-validation.result }}',
               'lint': '${{ needs.lint.result }}',
               'generate-drift': '${{ needs.generate-drift.result }}'

@@ -295,6 +295,21 @@ ome-agent: xet-build ## 🔄 Build ome-agent binary.
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/ome-agent ./cmd/ome-agent
 	@echo "✅ Build complete"
 
+.PHONY: kubectl-ome
+kubectl-ome: ## 🔌 Build the kubectl-ome plugin binary.
+	CGO_ENABLED=0 $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/kubectl-ome ./cmd/kubectl-ome
+
+.PHONY: kubectl-ome-cross
+kubectl-ome-cross: ## 🔌 Cross-compile kubectl-ome for all release platforms (CGO off).
+	@for os in linux darwin windows; do \
+	  for arch in amd64 arm64; do \
+	    ext=""; [ "$$os" = "windows" ] && ext=".exe"; \
+	    echo "building $$os/$$arch"; \
+	    CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO_CMD) build -ldflags="$(LD_FLAGS)" \
+	      -o bin/cross/kubectl-ome_$${os}_$${arch}$${ext} ./cmd/kubectl-ome || exit 1; \
+	  done; \
+	done
+
 .PHONY: run-ome-manager
 run-ome-manager: manifests generate fmt vet ## Run ome-manager binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
 	@echo "🏃‍♂️ Running ome-manager..."
