@@ -53,13 +53,17 @@ func TestRenderNotReady(t *testing.T) {
 		Pods: map[v1beta1.ComponentType][]corev1.Pod{
 			v1beta1.EngineComponent: {{
 				ObjectMeta: metav1.ObjectMeta{Name: "llama-70b-engine-5d4-x2p"},
-				Spec:       corev1.PodSpec{NodeName: "gpu-node-1"},
+				Spec: corev1.PodSpec{
+					NodeName:   "gpu-node-1",
+					Containers: []corev1.Container{{Name: "engine"}, {Name: "engine-metrics"}},
+				},
 				Status: corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{
 					{Ready: true}, {Ready: true},
 				}},
 			}},
 			v1beta1.DecoderComponent: {{
 				ObjectMeta: metav1.ObjectMeta{Name: "llama-70b-decoder-7c9-k4m"},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "decoder"}, {Name: "decoder-metrics"}}},
 				Status:     corev1.PodStatus{Phase: corev1.PodPending, ContainerStatuses: []corev1.ContainerStatus{{}, {}}},
 			}},
 		},
@@ -91,11 +95,17 @@ func TestRenderShowsUnlabeledPods(t *testing.T) {
 		Pods: map[v1beta1.ComponentType][]corev1.Pod{
 			v1beta1.EngineComponent: {{
 				ObjectMeta: metav1.ObjectMeta{Name: "orphan-pods-engine-1"},
-				Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "engine"}}},
+				Status: corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{
+					{Ready: true},
+				}},
 			}},
 			v1beta1.ComponentType(""): {{
 				ObjectMeta: metav1.ObjectMeta{Name: "orphan-pods-stray-7f8"},
-				Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "main"}}},
+				Status: corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{
+					{Ready: true},
+				}},
 			}},
 		},
 	}
@@ -129,8 +139,8 @@ func TestRenderShowsOptionalStatusSections(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, render(r, &buf))
 	out := buf.String()
-	assert.Contains(t, out, "  Traffic: present (see -o yaml for detail)\n")
-	assert.Contains(t, out, "  Canary: present (see -o yaml for detail)\n")
-	assert.Contains(t, out, "  Placement: present (see -o yaml for detail)\n")
-	assert.Contains(t, out, "  RolloutCoordination: present (see -o yaml for detail)\n")
+	assert.Contains(t, out, "  Traffic: present (inspect with kubectl get inferenceservice -o yaml)\n")
+	assert.Contains(t, out, "  Canary: present (inspect with kubectl get inferenceservice -o yaml)\n")
+	assert.Contains(t, out, "  Placement: present (inspect with kubectl get inferenceservice -o yaml)\n")
+	assert.Contains(t, out, "  RolloutCoordination: present (inspect with kubectl get inferenceservice -o yaml)\n")
 }
