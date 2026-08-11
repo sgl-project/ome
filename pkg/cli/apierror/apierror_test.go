@@ -20,11 +20,11 @@ func TestFriendlyMissingCRD(t *testing.T) {
 
 func TestFriendlyObjectNotFoundPassesThrough(t *testing.T) {
 	raw := kerrors.NewNotFound(gr, "missing")
-	assert.Equal(t, error(raw), Friendly(raw))
+	assert.Same(t, error(raw), Friendly(raw))
 }
 
 func TestFriendlyNilAndOther(t *testing.T) {
 	assert.NoError(t, Friendly(nil))
 	other := errors.New("boom")
-	assert.Equal(t, other, Friendly(other))
+	assert.Same(t, other, Friendly(other))
 }
