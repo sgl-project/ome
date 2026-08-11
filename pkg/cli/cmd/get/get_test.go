@@ -2,6 +2,7 @@ package get
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
+	"sigs.k8s.io/yaml"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/cli/factory"
@@ -94,4 +96,91 @@ func TestGetNotFoundFriendly(t *testing.T) {
 	_, err := execute(t, f, "isvc", "missing")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"missing" not found`)
+}
+
+// TestGetISVCListJSONEnvelope pins Finding 1: a multi-object -o json listing
+// must be one valid document -- a v1 List envelope -- not several bare
+// objects printed back-to-back.
+func TestGetISVCListJSONEnvelope(t *testing.T) {
+	f := factory.Static{
+		OME: omefake.NewSimpleClientset(fixtureISVC("a-isvc", "team-a"), fixtureISVC("b-isvc", "team-a")),
+		NS:  "team-a",
+	}
+	out, err := execute(t, f, "isvc", "-o", "json")
+	require.NoError(t, err)
+	var list struct {
+		Kind  string            `json:"kind"`
+		Items []json.RawMessage `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out), &list), "must be a single valid JSON document")
+	assert.Equal(t, "List", list.Kind)
+	assert.Len(t, list.Items, 2)
+}
+
+// TestGetModelsListYAMLEnvelope pins Finding 1 for the YAML path: printing
+// each object separately produces a malformed multi-document stream (no ---
+// separators); the fix wraps the list in a single List envelope instead.
+func TestGetModelsListYAMLEnvelope(t *testing.T) {
+	arch := "LlamaForCausalLM"
+	f := factory.Static{
+		OME: omefake.NewSimpleClientset(
+			&v1beta1.BaseModel{ObjectMeta: metav1.ObjectMeta{Name: "ns-model", Namespace: "team-a"},
+				Spec: v1beta1.BaseModelSpec{ModelArchitecture: &arch}},
+			&v1beta1.ClusterBaseModel{ObjectMeta: metav1.ObjectMeta{Name: "cluster-model"},
+				Spec: v1beta1.BaseModelSpec{ModelArchitecture: &arch}},
+		),
+		NS: "team-a",
+	}
+	out, err := execute(t, f, "models", "-o", "yaml")
+	require.NoError(t, err)
+	assert.Contains(t, out, "kind: List")
+	assert.Contains(t, out, "name: ns-model")
+	assert.Contains(t, out, "name: cluster-model")
+
+	var doc struct {
+		Kind  string           `json:"kind"`
+		Items []map[string]any `json:"items"`
+	}
+	require.NoError(t, yaml.Unmarshal([]byte(out), &doc), "must be a single valid YAML document")
+	assert.Equal(t, "List", doc.Kind)
+	assert.Len(t, doc.Items, 2)
+}
+
+// TestGetAllNamespacesWarnsOnClusterScoped pins Finding 2a: -A on a
+// cluster-scoped resource is accepted (not an error, kubectl parity) but
+// warns instead of silently doing nothing.
+func TestGetAllNamespacesWarnsOnClusterScoped(t *testing.T) {
+	f := factory.Static{OME: omefake.NewSimpleClientset(), NS: "team-a"}
+	out, err := execute(t, f, "acceleratorclasses", "-A")
+	require.NoError(t, err)
+	assert.Contains(t, out, `warning: --all-namespaces is ignored for the cluster-scoped resource "acceleratorclasses"`)
+}
+
+// TestGetEmptyClusterScopedMessageHasNoNamespaceClause pins Finding 2b: the
+// empty-list message for a cluster-scoped resource must not claim a
+// namespace scope that doesn't apply.
+func TestGetEmptyClusterScopedMessageHasNoNamespaceClause(t *testing.T) {
+	f := factory.Static{OME: omefake.NewSimpleClientset(), NS: "team-a"}
+	out, err := execute(t, f, "workloadclusters")
+	require.NoError(t, err)
+	assert.Contains(t, out, "No workloadclusters found.\n")
+	assert.NotContains(t, out, "namespace")
+}
+
+func TestGetInvalidOutputFormat(t *testing.T) {
+	_, err := execute(t, factory.Static{NS: "team-a"}, "isvc", "-o", "toml")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "supported: wide, json, yaml")
+}
+
+func TestGetNameWithAllNamespacesRejected(t *testing.T) {
+	_, err := execute(t, factory.Static{NS: "team-a"}, "isvc", "a-isvc", "-A")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot be combined with --all-namespaces")
+}
+
+func TestGetNameWithSelectorRejected(t *testing.T) {
+	_, err := execute(t, factory.Static{NS: "team-a"}, "isvc", "a-isvc", "-l", "foo=bar")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot be combined with --selector")
 }

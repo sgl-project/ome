@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
@@ -67,7 +68,11 @@ func (o *Options) Complete(f factory.Factory, args []string) error {
 	}
 	o.namespace = ns
 	if o.AllNamespaces {
-		o.namespace = metav1.NamespaceAll
+		if e.Namespaced {
+			o.namespace = metav1.NamespaceAll
+		} else {
+			fmt.Fprintf(o.ErrOut, "warning: --all-namespaces is ignored for the cluster-scoped resource %q\n", e.Canonical)
+		}
 	}
 	return nil
 }
@@ -106,15 +111,18 @@ func (o *Options) Run(ctx context.Context, f factory.Factory) error {
 		if o.Name != "" {
 			return printers.PrintObj(objs[0], o.Output, o.Out)
 		}
+		list := &corev1.List{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "List"}}
 		for _, obj := range objs {
-			if err := printers.PrintObj(obj, o.Output, o.Out); err != nil {
-				return err
-			}
+			list.Items = append(list.Items, runtime.RawExtension{Object: obj})
 		}
-		return nil
+		return printers.PrintObj(list, o.Output, o.Out)
 	}
 	if len(objs) == 0 {
-		fmt.Fprintf(o.ErrOut, "No %s found in namespace %q.\n", o.entry.Canonical, o.namespace)
+		if !o.entry.Namespaced || o.AllNamespaces {
+			fmt.Fprintf(o.ErrOut, "No %s found.\n", o.entry.Canonical)
+		} else {
+			fmt.Fprintf(o.ErrOut, "No %s found in namespace %q.\n", o.entry.Canonical, o.namespace)
+		}
 		return nil
 	}
 	table := printers.Table{}
