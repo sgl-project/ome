@@ -2,7 +2,7 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use cas_client::remote_client::PREFIX_DEFAULT;
-use cas_client::{CacheConfig, FileProvider, OutputProvider, CHUNK_CACHE_SIZE_BYTES};
+use file_reconstruction::DataOutput;
 use dirs::home_dir;
 use merklehash::MerkleHash;
 use progress_tracking::{
@@ -129,7 +129,7 @@ impl XetDownloader {
             std::fs::create_dir_all(parent)?;
         }
 
-        let output = OutputProvider::File(FileProvider::new(destination_path.to_path_buf()));
+        let output = DataOutput::write_in_file(destination_path);
         let file_name_arc: Arc<str> = Arc::from(file_name.to_owned());
 
         let progress_updater = progress.as_ref().map(|tracker| {
@@ -143,7 +143,7 @@ impl XetDownloader {
 
         let bytes_downloaded = self
             .downloader
-            .smudge_file_from_hash(&hash, file_name_arc, &output, None, progress_updater)
+            .smudge_file_from_hash(&hash, file_name_arc, output, None, progress_updater)
             .await?;
 
         info!(
@@ -230,11 +230,8 @@ fn create_xet_config(
             compression: None,
             auth: auth_cfg,
             prefix: PREFIX_DEFAULT.into(),
-            cache_config: CacheConfig {
-                cache_directory: cache_path.join("chunk-cache"),
-                cache_size: *CHUNK_CACHE_SIZE_BYTES,
-            },
             staging_directory: None,
+            user_agent: format!("ome-xet-binding/{}", env!("CARGO_PKG_VERSION")),
         },
         shard_config: ShardConfig {
             prefix: PREFIX_DEFAULT.into(),

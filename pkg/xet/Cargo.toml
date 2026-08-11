@@ -16,6 +16,7 @@ utils = { git = "https://github.com/huggingface/xet-core", package = "utils" }
 xet-runtime = { git = "https://github.com/huggingface/xet-core", package = "xet_runtime" }
 progress-tracking = { git = "https://github.com/huggingface/xet-core", package = "progress_tracking" }
 merklehash = { git = "https://github.com/huggingface/xet-core", package = "merklehash" }
+file_reconstruction = { git = "https://github.com/huggingface/xet-core", package = "file_reconstruction" }
 
 # Standard dependencies
 ulid = "1.1"
