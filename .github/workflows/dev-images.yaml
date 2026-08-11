@@ -1,9 +1,9 @@
 name: Dev Images
 
+# Dev images are built and pushed on demand only; every merge to main was
+# rebuilding and pushing all images, which ate runner capacity. Release
+# images are unaffected (release.yaml builds on tags).
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
