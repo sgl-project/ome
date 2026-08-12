@@ -8,9 +8,11 @@ import (
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 
 	"sigs.k8s.io/ome/pkg/cli/factory"
+	"sigs.k8s.io/ome/pkg/cli/paging"
 	"sigs.k8s.io/ome/pkg/constants"
 )
 
@@ -68,11 +70,26 @@ func (o *Options) Run(ctx context.Context, f factory.Factory) error {
 	if o.Component != "" {
 		selector += fmt.Sprintf(",%s=%s", constants.OMEComponentLabel, o.Component)
 	}
-	pods, err := kube.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	podObjs, err := paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+		pageOpts.LabelSelector = selector
+		l, err := kube.CoreV1().Pods(ns).List(ctx, pageOpts)
+		if err != nil {
+			return nil, "", err
+		}
+		items := make([]runtime.Object, 0, len(l.Items))
+		for i := range l.Items {
+			items = append(items, &l.Items[i])
+		}
+		return items, l.Continue, nil
+	})
 	if err != nil {
 		return err
 	}
-	if len(pods.Items) == 0 {
+	pods := make([]corev1.Pod, 0, len(podObjs))
+	for _, obj := range podObjs {
+		pods = append(pods, *obj.(*corev1.Pod))
+	}
+	if len(pods) == 0 {
 		return fmt.Errorf("no pods found for InferenceService %q in namespace %q (selector %s)", o.Name, ns, selector)
 	}
 	opts := &corev1.PodLogOptions{Follow: o.Follow}
@@ -84,7 +101,7 @@ func (o *Options) Run(ctx context.Context, f factory.Factory) error {
 		opts.SinceSeconds = &secs
 	}
 	var streams []namedStream
-	for _, p := range pods.Items {
+	for _, p := range pods {
 		po := *opts
 		po.Container = o.containerFor(&p)
 		req := kube.CoreV1().Pods(ns).GetLogs(p.Name, &po)
@@ -99,7 +116,7 @@ func (o *Options) Run(ctx context.Context, f factory.Factory) error {
 			return fmt.Errorf("streaming logs for pod %s: %w", p.Name, err)
 		}
 		prefix := ""
-		if len(pods.Items) > 1 {
+		if len(pods) > 1 {
 			prefix = fmt.Sprintf("[%s/%s] ", p.Labels[constants.OMEComponentLabel], p.Name)
 		}
 		streams = append(streams, namedStream{Prefix: prefix, Reader: reader})

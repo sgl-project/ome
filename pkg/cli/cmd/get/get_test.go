@@ -203,3 +203,20 @@ func TestGetNameWithSelectorRejected(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot be combined with --selector")
 }
+
+// TestGetSelectorSurvivesPaging pins the pagination helper's contract to
+// preserve a caller-supplied --selector: chunking a list through
+// Limit/Continue must never silently drop LabelSelector filtering.
+func TestGetSelectorSurvivesPaging(t *testing.T) {
+	tagged := fixtureISVC("gpu-isvc", "team-a")
+	tagged.Labels = map[string]string{"tier": "gpu"}
+	untagged := fixtureISVC("cpu-isvc", "team-a")
+	f := factory.Static{
+		OME: omefake.NewSimpleClientset(tagged, untagged),
+		NS:  "team-a",
+	}
+	out, err := execute(t, f, "isvc", "-l", "tier=gpu")
+	require.NoError(t, err)
+	assert.Contains(t, out, "gpu-isvc")
+	assert.NotContains(t, out, "cpu-isvc")
+}
