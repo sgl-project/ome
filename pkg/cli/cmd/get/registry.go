@@ -17,6 +17,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/cli/factory"
+	"sigs.k8s.io/ome/pkg/cli/paging"
 	"sigs.k8s.io/ome/pkg/cli/printers"
 )
 
@@ -133,15 +134,18 @@ var isvcEntry = &entry{
 		if err != nil {
 			return nil, err
 		}
-		l, err := c.OmeV1beta1().InferenceServices(ns).List(ctx, opts)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]runtime.Object, 0, len(l.Items))
-		for i := range l.Items {
-			out = append(out, &l.Items[i])
-		}
-		return out, nil
+		return paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			l, err := c.OmeV1beta1().InferenceServices(ns).List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(l.Items))
+			for i := range l.Items {
+				items = append(items, &l.Items[i])
+			}
+			return items, l.Continue, nil
+		})
 	},
 	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
 		c, err := f.OMEClient()
@@ -259,20 +263,38 @@ var modelsEntry = &entry{
 			return nil, err
 		}
 		var out []runtime.Object
-		bms, err := c.OmeV1beta1().BaseModels(ns).List(ctx, opts)
+		bms, err := paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			l, err := c.OmeV1beta1().BaseModels(ns).List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(l.Items))
+			for i := range l.Items {
+				items = append(items, &l.Items[i])
+			}
+			return items, l.Continue, nil
+		})
 		if err != nil {
 			return nil, err
 		}
-		for i := range bms.Items {
-			out = append(out, &bms.Items[i])
-		}
-		cbms, err := c.OmeV1beta1().ClusterBaseModels().List(ctx, opts)
+		out = append(out, bms...)
+		cbms, err := paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			l, err := c.OmeV1beta1().ClusterBaseModels().List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(l.Items))
+			for i := range l.Items {
+				items = append(items, &l.Items[i])
+			}
+			return items, l.Continue, nil
+		})
 		if err != nil {
 			return nil, err
 		}
-		for i := range cbms.Items {
-			out = append(out, &cbms.Items[i])
-		}
+		out = append(out, cbms...)
 		return out, nil
 	},
 	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
@@ -299,15 +321,18 @@ var baseModelsEntry = &entry{
 		if err != nil {
 			return nil, err
 		}
-		l, err := c.OmeV1beta1().BaseModels(ns).List(ctx, opts)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]runtime.Object, 0, len(l.Items))
-		for i := range l.Items {
-			out = append(out, &l.Items[i])
-		}
-		return out, nil
+		return paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			l, err := c.OmeV1beta1().BaseModels(ns).List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(l.Items))
+			for i := range l.Items {
+				items = append(items, &l.Items[i])
+			}
+			return items, l.Continue, nil
+		})
 	},
 	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
 		c, err := f.OMEClient()
@@ -328,15 +353,18 @@ var clusterBaseModelsEntry = &entry{
 		if err != nil {
 			return nil, err
 		}
-		l, err := c.OmeV1beta1().ClusterBaseModels().List(ctx, opts)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]runtime.Object, 0, len(l.Items))
-		for i := range l.Items {
-			out = append(out, &l.Items[i])
-		}
-		return out, nil
+		return paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			l, err := c.OmeV1beta1().ClusterBaseModels().List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(l.Items))
+			for i := range l.Items {
+				items = append(items, &l.Items[i])
+			}
+			return items, l.Continue, nil
+		})
 	},
 	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
 		c, err := f.OMEClient()
@@ -435,20 +463,38 @@ var runtimesEntry = &entry{
 			return nil, err
 		}
 		var out []runtime.Object
-		srts, err := c.OmeV1beta1().ServingRuntimes(ns).List(ctx, opts)
+		srts, err := paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			l, err := c.OmeV1beta1().ServingRuntimes(ns).List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(l.Items))
+			for i := range l.Items {
+				items = append(items, &l.Items[i])
+			}
+			return items, l.Continue, nil
+		})
 		if err != nil {
 			return nil, err
 		}
-		for i := range srts.Items {
-			out = append(out, &srts.Items[i])
-		}
-		csrts, err := c.OmeV1beta1().ClusterServingRuntimes().List(ctx, opts)
+		out = append(out, srts...)
+		csrts, err := paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			l, err := c.OmeV1beta1().ClusterServingRuntimes().List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(l.Items))
+			for i := range l.Items {
+				items = append(items, &l.Items[i])
+			}
+			return items, l.Continue, nil
+		})
 		if err != nil {
 			return nil, err
 		}
-		for i := range csrts.Items {
-			out = append(out, &csrts.Items[i])
-		}
+		out = append(out, csrts...)
 		return out, nil
 	},
 	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
@@ -475,15 +521,18 @@ var servingRuntimesEntry = &entry{
 		if err != nil {
 			return nil, err
 		}
-		l, err := c.OmeV1beta1().ServingRuntimes(ns).List(ctx, opts)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]runtime.Object, 0, len(l.Items))
-		for i := range l.Items {
-			out = append(out, &l.Items[i])
-		}
-		return out, nil
+		return paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			l, err := c.OmeV1beta1().ServingRuntimes(ns).List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(l.Items))
+			for i := range l.Items {
+				items = append(items, &l.Items[i])
+			}
+			return items, l.Continue, nil
+		})
 	},
 	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
 		c, err := f.OMEClient()
@@ -504,15 +553,18 @@ var clusterServingRuntimesEntry = &entry{
 		if err != nil {
 			return nil, err
 		}
-		l, err := c.OmeV1beta1().ClusterServingRuntimes().List(ctx, opts)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]runtime.Object, 0, len(l.Items))
-		for i := range l.Items {
-			out = append(out, &l.Items[i])
-		}
-		return out, nil
+		return paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			l, err := c.OmeV1beta1().ClusterServingRuntimes().List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(l.Items))
+			for i := range l.Items {
+				items = append(items, &l.Items[i])
+			}
+			return items, l.Continue, nil
+		})
 	},
 	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
 		c, err := f.OMEClient()
@@ -538,15 +590,18 @@ var acceleratorClassesEntry = &entry{
 		if err != nil {
 			return nil, err
 		}
-		l, err := c.OmeV1beta1().AcceleratorClasses().List(ctx, opts)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]runtime.Object, 0, len(l.Items))
-		for i := range l.Items {
-			out = append(out, &l.Items[i])
-		}
-		return out, nil
+		return paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			l, err := c.OmeV1beta1().AcceleratorClasses().List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(l.Items))
+			for i := range l.Items {
+				items = append(items, &l.Items[i])
+			}
+			return items, l.Continue, nil
+		})
 	},
 	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
 		c, err := f.OMEClient()
@@ -571,15 +626,18 @@ var benchmarkJobsEntry = &entry{
 		if err != nil {
 			return nil, err
 		}
-		l, err := c.OmeV1beta1().BenchmarkJobs(ns).List(ctx, opts)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]runtime.Object, 0, len(l.Items))
-		for i := range l.Items {
-			out = append(out, &l.Items[i])
-		}
-		return out, nil
+		return paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			l, err := c.OmeV1beta1().BenchmarkJobs(ns).List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(l.Items))
+			for i := range l.Items {
+				items = append(items, &l.Items[i])
+			}
+			return items, l.Continue, nil
+		})
 	},
 	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
 		c, err := f.OMEClient()
@@ -609,15 +667,18 @@ var fineTunedWeightsEntry = &entry{
 		if err != nil {
 			return nil, err
 		}
-		l, err := c.OmeV1beta1().FineTunedWeights().List(ctx, opts)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]runtime.Object, 0, len(l.Items))
-		for i := range l.Items {
-			out = append(out, &l.Items[i])
-		}
-		return out, nil
+		return paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			l, err := c.OmeV1beta1().FineTunedWeights().List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(l.Items))
+			for i := range l.Items {
+				items = append(items, &l.Items[i])
+			}
+			return items, l.Continue, nil
+		})
 	},
 	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
 		c, err := f.OMEClient()
@@ -644,15 +705,18 @@ var inferenceReplicasEntry = &entry{
 		if err != nil {
 			return nil, err
 		}
-		l, err := c.OmeV1beta1().InferenceReplicas(ns).List(ctx, opts)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]runtime.Object, 0, len(l.Items))
-		for i := range l.Items {
-			out = append(out, &l.Items[i])
-		}
-		return out, nil
+		return paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			l, err := c.OmeV1beta1().InferenceReplicas(ns).List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(l.Items))
+			for i := range l.Items {
+				items = append(items, &l.Items[i])
+			}
+			return items, l.Continue, nil
+		})
 	},
 	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
 		c, err := f.OMEClient()
@@ -683,15 +747,18 @@ var workloadClustersEntry = &entry{
 		if err != nil {
 			return nil, err
 		}
-		l, err := c.OmeV1beta1().WorkloadClusters().List(ctx, opts)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]runtime.Object, 0, len(l.Items))
-		for i := range l.Items {
-			out = append(out, &l.Items[i])
-		}
-		return out, nil
+		return paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			l, err := c.OmeV1beta1().WorkloadClusters().List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(l.Items))
+			for i := range l.Items {
+				items = append(items, &l.Items[i])
+			}
+			return items, l.Continue, nil
+		})
 	},
 	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
 		c, err := f.OMEClient()
