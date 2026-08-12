@@ -1,0 +1,43 @@
+apiVersion: krew.googlecontainertools.github.com/v1alpha2
+kind: Plugin
+metadata:
+  name: ome
+spec:
+  version: VERSION
+  homepage: https://github.com/ome-projects/ome
+  shortDescription: Inspect OME models, runtimes and inference services
+  description: |
+    Official CLI for OME (Open Model Engine), the Kubernetes operator for
+    LLM serving. Provides model-centric listings across OME resources,
+    one-view InferenceService readiness diagnosis, runtime-selection
+    explanations powered by the operator's own scoring engine, and
+    component-aware log streaming.
+  caveats: |
+    This plugin is read-only and needs get/list on ome.io resources plus
+    pods, pods/log and events. See the docs for an example ClusterRole:
+    https://ome-projects.github.io/ome/docs/tasks/kubectl-ome/
+  platforms:
+    - selector: {matchLabels: {os: linux, arch: amd64}}
+      uri: https://github.com/ome-projects/ome/releases/download/VERSION/kubectl-ome_VERSION_linux_amd64.tar.gz
+      sha256: SHA256_LINUX_AMD64
+      bin: kubectl-ome
+    - selector: {matchLabels: {os: linux, arch: arm64}}
+      uri: https://github.com/ome-projects/ome/releases/download/VERSION/kubectl-ome_VERSION_linux_arm64.tar.gz
+      sha256: SHA256_LINUX_ARM64
+      bin: kubectl-ome
+    - selector: {matchLabels: {os: darwin, arch: amd64}}
+      uri: https://github.com/ome-projects/ome/releases/download/VERSION/kubectl-ome_VERSION_darwin_amd64.tar.gz
+      sha256: SHA256_DARWIN_AMD64
+      bin: kubectl-ome
+    - selector: {matchLabels: {os: darwin, arch: arm64}}
+      uri: https://github.com/ome-projects/ome/releases/download/VERSION/kubectl-ome_VERSION_darwin_arm64.tar.gz
+      sha256: SHA256_DARWIN_ARM64
+      bin: kubectl-ome
+    - selector: {matchLabels: {os: windows, arch: amd64}}
+      uri: https://github.com/ome-projects/ome/releases/download/VERSION/kubectl-ome_VERSION_windows_amd64.tar.gz
+      sha256: SHA256_WINDOWS_AMD64
+      bin: kubectl-ome.exe
+    - selector: {matchLabels: {os: windows, arch: arm64}}
+      uri: https://github.com/ome-projects/ome/releases/download/VERSION/kubectl-ome_VERSION_windows_arm64.tar.gz
+      sha256: SHA256_WINDOWS_ARM64
+      bin: kubectl-ome.exe
