@@ -6,6 +6,7 @@ import (
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 
 	"sigs.k8s.io/ome/pkg/cli/cmd/get"
+	"sigs.k8s.io/ome/pkg/cli/cmd/logs"
 	runtimecmd "sigs.k8s.io/ome/pkg/cli/cmd/runtime"
 	"sigs.k8s.io/ome/pkg/cli/cmd/status"
 	"sigs.k8s.io/ome/pkg/cli/cmd/version"
@@ -35,8 +36,8 @@ component-aware log streaming.`,
 	configFlags.AddFlags(cmd.PersistentFlags())
 
 	// Command families. Keep alphabetical.
-	// (logs is added by a later PR; get/runtime/status/version below.)
 	cmd.AddCommand(get.NewCmd(f, streams))
+	cmd.AddCommand(logs.NewCmd(f, streams))
 	cmd.AddCommand(runtimecmd.NewCmd(f, streams))
 	cmd.AddCommand(status.NewCmd(f, streams))
 	cmd.AddCommand(version.NewCmd(f, streams))
