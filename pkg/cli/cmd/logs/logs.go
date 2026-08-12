@@ -90,6 +90,12 @@ func (o *Options) Run(ctx context.Context, f factory.Factory) error {
 		req := kube.CoreV1().Pods(ns).GetLogs(p.Name, &po)
 		reader, err := req.Stream(ctx)
 		if err != nil {
+			// Don't leak the API-server log connections already opened for
+			// earlier pods in this loop: multiplex() never gets to run its
+			// deferred Close on them since we're bailing out before the call.
+			for _, s := range streams {
+				_ = s.Reader.Close()
+			}
 			return fmt.Errorf("streaming logs for pod %s: %w", p.Name, err)
 		}
 		prefix := ""
