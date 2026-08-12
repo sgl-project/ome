@@ -239,3 +239,166 @@ func TestExplainModelNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
+
+// TestExplainNamesMatchingFormatCause pins down defect (a), case 2: the
+// supportedModelFormats entry that actually matches the model has no
+// autoSelect=true, but a *different*, non-matching entry on the same runtime
+// does. ValidateRuntime ignores autoSelect entirely (it only checks
+// compatibility) so it returns nil here; the old code took that nil to mean
+// "must be missing an autoSelect entry altogether" and printed that hardcoded
+// reason, which is false -- srt-mixed has one, just not on the matching
+// format. See pkg/runtimeselector/scorer.go CalculateScore: it skips only
+// explicitly autoSelect=false formats, so the matching (explicitly
+// non-autoSelect) format contributes nothing and the non-matching autoSelect
+// format scores 0 too (wrong ModelFormat.Name), leaving the runtime out of
+// GetCompatibleRuntimes' matches entirely.
+func TestExplainNamesMatchingFormatCause(t *testing.T) {
+	format := "safetensors"
+	model := &v1beta1.ClusterBaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "llama-70b"},
+		Spec:       v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: format}},
+	}
+	rt := &v1beta1.ClusterServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "srt-mixed"},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				// Matches the model's format, but explicitly opts out of auto-select.
+				{ModelFormat: &v1beta1.ModelFormat{Name: format}, AutoSelect: ptr(false)},
+				// Auto-select enabled, but for a format that does not match this model.
+				{ModelFormat: &v1beta1.ModelFormat{Name: "onnx"}, AutoSelect: ptr(true)},
+			},
+		},
+	}
+	ctrl := ctrlfake.NewClientBuilder().WithScheme(scheme(t)).WithObjects(model, rt).Build()
+	f := factory.Static{
+		OME:     omefake.NewSimpleClientset(model),
+		Runtime: ctrl,
+		NS:      "team-a",
+	}
+	out, err := execute(t, f, "explain", "--model", "llama-70b")
+	require.NoError(t, err)
+
+	got := row(t, out, "srt-mixed")
+	require.GreaterOrEqual(t, len(got), 3, "row: %v", got)
+	assert.Equal(t, "No", got[2])
+	assert.Contains(t, out, "not autoSelect-enabled", "reason must name the matching-format cause")
+	assert.Contains(t, out, "safetensors", "reason should identify the matching format by name")
+	assert.NotContains(t, out, "no supportedModelFormats[].autoSelect=true entry",
+		"srt-mixed DOES have an autoSelect=true entry (onnx) -- must not claim none exists")
+}
+
+// TestExplainNamesZeroScoreCause pins down defect (a), case 3: the matching
+// format IS autoSelect-enabled, but its explicit Priority of 0 drives
+// scorer.CalculateScore (pkg/runtimeselector/scorer.go) to 0, which
+// evaluateRuntime (pkg/runtimeselector/selector.go) treats the same as "no
+// match". ValidateRuntime is blind to score entirely, so it returns nil; the
+// reason must name the zero score/priority instead of falsely claiming no
+// autoSelect entry exists.
+func TestExplainNamesZeroScoreCause(t *testing.T) {
+	format := "safetensors"
+	model := &v1beta1.ClusterBaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "llama-70b"},
+		Spec:       v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: format}},
+	}
+	rt := &v1beta1.ClusterServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "srt-zero-priority"},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{
+					ModelFormat: &v1beta1.ModelFormat{Name: format},
+					AutoSelect:  ptr(true),
+					Priority:    ptr(int32(0)),
+				},
+			},
+		},
+	}
+	ctrl := ctrlfake.NewClientBuilder().WithScheme(scheme(t)).WithObjects(model, rt).Build()
+	f := factory.Static{
+		OME:     omefake.NewSimpleClientset(model),
+		Runtime: ctrl,
+		NS:      "team-a",
+	}
+	out, err := execute(t, f, "explain", "--model", "llama-70b")
+	require.NoError(t, err)
+
+	got := row(t, out, "srt-zero-priority")
+	require.GreaterOrEqual(t, len(got), 3, "row: %v", got)
+	assert.Equal(t, "No", got[2])
+	assert.Contains(t, out, "score is 0", "reason should name the zero auto-select score")
+	assert.Contains(t, out, "priority 0", "reason should point at the explicit zero priority")
+	assert.NotContains(t, out, "no supportedModelFormats[].autoSelect=true entry",
+		"srt-zero-priority DOES have an autoSelect=true entry -- must not claim none exists")
+}
+
+// TestExplainClusterRowReflectsClusterSpecWhenShadowed pins down defect (b):
+// ValidateRuntime resolves a runtime by name only, namespaced-first
+// (pkg/runtimeselector/fetcher.go GetRuntime), so re-validating a
+// cluster-scoped candidate whose name collides with a namespace-scoped
+// runtime of the same name must not silently grade the namespaced object.
+// Same-named shadowing across scopes is an intentional pattern
+// (pkg/runtimeinheritance), not user error, so explain must still get it
+// right.
+func TestExplainClusterRowReflectsClusterSpecWhenShadowed(t *testing.T) {
+	format := "safetensors"
+	model := &v1beta1.ClusterBaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "llama-70b"},
+		Spec:       v1beta1.BaseModelSpec{ModelFormat: v1beta1.ModelFormat{Name: format}},
+	}
+	// Namespaced "shared" is fully compatible and auto-select eligible --
+	// GetCompatibleRuntimes must return it as a "Yes" row, unaffected by the
+	// cluster row's fix.
+	nsRuntime := &v1beta1.ServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "shared", Namespace: "team-a"},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{autoSelectFormat(format)},
+		},
+	}
+	// Cluster "shared" supports a totally different format. ValidateRuntime("shared")
+	// would resolve the NAMESPACED runtime above (namespaced-first, name-only),
+	// see it's compatible, and return nil -- masking the cluster object's real
+	// (and different) incompatibility if explain.go trusted that nil here.
+	clusterRuntime := &v1beta1.ClusterServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "shared"},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{autoSelectFormat("onnx")},
+		},
+	}
+	ctrl := ctrlfake.NewClientBuilder().WithScheme(scheme(t)).
+		WithObjects(model, nsRuntime, clusterRuntime).Build()
+	f := factory.Static{
+		OME:     omefake.NewSimpleClientset(model),
+		Runtime: ctrl,
+		NS:      "team-a",
+	}
+	out, err := execute(t, f, "explain", "--model", "llama-70b")
+	require.NoError(t, err)
+
+	var nsLine, clusterLine string
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || fields[0] != "shared" {
+			continue
+		}
+		switch fields[1] {
+		case "Namespaced":
+			nsLine = line
+		case "Cluster":
+			clusterLine = line
+		}
+	}
+	require.NotEmpty(t, nsLine, "expected a Namespaced row for shared:\n%s", out)
+	require.NotEmpty(t, clusterLine, "expected a Cluster row for shared:\n%s", out)
+
+	nsFields := strings.Fields(nsLine)
+	assert.Equal(t, "Yes", nsFields[2], "namespaced runtime is compatible and must be unaffected by the cluster row's fix")
+
+	clusterFields := strings.Fields(clusterLine)
+	assert.Equal(t, "No", clusterFields[2])
+	// The cluster runtime's real defect is a format mismatch (onnx vs
+	// safetensors) -- the reason must come from THAT object, not the
+	// namespaced runtime's compatibility, and not a generic
+	// autoSelect-missing claim (the cluster runtime's own format DOES have
+	// autoSelect=true).
+	assert.Contains(t, clusterLine, "onnx",
+		"cluster row's reason should come from the cluster object's own format mismatch")
+}
