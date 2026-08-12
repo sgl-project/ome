@@ -352,3 +352,54 @@ jobs:
           prerelease: ${{ contains(needs.prepare.outputs.tag, 'rc') || contains(needs.prepare.outputs.tag, 'alpha') || contains(needs.prepare.outputs.tag, 'beta') }}
           files: |
             release-assets/*
+
+  cli-artifacts:
+    name: Package kubectl-ome for krew
+    runs-on: ubuntu-latest
+    needs: [prepare, create-release]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Cross-compile
+        run: make kubectl-ome-cross GIT_TAG="${{ needs.prepare.outputs.tag }}"
+      - name: Package archives and checksums
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.prepare.outputs.tag }}"
+          mkdir -p dist
+          for os in linux darwin windows; do
+            for arch in amd64 arm64; do
+              ext=""; [ "$os" = "windows" ] && ext=".exe"
+              staging="dist/staging_${os}_${arch}"
+              mkdir -p "$staging"
+              cp "bin/cross/kubectl-ome_${os}_${arch}${ext}" "$staging/kubectl-ome${ext}"
+              cp LICENSE "$staging/"
+              tar -czf "dist/kubectl-ome_${VERSION}_${os}_${arch}.tar.gz" -C "$staging" .
+              rm -r "$staging"
+            done
+          done
+          (cd dist && sha256sum *.tar.gz > kubectl-ome_checksums.txt)
+      - name: Stamp krew manifest
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.prepare.outputs.tag }}"
+          cp hack/krew/ome.yaml dist/ome.yaml
+          sed -i "s/VERSION/${VERSION}/g" dist/ome.yaml
+          for os in linux darwin windows; do
+            for arch in amd64 arm64; do
+              sum=$(sha256sum "dist/kubectl-ome_${VERSION}_${os}_${arch}.tar.gz" | cut -d' ' -f1)
+              key="SHA256_$(echo "${os}_${arch}" | tr a-z A-Z)"
+              sed -i "s/${key}/${sum}/" dist/ome.yaml
+            done
+          done
+          grep -q "SHA256_" dist/ome.yaml && { echo "unstamped placeholder left"; exit 1; } || true
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ needs.prepare.outputs.tag }}" dist/*.tar.gz dist/kubectl-ome_checksums.txt dist/ome.yaml --clobber
