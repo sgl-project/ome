@@ -25,6 +25,8 @@ type Metrics struct {
 	modelDownloadDuration         *prometheus.HistogramVec
 	modelVerificationDuration     prometheus.Histogram
 	modelDownloadBytesTransferred *prometheus.CounterVec
+	modelDownloadPhaseDuration    *prometheus.HistogramVec
+	modelDownloadPhaseBytes       *prometheus.CounterVec
 	rateLimitWaitDuration         *prometheus.HistogramVec
 
 	// Go runtime metrics
@@ -192,6 +194,21 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 			},
 			[]string{"model_type", "namespace", "name"},
 		),
+		modelDownloadPhaseDuration: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "model_agent_download_phase_duration_seconds",
+				Help:    "The duration of bounded model download phases in seconds",
+				Buckets: downloadPhaseDurationBuckets(),
+			},
+			[]string{"phase", "outcome"},
+		),
+		modelDownloadPhaseBytes: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "model_agent_download_phase_bytes_total",
+				Help: "The total bytes processed by bounded model download phases",
+			},
+			[]string{"phase", "outcome"},
+		),
 		rateLimitWaitDuration: promauto.With(registerer).NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name:    "model_agent_rate_limit_wait_seconds",
@@ -211,6 +228,10 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 		goMemoryStackSys:  goMemoryStackSys,
 		goGCCount:         goGCCount,
 	}
+}
+
+func downloadPhaseDurationBuckets() []float64 {
+	return []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600, 1200, 1800}
 }
 
 // RecordSuccessfulDownload records a successful model download
@@ -246,6 +267,15 @@ func (m *Metrics) ObserveVerificationDuration(duration time.Duration) {
 // RecordBytesTransferred records the number of bytes transferred during a download
 func (m *Metrics) RecordBytesTransferred(modelType, namespace, name string, bytes int64) {
 	m.modelDownloadBytesTransferred.WithLabelValues(modelType, namespace, name).Add(float64(bytes))
+}
+
+// ObserveDownloadPhase records a bounded-cardinality pipeline phase. Model,
+// object, part, and run identifiers are intentionally excluded from labels.
+func (m *Metrics) ObserveDownloadPhase(phase, outcome string, duration time.Duration, bytes int64) {
+	m.modelDownloadPhaseDuration.WithLabelValues(phase, outcome).Observe(duration.Seconds())
+	if bytes > 0 {
+		m.modelDownloadPhaseBytes.WithLabelValues(phase, outcome).Add(float64(bytes))
+	}
 }
 
 // RecordGCDuration records the duration of a garbage collection cycle

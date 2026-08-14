@@ -30,9 +30,10 @@ import (
 // OCIOSDataStore performs data store operations against Oracle Object Storage.
 // It provides file upload, download, listing, and validation methods.
 type OCIOSDataStore struct {
-	logger logging.Interface
-	Config *Config
-	Client *objectstorage.ObjectStorageClient `validate:"required"`
+	logger   logging.Interface
+	observer DownloadObserver
+	Config   *Config
+	Client   *objectstorage.ObjectStorageClient `validate:"required"`
 }
 
 // DownloadOptions defines parameters to control DownloadWithStrategy behavior.
@@ -198,7 +199,19 @@ func (cds *OCIOSDataStore) DownloadWithStrategy(source ObjectURI, target string,
 	targetFilePath := ComputeTargetFilePath(source, target, &downloadOpts)
 
 	if downloadOpts.DisableOverride {
+		validationStartedAt := time.Now()
 		valid, err := cds.IsLocalCopyValid(source, targetFilePath)
+		outcome := DownloadOutcomeSuccess
+		if err != nil {
+			outcome = DownloadOutcomeError
+		}
+		cds.observeDownloadPhase(DownloadObservation{
+			Phase:      PhaseExistingCopyCheck,
+			Duration:   time.Since(validationStartedAt),
+			Outcome:    outcome,
+			ObjectName: source.ObjectName,
+			Err:        err,
+		})
 		if err != nil {
 			return fmt.Errorf("failed to check if local copy is valid: %w", err)
 		}
@@ -208,7 +221,19 @@ func (cds *OCIOSDataStore) DownloadWithStrategy(source ObjectURI, target string,
 		}
 	}
 
+	listStartedAt := time.Now()
 	objects, err := cds.ListObjects(source)
+	listOutcome := DownloadOutcomeSuccess
+	if err != nil {
+		listOutcome = DownloadOutcomeError
+	}
+	cds.observeDownloadPhase(DownloadObservation{
+		Phase:      PhaseStrategyList,
+		Duration:   time.Since(listStartedAt),
+		Outcome:    listOutcome,
+		ObjectName: source.ObjectName,
+		Err:        err,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to list objects for %s: %w", source.ObjectName, err)
 	}
@@ -241,7 +266,20 @@ func (cds *OCIOSDataStore) Download(source ObjectURI, target string, opts ...Dow
 	objectFullName := fmt.Sprintf(
 		"%s/%s/%s", source.Namespace, source.BucketName, source.ObjectName)
 
+	requestStartedAt := time.Now()
 	response, err := cds.GetObject(source)
+	requestOutcome := DownloadOutcomeSuccess
+	if err != nil {
+		requestOutcome = DownloadOutcomeError
+	}
+	cds.observeDownloadPhase(DownloadObservation{
+		Phase:      PhaseGetObjectRequest,
+		Duration:   time.Since(requestStartedAt),
+		Outcome:    requestOutcome,
+		ObjectName: source.ObjectName,
+		Attempt:    1,
+		Err:        err,
+	})
 	if err != nil {
 		return err
 	}
@@ -262,7 +300,25 @@ func (cds *OCIOSDataStore) Download(source ObjectURI, target string, opts ...Dow
 			path.Dir(targetFilePath), target, err)
 	}
 
+	copyStartedAt := time.Now()
 	err = CopyReaderToFilePath(responseContent, targetFilePath)
+	copyOutcome := DownloadOutcomeSuccess
+	if err != nil {
+		copyOutcome = DownloadOutcomeError
+	}
+	var copiedBytes int64
+	if response.ContentLength != nil {
+		copiedBytes = *response.ContentLength
+	}
+	cds.observeDownloadPhase(DownloadObservation{
+		Phase:      PhaseStandardFileCopy,
+		Duration:   time.Since(copyStartedAt),
+		Bytes:      copiedBytes,
+		Outcome:    copyOutcome,
+		ObjectName: source.ObjectName,
+		Attempt:    1,
+		Err:        err,
+	})
 	if err != nil {
 		return fmt.Errorf(
 			"failed to load downloaded object %s to the target path %s, error: %+v",
@@ -450,7 +506,28 @@ func (cds *OCIOSDataStore) ListObjects(target ObjectURI) ([]objectstorage.Object
 // If the object was uploaded via multipart and lacks a standard MD5, it attempts to verify via custom metadata.
 //
 // Returns true if the local file is a valid, verified copy of the object.
-func (cds *OCIOSDataStore) IsLocalCopyValid(source ObjectURI, localFilePath string) (bool, error) {
+func (cds *OCIOSDataStore) IsLocalCopyValid(source ObjectURI, localFilePath string) (valid bool, returnErr error) {
+	validationStartedAt := time.Now()
+	localFileExists := false
+	defer func() {
+		outcome := DownloadOutcomeSuccess
+		switch {
+		case returnErr != nil:
+			outcome = DownloadOutcomeError
+		case !localFileExists:
+			outcome = DownloadOutcomeSkipped
+		case !valid:
+			outcome = DownloadOutcomeMismatch
+		}
+		cds.observeDownloadPhase(DownloadObservation{
+			Phase:      PhaseLocalValidation,
+			Duration:   time.Since(validationStartedAt),
+			Outcome:    outcome,
+			ObjectName: source.ObjectName,
+			Err:        returnErr,
+		})
+	}()
+
 	fileInfo, err := os.Stat(localFilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -458,8 +535,21 @@ func (cds *OCIOSDataStore) IsLocalCopyValid(source ObjectURI, localFilePath stri
 		}
 		return false, err
 	}
+	localFileExists = true
 
+	headStartedAt := time.Now()
 	headResponse, err := cds.HeadObject(source)
+	headOutcome := DownloadOutcomeSuccess
+	if err != nil {
+		headOutcome = DownloadOutcomeError
+	}
+	cds.observeDownloadPhase(DownloadObservation{
+		Phase:      PhaseHeadObject,
+		Duration:   time.Since(headStartedAt),
+		Outcome:    headOutcome,
+		ObjectName: source.ObjectName,
+		Err:        err,
+	})
 	if err != nil {
 		return false, fmt.Errorf("failed to get object metadata: %w", err)
 	}
@@ -497,7 +587,21 @@ func (cds *OCIOSDataStore) IsLocalCopyValid(source ObjectURI, localFilePath stri
 	}(file)
 
 	hash := md5.New()
-	if _, err := io.Copy(hash, file); err != nil {
+	md5StartedAt := time.Now()
+	bytesRead, err := io.Copy(hash, file)
+	md5Outcome := DownloadOutcomeSuccess
+	if err != nil {
+		md5Outcome = DownloadOutcomeError
+	}
+	cds.observeDownloadPhase(DownloadObservation{
+		Phase:      PhaseMD5Read,
+		Duration:   time.Since(md5StartedAt),
+		Bytes:      bytesRead,
+		Outcome:    md5Outcome,
+		ObjectName: source.ObjectName,
+		Err:        err,
+	})
+	if err != nil {
 		return false, err
 	}
 

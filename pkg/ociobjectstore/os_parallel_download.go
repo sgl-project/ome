@@ -55,7 +55,22 @@ type DownloadedFile struct {
 }
 
 // MultipartDownload used to download big file, or the download will timeout
-func (cds *OCIOSDataStore) MultipartDownload(source ObjectURI, target string, opts ...DownloadOption) error {
+func (cds *OCIOSDataStore) MultipartDownload(source ObjectURI, target string, opts ...DownloadOption) (returnErr error) {
+	multipartStartedAt := time.Now()
+	defer func() {
+		outcome := DownloadOutcomeSuccess
+		if returnErr != nil {
+			outcome = DownloadOutcomeError
+		}
+		cds.observeDownloadPhase(DownloadObservation{
+			Phase:      PhaseMultipartTotal,
+			Duration:   time.Since(multipartStartedAt),
+			Outcome:    outcome,
+			ObjectName: source.ObjectName,
+			Err:        returnErr,
+		})
+	}()
+
 	downloadOpts, err := applyDownloadOptions(opts...)
 	if err != nil {
 		return fmt.Errorf("failed to apply download options: %w", err)
@@ -69,7 +84,19 @@ func (cds *OCIOSDataStore) MultipartDownload(source ObjectURI, target string, op
 		source.Namespace = *namespace
 	}
 
+	listStartedAt := time.Now()
 	objects, err := cds.ListObjects(source)
+	listOutcome := DownloadOutcomeSuccess
+	if err != nil {
+		listOutcome = DownloadOutcomeError
+	}
+	cds.observeDownloadPhase(DownloadObservation{
+		Phase:      PhaseMultipartList,
+		Duration:   time.Since(listStartedAt),
+		Outcome:    listOutcome,
+		ObjectName: source.ObjectName,
+		Err:        err,
+	})
 	if err != nil {
 		return err
 	}
@@ -169,8 +196,26 @@ func (cds *OCIOSDataStore) MultipartDownload(source ObjectURI, target string, op
 
 		// Use pooled buffer for streaming copy
 		bufp := BufferPool.Get().(*[]byte)
+		copyStartedAt := time.Now()
 		_, err = io.CopyBuffer(tmpFile, tempFile, *bufp)
+		copyDuration := time.Since(copyStartedAt)
 		BufferPool.Put(bufp)
+
+		copyOutcome := DownloadOutcomeSuccess
+		if err != nil {
+			copyOutcome = DownloadOutcomeError
+		}
+		cds.observeDownloadPhase(DownloadObservation{
+			Phase:      PhasePartToModelCopy,
+			Duration:   copyDuration,
+			Bytes:      part.size,
+			Outcome:    copyOutcome,
+			ObjectName: source.ObjectName,
+			PartNumber: part.partNum,
+			HasPart:    true,
+			ChunkSize:  part.size,
+			Err:        err,
+		})
 
 		if err != nil {
 			os.Remove(tempTargetFilePath)
@@ -185,19 +230,55 @@ func (cds *OCIOSDataStore) MultipartDownload(source ObjectURI, target string, op
 	}
 
 	// Ensure all data is flushed to disk
+	syncStartedAt := time.Now()
 	if err := tmpFile.Sync(); err != nil {
+		cds.observeDownloadPhase(DownloadObservation{
+			Phase:      PhaseModelFileSync,
+			Duration:   time.Since(syncStartedAt),
+			Outcome:    DownloadOutcomeError,
+			ObjectName: source.ObjectName,
+			Err:        err,
+		})
 		return fmt.Errorf("failed to sync temporary file to disk: %v", err)
 	}
+	cds.observeDownloadPhase(DownloadObservation{
+		Phase:      PhaseModelFileSync,
+		Duration:   time.Since(syncStartedAt),
+		Outcome:    DownloadOutcomeSuccess,
+		ObjectName: source.ObjectName,
+	})
 
 	// Close the file explicitly before renaming
+	closeStartedAt := time.Now()
 	if err := tmpFile.Close(); err != nil {
+		cds.observeDownloadPhase(DownloadObservation{
+			Phase:      PhaseModelFileClose,
+			Duration:   time.Since(closeStartedAt),
+			Outcome:    DownloadOutcomeError,
+			ObjectName: source.ObjectName,
+			Err:        err,
+		})
 		return fmt.Errorf("failed to close temporary file: %v", err)
 	}
+	cds.observeDownloadPhase(DownloadObservation{
+		Phase:      PhaseModelFileClose,
+		Duration:   time.Since(closeStartedAt),
+		Outcome:    DownloadOutcomeSuccess,
+		ObjectName: source.ObjectName,
+	})
 	// Mark as closed to prevent deferred function from trying to close again
 	fileClosed = true
 
 	// Rename the temporary file to the final target path
+	renameStartedAt := time.Now()
 	if err := os.Rename(tempTargetFilePath, targetFilePath); err != nil {
+		cds.observeDownloadPhase(DownloadObservation{
+			Phase:      PhaseModelFileRename,
+			Duration:   time.Since(renameStartedAt),
+			Outcome:    DownloadOutcomeError,
+			ObjectName: source.ObjectName,
+			Err:        err,
+		})
 		// Try to clean up the temp file if rename fails
 		cleanupErr := os.Remove(tempTargetFilePath)
 		if cleanupErr != nil {
@@ -206,6 +287,12 @@ func (cds *OCIOSDataStore) MultipartDownload(source ObjectURI, target string, op
 		}
 		return fmt.Errorf("failed to rename temporary file to target: %v", err)
 	}
+	cds.observeDownloadPhase(DownloadObservation{
+		Phase:      PhaseModelFileRename,
+		Duration:   time.Since(renameStartedAt),
+		Outcome:    DownloadOutcomeSuccess,
+		ObjectName: source.ObjectName,
+	})
 
 	// Double-check the final file size
 	fileInfo, err := os.Stat(targetFilePath)
@@ -293,11 +380,27 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 		start := time.Now()
 
 		for attempt := 1; attempt <= maxPartRetries; attempt++ {
+			requestStartedAt := time.Now()
 			resp, err := cds.Client.GetObject(ctx, objectstorage.GetObjectRequest{
 				NamespaceName: common.String(part.namespace),
 				BucketName:    common.String(part.bucket),
 				ObjectName:    common.String(part.object),
 				Range:         common.String(part.byteRange),
+			})
+			requestOutcome := DownloadOutcomeSuccess
+			if err != nil {
+				requestOutcome = DownloadOutcomeError
+			}
+			cds.observeDownloadPhase(DownloadObservation{
+				Phase:      PhaseGetObjectRequest,
+				Duration:   time.Since(requestStartedAt),
+				Outcome:    requestOutcome,
+				ObjectName: part.object,
+				PartNumber: part.partNum,
+				HasPart:    true,
+				Attempt:    attempt,
+				ChunkSize:  part.size,
+				Err:        err,
 			})
 			if err != nil {
 				cds.logger.Warnf("Error getting object for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, err)
@@ -315,11 +418,73 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 
 				// Stream data directly to temp file using pooled buffer
 				bufp := BufferPool.Get().(*[]byte)
-				written, streamErr := io.CopyBuffer(tempFile, resp.Content, *bufp)
+				copyStartedAt := time.Now()
+				bodyReader := newTimedReader(resp.Content, copyStartedAt)
+				written, streamErr := io.CopyBuffer(tempFile, bodyReader, *bufp)
+				copyDuration := time.Since(copyStartedAt)
 				BufferPool.Put(bufp)
 
+				copyOutcome := DownloadOutcomeSuccess
+				if streamErr != nil {
+					copyOutcome = DownloadOutcomeError
+				}
+				if bodyReader.observedFirstRead {
+					cds.observeDownloadPhase(DownloadObservation{
+						Phase:      PhaseGetObjectFirstRead,
+						Duration:   bodyReader.firstReadDuration,
+						Outcome:    copyOutcome,
+						ObjectName: part.object,
+						PartNumber: part.partNum,
+						HasPart:    true,
+						Attempt:    attempt,
+						ChunkSize:  part.size,
+						Err:        streamErr,
+					})
+				}
+				cds.observeDownloadPhase(DownloadObservation{
+					Phase:      PhaseGetObjectBodyRead,
+					Duration:   bodyReader.duration,
+					Bytes:      bodyReader.bytes,
+					Outcome:    copyOutcome,
+					ObjectName: part.object,
+					PartNumber: part.partNum,
+					HasPart:    true,
+					Attempt:    attempt,
+					ChunkSize:  part.size,
+					Err:        streamErr,
+				})
+				cds.observeDownloadPhase(DownloadObservation{
+					Phase:      PhaseObjectToPartCopy,
+					Duration:   copyDuration,
+					Bytes:      written,
+					Outcome:    copyOutcome,
+					ObjectName: part.object,
+					PartNumber: part.partNum,
+					HasPart:    true,
+					Attempt:    attempt,
+					ChunkSize:  part.size,
+					Err:        streamErr,
+				})
+
 				closeErr := resp.Content.Close()
+				syncStartedAt := time.Now()
 				syncErr := tempFile.Sync()
+				syncOutcome := DownloadOutcomeSuccess
+				if syncErr != nil {
+					syncOutcome = DownloadOutcomeError
+				}
+				cds.observeDownloadPhase(DownloadObservation{
+					Phase:      PhasePartFileSync,
+					Duration:   time.Since(syncStartedAt),
+					Bytes:      written,
+					Outcome:    syncOutcome,
+					ObjectName: part.object,
+					PartNumber: part.partNum,
+					HasPart:    true,
+					Attempt:    attempt,
+					ChunkSize:  part.size,
+					Err:        syncErr,
+				})
 				tempFile.Close()
 
 				if streamErr != nil {
@@ -354,21 +519,43 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 
 		if lastErr != nil {
 			// All retries failed for this part
+			channelWaitStartedAt := time.Now()
 			result <- &DownloadedPart{
 				err:     lastErr,
 				partNum: part.partNum,
 				offset:  part.offset,
 			}
+			cds.observeDownloadPhase(DownloadObservation{
+				Phase:      PhasePartChannelWait,
+				Duration:   time.Since(channelWaitStartedAt),
+				Outcome:    DownloadOutcomeError,
+				ObjectName: part.object,
+				PartNumber: part.partNum,
+				HasPart:    true,
+				ChunkSize:  part.size,
+				Err:        lastErr,
+			})
 			continue
 		}
 
 		// Success: send the downloaded part
+		channelWaitStartedAt := time.Now()
 		result <- &DownloadedPart{
 			size:         size,
 			tempFilePath: tempFilePath,
 			offset:       part.offset,
 			partNum:      part.partNum,
 		}
+		cds.observeDownloadPhase(DownloadObservation{
+			Phase:      PhasePartChannelWait,
+			Duration:   time.Since(channelWaitStartedAt),
+			Bytes:      size,
+			Outcome:    DownloadOutcomeSuccess,
+			ObjectName: part.object,
+			PartNumber: part.partNum,
+			HasPart:    true,
+			ChunkSize:  part.size,
+		})
 	}
 }
 

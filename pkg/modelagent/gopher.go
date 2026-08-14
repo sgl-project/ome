@@ -44,6 +44,8 @@ type GopherTask struct {
 	BaseModel              *v1beta1.BaseModel
 	ClusterBaseModel       *v1beta1.ClusterBaseModel
 	TensorRTLLMShapeFilter *TensorRTLLMShapeFilter
+	QueuedAt               time.Time
+	DownloadID             string
 	SamePathWaitStartedAt  time.Time
 	NormalPriorityOnly     bool
 	RevalidationReplay     bool
@@ -202,6 +204,9 @@ func (s *Gopher) enqueueTask(task *GopherTask) {
 		s.cancelActiveDownload(task)
 	} else {
 		s.classifyStartupRevalidation(task)
+		// This measures time in Gopher's priority queue. Scout/watch latency is
+		// outside this boundary and remains visible in the CR/log timestamps.
+		task.QueuedAt = time.Now()
 	}
 	s.taskQueue.enqueue(task)
 }
@@ -348,6 +353,22 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 	// Get model info for logging
 	modelInfo := getModelInfoForLogging(task)
 	modelUID := getModelUID(task)
+	if task.TaskType == Download || task.TaskType == DownloadOverride {
+		if task.DownloadID == "" {
+			task.DownloadID = fmt.Sprintf("%s-%d", modelUID, time.Now().UnixNano())
+		}
+		if !task.QueuedAt.IsZero() {
+			s.observeTaskDownloadPhase(
+				task,
+				ociobjectstore.PhaseQueueWait,
+				task.QueuedAt,
+				ociobjectstore.DownloadOutcomeSuccess,
+				0,
+				nil,
+			)
+			task.QueuedAt = time.Time{}
+		}
+	}
 	s.logger.Infof("Processing gopher task: %s, type: %s", modelInfo, task.TaskType)
 
 	// Get model type, namespace, and name for metrics
@@ -389,9 +410,13 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 			ClusterBaseModel: task.ClusterBaseModel,
 		}
 
+		statusStartedAt := time.Now()
 		if err := s.safeNodeLabelReconciliation(nodeLabelOp); err != nil {
+			s.observeTaskDownloadPhase(task, ociobjectstore.PhaseStatusUpdating, statusStartedAt, ociobjectstore.DownloadOutcomeError, 0, err)
 			s.logger.Errorf("Failed to set model %s status to Updating: %v", modelInfo, err)
 			// Continue with download anyway
+		} else {
+			s.observeTaskDownloadPhase(task, ociobjectstore.PhaseStatusUpdating, statusStartedAt, ociobjectstore.DownloadOutcomeSuccess, 0, nil)
 		}
 
 		// Create a cancellable context for this download
@@ -506,8 +531,12 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 				s.logger.Warnf("No model object found in task, skipping config parsing")
 			}
 
+			configStartedAt := time.Now()
 			if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel, nil); err != nil {
+				s.observeTaskDownloadPhase(task, ociobjectstore.PhaseModelConfigUpdate, configStartedAt, ociobjectstore.DownloadOutcomeError, 0, err)
 				s.logger.Errorf("Failed to parse and update model config: %v", err)
+			} else {
+				s.observeTaskDownloadPhase(task, ociobjectstore.PhaseModelConfigUpdate, configStartedAt, ociobjectstore.DownloadOutcomeSuccess, 0, nil)
 			}
 		case storage.StorageTypeVendor:
 			s.logger.Infof("Skipping download for model %s", modelInfo)
@@ -568,11 +597,14 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 		}
 
 		// This will update both the node label and ConfigMap status
+		readyStartedAt := time.Now()
 		err = s.safeNodeLabelReconciliation(nodeLabelOp)
 		if err != nil {
+			s.observeTaskDownloadPhase(task, ociobjectstore.PhaseStatusReady, readyStartedAt, ociobjectstore.DownloadOutcomeError, 0, err)
 			s.logger.Errorf("Failed to mark model %s as Ready: %v", modelInfo, err)
 			return err
 		}
+		s.observeTaskDownloadPhase(task, ociobjectstore.PhaseStatusReady, readyStartedAt, ociobjectstore.DownloadOutcomeSuccess, 0, nil)
 	case Delete:
 		// First, cancel any ongoing download for this model
 		s.activeDownloadsMutex.RLock()
@@ -1216,6 +1248,7 @@ func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectUR
 	if err != nil {
 		return fmt.Errorf("failed to create object storage client: %w", err)
 	}
+	ociOSDataStore.SetDownloadObserver(newModelDownloadObserver(s, task))
 
 	// Check context before making expensive operations
 	select {
@@ -1225,7 +1258,13 @@ func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectUR
 	}
 
 	s.logger.Infof("Making call to object storage with endpoint %s", ociOSDataStore.Client.Endpoint())
+	prefixListStartedAt := time.Now()
 	objects, err := ociOSDataStore.ListObjects(*uri)
+	prefixListOutcome := ociobjectstore.DownloadOutcomeSuccess
+	if err != nil {
+		prefixListOutcome = ociobjectstore.DownloadOutcomeError
+	}
+	s.observeTaskDownloadPhase(task, ociobjectstore.PhasePrefixList, prefixListStartedAt, prefixListOutcome, 0, err)
 	if err != nil {
 		return fmt.Errorf("failed to list objects: %w", err)
 	}
@@ -1252,9 +1291,13 @@ func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectUR
 	}
 
 	var objectUris []ociobjectstore.ObjectURI
+	var totalBytes int64
 	for _, obj := range objects {
 		if obj.Name == nil {
 			continue
+		}
+		if obj.Size != nil {
+			totalBytes += *obj.Size
 		}
 		objectUris = append(objectUris, ociobjectstore.ObjectURI{
 			Namespace:  uri.Namespace,
@@ -1274,12 +1317,20 @@ func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectUR
 	// TODO: BulkDownload doesn't support context cancellation yet
 	// This means downloads may continue even after deletion request
 	// Future enhancement: modify ociobjectstore to support context
+	bulkDownloadStartedAt := time.Now()
 	errs := ociOSDataStore.BulkDownload(objectUris, destPath, s.concurrency,
 		ociobjectstore.WithThreads(s.multipartConcurrency),
 		ociobjectstore.WithChunkSize(BigFileSizeInMB),
 		ociobjectstore.WithSizeThreshold(BigFileSizeInMB),
 		ociobjectstore.WithOverrideEnabled(false),
 		ociobjectstore.WithStripPrefix(uri.Prefix))
+	bulkDownloadOutcome := ociobjectstore.DownloadOutcomeSuccess
+	bulkDownloadBytes := totalBytes
+	if errs != nil {
+		bulkDownloadOutcome = ociobjectstore.DownloadOutcomeError
+		bulkDownloadBytes = 0
+	}
+	s.observeTaskDownloadPhase(task, ociobjectstore.PhaseBulkDownload, bulkDownloadStartedAt, bulkDownloadOutcome, bulkDownloadBytes, errs)
 	if errs != nil {
 		// Check if we were cancelled during download
 		select {
@@ -1289,12 +1340,18 @@ func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectUR
 			return fmt.Errorf("failed to download objects: %v", errs)
 		}
 	}
-
 	// Perform final verification of all downloaded files
 	s.logger.Info("Performing final integrity verification of all downloaded files...")
 	verificationStartTime := time.Now()
 	verificationErrors := s.verifyDownloadedFiles(ociOSDataStore, objectUris, destPath, task)
 	verificationDuration := time.Since(verificationStartTime)
+	verificationOutcome := ociobjectstore.DownloadOutcomeSuccess
+	var verificationErr error
+	if len(verificationErrors) > 0 {
+		verificationOutcome = ociobjectstore.DownloadOutcomeError
+		verificationErr = fmt.Errorf("verification failed for %d files", len(verificationErrors))
+	}
+	s.observeTaskDownloadPhase(task, ociobjectstore.PhaseFinalVerification, verificationStartTime, verificationOutcome, totalBytes, verificationErr)
 
 	// Record verification duration
 	s.metrics.ObserveVerificationDuration(verificationDuration)
@@ -1309,13 +1366,7 @@ func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectUR
 		return fmt.Errorf("integrity verification failed for %d/%d files: %s", len(verificationErrors), len(objects), strings.Join(errMsgs, "; "))
 	}
 
-	// Calculate and record total bytes transferred
-	var totalBytes int64
-	for _, obj := range objects {
-		if obj.Size != nil {
-			totalBytes += *obj.Size
-		}
-	}
+	// Record total bytes transferred after successful verification.
 	s.metrics.RecordBytesTransferred(modelType, namespace, name, totalBytes)
 
 	s.logger.Infof("All files downloaded and verified successfully (%d files, %d bytes, verification took %v)",

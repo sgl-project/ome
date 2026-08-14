@@ -31,6 +31,27 @@ func TestNewMetrics_RegistersMetrics(t *testing.T) {
 	}
 }
 
+func TestDownloadPhaseMetrics(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	metrics := NewMetrics(reg)
+
+	metrics.ObserveDownloadPhase("get_object_body_read", "success", 2*time.Second, 4096)
+
+	if got := testutil.ToFloat64(metrics.modelDownloadPhaseBytes.WithLabelValues("get_object_body_read", "success")); got != 4096 {
+		t.Errorf("modelDownloadPhaseBytes = %v, want 4096", got)
+	}
+	if got := testutil.CollectAndCount(metrics.modelDownloadPhaseDuration); got != 1 {
+		t.Errorf("modelDownloadPhaseDuration metric families = %d, want 1", got)
+	}
+}
+
+func TestDownloadPhaseDurationBucketsCoverLargeModels(t *testing.T) {
+	buckets := downloadPhaseDurationBuckets()
+	if got := buckets[len(buckets)-1]; got < 1800 {
+		t.Errorf("largest download phase duration bucket = %v, want at least 1800 seconds", got)
+	}
+}
+
 func TestGoRuntimeMetrics_AreSet(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	_ = NewMetrics(reg)
