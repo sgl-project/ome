@@ -1,0 +1,23 @@
+title: Alfred GPU Cluster Caretaker
+oep-number: 0008
+authors:
+  - "@slin1237"
+  - "@pallasathena92"
+status: provisional
+creation-date: 2026-08-12
+reviewers:
+  - TBD
+approvers:
+  - TBD
+
+# The target maturity stage in the current dev cycle for this OEP.
+stage: alpha
+
+# Metrics to monitor feature adoption and performance
+metrics:
+  - alfred_cluster_fragmentation_score
+  - alfred_fragmentation_observed
+  - alfred_fragmentation_reclaimable
+  - alfred_pending_pressure
+  - alfred_recommendations_produced_total
+  - alfred_lws_recommendations_total
