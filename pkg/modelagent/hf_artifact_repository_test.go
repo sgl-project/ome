@@ -3,6 +3,7 @@ package modelagent
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -283,6 +284,20 @@ func TestHfArtifactRepositoryRejectsInvalidExpectedArtifact(t *testing.T) {
 	configMap, err := client.CoreV1().ConfigMaps("ome").Get(context.Background(), "node-1", metav1.GetOptions{})
 	require.NoError(t, err)
 	assert.Empty(t, configMap.Data)
+}
+
+func TestValidateHfArtifactIdentityAndPathAcceptsUppercaseCommitSHA(t *testing.T) {
+	identity := HfArtifactIdentity{
+		ModelID:   "Qwen/Qwen3-8B",
+		CommitSHA: strings.ToUpper(testHFCommitSHA),
+	}
+	artifact := HfArtifactEntry{
+		Key:       hfArtifactConfigMapKey(identity),
+		Identity:  identity,
+		LocalPath: canonicalHfArtifactPath("/mnt/data/models/customer-model-store/model-ocid", identity),
+	}
+
+	assert.NoError(t, validateHfArtifactIdentityAndPath(artifact))
 }
 
 func TestHfArtifactRepositoryRemovesModelReferenceAndDeletesUnreferencedArtifactEntry(t *testing.T) {

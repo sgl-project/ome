@@ -402,7 +402,7 @@ func validateHfArtifactIdentityAndPath(artifact HfArtifactEntry) error {
 	expectedSuffix := filepath.Join(
 		constants.ModelArtifactsDirectory,
 		filepath.FromSlash(artifact.Identity.ModelID),
-		artifact.Identity.CommitSHA,
+		strings.ToLower(artifact.Identity.CommitSHA),
 	)
 	cleanPath := filepath.Clean(artifact.LocalPath)
 	if cleanPath != expectedSuffix && !strings.HasSuffix(cleanPath, string(filepath.Separator)+expectedSuffix) {
