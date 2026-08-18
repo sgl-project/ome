@@ -27,6 +27,8 @@ type Metrics struct {
 	modelDownloadBytesTransferred *prometheus.CounterVec
 	modelDownloadPhaseDuration    *prometheus.HistogramVec
 	modelDownloadPhaseBytes       *prometheus.CounterVec
+	modelDownloadWriteCalls       *prometheus.CounterVec
+	modelDownloadWriteMaxDuration *prometheus.HistogramVec
 	rateLimitWaitDuration         *prometheus.HistogramVec
 
 	// Go runtime metrics
@@ -209,6 +211,21 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 			},
 			[]string{"phase", "outcome"},
 		),
+		modelDownloadWriteCalls: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "model_agent_download_write_calls_total",
+				Help: "The total direct model file write calls grouped by requested write size",
+			},
+			[]string{"outcome", "size_range"},
+		),
+		modelDownloadWriteMaxDuration: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "model_agent_download_write_max_duration_seconds",
+				Help:    "The longest direct model file write call observed in each downloaded part",
+				Buckets: prometheus.ExponentialBuckets(0.0001, 2, 18), // 100us to ~13s
+			},
+			[]string{"outcome"},
+		),
 		rateLimitWaitDuration: promauto.With(registerer).NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name:    "model_agent_rate_limit_wait_seconds",
@@ -275,6 +292,27 @@ func (m *Metrics) ObserveDownloadPhase(phase, outcome string, duration time.Dura
 	m.modelDownloadPhaseDuration.WithLabelValues(phase, outcome).Observe(duration.Seconds())
 	if bytes > 0 {
 		m.modelDownloadPhaseBytes.WithLabelValues(phase, outcome).Add(float64(bytes))
+	}
+}
+
+// ObserveDownloadWriteCalls records an aggregated, bounded distribution for
+// direct model file writes. Each count represents one WriteAt call.
+func (m *Metrics) ObserveDownloadWriteCalls(outcome string, maxDuration time.Duration, upTo16KiB, from16KiBTo64KiB, from64KiBTo256KiB, from256KiBTo1MiB, over1MiB int64) {
+	m.modelDownloadWriteMaxDuration.WithLabelValues(outcome).Observe(maxDuration.Seconds())
+	counts := []struct {
+		rangeName string
+		count     int64
+	}{
+		{rangeName: "up_to_16_kib", count: upTo16KiB},
+		{rangeName: "16_kib_to_64_kib", count: from16KiBTo64KiB},
+		{rangeName: "64_kib_to_256_kib", count: from64KiBTo256KiB},
+		{rangeName: "256_kib_to_1_mib", count: from256KiBTo1MiB},
+		{rangeName: "over_1_mib", count: over1MiB},
+	}
+	for _, sizeRange := range counts {
+		if sizeRange.count > 0 {
+			m.modelDownloadWriteCalls.WithLabelValues(outcome, sizeRange.rangeName).Add(float64(sizeRange.count))
+		}
 	}
 }
 

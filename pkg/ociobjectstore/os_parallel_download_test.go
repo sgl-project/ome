@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -223,6 +224,41 @@ func TestWritePartAtRetryOverwritesPartialRange(t *testing.T) {
 	actual, err := os.ReadFile(target.Name())
 	require.NoError(t, err)
 	assert.Equal(t, []byte("complete"), actual)
+}
+
+func TestWritePartAtCollectsWriteStats(t *testing.T) {
+	target, err := os.CreateTemp(t.TempDir(), "write-stats-*.temp")
+	require.NoError(t, err)
+	defer target.Close()
+
+	content := bytes.Repeat([]byte("x"), 40*1024)
+	part := &PrepareDownloadPart{offset: 0, partNum: 0, size: int64(len(content))}
+	written, stats, err := writePartAtWithStats(target, part, &fixedChunkReader{
+		reader:    bytes.NewReader(content),
+		chunkSize: 16 * 1024,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(len(content)), written)
+	assert.Equal(t, int64(len(content)), stats.Bytes)
+	assert.Equal(t, int64(3), stats.Calls)
+	assert.Equal(t, int64(3), stats.CallsUpTo16KiB)
+	assert.Equal(t, int64(8*1024), stats.MinRequestBytes)
+	assert.Equal(t, int64(16*1024), stats.MaxRequestBytes)
+	assert.GreaterOrEqual(t, stats.Duration, time.Duration(0))
+	assert.GreaterOrEqual(t, stats.MaxDuration, time.Duration(0))
+}
+
+type fixedChunkReader struct {
+	reader    io.Reader
+	chunkSize int
+}
+
+func (r *fixedChunkReader) Read(buffer []byte) (int, error) {
+	if len(buffer) > r.chunkSize {
+		buffer = buffer[:r.chunkSize]
+	}
+	return r.reader.Read(buffer)
 }
 
 func TestPrepareDownloadPart(t *testing.T) {

@@ -25,6 +25,7 @@ const (
 	PhaseGetObjectRequest   DownloadPhase = "get_object_request"
 	PhaseGetObjectFirstRead DownloadPhase = "get_object_first_read"
 	PhaseGetObjectBodyRead  DownloadPhase = "get_object_body_read"
+	PhaseModelFileWrite     DownloadPhase = "model_file_write"
 	PhaseObjectToPartCopy   DownloadPhase = "object_to_part_file_copy"
 	PhasePartFileSync       DownloadPhase = "part_file_sync"
 	PhasePartChannelWait    DownloadPhase = "part_channel_wait"
@@ -39,6 +40,23 @@ const (
 	PhaseMD5Read            DownloadPhase = "md5_read"
 	PhaseLocalValidation    DownloadPhase = "local_validation"
 )
+
+// WriteStats summarizes the write calls made while streaming one object range.
+// Size bucket counts are mutually exclusive and deliberately bounded so they
+// can be exported as Prometheus labels without recording one metric per write.
+type WriteStats struct {
+	Calls              int64
+	Bytes              int64
+	Duration           time.Duration
+	MaxDuration        time.Duration
+	MinRequestBytes    int64
+	MaxRequestBytes    int64
+	CallsUpTo16KiB     int64
+	Calls16KiBTo64KiB  int64
+	Calls64KiBTo256KiB int64
+	Calls256KiBTo1MiB  int64
+	CallsOver1MiB      int64
+}
 
 // DownloadOutcome is deliberately bounded for use as a metric label.
 type DownloadOutcome string
@@ -62,6 +80,7 @@ type DownloadObservation struct {
 	HasPart    bool
 	Attempt    int
 	ChunkSize  int64
+	WriteStats *WriteStats
 	Err        error
 }
 
@@ -84,8 +103,9 @@ func (cds *OCIOSDataStore) observeDownloadPhase(observation DownloadObservation)
 }
 
 // timedReader accumulates time spent inside body Read calls without logging
-// every buffer. The surrounding copy is timed separately because wrapping the
-// file writer would disable io.Copy fast paths and perturb the measurement.
+// every buffer. The surrounding copy is timed separately. The direct-write
+// path also times its OffsetWriter; neither side implements an io.Copy fast
+// path, so that wrapper does not change the selected copy implementation.
 type timedReader struct {
 	reader            io.Reader
 	duration          time.Duration

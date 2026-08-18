@@ -47,6 +47,18 @@ func (o *modelDownloadObserver) ObserveDownloadPhase(observation ociobjectstore.
 			observation.Duration,
 			observation.Bytes,
 		)
+		if observation.WriteStats != nil {
+			stats := observation.WriteStats
+			o.metrics.ObserveDownloadWriteCalls(
+				string(observation.Outcome),
+				stats.MaxDuration,
+				stats.CallsUpTo16KiB,
+				stats.Calls16KiBTo64KiB,
+				stats.Calls64KiBTo256KiB,
+				stats.Calls256KiBTo1MiB,
+				stats.CallsOver1MiB,
+			)
+		}
 	}
 	if o.logger == nil {
 		return
@@ -77,6 +89,21 @@ func (o *modelDownloadObserver) ObserveDownloadPhase(observation ociobjectstore.
 	}
 	if observation.ChunkSize > 0 {
 		fields = append(fields, "chunk_size_bytes", observation.ChunkSize)
+	}
+	if observation.WriteStats != nil {
+		stats := observation.WriteStats
+		fields = append(fields,
+			"write_calls", stats.Calls,
+			"write_duration_ms", float64(stats.Duration.Microseconds())/1000,
+			"max_write_duration_ms", float64(stats.MaxDuration.Microseconds())/1000,
+			"min_write_request_bytes", stats.MinRequestBytes,
+			"max_write_request_bytes", stats.MaxRequestBytes,
+			"write_calls_up_to_16_kib", stats.CallsUpTo16KiB,
+			"write_calls_16_kib_to_64_kib", stats.Calls16KiBTo64KiB,
+			"write_calls_64_kib_to_256_kib", stats.Calls64KiBTo256KiB,
+			"write_calls_256_kib_to_1_mib", stats.Calls256KiBTo1MiB,
+			"write_calls_over_1_mib", stats.CallsOver1MiB,
+		)
 	}
 	if observation.Err != nil {
 		fields = append(fields, "error", observation.Err)

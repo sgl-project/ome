@@ -394,7 +394,7 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 				// mutate the shared file cursor.
 				copyStartedAt := time.Now()
 				bodyReader := newTimedReader(resp.Content, copyStartedAt)
-				written, streamErr := writePartAt(targetFile, part, bodyReader)
+				written, writeStats, streamErr := writePartAtWithStats(targetFile, part, bodyReader)
 				copyDuration := time.Since(copyStartedAt)
 
 				copyOutcome := DownloadOutcomeSuccess
@@ -424,6 +424,19 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 					HasPart:    true,
 					Attempt:    attempt,
 					ChunkSize:  part.size,
+					Err:        streamErr,
+				})
+				cds.observeDownloadPhase(DownloadObservation{
+					Phase:      PhaseModelFileWrite,
+					Duration:   writeStats.Duration,
+					Bytes:      writeStats.Bytes,
+					Outcome:    copyOutcome,
+					ObjectName: part.object,
+					PartNumber: part.partNum,
+					HasPart:    true,
+					Attempt:    attempt,
+					ChunkSize:  part.size,
+					WriteStats: &writeStats,
 					Err:        streamErr,
 				})
 				cds.observeDownloadPhase(DownloadObservation{
@@ -526,16 +539,61 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 // next part, while OffsetWriter makes concurrent writes independent of the
 // shared file cursor.
 func writePartAt(targetFile *os.File, part *PrepareDownloadPart, source io.Reader) (int64, error) {
+	written, _, err := writePartAtWithStats(targetFile, part, source)
+	return written, err
+}
+
+func writePartAtWithStats(targetFile *os.File, part *PrepareDownloadPart, source io.Reader) (int64, WriteStats, error) {
 	writer := io.NewOffsetWriter(targetFile, part.offset)
+	timedWriter := &writeStatsWriter{writer: writer}
 	limitedSource := &io.LimitedReader{R: source, N: part.size}
 	bufp := BufferPool.Get().(*[]byte)
 	defer BufferPool.Put(bufp)
 
-	written, err := io.CopyBuffer(writer, limitedSource, *bufp)
+	written, err := io.CopyBuffer(timedWriter, limitedSource, *bufp)
 	if err == nil && written != part.size {
 		err = io.ErrUnexpectedEOF
 	}
-	return written, err
+	return written, timedWriter.stats, err
+}
+
+type writeStatsWriter struct {
+	writer io.Writer
+	stats  WriteStats
+}
+
+func (w *writeStatsWriter) Write(buffer []byte) (int, error) {
+	startedAt := time.Now()
+	n, err := w.writer.Write(buffer)
+	duration := time.Since(startedAt)
+
+	requestedBytes := int64(len(buffer))
+	w.stats.Calls++
+	w.stats.Bytes += int64(n)
+	w.stats.Duration += duration
+	if duration > w.stats.MaxDuration {
+		w.stats.MaxDuration = duration
+	}
+	if w.stats.MinRequestBytes == 0 || requestedBytes < w.stats.MinRequestBytes {
+		w.stats.MinRequestBytes = requestedBytes
+	}
+	if requestedBytes > w.stats.MaxRequestBytes {
+		w.stats.MaxRequestBytes = requestedBytes
+	}
+	switch {
+	case requestedBytes <= 16*1024:
+		w.stats.CallsUpTo16KiB++
+	case requestedBytes <= 64*1024:
+		w.stats.Calls16KiBTo64KiB++
+	case requestedBytes <= 256*1024:
+		w.stats.Calls64KiBTo256KiB++
+	case requestedBytes <= 1024*1024:
+		w.stats.Calls256KiBTo1MiB++
+	default:
+		w.stats.CallsOver1MiB++
+	}
+
+	return n, err
 }
 
 func (cds *OCIOSDataStore) DownloadWithMultiThreads(downloadThreads int, filesToDownload chan *FileToDownload) chan *DownloadedFile {

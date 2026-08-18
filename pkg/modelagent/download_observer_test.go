@@ -32,7 +32,7 @@ func TestModelDownloadObserverRecordsBoundedMetrics(t *testing.T) {
 
 	observer := newModelDownloadObserver(gopher, task)
 	observer.ObserveDownloadPhase(ociobjectstore.DownloadObservation{
-		Phase:      ociobjectstore.PhaseObjectToPartCopy,
+		Phase:      ociobjectstore.PhaseModelFileWrite,
 		Duration:   time.Second,
 		Bytes:      2048,
 		Outcome:    ociobjectstore.DownloadOutcomeSuccess,
@@ -41,10 +41,23 @@ func TestModelDownloadObserverRecordsBoundedMetrics(t *testing.T) {
 		HasPart:    true,
 		Attempt:    1,
 		ChunkSize:  4096,
+		WriteStats: &ociobjectstore.WriteStats{
+			Calls:           3,
+			Bytes:           2048,
+			Duration:        time.Second,
+			MaxDuration:     500 * time.Millisecond,
+			MinRequestBytes: 512,
+			MaxRequestBytes: 1024,
+			CallsUpTo16KiB:  3,
+		},
 	})
 
-	got := testutil.ToFloat64(metrics.modelDownloadPhaseBytes.WithLabelValues("object_to_part_file_copy", "success"))
+	got := testutil.ToFloat64(metrics.modelDownloadPhaseBytes.WithLabelValues("model_file_write", "success"))
 	if got != 2048 {
 		t.Fatalf("modelDownloadPhaseBytes = %v, want 2048", got)
+	}
+	writeCalls := testutil.ToFloat64(metrics.modelDownloadWriteCalls.WithLabelValues("success", "up_to_16_kib"))
+	if writeCalls != 3 {
+		t.Fatalf("modelDownloadWriteCalls = %v, want 3", writeCalls)
 	}
 }

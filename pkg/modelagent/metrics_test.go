@@ -45,6 +45,30 @@ func TestDownloadPhaseMetrics(t *testing.T) {
 	}
 }
 
+func TestDownloadWriteCallMetrics(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	metrics := NewMetrics(reg)
+
+	metrics.ObserveDownloadWriteCalls("success", 250*time.Millisecond, 3, 4, 5, 6, 7)
+
+	wants := map[string]float64{
+		"up_to_16_kib":      3,
+		"16_kib_to_64_kib":  4,
+		"64_kib_to_256_kib": 5,
+		"256_kib_to_1_mib":  6,
+		"over_1_mib":        7,
+	}
+	for sizeRange, want := range wants {
+		got := testutil.ToFloat64(metrics.modelDownloadWriteCalls.WithLabelValues("success", sizeRange))
+		if got != want {
+			t.Errorf("modelDownloadWriteCalls[%s] = %v, want %v", sizeRange, got, want)
+		}
+	}
+	if got := testutil.CollectAndCount(metrics.modelDownloadWriteMaxDuration); got != 1 {
+		t.Errorf("modelDownloadWriteMaxDuration metric families = %d, want 1", got)
+	}
+}
+
 func TestDownloadPhaseDurationBucketsCoverLargeModels(t *testing.T) {
 	buckets := downloadPhaseDurationBuckets()
 	if got := buckets[len(buckets)-1]; got < 1800 {
