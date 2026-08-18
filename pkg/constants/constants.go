@@ -12,11 +12,14 @@ import (
 	"knative.dev/pkg/network"
 )
 
+// OMEAPIGroupName is the OME API group and the prefix of every ome.io
+// annotation key.
+const OMEAPIGroupName = "ome.io"
+
 // OME Constants
 var (
-	OMEName         = "ome"
-	OMEAPIGroupName = "ome.io"
-	OMENamespace    = getEnvOrDefault("POD_NAMESPACE", "ome")
+	OMEName      = "ome"
+	OMENamespace = getEnvOrDefault("POD_NAMESPACE", "ome")
 )
 
 // Runtime revision (ServingRuntime spec snapshot) constants. OME snapshots a
@@ -185,6 +188,39 @@ var (
 	BaseModelDecryptionKeyName    = OMEAPIGroupName + "/base-model-decryption-key-name"
 	BaseModelDecryptionSecretName = OMEAPIGroupName + "/base-model-decryption-secret-name"
 	DisableModelDecryption        = OMEAPIGroupName + "/disable-model-decryption"
+)
+
+// Migration-request contract and Alfred caretaker annotations (OEP-0008).
+const (
+	// MigrationRequestAnnotationPrefix prefixes the UUID-suffixed
+	// migration-request annotations (`ome.io/migration-request-v1-<uuid>`)
+	// written by Alfred's dispatcher onto an InferenceService. The
+	// controller that owns the addressed component consumes the request,
+	// executes the move, clears the annotation, and records the outcome in
+	// Status.MigrationHistory. Wire payload in pkg/migration.
+	MigrationRequestAnnotationPrefix = OMEAPIGroupName + "/migration-request-v1-"
+
+	// AlfredAPIGroupName groups the per-workload caretaker annotations an
+	// operator sets on an InferenceService to gate Alfred's policies.
+	AlfredAPIGroupName = "alfred.ome.io"
+	// AlfredMovableAnnotationKey opts a workload out of ("false") or into
+	// ("true") every Alfred policy; wins over the cluster-wide default.
+	AlfredMovableAnnotationKey = AlfredAPIGroupName + "/movable"
+	// AlfredPriorityAnnotationKey is a float in [0, 1]; lower = more
+	// protected when Alfred orders candidates.
+	AlfredPriorityAnnotationKey = AlfredAPIGroupName + "/priority"
+	// AlfredCooldownMinutesAnnotationKey overrides the per-workload
+	// migration cooldown for this workload.
+	AlfredCooldownMinutesAnnotationKey = AlfredAPIGroupName + "/cooldown-minutes"
+	// AlfredOptOutReasonAnnotationKey is a free-text operator note
+	// explaining an opt-out; surfaced in events, never parsed.
+	AlfredOptOutReasonAnnotationKey = AlfredAPIGroupName + "/opt-out-reason"
+	// AlfredTenantGroupAnnotationKey opts same-group workloads across
+	// namespaces into cross-tenant optimization.
+	AlfredTenantGroupAnnotationKey = AlfredAPIGroupName + "/tenant-group"
+	// AlfredSpotPolicyAnnotationKey overrides the cluster spot policy for
+	// this workload: avoid | migrate | ignore.
+	AlfredSpotPolicyAnnotationKey = AlfredAPIGroupName + "/spot-policy"
 )
 
 // Label Constants
