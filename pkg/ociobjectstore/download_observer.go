@@ -29,6 +29,8 @@ const (
 	PhasePartFileSync       DownloadPhase = "part_file_sync"
 	PhasePartChannelWait    DownloadPhase = "part_channel_wait"
 	PhasePartToModelCopy    DownloadPhase = "part_to_model_file_copy"
+	PhaseObjectToModelWrite DownloadPhase = "object_to_model_file_write"
+	PhaseModelFileAllocate  DownloadPhase = "model_file_preallocate"
 	PhaseModelFileSync      DownloadPhase = "model_file_sync"
 	PhaseModelFileClose     DownloadPhase = "model_file_close"
 	PhaseModelFileRename    DownloadPhase = "model_file_rename"

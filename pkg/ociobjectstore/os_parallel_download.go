@@ -34,13 +34,12 @@ type PrepareDownloadPart struct {
 	size      int64
 }
 
-// DownloadedPart contains the data downloaded from object storage and the body part info
+// DownloadedPart reports completion metadata for a range already written into
+// the shared object-level temporary file.
 type DownloadedPart struct {
-	size         int64
-	tempFilePath string // Path to temporary file containing the data
-	offset       int64
-	partNum      int
-	err          error
+	size    int64
+	partNum int
+	err     error
 }
 
 type FileToDownload struct {
@@ -137,9 +136,6 @@ func (cds *OCIOSDataStore) MultipartDownload(source ObjectURI, target string, op
 		totalParts++
 	}
 
-	prepareDownloadParts := splitToParts(totalParts, partSize, objectSize, source)
-	downloadedParts := cds.multipartDownload(context.Background(), threads, prepareDownloadParts)
-
 	targetFilePath := ComputeTargetFilePath(source, target, &downloadOpts)
 	tempTargetFilePath := targetFilePath + ".temp"
 
@@ -152,81 +148,65 @@ func (cds *OCIOSDataStore) MultipartDownload(source ObjectURI, target string, op
 	// Clean up any existing temporary file
 	os.Remove(tempTargetFilePath)
 
-	// Create a new temporary file
-	tmpFile, err := os.Create(tempTargetFilePath)
+	// Create one object-level temporary file. Part workers write directly to
+	// disjoint offsets; the file is published only after every part succeeds.
+	tmpFile, err := os.OpenFile(tempTargetFilePath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
 
-	// Use a file closure flag to avoid double-closing the file
+	preallocateStartedAt := time.Now()
+	usedFallocate, preallocateErr := preallocateFile(tmpFile, int64(objectSize))
+	preallocateOutcome := DownloadOutcomeSuccess
+	if preallocateErr != nil {
+		preallocateOutcome = DownloadOutcomeError
+	}
+	cds.observeDownloadPhase(DownloadObservation{
+		Phase:      PhaseModelFileAllocate,
+		Duration:   time.Since(preallocateStartedAt),
+		Bytes:      int64(objectSize),
+		Outcome:    preallocateOutcome,
+		ObjectName: source.ObjectName,
+		Err:        preallocateErr,
+	})
+	if preallocateErr != nil {
+		tmpFile.Close()
+		os.Remove(tempTargetFilePath)
+		return fmt.Errorf("failed to preallocate temporary file %s: %w", tempTargetFilePath, preallocateErr)
+	}
+	cds.logger.Debugf("[%s] Preallocated %d bytes for multipart target (fallocate=%t)", source.ObjectName, objectSize, usedFallocate)
+
+	// Close the file before removing an unpublished temporary path. Workers are
+	// always joined before this function returns.
 	fileClosed := false
-	defer func(tmpFile *os.File) {
-		// Only close if not already closed
+	filePublished := false
+	defer func() {
 		if !fileClosed {
-			err := tmpFile.Close()
-			if err != nil {
-				cds.logger.Warnf("[%s] Failed to close temporary file: %v", source.ObjectName, err)
+			if closeErr := tmpFile.Close(); closeErr != nil {
+				cds.logger.Warnf("[%s] Failed to close temporary file: %v", source.ObjectName, closeErr)
 			}
 		}
-	}(tmpFile)
+		if !filePublished {
+			if removeErr := os.Remove(tempTargetFilePath); removeErr != nil && !os.IsNotExist(removeErr) {
+				cds.logger.Warnf("[%s] Failed to remove temporary file: %v", source.ObjectName, removeErr)
+			}
+		}
+	}()
 
 	startTime := time.Now()
+	downloadCtx, cancelDownload := context.WithCancel(context.Background())
+	prepareDownloadParts := splitToParts(totalParts, partSize, objectSize, source)
+	downloadedParts := cds.multipartDownload(downloadCtx, threads, prepareDownloadParts, tmpFile)
+	var downloadErr error
 	for part := range downloadedParts {
-		if part.err != nil {
-			err := os.Remove(tempTargetFilePath)
-			if err != nil {
-				cds.logger.Warnf("[%s] Failed to clean up temporary file after error: %v", source.ObjectName, err)
-			}
-			return fmt.Errorf("error downloading part %d: %v", part.partNum, part.err)
+		if part.err != nil && downloadErr == nil {
+			downloadErr = fmt.Errorf("error downloading part %d: %w", part.partNum, part.err)
+			cancelDownload()
 		}
-
-		// Copy the part from the temporary file to the final position
-		tempFile, err := os.Open(part.tempFilePath)
-		if err != nil {
-			return fmt.Errorf("failed to open temporary file for part %d: %v", part.partNum, err)
-		}
-		defer tempFile.Close()
-
-		// Copy data from temp file to final file at correct offset using streaming
-		_, err = tmpFile.Seek(part.offset, 0)
-		if err != nil {
-			os.Remove(tempTargetFilePath)
-			return fmt.Errorf("failed to seek to offset %d for part %d: %v", part.offset, part.partNum, err)
-		}
-
-		// Use pooled buffer for streaming copy
-		bufp := BufferPool.Get().(*[]byte)
-		copyStartedAt := time.Now()
-		_, err = io.CopyBuffer(tmpFile, tempFile, *bufp)
-		copyDuration := time.Since(copyStartedAt)
-		BufferPool.Put(bufp)
-
-		copyOutcome := DownloadOutcomeSuccess
-		if err != nil {
-			copyOutcome = DownloadOutcomeError
-		}
-		cds.observeDownloadPhase(DownloadObservation{
-			Phase:      PhasePartToModelCopy,
-			Duration:   copyDuration,
-			Bytes:      part.size,
-			Outcome:    copyOutcome,
-			ObjectName: source.ObjectName,
-			PartNumber: part.partNum,
-			HasPart:    true,
-			ChunkSize:  part.size,
-			Err:        err,
-		})
-
-		if err != nil {
-			os.Remove(tempTargetFilePath)
-			return fmt.Errorf("failed to copy part %d data at offset %d: %v", part.partNum, part.offset, err)
-		}
-
-		// Remove the temporary file
-		err = os.Remove(part.tempFilePath)
-		if err != nil {
-			cds.logger.Warnf("[%s] Failed to remove temporary file for part %d: %v", source.ObjectName, part.partNum, err)
-		}
+	}
+	cancelDownload()
+	if downloadErr != nil {
+		return downloadErr
 	}
 
 	// Ensure all data is flushed to disk
@@ -293,6 +273,7 @@ func (cds *OCIOSDataStore) MultipartDownload(source ObjectURI, target string, op
 		Outcome:    DownloadOutcomeSuccess,
 		ObjectName: source.ObjectName,
 	})
+	filePublished = true
 
 	// Double-check the final file size
 	fileInfo, err := os.Stat(targetFilePath)
@@ -312,54 +293,53 @@ func (cds *OCIOSDataStore) MultipartDownload(source ObjectURI, target string, op
 
 // splitToParts splits the file to the partSize and builds a new struct to prepare for multipart download
 func splitToParts(totalParts, partSize, objectSize int, source ObjectURI) chan *PrepareDownloadPart {
-	prepareDownloadParts := make(chan *PrepareDownloadPart)
-	go func() {
-		defer func() {
-			close(prepareDownloadParts)
-		}()
+	// Buffer every descriptor so cancellation of the worker pool cannot leave a
+	// producer goroutine blocked on a send. A large model has only hundreds to a
+	// few thousand descriptors, so the memory cost is negligible.
+	prepareDownloadParts := make(chan *PrepareDownloadPart, totalParts)
+	defer close(prepareDownloadParts)
 
-		for part := 0; part < totalParts; part++ {
-			start := int64(part * partSize)
-			// Calculate end position (inclusive for HTTP Range header)
-			// Note: HTTP Range is inclusive of both start and end bytes
-			end := int64(math.Min(float64((part+1)*partSize-1), float64(objectSize-1)))
+	for part := 0; part < totalParts; part++ {
+		start := int64(part * partSize)
+		// Calculate end position (inclusive for HTTP Range header)
+		// Note: HTTP Range is inclusive of both start and end bytes
+		end := int64(math.Min(float64((part+1)*partSize-1), float64(objectSize-1)))
 
-			// Ensure we're not requesting beyond file size
-			if start >= int64(objectSize) {
-				break
-			}
-
-			// Format as "bytes=start-end" for HTTP Range header
-			bytesRange := strconv.FormatInt(start, 10) + "-" + strconv.FormatInt(end, 10)
-
-			part := PrepareDownloadPart{
-				namespace: source.Namespace,
-				bucket:    source.BucketName,
-				object:    source.ObjectName,
-				byteRange: "bytes=" + bytesRange,
-				offset:    start,
-				partNum:   part,
-				// Corrected size calculation for inclusive ranges
-				size: end - start + 1,
-			}
-
-			prepareDownloadParts <- &part
+		// Ensure we're not requesting beyond file size
+		if start >= int64(objectSize) {
+			break
 		}
-	}()
+
+		// Format as "bytes=start-end" for HTTP Range header
+		bytesRange := strconv.FormatInt(start, 10) + "-" + strconv.FormatInt(end, 10)
+
+		part := PrepareDownloadPart{
+			namespace: source.Namespace,
+			bucket:    source.BucketName,
+			object:    source.ObjectName,
+			byteRange: "bytes=" + bytesRange,
+			offset:    start,
+			partNum:   part,
+			// Corrected size calculation for inclusive ranges
+			size: end - start + 1,
+		}
+
+		prepareDownloadParts <- &part
+	}
 
 	return prepareDownloadParts
 }
 
-func (cds *OCIOSDataStore) multipartDownload(ctx context.Context, downloadThreads int, prepareDownloadParts chan *PrepareDownloadPart) chan *DownloadedPart {
-	result := make(chan *DownloadedPart)
+func (cds *OCIOSDataStore) multipartDownload(ctx context.Context, downloadThreads int, prepareDownloadParts chan *PrepareDownloadPart, targetFile *os.File) chan *DownloadedPart {
+	result := make(chan *DownloadedPart, downloadThreads)
 
 	var wg sync.WaitGroup
 	wg.Add(downloadThreads)
 
 	for i := 0; i < downloadThreads; i++ {
 		go func() {
-			cds.downloadFilePart(ctx, prepareDownloadParts, result)
-			wg.Done()
+			defer wg.Done()
+			cds.downloadFilePart(ctx, prepareDownloadParts, result, targetFile)
 		}()
 	}
 
@@ -372,10 +352,13 @@ func (cds *OCIOSDataStore) multipartDownload(ctx context.Context, downloadThread
 }
 
 // downloadFilePart wraps objectStorage GetObject API call
-func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownloadParts chan *PrepareDownloadPart, result chan *DownloadedPart) {
+func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownloadParts chan *PrepareDownloadPart, result chan *DownloadedPart, targetFile *os.File) {
 	for part := range prepareDownloadParts {
+		if ctx.Err() != nil {
+			return
+		}
+
 		var lastErr error
-		var tempFilePath string
 		var size int64
 		start := time.Now()
 
@@ -406,23 +389,13 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 				cds.logger.Warnf("Error getting object for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, err)
 				lastErr = err
 			} else {
-				// Create temporary file for streaming
-				tempFile, tempErr := os.CreateTemp("", fmt.Sprintf("ome_download_part_%d_*.tmp", part.partNum))
-				if tempErr != nil {
-					cds.logger.Warnf("Error creating temp file for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, tempErr)
-					lastErr = tempErr
-					resp.Content.Close()
-					continue
-				}
-				tempFilePath = tempFile.Name()
-
-				// Stream data directly to temp file using pooled buffer
-				bufp := BufferPool.Get().(*[]byte)
+				// Stream this range directly into its disjoint offset in the shared
+				// object-level temporary file. OffsetWriter uses WriteAt and does not
+				// mutate the shared file cursor.
 				copyStartedAt := time.Now()
 				bodyReader := newTimedReader(resp.Content, copyStartedAt)
-				written, streamErr := io.CopyBuffer(tempFile, bodyReader, *bufp)
+				written, streamErr := writePartAt(targetFile, part, bodyReader)
 				copyDuration := time.Since(copyStartedAt)
-				BufferPool.Put(bufp)
 
 				copyOutcome := DownloadOutcomeSuccess
 				if streamErr != nil {
@@ -454,7 +427,7 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 					Err:        streamErr,
 				})
 				cds.observeDownloadPhase(DownloadObservation{
-					Phase:      PhaseObjectToPartCopy,
+					Phase:      PhaseObjectToModelWrite,
 					Duration:   copyDuration,
 					Bytes:      written,
 					Outcome:    copyOutcome,
@@ -467,38 +440,13 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 				})
 
 				closeErr := resp.Content.Close()
-				syncStartedAt := time.Now()
-				syncErr := tempFile.Sync()
-				syncOutcome := DownloadOutcomeSuccess
-				if syncErr != nil {
-					syncOutcome = DownloadOutcomeError
-				}
-				cds.observeDownloadPhase(DownloadObservation{
-					Phase:      PhasePartFileSync,
-					Duration:   time.Since(syncStartedAt),
-					Bytes:      written,
-					Outcome:    syncOutcome,
-					ObjectName: part.object,
-					PartNumber: part.partNum,
-					HasPart:    true,
-					Attempt:    attempt,
-					ChunkSize:  part.size,
-					Err:        syncErr,
-				})
-				tempFile.Close()
 
 				if streamErr != nil {
-					cds.logger.Warnf("Error streaming response to temp file for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, streamErr)
-					os.Remove(tempFilePath) // Clean up temp file
+					cds.logger.Warnf("Error streaming response to target file for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, streamErr)
 					lastErr = streamErr
 				} else if closeErr != nil {
 					cds.logger.Warnf("Error closing response body for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, closeErr)
-					os.Remove(tempFilePath)
 					lastErr = closeErr
-				} else if syncErr != nil {
-					cds.logger.Warnf("Error syncing temp file for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, syncErr)
-					os.Remove(tempFilePath)
-					lastErr = syncErr
 				} else {
 					// Success
 					size = written
@@ -507,8 +455,15 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 				}
 			}
 			if attempt < maxPartRetries && lastErr != nil {
-				time.Sleep(2 * time.Second)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(2 * time.Second):
+				}
 			}
+		}
+		if ctx.Err() != nil {
+			return
 		}
 
 		duration := time.Since(start)
@@ -520,10 +475,14 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 		if lastErr != nil {
 			// All retries failed for this part
 			channelWaitStartedAt := time.Now()
-			result <- &DownloadedPart{
+			partResult := &DownloadedPart{
 				err:     lastErr,
 				partNum: part.partNum,
-				offset:  part.offset,
+			}
+			select {
+			case result <- partResult:
+			case <-ctx.Done():
+				return
 			}
 			cds.observeDownloadPhase(DownloadObservation{
 				Phase:      PhasePartChannelWait,
@@ -540,11 +499,14 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 
 		// Success: send the downloaded part
 		channelWaitStartedAt := time.Now()
-		result <- &DownloadedPart{
-			size:         size,
-			tempFilePath: tempFilePath,
-			offset:       part.offset,
-			partNum:      part.partNum,
+		partResult := &DownloadedPart{
+			size:    size,
+			partNum: part.partNum,
+		}
+		select {
+		case result <- partResult:
+		case <-ctx.Done():
+			return
 		}
 		cds.observeDownloadPhase(DownloadObservation{
 			Phase:      PhasePartChannelWait,
@@ -557,6 +519,23 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 			ChunkSize:  part.size,
 		})
 	}
+}
+
+// writePartAt writes exactly one range into its preassigned location. The
+// LimitedReader prevents a malformed range response from crossing into the
+// next part, while OffsetWriter makes concurrent writes independent of the
+// shared file cursor.
+func writePartAt(targetFile *os.File, part *PrepareDownloadPart, source io.Reader) (int64, error) {
+	writer := io.NewOffsetWriter(targetFile, part.offset)
+	limitedSource := &io.LimitedReader{R: source, N: part.size}
+	bufp := BufferPool.Get().(*[]byte)
+	defer BufferPool.Put(bufp)
+
+	written, err := io.CopyBuffer(writer, limitedSource, *bufp)
+	if err == nil && written != part.size {
+		err = io.ErrUnexpectedEOF
+	}
+	return written, err
 }
 
 func (cds *OCIOSDataStore) DownloadWithMultiThreads(downloadThreads int, filesToDownload chan *FileToDownload) chan *DownloadedFile {

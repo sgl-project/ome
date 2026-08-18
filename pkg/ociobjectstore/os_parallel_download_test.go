@@ -1,7 +1,11 @@
 package ociobjectstore
 
 import (
+	"bytes"
+	"errors"
+	"io"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -92,49 +96,133 @@ func TestSplitToParts(t *testing.T) {
 
 func TestDownloadedPart(t *testing.T) {
 	t.Run("Create DownloadedPart", func(t *testing.T) {
-		// Create a temporary file for testing
-		tempFile, err := os.CreateTemp("", "test_download_part_*.tmp")
-		require.NoError(t, err)
-		defer os.Remove(tempFile.Name())
-
-		testContent := []byte("test content")
-		_, err = tempFile.Write(testContent)
-		require.NoError(t, err)
-		tempFile.Close()
-
 		part := &DownloadedPart{
-			size:         1024,
-			tempFilePath: tempFile.Name(),
-			offset:       0,
-			partNum:      1,
-			err:          nil,
+			size:    1024,
+			partNum: 1,
+			err:     nil,
 		}
 
 		assert.Equal(t, int64(1024), part.size)
-		assert.Equal(t, tempFile.Name(), part.tempFilePath)
-		assert.Equal(t, int64(0), part.offset)
 		assert.Equal(t, 1, part.partNum)
 		assert.NoError(t, part.err)
-
-		// Verify temp file contains expected content
-		data, err := os.ReadFile(part.tempFilePath)
-		require.NoError(t, err)
-		assert.Equal(t, testContent, data)
 	})
 
 	t.Run("DownloadedPart with error", func(t *testing.T) {
 		part := &DownloadedPart{
-			size:         0,
-			tempFilePath: "",
-			offset:       0,
-			partNum:      1,
-			err:          assert.AnError,
+			size:    0,
+			partNum: 1,
+			err:     assert.AnError,
 		}
 
 		assert.Equal(t, int64(0), part.size)
-		assert.Equal(t, "", part.tempFilePath)
 		assert.Error(t, part.err)
 	})
+}
+
+func TestWritePartAtConcurrentOffsets(t *testing.T) {
+	contents := [][]byte{
+		bytes.Repeat([]byte("a"), 64*1024),
+		bytes.Repeat([]byte("b"), 64*1024),
+		bytes.Repeat([]byte("c"), 64*1024),
+		bytes.Repeat([]byte("d"), 31*1024),
+	}
+
+	var totalSize int64
+	parts := make([]*PrepareDownloadPart, 0, len(contents))
+	for i, content := range contents {
+		parts = append(parts, &PrepareDownloadPart{
+			offset:  totalSize,
+			partNum: i,
+			size:    int64(len(content)),
+		})
+		totalSize += int64(len(content))
+	}
+
+	target, err := os.CreateTemp(t.TempDir(), "direct-write-*.temp")
+	require.NoError(t, err)
+	defer target.Close()
+	_, err = preallocateFile(target, totalSize)
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	errorsByPart := make(chan error, len(parts))
+	// Start in reverse order to prove correctness does not depend on a shared
+	// file cursor or in-order part completion.
+	for i := len(parts) - 1; i >= 0; i-- {
+		part := parts[i]
+		content := contents[i]
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			written, writeErr := writePartAt(target, part, bytes.NewReader(content))
+			if writeErr == nil && written != int64(len(content)) {
+				writeErr = errors.New("unexpected written byte count")
+			}
+			errorsByPart <- writeErr
+		}()
+	}
+	wg.Wait()
+	close(errorsByPart)
+	for writeErr := range errorsByPart {
+		require.NoError(t, writeErr)
+	}
+
+	require.NoError(t, target.Sync())
+	actual, err := os.ReadFile(target.Name())
+	require.NoError(t, err)
+	assert.Equal(t, bytes.Join(contents, nil), actual)
+}
+
+func TestWritePartAtRejectsShortResponse(t *testing.T) {
+	target, err := os.CreateTemp(t.TempDir(), "short-response-*.temp")
+	require.NoError(t, err)
+	defer target.Close()
+	_, err = preallocateFile(target, 8)
+	require.NoError(t, err)
+
+	part := &PrepareDownloadPart{offset: 0, partNum: 0, size: 8}
+	written, err := writePartAt(target, part, bytes.NewReader([]byte("short")))
+
+	assert.Equal(t, int64(5), written)
+	assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
+}
+
+func TestWritePartAtDoesNotCrossPartBoundary(t *testing.T) {
+	target, err := os.CreateTemp(t.TempDir(), "long-response-*.temp")
+	require.NoError(t, err)
+	defer target.Close()
+	_, err = preallocateFile(target, 8)
+	require.NoError(t, err)
+
+	part := &PrepareDownloadPart{offset: 2, partNum: 0, size: 3}
+	written, err := writePartAt(target, part, bytes.NewReader([]byte("toolong")))
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), written)
+
+	actual, err := os.ReadFile(target.Name())
+	require.NoError(t, err)
+	assert.Equal(t, []byte{0, 0, 't', 'o', 'o', 0, 0, 0}, actual)
+}
+
+func TestWritePartAtRetryOverwritesPartialRange(t *testing.T) {
+	target, err := os.CreateTemp(t.TempDir(), "retry-*.temp")
+	require.NoError(t, err)
+	defer target.Close()
+	_, err = preallocateFile(target, 8)
+	require.NoError(t, err)
+
+	part := &PrepareDownloadPart{offset: 0, partNum: 0, size: 8}
+	written, err := writePartAt(target, part, bytes.NewReader([]byte("bad")))
+	assert.Equal(t, int64(3), written)
+	assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
+
+	written, err = writePartAt(target, part, bytes.NewReader([]byte("complete")))
+	require.NoError(t, err)
+	assert.Equal(t, int64(8), written)
+
+	actual, err := os.ReadFile(target.Name())
+	require.NoError(t, err)
+	assert.Equal(t, []byte("complete"), actual)
 }
 
 func TestPrepareDownloadPart(t *testing.T) {
