@@ -125,7 +125,7 @@ Generalizing to a caretaker engine has a cost, and it is worth naming: a single 
 
 1. **Run one observe → arbitrate → actuate engine** over the physical GPU layer: a shared read-only ClusterSnapshot, a set of Policies (`Evaluate(snapshot) → []Candidate`), an Arbiter that selects and sequences under global safety bounds, a Dispatcher that actuates through the existing narrow contracts, and a Reporter that is the sole emitter of observability output (Events, decision metrics, the optional recommendations ConfigMap). The engine is the deliverable; policies are pluggable on top of it.
 2. **Ship Policy #1 — Defragmentation.** Continuously observe GPU utilization, workload placement, and pending-pod pressure; compute a fragmentation metric; produce candidates identifying which workloads, if relocated, would reduce fragmentation most; and (optionally, per opt-in) execute those migrations.
-3. **Ship Policy #2 — Node-Health Evacuation.** On a bad node condition (consumed from existing signals — node conditions, AcceleratorClass status — not newly detected by Alfred), produce candidates that evacuate OME workloads off the affected node through the narrow contract, **and** emit a remediation signal (metric + two Events: `NodeRepairNeeded` at detection, `NodeDrainedForRepair` at drain completion) for the system that owns remediation. Evacuate and signal; never cordon, drain, terminate, or reboot.
+3. **Ship Policy #2 — Node-Health Evacuation.** On a bad node condition (consumed from existing signals — node conditions — not newly detected by Alfred), produce candidates that evacuate OME workloads off the affected node through the narrow contract, **and** emit a remediation signal (metric + two Events: `NodeRepairNeeded` at detection, `NodeDrainedForRepair` at drain completion) for the system that owns remediation. Evacuate and signal; never cordon, drain, terminate, or reboot.
 4. **Reserve Policy #3 — Descheduling** as a future policy on the same engine (rebalancing workloads whose placement has drifted from current constraints). Named here only to validate that the engine generalizes; **no** behavior is promised in this OEP.
 5. **Actuate only through one narrow contract.** The migration-request annotation (the published OEP-0007 contract) is the single verb for every executable path, consumed by the controller that owns the workload: OMENative for multi-pod Instances; the InferenceService controller for `RawDeployment` components, which executes a surge-first Deployment rolling restart (single ready replica) or a targeted, PDB-honoring eviction (multiple ready replicas). Alfred itself never evicts or deletes a pod. Never modify OME-owned reconciliation state by any other path.
 6. **Operate safely by default.** Conservative rate limits, per-workload cooldowns, concurrency caps, and explicit rejection of high-uncertainty actions, enforced centrally in the Arbiter across all policies. First principle: *primum non nocere.*
@@ -140,7 +140,7 @@ Generalizing to a caretaker engine has a cost, and it is worth naming: a single 
 3. **No replica scaling — that is [OEP-0013](../0013-autoscaling/README.md)'s domain.** Alfred relocates existing workloads; it never changes how many replicas a workload has. *Rationale:* scaling and defragmentation are separate control loops with separate triggers; merging them couples two independent decisions and double-counts churn budget.
 4. **No new CRDs.** Hard constraint. Configuration is a `ConfigMap`, gating is annotations, output is metrics/Events/ConfigMap. *Rationale:* a caretaker should be deployable into an existing OME cluster without an API surface change or a migration.
 5. **Node-health *evacuation* is in scope (Policy #2); hardware *remediation* stays deferred.** This **refines** the archived Alfred's blanket "no auto-repair." We keep reacting to a bad node condition by evacuating workloads and signaling; we do **not** patch, repair, soft-reset, image-rotate, or call any cloud Compute API. Remediation — the part that actually fixes or recycles hardware — remains out of scope and is left to the operator/cloud, with an optional remediation plugin a possible *future* extension (not promised here). *Rationale:* evacuation is reversible and lives entirely within Alfred's existing narrow contract; remediation is irreversible, cloud-specific, and a different trust boundary.
-6. **Not solving GPU health detection.** Alfred *consumes* existing signals (AcceleratorClass status, node conditions) to trigger Policy #2; it adds no new telemetry and runs no health probes of its own. *Rationale:* detection is a separate concern with its own ownership; conflating it would expand scope past a caretaker.
+6. **Not solving GPU health detection.** Alfred *consumes* existing signals (node conditions) to trigger Policy #2; it adds no new telemetry and runs no health probes of its own. *Rationale:* detection is a separate concern with its own ownership; conflating it would expand scope past a caretaker.
 7. **Not an optimization engine in the mathematical sense.** Policies use heuristic candidate selection under safety bounds. "Good enough to reduce fragmentation" is the standard; global optimality is **not** promised. *Rationale:* optimal bin-packing is NP-hard and the cluster state moves under you anyway; a safe heuristic that converges beats an optimum that's stale on arrival.
 8. **Not managing workloads beyond InferenceService.** Non-OME GPU workloads are *observed* (they count toward the fragmentation picture in the ClusterSnapshot) but **never** migrated or evacuated. *Rationale:* Alfred only has a safe actuation contract for OME-owned workloads; acting on anything else would exceed that contract.
 9. **Not causing preemption.** Users set `priorityClass` on `InferenceService` and the scheduler enforces it; Alfred does not preempt. *Rationale:* preemption is the scheduler's decision, and an out-of-band preemptor would race it.
@@ -203,7 +203,7 @@ Alfred reads:
 - Pods (labeled by OME conventions).
 - InferenceServices.
 - BaseModels / ClusterBaseModels.
-- AcceleratorClasses.
+- PersistentVolumeClaims / PersistentVolumes (PVC-backed model topology).
 - Alfred's own ConfigMap for policy configuration.
 
 Alfred writes — and this list is exhaustive (see [the engine
@@ -780,7 +780,7 @@ type ClusterSnapshot struct {
 
 type NodeState struct {
     Name                  string
-    AcceleratorClass      string
+    GPUPool               string                 // node-derived pool key (GPU product / instance-shape label)
     TotalGPUs             int
     AllocatedGPUs         int
     FreeGPUs              int
@@ -847,38 +847,39 @@ The score answers one question: **how much of the cluster's free GPU capacity co
 - **Fragmentation is relative to demand.** A free GPU is only meaningfully free if a workload shape this cluster actually serves can use it, so the score is computed against the demand-size distribution, not against nodes in isolation. (Formally: the whole-GPU case of the statistical fragmentation measure of Weng et al., USENIX ATC '23, "Beware of Fragmentation: Scheduling GPU-Sharing Workloads with Fragmentation Gradient Descent".)
 - **The score measures opportunity, not state.** Operators watch this gauge to decide whether to switch from `recommend-only` to `execute`, so it must measure what `execute` could achieve. A cluster Alfred cannot improve — fully packed, fully utilized, or fragmented solely by workloads Alfred may not move — scores 0 by construction; what it cannot fix is surfaced separately (Step 3), not through the gate.
 
-Everything is computed **per `AcceleratorClass`, never mixed across classes** — free L4s cannot seat an H100 demand, and a healthy L4 pool must not mask a fragmented H100 pool.
+Everything is computed **per hardware pool, never mixed across pools** — the pool key is derived from the node (GFD GPU product label, else instance shape), never from `AcceleratorClass`: shape-scoped classes (H100x1..x8) can overlap-claim the same node and cannot partition hardware. Free L4s cannot seat an H100 demand, and a healthy L4 pool must not mask a fragmented H100 pool.
 
-**Step 1 — per-size unusable free capacity.** For each class `c` and each demand size `s` in the within-node ladder `L = [1, 2, 4, 8]`:
+**Step 1 — per-size unusable free capacity.** For each pool `c` and each demand size `s` in the within-node ladder `L = [1, 2, 4, 8]`:
 
-```
-Slots(c, s) = sum over nodes n of class c: floor(FreeGPUs(n) / s)
+```text
+Slots(c, s) = sum over nodes n of pool c: floor(FreeGPUs(n) / s)    for s <= maxCap(c)
+Slots(c, s) = floor(fullyFreeNodes(c, maxCap) / ceil(s / maxCap))    for s >  maxCap(c)
 Frag(c, s)  = 1 - Slots(c, s) * s / TotalFree(c)     // defined 0 when TotalFree(c) = 0
 ```
 
-`Frag(c, s)` reads: the fraction of class-c free GPUs that a size-s demand cannot use. The signature trap scores itself — ten 8-GPU nodes each with 7 free: `Slots(8) = 0`, so `Frag(8) = 1.0`; 70 free GPUs, every one of them invisible to an 8-GPU workload. Three properties fall out of the formula's shape: `Frag(c, 1) = 0` identically, so small sizes need no hand-tuned down-weighting; `floor()` handles heterogeneous node sizes with no special cases; and sizes larger than a node draw slots only from fully-free node groups (`floor(fullyFreeNodes / (s / nodeCapacity))`). *Topology hook (Q-040):* if a node agent later supplies `LargestContiguousFree`, it substitutes for `FreeGPUs` here; on NVSwitch fleets the two are identical, so the hook matters only for PCIe and MIG pools.
+`Frag(c, s)` reads: the fraction of pool-c free GPUs that a size-s demand cannot use. The signature trap scores itself — ten 8-GPU nodes each with 7 free: `Slots(8) = 0`, so `Frag(8) = 1.0`; 70 free GPUs, every one of them invisible to an 8-GPU workload. Three properties fall out of the formula's shape: `Frag(c, 1) = 0` identically, so small sizes need no hand-tuned down-weighting; `floor()` handles heterogeneous node sizes with no special cases; and sizes larger than every node in the pool switch to the second case: they draw slots only from fully-free nodes of the pool's largest node shape (`maxCap`), because a smaller fully-free node cannot host a max-shape member pod. *Topology hook (Q-040):* if a node agent later supplies `LargestContiguousFree`, it substitutes for `FreeGPUs` here; on NVSwitch fleets the two are identical, so the hook matters only for PCIe and MIG pools.
 
 **Step 2 — demand weighting.**
 
-```
+```text
 w(c, s)       = (1 - lambda) * demandShare(c, s) + lambda * prior(s)
 F_observed(c) = sum over s: w(c, s) * Frag(c, s)
 ```
 
-`demandShare(c, s)` is the fraction of class-c GPU demand at size `s`, counted from running plus pending OME instance footprints snapped up to the ladder. A **multi-node Instance decomposes into its per-pod, per-node footprints** — a 2×8 Instance is 16 GPUs of size-8 demand, a 2×4 Instance is 8 GPUs of size-4 demand. This is not an approximation of convenience: within-node fragmentation can only deny a multi-node workload one node-shape at a time — what it needs from the cluster is "a node with 8 free," twice — so per-pod footprint is the unit of blocking, and `Slots(8)` already counts the nodes that could host each pod. (Whether two such nodes share an RDMA fabric is cross-node adjacency, out of scope per Q-039.) An LWS-backed instance also counts here — it is real demand — even though Step 3 will refuse to move it. The **prior** is a static distribution over sizes — default `{1: 0.1, 2: 0.1, 4: 0.2, 8: 0.6}`, blended at `lambda = 0.3` (`demandBlendLambda`) — expressing what shapes this fleet exists to serve, independent of what happens to be running right now. *Why a prior must exist:* pure `demandShare` is blind to shapes not currently deployed — a cluster running only 1-GPU jobs would weight `Frag(8)` at zero and report "no fragmentation" right up until the first 8-GPU model arrives and pends. The prior keeps latent large-shape fragmentation visible; its mass sits on the largest within-node size because that is the only shape fragmentation can hurt. `lambda` dials between reactive-only (`0`) and static-weights-only (`1`). The prior need not stay hand-typed: registered `BaseModel`/`ClusterBaseModel` resources declare GPU footprints, so a catalog-derived prior ("what could be deployed here") is a natural refinement — deferred to implementation.
+`demandShare(c, s)` is the fraction of pool-c GPU demand at size `s`, counted from running plus pending OME instance footprints snapped up to the ladder. A **multi-node Instance decomposes into its per-pod, per-node footprints** — a 2×8 Instance is 16 GPUs of size-8 demand, a 2×4 Instance is 8 GPUs of size-4 demand. This is not an approximation of convenience: within-node fragmentation can only deny a multi-node workload one node-shape at a time — what it needs from the cluster is "a node with 8 free," twice — so per-pod footprint is the unit of blocking, and `Slots(8)` already counts the nodes that could host each pod. (Whether two such nodes share an RDMA fabric is cross-node adjacency, out of scope per Q-039.) An LWS-backed instance also counts here — it is real demand — even though Step 3 will refuse to move it. The **prior** is a static distribution over sizes — default `{1: 0.1, 2: 0.1, 4: 0.2, 8: 0.6}`, blended at `lambda = 0.3` (`demandBlendLambda`) — expressing what shapes this fleet exists to serve, independent of what happens to be running right now. *Why a prior must exist:* pure `demandShare` is blind to shapes not currently deployed — a cluster running only 1-GPU jobs would weight `Frag(8)` at zero and report "no fragmentation" right up until the first 8-GPU model arrives and pends. The prior keeps latent large-shape fragmentation visible; its mass sits on the largest within-node size because that is the only shape fragmentation can hurt. `lambda` dials between reactive-only (`0`) and static-weights-only (`1`). The prior need not stay hand-typed: registered `BaseModel`/`ClusterBaseModel` resources declare GPU footprints, so a catalog-derived prior ("what could be deployed here") is a natural refinement — deferred to implementation.
 
-**Step 3 — reclaimable vs. observed.** Hypothetically repack the *movable* instances — those candidate enumeration could ever emit as executable (OMENative and RawDeployment with `Movable=true`) — onto the class's nodes with first-fit-decreasing, holding everything else fixed in place: non-OME occupants, `Movable=false` workloads, and LWS-backed instances. FFD is the same heuristic family candidate simulation already uses, and global optimality is explicitly not promised (see Non-Goals: not an optimization engine). Recompute Steps 1–2 on the repacked free distribution:
+**Step 3 — reclaimable vs. observed.** Hypothetically repack the *movable* instances — those candidate enumeration could ever emit as executable (OMENative and RawDeployment with `Movable=true`) — onto the pool's nodes with first-fit-decreasing, holding everything else fixed in place: non-OME occupants, `Movable=false` workloads, and LWS-backed instances. FFD is the same heuristic family candidate simulation already uses, and global optimality is explicitly not promised (see Non-Goals: not an optimization engine). Recompute Steps 1–2 on the repacked free distribution:
 
-```
-F_best(c)        = F_observed(c) recomputed on the hypothetical repacked snapshot
+```text
+F_best(c)        = F_observed(c) recomputed on the repacked snapshot, over the same TotalFree(c)
 F_reclaimable(c) = max(0, F_observed(c) - F_best(c))
 ```
 
-`F_reclaimable` is what migration could actually fix, and it is what gates the policy. The remainder — `F_observed - F_reclaimable` — is fragmentation only an operator can fix (LWS-backed groups, non-OME occupancy) and flows to the Reporter's advisory surface instead of the gate. This split is what keeps Alfred from waking every tick on a cluster it cannot improve, while still telling the operator that manual action would help. `F_best` is a bound, not a plan: realizing it may take many moves, paced by the Arbiter's churn budget across ticks, each tick re-deriving candidates from a fresh snapshot.
+`F_reclaimable` is what migration could actually fix, and it is what gates the policy. The remainder — `F_observed - F_reclaimable` — is fragmentation only an operator can fix (LWS-backed groups, non-OME occupancy) and flows to the Reporter's advisory surface instead of the gate. This split is what keeps Alfred from waking every tick on a cluster it cannot improve, while still telling the operator that manual action would help. Both sides normalize by the *observed* `TotalFree(c)`: a repack can consume free capacity (seating a pod off an excluded node), and letting the denominator shrink with it would fabricate reclaimable fragmentation out of a shrinking base with no slot improvement. `F_best` is a bound, not a plan: realizing it may take many moves, paced by the Arbiter's churn budget across ticks, each tick re-deriving candidates from a fresh snapshot.
 
 **Step 4 — pending pressure.** A pending pod is *eligible* iff the repacked state of Step 3 could seat it (`Slots_best(c, s_p) >= 1`). Ineligible pendings are capacity shortage, not fragmentation — that is [OEP-0013](../0013-autoscaling/README.md)'s problem, and they must not wake Alfred, because no migration can seat them. (A pending multi-node gang arrives as several pending pods and is checked per-pod, so a gang can read eligible when the repack could seat only part of it. This optimism is a deliberate roughness in the gate: the score decides whether to wake, and the candidate simulator — not the score — verifies real placements.) Blocked evacuations are fed back as **virtual pending pods** of their footprint (see the risks section): a `NoSurgeHeadroom` downgrade in pass N enters pass N+1's `PendingPods` with age counted from first blockage, scored identically — steering both the demand weights and `P` toward exactly the hole the evacuation needs.
 
-```
+```text
 u(p) = 1 - exp(-age_minutes(p) / tau)      // tau = pendingUrgencyTauMinutes, default 30
 P(c) = 1 - prod over eligible p: (1 - u(p))
 ```
@@ -887,12 +888,12 @@ Bounded per pod and in aggregate — an ancient pod asymptotes to 1 instead of g
 
 **Combined score.**
 
-```
+```text
 Score(c)           = 1 - (1 - F_reclaimable(c)) * (1 - P(c))
-FragmentationScore = max over classes c: Score(c)
+FragmentationScore = max over pools c: Score(c)
 ```
 
-Noisy-OR across the two terms: fixable shape damage or a starving fixable pod each independently justify waking the policy, and both live in `[0, 1]`, so the score needs no clamp and cannot saturate. `max` over classes rather than mean: you defragment the worst pool, and a healthy pool must not dilute a sick one. Published gauges: `alfred_fragmentation_observed{acceleratorclass, size}`, `alfred_fragmentation_reclaimable{acceleratorclass}`, `alfred_pending_pressure{acceleratorclass}`, and the combined `alfred_cluster_fragmentation_score` — an operator sees *which size in which pool* is blocked and what share of it Alfred could fix, before switching from `recommend-only` to `execute`.
+Noisy-OR across the two terms: fixable shape damage or a starving fixable pod each independently justify waking the policy, and both live in `[0, 1]`, so the score needs no clamp and cannot exceed 1. `max` over pools rather than mean: you defragment the worst pool, and a healthy pool must not dilute a sick one. Published gauges: `alfred_fragmentation_observed{pool, size}`, `alfred_fragmentation_reclaimable{pool}`, `alfred_pending_pressure{pool}`, and the combined `alfred_cluster_fragmentation_score` — an operator sees *which size in which pool* is blocked and what share of it Alfred could fix, before switching from `recommend-only` to `execute`.
 
 **Threshold gate.** If `FragmentationScore > policy.fragmentationThreshold` (default `0.25`), candidate selection proceeds. At or below it, `Evaluate` returns an empty `[]Candidate` and Alfred is quiescent. The default has a concrete reading: "repacking could recover at least a quarter of demand-weighted free capacity, or a fixable pod has been pending for roughly nine minutes or more." A fully-utilized cluster, an idle cluster whose spread blocks nothing yet, and a cluster fragmented entirely by workloads Alfred cannot move all sit below threshold by construction — migration is disruptive, and the gate fires only when migration is what would help.
 
@@ -934,7 +935,7 @@ When the score is above threshold, the policy turns the snapshot into a ranked `
 
 Each Candidate carries `HintTargetNodes`: a ranked, *advisory* list of nodes the migration should prefer. Advisory is the key word — Alfred computes a good target, but the K8s scheduler makes the final placement, and Alfred re-evaluates from the observed outcome rather than insisting. Computing a hint:
 
-1. **Enumerate** nodes that can physically accommodate the Instance's footprint (GPU count and `AcceleratorClass`).
+1. **Enumerate** nodes that can physically accommodate the Instance's footprint (GPU count and hardware pool).
 2. **Filter** out nodes that would make the migration pointless or unsafe:
    - **Model not available** — storage-aware, switching on `ModelAvailability.Backend`. *Per-node models*: the target must have the model ready, per `BaseModel.Status.NodesReady` or the node label `models.ome.io/{ns}.basemodel.{name}=Ready` (OEP-0007 Q-017) — migrating to a node that must first pull a multi-hundred-GB model defeats the purpose, and the pod's own readiness `nodeSelector` would block the placement anyway. *PVC-backed models*: `NodesReady` is intentionally empty and must **not** be used as a filter; the target set is the nodes that can mount the volume — for RWX/ROX storage, any node satisfying the PVC's CSI topology, with no model pull ever needed. *RWO (and RWOP) PVCs pin the workload*: the volume attaches to one node at a time and the source pod still holds it while a surge replacement starts, so no surge-shaped mechanism can run — the candidate is downgraded to advisory with reason `VolumePinned`.
    - **Unhealthy or cordoned**: excluded. Excluding unhealthy nodes from placement is existing defragmentation behavior — and it is the seam Policy #2 builds on: a node Policy #1 already refuses as a *target* is exactly the kind of node Policy #2 will reason about as a *source* to drain. Nodes inside their post-evacuation **suspicion window** are excluded too, even after the condition clears (see Policy #2's "stay suspicious" rule). (Mechanism for Policy #2 in its own section.)
@@ -1838,7 +1839,6 @@ The full ClusterRole — the defragmenter scope minus the eviction verb:
     - clusterservingruntimes
     - basemodels
     - clusterbasemodels
-    - acceleratorclasses
   verbs: [get, list, watch]
 
 # OME InferenceService annotation patching (narrow contract)
@@ -1916,7 +1916,7 @@ those named objects.
 
 Tl;dr: every recommendation metric now carries a `policy` label so operators can
 tell defragmentation churn from node-health churn at a glance; the fragmentation
-gauges are re-keyed by accelerator class and size (observed / reclaimable /
+gauges are re-keyed by hardware pool and size (observed / reclaimable /
 pending pressure — see Fragmentation scoring); migration metrics are unchanged;
 two node-health counters are added. Events
 and the audit ConfigMap stay as the human-readable surfaces. Every
@@ -1932,20 +1932,20 @@ the single most important operational question. So the recommendation and
 outcome counters gain `policy="defragmentation"|"nodehealth"`. The
 snapshot-derived gauges (fragmentation scores, capacity) are inherently
 Policy-agnostic; capacity gauges keep their existing labels, and the scoring
-gauges carry the per-class/per-size keys defined in Fragmentation scoring.
+gauges carry the per-pool/per-size keys defined in Fragmentation scoring.
 
 **Prometheus metrics**:
 
 Snapshot / fragmentation gauges:
 
-- `alfred_cluster_fragmentation_score` (gauge, 0-1; the gate value — max over classes of the combined score)
-- `alfred_fragmentation_observed{acceleratorclass,size}` (gauge; `Frag(c,s)` — which size in which pool is blocked)
-- `alfred_fragmentation_reclaimable{acceleratorclass}` (gauge; the share migration could fix — observed minus reclaimable is the operator-only, advisory-stream gap)
-- `alfred_pending_pressure{acceleratorclass}` (gauge; `P(c)`)
+- `alfred_cluster_fragmentation_score` (gauge, 0-1; the gate value — max over pools of the combined score)
+- `alfred_fragmentation_observed{pool,size}` (gauge; `Frag(c,s)` — which size in which pool is blocked)
+- `alfred_fragmentation_reclaimable{pool}` (gauge; the share migration could fix — observed minus reclaimable is the operator-only, advisory-stream gap)
+- `alfred_pending_pressure{pool}` (gauge; `P(c)`)
 - `alfred_gpu_capacity{node,status}` (gauge; status: total/allocated/free/contiguous_max)
 - `alfred_pending_pod_count` (gauge)
 - `alfred_pending_pod_gpu_requirements{size}` (gauge)
-- `alfred_surge_headroom_gpus{acceleratorclass}` (gauge, new; the largest replacement footprint that could surge right now, per accelerator class — 0 means surge-shaped migration is infeasible and such candidates degrade to advisory)
+- `alfred_surge_headroom_gpus{pool}` (gauge, new; the largest replacement footprint that could surge right now, per hardware pool — 0 means surge-shaped migration is infeasible and such candidates degrade to advisory)
 
 Recommendation / migration counters (now `policy`-labeled):
 
@@ -2391,6 +2391,13 @@ engine must not preclude them.
   can drain multiple workloads per cycle; within-class ordering of evacuation
   candidates defined (feasible first, higher priority first, smaller footprint
   first).
+- 2026-08-20: Scoring keyed by node-derived hardware pool instead of
+  AcceleratorClass: shape-scoped classes (H100x1..x8) can overlap-claim the
+  same node and cannot partition hardware, so the pool key comes from the
+  node's GPU product label (GFD) or instance shape. Metric label
+  `acceleratorclass` renamed to `pool`; the snapshot reads
+  PersistentVolumeClaims/PersistentVolumes for model topology and no longer
+  reads AcceleratorClasses.
 - TBD: Alpha implementation (engine refactor + Policies #1 and #2).
 - TBD: First Beta user.
 - TBD: Beta (Policy #3 Descheduling).

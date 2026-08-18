@@ -15,13 +15,13 @@ import (
 type Metrics struct {
 	// Snapshot / fragmentation gauges.
 	ClusterFragmentationScore prometheus.Gauge
-	FragmentationObserved     *prometheus.GaugeVec // acceleratorclass, size
-	FragmentationReclaimable  *prometheus.GaugeVec // acceleratorclass
-	PendingPressure           *prometheus.GaugeVec // acceleratorclass
+	FragmentationObserved     *prometheus.GaugeVec // pool, size
+	FragmentationReclaimable  *prometheus.GaugeVec // pool
+	PendingPressure           *prometheus.GaugeVec // pool
 	GPUCapacity               *prometheus.GaugeVec // node, status
 	PendingPodCount           prometheus.Gauge
 	PendingPodGPURequirements *prometheus.GaugeVec // size
-	SurgeHeadroomGPUs         *prometheus.GaugeVec // acceleratorclass
+	SurgeHeadroomGPUs         *prometheus.GaugeVec // pool
 
 	// Recommendation / migration counters (Reporter-only).
 	RecommendationsProduced *prometheus.CounterVec // policy, workload, component, reason, executable
@@ -55,20 +55,20 @@ func New(reg prometheus.Registerer) *Metrics {
 	return &Metrics{
 		ClusterFragmentationScore: factory.NewGauge(prometheus.GaugeOpts{
 			Name: "alfred_cluster_fragmentation_score",
-			Help: "Combined fragmentation gate value in [0,1]: max over accelerator classes of the reclaimable-or-pending score.",
+			Help: "Combined fragmentation gate value in [0,1]: max over hardware pools of the reclaimable-or-pending score.",
 		}),
 		FragmentationObserved: factory.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "alfred_fragmentation_observed",
-			Help: "Frag(c,s): fraction of class free GPUs a demand of the labeled size cannot use.",
-		}, []string{"acceleratorclass", "size"}),
+			Help: "Frag(c,s): fraction of the pool's free GPUs a demand of the labeled size cannot use.",
+		}, []string{"pool", "size"}),
 		FragmentationReclaimable: factory.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "alfred_fragmentation_reclaimable",
 			Help: "Share of observed fragmentation that migrating movable workloads could fix.",
-		}, []string{"acceleratorclass"}),
+		}, []string{"pool"}),
 		PendingPressure: factory.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "alfred_pending_pressure",
 			Help: "P(c): age-weighted pressure from pending pods a repack could seat.",
-		}, []string{"acceleratorclass"}),
+		}, []string{"pool"}),
 		GPUCapacity: factory.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "alfred_gpu_capacity",
 			Help: "Per-node GPU capacity; status is total, allocated, free, or contiguous_max.",
@@ -83,8 +83,8 @@ func New(reg prometheus.Registerer) *Metrics {
 		}, []string{"size"}),
 		SurgeHeadroomGPUs: factory.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "alfred_surge_headroom_gpus",
-			Help: "Largest replacement footprint that could surge right now per class; 0 means surge-shaped migration is infeasible.",
-		}, []string{"acceleratorclass"}),
+			Help: "Largest replacement footprint that could surge right now per pool; 0 means surge-shaped migration is infeasible.",
+		}, []string{"pool"}),
 
 		RecommendationsProduced: factory.NewCounterVec(prometheus.CounterOpts{
 			Name: "alfred_recommendations_produced_total",
@@ -158,7 +158,7 @@ func (m *Metrics) ObserveConfigReload(outcome string) {
 	m.PolicyReload.WithLabelValues(outcome).Inc()
 }
 
-// ResetSnapshotGauges clears the node- and class-keyed snapshot gauges before
+// ResetSnapshotGauges clears the node- and pool-keyed snapshot gauges before
 // a republish so series for departed nodes and classes do not linger.
 func (m *Metrics) ResetSnapshotGauges() {
 	m.FragmentationObserved.Reset()

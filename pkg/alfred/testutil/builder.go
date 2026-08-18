@@ -139,8 +139,13 @@ func (b *SnapshotBuilder) WithMultiPodInstance(workload string, ctype v1beta1.Co
 	if !ok {
 		component = &snapshot.Component{Type: ctype, DeploymentMode: mode}
 		w.Components[ctype] = component
+	} else if component.DeploymentMode != mode {
+		// A silent rewrite would re-label instances added under the
+		// earlier mode; the test would then assert against a snapshot
+		// it did not intend to build.
+		panic(fmt.Sprintf("testutil: component %s of %q already defined with mode %q; cannot redefine as %q",
+			ctype, workload, component.DeploymentMode, mode))
 	}
-	component.DeploymentMode = mode
 
 	inst := &snapshot.Instance{
 		Index:    int32(len(component.Instances)),

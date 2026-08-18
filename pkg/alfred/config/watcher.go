@@ -60,12 +60,7 @@ func (w *Watcher) Start(ctx context.Context) error {
 		UpdateFunc: func(_, newObj interface{}) {
 			w.observe(newObj)
 		},
-		DeleteFunc: func(obj interface{}) {
-			// Deletion keeps last-known-good; log loudly so the
-			// operator knows edits will not land.
-			w.Log.Info("alfred-config ConfigMap deleted; keeping last-known-good configuration",
-				"namespace", w.Namespace, "name", w.Name)
-		},
+		DeleteFunc: func(obj interface{}) { w.observeDelete(obj) },
 	})
 	if err != nil {
 		return fmt.Errorf("register configmap handler: %w", err)
@@ -83,6 +78,23 @@ func (w *Watcher) observe(obj interface{}) {
 		return
 	}
 	w.Apply(cm)
+}
+
+// observeDelete reacts only to the watched ConfigMap disappearing — the cache
+// holds every ConfigMap in the namespace, so unrelated deletions (e.g.
+// alfred-recommendations) must stay silent. Deletion keeps last-known-good;
+// the log is loud so the operator knows edits will not land. The informer may
+// deliver a DeletedFinalStateUnknown tombstone instead of the object.
+func (w *Watcher) observeDelete(obj interface{}) {
+	if tombstone, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+		obj = tombstone.Obj
+	}
+	cm, ok := obj.(*corev1.ConfigMap)
+	if !ok || cm.Namespace != w.Namespace || cm.Name != w.Name {
+		return
+	}
+	w.Log.Info("alfred-config ConfigMap deleted; keeping last-known-good configuration",
+		"namespace", w.Namespace, "name", w.Name)
 }
 
 // Apply processes one ConfigMap state. Exposed for tests; the informer path

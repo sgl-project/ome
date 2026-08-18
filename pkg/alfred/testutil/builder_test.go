@@ -73,6 +73,22 @@ func TestEnsureWorkloadRejectsMalformedKeys(t *testing.T) {
 	}
 }
 
+// Adding a second instance to an existing component with a different
+// deployment mode would silently re-label the instances already added under
+// the earlier mode; the builder must refuse, mirroring WithNode.
+func TestWithInstanceRejectsModeConflict(t *testing.T) {
+	b := NewSnapshot().
+		WithNode("node1", "h100", 8).
+		WithInstance("prod/svc-a", v1beta1.EngineComponent, constants.RawDeployment, "node1", 1)
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("conflicting DeploymentMode must panic, not rewrite the component")
+		}
+	}()
+	b.WithInstance("prod/svc-a", v1beta1.EngineComponent, constants.MultiNode, "node1", 1)
+}
+
 // Redefining a node would silently discard occupancy accumulated by earlier
 // builder calls while workload pods keep referencing it; the builder must
 // refuse instead of producing an inconsistent snapshot.

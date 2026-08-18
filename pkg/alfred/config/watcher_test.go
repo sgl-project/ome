@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/funcr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 )
 
@@ -131,6 +133,31 @@ func TestWatcherIgnoresOtherConfigMaps(t *testing.T) {
 	w.observe(other)
 	if observer.success != 0 || w.Store.Get().Mode != ModeRecommendOnly {
 		t.Fatal("watcher must ignore unrelated ConfigMaps")
+	}
+}
+
+// TestWatcherDeleteFilter: the cache holds every ConfigMap in the namespace,
+// so only the watched ConfigMap's deletion may produce the loud
+// "alfred-config deleted" log — including when the informer hands over a
+// DeletedFinalStateUnknown tombstone instead of the object.
+func TestWatcherDeleteFilter(t *testing.T) {
+	w, _, _ := newTestWatcher()
+	var logged []string
+	w.Log = funcr.New(func(_, args string) { logged = append(logged, args) }, funcr.Options{})
+
+	other := configMap(nil)
+	other.Name = "alfred-recommendations"
+	w.observeDelete(other)
+	w.observeDelete(cache.DeletedFinalStateUnknown{Key: "ome/alfred-recommendations", Obj: other})
+	w.observeDelete("not-an-object")
+	if len(logged) != 0 {
+		t.Fatalf("unrelated deletions must stay silent, logged %v", logged)
+	}
+
+	w.observeDelete(configMap(nil))
+	w.observeDelete(cache.DeletedFinalStateUnknown{Key: "ome/alfred-config", Obj: configMap(nil)})
+	if len(logged) != 2 {
+		t.Fatalf("watched ConfigMap deletions must log once each, logged %v", logged)
 	}
 }
 
