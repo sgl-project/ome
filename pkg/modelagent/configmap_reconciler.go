@@ -319,6 +319,13 @@ func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry
 		modelEntry.Config = config
 	}
 
+	// Serialize the model entry to JSON
+	modelEntryJSON, err := json.Marshal(modelEntry)
+	if err != nil {
+		c.logger.Errorf("Failed to marshal model entry for %s: %v", modelID, err)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -342,17 +349,6 @@ func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry
 
 	// Restore only a missing entry; do not overwrite a concurrent writer's newer value.
 	if _, exists := cm.Data[modelID]; exists {
-		return
-	}
-	artifactKey, err := findHfArtifactKeyForModel(cm.Data, modelID)
-	if err != nil {
-		c.logger.Errorf("Failed to recover Hugging Face artifact key for model %s: %v", modelID, err)
-		return
-	}
-	modelEntry.HfArtifactKey = artifactKey
-	modelEntryJSON, err := json.Marshal(modelEntry)
-	if err != nil {
-		c.logger.Errorf("Failed to marshal model entry for %s: %v", modelID, err)
 		return
 	}
 	cm.Data[modelID] = string(modelEntryJSON)
@@ -389,17 +385,6 @@ func (c *ConfigMapReconciler) restoreModelInConfigMap(modelID string, cacheEntry
 			}
 			// Re-apply only this model's entry if it is still missing from the latest ConfigMap.
 			if _, exists := cm.Data[modelID]; exists {
-				return
-			}
-			artifactKey, referenceErr := findHfArtifactKeyForModel(cm.Data, modelID)
-			if referenceErr != nil {
-				c.logger.Errorf("Failed to recover Hugging Face artifact key for model %s: %v", modelID, referenceErr)
-				return
-			}
-			modelEntry.HfArtifactKey = artifactKey
-			modelEntryJSON, err = json.Marshal(modelEntry)
-			if err != nil {
-				c.logger.Errorf("Failed to marshal model entry for %s: %v", modelID, err)
 				return
 			}
 			cm.Data[modelID] = string(modelEntryJSON)

@@ -471,42 +471,6 @@ func writeModelEntry(data map[string]string, modelKey string, model ModelEntry) 
 	return true, nil
 }
 
-// findHfArtifactKeyForModel scans only during ConfigMap recovery to rebuild a
-// missing model-to-artifact reference from the artifact's model references.
-func findHfArtifactKeyForModel(data map[string]string, modelKey string) (string, error) {
-	var artifactKey string
-	for key, raw := range data {
-		if !isHfArtifactConfigMapKey(key) {
-			continue
-		}
-		artifact, err := decodeHfArtifactEntry(key, raw)
-		if err != nil {
-			return "", err
-		}
-		if artifact.Key != key {
-			return "", fmt.Errorf("Hugging Face artifact entry %s records key %s", key, artifact.Key)
-		}
-		if err := validateHfArtifactIdentityAndPath(artifact); err != nil {
-			return "", fmt.Errorf("invalid Hugging Face artifact entry %s: %w", key, err)
-		}
-		if !isValidHfArtifactStatus(artifact.Status) {
-			return "", fmt.Errorf("Hugging Face artifact %s has invalid status %q", key, artifact.Status)
-		}
-		modelPath, found := artifact.Children[modelKey]
-		if !found {
-			continue
-		}
-		if strings.TrimSpace(modelPath) == "" {
-			return "", fmt.Errorf("Hugging Face artifact %s has an empty path for model %s", key, modelKey)
-		}
-		if artifactKey != "" && artifactKey != key {
-			return "", fmt.Errorf("model %s is referenced by multiple Hugging Face artifacts", modelKey)
-		}
-		artifactKey = key
-	}
-	return artifactKey, nil
-}
-
 func isValidHfArtifactStatus(status HfArtifactStatus) bool {
 	return status == HfArtifactStatusReady || status == HfArtifactStatusUpdating || status == HfArtifactStatusFailed
 }
