@@ -24,8 +24,11 @@ import (
 type ExecCredentialPolicy struct {
 	// Allowed turns exec credential plugins on. Default false.
 	Allowed bool
-	// AllowedCommands is the set of permitted plugin command basenames
-	// (e.g. "aws", "gke-gcloud-auth-plugin", "kubelogin"). Empty => none allowed.
+	// AllowedCommands is the set of permitted plugin commands, matched exactly
+	// against the command the kubeconfig names. List a bare command (e.g. "aws",
+	// "gke-gcloud-auth-plugin", "kubelogin") to permit PATH resolution, or an
+	// absolute path to pin one binary; a bare entry does NOT permit a path that
+	// merely ends in that name. Empty => none allowed.
 	AllowedCommands []string
 }
 
@@ -154,15 +157,24 @@ func isValidHostname(server string) bool {
 	return len(validation.IsDNS1123Subdomain(host)) == 0
 }
 
+// DefaultProbeTimeout bounds the reachability probe's single /version request
+// when no per-call timeout is configured. An unbounded probe would let one
+// black-holed endpoint hold a reconcile worker indefinitely.
+const DefaultProbeTimeout = 10 * time.Second
+
 // probeViaServerVersion is the default reachability probe: build a discovery
 // client and fetch the remote /version. Cheap and needs no extra RBAC. It is
 // assigned to Reconciler.Probe by SetupWithManager and overridden in tests.
-func probeViaServerVersion(_ context.Context, raw []byte, exec ExecCredentialPolicy) error {
+// A non-positive timeout falls back to DefaultProbeTimeout.
+func probeViaServerVersion(_ context.Context, raw []byte, exec ExecCredentialPolicy, timeout time.Duration) error {
 	cfg, err := RESTConfigFromKubeConfig(raw, exec)
 	if err != nil {
 		return err
 	}
-	cfg.Timeout = 10 * time.Second
+	if timeout <= 0 {
+		timeout = DefaultProbeTimeout
+	}
+	cfg.Timeout = timeout
 	dc, err := discovery.NewDiscoveryClientForConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("build discovery client: %w", err)

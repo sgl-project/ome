@@ -293,6 +293,7 @@ func TestResolveConfig_Defaults(t *testing.T) {
 	assert.Equal(t, DefaultHealthInterval, c.healthInterval)
 	assert.Equal(t, DefaultConnectionGracePeriod, c.connectionGracePeriod)
 	assert.Equal(t, DefaultEventsBatchPeriod, c.eventsBatchPeriod)
+	assert.Equal(t, DefaultProbeTimeout, c.probeTimeout)
 	assert.Equal(t, DefaultEstablishInitialTimeout, c.reconnect.establishInitial)
 	assert.Equal(t, DefaultEstablishMaxTimeout, c.reconnect.establishMax)
 	assert.Equal(t, DefaultReconnectRetryMax, c.reconnect.retryMax)
@@ -320,6 +321,22 @@ func TestResolveConfig_SeedsAndOptions(t *testing.T) {
 	assert.Equal(t, 6*time.Millisecond, c.reconnect.establishMax)
 	assert.Equal(t, 7*time.Millisecond, c.reconnect.retryInitial)
 	assert.Equal(t, 8*time.Millisecond, c.reconnect.retryMax)
+}
+
+// TestProbeTimeout_ConfiguredValueWins: the probe budget is config-driven — the
+// configured per-call value reaches the reachability probe, and only an unset
+// knob falls back to the in-package default.
+func TestProbeTimeout_ConfiguredValueWins(t *testing.T) {
+	r := &Reconciler{}
+	assert.Equal(t, DefaultProbeTimeout, r.probeTimeout())
+
+	r = &Reconciler{ProbeTimeout: 250 * time.Millisecond}
+	assert.Equal(t, 250*time.Millisecond, r.probeTimeout(), "struct field must apply before Setup")
+
+	c := r.resolveConfig()
+	assert.Equal(t, 250*time.Millisecond, c.probeTimeout, "struct field must seed the resolved config")
+	r.cfg = &c
+	assert.Equal(t, 250*time.Millisecond, r.probeTimeout(), "resolved config must win after Setup")
 }
 
 // TestResolveConfig_NegativeGraceDisables: a negative ConnectionGracePeriod is a

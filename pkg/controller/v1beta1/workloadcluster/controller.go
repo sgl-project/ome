@@ -68,6 +68,11 @@ type Reconciler struct {
 	// disconnected; zero defaults to DefaultConnectionGracePeriod. A negative
 	// value disables grace.
 	ConnectionGracePeriod time.Duration
+	// ProbeTimeout bounds the default reachability probe's single request. It is
+	// the same budget as a remote per-call timeout, so the control-plane wiring
+	// feeds it the configured per-call value; zero defaults to
+	// DefaultProbeTimeout.
+	ProbeTimeout time.Duration
 
 	// mu guards firstFailure. The reconciler runs single-worker per key, but
 	// firstFailure is shared across keys.
@@ -347,6 +352,16 @@ func (r *Reconciler) healthInterval() time.Duration {
 	return DefaultHealthInterval
 }
 
+func (r *Reconciler) probeTimeout() time.Duration {
+	if r.cfg != nil {
+		return r.cfg.probeTimeout
+	}
+	if r.ProbeTimeout > 0 {
+		return r.ProbeTimeout
+	}
+	return DefaultProbeTimeout
+}
+
 // SetupWithManager wires the reconciler: watch WorkloadClusters, and re-enqueue
 // (debounced by the events-batch period) when a referenced kubeconfig Secret
 // changes. Functional Options shrink the timing knobs (health interval,
@@ -354,7 +369,7 @@ func (r *Reconciler) healthInterval() time.Duration {
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
 	if r.Probe == nil {
 		r.Probe = func(ctx context.Context, raw []byte) error {
-			return probeViaServerVersion(ctx, raw, r.ExecPolicy)
+			return probeViaServerVersion(ctx, raw, r.ExecPolicy, r.probeTimeout())
 		}
 	}
 	if r.firstFailure == nil {
