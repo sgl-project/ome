@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -63,6 +64,12 @@ type Reconciler struct {
 	Manager *Manager
 	// ExecPolicy is the exec credential policy applied during validation.
 	ExecPolicy ExecCredentialPolicy
+	// SecretReader reads kubeconfig Secrets WITHOUT caching them. The Secret watch
+	// is metadata-only, so payloads never enter the informer cache; reading the
+	// bytes through the cached client would defeat that by starting a second,
+	// full-payload Secret informer over every namespace. SetupWithManager defaults
+	// it to mgr.GetAPIReader(); nil falls back to the reconciler's own client.
+	SecretReader client.Reader
 	// ConnectionGracePeriod is how long a previously reachable cluster tolerates
 	// transient probe failures before it is flipped to Ready=False and
 	// disconnected; zero defaults to DefaultConnectionGracePeriod. A negative
@@ -313,7 +320,7 @@ func (r *Reconciler) assess(ctx context.Context, wc *v1beta1.WorkloadCluster) (s
 	}
 	secret := &corev1.Secret{}
 	nn := types.NamespacedName{Name: src.KubeConfig.SecretRef.Name, Namespace: src.KubeConfig.SecretRef.Namespace}
-	if err := r.Get(ctx, nn, secret); err != nil {
+	if err := r.secretReader().Get(ctx, nn, secret); err != nil {
 		if apierrors.IsNotFound(err) {
 			return metav1.ConditionFalse, "SecretNotFound",
 				fmt.Sprintf("kubeconfig Secret %s/%s not found", nn.Namespace, nn.Name), nil
@@ -352,6 +359,15 @@ func (r *Reconciler) healthInterval() time.Duration {
 	return DefaultHealthInterval
 }
 
+// secretReader returns the uncached reader for kubeconfig Secrets, falling back
+// to the reconciler's client when none was wired (unit tests build it directly).
+func (r *Reconciler) secretReader() client.Reader {
+	if r.SecretReader != nil {
+		return r.SecretReader
+	}
+	return r.Client
+}
+
 func (r *Reconciler) probeTimeout() time.Duration {
 	if r.cfg != nil {
 		return r.cfg.probeTimeout
@@ -372,6 +388,9 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
 			return probeViaServerVersion(ctx, raw, r.ExecPolicy, r.probeTimeout())
 		}
 	}
+	if r.SecretReader == nil {
+		r.SecretReader = mgr.GetAPIReader()
+	}
 	if r.firstFailure == nil {
 		r.firstFailure = map[string]time.Time{}
 	}
@@ -387,7 +406,10 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta1.WorkloadCluster{}).
-		Watches(&corev1.Secret{}, r.secretEventHandler(cfg.eventsBatchPeriod)).
+		// Metadata-only: this controller needs Secret CHANGE events, never cached
+		// Secret payloads. A full informer would hold every Secret in the cluster
+		// in memory and widen the blast radius of a compromised manager pod.
+		Watches(&corev1.Secret{}, r.secretEventHandler(cfg.eventsBatchPeriod), builder.OnlyMetadata).
 		Complete(r)
 }
 

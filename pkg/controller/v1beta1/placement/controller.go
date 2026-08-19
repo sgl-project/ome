@@ -90,6 +90,10 @@ type Reconciler struct {
 	APIReader client.Reader
 	// Requeue is the status-refresh poll cadence; defaults to DefaultPlacementRequeue.
 	Requeue time.Duration
+	// LocalQueue is the Kueue LocalQueue a derived workload's pods join when the
+	// source ISVC carries no per-ISVC queue annotation. It names a resource the
+	// operator created, so it is config-driven; empty leaves DefaultLocalQueue.
+	LocalQueue string
 	// ControlPlaneID is this control plane's identity, stamped onto every derived
 	// ISVC (PlacementControlPlaneLabel) so the GC sweep only reaps deriveds THIS
 	// control plane created. Config-driven (manager flag / chart); empty leaves
@@ -943,14 +947,14 @@ func (r *Reconciler) getWinnerDerived(ctx context.Context, cluster string, isvc 
 // replacing them wholesale — preserving worker-side reconciler state across the
 // poll-driven re-apply.
 func (r *Reconciler) placeOn(ctx context.Context, cl client.Client, src *v1beta1.InferenceService) error {
-	return r.applyDerived(ctx, cl, src, DeriveISVC(src, r.ControlPlaneID))
+	return r.applyDerived(ctx, cl, src, DeriveISVC(src, r.ControlPlaneID, r.LocalQueue))
 }
 
 // placeOnReplicas is placeOn with a Split per-cluster apportioned replica band
 // pinned onto the derived's scalable components before the apply: replicas is
 // this home's share (the floor), maxPer the per-cluster ceiling (0 = uncapped).
 func (r *Reconciler) placeOnReplicas(ctx context.Context, cl client.Client, src *v1beta1.InferenceService, replicas, maxPer int32) error {
-	d := DeriveISVC(src, r.ControlPlaneID)
+	d := DeriveISVC(src, r.ControlPlaneID, r.LocalQueue)
 	setDerivedReplicas(d, replicas, maxPer)
 	return r.applyDerived(ctx, cl, src, d)
 }

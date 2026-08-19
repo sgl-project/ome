@@ -18,7 +18,10 @@ import (
 //   - Kueue gating stamped on component pod metadata (the queue-name label).
 //   - Control-plane-only directives removed (placement selectors + rollout verbs)
 //     so the worker reconciler does not (re)act on the control plane's decisions.
-func DeriveISVC(src *v1beta1.InferenceService, controlPlaneID string) *v1beta1.InferenceService {
+//
+// localQueue is the operator-configured LocalQueue used when the source carries
+// no LocalQueueAnnotation; empty falls back to DefaultLocalQueue.
+func DeriveISVC(src *v1beta1.InferenceService, controlPlaneID, localQueue string) *v1beta1.InferenceService {
 	d := src.DeepCopy()
 
 	// Clear server-side / control-plane state.
@@ -32,8 +35,12 @@ func DeriveISVC(src *v1beta1.InferenceService, controlPlaneID string) *v1beta1.I
 	d.ManagedFields = nil
 	d.Status = v1beta1.InferenceServiceStatus{}
 
-	// Resolve queue name: from LocalQueueAnnotation or default.
+	// Resolve queue name: per-ISVC annotation, then the operator-configured
+	// queue, then the in-package fallback.
 	queue := src.Annotations[LocalQueueAnnotation]
+	if queue == "" {
+		queue = localQueue
+	}
 	if queue == "" {
 		queue = DefaultLocalQueue
 	}
