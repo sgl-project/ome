@@ -126,6 +126,7 @@ modelAgent:
   enabled: false
   hostPath: /mnt/data/models
   modelFileWriteConcurrency: 0
+  modelVerificationConcurrency: 1
   skipStartupRevalidation: false
   skipFinalVerification: false
   priorityClassName: system-node-critical

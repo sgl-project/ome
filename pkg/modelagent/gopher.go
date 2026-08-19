@@ -57,23 +57,25 @@ type activeDownload struct {
 }
 
 type Gopher struct {
-	modelConfigParser         *modelparser.ModelConfigParser
-	configMapReconciler       *ConfigMapReconciler
-	downloadRetry             int
-	concurrency               int
-	multipartConcurrency      int
-	modelFileWriteConcurrency int
-	modelFileWriteLimiter     *ociobjectstore.WriteLimiter
-	modelRootDir              string
-	xetConfig                 *xet.Config
-	kubeClient                kubernetes.Interface
-	gopherChan                chan *GopherTask
-	nodeLabelReconciler       *NodeLabelReconciler
-	metrics                   *Metrics
-	logger                    *zap.SugaredLogger
-	configMapMutex            sync.Mutex // Mutex to coordinate ConfigMap access
-	baseModelLister           omev1beta1lister.BaseModelLister
-	clusterBaseModelLister    omev1beta1lister.ClusterBaseModelLister
+	modelConfigParser            *modelparser.ModelConfigParser
+	configMapReconciler          *ConfigMapReconciler
+	downloadRetry                int
+	concurrency                  int
+	multipartConcurrency         int
+	modelFileWriteConcurrency    int
+	modelFileWriteLimiter        *ociobjectstore.WriteLimiter
+	modelVerificationConcurrency int
+	modelVerificationLimiter     *verificationLimiter
+	modelRootDir                 string
+	xetConfig                    *xet.Config
+	kubeClient                   kubernetes.Interface
+	gopherChan                   chan *GopherTask
+	nodeLabelReconciler          *NodeLabelReconciler
+	metrics                      *Metrics
+	logger                       *zap.SugaredLogger
+	configMapMutex               sync.Mutex // Mutex to coordinate ConfigMap access
+	baseModelLister              omev1beta1lister.BaseModelLister
+	clusterBaseModelLister       omev1beta1lister.ClusterBaseModelLister
 
 	// Track active downloads for cancellation
 	activeDownloads      map[string]activeDownload // key: model UID
@@ -119,6 +121,18 @@ func WithModelFileWriteConcurrency(concurrency int) GopherOption {
 	}
 }
 
+// WithModelVerificationConcurrency bounds concurrent OCI model file integrity
+// checks across all downloads handled by this model-agent process.
+func WithModelVerificationConcurrency(concurrency int) GopherOption {
+	return func(gopher *Gopher) {
+		if concurrency < 1 {
+			concurrency = 1
+		}
+		gopher.modelVerificationConcurrency = concurrency
+		gopher.modelVerificationLimiter = newVerificationLimiter(concurrency)
+	}
+}
+
 const (
 	BigFileSizeInMB = 200
 
@@ -153,24 +167,26 @@ func NewGopher(
 	}
 
 	gopher := &Gopher{
-		modelConfigParser:      modelConfigParser,
-		configMapReconciler:    configMapReconciler,
-		downloadRetry:          downloadRetry,
-		concurrency:            concurrency,
-		multipartConcurrency:   multipartConcurrency,
-		modelRootDir:           modelRootDir,
-		xetConfig:              xetConfig,
-		kubeClient:             kubeClient,
-		gopherChan:             gopherChan,
-		nodeLabelReconciler:    nodeLabelReconciler,
-		metrics:                metrics,
-		logger:                 logger,
-		activeDownloads:        make(map[string]activeDownload),
-		baseModelLister:        baseModelLister,
-		clusterBaseModelLister: clusterBaseModelLister,
-		taskQueue:              newGopherTaskQueue(),
-		samePathWaitDelay:      defaultSamePathWaitDelay,
-		samePathWaitTimeout:    samePathWaitTimeout,
+		modelConfigParser:            modelConfigParser,
+		configMapReconciler:          configMapReconciler,
+		downloadRetry:                downloadRetry,
+		concurrency:                  concurrency,
+		multipartConcurrency:         multipartConcurrency,
+		modelVerificationConcurrency: 1,
+		modelVerificationLimiter:     newVerificationLimiter(1),
+		modelRootDir:                 modelRootDir,
+		xetConfig:                    xetConfig,
+		kubeClient:                   kubeClient,
+		gopherChan:                   gopherChan,
+		nodeLabelReconciler:          nodeLabelReconciler,
+		metrics:                      metrics,
+		logger:                       logger,
+		activeDownloads:              make(map[string]activeDownload),
+		baseModelLister:              baseModelLister,
+		clusterBaseModelLister:       clusterBaseModelLister,
+		taskQueue:                    newGopherTaskQueue(),
+		samePathWaitDelay:            defaultSamePathWaitDelay,
+		samePathWaitTimeout:          samePathWaitTimeout,
 	}
 	for _, option := range options {
 		if option != nil {
@@ -1411,8 +1427,9 @@ func (s *Gopher) performFinalVerification(
 		return nil
 	}
 
-	s.logger.Info("Performing final integrity verification of all downloaded files...")
-	verificationErrors := s.verifyDownloadedFiles(ociOSDataStore, objectURIs, destPath, task)
+	s.logger.Infof("Performing final integrity verification of %d downloaded files with pod-wide concurrency %d...",
+		len(objectURIs), s.effectiveModelVerificationConcurrency())
+	verificationErrors, verificationWait := s.verifyDownloadedFiles(ociOSDataStore, objectURIs, destPath, task)
 	verificationDuration := time.Since(verificationStartTime)
 	verificationOutcome := ociobjectstore.DownloadOutcomeSuccess
 	var verificationErr error
@@ -1421,6 +1438,12 @@ func (s *Gopher) performFinalVerification(
 		verificationErr = fmt.Errorf("verification failed for %d files", len(verificationErrors))
 	}
 	s.observeTaskDownloadPhase(task, ociobjectstore.PhaseFinalVerification, verificationStartTime, verificationOutcome, totalBytes, verificationErr)
+	newModelDownloadObserver(s, task).ObserveDownloadPhase(ociobjectstore.DownloadObservation{
+		Phase:    ociobjectstore.PhaseVerificationWait,
+		Duration: verificationWait,
+		Outcome:  verificationOutcome,
+		Err:      verificationErr,
+	})
 
 	// Record verification duration
 	s.metrics.ObserveVerificationDuration(verificationDuration)
@@ -1440,30 +1463,82 @@ func (s *Gopher) performFinalVerification(
 	return nil
 }
 
-func (s *Gopher) verifyDownloadedFiles(ociOSDataStore *ociobjectstore.OCIOSDataStore, uris []ociobjectstore.ObjectURI, destPath string, task *GopherTask) map[string]error {
-	errors := make(map[string]error)
-	for _, obj := range uris {
-		relativeName := filepath.Join(destPath, ociobjectstore.TrimObjectPrefix(obj.ObjectName, obj.Prefix))
-		// Fallback: if relativeName is empty, use the object name directly
-		if relativeName == "" {
-			relativeName = obj.ObjectName
-		}
-
-		valid, err := ociOSDataStore.IsLocalCopyValid(obj, relativeName)
-		if err != nil {
-			errors[obj.ObjectName] = err
-			continue
-		}
-		if !valid {
-			errors[obj.ObjectName] = fmt.Errorf("MD5 or size mismatch for %s", obj.ObjectName)
-		}
-	}
+func (s *Gopher) verifyDownloadedFiles(ociOSDataStore *ociobjectstore.OCIOSDataStore, uris []ociobjectstore.ObjectURI, destPath string, task *GopherTask) (map[string]error, time.Duration) {
+	errors, verificationWait := s.verifyDownloadedFilesWithValidator(uris, destPath, ociOSDataStore.IsLocalCopyValid)
 
 	// Record verification result in metrics
 	modelType, namespace, name := GetModelTypeNamespaceAndName(task)
 	s.metrics.RecordVerification(modelType, namespace, name, len(errors) == 0)
 
-	return errors
+	return errors, verificationWait
+}
+
+type localCopyValidator func(ociobjectstore.ObjectURI, string) (bool, error)
+
+type verificationResult struct {
+	objectName string
+	err        error
+	wait       time.Duration
+}
+
+func (s *Gopher) verifyDownloadedFilesWithValidator(uris []ociobjectstore.ObjectURI, destPath string, validate localCopyValidator) (map[string]error, time.Duration) {
+	errors := make(map[string]error)
+	if len(uris) == 0 {
+		return errors, 0
+	}
+
+	workerCount := min(s.effectiveModelVerificationConcurrency(), len(uris))
+	limiter := s.modelVerificationLimiter
+	if limiter == nil {
+		limiter = newVerificationLimiter(workerCount)
+	}
+	jobs := make(chan ociobjectstore.ObjectURI)
+	results := make(chan verificationResult, len(uris))
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for obj := range jobs {
+				wait := limiter.acquire()
+				relativeName := filepath.Join(destPath, ociobjectstore.TrimObjectPrefix(obj.ObjectName, obj.Prefix))
+				if relativeName == "" {
+					relativeName = obj.ObjectName
+				}
+				valid, err := validate(obj, relativeName)
+				limiter.release()
+				if err == nil && !valid {
+					err = fmt.Errorf("MD5 or size mismatch for %s", obj.ObjectName)
+				}
+				results <- verificationResult{objectName: obj.ObjectName, err: err, wait: wait}
+			}
+		}()
+	}
+
+	go func() {
+		for _, obj := range uris {
+			jobs <- obj
+		}
+		close(jobs)
+		workers.Wait()
+		close(results)
+	}()
+
+	var totalWait time.Duration
+	for result := range results {
+		totalWait += result.wait
+		if result.err != nil {
+			errors[result.objectName] = result.err
+		}
+	}
+	return errors, totalWait
+}
+
+func (s *Gopher) effectiveModelVerificationConcurrency() int {
+	if s.modelVerificationConcurrency < 1 {
+		return 1
+	}
+	return s.modelVerificationConcurrency
 }
 
 func (s *Gopher) deleteModel(destPath string, task *GopherTask) error {

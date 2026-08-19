@@ -10,31 +10,33 @@ import (
 )
 
 type modelDownloadObserver struct {
-	metrics                   *Metrics
-	logger                    *zap.SugaredLogger
-	downloadID                string
-	modelType                 string
-	modelNamespace            string
-	modelName                 string
-	nodeName                  string
-	objectConcurrency         int
-	multipartConcurrency      int
-	modelFileWriteConcurrency int
+	metrics                      *Metrics
+	logger                       *zap.SugaredLogger
+	downloadID                   string
+	modelType                    string
+	modelNamespace               string
+	modelName                    string
+	nodeName                     string
+	objectConcurrency            int
+	multipartConcurrency         int
+	modelFileWriteConcurrency    int
+	modelVerificationConcurrency int
 }
 
 func newModelDownloadObserver(gopher *Gopher, task *GopherTask) *modelDownloadObserver {
 	modelType, namespace, name := GetModelTypeNamespaceAndName(task)
 	return &modelDownloadObserver{
-		metrics:                   gopher.metrics,
-		logger:                    gopher.logger,
-		downloadID:                task.DownloadID,
-		modelType:                 modelType,
-		modelNamespace:            namespace,
-		modelName:                 name,
-		nodeName:                  os.Getenv("NODE_NAME"),
-		objectConcurrency:         gopher.concurrency,
-		multipartConcurrency:      gopher.multipartConcurrency,
-		modelFileWriteConcurrency: gopher.modelFileWriteConcurrency,
+		metrics:                      gopher.metrics,
+		logger:                       gopher.logger,
+		downloadID:                   task.DownloadID,
+		modelType:                    modelType,
+		modelNamespace:               namespace,
+		modelName:                    name,
+		nodeName:                     os.Getenv("NODE_NAME"),
+		objectConcurrency:            gopher.concurrency,
+		multipartConcurrency:         gopher.multipartConcurrency,
+		modelFileWriteConcurrency:    gopher.modelFileWriteConcurrency,
+		modelVerificationConcurrency: gopher.effectiveModelVerificationConcurrency(),
 	}
 }
 
@@ -80,6 +82,7 @@ func (o *modelDownloadObserver) ObserveDownloadPhase(observation ociobjectstore.
 		"object_concurrency", o.objectConcurrency,
 		"multipart_concurrency", o.multipartConcurrency,
 		"model_file_write_concurrency", o.modelFileWriteConcurrency,
+		"model_verification_concurrency", o.modelVerificationConcurrency,
 	}
 	if observation.ObjectName != "" {
 		fields = append(fields, "object", observation.ObjectName)

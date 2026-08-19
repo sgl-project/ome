@@ -16,6 +16,7 @@ const (
 	PhasePrefixList         DownloadPhase = "prefix_list_objects"
 	PhaseBulkDownload       DownloadPhase = "bulk_download"
 	PhaseFinalVerification  DownloadPhase = "final_verification"
+	PhaseVerificationWait   DownloadPhase = "model_verification_limiter_wait"
 	PhaseModelConfigUpdate  DownloadPhase = "model_config_update"
 	PhaseStatusReady        DownloadPhase = "status_ready"
 	PhaseExistingCopyCheck  DownloadPhase = "existing_copy_check"
