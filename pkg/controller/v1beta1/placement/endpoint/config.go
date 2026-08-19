@@ -63,7 +63,7 @@ type HostTemplateData struct {
 // Without a global gateway there is nothing to attach a route to, so the backend
 // stays off rather than guessing one.
 func (c Config) IsEnabled() bool {
-	return strings.TrimSpace(c.GlobalGateway) != ""
+	return strings.TrimSpace(c.GlobalGateway) != "" && c.BackendPort > 0
 }
 
 // GlobalHostFor returns the global host to program for isvc: the explicit

@@ -207,6 +207,12 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		// set is diagnosable instead of an indistinguishable Pending.
 		r.Log.Info("no placement candidates", "isvc", isvc.Namespace+"/"+isvc.Name,
 			"reason", reason, "error", err)
+		if err == nil && reason == MatchReasonNoReadyClusters && isvc.Status.Placement != nil {
+			// Fleet readiness is sampled and can disappear for one health interval.
+			// Preserve the last-known placement (including its endpoint and homes)
+			// rather than publishing Pending and derouting still-serving traffic.
+			return ctrl.Result{RequeueAfter: r.requeue()}, nil
+		}
 		return r.writePlacement(ctx, isvc, placementResult{phase: v1beta1.PlacementPhasePending})
 	}
 
@@ -424,7 +430,8 @@ func (r *Reconciler) reconcileAll(ctx context.Context, isvc *v1beta1.InferenceSe
 	for _, c := range placed {
 		derived, ok, err := r.getDerived(ctx, c, isvc)
 		if err != nil {
-			return ctrl.Result{}, err
+			r.Log.Error(err, "all: reading derived failed; skipping home", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
+			continue
 		}
 		if !ok {
 			continue
@@ -435,7 +442,8 @@ func (r *Reconciler) reconcileAll(ctx context.Context, isvc *v1beta1.InferenceSe
 		}
 		statuses, err := componentIRStatuses(ctx, cl, derived)
 		if err != nil {
-			return ctrl.Result{}, err
+			r.Log.Error(err, "all: reading IR statuses failed; skipping home", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
+			continue
 		}
 		if AllComponentsAdmitted(derived, statuses) {
 			admitted++
@@ -514,7 +522,8 @@ func (r *Reconciler) reconcileSplit(ctx context.Context, isvc *v1beta1.Inference
 		}
 		derived, ok, err := r.getDerived(ctx, c, isvc)
 		if err != nil {
-			return ctrl.Result{}, err
+			r.Log.Error(err, "split: reading derived failed; skipping observation", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
+			continue
 		}
 		if !ok {
 			continue // no derived yet
@@ -522,7 +531,9 @@ func (r *Reconciler) reconcileSplit(ctx context.Context, isvc *v1beta1.Inference
 		o.present = true
 		statuses, err := componentIRStatuses(ctx, cl, derived)
 		if err != nil {
-			return ctrl.Result{}, err
+			r.Log.Error(err, "split: reading IR statuses failed; skipping observation", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
+			o.present = false
+			continue
 		}
 		o.admitted = splitAdmittedReplicas(scaleComps, statuses)
 		o.ready = splitReadyReplicas(scaleComps, statuses)

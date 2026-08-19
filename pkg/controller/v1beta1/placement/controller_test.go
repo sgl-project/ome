@@ -748,6 +748,18 @@ func (c getFailClient) Get(ctx context.Context, key client.ObjectKey, obj client
 	return apierrors.NewInternalError(errors.New("get rejected"))
 }
 
+// irGetFailClient allows derived-ISVC reads but fails authoritative IR reads.
+type irGetFailClient struct {
+	client.WithWatch
+}
+
+func (c irGetFailClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if _, ok := obj.(*v1beta1.InferenceReplica); ok {
+		return apierrors.NewInternalError(errors.New("IR get rejected"))
+	}
+	return c.WithWatch.Get(ctx, key, obj, opts...)
+}
+
 // foreignDerived builds a same-named ISVC NOT created by this control plane (no
 // origin label, or an origin label for a different source UID).
 func foreignDerived(originUID string) *v1beta1.InferenceService {
@@ -1078,6 +1090,30 @@ func TestReconcile_FanOutSkipsDisconnectedCandidate(t *testing.T) {
 	assert.Equal(t, v1beta1.PlacementPhaseRacing, p.Phase)
 }
 
+func TestReconcile_NoReadyClustersPreservesLastKnownPlacement(t *testing.T) {
+	s := testScheme(t)
+	isvc := srcISVC("gpu=gb300")
+	isvc.Finalizers = []string{PlacementFinalizer}
+	isvc.Status.Placement = &v1beta1.PlacementStatus{
+		Cluster: "a", Phase: v1beta1.PlacementPhasePlaced, Endpoint: apis.HTTPS("svc.a.example"),
+		Candidates: []v1beta1.CandidatePlacement{{Cluster: "a", Phase: v1beta1.CandidatePhaseAdmitted, Endpoint: apis.HTTPS("svc.a.example")}},
+	}
+	isvc.Status.URL = apis.HTTPS("svc.a.example")
+	wc := readyWC("a", map[string]string{"gpu": "gb300"})
+	wc.Status.Conditions[0].Status = metav1.ConditionFalse
+	r, cp := newPlacer(s, fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{}}, isvc, wc)
+
+	res, err := r.Reconcile(context.Background(), req())
+	require.NoError(t, err)
+	assert.Positive(t, res.RequeueAfter)
+	p := cpPlacement(t, cp)
+	require.NotNil(t, p)
+	assert.Equal(t, v1beta1.PlacementPhasePlaced, p.Phase)
+	assert.Equal(t, "a", p.Cluster)
+	require.NotNil(t, cpStatusURL(t, cp))
+	assert.Equal(t, "svc.a.example", cpStatusURL(t, cp).Host)
+}
+
 // Index: isvcsForClusterChange enqueues an ISVC only when the changed
 // cluster is (or could become) one of its candidates — its requirement selector
 // matches the cluster's labels — and skips ISVCs the cluster cannot affect.
@@ -1317,6 +1353,27 @@ func TestReconcile_AllModePartialAdmitStaysPlaced(t *testing.T) {
 	assert.Nil(t, by["b"].Endpoint, "gated home has no endpoint yet")
 }
 
+func TestReconcile_AllModeRemoteIRFailureDoesNotHideHealthyHome(t *testing.T) {
+	s := testScheme(t)
+	bad := irGetFailClient{WithWatch: workerWithAdmittedURL(t, s, "svc.a.example")}
+	good := workerWithAdmittedURL(t, s, "svc.b.example")
+	clusters := fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{
+		"a": workloadcluster.NewNeverCachingClient(bad),
+		"b": workloadcluster.NewNeverCachingClient(good),
+	}}
+	r, cp := newPlacer(s, clusters, srcISVCMode(v1beta1.PlacementModeAll, "gpu=gb300"),
+		readyWC("a", map[string]string{"gpu": "gb300"}), readyWC("b", map[string]string{"gpu": "gb300"}))
+
+	_, err := r.Reconcile(context.Background(), req())
+	require.NoError(t, err)
+	p := cpPlacement(t, cp)
+	require.NotNil(t, p)
+	assert.Equal(t, v1beta1.PlacementPhasePlaced, p.Phase)
+	by := candidatesByCluster(p.Candidates)
+	assert.NotContains(t, by, "a")
+	assert.Equal(t, v1beta1.CandidatePhaseAdmitted, by["b"].Phase)
+}
+
 // TestReconcile_AllModeRacingWhileAllGated: no home admitted yet -> Racing, both
 // kept, fast requeue.
 func TestReconcile_AllModeRacingWhileAllGated(t *testing.T) {
@@ -1449,6 +1506,26 @@ func TestReconcile_SplitPackedFillsAcrossHomes(t *testing.T) {
 	require.NoError(t, wa.Get(context.Background(), types.NamespacedName{Namespace: "prod", Name: "svc"}, da))
 	require.NotNil(t, da.Spec.Engine.MinReplicas)
 	assert.Equal(t, 2, *da.Spec.Engine.MinReplicas, "home pinned to its admitted count")
+}
+
+func TestReconcile_SplitRemoteIRFailureDoesNotAbortHealthyHome(t *testing.T) {
+	s := testScheme(t)
+	good := workerWithReplicas(t, s, "svc.a.example", 1, 1)
+	bad := irGetFailClient{WithWatch: workerWithReplicas(t, s, "svc.z.example", 1, 1)}
+	clusters := fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{
+		"a": workloadcluster.NewNeverCachingClient(good),
+		"z": workloadcluster.NewNeverCachingClient(bad),
+	}}
+	r, cp := newPlacer(s, clusters, srcISVCSplit("gpu=gb300", 1),
+		readyWC("a", map[string]string{"gpu": "gb300"}), readyWC("z", map[string]string{"gpu": "gb300"}))
+
+	_, err := r.Reconcile(context.Background(), req())
+	require.NoError(t, err)
+	p := cpPlacement(t, cp)
+	require.NotNil(t, p)
+	assert.Equal(t, v1beta1.PlacementPhasePlaced, p.Phase)
+	by := candidatesByCluster(p.Candidates)
+	assert.Equal(t, v1beta1.CandidatePhaseAdmitted, by["a"].Phase)
 }
 
 // TestReconcile_SplitMaxPerClusterCapsDerivedCeiling: maxReplicasPerCluster is

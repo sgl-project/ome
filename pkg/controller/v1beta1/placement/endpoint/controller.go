@@ -3,6 +3,7 @@ package endpoint
 import (
 	"context"
 	"net"
+	"slices"
 	"sort"
 
 	"github.com/go-logr/logr"
@@ -49,6 +50,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	// Backend not configured: do nothing, and do not strand a finalizer.
 	if !r.Config.IsEnabled() {
 		if controllerutil.ContainsFinalizer(isvc, EndpointFinalizer) && isvc.DeletionTimestamp.IsZero() {
+			if err := r.Publisher.Unpublish(ctx, isvc); err != nil {
+				return ctrl.Result{}, err
+			}
 			controllerutil.RemoveFinalizer(isvc, EndpointFinalizer)
 			if err := r.Update(ctx, isvc); err != nil {
 				return requeueOnConflict(err)
@@ -233,7 +237,8 @@ var placementPublishChange = predicate.Funcs{
 }
 
 // placementEqual reports whether two PlacementStatus values agree on the fields
-// the publisher consumes: phase, winner cluster, and the endpoint host.
+// the publisher consumes: phase, winner cluster, endpoint host, and the
+// candidate-derived serving homes (including weights).
 func placementEqual(a, b *v1beta1.PlacementStatus) bool {
 	if a == nil || b == nil {
 		return a == b
@@ -241,7 +246,7 @@ func placementEqual(a, b *v1beta1.PlacementStatus) bool {
 	if a.Phase != b.Phase || a.Cluster != b.Cluster {
 		return false
 	}
-	return endpointHost(a) == endpointHost(b)
+	return endpointHost(a) == endpointHost(b) && slices.Equal(homesFromPlacement(a), homesFromPlacement(b))
 }
 
 func endpointHost(pl *v1beta1.PlacementStatus) string {

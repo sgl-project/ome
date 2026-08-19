@@ -13,7 +13,8 @@ import (
 func TestConfig_IsEnabled(t *testing.T) {
 	assert.False(t, Config{}.IsEnabled(), "no gateway -> disabled")
 	assert.False(t, Config{GlobalGateway: "  "}.IsEnabled(), "whitespace gateway -> disabled")
-	assert.True(t, Config{GlobalGateway: "ns/gw"}.IsEnabled())
+	assert.False(t, Config{GlobalGateway: "ns/gw"}.IsEnabled(), "missing backend port -> disabled")
+	assert.True(t, Config{GlobalGateway: "ns/gw", BackendPort: 8080}.IsEnabled())
 }
 
 func TestConfig_GlobalHostFor(t *testing.T) {

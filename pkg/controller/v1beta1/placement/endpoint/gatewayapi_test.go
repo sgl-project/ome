@@ -2,6 +2,7 @@ package endpoint
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -53,7 +55,7 @@ func TestBuildExternalNameService(t *testing.T) {
 	isvc := testISVC()
 	home := Home{Cluster: "cluster-a", BackendHost: "svc.prod.cloud-a.example"}
 
-	svc := p.buildExternalNameService(isvc, serviceName(isvc, "cluster-a"), home)
+	svc := p.buildExternalNameService(isvc, p.serviceName(isvc, "cluster-a"), home)
 
 	assert.Equal(t, "svc-global-cluster-a", svc.Name, "per-home Service name carries the cluster")
 	assert.Equal(t, "prod", svc.Namespace, "namespace falls back to the ISVC namespace")
@@ -64,6 +66,7 @@ func TestBuildExternalNameService(t *testing.T) {
 	assert.Equal(t, ManagedByValue, svc.Labels[ManagedByLabel])
 	assert.Equal(t, "cluster-a", svc.Labels[PlacementClusterLabel])
 	assert.Equal(t, "svc", svc.Labels[PlacementEndpointISVCLabel], "per-ISVC grouping label for GC/teardown")
+	assert.Equal(t, "prod", svc.Labels[PlacementEndpointISVCNamespaceLabel])
 	assert.Equal(t, "platform", svc.Labels["team"], "operator labels are merged in")
 }
 
@@ -77,6 +80,7 @@ func TestBuildHTTPRoute_SingleHome(t *testing.T) {
 	require.Len(t, route.Spec.Hostnames, 1)
 	assert.Equal(t, gatewayapiv1.Hostname("svc.prod.global.example"), route.Spec.Hostnames[0])
 	assert.Equal(t, "svc", route.Labels[PlacementEndpointISVCLabel])
+	assert.Equal(t, "prod", route.Labels[PlacementEndpointISVCNamespaceLabel])
 
 	require.Len(t, route.Spec.ParentRefs, 1)
 	pr := route.Spec.ParentRefs[0]
@@ -128,7 +132,7 @@ func TestBuildResources_RouteNamespaceOverride(t *testing.T) {
 	p := NewGatewayAPIPublisher(nil, cfg)
 	isvc := testISVC()
 
-	svc := p.buildExternalNameService(isvc, serviceName(isvc, "c"), Home{Cluster: "c", BackendHost: "b"})
+	svc := p.buildExternalNameService(isvc, p.serviceName(isvc, "c"), Home{Cluster: "c", BackendHost: "b"})
 	route := p.buildHTTPRoute(isvc, oneHome("h", "c", "b"))
 
 	assert.Equal(t, "ome-gateways", svc.Namespace)
@@ -136,6 +140,17 @@ func TestBuildResources_RouteNamespaceOverride(t *testing.T) {
 	require.NotNil(t, route.Spec.Rules[0].BackendRefs[0].Namespace)
 	assert.Equal(t, "ome-gateways", string(*route.Spec.Rules[0].BackendRefs[0].Namespace),
 		"backendRef namespace tracks the route namespace")
+}
+
+type routeUpdateFailClient struct {
+	client.Client
+}
+
+func (c routeUpdateFailClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if _, ok := obj.(*gatewayapiv1.HTTPRoute); ok {
+		return errors.New("route update failed")
+	}
+	return c.Client.Update(ctx, obj, opts...)
 }
 
 func TestBuildHTTPRoute_BareGatewayName(t *testing.T) {
@@ -253,6 +268,45 @@ func TestPublish_WinnerMovesClustersInSingle(t *testing.T) {
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "svc-global", Namespace: "prod"}, route))
 	require.Len(t, route.Spec.Rules[0].BackendRefs, 1)
 	assert.Equal(t, gatewayapiv1.ObjectName("svc-global-cluster-b"), route.Spec.Rules[0].BackendRefs[0].Name)
+}
+
+func TestPublish_RouteUpdateFailureKeepsOldBackendService(t *testing.T) {
+	s := pubScheme(t)
+	c := fakeclient.NewClientBuilder().WithScheme(s).Build()
+	p := NewGatewayAPIPublisher(c, baseConfig())
+	isvc := testISVC()
+	require.NoError(t, p.Publish(context.Background(), isvc, oneHome("h", "cluster-a", "a.example")))
+
+	p.client = routeUpdateFailClient{Client: c}
+	err := p.Publish(context.Background(), isvc, oneHome("h", "cluster-b", "b.example"))
+	require.Error(t, err)
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "svc-global-cluster-a", Namespace: "prod"}, &corev1.Service{}),
+		"old Service remains while the route still references it")
+}
+
+func TestPublish_SharedRouteNamespaceIsolatesSameNameSources(t *testing.T) {
+	s := pubScheme(t)
+	c := fakeclient.NewClientBuilder().WithScheme(s).Build()
+	cfg := baseConfig()
+	cfg.RouteNamespace = "ome-gateways"
+	p := NewGatewayAPIPublisher(c, cfg)
+	a := testISVC()
+	a.Namespace = "team-a"
+	b := testISVC()
+	b.Namespace = "team-b"
+
+	require.NoError(t, p.Publish(context.Background(), a, oneHome("a.global.example", "cluster-a", "a.example")))
+	require.NoError(t, p.Publish(context.Background(), b, oneHome("b.global.example", "cluster-b", "b.example")))
+	assert.NotEqual(t, p.routeName(a), p.routeName(b))
+	assert.NotEqual(t, p.serviceName(a, "cluster-a"), p.serviceName(b, "cluster-b"))
+	ownedA, err := p.ownedServices(context.Background(), a)
+	require.NoError(t, err)
+	require.Len(t, ownedA, 1)
+	assert.Equal(t, "team-a", ownedA[0].Labels[PlacementEndpointISVCNamespaceLabel])
+
+	require.NoError(t, p.Unpublish(context.Background(), a))
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: p.routeName(b), Namespace: "ome-gateways"}, &gatewayapiv1.HTTPRoute{}))
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: p.serviceName(b, "cluster-b"), Namespace: "ome-gateways"}, &corev1.Service{}))
 }
 
 func TestUnpublish_DeletesRouteAndAllServices(t *testing.T) {
