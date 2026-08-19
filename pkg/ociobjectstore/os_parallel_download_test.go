@@ -274,6 +274,71 @@ func TestWritePartAtCoalescesShortReadsIntoOneMiBWrites(t *testing.T) {
 	assert.Equal(t, content, actual)
 }
 
+func TestWriteLimiterCapsConcurrentWrites(t *testing.T) {
+	const (
+		limit      = 4
+		writeCount = 32
+		writeDelay = 10 * time.Millisecond
+	)
+	limiter := NewWriteLimiter(limit)
+	writer := &concurrencyTrackingWriter{delay: writeDelay}
+	start := make(chan struct{})
+	waits := make(chan time.Duration, writeCount)
+	var wg sync.WaitGroup
+
+	for i := 0; i < writeCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			timedWriter := &writeStatsWriter{writer: writer, limiter: limiter}
+			_, _ = timedWriter.Write([]byte("test"))
+			waits <- timedWriter.stats.LimiterWaitDuration
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(waits)
+
+	assert.Equal(t, limit, limiter.Limit())
+	assert.LessOrEqual(t, writer.maxConcurrent(), limit)
+	assert.Greater(t, writer.maxConcurrent(), 1)
+	var totalWait time.Duration
+	for wait := range waits {
+		totalWait += wait
+	}
+	assert.Greater(t, totalWait, time.Duration(0))
+}
+
+type concurrencyTrackingWriter struct {
+	mu        sync.Mutex
+	active    int
+	maxActive int
+	delay     time.Duration
+}
+
+func (writer *concurrencyTrackingWriter) Write(buffer []byte) (int, error) {
+	writer.mu.Lock()
+	writer.active++
+	if writer.active > writer.maxActive {
+		writer.maxActive = writer.active
+	}
+	writer.mu.Unlock()
+
+	time.Sleep(writer.delay)
+
+	writer.mu.Lock()
+	writer.active--
+	writer.mu.Unlock()
+	return len(buffer), nil
+}
+
+func (writer *concurrencyTrackingWriter) maxConcurrent() int {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	return writer.maxActive
+}
+
 type fixedChunkReader struct {
 	reader    io.Reader
 	chunkSize int

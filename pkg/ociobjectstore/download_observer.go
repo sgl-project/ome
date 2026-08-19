@@ -26,6 +26,7 @@ const (
 	PhaseGetObjectFirstRead DownloadPhase = "get_object_first_read"
 	PhaseGetObjectBodyRead  DownloadPhase = "get_object_body_read"
 	PhaseModelFileWrite     DownloadPhase = "model_file_write"
+	PhaseModelFileWriteWait DownloadPhase = "model_file_write_limiter_wait"
 	PhaseObjectToPartCopy   DownloadPhase = "object_to_part_file_copy"
 	PhasePartFileSync       DownloadPhase = "part_file_sync"
 	PhasePartChannelWait    DownloadPhase = "part_channel_wait"
@@ -45,17 +46,18 @@ const (
 // Size bucket counts are mutually exclusive and deliberately bounded so they
 // can be exported as Prometheus labels without recording one metric per write.
 type WriteStats struct {
-	Calls              int64
-	Bytes              int64
-	Duration           time.Duration
-	MaxDuration        time.Duration
-	MinRequestBytes    int64
-	MaxRequestBytes    int64
-	CallsUpTo16KiB     int64
-	Calls16KiBTo64KiB  int64
-	Calls64KiBTo256KiB int64
-	Calls256KiBTo1MiB  int64
-	CallsOver1MiB      int64
+	Calls               int64
+	Bytes               int64
+	Duration            time.Duration
+	LimiterWaitDuration time.Duration
+	MaxDuration         time.Duration
+	MinRequestBytes     int64
+	MaxRequestBytes     int64
+	CallsUpTo16KiB      int64
+	Calls16KiBTo64KiB   int64
+	Calls64KiBTo256KiB  int64
+	Calls256KiBTo1MiB   int64
+	CallsOver1MiB       int64
 }
 
 // DownloadOutcome is deliberately bounded for use as a metric label.

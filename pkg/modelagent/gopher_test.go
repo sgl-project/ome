@@ -1200,6 +1200,20 @@ func TestPerformFinalVerificationCanBeSkipped(t *testing.T) {
 	assert.Contains(t, recorded.All()[0].Message, "Skipping final OCI model integrity verification")
 }
 
+func TestWithModelFileWriteConcurrencyCreatesSharedLimiter(t *testing.T) {
+	g := &Gopher{}
+
+	WithModelFileWriteConcurrency(8)(g)
+
+	assert.Equal(t, 8, g.modelFileWriteConcurrency)
+	require.NotNil(t, g.modelFileWriteLimiter)
+	assert.Equal(t, 8, g.modelFileWriteLimiter.Limit())
+
+	WithModelFileWriteConcurrency(0)(g)
+	assert.Equal(t, 0, g.modelFileWriteConcurrency)
+	assert.Nil(t, g.modelFileWriteLimiter)
+}
+
 func TestCaptureStartupReadyModelsCapturesOnlyReadyEntries(t *testing.T) {
 	readyKey := constants.GetModelConfigMapKey("service-ns", "ready-model", false)
 	updatingKey := constants.GetModelConfigMapKey("service-ns", "updating-model", false)

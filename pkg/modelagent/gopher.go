@@ -57,21 +57,23 @@ type activeDownload struct {
 }
 
 type Gopher struct {
-	modelConfigParser      *modelparser.ModelConfigParser
-	configMapReconciler    *ConfigMapReconciler
-	downloadRetry          int
-	concurrency            int
-	multipartConcurrency   int
-	modelRootDir           string
-	xetConfig              *xet.Config
-	kubeClient             kubernetes.Interface
-	gopherChan             chan *GopherTask
-	nodeLabelReconciler    *NodeLabelReconciler
-	metrics                *Metrics
-	logger                 *zap.SugaredLogger
-	configMapMutex         sync.Mutex // Mutex to coordinate ConfigMap access
-	baseModelLister        omev1beta1lister.BaseModelLister
-	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister
+	modelConfigParser         *modelparser.ModelConfigParser
+	configMapReconciler       *ConfigMapReconciler
+	downloadRetry             int
+	concurrency               int
+	multipartConcurrency      int
+	modelFileWriteConcurrency int
+	modelFileWriteLimiter     *ociobjectstore.WriteLimiter
+	modelRootDir              string
+	xetConfig                 *xet.Config
+	kubeClient                kubernetes.Interface
+	gopherChan                chan *GopherTask
+	nodeLabelReconciler       *NodeLabelReconciler
+	metrics                   *Metrics
+	logger                    *zap.SugaredLogger
+	configMapMutex            sync.Mutex // Mutex to coordinate ConfigMap access
+	baseModelLister           omev1beta1lister.BaseModelLister
+	clusterBaseModelLister    omev1beta1lister.ClusterBaseModelLister
 
 	// Track active downloads for cancellation
 	activeDownloads      map[string]activeDownload // key: model UID
@@ -104,6 +106,16 @@ func WithSkipStartupRevalidation(skip bool) GopherOption {
 func WithSkipFinalVerification(skip bool) GopherOption {
 	return func(gopher *Gopher) {
 		gopher.skipFinalVerification = skip
+	}
+}
+
+// WithModelFileWriteConcurrency bounds concurrent WriteAt calls across all OCI
+// object downloads handled by this model-agent process. Values less than one
+// preserve the existing unrestricted behavior.
+func WithModelFileWriteConcurrency(concurrency int) GopherOption {
+	return func(gopher *Gopher) {
+		gopher.modelFileWriteConcurrency = concurrency
+		gopher.modelFileWriteLimiter = ociobjectstore.NewWriteLimiter(concurrency)
 	}
 }
 
@@ -1081,6 +1093,7 @@ func (s *Gopher) createOCIOSDataStore(baseModelSpec v1beta1.BaseModelSpec) (*oci
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ociobjectstore data store: %w", err)
 	}
+	ociOSDS.SetModelFileWriteLimiter(s.modelFileWriteLimiter)
 
 	return ociOSDS, nil
 }

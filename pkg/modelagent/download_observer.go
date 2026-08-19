@@ -10,29 +10,31 @@ import (
 )
 
 type modelDownloadObserver struct {
-	metrics              *Metrics
-	logger               *zap.SugaredLogger
-	downloadID           string
-	modelType            string
-	modelNamespace       string
-	modelName            string
-	nodeName             string
-	objectConcurrency    int
-	multipartConcurrency int
+	metrics                   *Metrics
+	logger                    *zap.SugaredLogger
+	downloadID                string
+	modelType                 string
+	modelNamespace            string
+	modelName                 string
+	nodeName                  string
+	objectConcurrency         int
+	multipartConcurrency      int
+	modelFileWriteConcurrency int
 }
 
 func newModelDownloadObserver(gopher *Gopher, task *GopherTask) *modelDownloadObserver {
 	modelType, namespace, name := GetModelTypeNamespaceAndName(task)
 	return &modelDownloadObserver{
-		metrics:              gopher.metrics,
-		logger:               gopher.logger,
-		downloadID:           task.DownloadID,
-		modelType:            modelType,
-		modelNamespace:       namespace,
-		modelName:            name,
-		nodeName:             os.Getenv("NODE_NAME"),
-		objectConcurrency:    gopher.concurrency,
-		multipartConcurrency: gopher.multipartConcurrency,
+		metrics:                   gopher.metrics,
+		logger:                    gopher.logger,
+		downloadID:                task.DownloadID,
+		modelType:                 modelType,
+		modelNamespace:            namespace,
+		modelName:                 name,
+		nodeName:                  os.Getenv("NODE_NAME"),
+		objectConcurrency:         gopher.concurrency,
+		multipartConcurrency:      gopher.multipartConcurrency,
+		modelFileWriteConcurrency: gopher.modelFileWriteConcurrency,
 	}
 }
 
@@ -77,6 +79,7 @@ func (o *modelDownloadObserver) ObserveDownloadPhase(observation ociobjectstore.
 		"node", o.nodeName,
 		"object_concurrency", o.objectConcurrency,
 		"multipart_concurrency", o.multipartConcurrency,
+		"model_file_write_concurrency", o.modelFileWriteConcurrency,
 	}
 	if observation.ObjectName != "" {
 		fields = append(fields, "object", observation.ObjectName)
@@ -95,6 +98,7 @@ func (o *modelDownloadObserver) ObserveDownloadPhase(observation ociobjectstore.
 		fields = append(fields,
 			"write_calls", stats.Calls,
 			"write_duration_ms", float64(stats.Duration.Microseconds())/1000,
+			"write_limiter_wait_ms", float64(stats.LimiterWaitDuration.Microseconds())/1000,
 			"max_write_duration_ms", float64(stats.MaxDuration.Microseconds())/1000,
 			"min_write_request_bytes", stats.MinRequestBytes,
 			"max_write_request_bytes", stats.MaxRequestBytes,

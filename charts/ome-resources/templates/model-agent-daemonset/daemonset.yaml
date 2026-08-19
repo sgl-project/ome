@@ -61,6 +61,8 @@ spec:
         - '2'
         - --num-high-priority-worker
         - '1'
+        - --model-file-write-concurrency
+        - {{ .Values.modelAgent.modelFileWriteConcurrency | quote }}
         - --same-path-wait-timeout
         - 30m
         {{- if .Values.modelAgent.skipStartupRevalidation }}

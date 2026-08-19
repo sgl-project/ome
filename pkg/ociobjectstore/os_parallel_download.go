@@ -394,7 +394,7 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 				// mutate the shared file cursor.
 				copyStartedAt := time.Now()
 				bodyReader := newTimedReader(resp.Content, copyStartedAt)
-				written, writeStats, streamErr := writePartAtWithStats(targetFile, part, bodyReader)
+				written, writeStats, streamErr := writePartAtWithStats(targetFile, part, bodyReader, cds.modelFileWriteLimiter)
 				copyDuration := time.Since(copyStartedAt)
 
 				copyOutcome := DownloadOutcomeSuccess
@@ -439,6 +439,19 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 					WriteStats: &writeStats,
 					Err:        streamErr,
 				})
+				if writeStats.LimiterWaitDuration > 0 {
+					cds.observeDownloadPhase(DownloadObservation{
+						Phase:      PhaseModelFileWriteWait,
+						Duration:   writeStats.LimiterWaitDuration,
+						Outcome:    copyOutcome,
+						ObjectName: part.object,
+						PartNumber: part.partNum,
+						HasPart:    true,
+						Attempt:    attempt,
+						ChunkSize:  part.size,
+						Err:        streamErr,
+					})
+				}
 				cds.observeDownloadPhase(DownloadObservation{
 					Phase:      PhaseObjectToModelWrite,
 					Duration:   copyDuration,
@@ -543,9 +556,13 @@ func writePartAt(targetFile *os.File, part *PrepareDownloadPart, source io.Reade
 	return written, err
 }
 
-func writePartAtWithStats(targetFile *os.File, part *PrepareDownloadPart, source io.Reader) (int64, WriteStats, error) {
+func writePartAtWithStats(targetFile *os.File, part *PrepareDownloadPart, source io.Reader, limiters ...*WriteLimiter) (int64, WriteStats, error) {
 	writer := io.NewOffsetWriter(targetFile, part.offset)
-	timedWriter := &writeStatsWriter{writer: writer}
+	var limiter *WriteLimiter
+	if len(limiters) > 0 {
+		limiter = limiters[0]
+	}
+	timedWriter := &writeStatsWriter{writer: writer, limiter: limiter}
 	limitedSource := &io.LimitedReader{R: source, N: part.size}
 	bufp := BufferPool.Get().(*[]byte)
 	defer BufferPool.Put(bufp)
@@ -593,11 +610,16 @@ func copyCoalesced(dst io.Writer, src io.Reader, buffer []byte) (int64, error) {
 }
 
 type writeStatsWriter struct {
-	writer io.Writer
-	stats  WriteStats
+	writer  io.Writer
+	limiter *WriteLimiter
+	stats   WriteStats
 }
 
 func (w *writeStatsWriter) Write(buffer []byte) (int, error) {
+	waitDuration := w.limiter.acquire()
+	w.stats.LimiterWaitDuration += waitDuration
+	defer w.limiter.release()
+
 	startedAt := time.Now()
 	n, err := w.writer.Write(buffer)
 	duration := time.Since(startedAt)

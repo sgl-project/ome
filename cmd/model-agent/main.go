@@ -32,22 +32,23 @@ import (
 
 // config holds all configuration parameters for the model agent
 type config struct {
-	port                    int
-	modelsRootDir           string
-	modelsRootDirOnHost     string
-	nodeName                string
-	nodeLabelRetry          int
-	concurrency             int
-	multipartConcurrency    int
-	downloadRetry           int
-	downloadAuthType        string
-	numDownloadWorker       int
-	numHighPriorityWorker   int
-	samePathWaitTimeout     time.Duration
-	skipStartupRevalidation bool
-	skipFinalVerification   bool
-	namespace               string
-	logLevel                string
+	port                      int
+	modelsRootDir             string
+	modelsRootDirOnHost       string
+	nodeName                  string
+	nodeLabelRetry            int
+	concurrency               int
+	multipartConcurrency      int
+	modelFileWriteConcurrency int
+	downloadRetry             int
+	downloadAuthType          string
+	numDownloadWorker         int
+	numHighPriorityWorker     int
+	samePathWaitTimeout       time.Duration
+	skipStartupRevalidation   bool
+	skipFinalVerification     bool
+	namespace                 string
+	logLevel                  string
 }
 
 // Logger type alias for zap.SugaredLogger
@@ -75,6 +76,7 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&cfg.downloadRetry, "download-retry", 3, "Number of retries for downloading")
 	rootCmd.PersistentFlags().IntVar(&cfg.concurrency, "concurrency", 4, "Number of concurrent download workers per gopher")
 	rootCmd.PersistentFlags().IntVar(&cfg.multipartConcurrency, "multipart-concurrency", 4, "Number of concurrent multipart download workers per gopher")
+	rootCmd.PersistentFlags().IntVar(&cfg.modelFileWriteConcurrency, "model-file-write-concurrency", 0, "Maximum concurrent model-file WriteAt calls across the model-agent pod; zero is unlimited")
 	rootCmd.PersistentFlags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 5, "Number of download workers")
 	rootCmd.PersistentFlags().IntVar(&cfg.numHighPriorityWorker, "num-high-priority-worker", 1, "Number of high-priority workers for delete and same-path reuse tasks")
 	rootCmd.PersistentFlags().DurationVar(&cfg.samePathWaitTimeout, "same-path-wait-timeout", 30*time.Minute, "Maximum time to wait for same-path model reuse before falling back to normal download")
@@ -278,6 +280,7 @@ func initializeComponents(
 		logger,
 		baseModelInformer.Lister(),
 		clusterBaseModelInformer.Lister(),
+		modelagent.WithModelFileWriteConcurrency(cfg.modelFileWriteConcurrency),
 		modelagent.WithSkipStartupRevalidation(cfg.skipStartupRevalidation),
 		modelagent.WithSkipFinalVerification(cfg.skipFinalVerification),
 	)
