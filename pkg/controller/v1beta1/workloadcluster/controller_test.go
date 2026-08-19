@@ -118,6 +118,19 @@ func TestReconcile_SecretNotFound(t *testing.T) {
 	assert.Equal(t, "SecretNotFound", cond.Reason)
 }
 
+func TestWorkloadClustersForSecretUsesReferenceIndex(t *testing.T) {
+	s := scheme(t)
+	match := wcWithSecret("match")
+	other := wcWithSecret("other")
+	other.Spec.ClusterSource.KubeConfig.SecretRef.Name = "different"
+	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(match, other).
+		WithIndex(&v1beta1.WorkloadCluster{}, kubeConfigSecretRefIndex, kubeConfigSecretRefValues).Build()
+	r := &Reconciler{Client: c, Log: log.Log}
+	reqs := r.workloadClustersForSecret(context.Background(), kcSecret(validKubeconfig))
+	require.Len(t, reqs, 1)
+	assert.Equal(t, "match", reqs[0].Name)
+}
+
 func TestReconcile_ConnectionFailed(t *testing.T) {
 	s := scheme(t)
 	wc := wcWithSecret("c1")

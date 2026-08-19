@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -43,6 +44,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
+
+// DefaultRemoteCacheSyncTimeout bounds the initial informer LIST/sync during a
+// connection build. A remote cache that cannot start must fail the connection
+// rather than leave later reads or handler registration blocked indefinitely.
+const DefaultRemoteCacheSyncTimeout = time.Minute
 
 // cacheIndexOption defines a field to index on the cache before starting
 type CacheIndexOption struct {
@@ -176,18 +182,34 @@ func NewSelectivelyCachingClient(
 
 	var synced atomic.Bool
 
+	runCtx, cancelRun := context.WithCancel(ctx)
+	startErr := make(chan error, 1)
 	go func() {
-		if err := remoteCache.Start(ctx); err != nil {
-			ctrl.LoggerFrom(ctx).Error(err, "Remote cache execution failed")
-		}
+		defer cancelRun()
+		startErr <- remoteCache.Start(runCtx)
 	}()
-
-	go func() {
-		if remoteCache.WaitForCacheSync(ctx) {
-			synced.Store(true)
-			ctrl.LoggerFrom(ctx).V(2).Info("Remote cache successfully synchronized")
+	syncCtx, cancelSync := context.WithTimeout(runCtx, DefaultRemoteCacheSyncTimeout)
+	defer cancelSync()
+	syncDone := make(chan bool, 1)
+	go func() { syncDone <- remoteCache.WaitForCacheSync(syncCtx) }()
+	select {
+	case err := <-startErr:
+		if err == nil {
+			err = errors.New("remote cache stopped before initial synchronization")
 		}
-	}()
+		cancelRun()
+		return nil, fmt.Errorf("starting remote cache: %w", err)
+	case ok := <-syncDone:
+		if !ok {
+			cancelRun()
+			if err := syncCtx.Err(); err != nil {
+				return nil, fmt.Errorf("synchronizing remote cache: %w", err)
+			}
+			return nil, errors.New("synchronizing remote cache failed")
+		}
+		synced.Store(true)
+		ctrl.LoggerFrom(ctx).V(2).Info("Remote cache successfully synchronized")
+	}
 
 	cachedClient := &selectivelyCachingClient{
 		WithWatch:    directClient,

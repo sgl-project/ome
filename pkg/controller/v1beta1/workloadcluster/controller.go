@@ -39,6 +39,8 @@ const DefaultHealthInterval = time.Minute
 // default".
 const DefaultConnectionGracePeriod = 2 * time.Minute
 
+const kubeConfigSecretRefIndex = "spec.clusterSource.kubeConfig.secretRef"
+
 // +kubebuilder:rbac:groups=ome.io,resources=workloadclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ome.io,resources=workloadclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
@@ -365,10 +367,22 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
 	if r.Manager != nil {
 		r.Manager.SetReconnectBackoff(cfg.reconnect)
 	}
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1beta1.WorkloadCluster{}, kubeConfigSecretRefIndex, kubeConfigSecretRefValues); err != nil {
+		return fmt.Errorf("index WorkloadClusters by kubeconfig Secret: %w", err)
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta1.WorkloadCluster{}).
 		Watches(&corev1.Secret{}, r.secretEventHandler(cfg.eventsBatchPeriod)).
 		Complete(r)
+}
+
+func kubeConfigSecretRefValues(obj client.Object) []string {
+	wc := obj.(*v1beta1.WorkloadCluster)
+	kc := wc.Spec.ClusterSource.KubeConfig
+	if kc == nil || kc.SecretRef.Name == "" || kc.SecretRef.Namespace == "" {
+		return nil
+	}
+	return []string{types.NamespacedName{Namespace: kc.SecretRef.Namespace, Name: kc.SecretRef.Name}.String()}
 }
 
 // secretEventHandler re-enqueues the WorkloadClusters referencing a changed
@@ -402,15 +416,14 @@ func (r *Reconciler) secretEventHandler(batchPeriod time.Duration) handler.Event
 // kubeConfig.secretRef points at it.
 func (r *Reconciler) workloadClustersForSecret(ctx context.Context, obj client.Object) []ctrl.Request {
 	list := &v1beta1.WorkloadClusterList{}
-	if err := r.List(ctx, list); err != nil {
+	key := types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}.String()
+	if err := r.List(ctx, list, client.MatchingFields{kubeConfigSecretRefIndex: key}); err != nil {
+		r.Log.Error(err, "list WorkloadClusters for kubeconfig Secret", "secret", key)
 		return nil
 	}
-	var reqs []ctrl.Request
+	reqs := make([]ctrl.Request, 0, len(list.Items))
 	for i := range list.Items {
-		kc := list.Items[i].Spec.ClusterSource.KubeConfig
-		if kc != nil && kc.SecretRef.Name == obj.GetName() && kc.SecretRef.Namespace == obj.GetNamespace() {
-			reqs = append(reqs, ctrl.Request{NamespacedName: types.NamespacedName{Name: list.Items[i].Name}})
-		}
+		reqs = append(reqs, ctrl.Request{NamespacedName: types.NamespacedName{Name: list.Items[i].Name}})
 	}
 	return reqs
 }
