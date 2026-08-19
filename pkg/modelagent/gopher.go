@@ -81,7 +81,30 @@ type Gopher struct {
 	samePathWaitDelay   time.Duration
 	samePathWaitTimeout time.Duration
 
-	startupReadyModelKeys map[string]struct{}
+	startupReadyModelKeys   map[string]struct{}
+	skipStartupRevalidation bool
+	skipFinalVerification   bool
+}
+
+// GopherOption configures optional model-agent behavior without changing the
+// default production behavior of NewGopher.
+type GopherOption func(*Gopher)
+
+// WithSkipStartupRevalidation trusts the startup Ready snapshot for models
+// whose local directory still exists. This is intended only for controlled
+// performance testing because it skips local integrity validation on restart.
+func WithSkipStartupRevalidation(skip bool) GopherOption {
+	return func(gopher *Gopher) {
+		gopher.skipStartupRevalidation = skip
+	}
+}
+
+// WithSkipFinalVerification disables the full integrity pass after an OCI
+// model download. This is intended only for controlled performance testing.
+func WithSkipFinalVerification(skip bool) GopherOption {
+	return func(gopher *Gopher) {
+		gopher.skipFinalVerification = skip
+	}
 }
 
 const (
@@ -107,7 +130,8 @@ func NewGopher(
 	metrics *Metrics,
 	logger *zap.SugaredLogger,
 	baseModelLister omev1beta1lister.BaseModelLister,
-	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister) (*Gopher, error) {
+	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister,
+	options ...GopherOption) (*Gopher, error) {
 
 	if xetConfig == nil {
 		return nil, fmt.Errorf("xet hugging face config cannot be nil")
@@ -116,7 +140,7 @@ func NewGopher(
 		samePathWaitTimeout = defaultSamePathWaitTimeout
 	}
 
-	return &Gopher{
+	gopher := &Gopher{
 		modelConfigParser:      modelConfigParser,
 		configMapReconciler:    configMapReconciler,
 		downloadRetry:          downloadRetry,
@@ -135,7 +159,13 @@ func NewGopher(
 		taskQueue:              newGopherTaskQueue(),
 		samePathWaitDelay:      defaultSamePathWaitDelay,
 		samePathWaitTimeout:    samePathWaitTimeout,
-	}, nil
+	}
+	for _, option := range options {
+		if option != nil {
+			option(gopher)
+		}
+	}
+	return gopher, nil
 }
 
 func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int, numHighPriorityWorker int) {
@@ -204,6 +234,10 @@ func (s *Gopher) enqueueTask(task *GopherTask) {
 		s.cancelActiveDownload(task)
 	} else {
 		s.classifyStartupRevalidation(task)
+		if task.RevalidationReplay && s.skipStartupRevalidation {
+			s.logger.Warnf("Skipping startup revalidation for previously Ready model %s because test-only bypass is enabled", getModelInfoForLogging(task))
+			return
+		}
 		// This measures time in Gopher's priority queue. Scout/watch latency is
 		// outside this boundary and remains visible in the CR/log timestamps.
 		task.QueuedAt = time.Now()
@@ -1340,10 +1374,32 @@ func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectUR
 			return fmt.Errorf("failed to download objects: %v", errs)
 		}
 	}
-	// Perform final verification of all downloaded files
-	s.logger.Info("Performing final integrity verification of all downloaded files...")
+	if err := s.performFinalVerification(ociOSDataStore, objectUris, destPath, task, totalBytes); err != nil {
+		return err
+	}
+
+	// Record total bytes transferred after verification succeeds or is
+	// explicitly bypassed for controlled performance testing.
+	s.metrics.RecordBytesTransferred(modelType, namespace, name, totalBytes)
+	return nil
+}
+
+func (s *Gopher) performFinalVerification(
+	ociOSDataStore *ociobjectstore.OCIOSDataStore,
+	objectURIs []ociobjectstore.ObjectURI,
+	destPath string,
+	task *GopherTask,
+	totalBytes int64,
+) error {
 	verificationStartTime := time.Now()
-	verificationErrors := s.verifyDownloadedFiles(ociOSDataStore, objectUris, destPath, task)
+	if s.skipFinalVerification {
+		s.logger.Warn("Skipping final OCI model integrity verification because test-only bypass is enabled")
+		s.observeTaskDownloadPhase(task, ociobjectstore.PhaseFinalVerification, verificationStartTime, ociobjectstore.DownloadOutcomeSkipped, totalBytes, nil)
+		return nil
+	}
+
+	s.logger.Info("Performing final integrity verification of all downloaded files...")
+	verificationErrors := s.verifyDownloadedFiles(ociOSDataStore, objectURIs, destPath, task)
 	verificationDuration := time.Since(verificationStartTime)
 	verificationOutcome := ociobjectstore.DownloadOutcomeSuccess
 	var verificationErr error
@@ -1363,14 +1419,11 @@ func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectUR
 			errMsgs = append(errMsgs, fmt.Sprintf("%s: %v", file, err))
 			s.logger.Errorf("Verification failed for %s: %v", file, err)
 		}
-		return fmt.Errorf("integrity verification failed for %d/%d files: %s", len(verificationErrors), len(objects), strings.Join(errMsgs, "; "))
+		return fmt.Errorf("integrity verification failed for %d/%d files: %s", len(verificationErrors), len(objectURIs), strings.Join(errMsgs, "; "))
 	}
 
-	// Record total bytes transferred after successful verification.
-	s.metrics.RecordBytesTransferred(modelType, namespace, name, totalBytes)
-
 	s.logger.Infof("All files downloaded and verified successfully (%d files, %d bytes, verification took %v)",
-		len(objects), totalBytes, verificationDuration.Round(time.Millisecond))
+		len(objectURIs), totalBytes, verificationDuration.Round(time.Millisecond))
 	return nil
 }
 

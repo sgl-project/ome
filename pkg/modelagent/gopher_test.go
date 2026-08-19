@@ -1131,6 +1131,75 @@ func TestEnqueueTaskClassifiesStartupReadyLocalPathAsRevalidation(t *testing.T) 
 	assert.Equal(t, 0, g.taskQueue.len())
 }
 
+func TestEnqueueTaskSkipsStartupRevalidationWhenConfigured(t *testing.T) {
+	storageURI := "oci://n/object-ns/b/model-bucket/o/models/ready-model"
+	modelPath := filepath.Join(t.TempDir(), "ready-model")
+	require.NoError(t, os.MkdirAll(modelPath, 0755))
+	model := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "ready-model", Namespace: "service-ns", UID: "ready-model-uid"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: &storageURI, Path: &modelPath},
+		},
+	}
+	g := &Gopher{
+		taskQueue:               newGopherTaskQueue(),
+		logger:                  zap.NewNop().Sugar(),
+		startupReadyModelKeys:   map[string]struct{}{getModelID(model, nil): {}},
+		skipStartupRevalidation: true,
+	}
+	task := &GopherTask{TaskType: Download, BaseModel: model}
+
+	g.enqueueTask(task)
+
+	assert.True(t, task.RevalidationReplay)
+	assert.Equal(t, 0, g.taskQueue.len())
+}
+
+func TestEnqueueTaskDoesNotSkipDownloadOverride(t *testing.T) {
+	storageURI := "oci://n/object-ns/b/model-bucket/o/models/ready-model"
+	modelPath := filepath.Join(t.TempDir(), "ready-model")
+	require.NoError(t, os.MkdirAll(modelPath, 0755))
+	model := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "ready-model", Namespace: "service-ns", UID: "ready-model-uid"},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{StorageUri: &storageURI, Path: &modelPath},
+		},
+	}
+	g := &Gopher{
+		taskQueue:               newGopherTaskQueue(),
+		logger:                  zap.NewNop().Sugar(),
+		startupReadyModelKeys:   map[string]struct{}{getModelID(model, nil): {}},
+		skipStartupRevalidation: true,
+	}
+
+	g.enqueueTask(&GopherTask{TaskType: DownloadOverride, BaseModel: model})
+
+	task, ok := g.taskQueue.popNormal()
+	require.True(t, ok)
+	assert.Equal(t, DownloadOverride, task.TaskType)
+	assert.False(t, task.RevalidationReplay)
+}
+
+func TestPerformFinalVerificationCanBeSkipped(t *testing.T) {
+	core, recorded := observer.New(zap.WarnLevel)
+	g := &Gopher{
+		logger:                zap.New(core).Sugar(),
+		skipFinalVerification: true,
+	}
+	task := &GopherTask{
+		TaskType: Download,
+		BaseModel: &v1beta1.BaseModel{
+			ObjectMeta: metav1.ObjectMeta{Name: "benchmark-model", Namespace: "perf"},
+		},
+	}
+
+	err := g.performFinalVerification(nil, nil, "", task, 1234)
+
+	require.NoError(t, err)
+	require.Len(t, recorded.All(), 1)
+	assert.Contains(t, recorded.All()[0].Message, "Skipping final OCI model integrity verification")
+}
+
 func TestCaptureStartupReadyModelsCapturesOnlyReadyEntries(t *testing.T) {
 	readyKey := constants.GetModelConfigMapKey("service-ns", "ready-model", false)
 	updatingKey := constants.GetModelConfigMapKey("service-ns", "updating-model", false)

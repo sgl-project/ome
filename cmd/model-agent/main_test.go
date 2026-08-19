@@ -115,6 +115,8 @@ func TestDefaultConfig(t *testing.T) {
 	testCmd.Flags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 3, "number of download workers")
 	testCmd.Flags().IntVar(&cfg.numHighPriorityWorker, "num-high-priority-worker", 1, "number of high-priority workers")
 	testCmd.Flags().DurationVar(&cfg.samePathWaitTimeout, "same-path-wait-timeout", 30*time.Minute, "same-path wait timeout")
+	testCmd.Flags().BoolVar(&cfg.skipStartupRevalidation, "skip-startup-revalidation", false, "skip startup revalidation")
+	testCmd.Flags().BoolVar(&cfg.skipFinalVerification, "skip-final-verification", false, "skip final verification")
 	testCmd.Flags().StringVar(&cfg.namespace, "namespace", "ome", "the namespace of the ome model agents daemon set")
 
 	// Call initConfig to set cfg.nodeName
@@ -131,6 +133,8 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, 3, cfg.numDownloadWorker)
 	assert.Equal(t, 1, cfg.numHighPriorityWorker)
 	assert.Equal(t, 30*time.Minute, cfg.samePathWaitTimeout)
+	assert.False(t, cfg.skipStartupRevalidation)
+	assert.False(t, cfg.skipFinalVerification)
 	assert.Equal(t, "ome", cfg.namespace)
 }
 

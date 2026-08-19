@@ -32,20 +32,22 @@ import (
 
 // config holds all configuration parameters for the model agent
 type config struct {
-	port                  int
-	modelsRootDir         string
-	modelsRootDirOnHost   string
-	nodeName              string
-	nodeLabelRetry        int
-	concurrency           int
-	multipartConcurrency  int
-	downloadRetry         int
-	downloadAuthType      string
-	numDownloadWorker     int
-	numHighPriorityWorker int
-	samePathWaitTimeout   time.Duration
-	namespace             string
-	logLevel              string
+	port                    int
+	modelsRootDir           string
+	modelsRootDirOnHost     string
+	nodeName                string
+	nodeLabelRetry          int
+	concurrency             int
+	multipartConcurrency    int
+	downloadRetry           int
+	downloadAuthType        string
+	numDownloadWorker       int
+	numHighPriorityWorker   int
+	samePathWaitTimeout     time.Duration
+	skipStartupRevalidation bool
+	skipFinalVerification   bool
+	namespace               string
+	logLevel                string
 }
 
 // Logger type alias for zap.SugaredLogger
@@ -76,6 +78,8 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 5, "Number of download workers")
 	rootCmd.PersistentFlags().IntVar(&cfg.numHighPriorityWorker, "num-high-priority-worker", 1, "Number of high-priority workers for delete and same-path reuse tasks")
 	rootCmd.PersistentFlags().DurationVar(&cfg.samePathWaitTimeout, "same-path-wait-timeout", 30*time.Minute, "Maximum time to wait for same-path model reuse before falling back to normal download")
+	rootCmd.PersistentFlags().BoolVar(&cfg.skipStartupRevalidation, "skip-startup-revalidation", false, "Skip revalidation of models that were Ready before model-agent restarted (test use only)")
+	rootCmd.PersistentFlags().BoolVar(&cfg.skipFinalVerification, "skip-final-verification", false, "Skip final integrity verification after an OCI model download (test use only)")
 	rootCmd.PersistentFlags().StringVar(&cfg.namespace, "namespace", "ome", "Kubernetes namespace to use")
 	rootCmd.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 
@@ -274,6 +278,8 @@ func initializeComponents(
 		logger,
 		baseModelInformer.Lister(),
 		clusterBaseModelInformer.Lister(),
+		modelagent.WithSkipStartupRevalidation(cfg.skipStartupRevalidation),
+		modelagent.WithSkipFinalVerification(cfg.skipFinalVerification),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gopher: %w", err)
