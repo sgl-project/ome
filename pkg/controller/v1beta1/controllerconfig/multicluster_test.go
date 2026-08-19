@@ -184,6 +184,11 @@ func TestMultiClusterConfig_ValidateRejectsMalformedKnobs(t *testing.T) {
 			want: "placement.gcInterval",
 		},
 		{
+			name: "gateway configured without a backend port",
+			cfg:  MultiClusterConfig{Endpoint: EndpointConfig{GlobalGateway: "infra/global-gw"}},
+			want: "endpoint.backendPort",
+		},
+		{
 			name: "port out of range",
 			cfg:  MultiClusterConfig{Endpoint: EndpointConfig{BackendPort: 99999}},
 			want: "endpoint.backendPort",
@@ -202,6 +207,9 @@ func TestMultiClusterConfig_ValidateRejectsMalformedKnobs(t *testing.T) {
 // blocks a legitimate config (or the graceful-degradation path).
 func TestMultiClusterConfig_ValidateAcceptsEmptyAndWellFormed(t *testing.T) {
 	require.NoError(t, MultiClusterConfig{}.Validate())
+	// Endpoint publishing fully off (no gateway, no port) stays valid: that is
+	// the graceful-degradation default, not a half-finished config.
+	require.NoError(t, MultiClusterConfig{Endpoint: EndpointConfig{}}.Validate())
 	require.NoError(t, MultiClusterConfig{
 		WorkloadCluster: WorkloadClusterConfig{HealthInterval: "30s", EstablishMax: "10m"},
 		Placement:       PlacementConfig{GCInterval: "5m", LocalQueue: "gpu-queue"},

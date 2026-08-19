@@ -206,6 +206,13 @@ func (c MultiClusterConfig) Validate() error {
 	if p := c.Endpoint.BackendPort; p < 0 || p > 65535 {
 		errs = append(errs, fmt.Errorf("endpoint.backendPort: %d is not a valid port", p))
 	}
+	// Naming a gateway states the intent to publish, but the publisher stays off
+	// without a routable backend port. Zero stays valid for the fully-disabled
+	// endpoint config; paired with a gateway it is a half-finished one that would
+	// otherwise publish nothing and report nothing.
+	if c.Endpoint.GlobalGateway != "" && c.Endpoint.BackendPort <= 0 {
+		errs = append(errs, fmt.Errorf("endpoint.backendPort: must be set when endpoint.globalGateway is configured (%q)", c.Endpoint.GlobalGateway))
+	}
 	return errors.Join(errs...)
 }
 
