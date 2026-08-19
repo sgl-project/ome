@@ -820,3 +820,37 @@ func TestCreateLWS(t *testing.T) {
 		})
 	}
 }
+
+// A multi-node gang is only useful if its pods share one topology domain, and on
+// this path the constraint belongs to LeaderWorkerSet: the exclusive-topology
+// annotation has to reach the LWS OBJECT, not just the pod templates, because LWS
+// reads it there to place each group. If it only landed on the pods, LWS would
+// place groups unconstrained and a gang could straddle two domains.
+func TestCreateLWSCarriesExclusiveTopologyToTheLWSObject(t *testing.T) {
+	scheme := runtime.NewScheme()
+	assert.NoError(t, lws.AddToScheme(scheme))
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	container := corev1.Container{Name: "ome-container", Image: "example.com/runtime:demo"}
+	headPod := &corev1.PodSpec{Containers: []corev1.Container{container}}
+	workerPod := &corev1.PodSpec{Containers: []corev1.Container{container}}
+
+	const sliceKey = "cloud.example.com/accelerator-slice-id"
+	componentMeta := metav1.ObjectMeta{
+		Name:        "gang-demo-engine",
+		Namespace:   "default",
+		Labels:      map[string]string{"app": "gang-demo-engine"},
+		Annotations: map[string]string{lws.ExclusiveKeyAnnotationKey: sliceKey},
+	}
+	minReplicas := 1
+	componentExt := &v1beta1.ComponentExtensionSpec{MinReplicas: &minReplicas}
+
+	r := NewLWSReconciler(client, scheme, headPod, workerPod, 1, componentExt, componentMeta)
+
+	assert.Equal(t, sliceKey, r.LWS.Annotations[lws.ExclusiveKeyAnnotationKey],
+		"LWS object must carry the exclusive-topology key so each group is placed within one domain")
+	assert.Equal(t, sliceKey, r.LWS.Spec.LeaderWorkerTemplate.LeaderTemplate.Annotations[lws.ExclusiveKeyAnnotationKey],
+		"leader pod template inherits Component annotations")
+	assert.Equal(t, sliceKey, r.LWS.Spec.LeaderWorkerTemplate.WorkerTemplate.Annotations[lws.ExclusiveKeyAnnotationKey],
+		"worker pod template inherits Component annotations")
+}
