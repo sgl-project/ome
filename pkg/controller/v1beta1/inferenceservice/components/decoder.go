@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/common"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/status"
 	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"sigs.k8s.io/ome/pkg/utils"
@@ -154,9 +155,44 @@ func (d *Decoder) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta
 		return d.deploymentReconciler.ReconcileRawDeployment(isvc, objectMeta, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	case constants.MultiNode:
 		return d.deploymentReconciler.ReconcileMultiNodeDeployment(isvc, objectMeta, podSpec, workerSize, workerPodSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
+	case constants.OMENative:
+		return d.projectInferenceReplica(isvc, objectMeta, podSpec, workerSize, workerPodSpec)
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for decoder")
 	}
+}
+
+// projectInferenceReplica renders this Component into its InferenceReplica: the
+// per-Component pod metadata, pod specs, replica count and gang topology key are
+// projected onto the IR, which becomes the single object describing what should
+// run. The rendered Runner templates carry the Component's merged labels and
+// annotations, so whatever the InferenceService (and this Component) declared is
+// visible on the IR and inherited by the pods rendered from it.
+//
+// Materializing those pods is the InferenceReplica controller's job. This build
+// does not include that controller, so the IR is created and kept up to date for
+// inspection and no workload is started from it.
+func (d *Decoder) projectInferenceReplica(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec, workerSize int, workerPodSpec *v1.PodSpec) (ctrl.Result, error) {
+	ir, err := irprojector.EnsureInferenceReplica(context.TODO(), irprojector.Params{
+		ISVC:          isvc,
+		Component:     v1beta1.DecoderComponent,
+		ComponentExt:  &d.decoderSpec.ComponentExtensionSpec,
+		ObjectMeta:    objectMeta,
+		PodSpec:       podSpec,
+		WorkerPodSpec: workerPodSpec,
+		WorkerSize:    workerSize,
+		MultiPod:      d.decoderSpec.Worker != nil,
+		TopologyKey:   d.decoderSpec.TopologyKey,
+		Client:        d.Client,
+	})
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	d.Log.Info("Projected InferenceReplica; no pods are rendered from it in this build",
+		"inferenceservice", isvc.Namespace+"/"+isvc.Name,
+		"component", v1beta1.DecoderComponent,
+		"inferencereplica", ir.Name)
+	return ctrl.Result{}, nil
 }
 
 // updateDecoderStatus updates the status of the decoder
