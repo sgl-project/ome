@@ -1,0 +1,118 @@
+---
+# Prefill/decode disaggregation on multi-host accelerator slices.
+#
+# One InferenceService, three Components:
+#   engine  — prefill, KV producer
+#   decoder — decode, KV consumer
+#   router  — fronts both and routes per phase
+#
+# Engine and decoder are each a leader + worker gang that must land inside ONE
+# accelerator slice, so each pins its own topologyKey. Sizing is deliberately
+# asymmetric: prefill and decode do not sustain the same requests/sec per gang,
+# so matching their throughput means different replica counts. Take the ratio
+# from your own measurements — the counts below are small on purpose so the
+# sample applies anywhere.
+#
+# The annotations exist to make metadata propagation observable end to end:
+#   example.com/owner       declared once here, must appear on BOTH gangs
+#   example.com/tier        declared here AND per Component; the Component wins
+#   example.com/slice-hint  a scheduling hint that must survive to the pods
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: pd-demo
+  annotations:
+    ome.io/deploymentMode: OMENative
+    example.com/owner: team-inference
+    example.com/tier: service-level
+    example.com/slice-hint: "2x2x2"
+  labels:
+    # Bump this to restart the workload with no real spec change: it alters the
+    # pod template, so the rollout policy below drives the replacement.
+    bounce: "1"
+spec:
+  deploymentMode: OMENative
+  model:
+    name: demo-model
+  runtime:
+    name: demo-accelerator-runtime
+  engine:
+    # Prefill gang count — the larger share here, since prefill is usually the
+    # bottleneck for long-context traffic.
+    minReplicas: 3
+    maxReplicas: 3
+    annotations:
+      example.com/tier: engine-level
+    # The slice one gang must fit inside. OMENative projects this onto
+    # ir.Spec.TopologyKey; the InferenceReplica controller is what turns it into
+    # the worker->leader affinity, and that controller is not in this build (see
+    # the README). Substitute the node label your platform uses to identify a
+    # single slice — present on every node of the slice, unique per slice.
+    topologyKey: cloud.example.com/accelerator-slice-id
+    # Constrain where gangs may land at all. topologyKey above co-locates one
+    # gang's pods; this bounds the pool they are placed from — here, the zones
+    # that hold the accelerator fleet, so a gang cannot be scheduled into a zone
+    # with no capacity for it.
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+              - us-central1-a
+              - us-central1-b
+    leader:
+      runner:
+        name: ome-container
+    worker:
+      size: 1
+      runner:
+        name: ome-container
+    lifecycle: &componentLifecycle
+      # A cold accelerator compile can take far longer than a normal container
+      # start. Size this to your own compile time, or gangs are torn down
+      # mid-compile and never converge.
+      instanceReadyTimeout: 45m0s
+      migrationPolicy:
+        mode: Auto
+      # A multi-host gang serves only when every pod in it is ready — a partially
+      # ready gang cannot answer a request.
+      readyPolicy: AllPodReady
+      # One crashlooping pod invalidates its whole gang, so replace the gang
+      # rather than the single pod.
+      restartPolicy: RecreateInstanceOnPodRestart
+      updateStrategy:
+        type: SurgeThenDrain
+        rollingUpdate:
+          # Stand up a replacement gang before draining an old one, and never
+          # give up serving capacity mid-roll.
+          maxSurge: 1
+          maxUnavailable: 0
+        inPlaceUpdateStrategy:
+          gracePeriodSeconds: 30
+          markNotReadyDuringLifecycle: true
+  decoder:
+    # Decode gang count, matched against the prefill count above so neither
+    # stage starves the other.
+    minReplicas: 2
+    maxReplicas: 2
+    annotations:
+      example.com/tier: decoder-level
+    # Each decode gang gets its own slice, same as prefill.
+    topologyKey: cloud.example.com/accelerator-slice-id
+    leader:
+      runner:
+        name: ome-container
+    worker:
+      size: 1
+      runner:
+        name: ome-container
+    # Both gangs share one readiness and rollout policy.
+    lifecycle: *componentLifecycle
+  router:
+    minReplicas: 1
+    maxReplicas: 1
+    annotations:
+      example.com/tier: router-level
