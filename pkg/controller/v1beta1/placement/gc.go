@@ -141,7 +141,17 @@ func (g *GCReconciler) sweep(ctx context.Context) error {
 		for _, orphan := range OrphanedDeriveds(live, g.ControlPlaneID, derivedList.Items) {
 			o := orphan
 			o.SetGroupVersionKind(v1beta1.SchemeGroupVersion.WithKind("InferenceService"))
-			if err := cl.Delete(ctx, &o); err != nil && !apierrors.IsNotFound(err) {
+			// Delete the exact object this sweep classified, never whatever now
+			// holds that name. A source deleted and recreated under the same name
+			// gets a fresh UID, so the placer may already have created a LIVE
+			// derived by the time this delete lands; a name-only delete would reap
+			// the running workload it just placed.
+			opts := []client.DeleteOption{}
+			if o.UID != "" {
+				uid := o.UID
+				opts = append(opts, client.Preconditions{UID: &uid})
+			}
+			if err := cl.Delete(ctx, &o, opts...); err != nil && !apierrors.IsNotFound(err) {
 				g.Log.Error(err, "gc: delete orphan derived", "cluster", cluster, "isvc", o.Namespace+"/"+o.Name)
 				continue
 			}

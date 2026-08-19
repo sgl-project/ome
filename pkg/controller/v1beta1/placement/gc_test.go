@@ -9,7 +9,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -90,6 +92,43 @@ func TestGCSweep_DeletesOrphansOnly(t *testing.T) {
 	err := worker.Get(context.Background(), types.NamespacedName{Namespace: "prod", Name: "orphan"}, &v1beta1.InferenceService{})
 	assert.True(t, apierrors.IsNotFound(err), "orphan deleted")
 	require.NoError(t, worker.Get(context.Background(), types.NamespacedName{Namespace: "prod", Name: "live"}, &v1beta1.InferenceService{}), "live kept")
+}
+
+// The sweep must delete the exact object it classified, not whatever holds that
+// name when the delete lands. A source deleted and recreated under the same name
+// gets a fresh UID, so the placer can have a LIVE derived in place by then; a
+// name-only delete would reap the workload it just placed.
+func TestGCSweep_DeletesByUIDPrecondition(t *testing.T) {
+	s := testScheme(t)
+	cp := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(&v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "prod", Name: "live", UID: "uid-live"},
+	}).Build()
+	orphan := derivedWithOrigin("orphan", "uid-gone")
+	orphan.UID = "derived-uid"
+
+	var gotOpts []client.DeleteOption
+	worker := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(orphan).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+				gotOpts = opts
+				return c.Delete(ctx, obj, opts...)
+			},
+		}).Build()
+	clusters := fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{
+		"w": workloadcluster.NewNeverCachingClient(worker),
+	}}
+	gc := &GCReconciler{APIReader: cp, Log: log.Log, Clusters: clusters}
+
+	require.NoError(t, gc.sweep(context.Background()))
+
+	var uid *types.UID
+	for _, o := range gotOpts {
+		if p, ok := o.(client.Preconditions); ok {
+			uid = p.UID
+		}
+	}
+	require.NotNil(t, uid, "orphan delete must carry a UID precondition")
+	assert.Equal(t, types.UID("derived-uid"), *uid)
 }
 
 // An empty control-plane ISVC list (transient/partial/suspect response, or a
