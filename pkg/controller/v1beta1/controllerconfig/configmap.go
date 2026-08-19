@@ -355,6 +355,12 @@ func NewBenchmarkJobConfig(clientset kubernetes.Interface) (*BenchmarkJobConfig,
 	return benchmarkJobConfig, nil
 }
 
+// getInferenceServiceConfigMap fetches the inferenceservice-config ConfigMap
+// from the OME namespace.
+func getInferenceServiceConfigMap(clientset kubernetes.Interface) (*v1.ConfigMap, error) {
+	return clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
+}
+
 // NewOmeAgentConfig loads the omeAgent block from the inferenceservice-config
 // ConfigMap in the OME namespace. A missing block yields a zero-value config
 // (not an error) so the PVC path can surface PVCConfigMissing via status
