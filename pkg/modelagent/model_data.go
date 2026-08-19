@@ -81,10 +81,11 @@ func (p *DownloadProgress) Percentage() float64 {
 // ModelEntry represents an entry in the node model ConfigMap
 // This is the top-level structure stored for each model in the ConfigMap
 type ModelEntry struct {
-	Name     string            `json:"name"`               // Name of the model
-	Status   ModelStatus       `json:"status"`             // Current status of the model on this node
-	Config   *ModelConfig      `json:"config,omitempty"`   // Model configuration, may be nil if just tracking status
-	Progress *DownloadProgress `json:"progress,omitempty"` // Download progress, nil when not downloading
+	Name          string            `json:"name"`                    // Name of the model
+	Status        ModelStatus       `json:"status"`                  // Current status of the model on this node
+	Config        *ModelConfig      `json:"config,omitempty"`        // Model configuration, may be nil if just tracking status
+	Progress      *DownloadProgress `json:"progress,omitempty"`      // Download progress, nil when not downloading
+	HfArtifactKey string            `json:"hfArtifactKey,omitempty"` // ConfigMap key of the shared HF artifact used by this model
 }
 
 // ConvertMetadataToModelConfig converts internal ModelMetadata to a client-facing ModelConfig

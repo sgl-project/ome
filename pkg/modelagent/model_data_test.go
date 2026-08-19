@@ -3,6 +3,7 @@ package modelagent
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -218,6 +219,39 @@ func TestConvertMetadataToModelConfig(t *testing.T) {
 					string(resultJSON), string(expectedJSON))
 			}
 		})
+	}
+}
+
+func TestModelEntryHfArtifactKeyJSONCompatibility(t *testing.T) {
+	var legacyDecoded ModelEntry
+	if err := json.Unmarshal([]byte(`{"name":"model-1","status":"Ready"}`), &legacyDecoded); err != nil {
+		t.Fatal(err)
+	}
+	if legacyDecoded.HfArtifactKey != "" {
+		t.Fatalf("legacy entry must decode with an empty Hugging Face artifact key: %q", legacyDecoded.HfArtifactKey)
+	}
+
+	legacy := ModelEntry{Name: "model-1", Status: ModelStatusReady}
+	encoded, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "hfArtifactKey") {
+		t.Fatalf("empty Hugging Face artifact key must be omitted: %s", encoded)
+	}
+
+	shared := legacy
+	shared.HfArtifactKey = "artifact.huggingface.Qwen.Qwen3-8B.example"
+	encoded, err = json.Marshal(shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded ModelEntry
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.HfArtifactKey != shared.HfArtifactKey {
+		t.Fatalf("Hugging Face artifact key mismatch: got %q, want %q", decoded.HfArtifactKey, shared.HfArtifactKey)
 	}
 }
 
