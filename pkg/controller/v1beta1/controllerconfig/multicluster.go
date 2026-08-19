@@ -1,7 +1,9 @@
 package controllerconfig
 
 import (
+	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -108,6 +110,11 @@ type PlacementConfig struct {
 	// DispatcherRoundTimeout is how long an Incremental round waits for a nominated
 	// cluster to win before adding the next batch. Non-positive enforces no dwell.
 	DispatcherRoundTimeout string `json:"dispatcherRoundTimeout,omitempty"`
+	// LocalQueue is the Kueue LocalQueue that a derived workload's pods join on
+	// the target cluster when the InferenceService carries no per-ISVC queue
+	// annotation. It names a resource the operator created, so it has no in-code
+	// default: empty leaves the placement package's own fallback in place.
+	LocalQueue string `json:"localQueue,omitempty"`
 }
 
 // +kubebuilder:object:generate=false
@@ -150,6 +157,56 @@ func parseMultiClusterConfig(configMap *v1.ConfigMap) (*MultiClusterConfig, erro
 		return nil, fmt.Errorf("unable to parse multicluster config json: %w", err)
 	}
 	return cfg, nil
+}
+
+// Validate reports knob values that are stated but unusable, for the manager to
+// refuse at startup. Loading stays forgiving on purpose — an unparsable duration
+// reads as zero so the consuming package applies its own default — but that
+// makes a typo like "30" or "1 m" indistinguishable from "not set", silently
+// discarding the operator's intended value for the life of the process. The
+// composition root calls this so the deploy fails loudly instead.
+func (c MultiClusterConfig) Validate() error {
+	durations := map[string]string{
+		"workloadCluster.perCallTimeout":       c.WorkloadCluster.PerCallTimeout,
+		"workloadCluster.healthInterval":       c.WorkloadCluster.HealthInterval,
+		"workloadCluster.connectionGrace":      c.WorkloadCluster.ConnectionGrace,
+		"workloadCluster.eventsBatchPeriod":    c.WorkloadCluster.EventsBatchPeriod,
+		"workloadCluster.establishInitial":     c.WorkloadCluster.EstablishInitial,
+		"workloadCluster.establishMax":         c.WorkloadCluster.EstablishMax,
+		"workloadCluster.reconnectRetryMax":    c.WorkloadCluster.ReconnectRetryMax,
+		"workloadCluster.funnelResyncInterval": c.WorkloadCluster.FunnelResyncInterval,
+		"placement.requeueInterval":            c.Placement.RequeueInterval,
+		"placement.gcInterval":                 c.Placement.GCInterval,
+		"placement.fanoutTimeout":              c.Placement.FanoutTimeout,
+		"placement.winnerLostGrace":            c.Placement.WinnerLostGrace,
+		"placement.statusBatchPeriod":          c.Placement.StatusBatchPeriod,
+		"placement.statusSafetyRequeue":        c.Placement.StatusSafetyRequeue,
+		"placement.dispatcherRoundTimeout":     c.Placement.DispatcherRoundTimeout,
+	}
+	keys := make([]string, 0, len(durations))
+	for k := range durations {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var errs []error
+	for _, k := range keys {
+		raw := durations[k]
+		if raw == "" {
+			continue
+		}
+		d, err := time.ParseDuration(raw)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %q is not a duration (use forms like \"30s\", \"5m\")", k, raw))
+			continue
+		}
+		if d <= 0 {
+			errs = append(errs, fmt.Errorf("%s: %q must be positive", k, raw))
+		}
+	}
+	if p := c.Endpoint.BackendPort; p < 0 || p > 65535 {
+		errs = append(errs, fmt.Errorf("endpoint.backendPort: %d is not a valid port", p))
+	}
+	return errors.Join(errs...)
 }
 
 // PerCallTimeoutDuration returns the parsed PerCallTimeout (0 if absent/unparsable).

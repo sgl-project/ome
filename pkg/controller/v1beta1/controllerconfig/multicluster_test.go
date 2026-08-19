@@ -162,3 +162,66 @@ func TestNewMultiClusterConfig(t *testing.T) {
 		})
 	}
 }
+
+// A stated-but-unparsable duration must fail at startup rather than read as
+// "not set": the forgiving accessors would discard the operator's intended
+// value for the life of the process, with the built-in default silently
+// standing in.
+func TestMultiClusterConfig_ValidateRejectsMalformedKnobs(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  MultiClusterConfig
+		want string
+	}{
+		{
+			name: "duration missing a unit",
+			cfg:  MultiClusterConfig{WorkloadCluster: WorkloadClusterConfig{HealthInterval: "30"}},
+			want: "workloadCluster.healthInterval",
+		},
+		{
+			name: "non-positive duration",
+			cfg:  MultiClusterConfig{Placement: PlacementConfig{GCInterval: "0s"}},
+			want: "placement.gcInterval",
+		},
+		{
+			name: "port out of range",
+			cfg:  MultiClusterConfig{Endpoint: EndpointConfig{BackendPort: 99999}},
+			want: "endpoint.backendPort",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.cfg.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
+}
+
+// An absent block and every well-formed knob must pass, so validation never
+// blocks a legitimate config (or the graceful-degradation path).
+func TestMultiClusterConfig_ValidateAcceptsEmptyAndWellFormed(t *testing.T) {
+	require.NoError(t, MultiClusterConfig{}.Validate())
+	require.NoError(t, MultiClusterConfig{
+		WorkloadCluster: WorkloadClusterConfig{HealthInterval: "30s", EstablishMax: "10m"},
+		Placement:       PlacementConfig{GCInterval: "5m", LocalQueue: "gpu-queue"},
+		Endpoint:        EndpointConfig{BackendPort: 8080},
+	}.Validate())
+}
+
+// Loading stays forgiving by contract: a malformed knob must NOT fail the load
+// (the accessor reads it as zero). Validate is the separate, explicit gate the
+// composition root applies.
+func TestNewMultiClusterConfig_LoadStaysForgiving_ValidateGates(t *testing.T) {
+	cs := fake.NewSimpleClientset(&v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: constants.InferenceServiceConfigMapName, Namespace: constants.OMENamespace},
+		Data:       map[string]string{MultiClusterConfigName: `{"workloadCluster":{"healthInterval":"1 m"}}`},
+	})
+	cfg, err := NewMultiClusterConfig(cs)
+	require.NoError(t, err, "load must not reject knob values")
+	assert.Equal(t, time.Duration(0), cfg.WorkloadCluster.HealthIntervalDuration())
+
+	err = cfg.Validate()
+	require.Error(t, err, "validation must catch what loading tolerates")
+	assert.Contains(t, err.Error(), "workloadCluster.healthInterval")
+}
