@@ -142,3 +142,28 @@ func TestResolveMCWiringMissingConfigMapErrors(t *testing.T) {
 	_, err := controllerconfig.NewMultiClusterConfig(fake.NewSimpleClientset())
 	assert.Error(t, err)
 }
+
+// The operator-configured LocalQueue must reach the placement reconciler; if it
+// stops being mapped, deriveds silently fall back to the in-package default and
+// Kueue never admits them on a fleet that names its queue anything else.
+func TestResolveMCWiringCarriesLocalQueue(t *testing.T) {
+	w := mcWiringFromJSON(t, `{"placement":{"localQueue":"gpu-queue"}}`)
+	assert.Equal(t, "gpu-queue", w.localQueue)
+
+	assert.Empty(t, mcWiringFromJSON(t, `{"placement":{}}`).localQueue,
+		"absent knob stays empty so placement applies its own fallback")
+}
+
+// The dispatcher falls back to AllAtOnce for anything it does not recognize, so
+// a mis-cased mode would silently select a different fan-out breadth than the
+// operator asked for. Startup must reject it instead.
+func TestValidateDispatcherMode(t *testing.T) {
+	for _, ok := range []placement.DispatcherMode{"", placement.DispatcherModeAllAtOnce, placement.DispatcherModeIncremental} {
+		assert.NoError(t, validateDispatcherMode(ok), "mode %q must be accepted", ok)
+	}
+	for _, bad := range []placement.DispatcherMode{"incremental", "allatonce", "Bogus"} {
+		err := validateDispatcherMode(bad)
+		require.Error(t, err, "mode %q must be rejected", bad)
+		assert.Contains(t, err.Error(), "dispatcherMode")
+	}
+}

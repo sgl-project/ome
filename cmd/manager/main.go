@@ -193,7 +193,9 @@ func GetOptions() Options {
 			"--exec-credential-allowed-commands, and its binary must be present in the manager image. "+
 			"SECURITY: an exec block runs a command in the controller pod; keep WorkloadCluster kubeconfig Secrets admin-only.")
 	flag.StringVar(&opts.execCredentialAllowedCmds, "exec-credential-allowed-commands", opts.execCredentialAllowedCmds,
-		"Comma-separated allowlist of exec credential plugin command basenames permitted when --allow-exec-credentials is set.")
+		"Comma-separated allowlist of exec credential plugin commands permitted when --allow-exec-credentials is set. "+
+			"Each entry is matched exactly against the command the kubeconfig names: a bare command (\"aws\") permits PATH "+
+			"resolution and an absolute path pins one binary, but a bare entry does NOT permit a path that merely ends in that name.")
 	flag.StringVar(&opts.placementControlPlaneID, "placement-control-plane-id", opts.placementControlPlaneID,
 		"identity stamped on every derived InferenceService this control plane creates. "+
 			"Required when multiple control planes share a workload cluster so each control plane's GC "+

@@ -45,6 +45,7 @@ type mcWiring struct {
 	dispatcherMode         placement.DispatcherMode
 	dispatcherStepSize     int
 	dispatcherRoundTimeout time.Duration
+	localQueue             string
 	funnelResyncInterval   time.Duration
 	funnelBufferSize       int
 
@@ -90,6 +91,7 @@ func resolveMCWiring(mc *controllerconfig.MultiClusterConfig) mcWiring {
 		dispatcherMode:         placement.DispatcherMode(pl.DispatcherMode),
 		dispatcherStepSize:     pl.DispatcherStepSize,
 		dispatcherRoundTimeout: pl.DispatcherRoundTimeoutDuration(),
+		localQueue:             pl.LocalQueue,
 		funnelResyncInterval:   wc.FunnelResyncIntervalDuration(),
 		funnelBufferSize:       wc.FunnelBufferSize,
 		endpoint: placementendpoint.Config{
@@ -98,6 +100,20 @@ func resolveMCWiring(mc *controllerconfig.MultiClusterConfig) mcWiring {
 			RouteNamespace:     ep.RouteNamespace,
 			BackendPort:        int32(ep.BackendPort),
 		},
+	}
+}
+
+// validateDispatcherMode rejects an unrecognized fan-out policy. The dispatcher
+// itself falls back to AllAtOnce for anything it does not recognize, so a typo
+// ("incremental" for "Incremental") would otherwise silently select a different
+// breadth policy than the operator asked for.
+func validateDispatcherMode(mode placement.DispatcherMode) error {
+	switch mode {
+	case "", placement.DispatcherModeAllAtOnce, placement.DispatcherModeIncremental:
+		return nil
+	default:
+		return fmt.Errorf("invalid multi-cluster configuration: placement.dispatcherMode %q must be %q or %q",
+			mode, placement.DispatcherModeAllAtOnce, placement.DispatcherModeIncremental)
 	}
 }
 
@@ -113,7 +129,17 @@ func setupMultiCluster(mgr manager.Manager, clientSet kubernetes.Interface, opti
 	if err != nil {
 		return fmt.Errorf("load multi-cluster configuration: %w", err)
 	}
+	// Loading is forgiving by contract (an unusable knob reads as "unset" and the
+	// owning package applies its default). Refuse to start on one instead: a
+	// silently-ignored knob means the control plane runs with timings the operator
+	// did not choose.
+	if err := mcConfig.Validate(); err != nil {
+		return fmt.Errorf("invalid multi-cluster configuration: %w", err)
+	}
 	w := resolveMCWiring(mcConfig)
+	if err := validateDispatcherMode(w.dispatcherMode); err != nil {
+		return err
+	}
 
 	clusterManager := workloadcluster.NewManager(mgr.GetScheme())
 	execPolicy := workloadcluster.ExecCredentialPolicy{
@@ -149,6 +175,7 @@ func setupMultiCluster(mgr manager.Manager, clientSet kubernetes.Interface, opti
 		ExecPolicy:            execPolicy,
 		HealthInterval:        w.healthInterval,
 		ConnectionGracePeriod: w.connectionGrace,
+		ProbeTimeout:          w.clientTuning.PerCallTimeout,
 	}).SetupWithManager(mgr,
 		workloadcluster.WithEventsBatchPeriod(w.eventsBatchPeriod),
 		workloadcluster.WithReconnectBackoff(w.reconnectBackoff),
@@ -184,6 +211,7 @@ func setupMultiCluster(mgr manager.Manager, clientSet kubernetes.Interface, opti
 
 	if err := (&placement.Reconciler{
 		Client:                  mgr.GetClient(),
+		APIReader:               mgr.GetAPIReader(),
 		Scheme:                  mgr.GetScheme(),
 		Log:                     ctrl.Log.WithName("controllers").WithName("Placement"),
 		Clusters:                clusterManager,
@@ -195,6 +223,7 @@ func setupMultiCluster(mgr manager.Manager, clientSet kubernetes.Interface, opti
 		DispatcherMode:          w.dispatcherMode,
 		DispatcherStepSize:      w.dispatcherStepSize,
 		DispatcherRoundTimeout:  w.dispatcherRoundTimeout,
+		LocalQueue:              w.localQueue,
 	}).SetupWithManager(mgr, convergeOpts...); err != nil {
 		return fmt.Errorf("create Placement controller: %w", err)
 	}
