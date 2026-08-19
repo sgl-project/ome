@@ -241,12 +241,37 @@ func TestWritePartAtCollectsWriteStats(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(len(content)), written)
 	assert.Equal(t, int64(len(content)), stats.Bytes)
-	assert.Equal(t, int64(3), stats.Calls)
-	assert.Equal(t, int64(3), stats.CallsUpTo16KiB)
-	assert.Equal(t, int64(8*1024), stats.MinRequestBytes)
-	assert.Equal(t, int64(16*1024), stats.MaxRequestBytes)
+	assert.Equal(t, int64(1), stats.Calls)
+	assert.Equal(t, int64(1), stats.Calls16KiBTo64KiB)
+	assert.Equal(t, int64(len(content)), stats.MinRequestBytes)
+	assert.Equal(t, int64(len(content)), stats.MaxRequestBytes)
 	assert.GreaterOrEqual(t, stats.Duration, time.Duration(0))
 	assert.GreaterOrEqual(t, stats.MaxDuration, time.Duration(0))
+}
+
+func TestWritePartAtCoalescesShortReadsIntoOneMiBWrites(t *testing.T) {
+	target, err := os.CreateTemp(t.TempDir(), "coalesced-write-*.temp")
+	require.NoError(t, err)
+	defer target.Close()
+
+	content := bytes.Repeat([]byte("x"), 2*1024*1024+512*1024)
+	part := &PrepareDownloadPart{offset: 0, partNum: 0, size: int64(len(content))}
+	written, stats, err := writePartAtWithStats(target, part, &fixedChunkReader{
+		reader:    bytes.NewReader(content),
+		chunkSize: 16 * 1024,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(len(content)), written)
+	assert.Equal(t, int64(len(content)), stats.Bytes)
+	assert.Equal(t, int64(3), stats.Calls)
+	assert.Equal(t, int64(3), stats.Calls256KiBTo1MiB)
+	assert.Equal(t, int64(512*1024), stats.MinRequestBytes)
+	assert.Equal(t, int64(1024*1024), stats.MaxRequestBytes)
+
+	actual, err := os.ReadFile(target.Name())
+	require.NoError(t, err)
+	assert.Equal(t, content, actual)
 }
 
 type fixedChunkReader struct {

@@ -550,11 +550,46 @@ func writePartAtWithStats(targetFile *os.File, part *PrepareDownloadPart, source
 	bufp := BufferPool.Get().(*[]byte)
 	defer BufferPool.Put(bufp)
 
-	written, err := io.CopyBuffer(timedWriter, limitedSource, *bufp)
+	written, err := copyCoalesced(timedWriter, limitedSource, *bufp)
 	if err == nil && written != part.size {
 		err = io.ErrUnexpectedEOF
 	}
 	return written, timedWriter.stats, err
+}
+
+// copyCoalesced fills buffer before writing it, except for the final partial
+// buffer. This is intentionally different from io.CopyBuffer: io.CopyBuffer
+// forwards every short source read to the destination immediately, which can
+// turn transport-sized reads (commonly 16 KiB) into the same number of small
+// WriteAt calls even when the supplied buffer is much larger.
+func copyCoalesced(dst io.Writer, src io.Reader, buffer []byte) (int64, error) {
+	if len(buffer) == 0 {
+		return 0, io.ErrShortBuffer
+	}
+
+	var written int64
+	for {
+		n, readErr := io.ReadFull(src, buffer)
+		if n > 0 {
+			writeN, writeErr := dst.Write(buffer[:n])
+			written += int64(writeN)
+			if writeErr != nil {
+				return written, writeErr
+			}
+			if writeN != n {
+				return written, io.ErrShortWrite
+			}
+		}
+
+		switch readErr {
+		case nil:
+			continue
+		case io.EOF, io.ErrUnexpectedEOF:
+			return written, nil
+		default:
+			return written, readErr
+		}
+	}
 }
 
 type writeStatsWriter struct {
