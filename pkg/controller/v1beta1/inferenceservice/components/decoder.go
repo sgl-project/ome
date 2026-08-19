@@ -6,6 +6,7 @@ import (
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -183,9 +184,20 @@ func (d *Decoder) projectInferenceReplica(isvc *v1beta1.InferenceService, object
 		WorkerSize:    workerSize,
 		MultiPod:      d.decoderSpec.Worker != nil,
 		TopologyKey:   d.decoderSpec.TopologyKey,
-		Client:        d.Client,
+		// The Component's autoscaler is the effective one: ServingRuntime has no
+		// autoscaler surface, and MergeEngineSpec/MergeDecoderSpec have already
+		// folded the runtime's Component config in. Passing nil would clear
+		// ir.Spec.Autoscaler (whole-block replace) and make the projector treat
+		// replicas as its own to overwrite on every pass.
+		ResolvedAutoscaler: d.decoderSpec.Autoscaler,
+		Client:             d.Client,
 	})
 	if err != nil {
+		// A racing create surfaces as Conflict, which the projector documents as
+		// a benign requeue. Returning it as an error would hot-loop on cache lag.
+		if apierrors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{}, err
 	}
 	d.Log.Info("Projected InferenceReplica; no pods are rendered from it in this build",
