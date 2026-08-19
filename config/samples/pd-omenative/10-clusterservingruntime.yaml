@@ -1,0 +1,50 @@
+# A multi-node TPU serving runtime. One pod per node, each claiming a whole
+# node's chips, so pod count and node count line up for a gang. Replace the
+# accelerator name, topology and resource key with what your nodes advertise —
+# the propagation this sample demonstrates is independent of them.
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: demo-accelerator-runtime
+spec:
+  disabled: false
+  supportedModelFormats:
+  - name: demo-safetensors
+    modelFormat:
+      name: safetensors
+    modelFramework:
+      name: transformers
+    modelArchitecture: LlamaForCausalLM
+    autoSelect: true
+  engineConfig:
+    # One pod per node, each claiming a whole node's accelerators, so pod count
+    # and node count line up for a gang.
+    nodeSelector:
+      cloud.google.com/gke-tpu-accelerator: tpu7x
+      cloud.google.com/gke-tpu-topology: 2x2x2
+    tolerations:
+    - key: google.com/tpu
+      operator: Equal
+      value: present
+      effect: NoSchedule
+    runner:
+      name: ome-container
+      image: example.com/serving-runtime:demo
+      resources:
+        requests: { cpu: "8", memory: 32Gi, google.com/tpu: "4" }
+        limits: { cpu: "8", memory: 32Gi, google.com/tpu: "4" }
+  decoderConfig:
+    nodeSelector:
+      cloud.google.com/gke-tpu-accelerator: tpu7x
+      cloud.google.com/gke-tpu-topology: 2x2x2
+    tolerations:
+    - key: google.com/tpu
+      operator: Equal
+      value: present
+      effect: NoSchedule
+    runner:
+      name: ome-container
+      image: example.com/serving-runtime:demo
+      resources:
+        requests: { cpu: "8", memory: 32Gi, google.com/tpu: "4" }
+        limits: { cpu: "8", memory: 32Gi, google.com/tpu: "4" }

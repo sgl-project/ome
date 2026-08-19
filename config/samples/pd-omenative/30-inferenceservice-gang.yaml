@@ -1,0 +1,76 @@
+---
+# Queue-admitted multi-host gang, via Kueue.
+#
+# A multi-host gang cannot serve until every pod is running, so letting its pods
+# in one at a time is worse than not letting them in at all: partial gangs hold
+# accelerators they cannot use while blocking the gang behind them. Kueue admits
+# against a quota instead — pods are created gated and stay gated until their
+# workload is admitted.
+#
+# Kueue does NOT replace kube-scheduler: its webhook gates the pods, and whichever
+# scheduler is named binds them once admitted. So schedulerName below is an
+# independent knob, not part of admission.
+#
+# This uses MultiNode rather than OMENative on purpose: OME derives the Kueue
+# labels in SetPodLabelsFromAnnotations, which runs in the RawDeployment and
+# MultiNode reconcilers and not on the OMENative projection path. See the README.
+#
+# No deploymentMode is set below — declaring leader + worker is what infers
+# MultiNode. Setting it explicitly would take a per-Component
+# ome.io/deploymentMode annotation, since spec.deploymentMode accepts only
+# OMENative and RawDeployment.
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: gang-demo
+  annotations:
+    # These two annotations are what OME reads. Together they become the Kueue
+    # LABELS on every pod:
+    #   ome.io/dedicated-ai-cluster -> kueue.x-k8s.io/queue-name
+    #   (presence of kueue-enabled) -> kueue.x-k8s.io/priority-class
+    # An annotation on the service becoming a label on the pods — a different
+    # propagation shape from the plain copy the other sample traces.
+    ome.io/dedicated-ai-cluster: accelerator-pool
+    kueue-enabled: "true"
+    example.com/owner: team-inference
+spec:
+  model:
+    name: demo-model
+  runtime:
+    name: demo-accelerator-runtime
+  engine:
+    # One gang. Keep it at one while the pod-group identifiers below are set on
+    # the template: they name a single group, so more replicas would fold every
+    # gang into one group and misreport its size.
+    minReplicas: 1
+    maxReplicas: 1
+    # Kueue treats plain pods as a gang only when they carry a pod-group
+    # identity, and OME does not derive those — set them here. They ride the
+    # normal Component metadata path onto the pod template, which is the same
+    # propagation the other sample traces.
+    #
+    # total-count must equal the pod count of one gang: leader (1) + worker
+    # size (1) = 2.
+    labels:
+      kueue.x-k8s.io/pod-group-name: gang-demo-engine
+    annotations:
+      kueue.x-k8s.io/pod-group-total-count: "2"
+      # Keep one gang inside a single slice. On this path the constraint is
+      # LeaderWorkerSet's: Component annotations are copied onto the LWS object,
+      # and LWS turns this key into the affinity that places each group
+      # exclusively within one domain. spec.<component>.topologyKey does NOT
+      # apply here — it is only read on the OMENative path.
+      leaderworkerset.sigs.k8s.io/exclusive-topology: cloud.example.com/accelerator-slice-id
+    # Override which scheduler binds this Component's pods. The value set here
+    # wins over the runtime's; the default scheduler applies only when neither
+    # sets one. Independent of Kueue, which gates admission either way.
+    schedulerName: scheduler-plugins-scheduler
+    # Declaring leader + worker is what makes this a multi-node gang.
+    leader:
+      runner:
+        name: ome-container
+    worker:
+      # Leader + 1 worker = a 2-pod gang, admitted together or not at all.
+      size: 1
+      runner:
+        name: ome-container

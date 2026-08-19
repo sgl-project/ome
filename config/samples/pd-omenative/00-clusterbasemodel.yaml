@@ -1,0 +1,14 @@
+# A placeholder model so the sample can be applied without pulling weights.
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: demo-model
+spec:
+  vendor: example
+  disabled: false
+  storage:
+    storageUri: hf://example-org/demo-model
+  modelFormat:
+    name: safetensors
+  modelArchitecture: LlamaForCausalLM
+  modelParameterSize: "8B"
