@@ -80,6 +80,14 @@ type Reconciler struct {
 	Scheme   *runtime.Scheme
 	Log      logr.Logger
 	Clusters ClusterClients
+	// APIReader is the live (uncached) reader used to re-read the control-plane
+	// ISVC inside the conflict-retry loop. This controller and the endpoint
+	// publisher both write this object, so a 409 here is genuine external
+	// contention: the apiserver holds a newer ResourceVersion than the informer
+	// has observed, and re-reading the cache would resubmit the same stale base
+	// for the whole backoff. Required: SetupWithManager defaults it to
+	// mgr.GetAPIReader() and rejects a reconciler still missing it.
+	APIReader client.Reader
 	// Requeue is the status-refresh poll cadence; defaults to DefaultPlacementRequeue.
 	Requeue time.Duration
 	// ControlPlaneID is this control plane's identity, stamped onto every derived
@@ -1101,7 +1109,7 @@ func (r *Reconciler) writePlacement(ctx context.Context, isvc *v1beta1.Inference
 	key := client.ObjectKeyFromObject(isvc)
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		cur := &v1beta1.InferenceService{}
-		if err := r.Get(ctx, key, cur); err != nil {
+		if err := r.APIReader.Get(ctx, key, cur); err != nil {
 			return err
 		}
 		if cur.Status.Placement == nil {
@@ -1223,6 +1231,13 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, opts ...ConvergeOption) 
 	cfg := resolveConvergeConfig(opts...)
 	r.converge = &cfg
 
+	if r.APIReader == nil {
+		r.APIReader = mgr.GetAPIReader()
+	}
+	if err := r.validateWiring(); err != nil {
+		return err
+	}
+
 	// Register the field index that marks ISVCs declaring placement requirements,
 	// so a cluster change lists only those (not every cached ISVC) before the
 	// per-ISVC candidate check in isvcsForClusterChange.
@@ -1243,6 +1258,16 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, opts ...ConvergeOption) 
 		b = b.WatchesRawSource(source.Channel(cfg.statusEvents, r.statusEventHandler(cfg.batchPeriod)))
 	}
 	return b.Complete(r)
+}
+
+// validateWiring rejects a mis-wired reconciler at setup. The live reader is a
+// correctness dependency, not a convenience: without it the conflict-retry loop
+// re-reads a stale cached base and burns its whole backoff on the same 409.
+func (r *Reconciler) validateWiring() error {
+	if r.APIReader == nil {
+		return fmt.Errorf("placement: APIReader (live, uncached reader) must be wired")
+	}
+	return nil
 }
 
 // statusEventHandler enqueues the funnel-resolved local key with the configured

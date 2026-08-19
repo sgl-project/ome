@@ -102,7 +102,7 @@ func workerWithAdmittedDerived(t *testing.T, s *runtime.Scheme) client.WithWatch
 
 func newPlacer(s *runtime.Scheme, clusters ClusterClients, objs ...client.Object) (*Reconciler, client.Client) {
 	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(&v1beta1.InferenceService{}).Build()
-	return &Reconciler{Client: c, Scheme: s, Log: log.Log, Clusters: clusters, Requeue: time.Second}, c
+	return &Reconciler{Client: c, APIReader: c, Scheme: s, Log: log.Log, Clusters: clusters, Requeue: time.Second}, c
 }
 
 func req() ctrl.Request {
