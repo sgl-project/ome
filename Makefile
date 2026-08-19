@@ -145,10 +145,32 @@ manifests: controller-gen yq ## 📄 Generate WebhookConfiguration, ClusterRole 
 	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.*.properties.livenessProbe.properties.tcpSocket.required)' -i config/crd/full/ome.io_inferenceservices.yaml
 	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.containers.items.properties.livenessProbe.properties.httpGet.required)' -i config/crd/full/ome.io_inferenceservices.yaml
 	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.*.properties.containers.items.properties.readinessProbe.properties.httpGet.required)' -i config/crd/full/ome.io_inferenceservices.yaml
+	@echo "  • Optimizing InferenceReplica CRD size..."
+	@# InferenceReplica embeds PodTemplateSpec one level deeper than ISVC
+	@# (spec.runners.items.template.spec.<podfield>). The same OpenAPI
+	@# strictness fixes the ISVC CRD needs are applied here at the deeper
+	@# path. Without ephemeralContainers deletion the CRD bloats from
+	@# ~1.3k to ~4k lines for almost no operator value.
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.runners.items.properties.template.properties.spec.properties.ephemeralContainers)' -i config/crd/full/ome.io_inferencereplicas.yaml
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.runners.items.properties.template.properties.spec.properties.containers.items.properties.readinessProbe.properties.httpGet.required)' -i config/crd/full/ome.io_inferencereplicas.yaml
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.runners.items.properties.template.properties.spec.properties.containers.items.properties.livenessProbe.properties.httpGet.required)' -i config/crd/full/ome.io_inferencereplicas.yaml
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.runners.items.properties.template.properties.spec.properties.containers.items.properties.readinessProbe.properties.tcpSocket.required)' -i config/crd/full/ome.io_inferencereplicas.yaml
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.runners.items.properties.template.properties.spec.properties.containers.items.properties.livenessProbe.properties.tcpSocket.required)' -i config/crd/full/ome.io_inferencereplicas.yaml
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.runners.items.properties.template.properties.spec.properties.initContainers.items.properties.readinessProbe.properties.httpGet.required)' -i config/crd/full/ome.io_inferencereplicas.yaml
+	@$(YQ) 'del(.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.runners.items.properties.template.properties.spec.properties.initContainers.items.properties.livenessProbe.properties.httpGet.required)' -i config/crd/full/ome.io_inferencereplicas.yaml
+	@echo "  • Preserving Runner template metadata (annotations + labels)..."
+	@# controller-gen renders PodTemplateSpec.metadata as a bare {type: object}
+	@# with no properties. CRD pruning then silently drops every key under
+	@# .spec.runners[].template.metadata on Update — including the per-Component
+	@# annotations + labels the IR projector stamps from the parent ISVC. Without
+	@# this fix, no-image-bump rollout triggers (annotation-only ISVC edits) never
+	@# reach the pod template and the revision hash never flips.
+	@$(YQ) '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.runners.items.properties.template.properties.metadata.properties = {"annotations": {"type": "object", "additionalProperties": {"type": "string"}}, "labels": {"type": "object", "additionalProperties": {"type": "string"}}}' -i config/crd/full/ome.io_inferencereplicas.yaml
 	@echo "  • Setting protocol defaults..."
 	@$(YQ) '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties | .. | select(has("protocol")) | path' config/crd/full/ome.io_inferenceservices.yaml -o j | jq -r '. | map(select(numbers)="["+tostring+"]") | join(".")' | awk '{print "."$$0".protocol.default"}' | xargs -n1 -I{} $(YQ) '{} = "TCP"' -i config/crd/full/ome.io_inferenceservices.yaml
 	@$(YQ) '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties | .. | select(has("protocol")) | path' config/crd/full/ome.io_clusterservingruntimes.yaml -o j | jq -r '. | map(select(numbers)="["+tostring+"]") | join(".")' | awk '{print "."$$0".protocol.default"}' | xargs -n1 -I{} $(YQ) '{} = "TCP"' -i config/crd/full/ome.io_clusterservingruntimes.yaml
 	@$(YQ) '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties | .. | select(has("protocol")) | path' config/crd/full/ome.io_servingruntimes.yaml -o j | jq -r '. | map(select(numbers)="["+tostring+"]") | join(".")' | awk '{print "."$$0".protocol.default"}' | xargs -n1 -I{} $(YQ) '{} = "TCP"' -i config/crd/full/ome.io_servingruntimes.yaml
+	@$(YQ) '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties | .. | select(has("protocol")) | path' config/crd/full/ome.io_inferencereplicas.yaml -o j | jq -r '. | map(select(numbers)="["+tostring+"]") | join(".")' | awk '{print "."$$0".protocol.default"}' | xargs -n1 -I{} $(YQ) '{} = "TCP"' -i config/crd/full/ome.io_inferencereplicas.yaml
 	@echo "✅ CRD modifications complete"
 
 	@echo "\n📋 Step 5: Generating minimal CRDs..."
