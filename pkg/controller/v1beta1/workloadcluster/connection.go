@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -31,9 +30,11 @@ type ExecCredentialPolicy struct {
 }
 
 func (p ExecCredentialPolicy) commandAllowed(cmd string) bool {
-	base := filepath.Base(cmd)
 	for _, a := range p.AllowedCommands {
-		if a == base || a == cmd {
+		// Exact matching permits either a bare command resolved through PATH or
+		// an explicitly allowlisted absolute path. It must never let an
+		// attacker-controlled path through merely because its basename matches.
+		if a == cmd {
 			return true
 		}
 	}
@@ -76,6 +77,9 @@ func validateKubeConfigBytes(raw []byte, exec ExecCredentialPolicy) error {
 		if authInfo.TokenFile != "" {
 			return fmt.Errorf("kubeconfig user %q references an on-disk token file, which is not allowed", name)
 		}
+		if authInfo.ClientCertificate != "" || authInfo.ClientKey != "" {
+			return fmt.Errorf("kubeconfig user %q references on-disk client certificate/key files; use inline certificate and key data instead", name)
+		}
 	}
 	for name, cluster := range cfg.Clusters {
 		if cluster.InsecureSkipTLSVerify {
@@ -96,14 +100,15 @@ func validateKubeConfigBytes(raw []byte, exec ExecCredentialPolicy) error {
 // CA file path, or an untrusted server endpoint. BearerToken (service-account
 // token) and inline CA data are allowed.
 func validateRESTConfig(cfg *rest.Config, exec ExecCredentialPolicy) error {
-	switch {
-	case cfg.ExecProvider != nil:
+	if cfg.ExecProvider != nil {
 		if !exec.Allowed {
 			return errors.New("kubeconfig uses an exec credential plugin, which is not allowed (enable --allow-exec-credentials)")
 		}
 		if !exec.commandAllowed(cfg.ExecProvider.Command) {
 			return fmt.Errorf("exec credential plugin command %q is not in the allowed list", cfg.ExecProvider.Command)
 		}
+	}
+	switch {
 	case cfg.AuthProvider != nil:
 		return errors.New("kubeconfig uses an auth-provider plugin, which is not allowed")
 	case cfg.BearerTokenFile != "":
@@ -114,6 +119,8 @@ func validateRESTConfig(cfg *rest.Config, exec ExecCredentialPolicy) error {
 		return errors.New("kubeconfig disables TLS verification, which is not allowed")
 	case cfg.TLSClientConfig.CAFile != "":
 		return errors.New("kubeconfig uses a CA file path; use inline CA data instead")
+	case cfg.TLSClientConfig.CertFile != "" || cfg.TLSClientConfig.KeyFile != "":
+		return errors.New("kubeconfig uses client certificate/key file paths; use inline data instead")
 	case !isValidHostname(cfg.Host):
 		return errors.New("kubeconfig server endpoint is not a trusted host")
 	}

@@ -311,7 +311,11 @@ func (r *Reconciler) assess(ctx context.Context, wc *v1beta1.WorkloadCluster) (s
 			return metav1.ConditionFalse, "SecretNotFound",
 				fmt.Sprintf("kubeconfig Secret %s/%s not found", nn.Namespace, nn.Name), nil
 		}
-		return metav1.ConditionFalse, "SecretNotFound", err.Error(), nil
+		// Local-apiserver read failures are transient transport failures, not a
+		// missing configuration. Reuse the connection grace path so one timeout
+		// does not discard an otherwise healthy remote client.
+		return metav1.ConditionFalse, "ConnectionFailed",
+			fmt.Sprintf("reading kubeconfig Secret %s/%s: %v", nn.Namespace, nn.Name, err), nil
 	}
 	raw, ok := secret.Data[key]
 	if !ok || len(raw) == 0 {

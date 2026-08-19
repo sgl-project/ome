@@ -196,6 +196,18 @@ func (b *blockingWatchClient) Watch(ctx context.Context, _ client.ObjectList, _ 
 	return nil, ctx.Err()
 }
 
+// stubbornWatchClient simulates a broken client that ignores context
+// cancellation. establishWatch must still return at its timeout.
+type stubbornWatchClient struct {
+	client.WithWatch
+	release <-chan struct{}
+}
+
+func (s *stubbornWatchClient) Watch(context.Context, client.ObjectList, ...client.ListOption) (watch.Interface, error) {
+	<-s.release
+	return nil, errors.New("released")
+}
+
 // immediateWatchClient returns an empty watch right away (success path).
 type immediateWatchClient struct {
 	client.WithWatch
@@ -211,6 +223,16 @@ func TestEstablishWatch_TimesOut(t *testing.T) {
 	require.ErrorIs(t, err, errWatchEstablishTimeout)
 }
 
+func TestEstablishWatch_TimeoutDoesNotWaitForClientCancellation(t *testing.T) {
+	release := make(chan struct{})
+	c := &stubbornWatchClient{WithWatch: fake.NewClientBuilder().Build(), release: release}
+	started := time.Now()
+	_, err := establishWatch(context.Background(), c, &corev1.PodList{}, 20*time.Millisecond)
+	require.ErrorIs(t, err, errWatchEstablishTimeout)
+	assert.Less(t, time.Since(started), 500*time.Millisecond)
+	close(release)
+}
+
 func TestEstablishWatch_Succeeds(t *testing.T) {
 	c := &immediateWatchClient{WithWatch: fake.NewClientBuilder().Build()}
 	w, err := establishWatch(context.Background(), c, &corev1.PodList{}, time.Second)
@@ -223,9 +245,10 @@ func TestEstablishWatch_Succeeds(t *testing.T) {
 // (nil,false,nil) rather than erroring.
 func TestManager_EstablishWatch_NotConnected(t *testing.T) {
 	m := NewManager(scheme(t))
-	w, connected, err := m.EstablishWatch(context.Background(), "nope", &corev1.PodList{}, 1)
+	w, generation, connected, err := m.EstablishWatch(context.Background(), "nope", &corev1.PodList{}, 1)
 	require.NoError(t, err)
 	assert.False(t, connected)
+	assert.Zero(t, generation)
 	assert.Nil(t, w)
 }
 
@@ -244,8 +267,9 @@ func TestManager_EstablishWatch_TimesOut(t *testing.T) {
 	}
 	require.NoError(t, m.Connect(context.Background(), "c1", []byte("kc")))
 
-	_, connected, err := m.EstablishWatch(context.Background(), "c1", &corev1.PodList{}, 1)
+	_, generation, connected, err := m.EstablishWatch(context.Background(), "c1", &corev1.PodList{}, 1)
 	assert.True(t, connected)
+	assert.NotZero(t, generation)
 	require.ErrorIs(t, err, errWatchEstablishTimeout)
 }
 

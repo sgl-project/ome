@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -236,6 +238,25 @@ func (c *fakeWatchClient) getHandler() toolscache.ResourceEventHandler {
 	return c.handler
 }
 
+func (c *fakeWatchClient) stopWatcher() {
+	c.mu.Lock()
+	w := c.watcher
+	c.mu.Unlock()
+	if w != nil {
+		w.Stop()
+	}
+}
+
+func waitForHandler(t *testing.T, c *fakeWatchClient) toolscache.ResourceEventHandler {
+	t.Helper()
+	var h toolscache.ResourceEventHandler
+	require.Eventually(t, func() bool {
+		h = c.getHandler()
+		return h != nil
+	}, 2*time.Second, 5*time.Millisecond, "cache handler was never registered")
+	return h
+}
+
 // TestFunnel_WatchClusterRegistersHandlerAndPushes drives the full per-cluster
 // path: establish the watch via the Manager, register the cache handler, then a
 // cache Add of an owned object resolves to its local key and lands on the
@@ -268,19 +289,7 @@ func TestFunnel_WatchClusterRegistersHandlerAndPushes(t *testing.T) {
 	go f.watchCluster(ctx, "c1")
 
 	// Wait for the handler to be registered (establishment confirmed first).
-	var h toolscache.ResourceEventHandler
-	deadline := time.After(2 * time.Second)
-	for h == nil {
-		select {
-		case <-deadline:
-			t.Fatalf("cache handler was never registered")
-		default:
-			h = fc.getHandler()
-			if h == nil {
-				time.Sleep(5 * time.Millisecond)
-			}
-		}
-	}
+	h := waitForHandler(t, fc)
 
 	// Drive an informer Add of an owned object through the handler.
 	h.OnAdd(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
@@ -294,5 +303,51 @@ func TestFunnel_WatchClusterRegistersHandlerAndPushes(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatalf("no event after informer Add of an owned object")
+	}
+}
+
+func TestFunnel_WatchClusterRegistersHandlerAfterClientReplacement(t *testing.T) {
+	first := &fakeWatchClient{}
+	second := &fakeWatchClient{}
+	m := NewManager(runtime.NewScheme())
+	m.newClient = func(_ context.Context, raw []byte, _ *runtime.Scheme) (SelectivelyCachingClient, context.CancelFunc, error) {
+		fc := first
+		if string(raw) == "B" {
+			fc = second
+		}
+		return fc, fc.stopWatcher, nil
+	}
+	m.SetReconnectBackoff(reconnectBackoff{
+		establishInitial: time.Second, establishMax: time.Second, establishFactor: 2,
+		retryInitial: time.Millisecond, retryMax: time.Millisecond,
+	})
+	require.NoError(t, m.Connect(context.Background(), "c1", []byte("A")))
+
+	f := NewStatusFunnel(m, FunnelConfig{
+		NewList:    func() client.ObjectList { return &corev1.ConfigMapList{} },
+		NewObject:  func() client.Object { return &corev1.ConfigMap{} },
+		Resolve:    originResolver,
+		BufferSize: 4,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go f.watchCluster(ctx, "c1")
+	waitForHandler(t, first)
+
+	// Leave a real disconnected gap before reconnecting. The per-cluster loop
+	// must keep retrying, and the replacement cache needs its own handler.
+	m.Disconnect("c1")
+	time.Sleep(20 * time.Millisecond)
+	require.NoError(t, m.Connect(context.Background(), "c1", []byte("B")))
+	h := waitForHandler(t, second)
+
+	h.OnAdd(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Namespace: "team-a", Name: "replacement", Labels: map[string]string{"origin": "uid-2"},
+	}}, false)
+	select {
+	case ev := <-f.Events():
+		assert.Equal(t, "replacement", ev.Object.GetName())
+	case <-time.After(2 * time.Second):
+		t.Fatal("replacement client handler did not emit an event")
 	}
 }

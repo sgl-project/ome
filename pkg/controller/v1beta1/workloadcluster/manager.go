@@ -40,8 +40,9 @@ type Manager struct {
 	// nil-safe — Connect falls back to its caller's ctx.
 	baseCtx context.Context
 
-	mu    sync.RWMutex
-	conns map[string]*remoteConn
+	mu             sync.RWMutex
+	conns          map[string]*remoteConn
+	nextGeneration uint64
 
 	// newClient builds a caching-capable client (+ a cancel for its background
 	// watch context) from raw kubeconfig bytes. Injected for tests; defaults to
@@ -80,6 +81,7 @@ type remoteConn struct {
 	client     SelectivelyCachingClient
 	cancel     context.CancelFunc
 	configHash string
+	generation uint64
 }
 
 // NewManager returns an empty Manager whose default builder constructs a
@@ -97,6 +99,8 @@ func NewManager(scheme *runtime.Scheme) *Manager {
 
 // SetExecCredentialPolicy configures the exec credential policy for this manager.
 func (m *Manager) SetExecCredentialPolicy(p ExecCredentialPolicy) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.execPolicy = p
 }
 
@@ -148,29 +152,37 @@ func (m *Manager) ReconnectBackoff() reconnectBackoff {
 // the caller falls back to the retry backoff (retryAfter). Returns (nil, false,
 // nil) when the cluster is not connected. This is the establish half of the
 // two-backoff reconnect scheme; the status-mirroring watch funnel consumes it.
-func (m *Manager) EstablishWatch(ctx context.Context, cluster string, list client.ObjectList, attempt int, opts ...client.ListOption) (watch.Interface, bool, error) {
-	cl, ok := m.ClientFor(cluster)
+func (m *Manager) EstablishWatch(ctx context.Context, cluster string, list client.ObjectList, attempt int, opts ...client.ListOption) (watch.Interface, uint64, bool, error) {
+	cl, generation, ok := m.clientForGeneration(cluster)
 	if !ok {
-		return nil, false, nil
+		return nil, 0, false, nil
 	}
 	timeout := m.ReconnectBackoff().establishWaitTime(attempt)
 	w, err := establishWatch(ctx, cl, list, timeout, opts...)
 	if err != nil {
-		return nil, true, err
+		return nil, generation, true, err
 	}
-	return w, true, nil
+	return w, generation, true, nil
 }
 
 // ClientFor returns the live client for a cluster, or (nil, false) if none is
 // connected.
 func (m *Manager) ClientFor(name string) (SelectivelyCachingClient, bool) {
+	cl, _, ok := m.clientForGeneration(name)
+	return cl, ok
+}
+
+// clientForGeneration returns the current client together with an identity
+// that changes whenever Connect replaces it. The funnel uses the generation to
+// attach one informer handler to each remote cache instance.
+func (m *Manager) clientForGeneration(name string) (SelectivelyCachingClient, uint64, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	c, ok := m.conns[name]
 	if !ok {
-		return nil, false
+		return nil, 0, false
 	}
-	return c.client, true
+	return c.client, c.generation, true
 }
 
 // Connect ensures a live client for the named cluster built from raw. It is a
@@ -200,7 +212,8 @@ func (m *Manager) Connect(ctx context.Context, name string, raw []byte) error {
 	if old, ok := m.conns[name]; ok && old.cancel != nil {
 		old.cancel()
 	}
-	m.conns[name] = &remoteConn{client: cl, cancel: cancel, configHash: hash}
+	m.nextGeneration++
+	m.conns[name] = &remoteConn{client: cl, cancel: cancel, configHash: hash, generation: m.nextGeneration}
 	m.mu.Unlock()
 	return nil
 }

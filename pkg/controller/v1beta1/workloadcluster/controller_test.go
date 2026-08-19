@@ -71,6 +71,20 @@ func newReconciler(s *runtime.Scheme, probe func(context.Context, []byte) error,
 	return &Reconciler{Client: c, Scheme: s, Log: log.Log, Probe: probe}, c
 }
 
+type secretReadErrorClient struct {
+	client.Client
+	fail bool
+}
+
+func (c *secretReadErrorClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if c.fail {
+		if _, ok := obj.(*corev1.Secret); ok {
+			return errors.New("local apiserver timeout")
+		}
+	}
+	return c.Client.Get(ctx, key, obj, opts...)
+}
+
 func readyCond(c client.Client, name string) *metav1.Condition {
 	wc := &v1beta1.WorkloadCluster{}
 	_ = c.Get(context.Background(), types.NamespacedName{Name: name}, wc)
@@ -208,6 +222,38 @@ func TestReconcile_BackoffHoldsConnectionOnTransientProbeFailure(t *testing.T) {
 	cond := readyCond(c, "c1")
 	require.NotNil(t, cond)
 	assert.Equal(t, metav1.ConditionTrue, cond.Status, "Ready must be held True within grace")
+	assert.Equal(t, "ProbeFailedRetrying", cond.Reason)
+}
+
+func TestReconcile_BackoffHoldsConnectionOnTransientSecretReadFailure(t *testing.T) {
+	s := scheme(t)
+	wc := wcWithSecret("c1")
+	secret := kcSecret(validKubeconfig)
+	base := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(wc, secret).WithStatusSubresource(&v1beta1.WorkloadCluster{}).Build()
+	c := &secretReadErrorClient{Client: base}
+	mgr := NewManager(s)
+	mgr.newClient = func(_ context.Context, _ []byte, _ *runtime.Scheme) (SelectivelyCachingClient, context.CancelFunc, error) {
+		return &stubClient{id: "c1"}, func() {}, nil
+	}
+	r := &Reconciler{
+		Client: c, Scheme: s, Log: log.Log,
+		Probe:   func(context.Context, []byte) error { return nil },
+		Manager: mgr, ConnectionGracePeriod: time.Hour,
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "c1"}})
+	require.NoError(t, err)
+	_, ok := mgr.ClientFor("c1")
+	require.True(t, ok)
+
+	c.fail = true
+	_, err = r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "c1"}})
+	require.NoError(t, err)
+	_, ok = mgr.ClientFor("c1")
+	assert.True(t, ok, "a transient Secret read failure within grace must not disconnect the live client")
+	cond := readyCond(base, "c1")
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionTrue, cond.Status)
 	assert.Equal(t, "ProbeFailedRetrying", cond.Reason)
 }
 

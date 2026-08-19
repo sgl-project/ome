@@ -21,6 +21,8 @@ func TestValidateRESTConfig(t *testing.T) {
 		{"insecure TLS", &rest.Config{TLSClientConfig: rest.TLSClientConfig{Insecure: true}}, ExecCredentialPolicy{}, true},
 		{"basic auth", &rest.Config{Host: "https://h", Username: "u", Password: "p"}, ExecCredentialPolicy{}, true},
 		{"ca file path", &rest.Config{Host: "https://h", TLSClientConfig: rest.TLSClientConfig{CAFile: "/etc/ca.crt"}}, ExecCredentialPolicy{}, true},
+		{"client certificate file path", &rest.Config{Host: "https://h", TLSClientConfig: rest.TLSClientConfig{CertFile: "/etc/client.crt", KeyFile: "/etc/client.key"}}, ExecCredentialPolicy{}, true},
+		{"allowed exec still validates host", &rest.Config{Host: "http://h", ExecProvider: &clientcmdapi.ExecConfig{Command: "aws"}}, ExecCredentialPolicy{Allowed: true, AllowedCommands: []string{"aws"}}, true},
 		{"untrusted host", &rest.Config{Host: "https://bad_host"}, ExecCredentialPolicy{}, true},
 	}
 	for _, tc := range cases {
@@ -86,6 +88,17 @@ clusters:
   cluster:
     certificate-authority-data: ZHVtbXk=
 `
+	const clientCertificatePath = `apiVersion: v1
+kind: Config
+clusters:
+- name: c
+  cluster: {server: https://example.com, certificate-authority-data: ZHVtbXk=}
+users:
+- name: u
+  user:
+    client-certificate: /etc/client.crt
+    client-key: /etc/client.key
+`
 	cases := []struct {
 		name    string
 		raw     string
@@ -95,6 +108,7 @@ clusters:
 		{"per-user token file", tokenFile, true},
 		{"per-cluster insecure", insecure, true},
 		{"ca file path", caPath, true},
+		{"client certificate file path", clientCertificatePath, true},
 		{"missing server", noServer, true},
 		{"malformed", "this is not a kubeconfig", true},
 	}
@@ -105,6 +119,19 @@ clusters:
 				t.Errorf("validateKubeConfigBytes() err=%v wantErr=%v", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestExecCredentialPolicy_CommandAllowed(t *testing.T) {
+	p := ExecCredentialPolicy{Allowed: true, AllowedCommands: []string{"aws", "/usr/local/bin/kubelogin"}}
+	if !p.commandAllowed("aws") {
+		t.Fatal("bare allowlisted command was rejected")
+	}
+	if !p.commandAllowed("/usr/local/bin/kubelogin") {
+		t.Fatal("exact allowlisted command path was rejected")
+	}
+	if p.commandAllowed("/tmp/attacker/aws") {
+		t.Fatal("path-qualified command matched a bare allowlist entry")
 	}
 }
 

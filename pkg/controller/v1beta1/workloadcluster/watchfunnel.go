@@ -226,7 +226,7 @@ func (f *StatusFunnel) watchCluster(ctx context.Context, cluster string) {
 	backoff := f.mgr.ReconnectBackoff()
 
 	var failed uint
-	handlerRegistered := false
+	var handlerGeneration uint64
 	for {
 		if ctx.Err() != nil {
 			return
@@ -241,11 +241,13 @@ func (f *StatusFunnel) watchCluster(ctx context.Context, cluster string) {
 			}
 		}
 
-		w, connected, err := f.mgr.EstablishWatch(ctx, cluster, f.cfg.NewList(), int(failed)+1, f.watchListOpts()...)
+		w, generation, connected, err := f.mgr.EstablishWatch(ctx, cluster, f.cfg.NewList(), int(failed)+1, f.watchListOpts()...)
 		if !connected {
-			// The cluster disconnected out from under us; the resync loop will
-			// drop this goroutine. Stop trying.
-			return
+			// A disconnect can race with an immediate reconnect. Keep this watch
+			// slot alive and retry until the resync loop cancels it, so a reconnect
+			// before the next resync cannot leave a stale f.watched entry.
+			failed++
+			continue
 		}
 		if err != nil {
 			failed++
@@ -257,8 +259,8 @@ func (f *StatusFunnel) watchCluster(ctx context.Context, cluster string) {
 		// Register the cache event handler once the watch is confirmed
 		// establishable. This is the steady-state event source; the established
 		// watch below is held only as a liveness signal.
-		if !handlerRegistered {
-			if err := f.registerCacheHandler(ctx, cluster); err != nil {
+		if handlerGeneration != generation {
+			if err := f.registerCacheHandler(ctx, cluster, generation); err != nil {
 				// The handler could not be registered (kind not cached / cache not
 				// ready). Abandon the established watch and retry with backoff.
 				w.Stop()
@@ -266,8 +268,8 @@ func (f *StatusFunnel) watchCluster(ctx context.Context, cluster string) {
 				log.V(2).Info("status funnel: register cache handler failed; backing off", "failedAttempts", failed, "err", err.Error())
 				continue
 			}
-			handlerRegistered = true
-			log.V(2).Info("status funnel: cache event handler registered")
+			handlerGeneration = generation
+			log.V(2).Info("status funnel: cache event handler registered", "generation", generation)
 		}
 
 		// Block on the established watch as a liveness probe. Its events are not
@@ -313,10 +315,13 @@ func (f *StatusFunnel) drainUntilEnd(ctx context.Context, w watch.Interface) {
 // cluster's derived-object cache informer. Add/Update/Delete all re-trigger the
 // local source: a derived appearing, changing status, or vanishing on a workload
 // cluster are each events the placer must observe.
-func (f *StatusFunnel) registerCacheHandler(ctx context.Context, cluster string) error {
-	cl, ok := f.mgr.ClientFor(cluster)
+func (f *StatusFunnel) registerCacheHandler(ctx context.Context, cluster string, generation uint64) error {
+	cl, currentGeneration, ok := f.mgr.clientForGeneration(cluster)
 	if !ok {
 		return fmt.Errorf("cluster %q is not connected", cluster)
+	}
+	if currentGeneration != generation {
+		return fmt.Errorf("cluster %q client changed from generation %d to %d", cluster, generation, currentGeneration)
 	}
 	h := toolscache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj any) { f.push(ctx, obj) },

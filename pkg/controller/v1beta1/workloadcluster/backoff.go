@@ -126,9 +126,14 @@ func establishWatch(ctx context.Context, c client.WithWatch, list client.ObjectL
 		return &cancelOnStopWatcher{Interface: r.w, cancel: cancel}, nil
 	case <-time.After(timeout):
 		cancel()
-		if r := <-resultCh; r.w != nil {
-			r.w.Stop()
-		}
+		// Do not wait for a broken client implementation to honor cancellation.
+		// The buffered result channel lets the producer finish independently; a
+		// late watcher is still stopped so it cannot leak.
+		go func() {
+			if r := <-resultCh; r.w != nil {
+				r.w.Stop()
+			}
+		}()
 		return nil, errWatchEstablishTimeout
 	}
 }
