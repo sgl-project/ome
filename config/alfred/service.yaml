@@ -1,0 +1,17 @@
+# Metrics endpoint: every replica observes, so scraping any pod works.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ome-alfred-metrics
+  namespace: ome
+  labels:
+    control-plane: ome-alfred
+    app.kubernetes.io/component: "ome-alfred"
+spec:
+  selector:
+    control-plane: ome-alfred
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: metrics
+    protocol: TCP

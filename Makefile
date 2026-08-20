@@ -6,6 +6,7 @@ REGISTRY     ?= ghcr.io/moirai-internal
 TAG          ?= $(GIT_TAG)
 ARCH         ?= linux/amd64
 MANAGER_IMG  ?= $(REGISTRY)/ome-manager:$(TAG)
+ALFRED_IMG   ?= $(REGISTRY)/alfred:$(TAG)
 
 # Git version and commit information for build
 version_pkg = sigs.k8s.io/ome/pkg/version
@@ -400,6 +401,16 @@ ome-agent-image: fmt vet xet-build ## Build ome-agent image.
 		. -f dockerfiles/ome-agent.Dockerfile -t $(REGISTRY)/ome-agent:$(TAG)
 	@echo "✅ Image built"
 
+.PHONY: alfred-image
+alfred-image: fmt vet ## Build alfred image.
+	@echo "🎩 Building alfred image..."
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/alfred.Dockerfile -t $(ALFRED_IMG)
+	@echo "✅ Image built"
+
 .PHONY: docker-buildx-setup
 docker-buildx-setup: ## 🔧 Setup Docker buildx for multi-arch builds
 	@echo "🔧 Setting up Docker buildx..."
@@ -517,11 +528,29 @@ uninstall: kustomize ## 🧹 Uninstall controller from the configured Kubernetes
 	kubectl delete --ignore-not-found=$(ignore-not-found) -k config/clusterresources
 	@echo "✅ Controller uninstalled"
 
+.PHONY: install-alfred
+install-alfred: kustomize ## 🎩 Deploy alfred (GPU cluster caretaker) in the configured Kubernetes cluster for testing.
+	@echo "\n🎩 Deploying alfred in recommend-only mode: $(ALFRED_IMG)"
+	@echo "  • OME must already be installed — alfred reads its CRDs and runs in the ome namespace"
+	@cp config/alfred/kustomization.yaml config/alfred/kustomization.yaml.bak; \
+		trap 'mv config/alfred/kustomization.yaml.bak config/alfred/kustomization.yaml' EXIT; \
+		(cd config/alfred && $(KUSTOMIZE) edit set image ghcr.io/moirai-internal/alfred=$(ALFRED_IMG)) && \
+		$(KUSTOMIZE) build config/alfred | kubectl apply --server-side --force-conflicts -f -
+	@kubectl -n ome rollout status deployment/ome-alfred --timeout=180s
+	@echo "\n✅ Alfred deployed. Tune it with 'kubectl -n ome edit configmap alfred-config' (hot-reloaded),"
+	@echo "   and scrape its gauges with 'kubectl -n ome port-forward svc/ome-alfred-metrics 8080:8080'.\n"
+
+.PHONY: uninstall-alfred
+uninstall-alfred: kustomize ## 🧹 Remove alfred from the configured Kubernetes cluster.
+	kubectl delete --ignore-not-found=$(ignore-not-found) -k config/alfred
+	@echo "✅ Alfred uninstalled"
+
 .PHONY: kustomize-validate
 kustomize-validate: kustomize ## 🔍 Validate kustomize configuration without applying to cluster
 	@echo "\n🔍 Validating kustomize configuration..."
 	@cd config/default && $(KUSTOMIZE) build --load-restrictor=LoadRestrictionsNone . > /dev/null && echo "✅ Default configuration is valid" || (echo "❌ Error in default configuration" && exit 1)
 	@cd config/clusterresources && $(KUSTOMIZE) build --load-restrictor=LoadRestrictionsNone . > /dev/null && echo "✅ Cluster resources configuration is valid" || (echo "❌ Error in cluster resources configuration" && exit 1)
+	@cd config/alfred && $(KUSTOMIZE) build --load-restrictor=LoadRestrictionsNone . > /dev/null && echo "✅ Alfred configuration is valid" || (echo "❌ Error in alfred configuration" && exit 1)
 	@echo "\n✅ Kustomize validation completed successfully!\n"
 
 .PHONY: push-manager-image
@@ -540,6 +569,12 @@ push-model-agent-image: model-agent-image ## Push model-agent image to registry.
 push-ome-agent-image: ome-agent-image ## Push ome-agent image to registry.
 	@echo "🚀 Pushing ome-agent image to registry..."
 	$(DOCKER_BUILD_CMD) push $(REGISTRY)/ome-agent:$(TAG)
+	@echo "✅ Image pushed"
+
+.PHONY: push-alfred-image
+push-alfred-image: alfred-image ## Push alfred image to registry.
+	@echo "🚀 Pushing alfred image to registry..."
+	$(DOCKER_BUILD_CMD) push $(ALFRED_IMG)
 	@echo "✅ Image pushed"
 
 .PHONY: patch-manager-dev
