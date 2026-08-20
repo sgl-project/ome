@@ -332,10 +332,18 @@ func (cds *OCIOSDataStore) Upload(source string, target ObjectURI) error {
 // already exist. It returns false when Object Storage rejects the write because
 // another writer has already created the object.
 func (cds *OCIOSDataStore) UploadIfAbsent(source string, target ObjectURI) (bool, error) {
+	_, uploaded, err := cds.UploadIfAbsentWithETag(source, target)
+	return uploaded, err
+}
+
+// UploadIfAbsentWithETag uploads a file or string only when the target object
+// does not already exist. On success it returns the ETag of the object this
+// caller created, which can be used to conditionally update or delete it.
+func (cds *OCIOSDataStore) UploadIfAbsentWithETag(source string, target ObjectURI) (string, bool, error) {
 	if target.Namespace == "" {
 		namespace, err := cds.GetNamespace()
 		if err != nil {
-			return false, fmt.Errorf("error upload object due to no namespace found: %+v", err)
+			return "", false, fmt.Errorf("error upload object due to no namespace found: %+v", err)
 		}
 		target.Namespace = *namespace
 	}
@@ -349,7 +357,7 @@ func (cds *OCIOSDataStore) UploadIfAbsent(source string, target ObjectURI) (bool
 	if sourceFile, err := os.Open(source); err == nil {
 		fileInfo, err := sourceFile.Stat()
 		if err != nil {
-			return false, fmt.Errorf(
+			return "", false, fmt.Errorf(
 				"failed to get source file info %q: %+v",
 				source,
 				err)
@@ -374,16 +382,19 @@ func (cds *OCIOSDataStore) UploadIfAbsent(source string, target ObjectURI) (bool
 	}
 	response, err := cds.Client.PutObject(context.Background(), putObjectRequest)
 	if isObjectAlreadyPresent(response.RawResponse, err) {
-		return false, nil
+		return "", false, nil
 	}
 	if err != nil || response.RawResponse == nil || response.RawResponse.StatusCode != http.StatusOK {
-		return false, fmt.Errorf(
+		return "", false, fmt.Errorf(
 			"failed to put object %q with response %+v: %s",
 			objectFullName,
 			response,
 			errorMessage(err))
 	}
-	return true, nil
+	if response.ETag == nil || *response.ETag == "" {
+		return "", false, fmt.Errorf("put object %q succeeded without an ETag", objectFullName)
+	}
+	return *response.ETag, true, nil
 }
 
 // DeleteObject removes an object from OCI Object Storage. Missing objects are

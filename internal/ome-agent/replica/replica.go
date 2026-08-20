@@ -32,11 +32,11 @@ var (
 	uploadCompletionMarkerFunc = func(dataStore *ociobjectstore.OCIOSDataStore, source string, target ociobjectstore.ObjectURI) error {
 		return dataStore.Upload(source, target)
 	}
-	tryAcquireArtifactUploadLockFunc = func(dataStore *ociobjectstore.OCIOSDataStore, source string, target ociobjectstore.ObjectURI) (bool, error) {
-		return dataStore.UploadIfAbsent(source, target)
+	tryAcquireArtifactUploadLockFunc = func(dataStore *ociobjectstore.OCIOSDataStore, source string, target ociobjectstore.ObjectURI) (string, bool, error) {
+		return dataStore.UploadIfAbsentWithETag(source, target)
 	}
-	deleteArtifactUploadLockFunc = func(dataStore *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI) error {
-		return dataStore.DeleteObject(target)
+	releaseArtifactUploadLockFunc = func(dataStore *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, etag string) (bool, error) {
+		return dataStore.DeleteObjectIfMatch(target, etag)
 	}
 	deleteArtifactCompletionMarkerFunc = func(dataStore *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI) error {
 		return dataStore.DeleteObject(target)
@@ -62,6 +62,12 @@ type targetArtifactState struct {
 	UploadLockModifiedTime *time.Time
 	UploadLockETag         string
 	ArtifactSizeBytes      *int64
+}
+
+// targetArtifactUploadLock identifies the specific Object Storage generation
+// acquired by this replica agent. Release must be conditional on this ETag.
+type targetArtifactUploadLock struct {
+	ETag string
 }
 
 // NewReplicaAgent constructs a new replica agent from the given configuration.
@@ -127,18 +133,18 @@ func (r *ReplicaAgent) Start() error {
 		return err
 	}
 
-	lockAcquired, skipReplication, err := r.prepareTargetArtifactUpload()
+	uploadLock, skipReplication, err := r.prepareTargetArtifactUpload()
 	if err != nil {
 		r.writeTerminationLog(err.Error())
 		return err
 	}
-	if lockAcquired {
-		defer r.releaseTargetArtifactUploadLock()
+	if uploadLock != nil {
+		defer r.releaseTargetArtifactUploadLock(*uploadLock)
 	}
 	if skipReplication {
 		return nil
 	}
-	if lockAcquired {
+	if uploadLock != nil {
 		skipReplication, err = r.prepareTargetArtifactAfterLockAcquired()
 		if err != nil {
 			r.writeTerminationLog(err.Error())
@@ -183,55 +189,55 @@ func (r *ReplicaAgent) Start() error {
 	return nil
 }
 
-func (r *ReplicaAgent) prepareTargetArtifactUpload() (bool, bool, error) {
+func (r *ReplicaAgent) prepareTargetArtifactUpload() (*targetArtifactUploadLock, bool, error) {
 	if !r.Config.TargetArtifactReuseAllowed {
-		return false, false, nil
+		return nil, false, nil
 	}
 	if r.ReplicationInput.TargetStorageType != storage.StorageTypeOCI {
-		return false, false, nil
+		return nil, false, nil
 	}
 	if r.Config.Target.OCIOSDataStore == nil {
-		return false, false, fmt.Errorf("target OCI object store data store is nil")
+		return nil, false, fmt.Errorf("target OCI object store data store is nil")
 	}
 	waitDeadline := nowFunc().Add(r.targetArtifactUploadLockTimeout())
 
 	state, err := r.targetArtifactState()
 	if err != nil {
-		return false, false, fmt.Errorf("failed to inspect target artifact state: %w", err)
+		return nil, false, fmt.Errorf("failed to inspect target artifact state: %w", err)
 	}
 	if state.Complete {
 		if r.canReuseCompleteTargetArtifact(state) {
 			r.Logger.Infof("Target artifact is already complete; skipping replication")
 			r.logTargetArtifactSize(state)
-			return false, true, nil
+			return nil, true, nil
 		}
 		r.Logger.Infof("Target artifact is complete but upload lock still exists; waiting for upload lock release")
 	}
 
 	for {
-		acquired, err := r.acquireTargetArtifactUploadLock()
+		uploadLock, err := r.acquireTargetArtifactUploadLock()
 		if err != nil {
-			return false, false, err
+			return nil, false, err
 		}
-		if acquired {
-			return true, false, nil
+		if uploadLock != nil {
+			return uploadLock, false, nil
 		}
 
 		r.Logger.Infof("Target artifact upload lock already exists; waiting for completion marker")
 		state, err = r.waitForTargetArtifactStateChange(waitDeadline)
 		if err != nil {
-			return false, false, err
+			return nil, false, err
 		}
 		if state.Complete {
 			if r.canReuseCompleteTargetArtifact(state) {
 				r.Logger.Infof("Target artifact completed while waiting for upload lock; skipping replication")
 				r.logTargetArtifactSize(state)
-				return false, true, nil
+				return nil, true, nil
 			}
 		}
 		if r.isTargetArtifactUploadLockStale(state) {
 			if err := r.deleteStaleTargetArtifactUploadLock(state); err != nil {
-				return false, false, err
+				return nil, false, err
 			}
 			continue
 		}
@@ -252,24 +258,35 @@ func (r *ReplicaAgent) logTargetArtifactSize(state targetArtifactState) {
 	r.Logger.Infof("Total model size: %d bytes", *state.ArtifactSizeBytes)
 }
 
-func (r *ReplicaAgent) acquireTargetArtifactUploadLock() (bool, error) {
+func (r *ReplicaAgent) acquireTargetArtifactUploadLock() (*targetArtifactUploadLock, error) {
 	lockURI := r.targetArtifactUploadLockURI()
 	r.Logger.Infof("Acquiring target artifact upload lock at oci://n/%s/b/%s/o/%s", lockURI.Namespace, lockURI.BucketName, lockURI.ObjectName)
-	acquired, err := tryAcquireArtifactUploadLockFunc(
+	etag, acquired, err := tryAcquireArtifactUploadLockFunc(
 		r.Config.Target.OCIOSDataStore,
 		constants.ArtifactUploadLockBody,
 		lockURI,
 	)
 	if err != nil {
-		return false, fmt.Errorf("failed to acquire target artifact upload lock: %w", err)
+		return nil, fmt.Errorf("failed to acquire target artifact upload lock: %w", err)
 	}
-	return acquired, nil
+	if !acquired {
+		return nil, nil
+	}
+	if etag == "" {
+		return nil, fmt.Errorf("acquired target artifact upload lock without an etag")
+	}
+	return &targetArtifactUploadLock{ETag: etag}, nil
 }
 
-func (r *ReplicaAgent) releaseTargetArtifactUploadLock() {
+func (r *ReplicaAgent) releaseTargetArtifactUploadLock(uploadLock targetArtifactUploadLock) {
 	lockURI := r.targetArtifactUploadLockURI()
-	if err := deleteArtifactUploadLockFunc(r.Config.Target.OCIOSDataStore, lockURI); err != nil {
+	released, err := releaseArtifactUploadLockFunc(r.Config.Target.OCIOSDataStore, lockURI, uploadLock.ETag)
+	if err != nil {
 		r.Logger.Errorf("Failed to release target artifact upload lock at oci://n/%s/b/%s/o/%s: %v", lockURI.Namespace, lockURI.BucketName, lockURI.ObjectName, err)
+		return
+	}
+	if !released {
+		r.Logger.Infof("Target artifact upload lock changed before release; leaving the current owner lock in place")
 	}
 }
 
