@@ -163,6 +163,11 @@ func (r *ReplicaAgent) Start() error {
 		return err
 	}
 
+	if err = r.removeTargetArtifactCompletionMarkerBeforeOverwrite(); err != nil {
+		r.writeTerminationLog(err.Error())
+		return err
+	}
+
 	err = replicatorImp.Replicate(sourceObjs)
 	if err != nil {
 		r.writeTerminationLog(err.Error())
@@ -409,16 +414,25 @@ func (r *ReplicaAgent) prepareTargetArtifactAfterLockAcquired() (bool, error) {
 		r.logTargetArtifactSize(state)
 		return true, nil
 	}
-	if !state.CompletionMarked {
-		return false, nil
+	return false, nil
+}
+
+// removeTargetArtifactCompletionMarkerBeforeOverwrite ensures readers cannot
+// treat a target prefix as complete while replication overwrites its objects.
+func (r *ReplicaAgent) removeTargetArtifactCompletionMarkerBeforeOverwrite() error {
+	if r.ReplicationInput.TargetStorageType != storage.StorageTypeOCI {
+		return nil
+	}
+	if r.Config.Target.OCIOSDataStore == nil {
+		return fmt.Errorf("target OCI object store data store is nil")
 	}
 
 	markerURI := r.targetArtifactCompleteMarkerURI()
 	r.Logger.Infof("Deleting target artifact completion marker before upload at oci://n/%s/b/%s/o/%s", markerURI.Namespace, markerURI.BucketName, markerURI.ObjectName)
 	if err := deleteArtifactCompletionMarkerFunc(r.Config.Target.OCIOSDataStore, markerURI); err != nil {
-		return false, fmt.Errorf("failed to delete target artifact completion marker before upload: %w", err)
+		return fmt.Errorf("failed to delete target artifact completion marker before upload: %w", err)
 	}
-	return false, nil
+	return nil
 }
 
 func (r *ReplicaAgent) writeCompletionMarker() error {

@@ -924,12 +924,18 @@ func TestReplicaAgent_StartLogsTargetArtifactSizeWhenSkippingCompletedTargetArti
 	mockLogger.AssertCalled(t, "Infof", "Total model size: %d bytes", []interface{}{artifactSizeBytes})
 }
 
-func TestReplicaAgent_StartBypassesTargetArtifactCoordinationWhenReuseNotAllowed(t *testing.T) {
+func TestReplicaAgent_StartDeletesCompletionMarkerBeforeOverwritingWhenReuseNotAllowed(t *testing.T) {
 	agent, cleanup := newTestAgentForCompletionMarker(t)
 	defer cleanup()
 	agent.Config.TargetArtifactReuseAllowed = false
 
-	fake := &fakeReplicator{}
+	operations := make([]string, 0, 2)
+	fake := &fakeReplicator{
+		onReplicate: func(objects []common.ReplicationObject) error {
+			operations = append(operations, "replicate")
+			return nil
+		},
+	}
 	newReplicatorFunc = func(_ *ReplicaAgent) (replicator.Replicator, error) {
 		return fake, nil
 	}
@@ -941,8 +947,9 @@ func TestReplicaAgent_StartBypassesTargetArtifactCoordinationWhenReuseNotAllowed
 		t.Fatal("target artifact upload lock should not be acquired when reuse is disabled")
 		return false, nil
 	}
-	deleteArtifactCompletionMarkerFunc = func(_ *ociobjectstore.OCIOSDataStore, _ ociobjectstore.ObjectURI) error {
-		t.Fatal("completion marker should not be deleted when reuse is disabled")
+	deleteArtifactCompletionMarkerFunc = func(_ *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI) error {
+		assert.Equal(t, "target-models/"+constants.ArtifactCompleteMarkerFileName, target.ObjectName)
+		operations = append(operations, "delete-completion-marker")
 		return nil
 	}
 	uploadCompletionMarkerFunc = func(_ *ociobjectstore.OCIOSDataStore, _ string, _ ociobjectstore.ObjectURI) error {
@@ -953,6 +960,7 @@ func TestReplicaAgent_StartBypassesTargetArtifactCoordinationWhenReuseNotAllowed
 	err := agent.Start()
 	require.NoError(t, err)
 	require.Len(t, fake.objects, 1)
+	assert.Equal(t, []string{"delete-completion-marker", "replicate"}, operations)
 }
 
 func TestReplicaAgent_StartDeletesStaleCompletionMarkerBeforeUploadingTargetArtifact(t *testing.T) {
