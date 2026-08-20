@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/ome/pkg/alfred/config"
 	"sigs.k8s.io/ome/pkg/alfred/metrics"
 	"sigs.k8s.io/ome/pkg/alfred/observer"
+	"sigs.k8s.io/ome/pkg/alfred/policy/defrag"
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 )
@@ -163,6 +164,7 @@ func main() {
 		Store:   store,
 		Metrics: alfredMetrics,
 		Log:     ctrl.Log.WithName("alfred-observer"),
+		Scorer:  defrag.PublishScores,
 	}
 	if err := mgr.Add(observationLoop); err != nil {
 		setupLog.Error(err, "unable to add observation loop")

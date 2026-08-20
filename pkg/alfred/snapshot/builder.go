@@ -79,8 +79,8 @@ func (o *Options) now() time.Time {
 // Build assembles a ClusterSnapshot from the cluster through a read-only
 // client. It never writes, and it degrades per-object rather than failing
 // wholesale wherever one broken object should not blind the caretaker (model
-// resolution); only the core lists (nodes, pods, InferenceServices,
-// accelerator classes) are load-bearing enough to fail the build.
+// resolution); only the core lists (nodes, pods, InferenceServices) are
+// load-bearing enough to fail the build.
 func Build(ctx context.Context, r client.Reader, opts Options) (*ClusterSnapshot, error) {
 	s := &ClusterSnapshot{
 		Timestamp:          opts.now(),

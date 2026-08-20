@@ -53,6 +53,48 @@ func TestNewRegistersEverySeries(t *testing.T) {
 	}
 }
 
+// TestPoolGaugeLabelKeys pins the exported label contract of the pool-keyed
+// gauges: the label is the node-derived hardware pool, named "pool".
+func TestPoolGaugeLabelKeys(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+	m.FragmentationObserved.WithLabelValues("h100", "8").Set(1)
+	m.FragmentationReclaimable.WithLabelValues("h100").Set(1)
+	m.PendingPressure.WithLabelValues("h100").Set(1)
+	m.SurgeHeadroomGPUs.WithLabelValues("h100").Set(1)
+
+	want := map[string][]string{
+		"alfred_fragmentation_observed":    {"pool", "size"},
+		"alfred_fragmentation_reclaimable": {"pool"},
+		"alfred_pending_pressure":          {"pool"},
+		"alfred_surge_headroom_gpus":       {"pool"},
+	}
+	families, err := registry.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, family := range families {
+		wantLabels, ok := want[family.GetName()]
+		if !ok {
+			continue
+		}
+		seen++
+		labels := family.GetMetric()[0].GetLabel()
+		if len(labels) != len(wantLabels) {
+			t.Fatalf("%s has %d labels, want %v", family.GetName(), len(labels), wantLabels)
+		}
+		for i, label := range labels {
+			if label.GetName() != wantLabels[i] {
+				t.Fatalf("%s label %d = %q, want %q", family.GetName(), i, label.GetName(), wantLabels[i])
+			}
+		}
+	}
+	if seen != len(want) {
+		t.Fatalf("found %d of %d pool-keyed families", seen, len(want))
+	}
+}
+
 func TestObserveConfigReload(t *testing.T) {
 	m := New(prometheus.NewRegistry())
 	m.ObserveConfigReload("success")

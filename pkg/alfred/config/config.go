@@ -7,6 +7,7 @@ package config
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -305,16 +306,34 @@ func (c *Config) validate() error {
 	if !sort.IntsAreSorted(d.Scoring.SizeLadder) {
 		return fmt.Errorf("policies.defragmentation.scoring.sizeLadder must be ascending, got %v", d.Scoring.SizeLadder)
 	}
+	ladderSizes := map[int]struct{}{}
 	for _, size := range d.Scoring.SizeLadder {
 		if size <= 0 {
 			return fmt.Errorf("policies.defragmentation.scoring.sizeLadder entries must be positive, got %v", d.Scoring.SizeLadder)
 		}
+		// IntsAreSorted accepts non-strict ascending, so duplicates need
+		// their own check: a repeated size would double-count its Frag
+		// term in every blended score.
+		if _, dup := ladderSizes[size]; dup {
+			return fmt.Errorf("policies.defragmentation.scoring.sizeLadder has duplicate size %d", size)
+		}
+		ladderSizes[size] = struct{}{}
 	}
 	var priorSum float64
 	for key, weight := range d.Scoring.SizePrior {
-		var size int
-		if _, err := fmt.Sscanf(key, "%d", &size); err != nil || size <= 0 {
-			return fmt.Errorf("policies.defragmentation.scoring.sizePrior key %q is not a positive size", key)
+		// Canonical whole-string parse: "8x" must not alias size 8, and
+		// neither may "08" or "+8" — Atoi accepts those aliases, and two
+		// keys collapsing onto one size would leave the surviving weight
+		// to map iteration order.
+		size, err := strconv.Atoi(key)
+		if err != nil || size <= 0 || strconv.Itoa(size) != key {
+			return fmt.Errorf("policies.defragmentation.scoring.sizePrior key %q is not a canonical positive size", key)
+		}
+		// A prior key outside the ladder would be silently dropped by
+		// the demand blend, deflating every weight it should have
+		// carried; reject it loudly instead.
+		if _, ok := ladderSizes[size]; !ok {
+			return fmt.Errorf("policies.defragmentation.scoring.sizePrior key %q is not a sizeLadder size %v", key, d.Scoring.SizeLadder)
 		}
 		if weight < 0 {
 			return fmt.Errorf("policies.defragmentation.scoring.sizePrior[%s] must be >= 0, got %v", key, weight)

@@ -136,8 +136,7 @@ func (l *Loop) publish(snap *snapshot.ClusterSnapshot, cfg *config.Config) {
 	// Surge headroom per hardware pool: the largest single-node free
 	// block — the biggest replacement footprint a surge-shaped migration
 	// could place while its source still holds GPUs. 0 means surge-shaped
-	// candidates degrade to advisory (NoSurgeHeadroom). The metric label
-	// keeps the OEP's `acceleratorclass` name; its value is the pool key.
+	// candidates degrade to advisory (NoSurgeHeadroom).
 	for _, pool := range snap.GPUPools() {
 		var headroom int64
 		for _, node := range snap.PoolNodes(pool) {

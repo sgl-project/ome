@@ -309,7 +309,7 @@ ome-manager: xet-build ## 🏗️  Build ome-manager binary.
 alfred: ## 🎩 Build alfred (GPU cluster caretaker) binary.
 	@echo "🎩 Building alfred..."
 	@mkdir -p bin
-	CGO_ENABLED=0 $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/alfred ./cmd/alfred
+	$(GO_BUILD_ENV) CGO_ENABLED=0 $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/alfred ./cmd/alfred
 	@echo "✅ Build complete"
 
 .PHONY: model-agent
