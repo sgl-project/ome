@@ -131,12 +131,14 @@ func (*Policy) Evaluate(snap *snapshot.ClusterSnapshot, cfg *config.Config) []po
 
 	// Maintenance windows gate defragmentation dispatch: outside every
 	// window, executable candidates are dropped; advisories carry no
-	// dispatch and survive. (Node-health evacuation deliberately ignores
-	// windows — that policy applies its own rules.)
+	// dispatch and survive, and an emergency — a pod starved past
+	// emergencyPendingAgeMinutes — overrides the window (a steady-state
+	// optimization can wait; a starving workload cannot). Node-health
+	// evacuation ignores windows entirely in its own policy.
 	if !maintenanceOpen(cfg, now) {
 		kept := out[:0]
 		for _, c := range out {
-			if !c.Executable {
+			if !c.Executable || c.Emergency {
 				kept = append(kept, c)
 			}
 		}
