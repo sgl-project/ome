@@ -32,6 +32,9 @@ func (v *BaseModelValidator) Handle(_ context.Context, req admission.Request) ad
 	if err := validation.ValidatePVCStorage(&bm.Spec, false); err != nil {
 		return admission.Denied(err.Error())
 	}
+	if err := validation.ValidateStageStorage(&bm.Spec); err != nil {
+		return admission.Denied(err.Error())
+	}
 	return admission.Allowed("")
 }
 
@@ -51,6 +54,9 @@ func (v *ClusterBaseModelValidator) Handle(_ context.Context, req admission.Requ
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 	if err := validation.ValidatePVCStorage(&cbm.Spec, true); err != nil {
+		return admission.Denied(err.Error())
+	}
+	if err := validation.ValidateStageStorage(&cbm.Spec); err != nil {
 		return admission.Denied(err.Error())
 	}
 	return admission.Allowed("")
