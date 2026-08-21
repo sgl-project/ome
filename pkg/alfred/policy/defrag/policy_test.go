@@ -406,6 +406,18 @@ func TestMaintenanceWindowGatesDispatch(t *testing.T) {
 	if open := evaluate(t, build(), cfg); len(executables(open)) != 1 {
 		t.Fatalf("inside the window the move must dispatch: %+v", open)
 	}
+
+	// An emergency — a pod starved past emergencyPendingAgeMinutes —
+	// overrides a closed window: a steady-state optimization can wait, a
+	// starving workload cannot. The age threshold is pinned explicitly so
+	// the assertion does not lean on the default.
+	cfg.MaintenanceWindows = []config.MaintenanceWindow{{Days: []string{"Mon"}, Start: "09:00", End: "17:00"}}
+	cfg.EmergencyPendingAgeMinutes = 15
+	starving := consolidationBuilder().WithPendingPodIn("prod", 8, 30*time.Minute, "h100")
+	emergency := executables(evaluate(t, starving.Build(), cfg))
+	if len(emergency) != 1 || !emergency[0].Emergency {
+		t.Fatalf("an emergency must override the closed window: %+v", emergency)
+	}
 }
 
 // TestModelReadinessFiltersTargets: per-node models restrict hints to nodes
