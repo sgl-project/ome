@@ -3,6 +3,7 @@ package benchmarkutils
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -67,8 +68,11 @@ func BuildInferenceServiceArgs(ctx context.Context, c client.Client, endpointSpe
 		}
 
 		args := map[string]string{
-			"--api-key":         "sample-key", // TODO: Use actual service account key later
-			"--api-model-name":  "vllm-model",
+			// genai-bench requires a non-empty api-key for the openai backend but
+			// does not verify it; engines fronted by OME don't authenticate either.
+			// A real key would have to come from the spec or a Secret.
+			"--api-key":         "sample-key",
+			"--api-model-name":  resolveAPIModelName(inferenceService, baseModelName),
 			"--model-tokenizer": *baseModel.Storage.Path,
 		}
 
@@ -104,6 +108,54 @@ func BuildInferenceServiceArgs(ctx context.Context, c client.Client, endpointSpe
 	}
 
 	return nil, fmt.Errorf("invalid EndpointSpec: both Endpoint and InferenceService are nil")
+}
+
+// servedModelNameFlag is how vLLM and SGLang name the identifier a client must
+// put in the "model" field of an OpenAI request.
+const servedModelNameFlag = "--served-model-name"
+
+// resolveAPIModelName determines the value the benchmark client should send as
+// the OpenAI "model" field.
+//
+// Engines validate it against their --served-model-name and answer 404 on a
+// mismatch, so guessing here means every request in the run fails while the job
+// still reports Completed. Preference order:
+//
+//  1. the first --served-model-name value the InferenceService sets on its
+//     engine runner, when the user overrode the runtime's command;
+//  2. otherwise the BaseModel name, which is what OME uses elsewhere to
+//     identify a model.
+//
+// A runtime that sets --served-model-name to something unrelated to the model
+// name and is not overridden by the InferenceService is not covered; resolving
+// that would require fetching the ServingRuntime here.
+func resolveAPIModelName(isvc *v1beta1.InferenceService, baseModelName string) string {
+	if isvc != nil && isvc.Spec.Engine != nil && isvc.Spec.Engine.Runner != nil {
+		runner := isvc.Spec.Engine.Runner
+		if name := servedModelNameFrom(runner.Command); name != "" {
+			return name
+		}
+		if name := servedModelNameFrom(runner.Args); name != "" {
+			return name
+		}
+	}
+	return baseModelName
+}
+
+// servedModelNameFrom returns the first value after --served-model-name.
+// The flag is variadic in both engines, so only the first name is taken: it is
+// the canonical one, later entries are aliases.
+func servedModelNameFrom(tokens []string) string {
+	for i, tok := range tokens {
+		if tok != servedModelNameFlag {
+			continue
+		}
+		if i+1 < len(tokens) && !strings.HasPrefix(tokens[i+1], "-") {
+			return tokens[i+1]
+		}
+		return ""
+	}
+	return ""
 }
 
 // buildArgsFromEndpoint constructs the arguments map when an Endpoint is directly provided.

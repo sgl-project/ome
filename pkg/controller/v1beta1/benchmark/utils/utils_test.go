@@ -523,3 +523,81 @@ func TestUpdateVolumeMounts(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveAPIModelName(t *testing.T) {
+	runnerWith := func(command, args []string) *v1beta1.InferenceService {
+		return &v1beta1.InferenceService{
+			Spec: v1beta1.InferenceServiceSpec{
+				Engine: &v1beta1.EngineSpec{
+					Runner: &v1beta1.RunnerSpec{
+						Container: v1.Container{
+							Command: command,
+							Args:    args,
+						},
+					},
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name          string
+		isvc          *v1beta1.InferenceService
+		baseModelName string
+		want          string
+	}{
+		{
+			// The regression this guards: the value used to be the literal
+			// "vllm-model", which 404s against any normally configured engine.
+			name:          "falls back to the base model name",
+			isvc:          &v1beta1.InferenceService{},
+			baseModelName: "qwen2-5-0-5b-instruct",
+			want:          "qwen2-5-0-5b-instruct",
+		},
+		{
+			name:          "nil inference service falls back too",
+			isvc:          nil,
+			baseModelName: "some-model",
+			want:          "some-model",
+		},
+		{
+			name:          "served model name from the runner command wins",
+			isvc:          runnerWith([]string{"python3", "-m", "srv", "--served-model-name", "from-command"}, nil),
+			baseModelName: "base",
+			want:          "from-command",
+		},
+		{
+			name:          "served model name from the runner args wins",
+			isvc:          runnerWith(nil, []string{"--served-model-name", "from-args"}),
+			baseModelName: "base",
+			want:          "from-args",
+		},
+		{
+			// The flag is variadic; later entries are aliases, the first is canonical.
+			name:          "only the first served model name is taken",
+			isvc:          runnerWith([]string{"--served-model-name", "canonical", "alias-one", "alias-two"}, nil),
+			baseModelName: "base",
+			want:          "canonical",
+		},
+		{
+			name:          "dangling flag falls back instead of consuming the next flag",
+			isvc:          runnerWith([]string{"--served-model-name", "--port", "8080"}, nil),
+			baseModelName: "base",
+			want:          "base",
+		},
+		{
+			name:          "flag at the very end falls back",
+			isvc:          runnerWith([]string{"python3", "--served-model-name"}, nil),
+			baseModelName: "base",
+			want:          "base",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolveAPIModelName(tt.isvc, tt.baseModelName); got != tt.want {
+				t.Errorf("resolveAPIModelName() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
