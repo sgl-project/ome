@@ -16,9 +16,12 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/discovery"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,8 +31,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/ome/pkg/alfred/config"
+	"sigs.k8s.io/ome/pkg/alfred/engine"
 	"sigs.k8s.io/ome/pkg/alfred/metrics"
 	"sigs.k8s.io/ome/pkg/alfred/observer"
+	"sigs.k8s.io/ome/pkg/alfred/policy"
 	"sigs.k8s.io/ome/pkg/alfred/policy/defrag"
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
@@ -159,15 +164,83 @@ func main() {
 		os.Exit(1)
 	}
 
+	// OMENative availability: surface enabled AND the InferenceReplica CRD
+	// registered. No real executor ships yet, so this is the heuristic the
+	// OEP's degraded mode keys on. The probe runs on its own rest.Config
+	// copy with a finite timeout (a global timeout on the manager's config
+	// would kill long-lived informer watches) and is TTL-cached so an
+	// executor installed later is noticed without a restart.
+	discoveryConfig := rest.CopyConfig(mgr.GetConfig())
+	discoveryConfig.Timeout = 15 * time.Second
+	probeInferenceReplica := func(context.Context) (bool, error) {
+		dc, err := discovery.NewDiscoveryClientForConfig(discoveryConfig)
+		if err != nil {
+			return false, err
+		}
+		resources, err := dc.ServerResourcesForGroupVersion(constants.OMEAPIGroupName + "/" + v1beta1.APIVersion)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+		for _, resource := range resources.APIResources {
+			if resource.Kind == "InferenceReplica" {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+	discoverOMENative := engine.OMENativeDiscovery(store,
+		engine.CachedProbe(5*time.Minute, nil, probeInferenceReplica),
+		ctrl.Log.WithName("alfred-omenative"))
+
 	observationLoop := &observer.Loop{
-		Reader:  mgr.GetClient(),
-		Store:   store,
-		Metrics: alfredMetrics,
-		Log:     ctrl.Log.WithName("alfred-observer"),
-		Scorer:  defrag.PublishScores,
+		Reader:             mgr.GetClient(),
+		Store:              store,
+		Metrics:            alfredMetrics,
+		Log:                ctrl.Log.WithName("alfred-observer"),
+		Scorer:             defrag.PublishScores,
+		OMENativeAvailable: discoverOMENative,
 	}
 	if err := mgr.Add(observationLoop); err != nil {
 		setupLog.Error(err, "unable to add observation loop")
+		os.Exit(1)
+	}
+
+	// Decision side: leader-only loop over policies → arbiter → reporter.
+	// The dispatcher joins in the execute path; until then admitted
+	// candidates are withheld and reported as such.
+	earlyTicker := &engine.EarlyTicker{
+		Cache: mgr.GetCache(),
+		Store: store,
+		Log:   ctrl.Log.WithName("alfred-earlytick"),
+		C:     make(chan struct{}, 1),
+	}
+	if err := mgr.Add(earlyTicker); err != nil {
+		setupLog.Error(err, "unable to add early ticker")
+		os.Exit(1)
+	}
+	decisionLoop := &engine.DecisionLoop{
+		Snapshots: observationLoop,
+		Store:     store,
+		Policies:  []policy.Policy{&defrag.Policy{}},
+		Arbiter:   &engine.Arbiter{Ledger: engine.NewLedger()},
+		Reporter: &engine.Reporter{
+			Client:        mgr.GetClient(),
+			DirectReader:  mgr.GetAPIReader(),
+			Recorder:      mgr.GetEventRecorderFor("alfred"),
+			Metrics:       alfredMetrics,
+			Log:           ctrl.Log.WithName("alfred-reporter"),
+			Namespace:     opts.namespace,
+			ConfigMapName: opts.configMapName,
+		},
+		Metrics:   alfredMetrics,
+		Log:       ctrl.Log.WithName("alfred-decision"),
+		EarlyTick: earlyTicker.C,
+	}
+	if err := mgr.Add(decisionLoop); err != nil {
+		setupLog.Error(err, "unable to add decision loop")
 		os.Exit(1)
 	}
 
