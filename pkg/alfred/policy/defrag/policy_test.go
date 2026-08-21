@@ -169,6 +169,52 @@ func TestEvictionShape(t *testing.T) {
 	}
 }
 
+// TestEvictionNoFeasibleTargetAdvisory: a replica whose ranking is empty has
+// nowhere to be evicted to — dispatching would strand the replacement in
+// Pending. It degrades to advisory, the free-then-place mirror of
+// NoSurgeHeadroom, while its sibling with a real target stays executable.
+func TestEvictionNoFeasibleTargetAdvisory(t *testing.T) {
+	b := testutil.NewSnapshot().
+		WithNode("node1", "h100", 8).
+		WithNode("node2", "h100", 8).
+		WithNode("node3", "h100", 8).
+		WithInstance("prod/wide", v1beta1.EngineComponent, constants.RawDeployment, "node1", 1).
+		WithInstance("prod/wide", v1beta1.EngineComponent, constants.RawDeployment, "node2", 1)
+	b.WithOtherOccupant("node1", 6)
+	b.WithOtherOccupant("node2", 7)
+	b.WithOtherOccupant("node3", 7)
+	b.WithModel("prod/wide", &snapshot.ModelAvailability{
+		Key:        snapshot.ModelKey{Kind: snapshot.ModelKindBaseModel, Namespace: "prod", Name: "llm"},
+		Backend:    snapshot.BackendPerNode,
+		NodesReady: []string{"node1", "node2"},
+	})
+	cfg := lowGate()
+	*cfg.Policies.Defragmentation.FragmentationThreshold = 0.01
+
+	cands := evaluate(t, b.Build(), cfg)
+
+	// The node1 replica is boxed in: node2 is full and node3 lacks the model.
+	blocked := advisories(cands, policy.AdvisoryNoFeasibleTarget)
+	if len(blocked) != 1 {
+		t.Fatalf("want one NoFeasibleTarget advisory, got %+v", cands)
+	}
+	if blocked[0].FromNode != "node1" || blocked[0].SurgeShaped || blocked[0].FootprintGPUs != 1 {
+		t.Fatalf("advisory shape: %+v", blocked[0])
+	}
+	if len(blocked[0].HintTargetNodes) != 0 {
+		t.Fatalf("advisory must carry no hints, got %v", blocked[0].HintTargetNodes)
+	}
+
+	// The node2 replica can still reach node1's hole: unchanged.
+	execs := executables(cands)
+	if len(execs) != 1 || execs[0].FromNode != "node2" {
+		t.Fatalf("want the node2 replica executable, got %+v", execs)
+	}
+	if len(execs[0].HintTargetNodes) != 1 || execs[0].HintTargetNodes[0] != "node1" {
+		t.Fatalf("hints = %v, want [node1]", execs[0].HintTargetNodes)
+	}
+}
+
 // TestEnumerationFilters: cooldown (with override), in-flight migrations,
 // and Movable=false all keep a workload out of the candidate set.
 func TestEnumerationFilters(t *testing.T) {

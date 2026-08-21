@@ -265,7 +265,15 @@ func evaluateInstance(ctx *evalCtx, w *snapshot.Workload, comp *snapshot.Compone
 		}
 		after = bins
 	} else {
-		after, _ = freeThenPlace(ctx.bins, prints[0], ranked)
+		bins, target := freeThenPlace(ctx.bins, prints[0], ranked)
+		if target == "" {
+			// Nowhere to land even once the source frees its GPUs
+			// (a full pool, or a model/spot constraint that empties
+			// the ranking): evicting would strand the replacement
+			// in Pending for no gain. Surface, do not dispatch.
+			return advisory(w, comp, inst.Index, policy.AdvisoryNoFeasibleTarget, from, inst.TotalGPUs), true
+		}
+		after = bins
 	}
 
 	benefit := ctx.before - weightedFrag(after, ctx.ladder, ctx.weights, ctx.totalFree)

@@ -29,6 +29,11 @@ const (
 	// AdvisoryNoSurgeHeadroom: the surge-shaped replacement footprint fits
 	// on no feasible target while the source still holds its GPUs.
 	AdvisoryNoSurgeHeadroom = "NoSurgeHeadroom"
+	// AdvisoryNoFeasibleTarget: the free-then-place mirror of
+	// NoSurgeHeadroom — no feasible target can seat the replacement even
+	// once the source releases its GPUs, so evicting would strand it in
+	// Pending.
+	AdvisoryNoFeasibleTarget = "NoFeasibleTarget"
 	// AdvisoryVolumePinned: an RWO/RWOP PVC pins the workload to its node;
 	// no migration mechanism can move it.
 	AdvisoryVolumePinned = "VolumePinned"
