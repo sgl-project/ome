@@ -178,7 +178,7 @@ func initializePrometheusMetrics(logger *Logger) *modelagent.Metrics {
 	}
 
 	// Initialize metrics
-	metrics := modelagent.NewMetrics(nil)
+	metrics := modelagent.NewMetrics(nil, cfg.modelsRootDir)
 	logger.Info("Initialized Prometheus metrics")
 	return metrics
 }
