@@ -532,10 +532,11 @@ uninstall: kustomize ## 🧹 Uninstall controller from the configured Kubernetes
 install-alfred: kustomize ## 🎩 Deploy alfred (GPU cluster caretaker) in the configured Kubernetes cluster for testing.
 	@echo "\n🎩 Deploying alfred in recommend-only mode: $(ALFRED_IMG)"
 	@echo "  • OME must already be installed — alfred reads its CRDs and runs in the ome namespace"
-	@cp config/alfred/kustomization.yaml config/alfred/kustomization.yaml.bak; \
-		trap 'mv config/alfred/kustomization.yaml.bak config/alfred/kustomization.yaml' EXIT; \
-		(cd config/alfred && $(KUSTOMIZE) edit set image ghcr.io/moirai-internal/alfred=$(ALFRED_IMG)) && \
-		$(KUSTOMIZE) build config/alfred | kubectl apply --server-side --force-conflicts -f -
+	@tmpdir=$$(mktemp -d); \
+		trap 'rm -rf "$$tmpdir"' EXIT; \
+		cp -R config/alfred/. "$$tmpdir"; \
+		(cd "$$tmpdir" && $(KUSTOMIZE) edit set image ghcr.io/moirai-internal/alfred=$(ALFRED_IMG)) && \
+		$(KUSTOMIZE) build "$$tmpdir" | kubectl apply --server-side --force-conflicts -f -
 	@kubectl -n ome rollout status deployment/ome-alfred --timeout=180s
 	@echo "\n✅ Alfred deployed. Tune it with 'kubectl -n ome edit configmap alfred-config' (hot-reloaded),"
 	@echo "   and scrape its gauges with 'kubectl -n ome port-forward svc/ome-alfred-metrics 8080:8080'.\n"

@@ -1,6 +1,8 @@
-# Alfred's permission surface is read-only plus four narrow writes
+# Alfred's cluster-scoped permissions are read-only plus two narrow writes
 # (OEP-0008 §RBAC): no node writes, no pod writes, no pods/eviction. Every
 # pod-level action is executed by the controller that owns the workload.
+# Anything confined to Alfred's own namespace — its ConfigMaps, its
+# leader-election Lease — lives in role.yaml instead.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -24,27 +26,11 @@ rules:
     resources: [ "persistentvolumeclaims", "persistentvolumes" ]
     verbs: [ "get", "list", "watch" ]
 
-  # ConfigMaps: read for policy loading, write only to the two pre-created
-  # Alfred-owned ConfigMaps — Alfred never creates a ConfigMap at runtime.
-  - apiGroups: [ "" ]
-    resources: [ "configmaps" ]
-    verbs: [ "get", "list", "watch" ]
-  - apiGroups: [ "" ]
-    resources: [ "configmaps" ]
-    verbs: [ "update", "patch", "delete" ]
-    resourceNames:
-      - alfred-config
-      - alfred-recommendations
-
-  # Events — recommendations, migrations, evacuation and repair signals.
+  # Events — recommendations, migrations, evacuation and repair signals, on
+  # workloads and nodes in any namespace.
   - apiGroups: [ "" ]
     resources: [ "events" ]
     verbs: [ "create", "patch" ]
-
-  # Leader election.
-  - apiGroups: [ "coordination.k8s.io" ]
-    resources: [ "leases" ]
-    verbs: [ "create", "get", "update" ]
 
   # OME CRDs (read).
   - apiGroups: [ "ome.io" ]

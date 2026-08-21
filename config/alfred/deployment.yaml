@@ -33,6 +33,10 @@ spec:
           type: RuntimeDefault
       containers:
       - name: alfred
+        # Placeholder: CI publishes no alfred image yet, so there is no
+        # released tag or digest to pin. Build and push one with
+        # `make push-alfred-image`, or point ALFRED_IMG at your own; pin this
+        # to a digest once alfred joins the dev-images matrix.
         image: ghcr.io/moirai-internal/alfred:latest
         imagePullPolicy: Always
         args:
