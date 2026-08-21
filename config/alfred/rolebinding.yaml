@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ome-alfred
+  namespace: ome
+  labels:
+    app.kubernetes.io/component: "ome-alfred"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ome-alfred
+subjects:
+- kind: ServiceAccount
+  name: ome-alfred
+  namespace: ome

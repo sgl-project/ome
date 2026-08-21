@@ -27,7 +27,7 @@ type SizeFrag struct {
 }
 
 // PoolScore is the full scoring breakdown for one hardware pool
-// (Node.GPUPool). 
+// (Node.GPUPool).
 type PoolScore struct {
 	Pool string
 

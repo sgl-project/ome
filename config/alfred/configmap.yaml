@@ -1,0 +1,96 @@
+# Alfred's policy configuration (OEP-0008 §Configuration). Alfred watches this
+# ConfigMap and hot-reloads it; a config that fails schema validation is
+# rejected and the last-known-good stays in force.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alfred-config
+  namespace: ome
+  labels:
+    app.kubernetes.io/component: "ome-alfred"
+data:
+  config.yaml: |
+    schemaVersion: 1
+
+    # recommend-only | execute. recommend-only never dispatches a migration:
+    # policies, arbitration and reporting all run, only the dispatcher is off.
+    mode: recommend-only
+
+    # Loop cadence.
+    decisionLoopInterval: 5m
+    observationLoopInterval: 30s
+    # Advances the next decision tick; never interrupts a pass ([] disables).
+    earlyTickOn: [NodeConditionChange]
+
+    policies:
+      defragmentation:
+        enabled: true
+        fragmentationThreshold: 0.25
+        aggressiveness: balanced      # conservative | balanced | aggressive
+        scoring:
+          sizeLadder: [1, 2, 4, 8]    # within-node demand sizes, ascending
+          demandBlendLambda: 0.3      # 0: pure observed demand; 1: pure prior
+          sizePrior:                  # static prior over demand sizes; sums to 1
+            "1": 0.1
+            "2": 0.1
+            "4": 0.2
+            "8": 0.6
+          pendingUrgencyTauMinutes: 30
+      nodeHealth:
+        enabled: true
+        aggressiveness: balanced
+        # Consumed from existing node conditions; Alfred never detects health.
+        triggerConditions: [GpuUnhealthy]
+        signalOnly: false
+        healthCooldownFloorMinutes: 5
+        nodeSuspicionWindowMinutes: 30
+
+    # Per-workload defaults; annotations on an InferenceService win over these.
+    defaultMovable: true
+    recentPlacementCooldownMinutes: 10
+    perWorkloadCooldownMinutes: 30
+    perNodeCooldownMinutes: 10
+
+    # Execution surfaces — all annotation-mediated; owning controllers execute.
+    rawDeploymentMigrationEnabled: true
+    omenativeMigrationEnabled: true
+    lwsRecommendationsEnabled: true
+
+    # Output.
+    recommendationsConfigMapEnabled: true
+    recommendationsConfigMapName: alfred-recommendations
+
+    # Global safety bounds, applied once by the arbiter across every policy.
+    maxInFlightMigrations: 3
+    maxMigrationsPerHour: 10
+    emergencyPendingAgeMinutes: 10
+
+    # Weekly UTC windows gating defrag dispatch; empty means no window applies.
+    # Node-health evacuation deliberately overrides them.
+    maintenanceWindows: []
+    # maintenanceWindows:
+    #   - days: [Sat, Sun]
+    #     start: "02:00"
+    #     end: "06:00"
+
+    spotPolicy:
+      avoidAsTarget: true
+      preferAsSource: true
+      preemptibleLabels:
+        - node.kubernetes.io/preemptible
+        - cloud.google.com/gke-preemptible
+
+    allowCrossTenantOptimization: true
+
+    logLevel: info
+    structuredLogging: true
+---
+# Pre-created because Alfred's RBAC lets it update but never create a
+# ConfigMap; the reporter writes its recommendations here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alfred-recommendations
+  namespace: ome
+  labels:
+    app.kubernetes.io/component: "ome-alfred"

@@ -1,0 +1,98 @@
+# Alfred, the GPU cluster caretaker (OEP-0008). Every replica runs the
+# read-only observation loop; only the leader decides and dispatches. Production
+# runs three replicas — one is enough for a test cluster, and leader election
+# stays on so the deployed shape matches production.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ome-alfred
+  namespace: ome
+  labels:
+    control-plane: ome-alfred
+    app.kubernetes.io/component: "ome-alfred"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: ome-alfred
+  template:
+    metadata:
+      labels:
+        control-plane: ome-alfred
+        app.kubernetes.io/component: "ome-alfred"
+      annotations:
+        kubectl.kubernetes.io/default-container: alfred
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: ome-alfred
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: alfred
+        # Placeholder: CI publishes no alfred image yet, so there is no
+        # released tag or digest to pin. Build and push one with
+        # `make push-alfred-image`, or point ALFRED_IMG at your own; pin this
+        # to a digest once alfred joins the dev-images matrix.
+        image: ghcr.io/moirai-internal/alfred:latest
+        imagePullPolicy: Always
+        args:
+          - "--metrics-bind-address=:8080"
+          - "--health-probe-bind-address=:8081"
+          - "--leader-elect=true"
+          - "--config-name=alfred-config"
+          - "--config-key=config.yaml"
+        env:
+          # Alfred reads its namespace from the downward API: it holds the
+          # config ConfigMap and the leader-election Lease.
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          # Labels alfred_leader_status so the leader is identifiable.
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        ports:
+        - name: metrics
+          containerPort: 8080
+          protocol: TCP
+        - name: health
+          containerPort: 8081
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 10
+        resources:
+          # The cluster-wide pod cache dominates Alfred's memory; raise the
+          # memory limit on clusters with many thousands of pods.
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: '1'
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+      terminationGracePeriodSeconds: 10
