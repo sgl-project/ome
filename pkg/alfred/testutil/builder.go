@@ -179,8 +179,14 @@ func (b *SnapshotBuilder) WithMultiPodInstance(workload string, ctype v1beta1.Co
 
 // WithPendingPod adds a real pending GPU pod that has waited for age.
 func (b *SnapshotBuilder) WithPendingPod(gpus int64, age time.Duration, pool string) *SnapshotBuilder {
+	return b.WithPendingPodIn("pending", gpus, age, pool)
+}
+
+// WithPendingPodIn adds a pending GPU pod in a specific namespace — tenant
+// scoping in policy tests needs control over where pending demand lives.
+func (b *SnapshotBuilder) WithPendingPodIn(namespace string, gpus int64, age time.Duration, pool string) *SnapshotBuilder {
 	b.s.PendingPods = append(b.s.PendingPods, snapshot.PendingPod{
-		Namespace:    "pending",
+		Namespace:    namespace,
 		Name:         b.nextPodName("pending"),
 		GPUsNeeded:   gpus,
 		GPUPool:      pool,
