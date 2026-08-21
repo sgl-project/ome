@@ -10,33 +10,35 @@ import (
 )
 
 type modelDownloadObserver struct {
-	metrics                      *Metrics
-	logger                       *zap.SugaredLogger
-	downloadID                   string
-	modelType                    string
-	modelNamespace               string
-	modelName                    string
-	nodeName                     string
-	objectConcurrency            int
-	multipartConcurrency         int
-	modelFileWriteConcurrency    int
-	modelVerificationConcurrency int
+	metrics                       *Metrics
+	logger                        *zap.SugaredLogger
+	downloadID                    string
+	modelType                     string
+	modelNamespace                string
+	modelName                     string
+	nodeName                      string
+	objectConcurrency             int
+	multipartConcurrency          int
+	modelFileWriteConcurrency     int
+	modelFileWriteBufferSizeBytes int
+	modelVerificationConcurrency  int
 }
 
 func newModelDownloadObserver(gopher *Gopher, task *GopherTask) *modelDownloadObserver {
 	modelType, namespace, name := GetModelTypeNamespaceAndName(task)
 	return &modelDownloadObserver{
-		metrics:                      gopher.metrics,
-		logger:                       gopher.logger,
-		downloadID:                   task.DownloadID,
-		modelType:                    modelType,
-		modelNamespace:               namespace,
-		modelName:                    name,
-		nodeName:                     os.Getenv("NODE_NAME"),
-		objectConcurrency:            gopher.concurrency,
-		multipartConcurrency:         gopher.multipartConcurrency,
-		modelFileWriteConcurrency:    gopher.modelFileWriteConcurrency,
-		modelVerificationConcurrency: gopher.effectiveModelVerificationConcurrency(),
+		metrics:                       gopher.metrics,
+		logger:                        gopher.logger,
+		downloadID:                    task.DownloadID,
+		modelType:                     modelType,
+		modelNamespace:                namespace,
+		modelName:                     name,
+		nodeName:                      os.Getenv("NODE_NAME"),
+		objectConcurrency:             gopher.concurrency,
+		multipartConcurrency:          gopher.multipartConcurrency,
+		modelFileWriteConcurrency:     gopher.modelFileWriteConcurrency,
+		modelFileWriteBufferSizeBytes: gopher.modelFileWriteBufferSizeBytes,
+		modelVerificationConcurrency:  gopher.effectiveModelVerificationConcurrency(),
 	}
 }
 
@@ -53,15 +55,7 @@ func (o *modelDownloadObserver) ObserveDownloadPhase(observation ociobjectstore.
 		)
 		if observation.WriteStats != nil {
 			stats := observation.WriteStats
-			o.metrics.ObserveDownloadWriteCalls(
-				string(observation.Outcome),
-				stats.MaxDuration,
-				stats.CallsUpTo16KiB,
-				stats.Calls16KiBTo64KiB,
-				stats.Calls64KiBTo256KiB,
-				stats.Calls256KiBTo1MiB,
-				stats.CallsOver1MiB,
-			)
+			o.metrics.ObserveDownloadWriteStats(string(observation.Outcome), stats)
 		}
 	}
 	if o.logger == nil {
@@ -82,6 +76,7 @@ func (o *modelDownloadObserver) ObserveDownloadPhase(observation ociobjectstore.
 		"object_concurrency", o.objectConcurrency,
 		"multipart_concurrency", o.multipartConcurrency,
 		"model_file_write_concurrency", o.modelFileWriteConcurrency,
+		"model_file_write_buffer_size_bytes", o.modelFileWriteBufferSizeBytes,
 		"model_verification_concurrency", o.modelVerificationConcurrency,
 	}
 	if observation.ObjectName != "" {
@@ -102,7 +97,12 @@ func (o *modelDownloadObserver) ObserveDownloadPhase(observation ociobjectstore.
 			"write_calls", stats.Calls,
 			"write_duration_ms", float64(stats.Duration.Microseconds())/1000,
 			"write_limiter_wait_ms", float64(stats.LimiterWaitDuration.Microseconds())/1000,
+			"write_limiter_wait_calls", stats.LimiterWaitCalls,
 			"max_write_duration_ms", float64(stats.MaxDuration.Microseconds())/1000,
+			"max_write_limiter_wait_ms", float64(stats.MaxLimiterWaitDuration.Microseconds())/1000,
+			"max_inflight_writes", stats.MaxInflightWrites,
+			"max_waiting_writers", stats.MaxWaitingWriters,
+			"write_buffer_size_bytes", stats.BufferSizeBytes,
 			"min_write_request_bytes", stats.MinRequestBytes,
 			"max_write_request_bytes", stats.MaxRequestBytes,
 			"write_calls_up_to_16_kib", stats.CallsUpTo16KiB,
@@ -110,6 +110,16 @@ func (o *modelDownloadObserver) ObserveDownloadPhase(observation ociobjectstore.
 			"write_calls_64_kib_to_256_kib", stats.Calls64KiBTo256KiB,
 			"write_calls_256_kib_to_1_mib", stats.Calls256KiBTo1MiB,
 			"write_calls_over_1_mib", stats.CallsOver1MiB,
+			"write_duration_calls_up_to_1_ms", stats.WriteDurationBuckets.UpTo1ms,
+			"write_duration_calls_1_ms_to_5_ms", stats.WriteDurationBuckets.From1To5ms,
+			"write_duration_calls_5_ms_to_20_ms", stats.WriteDurationBuckets.From5To20ms,
+			"write_duration_calls_20_ms_to_100_ms", stats.WriteDurationBuckets.From20To100ms,
+			"write_duration_calls_over_100_ms", stats.WriteDurationBuckets.Over100ms,
+			"write_limiter_wait_calls_up_to_1_ms", stats.LimiterWaitDurationBuckets.UpTo1ms,
+			"write_limiter_wait_calls_1_ms_to_5_ms", stats.LimiterWaitDurationBuckets.From1To5ms,
+			"write_limiter_wait_calls_5_ms_to_20_ms", stats.LimiterWaitDurationBuckets.From5To20ms,
+			"write_limiter_wait_calls_20_ms_to_100_ms", stats.LimiterWaitDurationBuckets.From20To100ms,
+			"write_limiter_wait_calls_over_100_ms", stats.LimiterWaitDurationBuckets.Over100ms,
 		)
 	}
 	if observation.Err != nil {

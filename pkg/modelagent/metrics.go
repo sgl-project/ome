@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/ociobjectstore"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -22,14 +23,17 @@ type Metrics struct {
 	rateLimitCounter           *prometheus.CounterVec
 
 	// Histogram metrics
-	modelDownloadDuration         *prometheus.HistogramVec
-	modelVerificationDuration     prometheus.Histogram
-	modelDownloadBytesTransferred *prometheus.CounterVec
-	modelDownloadPhaseDuration    *prometheus.HistogramVec
-	modelDownloadPhaseBytes       *prometheus.CounterVec
-	modelDownloadWriteCalls       *prometheus.CounterVec
-	modelDownloadWriteMaxDuration *prometheus.HistogramVec
-	rateLimitWaitDuration         *prometheus.HistogramVec
+	modelDownloadDuration                    *prometheus.HistogramVec
+	modelVerificationDuration                prometheus.Histogram
+	modelDownloadBytesTransferred            *prometheus.CounterVec
+	modelDownloadPhaseDuration               *prometheus.HistogramVec
+	modelDownloadPhaseBytes                  *prometheus.CounterVec
+	modelDownloadWriteCalls                  *prometheus.CounterVec
+	modelDownloadWriteDurationCalls          *prometheus.CounterVec
+	modelDownloadWriteLimiterWaitCalls       *prometheus.CounterVec
+	modelDownloadWriteMaxDuration            *prometheus.HistogramVec
+	modelDownloadWriteMaxLimiterWaitDuration *prometheus.HistogramVec
+	rateLimitWaitDuration                    *prometheus.HistogramVec
 
 	// Go runtime metrics
 	goGoroutines      prometheus.Gauge
@@ -218,10 +222,32 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 			},
 			[]string{"outcome", "size_range"},
 		),
+		modelDownloadWriteDurationCalls: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "model_agent_download_write_duration_calls_total",
+				Help: "The total direct model file write calls grouped by write duration",
+			},
+			[]string{"outcome", "duration_range"},
+		),
+		modelDownloadWriteLimiterWaitCalls: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "model_agent_download_write_limiter_wait_calls_total",
+				Help: "The total direct model file write limiter acquisitions grouped by wait duration",
+			},
+			[]string{"outcome", "duration_range"},
+		),
 		modelDownloadWriteMaxDuration: promauto.With(registerer).NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name:    "model_agent_download_write_max_duration_seconds",
 				Help:    "The longest direct model file write call observed in each downloaded part",
+				Buckets: prometheus.ExponentialBuckets(0.0001, 2, 18), // 100us to ~13s
+			},
+			[]string{"outcome"},
+		),
+		modelDownloadWriteMaxLimiterWaitDuration: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "model_agent_download_write_max_limiter_wait_seconds",
+				Help:    "The longest direct model file write limiter wait observed in each downloaded part",
 				Buckets: prometheus.ExponentialBuckets(0.0001, 2, 18), // 100us to ~13s
 			},
 			[]string{"outcome"},
@@ -295,23 +321,49 @@ func (m *Metrics) ObserveDownloadPhase(phase, outcome string, duration time.Dura
 	}
 }
 
-// ObserveDownloadWriteCalls records an aggregated, bounded distribution for
-// direct model file writes. Each count represents one WriteAt call.
-func (m *Metrics) ObserveDownloadWriteCalls(outcome string, maxDuration time.Duration, upTo16KiB, from16KiBTo64KiB, from64KiBTo256KiB, from256KiBTo1MiB, over1MiB int64) {
-	m.modelDownloadWriteMaxDuration.WithLabelValues(outcome).Observe(maxDuration.Seconds())
+// ObserveDownloadWriteStats records bounded, per-part aggregates without
+// performing one Prometheus operation for every WriteAt call.
+func (m *Metrics) ObserveDownloadWriteStats(outcome string, stats *ociobjectstore.WriteStats) {
+	if stats == nil {
+		return
+	}
+	m.modelDownloadWriteMaxDuration.WithLabelValues(outcome).Observe(stats.MaxDuration.Seconds())
+	if stats.LimiterWaitCalls > 0 {
+		m.modelDownloadWriteMaxLimiterWaitDuration.WithLabelValues(outcome).Observe(stats.MaxLimiterWaitDuration.Seconds())
+	}
 	counts := []struct {
 		rangeName string
 		count     int64
 	}{
-		{rangeName: "up_to_16_kib", count: upTo16KiB},
-		{rangeName: "16_kib_to_64_kib", count: from16KiBTo64KiB},
-		{rangeName: "64_kib_to_256_kib", count: from64KiBTo256KiB},
-		{rangeName: "256_kib_to_1_mib", count: from256KiBTo1MiB},
-		{rangeName: "over_1_mib", count: over1MiB},
+		{rangeName: "up_to_16_kib", count: stats.CallsUpTo16KiB},
+		{rangeName: "16_kib_to_64_kib", count: stats.Calls16KiBTo64KiB},
+		{rangeName: "64_kib_to_256_kib", count: stats.Calls64KiBTo256KiB},
+		{rangeName: "256_kib_to_1_mib", count: stats.Calls256KiBTo1MiB},
+		{rangeName: "over_1_mib", count: stats.CallsOver1MiB},
 	}
 	for _, sizeRange := range counts {
 		if sizeRange.count > 0 {
 			m.modelDownloadWriteCalls.WithLabelValues(outcome, sizeRange.rangeName).Add(float64(sizeRange.count))
+		}
+	}
+	observeDurationBucketCounts(m.modelDownloadWriteDurationCalls, outcome, stats.WriteDurationBuckets)
+	observeDurationBucketCounts(m.modelDownloadWriteLimiterWaitCalls, outcome, stats.LimiterWaitDurationBuckets)
+}
+
+func observeDurationBucketCounts(metric *prometheus.CounterVec, outcome string, counts ociobjectstore.DurationBucketCounts) {
+	buckets := []struct {
+		rangeName string
+		count     int64
+	}{
+		{rangeName: "up_to_1_ms", count: counts.UpTo1ms},
+		{rangeName: "1_ms_to_5_ms", count: counts.From1To5ms},
+		{rangeName: "5_ms_to_20_ms", count: counts.From5To20ms},
+		{rangeName: "20_ms_to_100_ms", count: counts.From20To100ms},
+		{rangeName: "over_100_ms", count: counts.Over100ms},
+	}
+	for _, bucket := range buckets {
+		if bucket.count > 0 {
+			metric.WithLabelValues(outcome, bucket.rangeName).Add(float64(bucket.count))
 		}
 	}
 }

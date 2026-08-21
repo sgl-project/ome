@@ -26,30 +26,32 @@ import (
 	"sigs.k8s.io/ome/pkg/logging"
 	"sigs.k8s.io/ome/pkg/modelagent"
 	"sigs.k8s.io/ome/pkg/modelparser"
+	"sigs.k8s.io/ome/pkg/ociobjectstore"
 	"sigs.k8s.io/ome/pkg/version"
 	"sigs.k8s.io/ome/pkg/xet"
 )
 
 // config holds all configuration parameters for the model agent
 type config struct {
-	port                         int
-	modelsRootDir                string
-	modelsRootDirOnHost          string
-	nodeName                     string
-	nodeLabelRetry               int
-	concurrency                  int
-	multipartConcurrency         int
-	modelFileWriteConcurrency    int
-	modelVerificationConcurrency int
-	downloadRetry                int
-	downloadAuthType             string
-	numDownloadWorker            int
-	numHighPriorityWorker        int
-	samePathWaitTimeout          time.Duration
-	skipStartupRevalidation      bool
-	skipFinalVerification        bool
-	namespace                    string
-	logLevel                     string
+	port                          int
+	modelsRootDir                 string
+	modelsRootDirOnHost           string
+	nodeName                      string
+	nodeLabelRetry                int
+	concurrency                   int
+	multipartConcurrency          int
+	modelFileWriteConcurrency     int
+	modelFileWriteBufferSizeBytes int
+	modelVerificationConcurrency  int
+	downloadRetry                 int
+	downloadAuthType              string
+	numDownloadWorker             int
+	numHighPriorityWorker         int
+	samePathWaitTimeout           time.Duration
+	skipStartupRevalidation       bool
+	skipFinalVerification         bool
+	namespace                     string
+	logLevel                      string
 }
 
 // Logger type alias for zap.SugaredLogger
@@ -78,6 +80,7 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&cfg.concurrency, "concurrency", 4, "Number of concurrent download workers per gopher")
 	rootCmd.PersistentFlags().IntVar(&cfg.multipartConcurrency, "multipart-concurrency", 4, "Number of concurrent multipart download workers per gopher")
 	rootCmd.PersistentFlags().IntVar(&cfg.modelFileWriteConcurrency, "model-file-write-concurrency", 0, "Maximum concurrent model-file WriteAt calls across the model-agent pod; zero is unlimited")
+	rootCmd.PersistentFlags().IntVar(&cfg.modelFileWriteBufferSizeBytes, "model-file-write-buffer-size-bytes", ociobjectstore.DefaultModelFileWriteBufferSizeBytes, "Coalescing buffer size in bytes held by each active direct-write multipart worker")
 	rootCmd.PersistentFlags().IntVar(&cfg.modelVerificationConcurrency, "model-verification-concurrency", 1, "Maximum concurrent OCI model file integrity checks across the model-agent pod")
 	rootCmd.PersistentFlags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 5, "Number of download workers")
 	rootCmd.PersistentFlags().IntVar(&cfg.numHighPriorityWorker, "num-high-priority-worker", 1, "Number of high-priority workers for delete and same-path reuse tasks")
@@ -283,6 +286,7 @@ func initializeComponents(
 		baseModelInformer.Lister(),
 		clusterBaseModelInformer.Lister(),
 		modelagent.WithModelFileWriteConcurrency(cfg.modelFileWriteConcurrency),
+		modelagent.WithModelFileWriteBufferSize(cfg.modelFileWriteBufferSizeBytes),
 		modelagent.WithModelVerificationConcurrency(cfg.modelVerificationConcurrency),
 		modelagent.WithSkipStartupRevalidation(cfg.skipStartupRevalidation),
 		modelagent.WithSkipFinalVerification(cfg.skipFinalVerification),

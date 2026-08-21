@@ -236,7 +236,7 @@ func TestWritePartAtCollectsWriteStats(t *testing.T) {
 	written, stats, err := writePartAtWithStats(target, part, &fixedChunkReader{
 		reader:    bytes.NewReader(content),
 		chunkSize: 16 * 1024,
-	})
+	}, nil, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, int64(len(content)), written)
@@ -247,6 +247,7 @@ func TestWritePartAtCollectsWriteStats(t *testing.T) {
 	assert.Equal(t, int64(len(content)), stats.MaxRequestBytes)
 	assert.GreaterOrEqual(t, stats.Duration, time.Duration(0))
 	assert.GreaterOrEqual(t, stats.MaxDuration, time.Duration(0))
+	assert.Equal(t, int64(1), durationBucketTotal(stats.WriteDurationBuckets))
 }
 
 func TestWritePartAtCoalescesShortReadsIntoOneMiBWrites(t *testing.T) {
@@ -259,7 +260,7 @@ func TestWritePartAtCoalescesShortReadsIntoOneMiBWrites(t *testing.T) {
 	written, stats, err := writePartAtWithStats(target, part, &fixedChunkReader{
 		reader:    bytes.NewReader(content),
 		chunkSize: 16 * 1024,
-	})
+	}, nil, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, int64(len(content)), written)
@@ -274,6 +275,27 @@ func TestWritePartAtCoalescesShortReadsIntoOneMiBWrites(t *testing.T) {
 	assert.Equal(t, content, actual)
 }
 
+func TestWritePartAtUsesConfiguredCoalescingBuffer(t *testing.T) {
+	target, err := os.CreateTemp(t.TempDir(), "configured-buffer-*.temp")
+	require.NoError(t, err)
+	defer target.Close()
+
+	const bufferSize = 512 * 1024
+	content := bytes.Repeat([]byte("x"), 2*bufferSize+128*1024)
+	part := &PrepareDownloadPart{offset: 0, partNum: 0, size: int64(len(content))}
+	written, stats, err := writePartAtWithStats(target, part, &fixedChunkReader{
+		reader:    bytes.NewReader(content),
+		chunkSize: 16 * 1024,
+	}, nil, newSizedBufferPool(bufferSize))
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(len(content)), written)
+	assert.Equal(t, int64(bufferSize), stats.BufferSizeBytes)
+	assert.Equal(t, int64(3), stats.Calls)
+	assert.Equal(t, int64(128*1024), stats.MinRequestBytes)
+	assert.Equal(t, int64(bufferSize), stats.MaxRequestBytes)
+}
+
 func TestWriteLimiterCapsConcurrentWrites(t *testing.T) {
 	const (
 		limit      = 4
@@ -283,7 +305,7 @@ func TestWriteLimiterCapsConcurrentWrites(t *testing.T) {
 	limiter := NewWriteLimiter(limit)
 	writer := &concurrencyTrackingWriter{delay: writeDelay}
 	start := make(chan struct{})
-	waits := make(chan time.Duration, writeCount)
+	allStats := make(chan WriteStats, writeCount)
 	var wg sync.WaitGroup
 
 	for i := 0; i < writeCount; i++ {
@@ -293,21 +315,33 @@ func TestWriteLimiterCapsConcurrentWrites(t *testing.T) {
 			<-start
 			timedWriter := &writeStatsWriter{writer: writer, limiter: limiter}
 			_, _ = timedWriter.Write([]byte("test"))
-			waits <- timedWriter.stats.LimiterWaitDuration
+			allStats <- timedWriter.stats
 		}()
 	}
 	close(start)
 	wg.Wait()
-	close(waits)
+	close(allStats)
 
 	assert.Equal(t, limit, limiter.Limit())
 	assert.LessOrEqual(t, writer.maxConcurrent(), limit)
 	assert.Greater(t, writer.maxConcurrent(), 1)
 	var totalWait time.Duration
-	for wait := range waits {
-		totalWait += wait
+	var maxInflight, maxWaiting int64
+	for stats := range allStats {
+		totalWait += stats.LimiterWaitDuration
+		maxInflight = max(maxInflight, stats.MaxInflightWrites)
+		maxWaiting = max(maxWaiting, stats.MaxWaitingWriters)
+		assert.Equal(t, int64(1), stats.LimiterWaitCalls)
+		assert.Equal(t, int64(1), durationBucketTotal(stats.WriteDurationBuckets))
+		assert.Equal(t, int64(1), durationBucketTotal(stats.LimiterWaitDurationBuckets))
 	}
 	assert.Greater(t, totalWait, time.Duration(0))
+	assert.Equal(t, int64(limit), maxInflight)
+	assert.Greater(t, maxWaiting, int64(0))
+}
+
+func durationBucketTotal(counts DurationBucketCounts) int64 {
+	return counts.UpTo1ms + counts.From1To5ms + counts.From5To20ms + counts.From20To100ms + counts.Over100ms
 }
 
 type concurrencyTrackingWriter struct {

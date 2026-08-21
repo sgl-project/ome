@@ -57,25 +57,26 @@ type activeDownload struct {
 }
 
 type Gopher struct {
-	modelConfigParser            *modelparser.ModelConfigParser
-	configMapReconciler          *ConfigMapReconciler
-	downloadRetry                int
-	concurrency                  int
-	multipartConcurrency         int
-	modelFileWriteConcurrency    int
-	modelFileWriteLimiter        *ociobjectstore.WriteLimiter
-	modelVerificationConcurrency int
-	modelVerificationLimiter     *verificationLimiter
-	modelRootDir                 string
-	xetConfig                    *xet.Config
-	kubeClient                   kubernetes.Interface
-	gopherChan                   chan *GopherTask
-	nodeLabelReconciler          *NodeLabelReconciler
-	metrics                      *Metrics
-	logger                       *zap.SugaredLogger
-	configMapMutex               sync.Mutex // Mutex to coordinate ConfigMap access
-	baseModelLister              omev1beta1lister.BaseModelLister
-	clusterBaseModelLister       omev1beta1lister.ClusterBaseModelLister
+	modelConfigParser             *modelparser.ModelConfigParser
+	configMapReconciler           *ConfigMapReconciler
+	downloadRetry                 int
+	concurrency                   int
+	multipartConcurrency          int
+	modelFileWriteConcurrency     int
+	modelFileWriteBufferSizeBytes int
+	modelFileWriteLimiter         *ociobjectstore.WriteLimiter
+	modelVerificationConcurrency  int
+	modelVerificationLimiter      *verificationLimiter
+	modelRootDir                  string
+	xetConfig                     *xet.Config
+	kubeClient                    kubernetes.Interface
+	gopherChan                    chan *GopherTask
+	nodeLabelReconciler           *NodeLabelReconciler
+	metrics                       *Metrics
+	logger                        *zap.SugaredLogger
+	configMapMutex                sync.Mutex // Mutex to coordinate ConfigMap access
+	baseModelLister               omev1beta1lister.BaseModelLister
+	clusterBaseModelLister        omev1beta1lister.ClusterBaseModelLister
 
 	// Track active downloads for cancellation
 	activeDownloads      map[string]activeDownload // key: model UID
@@ -118,6 +119,14 @@ func WithModelFileWriteConcurrency(concurrency int) GopherOption {
 	return func(gopher *Gopher) {
 		gopher.modelFileWriteConcurrency = concurrency
 		gopher.modelFileWriteLimiter = ociobjectstore.NewWriteLimiter(concurrency)
+	}
+}
+
+// WithModelFileWriteBufferSize configures the coalescing buffer held by every
+// active OCI multipart part worker.
+func WithModelFileWriteBufferSize(sizeBytes int) GopherOption {
+	return func(gopher *Gopher) {
+		gopher.modelFileWriteBufferSizeBytes = sizeBytes
 	}
 }
 
@@ -167,31 +176,35 @@ func NewGopher(
 	}
 
 	gopher := &Gopher{
-		modelConfigParser:            modelConfigParser,
-		configMapReconciler:          configMapReconciler,
-		downloadRetry:                downloadRetry,
-		concurrency:                  concurrency,
-		multipartConcurrency:         multipartConcurrency,
-		modelVerificationConcurrency: 1,
-		modelVerificationLimiter:     newVerificationLimiter(1),
-		modelRootDir:                 modelRootDir,
-		xetConfig:                    xetConfig,
-		kubeClient:                   kubeClient,
-		gopherChan:                   gopherChan,
-		nodeLabelReconciler:          nodeLabelReconciler,
-		metrics:                      metrics,
-		logger:                       logger,
-		activeDownloads:              make(map[string]activeDownload),
-		baseModelLister:              baseModelLister,
-		clusterBaseModelLister:       clusterBaseModelLister,
-		taskQueue:                    newGopherTaskQueue(),
-		samePathWaitDelay:            defaultSamePathWaitDelay,
-		samePathWaitTimeout:          samePathWaitTimeout,
+		modelConfigParser:             modelConfigParser,
+		configMapReconciler:           configMapReconciler,
+		downloadRetry:                 downloadRetry,
+		concurrency:                   concurrency,
+		multipartConcurrency:          multipartConcurrency,
+		modelFileWriteBufferSizeBytes: ociobjectstore.DefaultModelFileWriteBufferSizeBytes,
+		modelVerificationConcurrency:  1,
+		modelVerificationLimiter:      newVerificationLimiter(1),
+		modelRootDir:                  modelRootDir,
+		xetConfig:                     xetConfig,
+		kubeClient:                    kubeClient,
+		gopherChan:                    gopherChan,
+		nodeLabelReconciler:           nodeLabelReconciler,
+		metrics:                       metrics,
+		logger:                        logger,
+		activeDownloads:               make(map[string]activeDownload),
+		baseModelLister:               baseModelLister,
+		clusterBaseModelLister:        clusterBaseModelLister,
+		taskQueue:                     newGopherTaskQueue(),
+		samePathWaitDelay:             defaultSamePathWaitDelay,
+		samePathWaitTimeout:           samePathWaitTimeout,
 	}
 	for _, option := range options {
 		if option != nil {
 			option(gopher)
 		}
+	}
+	if err := ociobjectstore.ValidateModelFileWriteBufferSize(gopher.modelFileWriteBufferSizeBytes); err != nil {
+		return nil, fmt.Errorf("invalid model file write buffer size: %w", err)
 	}
 	return gopher, nil
 }
@@ -1110,6 +1123,9 @@ func (s *Gopher) createOCIOSDataStore(baseModelSpec v1beta1.BaseModelSpec) (*oci
 		return nil, fmt.Errorf("failed to create ociobjectstore data store: %w", err)
 	}
 	ociOSDS.SetModelFileWriteLimiter(s.modelFileWriteLimiter)
+	if err := ociOSDS.SetModelFileWriteBufferSize(s.modelFileWriteBufferSizeBytes); err != nil {
+		return nil, fmt.Errorf("failed to configure model file write buffer: %w", err)
+	}
 
 	return ociOSDS, nil
 }

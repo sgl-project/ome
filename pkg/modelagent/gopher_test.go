@@ -1217,6 +1217,14 @@ func TestWithModelFileWriteConcurrencyCreatesSharedLimiter(t *testing.T) {
 	assert.Nil(t, g.modelFileWriteLimiter)
 }
 
+func TestWithModelFileWriteBufferSize(t *testing.T) {
+	g := &Gopher{}
+
+	WithModelFileWriteBufferSize(2 * 1024 * 1024)(g)
+
+	assert.Equal(t, 2*1024*1024, g.modelFileWriteBufferSizeBytes)
+}
+
 func TestWithModelVerificationConcurrencyCreatesSharedLimiter(t *testing.T) {
 	g := &Gopher{}
 

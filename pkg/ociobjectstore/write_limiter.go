@@ -1,12 +1,23 @@
 package ociobjectstore
 
-import "time"
+import (
+	"sync/atomic"
+	"time"
+)
 
 // WriteLimiter bounds concurrent model-file writes across every object and
 // download task that shares the limiter. A nil limiter leaves writes
 // unrestricted.
 type WriteLimiter struct {
 	permits chan struct{}
+	active  atomic.Int64
+	waiting atomic.Int64
+}
+
+type writePermitStats struct {
+	waitDuration  time.Duration
+	activeWrites  int64
+	waitingWrites int64
 }
 
 // NewWriteLimiter creates a limiter with the requested concurrency. Values
@@ -18,19 +29,36 @@ func NewWriteLimiter(concurrency int) *WriteLimiter {
 	return &WriteLimiter{permits: make(chan struct{}, concurrency)}
 }
 
-func (limiter *WriteLimiter) acquire() time.Duration {
+func (limiter *WriteLimiter) acquire() writePermitStats {
 	if limiter == nil {
-		return 0
+		return writePermitStats{}
 	}
+
 	waitStartedAt := time.Now()
+	select {
+	case limiter.permits <- struct{}{}:
+		return writePermitStats{
+			waitDuration: time.Since(waitStartedAt),
+			activeWrites: limiter.active.Add(1),
+		}
+	default:
+	}
+
+	waitingWrites := limiter.waiting.Add(1)
 	limiter.permits <- struct{}{}
-	return time.Since(waitStartedAt)
+	limiter.waiting.Add(-1)
+	return writePermitStats{
+		waitDuration:  time.Since(waitStartedAt),
+		activeWrites:  limiter.active.Add(1),
+		waitingWrites: waitingWrites,
+	}
 }
 
 func (limiter *WriteLimiter) release() {
 	if limiter == nil {
 		return
 	}
+	limiter.active.Add(-1)
 	<-limiter.permits
 }
 

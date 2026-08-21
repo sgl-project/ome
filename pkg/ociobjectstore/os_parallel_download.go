@@ -394,7 +394,13 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 				// mutate the shared file cursor.
 				copyStartedAt := time.Now()
 				bodyReader := newTimedReader(resp.Content, copyStartedAt)
-				written, writeStats, streamErr := writePartAtWithStats(targetFile, part, bodyReader, cds.modelFileWriteLimiter)
+				written, writeStats, streamErr := writePartAtWithStats(
+					targetFile,
+					part,
+					bodyReader,
+					cds.modelFileWriteLimiter,
+					cds.modelFileWriteBufferPool,
+				)
 				copyDuration := time.Since(copyStartedAt)
 
 				copyOutcome := DownloadOutcomeSuccess
@@ -552,20 +558,26 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 // next part, while OffsetWriter makes concurrent writes independent of the
 // shared file cursor.
 func writePartAt(targetFile *os.File, part *PrepareDownloadPart, source io.Reader) (int64, error) {
-	written, _, err := writePartAtWithStats(targetFile, part, source)
+	written, _, err := writePartAtWithStats(targetFile, part, source, nil, nil)
 	return written, err
 }
 
-func writePartAtWithStats(targetFile *os.File, part *PrepareDownloadPart, source io.Reader, limiters ...*WriteLimiter) (int64, WriteStats, error) {
+func writePartAtWithStats(
+	targetFile *os.File,
+	part *PrepareDownloadPart,
+	source io.Reader,
+	limiter *WriteLimiter,
+	bufferPool *sizedBufferPool,
+) (int64, WriteStats, error) {
 	writer := io.NewOffsetWriter(targetFile, part.offset)
-	var limiter *WriteLimiter
-	if len(limiters) > 0 {
-		limiter = limiters[0]
+	if bufferPool == nil {
+		bufferPool = defaultModelFileWriteBufferPool
 	}
 	timedWriter := &writeStatsWriter{writer: writer, limiter: limiter}
 	limitedSource := &io.LimitedReader{R: source, N: part.size}
-	bufp := BufferPool.Get().(*[]byte)
-	defer BufferPool.Put(bufp)
+	bufp := bufferPool.get()
+	defer bufferPool.put(bufp)
+	timedWriter.stats.BufferSizeBytes = int64(len(*bufp))
 
 	written, err := copyCoalesced(timedWriter, limitedSource, *bufp)
 	if err == nil && written != part.size {
@@ -616,8 +628,21 @@ type writeStatsWriter struct {
 }
 
 func (w *writeStatsWriter) Write(buffer []byte) (int, error) {
-	waitDuration := w.limiter.acquire()
-	w.stats.LimiterWaitDuration += waitDuration
+	permitStats := w.limiter.acquire()
+	if w.limiter != nil {
+		w.stats.LimiterWaitCalls++
+		w.stats.LimiterWaitDuration += permitStats.waitDuration
+		w.stats.LimiterWaitDurationBuckets.observe(permitStats.waitDuration)
+		if permitStats.waitDuration > w.stats.MaxLimiterWaitDuration {
+			w.stats.MaxLimiterWaitDuration = permitStats.waitDuration
+		}
+		if permitStats.activeWrites > w.stats.MaxInflightWrites {
+			w.stats.MaxInflightWrites = permitStats.activeWrites
+		}
+		if permitStats.waitingWrites > w.stats.MaxWaitingWriters {
+			w.stats.MaxWaitingWriters = permitStats.waitingWrites
+		}
+	}
 	defer w.limiter.release()
 
 	startedAt := time.Now()
@@ -628,6 +653,7 @@ func (w *writeStatsWriter) Write(buffer []byte) (int, error) {
 	w.stats.Calls++
 	w.stats.Bytes += int64(n)
 	w.stats.Duration += duration
+	w.stats.WriteDurationBuckets.observe(duration)
 	if duration > w.stats.MaxDuration {
 		w.stats.MaxDuration = duration
 	}

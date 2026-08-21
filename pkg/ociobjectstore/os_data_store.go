@@ -30,17 +30,28 @@ import (
 // OCIOSDataStore performs data store operations against Oracle Object Storage.
 // It provides file upload, download, listing, and validation methods.
 type OCIOSDataStore struct {
-	logger                logging.Interface
-	observer              DownloadObserver
-	modelFileWriteLimiter *WriteLimiter
-	Config                *Config
-	Client                *objectstorage.ObjectStorageClient `validate:"required"`
+	logger                   logging.Interface
+	observer                 DownloadObserver
+	modelFileWriteLimiter    *WriteLimiter
+	modelFileWriteBufferPool *sizedBufferPool
+	Config                   *Config
+	Client                   *objectstorage.ObjectStorageClient `validate:"required"`
 }
 
 // SetModelFileWriteLimiter applies a limiter shared by model download tasks.
 // Passing nil preserves unrestricted writes.
 func (cds *OCIOSDataStore) SetModelFileWriteLimiter(limiter *WriteLimiter) {
 	cds.modelFileWriteLimiter = limiter
+}
+
+// SetModelFileWriteBufferSize configures the coalescing buffer held by each
+// active direct-write multipart worker.
+func (cds *OCIOSDataStore) SetModelFileWriteBufferSize(size int) error {
+	if err := ValidateModelFileWriteBufferSize(size); err != nil {
+		return err
+	}
+	cds.modelFileWriteBufferPool = newSizedBufferPool(size)
+	return nil
 }
 
 // DownloadOptions defines parameters to control DownloadWithStrategy behavior.
@@ -102,9 +113,10 @@ func NewOCIOSDataStore(config *Config) (*OCIOSDataStore, error) {
 	}
 
 	return &OCIOSDataStore{
-		logger: config.AnotherLogger,
-		Config: config,
-		Client: client,
+		logger:                   config.AnotherLogger,
+		modelFileWriteBufferPool: newSizedBufferPool(DefaultModelFileWriteBufferSizeBytes),
+		Config:                   config,
+		Client:                   client,
 	}, nil
 }
 

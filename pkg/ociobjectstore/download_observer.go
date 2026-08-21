@@ -47,18 +47,51 @@ const (
 // Size bucket counts are mutually exclusive and deliberately bounded so they
 // can be exported as Prometheus labels without recording one metric per write.
 type WriteStats struct {
-	Calls               int64
-	Bytes               int64
-	Duration            time.Duration
-	LimiterWaitDuration time.Duration
-	MaxDuration         time.Duration
-	MinRequestBytes     int64
-	MaxRequestBytes     int64
-	CallsUpTo16KiB      int64
-	Calls16KiBTo64KiB   int64
-	Calls64KiBTo256KiB  int64
-	Calls256KiBTo1MiB   int64
-	CallsOver1MiB       int64
+	Calls                      int64
+	Bytes                      int64
+	Duration                   time.Duration
+	LimiterWaitCalls           int64
+	LimiterWaitDuration        time.Duration
+	MaxDuration                time.Duration
+	MaxLimiterWaitDuration     time.Duration
+	MaxInflightWrites          int64
+	MaxWaitingWriters          int64
+	BufferSizeBytes            int64
+	MinRequestBytes            int64
+	MaxRequestBytes            int64
+	CallsUpTo16KiB             int64
+	Calls16KiBTo64KiB          int64
+	Calls64KiBTo256KiB         int64
+	Calls256KiBTo1MiB          int64
+	CallsOver1MiB              int64
+	WriteDurationBuckets       DurationBucketCounts
+	LimiterWaitDurationBuckets DurationBucketCounts
+}
+
+// DurationBucketCounts is a bounded per-call distribution accumulated in the
+// download goroutine. It avoids one Prometheus operation or log entry per
+// WriteAt call.
+type DurationBucketCounts struct {
+	UpTo1ms       int64
+	From1To5ms    int64
+	From5To20ms   int64
+	From20To100ms int64
+	Over100ms     int64
+}
+
+func (counts *DurationBucketCounts) observe(duration time.Duration) {
+	switch {
+	case duration <= time.Millisecond:
+		counts.UpTo1ms++
+	case duration <= 5*time.Millisecond:
+		counts.From1To5ms++
+	case duration <= 20*time.Millisecond:
+		counts.From5To20ms++
+	case duration <= 100*time.Millisecond:
+		counts.From20To100ms++
+	default:
+		counts.Over100ms++
+	}
 }
 
 // DownloadOutcome is deliberately bounded for use as a metric label.

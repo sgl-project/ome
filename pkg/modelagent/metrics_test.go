@@ -6,6 +6,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"sigs.k8s.io/ome/pkg/ociobjectstore"
 )
 
 func TestNewMetrics_RegistersMetrics(t *testing.T) {
@@ -49,7 +51,18 @@ func TestDownloadWriteCallMetrics(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	metrics := NewMetrics(reg)
 
-	metrics.ObserveDownloadWriteCalls("success", 250*time.Millisecond, 3, 4, 5, 6, 7)
+	metrics.ObserveDownloadWriteStats("success", &ociobjectstore.WriteStats{
+		MaxDuration:                250 * time.Millisecond,
+		MaxLimiterWaitDuration:     20 * time.Millisecond,
+		LimiterWaitCalls:           2,
+		CallsUpTo16KiB:             3,
+		Calls16KiBTo64KiB:          4,
+		Calls64KiBTo256KiB:         5,
+		Calls256KiBTo1MiB:          6,
+		CallsOver1MiB:              7,
+		WriteDurationBuckets:       ociobjectstore.DurationBucketCounts{UpTo1ms: 10},
+		LimiterWaitDurationBuckets: ociobjectstore.DurationBucketCounts{From5To20ms: 2},
+	})
 
 	wants := map[string]float64{
 		"up_to_16_kib":      3,
@@ -66,6 +79,12 @@ func TestDownloadWriteCallMetrics(t *testing.T) {
 	}
 	if got := testutil.CollectAndCount(metrics.modelDownloadWriteMaxDuration); got != 1 {
 		t.Errorf("modelDownloadWriteMaxDuration metric families = %d, want 1", got)
+	}
+	if got := testutil.ToFloat64(metrics.modelDownloadWriteDurationCalls.WithLabelValues("success", "up_to_1_ms")); got != 10 {
+		t.Errorf("modelDownloadWriteDurationCalls = %v, want 10", got)
+	}
+	if got := testutil.ToFloat64(metrics.modelDownloadWriteLimiterWaitCalls.WithLabelValues("success", "5_ms_to_20_ms")); got != 2 {
+		t.Errorf("modelDownloadWriteLimiterWaitCalls = %v, want 2", got)
 	}
 }
 

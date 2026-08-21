@@ -42,13 +42,23 @@ func TestModelDownloadObserverRecordsBoundedMetrics(t *testing.T) {
 		Attempt:    1,
 		ChunkSize:  4096,
 		WriteStats: &ociobjectstore.WriteStats{
-			Calls:           3,
-			Bytes:           2048,
-			Duration:        time.Second,
-			MaxDuration:     500 * time.Millisecond,
-			MinRequestBytes: 512,
-			MaxRequestBytes: 1024,
-			CallsUpTo16KiB:  3,
+			Calls:                  3,
+			Bytes:                  2048,
+			Duration:               time.Second,
+			LimiterWaitCalls:       3,
+			LimiterWaitDuration:    25 * time.Millisecond,
+			MaxDuration:            500 * time.Millisecond,
+			MaxLimiterWaitDuration: 20 * time.Millisecond,
+			MinRequestBytes:        512,
+			MaxRequestBytes:        1024,
+			CallsUpTo16KiB:         3,
+			WriteDurationBuckets: ociobjectstore.DurationBucketCounts{
+				From20To100ms: 3,
+			},
+			LimiterWaitDurationBuckets: ociobjectstore.DurationBucketCounts{
+				UpTo1ms:     2,
+				From5To20ms: 1,
+			},
 		},
 	})
 
@@ -59,5 +69,13 @@ func TestModelDownloadObserverRecordsBoundedMetrics(t *testing.T) {
 	writeCalls := testutil.ToFloat64(metrics.modelDownloadWriteCalls.WithLabelValues("success", "up_to_16_kib"))
 	if writeCalls != 3 {
 		t.Fatalf("modelDownloadWriteCalls = %v, want 3", writeCalls)
+	}
+	writeDurationCalls := testutil.ToFloat64(metrics.modelDownloadWriteDurationCalls.WithLabelValues("success", "20_ms_to_100_ms"))
+	if writeDurationCalls != 3 {
+		t.Fatalf("modelDownloadWriteDurationCalls = %v, want 3", writeDurationCalls)
+	}
+	waitCalls := testutil.ToFloat64(metrics.modelDownloadWriteLimiterWaitCalls.WithLabelValues("success", "up_to_1_ms"))
+	if waitCalls != 2 {
+		t.Fatalf("modelDownloadWriteLimiterWaitCalls = %v, want 2", waitCalls)
 	}
 }
