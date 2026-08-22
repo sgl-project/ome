@@ -430,6 +430,7 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 					HasPart:    true,
 					Attempt:    attempt,
 					ChunkSize:  part.size,
+					ReadStats:  &bodyReader.stats,
 					Err:        streamErr,
 				})
 				cds.observeDownloadPhase(DownloadObservation{

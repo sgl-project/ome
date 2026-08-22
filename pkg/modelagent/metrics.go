@@ -33,6 +33,11 @@ type Metrics struct {
 	modelDownloadWriteLimiterWaitCalls       *prometheus.CounterVec
 	modelDownloadWriteMaxDuration            *prometheus.HistogramVec
 	modelDownloadWriteMaxLimiterWaitDuration *prometheus.HistogramVec
+	modelDownloadReadCalls                   *prometheus.CounterVec
+	modelDownloadReadDurationCalls           *prometheus.CounterVec
+	modelDownloadReadShortCalls              *prometheus.CounterVec
+	modelDownloadReadZeroByteCalls           *prometheus.CounterVec
+	modelDownloadReadMaxDuration             *prometheus.HistogramVec
 	rateLimitWaitDuration                    *prometheus.HistogramVec
 
 	// Go runtime metrics
@@ -252,6 +257,42 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 			},
 			[]string{"outcome"},
 		),
+		modelDownloadReadCalls: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "model_agent_download_http_read_calls_total",
+				Help: "The total HTTP body read calls grouped by returned read size",
+			},
+			[]string{"outcome", "size_range"},
+		),
+		modelDownloadReadDurationCalls: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "model_agent_download_http_read_duration_calls_total",
+				Help: "The total HTTP body read calls grouped by read duration",
+			},
+			[]string{"outcome", "duration_range"},
+		),
+		modelDownloadReadShortCalls: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "model_agent_download_http_short_read_calls_total",
+				Help: "The total HTTP body reads that returned data shorter than the requested buffer",
+			},
+			[]string{"outcome"},
+		),
+		modelDownloadReadZeroByteCalls: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "model_agent_download_http_zero_byte_read_calls_total",
+				Help: "The total HTTP body reads that returned zero bytes",
+			},
+			[]string{"outcome"},
+		),
+		modelDownloadReadMaxDuration: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "model_agent_download_http_read_max_duration_seconds",
+				Help:    "The longest HTTP body read call observed in each downloaded part",
+				Buckets: prometheus.ExponentialBuckets(0.0001, 2, 18), // 100us to ~13s
+			},
+			[]string{"outcome"},
+		),
 		rateLimitWaitDuration: promauto.With(registerer).NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name:    "model_agent_rate_limit_wait_seconds",
@@ -271,6 +312,37 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 		goMemoryStackSys:  goMemoryStackSys,
 		goGCCount:         goGCCount,
 	}
+}
+
+// ObserveDownloadReadStats records bounded, per-part aggregates without
+// performing one Prometheus operation for every HTTP body Read call.
+func (m *Metrics) ObserveDownloadReadStats(outcome string, stats *ociobjectstore.ReadStats) {
+	if stats == nil {
+		return
+	}
+	m.modelDownloadReadMaxDuration.WithLabelValues(outcome).Observe(stats.MaxDuration.Seconds())
+	if stats.ShortReadCalls > 0 {
+		m.modelDownloadReadShortCalls.WithLabelValues(outcome).Add(float64(stats.ShortReadCalls))
+	}
+	if stats.ZeroByteReadCalls > 0 {
+		m.modelDownloadReadZeroByteCalls.WithLabelValues(outcome).Add(float64(stats.ZeroByteReadCalls))
+	}
+	counts := []struct {
+		rangeName string
+		count     int64
+	}{
+		{rangeName: "up_to_16_kib", count: stats.CallsUpTo16KiB},
+		{rangeName: "16_kib_to_64_kib", count: stats.Calls16KiBTo64KiB},
+		{rangeName: "64_kib_to_256_kib", count: stats.Calls64KiBTo256KiB},
+		{rangeName: "256_kib_to_1_mib", count: stats.Calls256KiBTo1MiB},
+		{rangeName: "over_1_mib", count: stats.CallsOver1MiB},
+	}
+	for _, sizeRange := range counts {
+		if sizeRange.count > 0 {
+			m.modelDownloadReadCalls.WithLabelValues(outcome, sizeRange.rangeName).Add(float64(sizeRange.count))
+		}
+	}
+	observeDurationBucketCounts(m.modelDownloadReadDurationCalls, outcome, stats.ReadDurationBuckets)
 }
 
 func downloadPhaseDurationBuckets() []float64 {

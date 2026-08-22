@@ -57,6 +57,10 @@ func (o *modelDownloadObserver) ObserveDownloadPhase(observation ociobjectstore.
 			stats := observation.WriteStats
 			o.metrics.ObserveDownloadWriteStats(string(observation.Outcome), stats)
 		}
+		if observation.ReadStats != nil {
+			stats := observation.ReadStats
+			o.metrics.ObserveDownloadReadStats(string(observation.Outcome), stats)
+		}
 	}
 	if o.logger == nil {
 		return
@@ -120,6 +124,30 @@ func (o *modelDownloadObserver) ObserveDownloadPhase(observation ociobjectstore.
 			"write_limiter_wait_calls_5_ms_to_20_ms", stats.LimiterWaitDurationBuckets.From5To20ms,
 			"write_limiter_wait_calls_20_ms_to_100_ms", stats.LimiterWaitDurationBuckets.From20To100ms,
 			"write_limiter_wait_calls_over_100_ms", stats.LimiterWaitDurationBuckets.Over100ms,
+		)
+	}
+	if observation.ReadStats != nil {
+		stats := observation.ReadStats
+		fields = append(fields,
+			"read_calls", stats.Calls,
+			"read_duration_ms", float64(stats.Duration.Microseconds())/1000,
+			"short_read_calls", stats.ShortReadCalls,
+			"zero_byte_read_calls", stats.ZeroByteReadCalls,
+			"max_read_duration_ms", float64(stats.MaxDuration.Microseconds())/1000,
+			"min_read_request_bytes", stats.MinRequestBytes,
+			"max_read_request_bytes", stats.MaxRequestBytes,
+			"min_read_returned_bytes", stats.MinReturnedBytes,
+			"max_read_returned_bytes", stats.MaxReturnedBytes,
+			"read_calls_up_to_16_kib", stats.CallsUpTo16KiB,
+			"read_calls_16_kib_to_64_kib", stats.Calls16KiBTo64KiB,
+			"read_calls_64_kib_to_256_kib", stats.Calls64KiBTo256KiB,
+			"read_calls_256_kib_to_1_mib", stats.Calls256KiBTo1MiB,
+			"read_calls_over_1_mib", stats.CallsOver1MiB,
+			"read_duration_calls_up_to_1_ms", stats.ReadDurationBuckets.UpTo1ms,
+			"read_duration_calls_1_ms_to_5_ms", stats.ReadDurationBuckets.From1To5ms,
+			"read_duration_calls_5_ms_to_20_ms", stats.ReadDurationBuckets.From5To20ms,
+			"read_duration_calls_20_ms_to_100_ms", stats.ReadDurationBuckets.From20To100ms,
+			"read_duration_calls_over_100_ms", stats.ReadDurationBuckets.Over100ms,
 		)
 	}
 	if observation.Err != nil {

@@ -88,6 +88,51 @@ func TestDownloadWriteCallMetrics(t *testing.T) {
 	}
 }
 
+func TestDownloadReadCallMetrics(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	metrics := NewMetrics(reg)
+
+	metrics.ObserveDownloadReadStats("success", &ociobjectstore.ReadStats{
+		ShortReadCalls:     8,
+		ZeroByteReadCalls:  1,
+		MaxDuration:        25 * time.Millisecond,
+		CallsUpTo16KiB:     3,
+		Calls16KiBTo64KiB:  4,
+		Calls64KiBTo256KiB: 5,
+		Calls256KiBTo1MiB:  6,
+		CallsOver1MiB:      7,
+		ReadDurationBuckets: ociobjectstore.DurationBucketCounts{
+			From20To100ms: 9,
+		},
+	})
+
+	wants := map[string]float64{
+		"up_to_16_kib":      3,
+		"16_kib_to_64_kib":  4,
+		"64_kib_to_256_kib": 5,
+		"256_kib_to_1_mib":  6,
+		"over_1_mib":        7,
+	}
+	for sizeRange, want := range wants {
+		got := testutil.ToFloat64(metrics.modelDownloadReadCalls.WithLabelValues("success", sizeRange))
+		if got != want {
+			t.Errorf("modelDownloadReadCalls[%s] = %v, want %v", sizeRange, got, want)
+		}
+	}
+	if got := testutil.ToFloat64(metrics.modelDownloadReadShortCalls.WithLabelValues("success")); got != 8 {
+		t.Errorf("modelDownloadReadShortCalls = %v, want 8", got)
+	}
+	if got := testutil.ToFloat64(metrics.modelDownloadReadZeroByteCalls.WithLabelValues("success")); got != 1 {
+		t.Errorf("modelDownloadReadZeroByteCalls = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(metrics.modelDownloadReadDurationCalls.WithLabelValues("success", "20_ms_to_100_ms")); got != 9 {
+		t.Errorf("modelDownloadReadDurationCalls = %v, want 9", got)
+	}
+	if got := testutil.CollectAndCount(metrics.modelDownloadReadMaxDuration); got != 1 {
+		t.Errorf("modelDownloadReadMaxDuration metric families = %d, want 1", got)
+	}
+}
+
 func TestDownloadPhaseDurationBucketsCoverLargeModels(t *testing.T) {
 	buckets := downloadPhaseDurationBuckets()
 	if got := buckets[len(buckets)-1]; got < 1800 {

@@ -68,6 +68,29 @@ type WriteStats struct {
 	LimiterWaitDurationBuckets DurationBucketCounts
 }
 
+// ReadStats summarizes the underlying HTTP body Read calls made while
+// streaming one object range. A short read returned some data but less than
+// the supplied buffer; zero-byte reads are tracked separately so normal EOF
+// calls do not inflate the short-read count.
+type ReadStats struct {
+	Calls               int64
+	Bytes               int64
+	ShortReadCalls      int64
+	ZeroByteReadCalls   int64
+	Duration            time.Duration
+	MaxDuration         time.Duration
+	MinRequestBytes     int64
+	MaxRequestBytes     int64
+	MinReturnedBytes    int64
+	MaxReturnedBytes    int64
+	CallsUpTo16KiB      int64
+	Calls16KiBTo64KiB   int64
+	Calls64KiBTo256KiB  int64
+	Calls256KiBTo1MiB   int64
+	CallsOver1MiB       int64
+	ReadDurationBuckets DurationBucketCounts
+}
+
 // DurationBucketCounts is a bounded per-call distribution accumulated in the
 // download goroutine. It avoids one Prometheus operation or log entry per
 // WriteAt call.
@@ -117,6 +140,7 @@ type DownloadObservation struct {
 	Attempt    int
 	ChunkSize  int64
 	WriteStats *WriteStats
+	ReadStats  *ReadStats
 	Err        error
 }
 
@@ -146,6 +170,7 @@ type timedReader struct {
 	reader            io.Reader
 	duration          time.Duration
 	bytes             int64
+	stats             ReadStats
 	copyStartedAt     time.Time
 	firstReadDuration time.Duration
 	observedFirstRead bool
@@ -158,8 +183,51 @@ func newTimedReader(reader io.Reader, copyStartedAt time.Time) *timedReader {
 func (r *timedReader) Read(buffer []byte) (int, error) {
 	startedAt := time.Now()
 	n, err := r.reader.Read(buffer)
-	r.duration += time.Since(startedAt)
+	duration := time.Since(startedAt)
+	r.duration += duration
 	r.bytes += int64(n)
+	r.stats.Calls++
+	r.stats.Bytes += int64(n)
+	r.stats.Duration += duration
+	r.stats.ReadDurationBuckets.observe(duration)
+	if duration > r.stats.MaxDuration {
+		r.stats.MaxDuration = duration
+	}
+	requested := int64(len(buffer))
+	if requested > 0 {
+		if r.stats.MinRequestBytes == 0 || requested < r.stats.MinRequestBytes {
+			r.stats.MinRequestBytes = requested
+		}
+		if requested > r.stats.MaxRequestBytes {
+			r.stats.MaxRequestBytes = requested
+		}
+	}
+	if n == 0 {
+		r.stats.ZeroByteReadCalls++
+	} else {
+		returned := int64(n)
+		if n < len(buffer) {
+			r.stats.ShortReadCalls++
+		}
+		if r.stats.MinReturnedBytes == 0 || returned < r.stats.MinReturnedBytes {
+			r.stats.MinReturnedBytes = returned
+		}
+		if returned > r.stats.MaxReturnedBytes {
+			r.stats.MaxReturnedBytes = returned
+		}
+		switch {
+		case returned <= 16*1024:
+			r.stats.CallsUpTo16KiB++
+		case returned <= 64*1024:
+			r.stats.Calls16KiBTo64KiB++
+		case returned <= 256*1024:
+			r.stats.Calls64KiBTo256KiB++
+		case returned <= 1024*1024:
+			r.stats.Calls256KiBTo1MiB++
+		default:
+			r.stats.CallsOver1MiB++
+		}
+	}
 	if n > 0 && !r.observedFirstRead {
 		r.firstReadDuration = time.Since(r.copyStartedAt)
 		r.observedFirstRead = true
