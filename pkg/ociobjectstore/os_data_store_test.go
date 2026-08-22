@@ -1,6 +1,7 @@
 package ociobjectstore
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -52,6 +53,37 @@ func objectStorageTestResponse(request *http.Request, statusCode int, headers ht
 		Body:       http.NoBody,
 		Request:    request,
 	}
+}
+
+type uploadSourceFileStub struct {
+	*strings.Reader
+	statErr error
+	closed  bool
+}
+
+func (f *uploadSourceFileStub) Close() error {
+	f.closed = true
+	return nil
+}
+
+func (f *uploadSourceFileStub) Stat() (os.FileInfo, error) {
+	return nil, f.statErr
+}
+
+func TestNewUploadBodyWithOpenerClosesFileWhenStatFails(t *testing.T) {
+	sourceFile := &uploadSourceFileStub{
+		Reader:  strings.NewReader("upload body"),
+		statErr: errors.New("stat failed"),
+	}
+
+	body, size, err := newUploadBodyWithOpener("/source/file", func(string) (uploadSourceFile, error) {
+		return sourceFile, nil
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, body)
+	assert.Nil(t, size)
+	assert.True(t, sourceFile.closed)
 }
 
 func TestUploadIfAbsentWithETag(t *testing.T) {
