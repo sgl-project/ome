@@ -57,7 +57,9 @@ type Node struct {
 	// via GPUPoolForNode — GPU product label, instance shape, or the GPU
 	// resource name — never from AcceleratorClass.Status.Nodes, which is
 	// a selection surface that shape-scoped classes (H100x1..x8) can all
-	// claim without partitioning hardware. Empty only on GPU-less nodes.
+	// claim without partitioning hardware. Reconciled across the node set
+	// after derivation so a partial GPU-feature-discovery rollout cannot
+	// split one physical pool in two. Empty only on GPU-less nodes.
 	GPUPool string
 
 	// GPUResource is the extended resource name this node exposes

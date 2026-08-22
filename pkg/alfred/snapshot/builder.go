@@ -98,6 +98,10 @@ func Build(ctx context.Context, r client.Reader, opts Options) (*ClusterSnapshot
 		node := &nodeList.Items[i]
 		s.Nodes[node.Name] = buildNode(node, &opts)
 	}
+	// Pool keys are derived per node but must partition consistently across
+	// the cluster; a partial GPU-feature-discovery rollout would otherwise
+	// split one physical pool in two. Runs before anything reads GPUPool.
+	reconcilePoolKeys(s.Nodes)
 
 	var podList corev1.PodList
 	if err := r.List(ctx, &podList); err != nil {
