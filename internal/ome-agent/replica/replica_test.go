@@ -1072,6 +1072,73 @@ func TestReplicaAgent_StartReleasesTargetArtifactUploadLockWhenReplicationFails(
 	assert.True(t, released)
 }
 
+func TestReplicaAgent_StartRetriesTargetArtifactUploadLockRelease(t *testing.T) {
+	agent, cleanup := newTestAgentForCompletionMarker(t)
+	defer cleanup()
+
+	newReplicatorFunc = func(_ *ReplicaAgent) (replicator.Replicator, error) {
+		return &fakeReplicator{}, nil
+	}
+	uploadCompletionMarkerFunc = func(_ *ociobjectstore.OCIOSDataStore, _ string, _ ociobjectstore.ObjectURI) error {
+		return nil
+	}
+
+	releaseAttempts := 0
+	releaseArtifactUploadLockFunc = func(_ *ociobjectstore.OCIOSDataStore, _ ociobjectstore.ObjectURI, _ string) (bool, error) {
+		releaseAttempts++
+		if releaseAttempts == 1 {
+			return false, errors.New("temporary delete failure")
+		}
+		return true, nil
+	}
+
+	require.NoError(t, agent.Start())
+	assert.Equal(t, 2, releaseAttempts)
+}
+
+func TestReplicaAgent_StartReturnsErrorWhenTargetArtifactUploadLockReleaseFails(t *testing.T) {
+	agent, cleanup := newTestAgentForCompletionMarker(t)
+	defer cleanup()
+
+	newReplicatorFunc = func(_ *ReplicaAgent) (replicator.Replicator, error) {
+		return &fakeReplicator{}, nil
+	}
+	uploadCompletionMarkerFunc = func(_ *ociobjectstore.OCIOSDataStore, _ string, _ ociobjectstore.ObjectURI) error {
+		return nil
+	}
+
+	releaseAttempts := 0
+	releaseArtifactUploadLockFunc = func(_ *ociobjectstore.OCIOSDataStore, _ ociobjectstore.ObjectURI, _ string) (bool, error) {
+		releaseAttempts++
+		return false, errors.New("temporary delete failure")
+	}
+
+	err := agent.Start()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to release target artifact upload lock")
+	assert.Equal(t, 3, releaseAttempts)
+}
+
+func TestReplicaAgent_StartPreservesReplicationErrorWhenTargetArtifactUploadLockReleaseFails(t *testing.T) {
+	agent, cleanup := newTestAgentForCompletionMarker(t)
+	defer cleanup()
+
+	newReplicatorFunc = func(_ *ReplicaAgent) (replicator.Replicator, error) {
+		return &fakeReplicator{err: errors.New("replication failed")}, nil
+	}
+
+	releaseAttempts := 0
+	releaseArtifactUploadLockFunc = func(_ *ociobjectstore.OCIOSDataStore, _ ociobjectstore.ObjectURI, _ string) (bool, error) {
+		releaseAttempts++
+		return false, errors.New("temporary delete failure")
+	}
+
+	err := agent.Start()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "replication failed")
+	assert.Equal(t, 3, releaseAttempts)
+}
+
 func TestReplicaAgent_ReleaseTargetArtifactUploadLockOnlyDeletesAcquiredLock(t *testing.T) {
 	agent, cleanup := newTestAgentForCompletionMarker(t)
 	defer cleanup()
@@ -1084,7 +1151,7 @@ func TestReplicaAgent_ReleaseTargetArtifactUploadLockOnlyDeletesAcquiredLock(t *
 		return false, nil
 	}
 
-	agent.releaseTargetArtifactUploadLock(targetArtifactUploadLock{ETag: "acquired-lock-etag"})
+	require.NoError(t, agent.releaseTargetArtifactUploadLock(targetArtifactUploadLock{ETag: "acquired-lock-etag"}))
 
 	assert.True(t, released)
 }

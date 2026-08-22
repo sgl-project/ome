@@ -2,18 +2,126 @@ package ociobjectstore
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/oracle/oci-go-sdk/v65/common"
+	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"sigs.k8s.io/ome/pkg/principals"
 	testingPkg "sigs.k8s.io/ome/pkg/testing"
 )
+
+type objectStorageRequestDispatcher struct {
+	do func(*http.Request) (*http.Response, error)
+}
+
+func (d objectStorageRequestDispatcher) Do(request *http.Request) (*http.Response, error) {
+	return d.do(request)
+}
+
+type objectStorageRequestSigner struct{}
+
+func (objectStorageRequestSigner) Sign(*http.Request) error {
+	return nil
+}
+
+func newTestOCIOSDataStore(dispatch func(*http.Request) (*http.Response, error)) *OCIOSDataStore {
+	return &OCIOSDataStore{
+		Client: &objectstorage.ObjectStorageClient{
+			BaseClient: common.BaseClient{
+				HTTPClient: objectStorageRequestDispatcher{do: dispatch},
+				Signer:     objectStorageRequestSigner{},
+				Host:       "https://objectstorage.test",
+				UserAgent:  "ociobjectstore-test",
+			},
+		},
+	}
+}
+
+func objectStorageTestResponse(request *http.Request, statusCode int, headers http.Header) *http.Response {
+	return &http.Response{
+		StatusCode: statusCode,
+		Header:     headers,
+		Body:       http.NoBody,
+		Request:    request,
+	}
+}
+
+func TestUploadIfAbsentWithETag(t *testing.T) {
+	target := ObjectURI{Namespace: "namespace", BucketName: "bucket", ObjectName: "prefix/lock"}
+
+	t.Run("uses If-None-Match and returns created ETag", func(t *testing.T) {
+		dataStore := newTestOCIOSDataStore(func(request *http.Request) (*http.Response, error) {
+			assert.Equal(t, http.MethodPut, request.Method)
+			assert.Equal(t, "*", request.Header.Get("If-None-Match"))
+			return objectStorageTestResponse(request, http.StatusOK, http.Header{"Etag": []string{"lock-etag"}}), nil
+		})
+
+		etag, created, err := dataStore.UploadIfAbsentWithETag("lock body", target)
+
+		require.NoError(t, err)
+		assert.True(t, created)
+		assert.Equal(t, "lock-etag", etag)
+	})
+
+	t.Run("treats precondition failure as already present", func(t *testing.T) {
+		dataStore := newTestOCIOSDataStore(func(request *http.Request) (*http.Response, error) {
+			return objectStorageTestResponse(request, http.StatusPreconditionFailed, http.Header{}), nil
+		})
+
+		etag, created, err := dataStore.UploadIfAbsentWithETag("lock body", target)
+
+		require.NoError(t, err)
+		assert.False(t, created)
+		assert.Empty(t, etag)
+	})
+}
+
+func TestDeleteObjectIfMatch(t *testing.T) {
+	target := ObjectURI{Namespace: "namespace", BucketName: "bucket", ObjectName: "prefix/lock"}
+
+	t.Run("uses If-Match and reports a successful delete", func(t *testing.T) {
+		dataStore := newTestOCIOSDataStore(func(request *http.Request) (*http.Response, error) {
+			assert.Equal(t, http.MethodDelete, request.Method)
+			assert.Equal(t, "lock-etag", request.Header.Get("If-Match"))
+			return objectStorageTestResponse(request, http.StatusNoContent, http.Header{}), nil
+		})
+
+		deleted, err := dataStore.DeleteObjectIfMatch(target, "lock-etag")
+
+		require.NoError(t, err)
+		assert.True(t, deleted)
+	})
+
+	for _, statusCode := range []int{http.StatusNotFound, http.StatusPreconditionFailed} {
+		t.Run(fmt.Sprintf("treats %d as not deleted", statusCode), func(t *testing.T) {
+			dataStore := newTestOCIOSDataStore(func(request *http.Request) (*http.Response, error) {
+				return objectStorageTestResponse(request, statusCode, http.Header{}), nil
+			})
+
+			deleted, err := dataStore.DeleteObjectIfMatch(target, "lock-etag")
+
+			require.NoError(t, err)
+			assert.False(t, deleted)
+		})
+	}
+}
+
+func TestDeleteObjectTreatsMissingObjectAsSuccess(t *testing.T) {
+	target := ObjectURI{Namespace: "namespace", BucketName: "bucket", ObjectName: "prefix/marker"}
+	dataStore := newTestOCIOSDataStore(func(request *http.Request) (*http.Response, error) {
+		return objectStorageTestResponse(request, http.StatusNotFound, http.Header{}), nil
+	})
+
+	require.NoError(t, dataStore.DeleteObject(target))
+}
 
 func TestNewOCIOSDataStore(t *testing.T) {
 	t.Run("Nil config", func(t *testing.T) {

@@ -23,8 +23,10 @@ const (
 	SourceStorageConfigKeyName = "source"
 	TargetStorageConfigKeyName = "target"
 
-	targetArtifactLockPollInterval       = 30 * time.Second
-	defaultArtifactUploadLockWaitTimeout = 120 * time.Hour
+	targetArtifactLockPollInterval         = 30 * time.Second
+	targetArtifactLockReleaseMaxAttempts   = 3
+	targetArtifactLockReleaseRetryInterval = 2 * time.Second
+	defaultArtifactUploadLockWaitTimeout   = 120 * time.Hour
 )
 
 var (
@@ -124,7 +126,7 @@ func NewReplicaAgent(config *Config) (*ReplicaAgent, error) {
 }
 
 // Start initiates the replication process.
-func (r *ReplicaAgent) Start() error {
+func (r *ReplicaAgent) Start() (returnErr error) {
 	r.Logger.Infof("Start replication from %s %v to %s %v with checksum config %+v", r.ReplicationInput.SourceStorageType, r.ReplicationInput.Source, r.ReplicationInput.TargetStorageType, r.ReplicationInput.Target, r.Config.Target.ChecksumConfig)
 
 	if r.Config.NumConnections <= 0 {
@@ -139,7 +141,17 @@ func (r *ReplicaAgent) Start() error {
 		return err
 	}
 	if uploadLock != nil {
-		defer r.releaseTargetArtifactUploadLock(*uploadLock)
+		defer func() {
+			if releaseErr := r.releaseTargetArtifactUploadLock(*uploadLock); releaseErr != nil {
+				if returnErr != nil {
+					r.Logger.Errorf("Failed to release target artifact upload lock after replication error: %v", releaseErr)
+					return
+				}
+
+				returnErr = releaseErr
+				r.writeTerminationLog(returnErr.Error())
+			}
+		}()
 	}
 	if skipReplication {
 		return nil
@@ -278,16 +290,28 @@ func (r *ReplicaAgent) acquireTargetArtifactUploadLock() (*targetArtifactUploadL
 	return &targetArtifactUploadLock{ETag: etag}, nil
 }
 
-func (r *ReplicaAgent) releaseTargetArtifactUploadLock(uploadLock targetArtifactUploadLock) {
+func (r *ReplicaAgent) releaseTargetArtifactUploadLock(uploadLock targetArtifactUploadLock) error {
 	lockURI := r.targetArtifactUploadLockURI()
-	released, err := releaseArtifactUploadLockFunc(r.Config.Target.OCIOSDataStore, lockURI, uploadLock.ETag)
-	if err != nil {
-		r.Logger.Errorf("Failed to release target artifact upload lock at oci://n/%s/b/%s/o/%s: %v", lockURI.Namespace, lockURI.BucketName, lockURI.ObjectName, err)
-		return
+	for attempt := 1; attempt <= targetArtifactLockReleaseMaxAttempts; attempt++ {
+		released, err := releaseArtifactUploadLockFunc(r.Config.Target.OCIOSDataStore, lockURI, uploadLock.ETag)
+		if err == nil {
+			if !released {
+				r.Logger.Infof("Target artifact upload lock changed before release; leaving the current owner lock in place")
+			}
+			return nil
+		}
+
+		if attempt == targetArtifactLockReleaseMaxAttempts {
+			releaseErr := fmt.Errorf("failed to release target artifact upload lock at oci://n/%s/b/%s/o/%s after %d attempts: %w", lockURI.Namespace, lockURI.BucketName, lockURI.ObjectName, attempt, err)
+			r.Logger.Errorf("%v", releaseErr)
+			return releaseErr
+		}
+
+		r.Logger.Errorf("Failed to release target artifact upload lock at oci://n/%s/b/%s/o/%s (attempt %d/%d): %v; retrying", lockURI.Namespace, lockURI.BucketName, lockURI.ObjectName, attempt, targetArtifactLockReleaseMaxAttempts, err)
+		sleepFunc(targetArtifactLockReleaseRetryInterval)
 	}
-	if !released {
-		r.Logger.Infof("Target artifact upload lock changed before release; leaving the current owner lock in place")
-	}
+
+	return nil
 }
 
 func (r *ReplicaAgent) waitForTargetArtifactStateChange(deadline time.Time) (targetArtifactState, error) {
