@@ -1084,6 +1084,29 @@ func TestReplicaAgent_PrepareTargetArtifactUploadUsesOneWaitDeadline(t *testing.
 	assert.Equal(t, 2, acquireAttempts)
 }
 
+func TestReplicaAgent_WaitForTargetArtifactStateChangeDoesNotSleepPastDeadline(t *testing.T) {
+	agent, cleanup := newTestAgentForCompletionMarker(t)
+	defer cleanup()
+	agent.Config.ArtifactUploadLockTimeout = 5 * time.Second
+
+	current := time.Date(2026, 7, 10, 1, 0, 0, 0, time.UTC)
+	nowFunc = func() time.Time { return current }
+	sleepDurations := make([]time.Duration, 0, 1)
+	sleepFunc = func(duration time.Duration) {
+		sleepDurations = append(sleepDurations, duration)
+		current = current.Add(duration)
+	}
+	targetArtifactStateFunc = func(_ *ociobjectstore.OCIOSDataStore, _ ociobjectstore.ObjectURI) (targetArtifactState, error) {
+		return targetArtifactState{UploadLocked: true}, nil
+	}
+
+	_, err := agent.waitForTargetArtifactStateChange(nowFunc().Add(agent.targetArtifactUploadLockTimeout()))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "timed out waiting for target artifact completion marker")
+	assert.Equal(t, []time.Duration{5 * time.Second}, sleepDurations)
+}
+
 func TestReplicaAgent_PrepareTargetArtifactUploadReclaimsLockThatBecomesStaleAtWaitDeadline(t *testing.T) {
 	agent, cleanup := newTestAgentForCompletionMarker(t)
 	defer cleanup()

@@ -308,10 +308,15 @@ func (r *ReplicaAgent) releaseTargetArtifactUploadLock(uploadLock targetArtifact
 
 func (r *ReplicaAgent) waitForTargetArtifactStateChange(deadline time.Time) (targetArtifactState, error) {
 	for {
-		if !nowFunc().Before(deadline) {
+		remaining := deadline.Sub(nowFunc())
+		if remaining <= 0 {
 			return targetArtifactState{}, fmt.Errorf("timed out waiting for target artifact completion marker")
 		}
-		sleepFunc(targetArtifactLockPollInterval)
+		pollInterval := targetArtifactLockPollInterval
+		if remaining < pollInterval {
+			pollInterval = remaining
+		}
+		sleepFunc(pollInterval)
 
 		state, err := r.targetArtifactState()
 		if err != nil {
