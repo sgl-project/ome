@@ -2,6 +2,8 @@ package replica
 
 import (
 	"errors"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"sigs.k8s.io/ome/internal/ome-agent/replica/common"
 	"sigs.k8s.io/ome/internal/ome-agent/replica/replicator"
 
+	ociCommon "github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -30,6 +33,25 @@ type TestReplicaAgent struct {
 	*ReplicaAgent
 	mockListSourceObjects func() ([]common.ReplicationObject, error)
 	mockValidateModelSize func(objects []common.ReplicationObject)
+}
+
+type targetArtifactStateRequestDispatcher struct {
+	listResponse string
+}
+
+func (d targetArtifactStateRequestDispatcher) Do(request *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(d.listResponse)),
+		Request:    request,
+	}, nil
+}
+
+type targetArtifactStateRequestSigner struct{}
+
+func (targetArtifactStateRequestSigner) Sign(*http.Request) error {
+	return nil
 }
 
 // Override Start method to use the mock
@@ -61,6 +83,19 @@ func createMockOCIOSDataStore() *ociobjectstore.OCIOSDataStore {
 
 	return &ociobjectstore.OCIOSDataStore{
 		Config: config,
+	}
+}
+
+func newTargetArtifactStateDataStore(listResponse string) *ociobjectstore.OCIOSDataStore {
+	return &ociobjectstore.OCIOSDataStore{
+		Client: &objectstorage.ObjectStorageClient{
+			BaseClient: ociCommon.BaseClient{
+				HTTPClient: targetArtifactStateRequestDispatcher{listResponse: listResponse},
+				Signer:     targetArtifactStateRequestSigner{},
+				Host:       "https://objectstorage.test",
+				UserAgent:  "replica-test",
+			},
+		},
 	}
 }
 
@@ -733,7 +768,11 @@ func TestReplicaAgent_StartSkipsReplicationWhenTargetArtifactUploadLockCompletes
 		if stateCalls == 1 {
 			return targetArtifactState{}, nil
 		}
-		return targetArtifactState{Complete: true}, nil
+		if stateCalls == 2 {
+			return targetArtifactState{Complete: true, CompletionMarked: true, UploadLocked: true}, nil
+		}
+		t.Fatal("waiter should reuse immediately after the completion marker appears")
+		return targetArtifactState{}, nil
 	}
 
 	err := agent.Start()
@@ -742,7 +781,7 @@ func TestReplicaAgent_StartSkipsReplicationWhenTargetArtifactUploadLockCompletes
 	assert.Equal(t, 2, stateCalls)
 }
 
-func TestReplicaAgent_StartWaitsWhenCompletedTargetArtifactStillHasActiveUploadLock(t *testing.T) {
+func TestReplicaAgent_StartSkipsCompletedTargetArtifactWhenUploadLockRemains(t *testing.T) {
 	agent, cleanup := newTestAgentForCompletionMarker(t)
 	defer cleanup()
 
@@ -752,24 +791,19 @@ func TestReplicaAgent_StartWaitsWhenCompletedTargetArtifactStillHasActiveUploadL
 		return &fakeReplicator{}, nil
 	}
 	tryAcquireArtifactUploadLockFunc = func(_ *ociobjectstore.OCIOSDataStore, _ string, _ ociobjectstore.ObjectURI) (string, bool, error) {
+		t.Fatal("completed target artifact should be reused without acquiring the retained upload lock")
 		return "", false, nil
 	}
-	stateCalls := 0
 	targetArtifactStateFunc = func(_ *ociobjectstore.OCIOSDataStore, _ ociobjectstore.ObjectURI) (targetArtifactState, error) {
-		stateCalls++
-		if stateCalls < 3 {
-			return targetArtifactState{Complete: true, CompletionMarked: true, UploadLocked: true}, nil
-		}
-		return targetArtifactState{Complete: true, CompletionMarked: true}, nil
+		return targetArtifactState{Complete: true, CompletionMarked: true, UploadLocked: true}, nil
 	}
 
 	err := agent.Start()
 	require.NoError(t, err)
 	assert.False(t, replicatorCalled)
-	assert.Equal(t, 3, stateCalls)
 }
 
-func TestReplicaAgent_StartSkipsCompletedTargetArtifactWhenUploadLockClearsBeforeAcquire(t *testing.T) {
+func TestReplicaAgent_StartSkipsCompletedTargetArtifactAfterLockAcquired(t *testing.T) {
 	agent, cleanup := newTestAgentForCompletionMarker(t)
 	defer cleanup()
 
@@ -796,7 +830,7 @@ func TestReplicaAgent_StartSkipsCompletedTargetArtifactWhenUploadLockClearsBefor
 	targetArtifactStateFunc = func(_ *ociobjectstore.OCIOSDataStore, _ ociobjectstore.ObjectURI) (targetArtifactState, error) {
 		stateCalls++
 		if stateCalls == 1 {
-			return targetArtifactState{Complete: true, CompletionMarked: true, UploadLocked: true}, nil
+			return targetArtifactState{}, nil
 		}
 		return targetArtifactState{Complete: true, CompletionMarked: true}, nil
 	}
@@ -1050,6 +1084,52 @@ func TestReplicaAgent_PrepareTargetArtifactUploadUsesOneWaitDeadline(t *testing.
 	assert.Equal(t, 2, acquireAttempts)
 }
 
+func TestReplicaAgent_PrepareTargetArtifactUploadReclaimsLockThatBecomesStaleAtWaitDeadline(t *testing.T) {
+	agent, cleanup := newTestAgentForCompletionMarker(t)
+	defer cleanup()
+	agent.Config.ArtifactUploadLockTimeout = time.Hour
+
+	current := time.Date(2026, 7, 10, 1, 0, 0, 0, time.UTC)
+	nowFunc = func() time.Time { return current }
+	sleepFunc = func(time.Duration) {
+		current = current.Add(time.Hour)
+	}
+
+	acquireAttempts := 0
+	tryAcquireArtifactUploadLockFunc = func(_ *ociobjectstore.OCIOSDataStore, _ string, _ ociobjectstore.ObjectURI) (string, bool, error) {
+		acquireAttempts++
+		if acquireAttempts == 1 {
+			return "", false, nil
+		}
+		return "replacement-lock-etag", true, nil
+	}
+
+	lockCreatedAt := current
+	targetArtifactStateFunc = func(_ *ociobjectstore.OCIOSDataStore, _ ociobjectstore.ObjectURI) (targetArtifactState, error) {
+		return targetArtifactState{
+			UploadLocked:           true,
+			UploadLockModifiedTime: &lockCreatedAt,
+			UploadLockETag:         "stale-lock-etag",
+		}, nil
+	}
+
+	deleted := false
+	deleteStaleArtifactUploadLockFunc = func(_ *ociobjectstore.OCIOSDataStore, _ ociobjectstore.ObjectURI, etag string) (bool, error) {
+		deleted = true
+		assert.Equal(t, "stale-lock-etag", etag)
+		return true, nil
+	}
+
+	uploadLock, skipReplication, err := agent.prepareTargetArtifactUpload()
+
+	require.NoError(t, err)
+	require.NotNil(t, uploadLock)
+	assert.Equal(t, "replacement-lock-etag", uploadLock.ETag)
+	assert.False(t, skipReplication)
+	assert.True(t, deleted)
+	assert.Equal(t, 2, acquireAttempts)
+}
+
 func TestReplicaAgent_StartReleasesTargetArtifactUploadLockWhenReplicationFails(t *testing.T) {
 	agent, cleanup := newTestAgentForCompletionMarker(t)
 	defer cleanup()
@@ -1205,6 +1285,72 @@ func TestFilterInternalArtifactReplicationObjectsSkipsCompletionMarker(t *testin
 	require.Len(t, filtered, 2)
 	assert.Equal(t, configName, filtered[0].GetName())
 	assert.Equal(t, weightName, filtered[1].GetName())
+}
+
+func TestDefaultTargetArtifactState(t *testing.T) {
+	target := ociobjectstore.ObjectURI{
+		Namespace:  "target-namespace",
+		BucketName: "target-bucket",
+		Prefix:     "models/",
+	}
+
+	t.Run("complete artifact excludes replication metadata from size", func(t *testing.T) {
+		dataStore := newTargetArtifactStateDataStore(`{
+			"objects": [
+				{"name":"models/.ome-artifact-complete","size":1},
+				{"name":"models/config.json","size":12},
+				{"name":"models/model.safetensors","size":100},
+				{"name":"models/.ome-artifact-upload.lock","size":1,"etag":"lock-etag","timeModified":"2026-08-20T12:00:00.000Z"}
+			]
+		}`)
+
+		state, err := defaultTargetArtifactState(dataStore, target)
+
+		require.NoError(t, err)
+		assert.True(t, state.CompletionMarked)
+		assert.True(t, state.Complete)
+		assert.True(t, state.UploadLocked)
+		assert.Equal(t, "lock-etag", state.UploadLockETag)
+		require.NotNil(t, state.UploadLockModifiedTime)
+		assert.Equal(t, time.Date(2026, time.August, 20, 12, 0, 0, 0, time.UTC), *state.UploadLockModifiedTime)
+		require.NotNil(t, state.ArtifactSizeBytes)
+		assert.Equal(t, int64(112), *state.ArtifactSizeBytes)
+	})
+
+	t.Run("completion marker without model files is incomplete", func(t *testing.T) {
+		dataStore := newTargetArtifactStateDataStore(`{
+			"objects": [
+				{"name":"models/.ome-artifact-complete","size":1}
+			]
+		}`)
+
+		state, err := defaultTargetArtifactState(dataStore, target)
+
+		require.NoError(t, err)
+		assert.True(t, state.CompletionMarked)
+		assert.False(t, state.Complete)
+		assert.False(t, state.UploadLocked)
+		assert.Nil(t, state.ArtifactSizeBytes)
+	})
+
+	t.Run("active lock uses creation time when modification time is unavailable", func(t *testing.T) {
+		dataStore := newTargetArtifactStateDataStore(`{
+			"objects": [
+				{"name":"models/.ome-artifact-upload.lock","size":1,"etag":"lock-etag","timeCreated":"2026-08-20T12:30:00.000Z"}
+			]
+		}`)
+
+		state, err := defaultTargetArtifactState(dataStore, target)
+
+		require.NoError(t, err)
+		assert.False(t, state.CompletionMarked)
+		assert.False(t, state.Complete)
+		assert.True(t, state.UploadLocked)
+		assert.Equal(t, "lock-etag", state.UploadLockETag)
+		require.NotNil(t, state.UploadLockModifiedTime)
+		assert.Equal(t, time.Date(2026, time.August, 20, 12, 30, 0, 0, time.UTC), *state.UploadLockModifiedTime)
+		assert.Nil(t, state.ArtifactSizeBytes)
+	})
 }
 
 func newTestAgentForCompletionMarker(t *testing.T) (*ReplicaAgent, func()) {

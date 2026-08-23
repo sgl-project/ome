@@ -446,6 +446,7 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, 10, config.NumConnections)
 	assert.Equal(t, 650, config.DownloadSizeLimitGB)
 	assert.Equal(t, true, config.EnableSizeLimitCheck)
+	assert.False(t, config.TargetArtifactReuseAllowed)
 	assert.Equal(t, 120*time.Hour, config.ArtifactUploadLockTimeout)
 }
 

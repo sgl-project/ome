@@ -218,12 +218,12 @@ func (r *ReplicaAgent) prepareTargetArtifactUpload() (*targetArtifactUploadLock,
 		return nil, false, fmt.Errorf("failed to inspect target artifact state: %w", err)
 	}
 	if state.Complete {
-		if r.canReuseCompleteTargetArtifact(state) {
-			r.Logger.Infof("Target artifact is already complete; skipping replication")
-			r.logTargetArtifactSize(state)
-			return nil, true, nil
-		}
-		r.Logger.Infof("Target artifact is complete but upload lock still exists; waiting for upload lock release")
+		// The completion marker is written only after every artifact object has
+		// uploaded successfully. A retained lock from cleanup must not delay
+		// reuse of that complete artifact.
+		r.Logger.Infof("Target artifact is already complete; skipping replication")
+		r.logTargetArtifactSize(state)
+		return nil, true, nil
 	}
 
 	for {
@@ -241,11 +241,9 @@ func (r *ReplicaAgent) prepareTargetArtifactUpload() (*targetArtifactUploadLock,
 			return nil, false, err
 		}
 		if state.Complete {
-			if r.canReuseCompleteTargetArtifact(state) {
-				r.Logger.Infof("Target artifact completed while waiting for upload lock; skipping replication")
-				r.logTargetArtifactSize(state)
-				return nil, true, nil
-			}
+			r.Logger.Infof("Target artifact completed while waiting for upload lock; skipping replication")
+			r.logTargetArtifactSize(state)
+			return nil, true, nil
 		}
 		if r.isTargetArtifactUploadLockStale(state) {
 			if err := r.deleteStaleTargetArtifactUploadLock(state); err != nil {
@@ -254,12 +252,6 @@ func (r *ReplicaAgent) prepareTargetArtifactUpload() (*targetArtifactUploadLock,
 			continue
 		}
 	}
-}
-
-func (r *ReplicaAgent) canReuseCompleteTargetArtifact(state targetArtifactState) bool {
-	// A complete marker is reusable once no active writer owns the prefix. A
-	// stale lock can be left behind after completion and should not block reuse.
-	return state.Complete && (!state.UploadLocked || r.isTargetArtifactUploadLockStale(state))
 }
 
 func (r *ReplicaAgent) logTargetArtifactSize(state targetArtifactState) {
@@ -325,7 +317,7 @@ func (r *ReplicaAgent) waitForTargetArtifactStateChange(deadline time.Time) (tar
 		if err != nil {
 			return targetArtifactState{}, fmt.Errorf("failed to inspect target artifact state while waiting for upload lock: %w", err)
 		}
-		if !state.UploadLocked || r.isTargetArtifactUploadLockStale(state) {
+		if state.Complete || !state.UploadLocked || r.isTargetArtifactUploadLockStale(state) {
 			return state, nil
 		}
 	}
