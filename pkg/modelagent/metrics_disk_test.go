@@ -1,6 +1,8 @@
 package modelagent
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -21,8 +23,12 @@ func TestNewMetricsPublishesModelsRootFreeBytes(t *testing.T) {
 
 func TestNewMetricsToleratesUnreadableModelsRoot(t *testing.T) {
 	reg := prometheus.NewRegistry()
+	// A regular file can never become a models root; an absent path would just
+	// be created by EnsureDir when the agent runs as root.
+	notADir := filepath.Join(t.TempDir(), "not-a-dir")
+	require.NoError(t, os.WriteFile(notADir, []byte("x"), 0o644))
 
-	metrics := NewMetrics(reg, "/definitely/not/a/real/path")
+	metrics := NewMetrics(reg, notADir)
 
 	require.NotNil(t, metrics)
 	assert.Equal(t, float64(0), gaugeValue(t, reg, "model_agent_models_root_free_bytes"))

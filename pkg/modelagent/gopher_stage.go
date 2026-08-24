@@ -87,7 +87,7 @@ func (s *Gopher) processStageStorageModel(ctx context.Context, task *GopherTask,
 	}
 
 	s.logger.Infof("Staging model %s from %s to %s", modelInfo, components.SourcePath, destPath)
-	result, err := stage.Run(components.SourcePath, destPath, stage.Options{
+	result, err := stage.Run(ctx, components.SourcePath, destPath, stage.Options{
 		SourceRoots: s.stageConfig.SourceRoots,
 		AlwaysCopy:  alwaysCopy,
 	})

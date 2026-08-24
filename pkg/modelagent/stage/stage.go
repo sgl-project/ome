@@ -1,6 +1,7 @@
 package stage
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -45,7 +46,10 @@ type Result struct {
 //
 // The copy lands in a sibling staging directory and is renamed into place only
 // once it is complete, so destPath either does not exist or is a whole model.
-func Run(sourcePath, destPath string, opts Options) (*Result, error) {
+// Cancelling ctx aborts the copy between entries and leaves nothing behind —
+// staging a large model runs for minutes, and a task nobody is waiting on
+// should stop pulling from the share.
+func Run(ctx context.Context, sourcePath, destPath string, opts Options) (*Result, error) {
 	resolvedSource, err := ResolveSource(sourcePath, opts.SourceRoots)
 	if err != nil {
 		return nil, err
@@ -83,6 +87,11 @@ func Run(sourcePath, destPath string, opts Options) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staging directory under %q: %w", destParent, err)
 	}
+	// MkdirTemp creates 0700; this directory becomes the published model, and a
+	// runtime that drops privileges has to be able to traverse it.
+	if err := os.Chmod(stagingDir, 0o755); err != nil {
+		return nil, fmt.Errorf("failed to set permissions on staging directory %q: %w", stagingDir, err)
+	}
 	succeeded := false
 	defer func() {
 		if !succeeded {
@@ -90,7 +99,7 @@ func Run(sourcePath, destPath string, opts Options) (*Result, error) {
 		}
 	}()
 
-	bytesCopied, err := copyTree(resolvedSource, stagingDir)
+	bytesCopied, err := copyTree(ctx, resolvedSource, stagingDir, resolveRoots(opts.SourceRoots))
 	if err != nil {
 		return nil, fmt.Errorf("failed to stage %q: %w", sourcePath, err)
 	}
@@ -100,6 +109,12 @@ func Run(sourcePath, destPath string, opts Options) (*Result, error) {
 		TotalBytes:  bytesCopied,
 		CompletedAt: time.Now().UTC(),
 	}); err != nil {
+		return nil, err
+	}
+
+	// Publishing a copy the caller has already given up on would resurrect a
+	// model that may since have been deleted.
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
@@ -201,13 +216,40 @@ func writeMarker(dir string, marker Marker) error {
 	return nil
 }
 
+// resolveRoots returns the symlink-resolved form of each root, dropping the
+// ones that cannot be resolved: a root that is not mounted must neither widen
+// nor narrow the boundary.
+func resolveRoots(roots []string) []string {
+	resolved := make([]string, 0, len(roots))
+	for _, root := range roots {
+		if r, err := filepath.EvalSymlinks(root); err == nil {
+			resolved = append(resolved, r)
+		}
+	}
+	return resolved
+}
+
+func containedInAny(path string, roots []string) bool {
+	for _, root := range roots {
+		if contains(root, path) {
+			return true
+		}
+	}
+	return false
+}
+
 // copyTree copies the contents of src into dst, which must already exist, and
-// returns the number of regular file bytes written.
-func copyTree(src, dst string) (int64, error) {
+// returns the number of regular file bytes written. Symlinks are staged
+// verbatim, so their targets are held to the same allowlist as the source
+// itself.
+func copyTree(ctx context.Context, src, dst string, roots []string) (int64, error) {
 	var total int64
 
 	err := filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 
@@ -228,11 +270,20 @@ func copyTree(src, dst string) (int64, error) {
 			}
 			return os.MkdirAll(target, info.Mode().Perm())
 		case d.Type()&os.ModeSymlink != 0:
-			// Copy the link itself; resolving it could pull in data from
-			// outside the source roots.
+			// The link is copied rather than followed, so the staged tree can
+			// still reach whatever it points at. Resolve it lexically — a
+			// dangling link must be judged too — and hold it to the allowlist.
 			linkTarget, err := os.Readlink(path)
 			if err != nil {
 				return err
+			}
+			resolvedTarget := linkTarget
+			if !filepath.IsAbs(resolvedTarget) {
+				resolvedTarget = filepath.Join(filepath.Dir(path), resolvedTarget)
+			}
+			resolvedTarget = filepath.Clean(resolvedTarget)
+			if !containedInAny(resolvedTarget, roots) {
+				return fmt.Errorf("symlink %q points to %q, which is outside the configured stage source roots", path, resolvedTarget)
 			}
 			return os.Symlink(linkTarget, target)
 		case d.Type().IsRegular():
