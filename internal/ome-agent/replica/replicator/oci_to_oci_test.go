@@ -2,11 +2,15 @@ package replicator
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"sigs.k8s.io/ome/internal/ome-agent/replica/common"
+	"sigs.k8s.io/ome/pkg/logging"
 
 	"github.com/stretchr/testify/assert"
 	"sigs.k8s.io/ome/pkg/ociobjectstore"
@@ -123,6 +127,82 @@ func TestReplicate(t *testing.T) {
 
 	err := testRep.Replicate(objects)
 	assert.NoError(t, err)
+}
+
+func TestOCIToOCIReplicatorLimitsChecksumConcurrency(t *testing.T) {
+	originalDownload := downloadObjectFunc
+	originalChecksum := getObjectMetadataWithChecksumFunc
+	originalUpload := uploadObjectToOCIOSDataStoreFunc
+	t.Cleanup(func() {
+		downloadObjectFunc = originalDownload
+		getObjectMetadataWithChecksumFunc = originalChecksum
+		uploadObjectToOCIOSDataStoreFunc = originalUpload
+	})
+
+	downloadObjectFunc = func(_ *ociobjectstore.OCIOSDataStore, object ociobjectstore.ObjectURI, downloadPath string) error {
+		filePath := filepath.Join(downloadPath, object.ObjectName)
+		if err := os.MkdirAll(filepath.Dir(filePath), 0750); err != nil {
+			return err
+		}
+		return os.WriteFile(filePath, []byte("test"), 0600)
+	}
+
+	started := make(chan struct{}, 2)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseChecksums := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseChecksums)
+
+	var checksumCount atomic.Int32
+	getObjectMetadataWithChecksumFunc = func(_ *common.ChecksumConfig, _ string, _ logging.Interface) map[string]string {
+		checksumCount.Add(1)
+		started <- struct{}{}
+		<-release
+		return map[string]string{OCIObjectMD5MetadataKey: "checksum"}
+	}
+	uploadObjectToOCIOSDataStoreFunc = func(_ *ociobjectstore.OCIOSDataStore, object ociobjectstore.ObjectURI, _ string) error {
+		if object.Metadata[OCIObjectMD5MetadataKey] != "checksum" {
+			return errors.New("checksum metadata missing")
+		}
+		return nil
+	}
+
+	replicator := &OCIToOCIReplicator{
+		Logger: testingPkg.SetupMockLogger(),
+		Config: OCIToOCIReplicatorConfig{
+			LocalPath:            t.TempDir(),
+			NumConnections:       2,
+			ChecksumConfig:       &common.ChecksumConfig{UploadEnabled: true, ChecksumAlgorithm: MD5ChecksumAlgorithm, Concurrency: 1},
+			SourceOCIOSDataStore: &ociobjectstore.OCIOSDataStore{},
+			TargetOCIOSDataStore: &ociobjectstore.OCIOSDataStore{},
+		},
+		ReplicationInput: common.ReplicationInput{
+			Source: ociobjectstore.ObjectURI{Namespace: "source-namespace", BucketName: "source-bucket"},
+			Target: ociobjectstore.ObjectURI{Namespace: "target-namespace", BucketName: "target-bucket"},
+		},
+	}
+	objects := []common.ReplicationObject{
+		NewCustomMockReplicationObject("file-1", "file-1", 4),
+		NewCustomMockReplicationObject("file-2", "file-2", 4),
+	}
+
+	result := make(chan error, 1)
+	go func() { result <- replicator.Replicate(objects) }()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for checksum worker")
+	}
+	select {
+	case <-started:
+		t.Fatal("checksum concurrency exceeded configured limit")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	releaseChecksums()
+	assert.NoError(t, <-result)
+	assert.Equal(t, int32(2), checksumCount.Load())
 }
 
 func TestGetTargetObjectURI(t *testing.T) {

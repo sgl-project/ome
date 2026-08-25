@@ -2,7 +2,13 @@ package replicator
 
 import (
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"sigs.k8s.io/ome/pkg/xet"
 
@@ -108,4 +114,92 @@ func TestHFToOCIReplicator_Replicate_Failure(t *testing.T) {
 	err = replicator.Replicate(objs)
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "upload error")
+}
+
+func TestEffectiveChecksumConcurrency(t *testing.T) {
+	assert.Equal(t, 1, effectiveChecksumConcurrency(nil))
+	assert.Equal(t, 1, effectiveChecksumConcurrency(&common.ChecksumConfig{}))
+	assert.Equal(t, 1, effectiveChecksumConcurrency(&common.ChecksumConfig{Concurrency: -1}))
+	assert.Equal(t, 3, effectiveChecksumConcurrency(&common.ChecksumConfig{Concurrency: 3}))
+}
+
+func TestUploadDirectoryLimitsChecksumConcurrency(t *testing.T) {
+	originalChecksum := getObjectMetadataWithChecksumFunc
+	originalUpload := uploadObjectToOCIOSDataStoreFunc
+	t.Cleanup(func() {
+		getObjectMetadataWithChecksumFunc = originalChecksum
+		uploadObjectToOCIOSDataStoreFunc = originalUpload
+	})
+
+	directory := t.TempDir()
+	for i := 0; i < 4; i++ {
+		err := os.WriteFile(filepath.Join(directory, fmt.Sprintf("file-%d", i)), []byte("test"), 0600)
+		assert.NoError(t, err)
+	}
+
+	var active atomic.Int32
+	var maximum atomic.Int32
+	var uploaded atomic.Int32
+	started := make(chan struct{}, 4)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseChecksums := func() {
+		releaseOnce.Do(func() { close(release) })
+	}
+	t.Cleanup(releaseChecksums)
+
+	getObjectMetadataWithChecksumFunc = func(_ *common.ChecksumConfig, _ string, _ logging.Interface) map[string]string {
+		current := active.Add(1)
+		for {
+			previous := maximum.Load()
+			if current <= previous || maximum.CompareAndSwap(previous, current) {
+				break
+			}
+		}
+		started <- struct{}{}
+		<-release
+		active.Add(-1)
+		return map[string]string{OCIObjectMD5MetadataKey: "checksum"}
+	}
+	uploadObjectToOCIOSDataStoreFunc = func(_ *ociobjectstore.OCIOSDataStore, object ociobjectstore.ObjectURI, _ string) error {
+		if object.Metadata[OCIObjectMD5MetadataKey] != "checksum" {
+			return errors.New("checksum metadata missing")
+		}
+		uploaded.Add(1)
+		return nil
+	}
+
+	logger := testingPkg.SetupMockLogger()
+	dataStore := &ociobjectstore.OCIOSDataStore{
+		Config: &ociobjectstore.Config{AnotherLogger: logger},
+	}
+	result := make(chan error, 1)
+	go func() {
+		result <- uploadDirectoryToOCIOSDataStore(
+			dataStore,
+			ociobjectstore.ObjectURI{BucketName: "bucket", Namespace: "namespace"},
+			directory,
+			&common.ChecksumConfig{UploadEnabled: true, ChecksumAlgorithm: MD5ChecksumAlgorithm, Concurrency: 2},
+			4,
+			4,
+		)
+	}()
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for checksum worker")
+		}
+	}
+	select {
+	case <-started:
+		t.Fatal("checksum concurrency exceeded configured limit")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	releaseChecksums()
+	assert.NoError(t, <-result)
+	assert.Equal(t, int32(2), maximum.Load())
+	assert.Equal(t, int32(4), uploaded.Load())
 }

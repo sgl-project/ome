@@ -14,6 +14,7 @@ import (
 type ChecksumConfig struct {
 	UploadEnabled     bool   `mapstructure:"upload_enabled"`
 	ChecksumAlgorithm string `mapstructure:"algorithm"`
+	Concurrency       int    `mapstructure:"concurrency"`
 }
 
 func ConvertToReplicationObjectsFromObjectSummary(summaries []objectstorage.ObjectSummary) []ReplicationObject {
