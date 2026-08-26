@@ -271,6 +271,37 @@ func (cds *OCIOSDataStore) Download(source ObjectURI, target string, opts ...Dow
 	return nil
 }
 
+type uploadSourceFile interface {
+	io.ReadCloser
+	Stat() (os.FileInfo, error)
+}
+
+type uploadSourceFileOpener func(string) (uploadSourceFile, error)
+
+func newUploadBody(source string) (io.ReadCloser, *int64, error) {
+	return newUploadBodyWithOpener(source, func(source string) (uploadSourceFile, error) {
+		return os.Open(source)
+	})
+}
+
+func newUploadBodyWithOpener(source string, openSourceFile uploadSourceFileOpener) (io.ReadCloser, *int64, error) {
+	sourceFile, err := openSourceFile(source)
+	if err != nil {
+		body := io.NopCloser(strings.NewReader(source))
+		size := int64(len(source))
+		return body, &size, nil
+	}
+
+	fileInfo, err := sourceFile.Stat()
+	if err != nil {
+		_ = sourceFile.Close()
+		return nil, nil, fmt.Errorf("failed to get source file info %q: %+v", source, err)
+	}
+
+	size := fileInfo.Size()
+	return sourceFile, &size, nil
+}
+
 // Upload uploads a file (or string content) to OCI Object Storage.
 //
 // If the `source` is a file path, the file is read and uploaded.
@@ -287,27 +318,11 @@ func (cds *OCIOSDataStore) Upload(source string, target ObjectURI) error {
 	objectFullName := fmt.Sprintf(
 		"%s/%s/%s", target.Namespace, target.BucketName, target.ObjectName)
 
-	var putObjectBody io.ReadCloser
-	var uploadObjectSize *int64
-
-	// When source is the path of the file which needs to be uploaded
-	if sourceFile, err := os.Open(source); err == nil {
-		fileInfo, err := sourceFile.Stat()
-		if err != nil {
-			return fmt.Errorf(
-				"failed to get source file info %q: %+v",
-				source,
-				err)
-		}
-		putObjectBody = io.NopCloser(sourceFile)
-		tmp := fileInfo.Size()
-		uploadObjectSize = &tmp
-	} else {
-		// When the source is pure string content that needs to be uploaded
-		putObjectBody = io.NopCloser(strings.NewReader(source))
-		tmp := int64(len(source))
-		uploadObjectSize = &tmp
+	putObjectBody, uploadObjectSize, err := newUploadBody(source)
+	if err != nil {
+		return err
 	}
+	defer putObjectBody.Close()
 
 	putObjectRequest := objectstorage.PutObjectRequest{
 		NamespaceName: &target.Namespace,
@@ -326,6 +341,129 @@ func (cds *OCIOSDataStore) Upload(source string, target ObjectURI) error {
 			err.Error())
 	}
 	return nil
+}
+
+// UploadIfAbsent uploads a file or string only when the target object does not
+// already exist. It returns false when Object Storage rejects the write because
+// another writer has already created the object.
+func (cds *OCIOSDataStore) UploadIfAbsent(source string, target ObjectURI) (bool, error) {
+	_, uploaded, err := cds.UploadIfAbsentWithETag(source, target)
+	return uploaded, err
+}
+
+// UploadIfAbsentWithETag uploads a file or string only when the target object
+// does not already exist. On success it returns the ETag of the object this
+// caller created, which can be used to conditionally update or delete it.
+func (cds *OCIOSDataStore) UploadIfAbsentWithETag(source string, target ObjectURI) (string, bool, error) {
+	if target.Namespace == "" {
+		namespace, err := cds.GetNamespace()
+		if err != nil {
+			return "", false, fmt.Errorf("error upload object due to no namespace found: %+v", err)
+		}
+		target.Namespace = *namespace
+	}
+
+	objectFullName := fmt.Sprintf(
+		"%s/%s/%s", target.Namespace, target.BucketName, target.ObjectName)
+
+	putObjectBody, uploadObjectSize, err := newUploadBody(source)
+	if err != nil {
+		return "", false, err
+	}
+	defer putObjectBody.Close()
+
+	putObjectRequest := objectstorage.PutObjectRequest{
+		NamespaceName: &target.Namespace,
+		BucketName:    &target.BucketName,
+		ObjectName:    &target.ObjectName,
+		ContentLength: uploadObjectSize,
+		PutObjectBody: putObjectBody,
+		IfNoneMatch:   common.String("*"),
+	}
+	response, err := cds.Client.PutObject(context.Background(), putObjectRequest)
+	if isObjectAlreadyPresent(response.RawResponse, err) {
+		return "", false, nil
+	}
+	if err != nil || response.RawResponse == nil || response.RawResponse.StatusCode != http.StatusOK {
+		return "", false, fmt.Errorf(
+			"failed to put object %q with response %+v: %s",
+			objectFullName,
+			response,
+			errorMessage(err))
+	}
+	if response.ETag == nil || *response.ETag == "" {
+		return "", false, fmt.Errorf("put object %q succeeded without an ETag", objectFullName)
+	}
+	return *response.ETag, true, nil
+}
+
+// DeleteObject removes an object from OCI Object Storage. Missing objects are
+// treated as already cleaned up so callers can use this for best-effort cleanup.
+func (cds *OCIOSDataStore) DeleteObject(target ObjectURI) error {
+	if target.Namespace == "" {
+		namespace, err := cds.GetNamespace()
+		if err != nil {
+			return fmt.Errorf("error delete object due to no namespace found: %+v", err)
+		}
+		target.Namespace = *namespace
+	}
+
+	objectFullName := fmt.Sprintf(
+		"%s/%s/%s", target.Namespace, target.BucketName, target.ObjectName)
+	deleteObjectRequest := objectstorage.DeleteObjectRequest{
+		NamespaceName: &target.Namespace,
+		BucketName:    &target.BucketName,
+		ObjectName:    &target.ObjectName,
+	}
+	response, err := cds.Client.DeleteObject(context.Background(), deleteObjectRequest)
+	if isObjectMissing(err) {
+		return nil
+	}
+	if err != nil || response.RawResponse == nil || response.RawResponse.StatusCode != http.StatusNoContent {
+		return fmt.Errorf(
+			"failed to delete object %q with response %+v: %s",
+			objectFullName,
+			response,
+			errorMessage(err))
+	}
+	return nil
+}
+
+// DeleteObjectIfMatch removes an object only when its current ETag matches the
+// caller's observed ETag. It returns false when the object is already gone or
+// has changed since observation.
+func (cds *OCIOSDataStore) DeleteObjectIfMatch(target ObjectURI, etag string) (bool, error) {
+	if etag == "" {
+		return false, fmt.Errorf("etag cannot be empty")
+	}
+	if target.Namespace == "" {
+		namespace, err := cds.GetNamespace()
+		if err != nil {
+			return false, fmt.Errorf("error delete object due to no namespace found: %+v", err)
+		}
+		target.Namespace = *namespace
+	}
+
+	objectFullName := fmt.Sprintf(
+		"%s/%s/%s", target.Namespace, target.BucketName, target.ObjectName)
+	deleteObjectRequest := objectstorage.DeleteObjectRequest{
+		NamespaceName: &target.Namespace,
+		BucketName:    &target.BucketName,
+		ObjectName:    &target.ObjectName,
+		IfMatch:       common.String(etag),
+	}
+	response, err := cds.Client.DeleteObject(context.Background(), deleteObjectRequest)
+	if isObjectMissing(err) || isPreconditionFailed(response.RawResponse, err) {
+		return false, nil
+	}
+	if err != nil || response.RawResponse == nil || response.RawResponse.StatusCode != http.StatusNoContent {
+		return false, fmt.Errorf(
+			"failed to delete object %q with response %+v: %s",
+			objectFullName,
+			response,
+			errorMessage(err))
+	}
+	return true, nil
 }
 
 // HeadObject fetches metadata headers for an object in OCI Object Storage.
@@ -423,7 +561,7 @@ func (cds *OCIOSDataStore) ListObjects(target ObjectURI) ([]objectstorage.Object
 		NamespaceName: &target.Namespace,
 		BucketName:    &target.BucketName,
 		Prefix:        &target.Prefix, //Virtual folder name within bucket
-		Fields:        common.String("name,size,md5"),
+		Fields:        common.String("name,size,md5,etag,timeCreated,timeModified"),
 	}
 
 	var allObjects []objectstorage.ObjectSummary
@@ -521,4 +659,32 @@ func isMultipartMd5(md5 string) bool {
 	}
 	_, err := strconv.Atoi(parts[1])
 	return err == nil
+}
+
+func isObjectAlreadyPresent(response *http.Response, err error) bool {
+	return isPreconditionFailed(response, err)
+}
+
+func isPreconditionFailed(response *http.Response, err error) bool {
+	if response != nil && response.StatusCode == http.StatusPreconditionFailed {
+		return true
+	}
+	if serviceErr, ok := common.IsServiceError(err); ok {
+		return serviceErr.GetHTTPStatusCode() == http.StatusPreconditionFailed
+	}
+	return false
+}
+
+func isObjectMissing(err error) bool {
+	if serviceErr, ok := common.IsServiceError(err); ok {
+		return serviceErr.GetHTTPStatusCode() == http.StatusNotFound
+	}
+	return false
+}
+
+func errorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }

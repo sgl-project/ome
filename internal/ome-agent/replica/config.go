@@ -24,9 +24,11 @@ type Config struct {
 	LocalPath                      string        `mapstructure:"local_path" validate:"required"`
 	DownloadSizeLimitGB            int           `mapstructure:"download_size_limit_gb"`
 	EnableSizeLimitCheck           bool          `mapstructure:"enable_size_limit_check"`
-	NumConnections                 int           `mapstructure:"num_connections"`
+	TargetArtifactReuseAllowed     bool          `mapstructure:"target_artifact_reuse_allowed"`
+	NumConnections                 int           `mapstructure:"num_connections" validate:"gt=0"`
 	HFDownloadTimeout              time.Duration `mapstructure:"hf_download_timeout"`
 	HFDownloadStaleProgressTimeout time.Duration `mapstructure:"hf_download_stale_progress_timeout"`
+	ArtifactUploadLockTimeout      time.Duration `mapstructure:"artifact_upload_lock_timeout"`
 
 	Source struct {
 		StorageURIStr  string `mapstructure:"storage_uri" validate:"required"`
@@ -67,6 +69,7 @@ func defaultConfig() *Config {
 		EnableSizeLimitCheck:           true,
 		HFDownloadTimeout:              72 * time.Hour,
 		HFDownloadStaleProgressTimeout: 30 * time.Minute,
+		ArtifactUploadLockTimeout:      120 * time.Hour,
 	}
 }
 

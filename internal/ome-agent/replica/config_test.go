@@ -164,6 +164,7 @@ func TestWithViper(t *testing.T) {
 				v.Set("enable_size_limit_check", true)
 				v.Set("hf_download_timeout", "2h")
 				v.Set("hf_download_stale_progress_timeout", "15m")
+				v.Set("artifact_upload_lock_timeout", "3h")
 				v.Set("source.storage_uri", "oci://n/test-src-namespace/b/test-src-bucket/o/models")
 				v.Set("target.storage_uri", "oci://n/test-tgt-namespace/b/test-tgt-bucket/o/models")
 				return v
@@ -176,6 +177,7 @@ func TestWithViper(t *testing.T) {
 				assert.Equal(t, true, c.EnableSizeLimitCheck)
 				assert.Equal(t, 2*time.Hour, c.HFDownloadTimeout)
 				assert.Equal(t, 15*time.Minute, c.HFDownloadStaleProgressTimeout)
+				assert.Equal(t, 3*time.Hour, c.ArtifactUploadLockTimeout)
 				assert.Equal(t, "oci://n/test-src-namespace/b/test-src-bucket/o/models", c.Source.StorageURIStr)
 				assert.Equal(t, "oci://n/test-tgt-namespace/b/test-tgt-bucket/o/models", c.Target.StorageURIStr)
 			},
@@ -193,6 +195,7 @@ func TestWithViper(t *testing.T) {
 				assert.Equal(t, true, c.EnableSizeLimitCheck)
 				assert.Equal(t, 72*time.Hour, c.HFDownloadTimeout)
 				assert.Equal(t, 30*time.Minute, c.HFDownloadStaleProgressTimeout)
+				assert.Equal(t, 120*time.Hour, c.ArtifactUploadLockTimeout)
 			},
 		},
 		{
@@ -385,6 +388,24 @@ func TestConfig_Validate(t *testing.T) {
 			expectError: true,
 		},
 		{
+			name: "invalid NumConnections",
+			setupConfig: func() *Config {
+				return &Config{
+					LocalPath:            "/test/path",
+					DownloadSizeLimitGB:  100,
+					EnableSizeLimitCheck: true,
+					NumConnections:       0,
+					Source: SourceStruct{
+						StorageURIStr: validSourceURI,
+					},
+					Target: TargetStruct{
+						StorageURIStr: validTargetURI,
+					},
+				}
+			},
+			expectError: true,
+		},
+		{
 			name: "invalid source storage URI",
 			setupConfig: func() *Config {
 				return &Config{
@@ -425,6 +446,8 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, 10, config.NumConnections)
 	assert.Equal(t, 650, config.DownloadSizeLimitGB)
 	assert.Equal(t, true, config.EnableSizeLimitCheck)
+	assert.False(t, config.TargetArtifactReuseAllowed)
+	assert.Equal(t, 120*time.Hour, config.ArtifactUploadLockTimeout)
 }
 
 func TestConfig_ValidateRequiredDependencies(t *testing.T) {

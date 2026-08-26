@@ -33,6 +33,7 @@ download_size_limit_gb: 650
 enable_size_limit_check: true
 hf_download_timeout: "72h"
 hf_download_stale_progress_timeout: "30m"
+artifact_upload_lock_timeout: "120h"
 
 source:
   storage_uri: "oci://n/<namespace>/b/<bucket-name>/o/<object-name>"
