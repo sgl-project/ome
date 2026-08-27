@@ -2,6 +2,7 @@ package acceleratorclassselector
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -63,13 +64,16 @@ func (s *defaultSelector) GetAcceleratorClass(ctx context.Context, isvc *v1beta1
 		// if policy is not specified, will skip getting acceleratorClass by policy
 		if acName == "" {
 			logger.Info("No acceleratorClass name found for component", "component", component, "inferenceService", isvc.Name)
-			acceleratorPolicy := s.getAcceleratorPolicy(isvc, component)
+			acceleratorPolicy := s.getAcceleratorPolicy(isvc, runtime, component)
 			if acceleratorPolicy == "" {
 				logger.Info("No acceleratorClass policy found for component", "component", component, "inferenceService", isvc.Name)
 				return nil, "", nil
 			}
 			if acceleratorClass := s.getAcceleratorClassByPolicy(ctx, isvc, runtime, acceleratorPolicy); acceleratorClass != nil {
 				acName = *acceleratorClass
+			}
+			if acName == "" {
+				return nil, "", fmt.Errorf("no accelerator class matched policy %q", acceleratorPolicy)
 			}
 		}
 	}
@@ -157,12 +161,18 @@ func (s *defaultSelector) getAcceleratorClassByPolicy(ctx context.Context, isvc 
 		return s.selectMostCapable(ctx, validCandidates, preferredPrecisions)
 
 	case v1beta1.FirstAvailablePolicy:
-		// Return the first valid candidate. `validCandidates` preserves the order from the runtime list.
-		if len(validCandidates) > 0 {
-			selected := validCandidates[0].Name
+		// Return the first candidate with matching nodes. `validCandidates`
+		// preserves the preference order declared by the runtime.
+		for _, candidate := range validCandidates {
+			if candidate.Status.AvailableNodes <= 0 {
+				logger.V(1).Info("Skipping unavailable accelerator class", "name", candidate.Name)
+				continue
+			}
+			selected := candidate.Name
 			logger.Info("FirstAvailable selected", "name", selected)
 			return &selected
 		}
+		logger.Info("No accelerator candidates have matching nodes")
 	}
 
 	return nil
@@ -234,11 +244,20 @@ func (s *defaultSelector) getComponentAcceleratorPolicy(isvc *v1beta1.InferenceS
 	return ""
 }
 
-// getAcceleratorPolicy determines the effective AcceleratorSelectionPolicy for the given component and InferenceService
-// If no policy is specified, an empty string is returned
-func (s *defaultSelector) getAcceleratorPolicy(isvc *v1beta1.InferenceService, component v1beta1.ComponentType) v1beta1.AcceleratorSelectionPolicy {
-	// Check component-specific AcceleratorOverride
-	return s.getComponentAcceleratorPolicy(isvc, component)
+// getAcceleratorPolicy determines the effective AcceleratorSelectionPolicy for
+// the given component. InferenceService-level configuration takes precedence
+// over the runtime default. If no policy is specified, an empty string is
+// returned.
+func (s *defaultSelector) getAcceleratorPolicy(isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec, component v1beta1.ComponentType) v1beta1.AcceleratorSelectionPolicy {
+	if policy := s.getComponentAcceleratorPolicy(isvc, component); policy != "" {
+		return policy
+	}
+
+	if runtime != nil && runtime.AcceleratorRequirements != nil {
+		return runtime.AcceleratorRequirements.Policy
+	}
+
+	return ""
 }
 
 // getCandidateAccelerators fetches AcceleratorClass candidates from runtime.AcceleratorClasses

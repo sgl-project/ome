@@ -120,6 +120,84 @@ func TestAcceleratorClass_Reconcile_MatchDiscovery(t *testing.T) {
 	g.Expect(curr.Status.Nodes).NotTo(ContainElement("node-b"))
 }
 
+func TestAcceleratorClass_Reconcile_MatchRequiredNodeAffinity(t *testing.T) {
+	g := NewWithT(t)
+
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).To(Succeed())
+	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
+
+	ac := &v1beta1.AcceleratorClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "nvidia-h100-cuda12-host"},
+		Spec: v1beta1.AcceleratorClassSpec{
+			Discovery: v1beta1.AcceleratorDiscovery{Affinity: &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+							MatchExpressions: []corev1.NodeSelectorRequirement{
+								{
+									Key:      "nvidia.com/gpu.product",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"NVIDIA-H100-80GB-HBM3"},
+								},
+								{
+									Key:      "nvidia.com/cuda.driver.major",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"535", "550", "570"},
+								},
+							},
+						}},
+					},
+				},
+			}},
+		},
+	}
+
+	node535 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{
+		Name: "h100-r535",
+		Labels: map[string]string{
+			"nvidia.com/gpu.product":       "NVIDIA-H100-80GB-HBM3",
+			"nvidia.com/cuda.driver.major": "535",
+		},
+	}}
+	node580 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{
+		Name: "h100-r580",
+		Labels: map[string]string{
+			"nvidia.com/gpu.product":       "NVIDIA-H100-80GB-HBM3",
+			"nvidia.com/cuda.driver.major": "580",
+		},
+	}}
+	a100Node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{
+		Name: "a100-r535",
+		Labels: map[string]string{
+			"nvidia.com/gpu.product":       "NVIDIA-A100-SXM4-80GB",
+			"nvidia.com/cuda.driver.major": "535",
+		},
+	}}
+
+	c := ctrlclientfake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ac, node535, node580, a100Node).
+		WithStatusSubresource(&v1beta1.AcceleratorClass{}).
+		Build()
+
+	reconciler := &AcceleratorClassReconciler{
+		Client:   c,
+		Log:      ctrl.Log.WithName("AcceleratorClassTest"),
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(5),
+	}
+
+	ctx := context.TODO()
+	_, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: ac.Name}})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	updated := &v1beta1.AcceleratorClass{}
+	g.Expect(c.Get(ctx, types.NamespacedName{Name: ac.Name}, updated)).To(Succeed())
+	g.Expect(updated.Status.AvailableNodes).To(Equal(int32(1)))
+	g.Expect(updated.Status.Nodes).To(ConsistOf("h100-r535"))
+}
+
 func TestAcceleratorClass_Reconcile_MatchMemoryGB(t *testing.T) {
 	g := NewWithT(t)
 

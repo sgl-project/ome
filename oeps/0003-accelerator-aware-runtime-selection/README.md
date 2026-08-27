@@ -23,12 +23,20 @@ compatibility with existing Kubernetes ecosystem tools like Kueue.
     - [AcceleratorClass](#acceleratorclass)
     - [InferenceService Extensions](#inferenceservice-extensions)
     - [ServingRuntime Extensions](#servingruntime-extensions)
+  - [Driver-Aware Runtime Configuration](#driver-aware-runtime-configuration)
+    - [Label Ownership](#label-ownership)
+    - [Compatibility Classes](#compatibility-classes)
+    - [Runtime Policy and Overrides](#runtime-policy-and-overrides)
+    - [Selection and Scheduling Safety](#selection-and-scheduling-safety)
+    - [Upgrade Lifecycle](#upgrade-lifecycle)
+    - [Vendor Portability](#vendor-portability)
   - [Kueue Integration](#kueue-integration)
   - [Override Hierarchy](#override-hierarchy)
   - [Implementation Architecture](#implementation-architecture)
   - [Test Plan](#test-plan)
     - [Unit Tests](#unit-tests)
     - [Integration Tests](#integration-tests)
+    - [Driver-Aware Validation](#driver-aware-validation)
   - [Graduation Criteria](#graduation-criteria)
 - [Implementation History](#implementation-history)
 - [Drawbacks](#drawbacks)
@@ -1130,33 +1138,243 @@ type ServingRuntimeSpec struct {
 }
 
 type AcceleratorRequirements struct {
-    // SupportedClasses explicitly lists supported accelerator classes
+    // AcceleratorClasses lists supported classes in preference order
     // +optional
-    SupportedClasses []string `json:"supportedClasses,omitempty"`
+    AcceleratorClasses []string `json:"acceleratorClasses,omitempty"`
 
-    // RequiredCapabilities that any accelerator must meet
+    // Policy is the runtime default when a service or component does not
+    // provide its own policy
     // +optional
-    RequiredCapabilities *AcceleratorCapabilities `json:"requiredCapabilities,omitempty"`
+    Policy AcceleratorSelectionPolicy `json:"policy,omitempty"`
 
-    // PreferenceOrder for accelerator selection
+    // Capability constraints applied before policy selection
     // +optional
-    PreferenceOrder []AcceleratorPreference `json:"preferenceOrder,omitempty"`
-}
-
-type AcceleratorPreference struct {
-    // Class name or capability matcher
-    Class string `json:"class,omitempty"`
-
-    // Score for this preference (higher is better)
-    // +kubebuilder:validation:Minimum=0
-    // +kubebuilder:validation:Maximum=100
-    Score int32 `json:"score"`
-
-    // Conditions when this preference applies
-    // +optional
-    Conditions []PreferenceCondition `json:"conditions,omitempty"`
+    MinMemory *int64 `json:"minMemory,omitempty"`
+    MinComputePerformanceTFLOPS *int64 `json:"minComputePerformanceTFLOPS,omitempty"`
+    MinArchitectureVersion *string `json:"minArchitectureVersion,omitempty"`
+    RequiredFeatures []string `json:"requiredFeatures,omitempty"`
+    PreferredPrecisions []string `json:"preferredPrecisions,omitempty"`
 }
 ```
+
+### Driver-Aware Runtime Configuration
+
+Accelerator model alone is not sufficient to determine whether a runtime image
+can execute on a node. Runtime images ship a CUDA or ROCm user-space stack, while
+the kernel driver is supplied by the host. A geographically distributed fleet
+can therefore contain the same GPU model with several driver branches during a
+staged upgrade. Those nodes may require different runtime environment variables
+or arguments even though they expose the same extended GPU resource.
+
+This design models a driver compatibility band as an `AcceleratorClass`. The
+class owns the node constraints and resource requirements, while the
+`ServingRuntime` owns the ordered preference and the configuration associated
+with each selected class. This keeps hardware discovery out of runtime images
+and keeps runtime-specific compatibility behavior out of cluster-level
+`AcceleratorClass` objects.
+
+The design intentionally does not interpolate arbitrary node labels into pod
+environment variables. An InferenceService pod is constructed before the
+scheduler chooses a node, so such interpolation would be ambiguous in a
+multi-node cluster and could disagree with the scheduler. Selecting an
+`AcceleratorClass` first provides a stable configuration key and a scheduling
+constraint derived from the same object.
+
+#### Label Ownership
+
+OME consumes node labels; it does not install GPU discovery software or claim
+ownership of vendor label namespaces. A cluster operator is responsible for
+deploying and operating a trusted label provider. For NVIDIA clusters this is
+normally GPU Feature Discovery, which can publish labels such as:
+
+```text
+nvidia.com/gpu.product=NVIDIA-H100-80GB-HBM3
+nvidia.com/cuda.driver-version.major=580
+nvidia.com/cuda.driver-version.full=580.126.09
+```
+
+The label provider and its update cadence are part of the cluster's trust
+boundary. If labels are missing or stale, a driver-specific class has no
+matching nodes and cannot be selected by `FirstAvailable`. Admission policies
+may additionally restrict who can edit vendor-owned node labels and
+`AcceleratorClass` resources.
+
+#### Compatibility Classes
+
+Operators should define classes for meaningful compatibility bands rather than
+creating a class for every patch-level driver release. For example, a CUDA 13
+native class can select driver branch 580, while a compatibility class can
+select the older branches supported by the compatibility package shipped in the
+runtime image:
+
+```yaml
+apiVersion: ome.io/v1beta1
+kind: AcceleratorClass
+metadata:
+  name: nvidia-h100-cu13
+spec:
+  vendor: nvidia
+  family: hopper
+  model: h100
+  discovery:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: nvidia.com/gpu.product
+                  operator: In
+                  values: [NVIDIA-H100-80GB-HBM3]
+                - key: nvidia.com/cuda.driver-version.major
+                  operator: In
+                  values: ["580"]
+  resources:
+    - name: nvidia.com/gpu
+      quantity: "1"
+---
+apiVersion: ome.io/v1beta1
+kind: AcceleratorClass
+metadata:
+  name: nvidia-h100-cu12
+spec:
+  vendor: nvidia
+  family: hopper
+  model: h100
+  discovery:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: nvidia.com/gpu.product
+                  operator: In
+                  values: [NVIDIA-H100-80GB-HBM3]
+                - key: nvidia.com/cuda.driver-version.major
+                  operator: In
+                  values: ["535", "550", "570"]
+  resources:
+    - name: nvidia.com/gpu
+      quantity: "1"
+```
+
+Class names describe an operator-defined compatibility contract; OME does not
+infer CUDA compatibility from the name. The operator must choose ranges that
+are valid for the runtime image, vendor compatibility package, GPU family, and
+enabled features. Patch-specific classes remain possible when a known driver
+regression requires narrower targeting.
+
+A broader hardware-only class can be retained as the final fallback. Because a
+node may match both a driver-specific class and the broader class, overlap is
+expected and does not assign a node exclusively to one class.
+
+#### Runtime Policy and Overrides
+
+The runtime declares its selection policy and ordered compatibility bands:
+
+```yaml
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-h100
+spec:
+  acceleratorRequirements:
+    policy: FirstAvailable
+    acceleratorClasses:
+      - nvidia-h100-cu13
+      - nvidia-h100-cu12
+      - nvidia-h100
+  supportedModelFormats:
+    - modelFormat:
+        name: safetensors
+      acceleratorConfig:
+        nvidia-h100-cu13:
+          environmentOverride:
+            VLLM_ENABLE_CUDA_COMPATIBILITY: "0"
+        nvidia-h100-cu12:
+          environmentOverride:
+            VLLM_ENABLE_CUDA_COMPATIBILITY: "1"
+```
+
+`acceleratorConfig` remains keyed by the selected class and may also provide
+runtime argument and tensor-parallelism overrides. Environment override keys
+are applied in sorted order so semantically identical reconciliations produce a
+stable pod template and do not create spurious ReplicaSets.
+
+The effective policy precedence is:
+
+1. Component `acceleratorOverride.policy` for the engine or decoder.
+2. InferenceService `acceleratorSelector.policy`.
+3. ServingRuntime `acceleratorRequirements.policy`.
+4. No automatic class selection when no level specifies a policy.
+
+An explicitly named class at the component or InferenceService level continues
+to take precedence over policy-based selection. The runtime policy is therefore
+a default chosen by the runtime author, not a restriction on workload owners.
+
+#### Selection and Scheduling Safety
+
+For `FirstAvailable`, OME performs the following steps:
+
+1. Fetch classes named by `acceleratorRequirements.acceleratorClasses` without
+   changing their declaration order.
+2. Apply the existing accelerator constraints and exclusions.
+3. Select the first remaining class whose `status.availableNodes` is greater
+   than zero.
+4. Fail reconciliation when a policy was requested but no class has matching
+   nodes; do not silently create an unconstrained workload.
+5. Apply the selected class's resource requirements, required node affinity,
+   and model-format-specific runtime overrides to the engine or decoder pod.
+
+`status.availableNodes` means nodes matching the class definition; it is not a
+real-time count of unallocated GPUs. Normal Kubernetes scheduling still handles
+resource availability and contention.
+
+The AcceleratorClass controller calculates matching-node status from both
+`discovery.nodeSelector` and required node affinity. Kubernetes node selector
+semantics are preserved: selector terms are ORed, requirements within a term
+are ANDed, and `In`, `NotIn`, `Exists`, `DoesNotExist`, `Gt`, and `Lt` are
+supported. Preferred affinity influences scheduling but does not establish
+class membership.
+
+The same required affinity is copied into the generated pod. Status drives the
+selection decision, while pod affinity is the enforcement guard that prevents
+the selected runtime configuration from landing on a node outside its driver
+compatibility band. `requiredDuringSchedulingIgnoredDuringExecution` does not
+evict an already-running pod when a node label later changes; operators should
+use their normal rollout or node-drain procedure after driver replacement.
+
+#### Upgrade Lifecycle
+
+A rolling driver upgrade does not require editing every workload:
+
+1. Before the rollout, publish AcceleratorClasses covering both old and new
+   supported driver bands and update the runtime's ordered list and overrides.
+2. GPU discovery updates node labels after each node's driver changes.
+3. The AcceleratorClass controller watches Node updates and recomputes matching
+   nodes for every class.
+4. New InferenceServices, and existing services that reconcile into a new pod
+   template, select the first compatible class according to runtime order.
+5. After the fleet no longer needs the old band, remove it from runtimes first,
+   then remove the obsolete AcceleratorClass.
+
+This supports canary and region-by-region upgrades while keeping the runtime
+image and its compatibility behavior declarative. Updating a label does not
+mutate the environment of an existing pod; a rollout is required when an
+existing deployment must adopt a different accelerator configuration.
+
+#### Vendor Portability
+
+The mechanism is vendor-neutral because OME evaluates Kubernetes selectors and
+uses the resource name declared by the class. AMD clusters can use the same
+pattern with labels published by AMD GPU discovery or Node Feature Discovery,
+for example GPU family, ROCm version, or amdgpu driver labels, and request
+`amd.com/gpu`. Label keys and valid compatibility ranges differ by provider, so
+they remain operator configuration rather than hard-coded OME logic.
+
+Vendor portability depends on having a trustworthy, sufficiently precise label
+source. Where an AMD environment exposes only a GPU resource and product label,
+operators can use product-level classes but cannot safely make driver-specific
+runtime choices until a driver or ROCm compatibility label is published.
 
 ### Kueue Integration
 
@@ -1524,6 +1742,57 @@ graph TB
    - Conflicting requirements
    - Invalid accelerator class references
 
+#### Driver-Aware Validation
+
+The driver-aware extension adds unit coverage for:
+
+- Runtime policy precedence beneath component and InferenceService policies.
+- `FirstAvailable` preserving runtime declaration order, skipping classes with
+  zero matching nodes, and returning no selection when every class is
+  unavailable.
+- An explicit error when a requested policy cannot select any class.
+- Required node affinity matching, including selector term and operator
+  semantics used to calculate `AcceleratorClass.status.availableNodes`.
+- Deterministic environment override ordering to keep pod-template hashes
+  stable across reconciliations.
+
+The implementation was also validated on 2026-08-26 against a single-node k3s
+cluster with eight NVIDIA H100 80GB HBM3 GPUs. GPU Feature Discovery reported
+driver `580.126.09` and CUDA runtime `13.0`. The test runtime declared:
+
+```yaml
+acceleratorRequirements:
+  policy: FirstAvailable
+  acceleratorClasses:
+    - nvidia-h100-cu13
+    - nvidia-h100-cu12
+    - nvidia-h100
+```
+
+The test observed the following matching-node status:
+
+| AcceleratorClass | Matching nodes |
+|------------------|----------------|
+| `nvidia-h100-cu13` | 1 |
+| `nvidia-h100-cu12` | 0 |
+| `nvidia-h100` | 1 |
+
+OME selected `nvidia-h100-cu13`, proving that the ordered policy did not choose
+the broader `nvidia-h100` fallback even though it also matched the node. The
+generated pod requested and limited one `nvidia.com/gpu`, contained required
+node affinity for the H100 product and driver major 580, and exposed:
+
+```text
+OME_SELECTED_ACCELERATOR=nvidia-h100-cu13
+VLLM_ENABLE_CUDA_COMPATIBILITY=0
+```
+
+The pod reached Ready with no restarts. After deterministic environment
+ordering was added, repeated controller reconciliation left the Deployment at
+revision 1 with one Ready ReplicaSet, demonstrating that the override map did
+not cause pod-template churn. The isolated test namespace and sample resources
+were deleted after evidence was collected.
+
 ### Deployment Strategies
 
 Organizations can choose different approaches for managing AcceleratorClasses:
@@ -1588,6 +1857,8 @@ acceleratorClasses:
 - 2025-08-XX: Alpha implementation started
 - 2025-10-XX: Beta release with Kueue integration
 - 2025-12-XX: GA release
+- 2026-08-26: Driver-aware runtime defaults and ordered availability selection
+  designed and validated on NVIDIA H100
 
 ## Drawbacks
 

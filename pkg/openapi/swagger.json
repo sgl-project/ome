@@ -418,6 +418,10 @@
           "type": "integer",
           "format": "int64"
         },
+        "policy": {
+          "description": "Policy defines the default selection policy when multiple accelerator classes are supported. An InferenceService-level or component-level policy takes precedence when specified.",
+          "type": "string"
+        },
         "preferredPrecisions": {
           "description": "PreferredPrecisions lists numeric precisions in order of preference Examples: [\"fp8\", \"fp16\", \"fp32\"]",
           "type": "array",

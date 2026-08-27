@@ -74,12 +74,12 @@ The selector follows a prioritized selection logic:
    - Determine effective policy from:
      - Component-specific override policy
      - InferenceService-level policy
-     - Default policy (FirstAvailable)
+     - ServingRuntime-level default policy
    - Apply policy logic:
-     - **FirstAvailable**: Return the first accelerator from runtime requirements (currently implemented)
-     - **BestFit**: Select based on best resource match (TODO)
-     - **Cheapest**: Select based on cost optimization (TODO)
-     - **MostCapable**: Select based on maximum capabilities (TODO)
+     - **FirstAvailable**: Return the first class, in runtime order, that has matching nodes
+     - **BestFit**: Select based on best resource match
+     - **Cheapest**: Select based on cost optimization
+     - **MostCapable**: Select based on maximum capabilities
 
 4. **Fetch and Return**
    - Fetch the selected accelerator class spec from the cluster
@@ -97,7 +97,7 @@ InferenceService.AcceleratorSelector.AcceleratorClass
 Policy-based selection:
   - Component.AcceleratorOverride.Policy
   - InferenceService.AcceleratorSelector.Policy
-  - Default Policy (FirstAvailable)
+  - ServingRuntime.AcceleratorRequirements.Policy
     ↓
 Lowest Priority
 ```
@@ -229,11 +229,12 @@ type Config struct {
 
     // EnableDetailedLogging enables verbose logging for debugging
     EnableDetailedLogging bool
-
-    // DefaultPolicy is used when no policy is specified
-    DefaultPolicy v1beta1.AcceleratorSelectionPolicy
 }
 ```
+
+There is no package-wide default selection policy. A policy can be supplied by
+the component, the InferenceService, or the ServingRuntime. When none is
+specified, automatic AcceleratorClass selection is skipped.
 
 ### Creating a Selector with Custom Configuration
 
@@ -241,7 +242,6 @@ type Config struct {
 config := &acceleratorclassselector.Config{
     Client:                mgr.GetClient(),
     EnableDetailedLogging: true,
-    DefaultPolicy:         v1beta1.BestFitPolicy,
 }
 
 selector := acceleratorclassselector.NewWithConfig(config)
@@ -303,8 +303,8 @@ podSpec := buildPodSpec(runtime, engineAcc)
 
 ## Selection Policies
 
-### FirstAvailable (Default)
-- Returns the first accelerator class from runtime's `AcceleratorRequirements.AcceleratorClasses`
+### FirstAvailable
+- Returns the first accelerator class with matching nodes from the runtime's ordered `AcceleratorRequirements.AcceleratorClasses`
 - Fast and predictable
 - Best for simple deployments
 

@@ -1,6 +1,7 @@
 package components
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -13,6 +14,44 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 )
+
+func TestUpdateEnvVariablesSortsAcceleratorEnvironmentOverride(t *testing.T) {
+	b := &BaseComponentFields{
+		SupportedModelFormat: &v1beta1.SupportedModelFormat{
+			AcceleratorConfig: map[string]*v1beta1.AcceleratorModelConfig{
+				"nvidia-h100-cu13": {
+					EnvironmentOverride: map[string]string{
+						"VLLM_ENABLE_CUDA_COMPATIBILITY": "0",
+						"OME_SELECTED_ACCELERATOR":       "nvidia-h100-cu13",
+					},
+				},
+			},
+		},
+		AcceleratorClassName: "nvidia-h100-cu13",
+		Log:                  logr.Discard(),
+	}
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-isvc", Namespace: "default"},
+	}
+	container := &v1.Container{
+		Env: []v1.EnvVar{{Name: "RUNTIME_BASELINE", Value: "present"}},
+	}
+
+	UpdateEnvVariables(b, isvc, container, &metav1.ObjectMeta{})
+
+	gotNames := make([]string, 0, len(container.Env))
+	for _, envVar := range container.Env {
+		gotNames = append(gotNames, envVar.Name)
+	}
+	wantNames := []string{
+		"RUNTIME_BASELINE",
+		"OME_SELECTED_ACCELERATOR",
+		"VLLM_ENABLE_CUDA_COMPATIBILITY",
+	}
+	if !slices.Equal(gotNames, wantNames) {
+		t.Fatalf("environment variables are not deterministic: got %v, want %v", gotNames, wantNames)
+	}
+}
 
 func TestUpdatePodSpecNodeSelector(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)

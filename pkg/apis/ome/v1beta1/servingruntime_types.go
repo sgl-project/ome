@@ -236,6 +236,12 @@ type AcceleratorRequirements struct {
 	// +listType=atomic
 	AcceleratorClasses []string `json:"acceleratorClasses,omitempty"`
 
+	// Policy defines the default selection policy when multiple accelerator classes are supported.
+	// An InferenceService-level or component-level policy takes precedence when specified.
+	// +kubebuilder:validation:Enum=BestFit;Cheapest;MostCapable;FirstAvailable
+	// +optional
+	Policy AcceleratorSelectionPolicy `json:"policy,omitempty"`
+
 	// MinMemory specifies minimum GPU memory required in GB
 	// +optional
 	// +kubebuilder:validation:Minimum=0

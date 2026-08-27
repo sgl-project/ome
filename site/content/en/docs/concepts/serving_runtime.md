@@ -136,6 +136,7 @@ A runtime can declare the accelerators it supports and the minimum hardware it n
 | Field                                    | Type     | Description                                                                                          |
 |------------------------------------------|----------|------------------------------------------------------------------------------------------------------|
 | `acceleratorRequirements.acceleratorClasses`          | []string | Names of the `AcceleratorClass` resources this runtime supports                                     |
+| `acceleratorRequirements.policy`                      | AcceleratorSelectionPolicy | Default policy used to choose among the supported classes. An InferenceService or component policy overrides it. |
 | `acceleratorRequirements.minMemory`                   | int64    | Minimum accelerator memory required, in GB                                                          |
 | `acceleratorRequirements.minComputePerformanceTFLOPS` | int64    | Minimum compute capability required, in TFLOPS                                                      |
 | `acceleratorRequirements.minArchitectureVersion`      | string   | Minimum architecture version (NVIDIA compute capability or equivalent)                              |
@@ -155,6 +156,7 @@ spec:
       quantization: fp8
       autoSelect: true
   acceleratorRequirements:
+    policy: FirstAvailable
     acceleratorClasses:
       - nvidia-h100
       - nvidia-h200
@@ -169,6 +171,12 @@ spec:
     runner:
       image: lmsysorg/sglang:v0.4.6.post6
 ```
+
+`FirstAvailable` evaluates `acceleratorClasses` in declaration order and
+selects the first class that has matching nodes. This lets runtime authors
+declare a preferred accelerator with ordered fallbacks while still allowing an
+InferenceService to override the policy. Matching-node status honors both the
+class's `discovery.nodeSelector` and its required node affinity.
 
 ### Per-Accelerator Model Configuration
 

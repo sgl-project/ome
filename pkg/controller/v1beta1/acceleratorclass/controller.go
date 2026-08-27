@@ -3,6 +3,7 @@ package acceleratorclass
 import (
 	"context"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -144,7 +145,93 @@ func nodePassesDiscovery(ac *v1beta1.AcceleratorClass, node *corev1.Node) bool {
 		}
 	}
 
+	// Required node affinity is part of AcceleratorClass discovery. Preferred
+	// affinity influences scheduling but does not determine class membership.
+	if ac.Spec.Discovery.Affinity != nil && ac.Spec.Discovery.Affinity.NodeAffinity != nil {
+		required := ac.Spec.Discovery.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+		if required != nil {
+			for _, term := range required.NodeSelectorTerms {
+				if nodeMatchesSelectorTerm(node, term) {
+					return true
+				}
+			}
+			return false
+		}
+	}
+
 	return true
+}
+
+func nodeMatchesSelectorTerm(node *corev1.Node, term corev1.NodeSelectorTerm) bool {
+	// Kubernetes defines an empty NodeSelectorTerm as matching no objects.
+	if len(term.MatchExpressions) == 0 && len(term.MatchFields) == 0 {
+		return false
+	}
+
+	for _, requirement := range term.MatchExpressions {
+		value, exists := node.Labels[requirement.Key]
+		if !nodeSelectorRequirementMatches(value, exists, requirement) {
+			return false
+		}
+	}
+
+	for _, requirement := range term.MatchFields {
+		value, exists := nodeFieldValue(node, requirement.Key)
+		if !nodeSelectorRequirementMatches(value, exists, requirement) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func nodeFieldValue(node *corev1.Node, key string) (string, bool) {
+	switch key {
+	case "metadata.name":
+		return node.Name, true
+	default:
+		return "", false
+	}
+}
+
+func nodeSelectorRequirementMatches(value string, exists bool, requirement corev1.NodeSelectorRequirement) bool {
+	switch requirement.Operator {
+	case corev1.NodeSelectorOpIn:
+		return exists && containsString(requirement.Values, value)
+	case corev1.NodeSelectorOpNotIn:
+		return !exists || !containsString(requirement.Values, value)
+	case corev1.NodeSelectorOpExists:
+		return exists
+	case corev1.NodeSelectorOpDoesNotExist:
+		return !exists
+	case corev1.NodeSelectorOpGt, corev1.NodeSelectorOpLt:
+		if !exists || len(requirement.Values) != 1 {
+			return false
+		}
+		actual, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return false
+		}
+		target, err := strconv.ParseInt(requirement.Values[0], 10, 64)
+		if err != nil {
+			return false
+		}
+		if requirement.Operator == corev1.NodeSelectorOpGt {
+			return actual > target
+		}
+		return actual < target
+	default:
+		return false
+	}
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func nodeMatchCapabilities(ac *v1beta1.AcceleratorClass, node *corev1.Node) bool {

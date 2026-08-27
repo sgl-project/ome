@@ -3,6 +3,7 @@ package components
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strconv"
 
 	"github.com/go-logr/logr"
@@ -200,9 +201,14 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 		acceleratorConfig := b.SupportedModelFormat.GetAcceleratorConfig(b.AcceleratorClassName)
 		if acceleratorConfig != nil {
 			envOverride := acceleratorConfig.EnvironmentOverride
-			for envName, envVar := range envOverride {
+			envNames := make([]string, 0, len(envOverride))
+			for envName := range envOverride {
+				envNames = append(envNames, envName)
+			}
+			sort.Strings(envNames)
+			for _, envName := range envNames {
 				isvcutils.UpdateEnvVars(container, &corev1.EnvVar{
-					Name: envName, Value: envVar})
+					Name: envName, Value: envOverride[envName]})
 			}
 		}
 	}

@@ -757,6 +757,14 @@ Examples: [&quot;fp8&quot;, &quot;fp16&quot;, &quot;fp32&quot;]</p>
    <p>AcceleratorClasses lists the names of AcceleratorClasses this runtime supports</p>
 </td>
 </tr>
+<tr><td><code>policy</code><br/>
+<a href="#ome-io-v1beta1-AcceleratorSelectionPolicy"><code>AcceleratorSelectionPolicy</code></a>
+</td>
+<td>
+   <p>Policy defines the default selection policy when multiple accelerator classes are supported.
+An InferenceService-level or component-level policy takes precedence when specified.</p>
+</td>
+</tr>
 <tr><td><code>minMemory</code><br/>
 <code>int64</code>
 </td>

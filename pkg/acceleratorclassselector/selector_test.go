@@ -25,6 +25,15 @@ func (m *mockAcceleratorFetcher) addAccelerator(name string, spec *v1beta1.Accel
 	m.accelerators[name] = &v1beta1.AcceleratorClass{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec:       *spec,
+		Status: v1beta1.AcceleratorClassStatus{
+			AvailableNodes: 1,
+		},
+	}
+}
+
+func (m *mockAcceleratorFetcher) setAvailableNodes(name string, availableNodes int32) {
+	if accelerator, found := m.accelerators[name]; found {
+		accelerator.Status.AvailableNodes = availableNodes
 	}
 }
 
@@ -644,6 +653,101 @@ func TestGetAcceleratorClassByPolicy_AllPolicies(t *testing.T) {
 					tt.description, *selected, tt.expectedName)
 			}
 		})
+	}
+}
+
+func TestGetAcceleratorPolicyPrecedence(t *testing.T) {
+	tests := []struct {
+		name      string
+		isvc      *v1beta1.InferenceService
+		runtime   *v1beta1.ServingRuntimeSpec
+		component v1beta1.ComponentType
+		expected  v1beta1.AcceleratorSelectionPolicy
+	}{
+		{
+			name: "component policy overrides service and runtime",
+			isvc: &v1beta1.InferenceService{Spec: v1beta1.InferenceServiceSpec{
+				AcceleratorSelector: &v1beta1.AcceleratorSelector{Policy: v1beta1.CheapestPolicy},
+				Engine:              &v1beta1.EngineSpec{AcceleratorOverride: &v1beta1.AcceleratorSelector{Policy: v1beta1.MostCapablePolicy}},
+			}},
+			runtime: &v1beta1.ServingRuntimeSpec{AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
+				Policy: v1beta1.FirstAvailablePolicy,
+			}},
+			component: v1beta1.EngineComponent,
+			expected:  v1beta1.MostCapablePolicy,
+		},
+		{
+			name: "service policy overrides runtime",
+			isvc: &v1beta1.InferenceService{Spec: v1beta1.InferenceServiceSpec{
+				AcceleratorSelector: &v1beta1.AcceleratorSelector{Policy: v1beta1.CheapestPolicy},
+			}},
+			runtime: &v1beta1.ServingRuntimeSpec{AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
+				Policy: v1beta1.FirstAvailablePolicy,
+			}},
+			component: v1beta1.EngineComponent,
+			expected:  v1beta1.CheapestPolicy,
+		},
+		{
+			name: "runtime policy is the default",
+			isvc: &v1beta1.InferenceService{},
+			runtime: &v1beta1.ServingRuntimeSpec{AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
+				Policy: v1beta1.FirstAvailablePolicy,
+			}},
+			component: v1beta1.EngineComponent,
+			expected:  v1beta1.FirstAvailablePolicy,
+		},
+		{
+			name:      "no policy configured",
+			isvc:      &v1beta1.InferenceService{},
+			runtime:   &v1beta1.ServingRuntimeSpec{},
+			component: v1beta1.EngineComponent,
+			expected:  "",
+		},
+	}
+
+	selector := &defaultSelector{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := selector.getAcceleratorPolicy(tt.isvc, tt.runtime, tt.component)
+			if actual != tt.expected {
+				t.Fatalf("getAcceleratorPolicy() = %q, want %q", actual, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetAcceleratorClass_RuntimeFirstAvailablePolicy(t *testing.T) {
+	mockFetcher := newMockFetcher()
+	accelerators := createRealisticAccelerators()
+	mockFetcher.addAccelerator("nvidia-h100-80gb", accelerators["nvidia-h100-80gb"])
+	mockFetcher.addAccelerator("nvidia-a100-40gb", accelerators["nvidia-a100-40gb"])
+	mockFetcher.setAvailableNodes("nvidia-h100-80gb", 0)
+
+	selector := &defaultSelector{
+		config:  &Config{},
+		fetcher: mockFetcher,
+	}
+	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "test-isvc"}}
+	runtime := &v1beta1.ServingRuntimeSpec{AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
+		AcceleratorClasses: []string{"nvidia-h100-80gb", "nvidia-a100-40gb"},
+		Policy:             v1beta1.FirstAvailablePolicy,
+	}}
+
+	selected, selectedName, err := selector.GetAcceleratorClass(context.Background(), isvc, runtime, v1beta1.EngineComponent)
+	if err != nil {
+		t.Fatalf("GetAcceleratorClass() returned error: %v", err)
+	}
+	if selected == nil || selectedName != "nvidia-a100-40gb" {
+		t.Fatalf("GetAcceleratorClass() selected %q, want %q", selectedName, "nvidia-a100-40gb")
+	}
+
+	mockFetcher.setAvailableNodes("nvidia-a100-40gb", 0)
+	selected, selectedName, err = selector.GetAcceleratorClass(context.Background(), isvc, runtime, v1beta1.EngineComponent)
+	if err == nil {
+		t.Fatalf("GetAcceleratorClass() error = nil, want no matching accelerator error")
+	}
+	if selected != nil || selectedName != "" {
+		t.Fatalf("GetAcceleratorClass() selected unavailable accelerator %q", selectedName)
 	}
 }
 

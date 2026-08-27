@@ -901,6 +901,13 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorRequirements(ref common.ReferenceCal
 							},
 						},
 					},
+					"policy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Policy defines the default selection policy when multiple accelerator classes are supported. An InferenceService-level or component-level policy takes precedence when specified.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"minMemory": {
 						SchemaProps: spec.SchemaProps{
 							Description: "MinMemory specifies minimum GPU memory required in GB",

@@ -296,7 +296,12 @@ OME can select the accelerator (GPU class) for an InferenceService declaratively
 | `BestFit`        | Selects the accelerator that best matches the model requirements. |
 | `Cheapest`       | Selects the lowest-cost accelerator that meets the requirements.  |
 | `MostCapable`    | Selects the most powerful accelerator available.                  |
-| `FirstAvailable` | Selects the first matching accelerator (fastest scheduling).      |
+| `FirstAvailable` | Selects the first class, in runtime declaration order, that has matching nodes. |
+
+When the InferenceService does not specify a policy, OME uses
+`ServingRuntime.spec.acceleratorRequirements.policy` if the runtime provides
+one. Component-level policies take precedence over the InferenceService-level
+policy, which takes precedence over the runtime default.
 
 #### Accelerator Constraints
 
