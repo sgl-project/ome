@@ -108,6 +108,7 @@ func uploadDirectoryToOCIOSDataStore(
 
 	tasks := make(chan UploadTask, numberOfObjects)
 	errCh := make(chan error, numberOfObjects)
+	checksumLimiter := newChecksumLimiter(checksumConfig)
 
 	var wg sync.WaitGroup
 	// Start worker goroutines
@@ -116,7 +117,14 @@ func uploadDirectoryToOCIOSDataStore(
 		go func() {
 			defer wg.Done()
 			for task := range tasks {
-				if err := UploadObjectToOCIOSDataStore(ociOSDataStore, task.targetObj, task.filePath); err != nil {
+				task.targetObj.Metadata = getObjectMetadataWithChecksumLimit(
+					checksumConfig,
+					task.filePath,
+					ociOSDataStore.Config.AnotherLogger,
+					checksumLimiter,
+				)
+
+				if err := uploadObjectToOCIOSDataStoreFunc(ociOSDataStore, task.targetObj, task.filePath); err != nil {
 					errCh <- fmt.Errorf("upload failed for %s: %w", task.filePath, err)
 				}
 			}
@@ -150,12 +158,10 @@ func uploadDirectoryToOCIOSDataStore(
 			objectName = relPath
 		}
 
-		metadata := GetObjectMetadatWithFileChecksum(checksumConfig, filePath, ociOSDataStore.Config.AnotherLogger)
 		targetObj := ociobjectstore.ObjectURI{
 			BucketName: object.BucketName,
 			Namespace:  object.Namespace,
 			ObjectName: objectName,
-			Metadata:   metadata,
 		}
 
 		tasks <- UploadTask{targetObj: targetObj, filePath: filePath}

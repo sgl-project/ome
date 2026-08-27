@@ -2,6 +2,7 @@ package replica
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -167,6 +168,9 @@ func TestWithViper(t *testing.T) {
 				v.Set("artifact_upload_lock_timeout", "3h")
 				v.Set("source.storage_uri", "oci://n/test-src-namespace/b/test-src-bucket/o/models")
 				v.Set("target.storage_uri", "oci://n/test-tgt-namespace/b/test-tgt-bucket/o/models")
+				v.Set("target.checksum.upload_enabled", true)
+				v.Set("target.checksum.algorithm", "md5")
+				v.Set("target.checksum.concurrency", 3)
 				return v
 			},
 			expectError: false,
@@ -180,6 +184,28 @@ func TestWithViper(t *testing.T) {
 				assert.Equal(t, 3*time.Hour, c.ArtifactUploadLockTimeout)
 				assert.Equal(t, "oci://n/test-src-namespace/b/test-src-bucket/o/models", c.Source.StorageURIStr)
 				assert.Equal(t, "oci://n/test-tgt-namespace/b/test-tgt-bucket/o/models", c.Target.StorageURIStr)
+				assert.Equal(t, &common.ChecksumConfig{
+					UploadEnabled:     true,
+					ChecksumAlgorithm: "md5",
+					Concurrency:       3,
+				}, c.Target.ChecksumConfig)
+			},
+		},
+		{
+			name: "checksum concurrency from environment",
+			setupViper: func() *viper.Viper {
+				v := viper.New()
+				v.SetEnvPrefix("OME_AGENT")
+				v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+				v.AutomaticEnv()
+				v.SetDefault("target.checksum.concurrency", 8)
+				t.Setenv("OME_AGENT_TARGET_CHECKSUM_CONCURRENCY", "6")
+				v.Set("target.checksum.concurrency", v.Get("target.checksum.concurrency"))
+				return v
+			},
+			expectError: false,
+			validateFunc: func(t *testing.T, c *Config) {
+				assert.Equal(t, 6, c.Target.ChecksumConfig.Concurrency)
 			},
 		},
 		{

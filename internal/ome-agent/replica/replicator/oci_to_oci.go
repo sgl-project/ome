@@ -40,13 +40,14 @@ func (r *OCIToOCIReplicator) Replicate(objects []common.ReplicationObject) error
 	startTime := time.Now()
 	objChan := PrepareObjectChannel(objects)
 	resultChan := make(chan *ReplicationResult, len(objects))
+	checksumLimiter := newChecksumLimiter(r.Config.ChecksumConfig)
 
 	var wg sync.WaitGroup
 	for i := 0; i < r.Config.NumConnections; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r.processObjectReplication(objChan, resultChan)
+			r.processObjectReplication(objChan, resultChan, checksumLimiter)
 		}()
 	}
 
@@ -79,7 +80,11 @@ func (r *OCIToOCIReplicator) Replicate(objects []common.ReplicationObject) error
 	return nil
 }
 
-func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan common.ReplicationObject, results chan<- *ReplicationResult) {
+func (r *OCIToOCIReplicator) processObjectReplication(
+	objects <-chan common.ReplicationObject,
+	results chan<- *ReplicationResult,
+	checksumLimiter chan struct{},
+) {
 	for obj := range objects {
 		// Skip directories
 		if strings.HasSuffix(obj.GetName(), "/") {
@@ -101,7 +106,7 @@ func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan common.Repl
 		// Download
 		downloadStart := time.Now()
 		tempDirPath := filepath.Join(r.Config.LocalPath, ReplicaWorkspacePath)
-		err := DownloadObject(r.Config.SourceOCIOSDataStore, srcObj, tempDirPath)
+		err := downloadObjectFunc(r.Config.SourceOCIOSDataStore, srcObj, tempDirPath)
 		downloadDuration := time.Since(downloadStart)
 		if err != nil {
 			result.error = err
@@ -112,11 +117,16 @@ func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan common.Repl
 
 		// Set up checksum as metadata
 		uploadedFilePath := filepath.Join(tempDirPath, obj.GetName())
-		targetObj.Metadata = GetObjectMetadatWithFileChecksum(r.Config.ChecksumConfig, uploadedFilePath, r.Logger)
+		targetObj.Metadata = getObjectMetadataWithChecksumLimit(
+			r.Config.ChecksumConfig,
+			uploadedFilePath,
+			r.Logger,
+			checksumLimiter,
+		)
 
 		// Upload
 		uploadStart := time.Now()
-		err = UploadObjectToOCIOSDataStore(r.Config.TargetOCIOSDataStore, targetObj, uploadedFilePath)
+		err = uploadObjectToOCIOSDataStoreFunc(r.Config.TargetOCIOSDataStore, targetObj, uploadedFilePath)
 		uploadDuration := time.Since(uploadStart)
 		if err != nil {
 			result.error = err

@@ -42,7 +42,10 @@ var (
 	}
 	disableProgressHook                   = func(c *xet.Client) error { return c.DisableProgress() }
 	downloadFromHFFunc                    = downloadFromHF
+	downloadObjectFunc                    = DownloadObject
 	uploadDirectoryToOCIOSDataStoreFunc   = uploadDirectoryToOCIOSDataStore
+	uploadObjectToOCIOSDataStoreFunc      = UploadObjectToOCIOSDataStore
+	getObjectMetadataWithChecksumFunc     = GetObjectMetadatWithFileChecksum
 	downloadObjectsFromOCIOSDataStoreFunc = downloadObjectsFromOCIOSDataStore
 )
 
@@ -288,4 +291,30 @@ func GetObjectMetadatWithFileChecksum(config *common.ChecksumConfig, filePath st
 		}
 	}
 	return metadata
+}
+
+func newChecksumLimiter(config *common.ChecksumConfig) chan struct{} {
+	return make(chan struct{}, effectiveChecksumConcurrency(config))
+}
+
+func getObjectMetadataWithChecksumLimit(
+	config *common.ChecksumConfig,
+	filePath string,
+	logger logging.Interface,
+	limiter chan struct{},
+) map[string]string {
+	if config == nil || !config.UploadEnabled {
+		return nil
+	}
+
+	limiter <- struct{}{}
+	defer func() { <-limiter }()
+	return getObjectMetadataWithChecksumFunc(config, filePath, logger)
+}
+
+func effectiveChecksumConcurrency(config *common.ChecksumConfig) int {
+	if config == nil || config.Concurrency < 1 {
+		return 1
+	}
+	return config.Concurrency
 }
