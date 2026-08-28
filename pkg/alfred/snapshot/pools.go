@@ -52,10 +52,11 @@ func shapePoolKey(labels map[string]string) string {
 	if shape == "" {
 		return ""
 	}
-	if short, err := utils.GetInstanceTypeShortName(shape); err == nil && short != "" {
-		return short
+	short, err := utils.GetInstanceTypeShortName(shape)
+	if err != nil {
+		return ""
 	}
-	return ""
+	return short
 }
 
 // reconcilePoolKeys makes the partition consistent across nodes of identical

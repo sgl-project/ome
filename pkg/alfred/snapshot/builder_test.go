@@ -461,3 +461,40 @@ func TestSnapshotHelpers(t *testing.T) {
 		t.Fatal("WithVirtualPending(nil) should return the receiver")
 	}
 }
+
+// TestBuildReconcilesPoolKeys pins the wiring rather than the algorithm:
+// reconcilePoolKeys must run inside Build, before anything reads GPUPool.
+// The unit tests in pools_test.go call it directly, so removing the call from
+// Build would leave them all green while every score silently halved. The
+// deprecated instance-type label carries the shape here, covering that rung
+// end to end at the same time.
+func TestBuildReconcilesPoolKeys(t *testing.T) {
+	labelled := gpuNode("labelled", "8", func(n *corev1.Node) {
+		n.Labels = map[string]string{
+			"nvidia.com/gpu.product":           testPool,
+			"beta.kubernetes.io/instance-type": "BM.GPU.H100.8",
+		}
+	})
+	bare := gpuNode("bare", "8", func(n *corev1.Node) {
+		n.Labels = map[string]string{"beta.kubernetes.io/instance-type": "BM.GPU.H100.8"}
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(testScheme(t)).
+		WithObjects(labelled, bare).
+		Build()
+
+	snap, err := Build(context.Background(), client.Reader(fakeClient), Options{
+		Now: func() time.Time { return buildNow },
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	if got := snap.Nodes["bare"].GPUPool; got != testPool {
+		t.Fatalf("unlabelled node pool = %q, want %q — Build must reconcile pool keys", got, testPool)
+	}
+	if pools := snap.GPUPools(); len(pools) != 1 || pools[0] != testPool {
+		t.Fatalf("identical hardware must land in one pool, got %v", pools)
+	}
+}
