@@ -9,7 +9,6 @@ import (
 
 // InferenceServiceSpec is the top level type for this resource
 type InferenceServiceSpec struct {
-
 	// DeploymentMode selects the dispatch backend that drives every
 	// Component on this InferenceService. When set, it propagates to
 	// the Engine, Decoder, and Router resolver at read-time without
@@ -60,11 +59,6 @@ type InferenceServiceSpec struct {
 	// +optional
 	Router *RouterSpec `json:"router,omitempty"`
 
-	// KedaConfig defines the autoscaling configuration for KEDA
-	// Provides settings for event-driven autoscaling using KEDA (Kubernetes Event-driven Autoscaling),
-	// allowing the service to scale based on custom metrics or event sources.
-	KedaConfig *KedaConfig `json:"kedaConfig,omitempty"`
-
 	// AcceleratorSelector specifies accelerator selection preferences
 	// +optional
 	AcceleratorSelector *AcceleratorSelector `json:"acceleratorSelector,omitempty"`
@@ -98,6 +92,31 @@ type InferenceServiceSpec struct {
 	// deployments. Alpha; the API may change without notice.
 	// +optional
 	Placement *PlacementSpec `json:"placement,omitempty"`
+}
+
+// GetRolloutGroups returns the ordered rollout groups (spec.rollout.groups), or
+// nil if spec.rollout is unset. Nil-safe on a nil receiver so callers can drop
+// their own guards.
+func (s *InferenceServiceSpec) GetRolloutGroups() []RolloutGroup {
+	if s == nil || s.Rollout == nil {
+		return nil
+	}
+	return s.Rollout.Groups
+}
+
+// GetCanaryGroup returns the first rollout group whose progression is canary, or
+// nil if none. Admission rejects more than one canary group, so there is at most
+// one; a canary group may span multiple Components (primary-driven). Nil-safe.
+func (s *InferenceServiceSpec) GetCanaryGroup() *RolloutGroup {
+	if s == nil || s.Rollout == nil {
+		return nil
+	}
+	for i := range s.Rollout.Groups {
+		if s.Rollout.Groups[i].Canary != nil {
+			return &s.Rollout.Groups[i]
+		}
+	}
+	return nil
 }
 
 // AcceleratorSelector defines how to select accelerators for the InferenceService
@@ -175,31 +194,6 @@ const (
 	FirstAvailablePolicy AcceleratorSelectionPolicy = "FirstAvailable"
 )
 
-// GetRolloutGroups returns the ordered rollout groups (spec.rollout.groups), or
-// nil if spec.rollout is unset. Nil-safe on a nil receiver so callers can drop
-// their own guards.
-func (s *InferenceServiceSpec) GetRolloutGroups() []RolloutGroup {
-	if s == nil || s.Rollout == nil {
-		return nil
-	}
-	return s.Rollout.Groups
-}
-
-// GetCanaryGroup returns the first rollout group whose progression is canary, or
-// nil if none. Admission rejects more than one canary group, so there is at most
-// one; a canary group may span multiple Components (primary-driven). Nil-safe.
-func (s *InferenceServiceSpec) GetCanaryGroup() *RolloutGroup {
-	if s == nil || s.Rollout == nil {
-		return nil
-	}
-	for i := range s.Rollout.Groups {
-		if s.Rollout.Groups[i].Canary != nil {
-			return &s.Rollout.Groups[i]
-		}
-	}
-	return nil
-}
-
 // EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments)
 // Provides a comprehensive specification for deploying model serving containers and pods.
 // It allows for complete Kubernetes pod configuration including main containers,
@@ -223,33 +217,33 @@ type EngineSpec struct {
 	// +optional
 	Runner *RunnerSpec `json:"runner,omitempty"`
 
-	// Leader node configuration (only used for MultiNode deployment)
+	// Leader node configuration (only used for multi-node deployment)
 	// Defines the pod and container spec for the leader node that coordinates
 	// distributed inference in multi-node deployments.
 	// +optional
 	Leader *LeaderSpec `json:"leader,omitempty"`
 
-	// Worker nodes configuration (only used for MultiNode deployment)
+	// Worker nodes configuration (only used for multi-node deployment)
 	// Defines the pod and container spec for worker nodes that perform
 	// distributed processing tasks as directed by the leader.
 	// +optional
 	Worker *WorkerSpec `json:"worker,omitempty"`
-
-	// AcceleratorOverride allows overriding the global accelerator selection for this component
-	// +optional
-	AcceleratorOverride *AcceleratorSelector `json:"acceleratorOverride,omitempty"`
 
 	// TopologyKey is the node-label key (e.g. an NVLink/RDMA fabric-domain label)
 	// used to co-locate all pods of one multi-node (leader+worker) gang
 	// into a single network / NVLink topology domain. When set on a
 	// multi-node component, OME auto-generates the per-instance
 	// worker→leader podAffinity that anchors every worker to its gang's
-	// leader on a node sharing this label value — so users no longer
+	// leader on a node sharing this label value — so users need not
 	// hand-write that affinity. Only meaningful for multi-node components;
 	// ignored for single-pod (no leader to anchor to). Unset means no
 	// auto-generated gang affinity.
 	// +optional
 	TopologyKey *string `json:"topologyKey,omitempty"`
+
+	// AcceleratorOverride allows overriding the global accelerator selection for this component
+	// +optional
+	AcceleratorOverride *AcceleratorSelector `json:"acceleratorOverride,omitempty"`
 }
 
 // DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment)
@@ -274,33 +268,33 @@ type DecoderSpec struct {
 	// +optional
 	Runner *RunnerSpec `json:"runner,omitempty"`
 
-	// Leader node configuration (only used for MultiNode deployment)
+	// Leader node configuration (only used for multi-node deployment)
 	// Defines the pod and container spec for the leader node that coordinates
 	// distributed token generation in multi-node deployments.
 	// +optional
 	Leader *LeaderSpec `json:"leader,omitempty"`
 
-	// Worker nodes configuration (only used for MultiNode deployment)
+	// Worker nodes configuration (only used for multi-node deployment)
 	// Defines the pod and container spec for worker nodes that perform
 	// distributed token generation tasks as directed by the leader.
 	// +optional
 	Worker *WorkerSpec `json:"worker,omitempty"`
-
-	// AcceleratorOverride allows overriding the global accelerator selection for this component
-	// +optional
-	AcceleratorOverride *AcceleratorSelector `json:"acceleratorOverride,omitempty"`
 
 	// TopologyKey is the node-label key (e.g. an NVLink/RDMA fabric-domain label)
 	// used to co-locate all pods of one multi-node (leader+worker) gang
 	// into a single network / NVLink topology domain. When set on a
 	// multi-node component, OME auto-generates the per-instance
 	// worker→leader podAffinity that anchors every worker to its gang's
-	// leader on a node sharing this label value — so users no longer
+	// leader on a node sharing this label value — so users need not
 	// hand-write that affinity. Only meaningful for multi-node components;
 	// ignored for single-pod (no leader to anchor to). Unset means no
 	// auto-generated gang affinity.
 	// +optional
 	TopologyKey *string `json:"topologyKey,omitempty"`
+
+	// AcceleratorOverride allows overriding the global accelerator selection for this component
+	// +optional
+	AcceleratorOverride *AcceleratorSelector `json:"acceleratorOverride,omitempty"`
 }
 
 // LeaderSpec defines the configuration for a leader node in a multi-node component
@@ -392,8 +386,8 @@ type ModelRef struct {
 	FineTunedWeights []string `json:"fineTunedWeights,omitempty"`
 
 	// Overlays declares additional BaseModels attached to every serving
-	// pod alongside the primary. Each overlay is mounted or
-	// env-addressable at /opt/ml/model-overlays/<name> and
+	// pod alongside the primary. Each overlay is mounted (PVC/PerNode)
+	// or env-addressable (Sharded) at /opt/ml/model-overlays/<name> and
 	// exposed via OVERLAY_<UPPERCASED_NAME>_MODEL_PATH. Runner selects
 	// at request time; OME does not detect failures or auto-swap.
 	// Disabled or NotReady overlays are silently omitted.

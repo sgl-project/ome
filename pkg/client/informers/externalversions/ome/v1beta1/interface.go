@@ -10,6 +10,8 @@ import (
 type Interface interface {
 	// AcceleratorClasses returns a AcceleratorClassInformer.
 	AcceleratorClasses() AcceleratorClassInformer
+	// AcceleratorQuotas returns a AcceleratorQuotaInformer.
+	AcceleratorQuotas() AcceleratorQuotaInformer
 	// BaseModels returns a BaseModelInformer.
 	BaseModels() BaseModelInformer
 	// BenchmarkJobs returns a BenchmarkJobInformer.
@@ -44,6 +46,11 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 // AcceleratorClasses returns a AcceleratorClassInformer.
 func (v *version) AcceleratorClasses() AcceleratorClassInformer {
 	return &acceleratorClassInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// AcceleratorQuotas returns a AcceleratorQuotaInformer.
+func (v *version) AcceleratorQuotas() AcceleratorQuotaInformer {
+	return &acceleratorQuotaInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // BaseModels returns a BaseModelInformer.

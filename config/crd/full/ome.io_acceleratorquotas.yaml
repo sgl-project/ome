@@ -1,0 +1,425 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: acceleratorquotas.ome.io
+spec:
+  group: ome.io
+  names:
+    kind: AcceleratorQuota
+    listKind: AcceleratorQuotaList
+    plural: acceleratorquotas
+    shortNames:
+    - aq
+    singular: acceleratorquota
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.role
+      name: Role
+      type: string
+    - jsonPath: .spec.parentRef.name
+      name: Parent
+      type: string
+    - jsonPath: .status.budgets[0].resourceName
+      name: Resource
+      type: string
+    - jsonPath: .status.budgets[0].resourceFlavor
+      name: Flavor
+      type: string
+    - jsonPath: .status.budgets[0].nominal
+      name: Nominal
+      type: string
+    - jsonPath: .status.budgets[0].admitted
+      name: Admitted
+      type: string
+    - jsonPath: .status.budgets[0].borrowed
+      name: Borrowed
+      priority: 1
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Degraded")].status
+      name: Degraded
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.path
+      name: Path
+      priority: 1
+      type: string
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              budgets:
+                items:
+                  properties:
+                    borrowingLimit:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    lendingLimit:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    nominal:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    perCluster:
+                      items:
+                        properties:
+                          cluster:
+                            maxLength: 253
+                            type: string
+                          nominal:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                        required:
+                        - cluster
+                        - nominal
+                        type: object
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - cluster
+                      x-kubernetes-list-type: map
+                    policy:
+                      enum:
+                      - Explicit
+                      - Proportional
+                      type: string
+                    resourceFlavor:
+                      maxLength: 253
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                      type: string
+                    resourceName:
+                      maxLength: 253
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*(/[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?)?$
+                      type: string
+                  required:
+                  - nominal
+                  - resourceFlavor
+                  - resourceName
+                  type: object
+                maxItems: 16
+                type: array
+                x-kubernetes-list-map-keys:
+                - resourceName
+                - resourceFlavor
+                x-kubernetes-list-type: map
+              distribution:
+                properties:
+                  policy:
+                    enum:
+                    - Explicit
+                    - Proportional
+                    type: string
+                type: object
+              namespaces:
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
+              parentRef:
+                properties:
+                  name:
+                    maxLength: 253
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                required:
+                - name
+                type: object
+              priorityTier:
+                maxLength: 63
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                type: string
+              role:
+                enum:
+                - Cohort
+                - ClusterQueue
+                type: string
+            required:
+            - role
+            type: object
+            x-kubernetes-validations:
+            - message: a ClusterQueue node must set parentRef; only the reserved root
+                node is parent-less
+              rule: self.role != 'ClusterQueue' || has(self.parentRef)
+            - message: a Cohort node must not set namespaces, priorityTier, or distribution;
+                no workload binds to a grouping
+              rule: self.role != 'Cohort' || (!has(self.namespaces) && !has(self.priorityTier)
+                && !has(self.distribution))
+            - message: a Cohort node's budgets carry only resourceName, resourceFlavor,
+                and nominal
+              rule: self.role != 'Cohort' || !has(self.budgets) || self.budgets.all(b,
+                !has(b.policy) && !has(b.borrowingLimit) && !has(b.lendingLimit) &&
+                !has(b.perCluster))
+            - message: a ClusterQueue node must carry at least one budget
+              rule: self.role != 'ClusterQueue' || (has(self.budgets) && size(self.budgets)
+                > 0)
+            - message: a budget whose effective distribution policy is Explicit must
+                set perCluster
+              rule: '!has(self.budgets) || self.budgets.all(b, !(has(b.policy) ? b.policy
+                == ''Explicit'' : (has(self.distribution) && has(self.distribution.policy)
+                && self.distribution.policy == ''Explicit'')) || has(b.perCluster))'
+            - message: a budget whose effective distribution policy is Proportional
+                must not set perCluster; the split is computed
+              rule: '!has(self.budgets) || self.budgets.all(b, !(has(b.policy) ? b.policy
+                == ''Proportional'' : (has(self.distribution) && has(self.distribution.policy)
+                && self.distribution.policy == ''Proportional'')) || !has(b.perCluster))'
+          status:
+            properties:
+              budgets:
+                items:
+                  properties:
+                    admitted:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    borrowed:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    nominal:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    perCluster:
+                      items:
+                        properties:
+                          admitted:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          borrowed:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          cluster:
+                            type: string
+                          nominal:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          reserved:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                        required:
+                        - cluster
+                        type: object
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - cluster
+                      x-kubernetes-list-type: map
+                    reserved:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    resourceFlavor:
+                      type: string
+                    resourceName:
+                      type: string
+                  required:
+                  - resourceFlavor
+                  - resourceName
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - resourceName
+                - resourceFlavor
+                x-kubernetes-list-type: map
+              capacity:
+                items:
+                  properties:
+                    allocatable:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    highWaterMark:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    observedAt:
+                      format: date-time
+                      type: string
+                    perCluster:
+                      items:
+                        properties:
+                          allocatable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          cluster:
+                            type: string
+                          highWaterMark:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          observedAt:
+                            format: date-time
+                            type: string
+                        required:
+                        - cluster
+                        type: object
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - cluster
+                      x-kubernetes-list-type: map
+                    resourceFlavor:
+                      type: string
+                    resourceName:
+                      type: string
+                  required:
+                  - resourceFlavor
+                  - resourceName
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - resourceName
+                - resourceFlavor
+                x-kubernetes-list-type: map
+              clusters:
+                items:
+                  properties:
+                    appliedGeneration:
+                      format: int64
+                      type: integer
+                    appliedTime:
+                      format: date-time
+                      type: string
+                    cluster:
+                      type: string
+                    materializedGeneration:
+                      format: int64
+                      type: integer
+                    message:
+                      type: string
+                  required:
+                  - cluster
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - cluster
+                x-kubernetes-list-type: map
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              materialization:
+                properties:
+                  frozen:
+                    type: boolean
+                  frozenAt:
+                    format: date-time
+                    type: string
+                  lastAppliedGeneration:
+                    format: int64
+                    type: integer
+                  lastAppliedTime:
+                    format: date-time
+                    type: string
+                  reason:
+                    type: string
+                type: object
+              observedGeneration:
+                format: int64
+                type: integer
+              parent:
+                type: string
+              path:
+                type: string
+              sourceGeneration:
+                format: int64
+                type: integer
+            type: object
+        type: object
+        x-kubernetes-validations:
+        - message: an AcceleratorQuota name may not exceed 63 characters; it is copied
+            into a label value on every Kueue object the node materializes
+          rule: size(self.metadata.name) <= 63
+    served: true
+    storage: true
+    subresources:
+      status: {}

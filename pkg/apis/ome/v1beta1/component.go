@@ -7,19 +7,12 @@ import (
 
 // ComponentExtensionSpec defines the deployment configuration for a given InferenceService component
 type ComponentExtensionSpec struct {
-	// Minimum number of replicas, defaults to 1.
+	// Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.
 	// +optional
 	MinReplicas *int `json:"minReplicas,omitempty"`
 	// Maximum number of replicas for autoscaling.
 	// +optional
 	MaxReplicas int `json:"maxReplicas,omitempty"`
-	// ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for.
-	// +optional
-	ScaleTarget *int `json:"scaleTarget,omitempty"`
-	// ScaleMetric defines the scaling metric type watched by autoscaler.
-	// Possible values are cpu, memory for HPA; KEDA additionally supports custom metrics.
-	// +optional
-	ScaleMetric *ScaleMetric `json:"scaleMetric,omitempty"`
 	// TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.
 	// +optional
 	TimeoutSeconds *int64 `json:"timeoutSeconds,omitempty"`
@@ -31,6 +24,10 @@ type ComponentExtensionSpec struct {
 	// More info: http://kubernetes.io/docs/user-guide/annotations
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
+	// ServicePortAppProtocols maps generated Service port names to their
+	// Kubernetes appProtocol values. Declared ports use their container port name.
+	// +optional
+	ServicePortAppProtocols map[string]string `json:"servicePortAppProtocols,omitempty"`
 	// MinAvailable specifies how many component pods must still be available after the eviction
 	// +optional
 	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
@@ -42,13 +39,6 @@ type ComponentExtensionSpec struct {
 	// +optional
 	DeploymentStrategy *appsv1.DeploymentStrategy `json:"deploymentStrategy,omitempty"`
 
-	KedaConfig *KedaConfig `json:"kedaConfig,omitempty"`
-
-	// ServicePortAppProtocols maps generated Service port names to their
-	// Kubernetes appProtocol values. Declared ports use their container port name.
-	// +optional
-	ServicePortAppProtocols map[string]string `json:"servicePortAppProtocols,omitempty"`
-
 	// Lifecycle groups OMENative-specific lifecycle policies for this
 	// Component. Applies only when the Component resolves to deploymentMode
 	// OMENative (spec.deploymentMode or the per-Component
@@ -58,20 +48,11 @@ type ComponentExtensionSpec struct {
 	Lifecycle *LifecycleSpec `json:"lifecycle,omitempty"`
 
 	// Autoscaler configures the per-Component autoscaler dispatch and the
-	// underlying KEDA / HPA configuration. When set, it takes precedence
-	// over the legacy ScaleTarget / ScaleMetric fields and the
-	// ome.io/autoscalerClass annotation for this Component.
-	// Alpha. The API may change without notice.
+	// underlying KEDA / HPA configuration. Takes priority over the legacy
+	// ome.io/autoscalerClass annotation for this Component, and is the
+	// only way to configure per-Component autoscaling: scale metrics live
+	// here (Autoscaler.HPA.Metrics), alongside MinReplicas / MaxReplicas
+	// above. Alpha. The API may change without notice.
 	// +optional
 	Autoscaler *ComponentAutoscaler `json:"autoscaler,omitempty"`
 }
-
-// ScaleMetric enum
-// +kubebuilder:validation:Enum=cpu;memory
-type ScaleMetric string
-
-const (
-	MetricCPU    ScaleMetric = "cpu"
-	MetricMemory ScaleMetric = "memory"
-	MetricTPS    ScaleMetric = "tps"
-)

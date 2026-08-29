@@ -137,6 +137,19 @@ type InferenceReplicaSpec struct {
 	// In-flight operations resume on unpause.
 	// +optional
 	Paused bool `json:"paused,omitempty"`
+
+	// RevisionHistoryLimit caps how many non-live ControllerRevisions
+	// the InferenceReplica controller retains for this replica,
+	// projected by the InferenceService controller from the parent
+	// ISVC's ome.io/revision-history-limit annotation. Live revisions
+	// (CurrentRevision / UpdateRevision and every per-Instance
+	// running/target revision) are never deleted regardless of the
+	// limit. Nil falls back to the operator-level
+	// lifecycle.revisionHistoryLimit config; when that is also absent,
+	// no revisions are pruned.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"`
 }
 
 // ParentReference holds the InferenceService owner reference info.
@@ -205,9 +218,8 @@ type InferenceReplicaPacing struct {
 	Partition *int32 `json:"partition,omitempty"`
 
 	// MaxUnavailable caps in-rollout disruption. Accepts either a
-	// raw count or a percent string. When nil, the
-	// InferenceReplica controller falls back to its own default
-	// (currently 25%).
+	// raw count or a percent string. When nil, the InferenceReplica
+	// controller falls back to its own default budget.
 	// +optional
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
 
@@ -223,8 +235,10 @@ type InferenceReplicaPacing struct {
 
 // InferenceReplicaStatus is the observed state of one
 // InferenceReplica. The InferenceReplica controller is the sole
-// writer. Fields mirror the legacy LifecycleStatus shape so
-// the dual-write window can byte-compare the two.
+// writer. Fields mirror the LifecycleStatus shape so the ISVC's
+// aggregated per-Component status is a verbatim projection of this
+// block.
+// +kubebuilder:validation:XValidation:rule="(!has(self.instanceStatusEncoding) && !has(self.instanceStatusColumns)) || (has(self.instanceStatusEncoding) && self.instanceStatusEncoding == 'ColumnarV2' && has(self.instanceStatusColumns) && !has(self.instanceStatuses))",message="instance status encoding and payload must form a valid DenseV1 or ColumnarV2 representation"
 type InferenceReplicaStatus struct {
 	// ObservedGeneration is the InferenceReplica.metadata.generation
 	// the most recent status flush reflects.
@@ -279,20 +293,28 @@ type InferenceReplicaStatus struct {
 	CollisionCount *int32 `json:"collisionCount,omitempty"`
 
 	// LabelSelector identifies pods of this InferenceReplica for the
-	// HPA scale subresource. Must match the legacy
-	// componentLabelSelectorString formula so existing HPAs continue
-	// to resolve unchanged.
+	// HPA scale subresource. Uses the same selector formula as the
+	// Component's pod labels, so HPAs targeting either the ISVC or the
+	// InferenceReplica resolve to the same pod set.
 	// +optional
 	LabelSelector string `json:"labelSelector,omitempty"`
 
-	// InstanceStatuses reports per-Instance state. Reuses the
-	// existing OMENativeInstanceStatus type to enable byte-equality
-	// diffs against the legacy ISVC.status subtree during the
-	// migration window.
+	// InstanceStatuses is the DenseV1 per-Instance representation. It may be
+	// present only when InstanceStatusEncoding is absent.
 	// +optional
 	// +listType=map
 	// +listMapKey=index
 	InstanceStatuses []OMENativeInstanceStatus `json:"instanceStatuses,omitempty"`
+
+	// InstanceStatusEncoding selects a non-dense per-Instance representation.
+	// Its absence identifies DenseV1.
+	// +optional
+	InstanceStatusEncoding *InstanceStatusEncoding `json:"instanceStatusEncoding,omitempty"`
+
+	// InstanceStatusColumns contains the ColumnarV2 per-Instance
+	// representation and is present together with InstanceStatusEncoding.
+	// +optional
+	InstanceStatusColumns *InstanceStatusColumns `json:"instanceStatusColumns,omitempty"`
 
 	// RetryBlocks records per-target-revision retry authority for update
 	// attempts. Revision-scoped: one block per failed target revision,
