@@ -122,7 +122,8 @@ type OMENativeInstanceStatus struct {
 	// +optional
 	PodCount int32 `json:"podCount,omitempty"`
 
-	// ReadyPodCount is the number of pods reporting Ready=True.
+	// ReadyPodCount is retained for API compatibility. OMENative derives
+	// readiness from Pods and does not persist this field.
 	// +optional
 	ReadyPodCount int32 `json:"readyPodCount,omitempty"`
 
@@ -140,7 +141,8 @@ type OMENativeInstanceStatus struct {
 	// +optional
 	AvailablePodCount int32 `json:"availablePodCount,omitempty"`
 
-	// ScheduledPodCount is the number of pods with Spec.NodeName set.
+	// ScheduledPodCount is retained for API compatibility. OMENative derives
+	// scheduling state from Pods and does not persist this field.
 	// +optional
 	ScheduledPodCount int32 `json:"scheduledPodCount,omitempty"`
 
@@ -151,7 +153,8 @@ type OMENativeInstanceStatus struct {
 	// +optional
 	Admitted bool `json:"admitted,omitempty"`
 
-	// NodesOccupied is the set of node names hosting pods of this Instance.
+	// NodesOccupied is retained for API compatibility. OMENative reads current
+	// placement from Pods and does not persist this field.
 	// +optional
 	// +listType=set
 	NodesOccupied []string `json:"nodesOccupied,omitempty"`
@@ -345,7 +348,7 @@ type MigrationHistoryEntry struct {
 	// +optional
 	ReplacementInstance *int32 `json:"replacementInstance,omitempty"`
 
-	// Mode is the migration mechanism. Always `surge` in v1.
+	// Mode is the migration mechanism. Surge is the only defined mode.
 	Mode MigrationMode `json:"mode"`
 
 	// Phase is the current lifecycle phase.
@@ -401,7 +404,10 @@ type LifecycleSpec struct {
 	UpdateStrategy *UpdateStrategy `json:"updateStrategy,omitempty"`
 
 	// ReadyPolicy controls how Instance-level readiness is aggregated from
-	// the underlying pods.
+	// the underlying pods. None is accepted only for single-pod Instances,
+	// where it is equivalent to AllPodReady; admission rejects None on
+	// multi-pod OMENative Components because per-pod readiness reporting
+	// is not supported.
 	// +optional
 	ReadyPolicy *InstanceReadyPolicy `json:"readyPolicy,omitempty"`
 
@@ -532,8 +538,11 @@ const (
 	// InstanceReadyPolicyAllPodReady reports the Instance Ready only when
 	// every pod in the Instance has Ready=True. Default for multi-pod Instances.
 	InstanceReadyPolicyAllPodReady InstanceReadyPolicy = "AllPodReady"
-	// InstanceReadyPolicyNone disables Instance-level aggregation; pods
-	// are reported individually.
+	// InstanceReadyPolicyNone is accepted only for single-pod Instances,
+	// where it is behaviorally identical to AllPodReady. Admission rejects
+	// it on multi-pod OMENative Components: per-pod readiness reporting is
+	// not supported, so multi-pod readiness is always the AllPodReady
+	// aggregation.
 	InstanceReadyPolicyNone InstanceReadyPolicy = "None"
 )
 

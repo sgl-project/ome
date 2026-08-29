@@ -4,6 +4,8 @@ package v1beta1
 
 type AcceleratorClassExpansion interface{}
 
+type AcceleratorQuotaExpansion interface{}
+
 type BaseModelExpansion interface{}
 
 type BenchmarkJobExpansion interface{}

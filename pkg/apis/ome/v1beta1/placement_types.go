@@ -7,8 +7,8 @@ type PlacementMode string
 
 const (
 	// PlacementModeSingle places the InferenceService on exactly one workload
-	// cluster (the winner of the fan-out race) and sweeps the rest. This is the
-	// default and the only mode wired end to end today.
+	// cluster (the winner of the fan-out race) and sweeps the rest. This is
+	// the default.
 	PlacementModeSingle PlacementMode = "Single"
 
 	// PlacementModeAll places the InferenceService on every candidate cluster
@@ -32,8 +32,8 @@ const (
 type PlacementSpec struct {
 	// Mode is the placement cardinality: Single (one cluster), All (every
 	// candidate), or Split (replicas distributed across clusters). Defaults to
-	// Single. All and Split are rejected by admission on a control plane whose
-	// build does not yet implement them.
+	// Single. All and Split are rejected by admission on a control plane that
+	// does not implement them.
 	// +kubebuilder:default=Single
 	// +optional
 	Mode PlacementMode `json:"mode,omitempty"`
@@ -61,9 +61,8 @@ type PlacementSpec struct {
 	Split *SplitSpec `json:"split,omitempty"`
 }
 
-// SplitSpec tunes how Split mode distributes replicas across candidate clusters.
-// All fields are optional and degrade to the documented default — no in-code
-// magic values.
+// SplitSpec tunes how Split mode distributes replicas across candidate
+// clusters. All fields are optional and degrade to the documented defaults.
 type SplitSpec struct {
 	// Replicas is the fleet-wide desired replica count to distribute across homes.
 	// Unset falls back to the engine component's minReplicas (the guaranteed

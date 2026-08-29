@@ -223,6 +223,13 @@ spec:
             type: object
           status:
             properties:
+              cache:
+                properties:
+                  backend:
+                    type: string
+                  sourceUri:
+                    type: string
+                type: object
               conditions:
                 items:
                   properties:

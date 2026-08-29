@@ -11,7 +11,7 @@ type ModelFormat struct {
 	// +required
 	Name string `json:"name"`
 	// Version of the model format.
-	// Used in validating that a runtime supports a model.
+	// Used in validating that a runtime supports a predictor.
 	// It Can be "major", "major.minor" or "major.minor.patch".
 	// +optional
 	Version *string `json:"version,omitempty"`
@@ -31,7 +31,7 @@ type ModelFrameworkSpec struct {
 	// +required
 	Name string `json:"name"`
 	// Version of the library.
-	// Used in validating that a runtime supports a model.
+	// Used in validating that a runtime supports a predictor.
 	// It Can be "major", "major.minor" or "major.minor.patch".
 	// +optional
 	Version *string `json:"version,omitempty"`
@@ -124,6 +124,12 @@ type StorageSpec struct {
 	// - OCI Object Storage:   oci://n/{namespace}/b/{bucket}/o/{object_path}
 	// - Persistent Volume:    pvc://{pvc-name}/{sub-path}
 	// - Vendor-specific:      vendor://{vendor-name}/{resource-type}/{resource-path}
+	// - Hugging Face:         hf://{org}/{repo}[@{revision}]
+	// - Amazon S3:            s3://{bucket}/{object_path}
+	// - Azure Blob Storage:   az://{account}/{container}/{object_path}
+	// - Google Cloud Storage: gs://{bucket}/{object_path}
+	// - GitHub:               github://{org}/{repo}[@{tag}]
+	// - Local filesystem:     local://{path}
 	// This field is required.
 	// +required
 	StorageUri *string `json:"storageUri,omitempty"`
@@ -155,6 +161,26 @@ const (
 	ReuseIfExists  DownloadPolicy = "ReuseIfExists"
 )
 
+// Distribution selects how a BaseModel's bytes are distributed across the cluster.
+// +kubebuilder:validation:Enum=PerNode;Sharded
+type Distribution string
+
+const (
+	// DistributionPerNode materializes a full copy of the model on each
+	// selected node. The model agent downloads the model directly from its
+	// source and places it on local storage. Default behavior; a nil
+	// Distribution is treated as PerNode for backwards compatibility.
+	DistributionPerNode Distribution = "PerNode"
+
+	// DistributionSharded distributes the model as chunks across the cluster
+	// via an external sharded cache. The BaseModel controller probes source
+	// reachability and parses metadata through the cache; bytes are pulled
+	// on demand at first inference (lazy fetch). The model agent skips this
+	// BaseModel entirely. The specific sharded cache implementation is
+	// configured at the cluster level.
+	DistributionSharded Distribution = "Sharded"
+)
+
 // BaseModelSpec defines the desired state of BaseModel
 type BaseModelSpec struct {
 	// +optional
@@ -179,7 +205,8 @@ type BaseModelSpec struct {
 	ModelArchitecture *string `json:"modelArchitecture,omitempty"`
 
 	// Quantization defines the quantization scheme applied to the model weights,
-	// such as "fp8", "fbgemm_fp8", or "int4". This influences runtime compatibility and performance.
+	// such as "fp8", "fbgemm_fp8", "int4", "nvfp4", or "mxfp4". This influences
+	// runtime compatibility and performance.
 	// +optional
 	Quantization *ModelQuantization `json:"quantization,omitempty"`
 
@@ -207,10 +234,19 @@ type BaseModelSpec struct {
 	// +required
 	Storage *StorageSpec `json:"storage,omitempty"`
 
+	// Distribution selects how the model's bytes are made available across the
+	// cluster. A nil value is treated as DistributionPerNode (the existing
+	// per-node download behavior). Use DistributionSharded to opt the model
+	// into a sharded distribution mode where chunks are spread across cluster
+	// nodes by an external sharded cache.
+	// +optional
+	Distribution *Distribution `json:"distribution,omitempty"`
+
 	// ModelExtension is the common extension of the model
 	ModelExtensionSpec `json:",inline"`
 
-	// +optional Serving mode of the model, e.g., ["On-demand", "Dedicated"]
+	// ServingMode of the model, e.g., ["On-demand", "Dedicated"]
+	// +optional
 	// +listType=atomic
 	ServingMode []string `json:"servingMode,omitempty"`
 
@@ -284,13 +320,11 @@ const (
 )
 
 // ModelCapability enum
-// TODO: Remove legacy capabilities
-//
-// +kubebuilder:validation:Enum=TEXT_GENERATION;TEXT_SUMMARIZATION;TEXT_EMBEDDINGS;TEXT_RERANK;CHAT;VISION;EMBEDDING;RERANK;TEXT_TO_TEXT;TEXT_TO_AUDIO;TEXT_TO_IMAGE;TEXT_TO_VIDEO;IMAGE_TEXT_TO_TEXT;IMAGE_TEXT_TO_AUDIO;IMAGE_TEXT_TO_IMAGE;IMAGE_TEXT_TO_VIDEO;VIDEO_TEXT_TO_AUDIO;VIDEO_TEXT_TO_TEXT;AUDIO_TO_TEXT;AUDIO_TO_AUDIO;AUDIO_TEXT_TO_TEXT;AUDIO_TRANSLATION
+// +kubebuilder:validation:Enum=TEXT_GENERATION;TEXT_SUMMARIZATION;TEXT_EMBEDDINGS;TEXT_RERANK;CHAT;VISION;EMBEDDING;RERANK;TEXT_TO_TEXT;TEXT_TO_AUDIO;TEXT_TO_IMAGE;TEXT_TO_VIDEO;IMAGE_TEXT_TO_TEXT;IMAGE_TEXT_TO_AUDIO;IMAGE_TEXT_TO_IMAGE;IMAGE_TEXT_TO_VIDEO;VIDEO_TEXT_TO_TEXT;VIDEO_TEXT_TO_AUDIO;AUDIO_TO_TEXT;AUDIO_TEXT_TO_TEXT;AUDIO_TO_AUDIO;AUDIO_TRANSLATION
 type ModelCapability string
 
 const (
-	// Legacy capabilities (to be deprecated)
+	// Deprecated: prefer the modality-pair values below.
 	ModelCapabilityTextGeneration    ModelCapability = "TEXT_GENERATION"
 	ModelCapabilityTextSummarization ModelCapability = "TEXT_SUMMARIZATION"
 	ModelCapabilityTextEmbeddings    ModelCapability = "TEXT_EMBEDDINGS"
@@ -298,7 +332,7 @@ const (
 	ModelCapabilityChat              ModelCapability = "CHAT"
 	ModelCapabilityVision            ModelCapability = "VISION"
 
-	// New capabilities (preferred naming)
+	// Preferred capability names, expressed as modality pairs.
 	ModelCapabilityEmbedding        ModelCapability = "EMBEDDING"
 	ModelCapabilityRerank           ModelCapability = "RERANK"
 	ModelCapabilityTextToText       ModelCapability = "TEXT_TO_TEXT"
@@ -309,11 +343,11 @@ const (
 	ModelCapabilityImageTextToAudio ModelCapability = "IMAGE_TEXT_TO_AUDIO"
 	ModelCapabilityImageTextToImage ModelCapability = "IMAGE_TEXT_TO_IMAGE"
 	ModelCapabilityImageTextToVideo ModelCapability = "IMAGE_TEXT_TO_VIDEO"
-	ModelCapabilityVideoTextToAudio ModelCapability = "VIDEO_TEXT_TO_AUDIO"
 	ModelCapabilityVideoTextToText  ModelCapability = "VIDEO_TEXT_TO_TEXT"
+	ModelCapabilityVideoTextToAudio ModelCapability = "VIDEO_TEXT_TO_AUDIO"
 	ModelCapabilityAudioToText      ModelCapability = "AUDIO_TO_TEXT"
-	ModelCapabilityAudioToAudio     ModelCapability = "AUDIO_TO_AUDIO"
 	ModelCapabilityAudioTextToText  ModelCapability = "AUDIO_TEXT_TO_TEXT"
+	ModelCapabilityAudioToAudio     ModelCapability = "AUDIO_TO_AUDIO"
 	ModelCapabilityAudioTranslation ModelCapability = "AUDIO_TRANSLATION"
 	ModelCapabilityUnknown          ModelCapability = ""
 )
@@ -370,7 +404,7 @@ type FineTunedWeightSpec struct {
 	// +required
 	Storage *StorageSpec `json:"storage,omitempty"`
 
-	// TrainingJobID is the ID of the training job that produced this weight
+	// TrainingJobRef references the training job that produced this weight
 	// +optional
 	TrainingJobRef ObjectReference `json:"trainingJobRef,omitempty"`
 }
@@ -406,10 +440,13 @@ const (
 	LifeCycleDetailFailed     string = "Associated JobRun Failed"
 )
 
-// Model status condition types and reasons.
 const (
 	// ModelConditionSourceReachable reports whether OME can access the model source.
 	ModelConditionSourceReachable = "SourceReachable"
+	// ModelConditionMetadataExtracted reports whether OME has extracted
+	// enough metadata from the source (config.json / model_index.json /
+	// safetensors headers) to populate the BaseModel spec.
+	ModelConditionMetadataExtracted = "MetadataExtracted"
 	// ModelConditionReady reports whether the model status is ready for serving consumers.
 	ModelConditionReady = "Ready"
 
@@ -419,6 +456,17 @@ const (
 	ModelConditionReasonSourceReachable = "SourceReachable"
 	// ModelConditionReasonSourceNotReachable means the model source is not reachable.
 	ModelConditionReasonSourceNotReachable = "SourceNotReachable"
+	// ModelConditionReasonMetadataPending means model metadata has not been parsed yet.
+	ModelConditionReasonMetadataPending = "MetadataPending"
+	// ModelConditionReasonMetadataParsed means model metadata has been parsed.
+	ModelConditionReasonMetadataParsed = "MetadataParsed"
+	// ModelConditionReasonMetadataUnparseable means the model source layout is
+	// structurally incompatible with the cache provider's parsing requirements
+	// (e.g. missing config.json/model_index.json or unresolvable safetensors
+	// shards). The state is terminal until the spec or the source changes.
+	ModelConditionReasonMetadataUnparseable = "MetadataUnparseable"
+	// ModelConditionReasonProviderNotConfigured means no model cache provider is configured for the controller.
+	ModelConditionReasonProviderNotConfigured = "ProviderNotConfigured"
 
 	// ModelConditionReasonPVCInvalid means the PVC storage URI is malformed
 	// or violates the BaseModel/ClusterBaseModel namespace rules.
@@ -446,6 +494,21 @@ const (
 	// extraction Job.
 	ModelConditionReasonPVCConfigMissing = "PVCConfigMissing"
 )
+
+// ModelCacheStatus reports the cluster-wide cache provider identity
+// for models that use a sharded distribution backend. In the lazy-
+// fetch flow, the sharded-cache daemons pull bytes on demand at first
+// inference, so there is no separate "placement progress" to report
+// — Backend + SourceUri are enough to identify the cache mapping.
+type ModelCacheStatus struct {
+	// Backend identifies the configured cache provider.
+	// +optional
+	Backend string `json:"backend,omitempty"`
+
+	// SourceUri is the model source URI being cached.
+	// +optional
+	SourceUri string `json:"sourceUri,omitempty"`
+}
 
 // ModelStatusSpec defines the observed state of Model weight
 type ModelStatusSpec struct {
@@ -475,13 +538,19 @@ type ModelStatusSpec struct {
 	// +listType=atomic
 	NodesFailed []string `json:"nodesFailed,omitempty"`
 
-	// Conditions describe model readiness and source/metadata state. The PVC
-	// path reports SourceReachable and Ready; PerNode models continue to
-	// report node-level state through NodesReady and NodesFailed.
+	// Conditions describe cluster-wide model readiness and cache state.
+	// Sharded models report SourceReachable, MetadataExtracted, and Ready;
+	// PerNode models continue to report node-level state through NodesReady
+	// and NodesFailed.
 	// +optional
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// Cache contains cluster-wide cache progress when the model uses a sharded
+	// distribution backend.
+	// +optional
+	Cache *ModelCacheStatus `json:"cache,omitempty"`
 }
 
 // BaseModel is the Schema for the basemodels API
