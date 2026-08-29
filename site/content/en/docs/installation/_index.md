@@ -41,16 +41,16 @@ Make sure the following conditions are met:
 
 The following components are optional and only required for specific features:
 
-| Component                 | Required For                      | Description                                                |
-|---------------------------|-----------------------------------|------------------------------------------------------------|
-| **Istio**                 | Virtual Services                  | Service mesh for traffic management (minimum version 1.19) |
-| **KEDA**                  | Custom metrics autoscaling        | Kubernetes Event-driven Autoscaling                        |
-| **Prometheus**            | Custom metrics autoscaling        | Metrics collection and monitoring                          |
-| **LeaderWorkerSet (LWS)** | MultiNode, MultiNodeRayVLLM modes | Kubernetes API for distributed training workloads          |
-| **Kueue**                 | Job scheduling                    | Kubernetes-native job queueing                             |
+| Component                 | Required For               | Description                                                |
+|---------------------------|----------------------------|------------------------------------------------------------|
+| **Istio**                 | Virtual Services           | Service mesh for traffic management (minimum version 1.19) |
+| **KEDA**                  | Custom metrics autoscaling | Kubernetes Event-driven Autoscaling                        |
+| **Prometheus**            | Custom metrics autoscaling | Metrics collection and monitoring                          |
+| **LeaderWorkerSet (LWS)** | MultiNode mode             | Kubernetes API for distributed training workloads          |
+| **Kueue**                 | Job scheduling             | Kubernetes-native job queueing                             |
 
 !!! warning
-    **Important**: If you plan to use `MultiNode` or `MultiNodeRayVLLM` deployment modes, you MUST install the corresponding optional components (Ray and/or LWS) BEFORE installing OME. The controller may panic if these CRDs are not available when needed.
+    **Important**: If you plan to use the `MultiNode` deployment mode, you MUST install LeaderWorkerSet (LWS) BEFORE installing OME. The controller may panic if the CRD is not available when needed.
 
 ### 1. Install Cert Manager (Required)
 
@@ -106,7 +106,7 @@ helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack
 
 ### 5. Install LeaderWorkerSet (Optional - MultiNode mode only)
 
-**Optional - Required for both MultiNode and MultiNodeRayVLLM deployment modes**
+**Optional - Required for the MultiNode deployment mode**
 
 Please refer to [LeaderWorkerSet installation guide](https://github.com/kubernetes-sigs/lws).
 

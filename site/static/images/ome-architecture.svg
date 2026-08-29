@@ -176,7 +176,7 @@
             <rect x="950" y="595" width="140" height="80" rx="5" fill="white" stroke="#ba68c8" stroke-width="1" filter="url(#shadow)"/>
             <text x="1020" y="615" text-anchor="middle" font-size="10" font-weight="bold" fill="#8e24aa" font-family="Arial, sans-serif">Multi-Node</text>
             <text x="1020" y="630" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">LeaderWorkerSet</text>
-            <text x="1020" y="645" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Ray Cluster</text>
+            <text x="1020" y="645" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Leader/Worker Groups</text>
             <text x="1020" y="660" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Pod Coordination</text>
 
             <rect x="1110" y="595" width="140" height="80" rx="5" fill="white" stroke="#ba68c8" stroke-width="1" filter="url(#shadow)"/>
@@ -275,20 +275,17 @@
         <rect x="70" y="1140" width="80" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
         <text x="110" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">KEDA</text>
 
-        <rect x="160" y="1140" width="80" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
-        <text x="200" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">Gateway API</text>
+        <rect x="178" y="1140" width="80" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
+        <text x="218" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">Gateway API</text>
 
-        <rect x="250" y="1140" width="80" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
-        <text x="290" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">Istio</text>
+        <rect x="286" y="1140" width="80" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
+        <text x="326" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">Istio</text>
 
-        <rect x="340" y="1140" width="100" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
-        <text x="390" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">LeaderWorkerSet</text>
+        <rect x="394" y="1140" width="100" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
+        <text x="444" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">LeaderWorkerSet</text>
 
-        <rect x="450" y="1140" width="80" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
-        <text x="490" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">Ray</text>
-
-        <rect x="540" y="1140" width="80" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
-        <text x="580" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">Kueue</text>
+        <rect x="522" y="1140" width="80" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
+        <text x="562" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">Kueue</text>
 
         <rect x="630" y="1140" width="100" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
         <text x="680" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">Prometheus</text>
