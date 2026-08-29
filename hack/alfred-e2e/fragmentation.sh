@@ -5,6 +5,8 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 trap stop_nested_tunnel EXIT
 
+require_command kubectl
+
 scenario_namespace="alfred-e2e"
 scenario_label="alfred-e2e.ome.io/scenario=fragmentation"
 gpu_product="ALFRED-E2E-H100"

@@ -4,6 +4,8 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
+require_command kubectl jq
+
 alfred_image="${ALFRED_E2E_IMG:-}"
 pull_secret_source="${ALFRED_E2E_PULL_SECRET_SOURCE:-}"
 kustomize_bin="${KUSTOMIZE_BIN:-${project_dir}/bin/kustomize}"

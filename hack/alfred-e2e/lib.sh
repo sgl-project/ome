@@ -18,6 +18,16 @@ if [[ -n "${host_context}" ]]; then
   host_kubectl+=(--context "${host_context}")
 fi
 
+require_command() {
+  local cmd
+  for cmd in "$@"; do
+    if ! command -v "${cmd}" >/dev/null 2>&1; then
+      echo "required command not found: ${cmd}" >&2
+      exit 1
+    fi
+  done
+}
+
 tunnel_pid=""
 tunnel_log=""
 
@@ -34,25 +44,42 @@ stop_nested_tunnel() {
 }
 
 start_nested_tunnel() {
-  tunnel_log="$(mktemp)"
-  "${host_kubectl[@]}" -n "${host_namespace}" port-forward \
-    service/kwok-cluster "${nested_port}:8080" >"${tunnel_log}" 2>&1 &
-  tunnel_pid=$!
+  local outcome
+  # A handoff between scripts can reach here before the previous forward has
+  # released the fixed local port, which kills the new one on bind. That is
+  # transient, so retry it; a forward that stays up but never answers is not.
+  for _ in 1 2 3; do
+    tunnel_log="$(mktemp)"
+    "${host_kubectl[@]}" -n "${host_namespace}" port-forward \
+      service/kwok-cluster "${nested_port}:8080" >"${tunnel_log}" 2>&1 &
+    tunnel_pid=$!
 
-  for _ in $(seq 1 30); do
-    if ! kill -0 "${tunnel_pid}" >/dev/null 2>&1; then
-      cat "${tunnel_log}" >&2
+    outcome="unready"
+    for _ in $(seq 1 30); do
+      if ! kill -0 "${tunnel_pid}" >/dev/null 2>&1; then
+        outcome="died"
+        break
+      fi
+      if nested_kubectl get --raw=/readyz >/dev/null 2>&1; then
+        return 0
+      fi
+      sleep 1
+    done
+
+    cat "${tunnel_log}" >&2
+    if [[ "${outcome}" != "died" ]]; then
       return 1
     fi
-    if kubectl --server "${nested_server}" get --raw=/readyz >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 1
+    stop_nested_tunnel
+    sleep 2
   done
-  cat "${tunnel_log}" >&2
   return 1
 }
 
+# The nested API is anonymous plain HTTP. --server overrides only the cluster
+# server, so without an explicit empty kubeconfig the ambient context's user
+# still applies — and every cloud kubeconfig runs an exec credential plugin,
+# which would make these calls fail for reasons unrelated to the nested cluster.
 nested_kubectl() {
-  kubectl --server "${nested_server}" "$@"
+  kubectl --kubeconfig /dev/null --server "${nested_server}" "$@"
 }

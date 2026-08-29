@@ -5,11 +5,14 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 trap stop_nested_tunnel EXIT
 
+require_command kubectl jq
+
 scenario_namespace="alfred-e2e"
 deadline=$((SECONDS + 120))
 last_score="unavailable"
 last_count="0"
 last_withheld="0"
+last_pending="unavailable"
 
 start_nested_tunnel
 
@@ -32,17 +35,23 @@ while (( SECONDS < deadline )); do
     last_withheld="$(jq -r '[.recommendations // [] | .[] | select(.outcome == "withheld")] | length' <<<"${record}")"
   fi
 
+  # An empty nodeName alone would also hold if nothing ever tried to schedule
+  # the pod, so require the scheduler's own verdict: it looked and found no
+  # node with 8 free GPUs, which is the condition the fixture exists to create.
   pending_node="$(nested_kubectl -n "${scenario_namespace}" get pod pending-8gpu \
     -o jsonpath='{.spec.nodeName}' 2>/dev/null || true)"
+  pending_reason="$(nested_kubectl -n "${scenario_namespace}" get pod pending-8gpu \
+    -o jsonpath='{.status.conditions[?(@.type=="PodScheduled")].reason}' 2>/dev/null || true)"
+  last_pending="node=${pending_node:-none} reason=${pending_reason:-none}"
   if [[ -n "${last_score}" ]] &&
      awk -v score="${last_score}" 'BEGIN { exit !(score > 0.25) }' &&
      (( last_count > 0 )) && (( last_withheld > 0 )) &&
-     [[ -z "${pending_node}" ]]; then
+     [[ -z "${pending_node}" && "${pending_reason}" == "Unschedulable" ]]; then
     echo "Alfred fragmentation E2E passed"
     echo "  score: ${last_score}"
     echo "  recommendations: ${last_count}"
     echo "  recommend-only withheld: ${last_withheld}"
-    echo "  pending 8-GPU demand: unscheduled"
+    echo "  pending 8-GPU demand: Unschedulable"
     exit 0
   fi
   sleep 2
@@ -52,6 +61,7 @@ echo "Alfred fragmentation E2E timed out" >&2
 echo "  score: ${last_score}" >&2
 echo "  recommendations: ${last_count}" >&2
 echo "  recommend-only withheld: ${last_withheld}" >&2
+echo "  pending 8-GPU demand: ${last_pending}" >&2
 "${host_kubectl[@]}" -n "${host_namespace}" logs deployment/alfred-under-test \
   --tail=80 >&2 || true
 exit 1

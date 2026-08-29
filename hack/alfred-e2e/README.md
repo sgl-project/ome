@@ -6,9 +6,17 @@ nested API; only the nested Nodes and workload Pods are simulated. No local
 container runtime is required, and no fake Node is added to the host cluster.
 
 The fragmentation fixture creates ten fake 8-GPU nodes, places one movable
-1-GPU OME pod on each node, and leaves an 8-GPU demand pending. Its E2E-only
-configuration weights the 8-GPU bucket, making the scenario deterministic
-while retaining Alfred's normal `0.25` policy gate.
+1-GPU OME pod on each node, and leaves an 8-GPU demand pending. Seven GPUs
+free on every node seats no 8-GPU job at all, while a repack would free whole
+nodes — so reclaimable fragmentation lands near `0.64`, well clear of
+Alfred's normal `0.25` policy gate, which the fixture keeps unchanged.
+
+Two settings are E2E-only, both for determinism rather than to force the
+result. `demandBlendLambda: 1.0` takes the scoring weights entirely from the
+shipped size prior instead of from observed demand, so the score does not
+drift as pods come and go. The loop intervals and cooldowns are compressed to
+seconds and single minutes so a cycle is observable inside the verifier's
+120-second window.
 
 ## Run
 
@@ -29,7 +37,7 @@ make alfred-e2e-fragmentation \
 
 The second target succeeds only when:
 
-- the synthetic 8-GPU demand remains Pending;
+- the synthetic 8-GPU demand is rejected by the scheduler as `Unschedulable`;
 - `alfred_cluster_fragmentation_score` exceeds `0.25`;
 - `alfred-recommendations/last-cycle.json` contains recommendations; and
 - at least one recommendation is `withheld`, proving recommend-only admission.

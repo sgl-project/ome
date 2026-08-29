@@ -24,10 +24,10 @@ data:
           sizeLadder: [1, 2, 4, 8]
           demandBlendLambda: 1.0
           sizePrior:
-            "1": 0.0
-            "2": 0.0
-            "4": 0.0
-            "8": 1.0
+            "1": 0.1
+            "2": 0.1
+            "4": 0.2
+            "8": 0.6
           pendingUrgencyTauMinutes: 1
       nodeHealth:
         enabled: true
