@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ome
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alfred-config
+  namespace: ome
+data:
+  config.yaml: |
+    schemaVersion: 1
+    mode: recommend-only
+    decisionLoopInterval: 2s
+    observationLoopInterval: 1s
+    earlyTickOn: [NodeConditionChange]
+    policies:
+      defragmentation:
+        enabled: true
+        fragmentationThreshold: 0.25
+        aggressiveness: balanced
+        scoring:
+          sizeLadder: [1, 2, 4, 8]
+          demandBlendLambda: 1.0
+          sizePrior:
+            "1": 0.1
+            "2": 0.1
+            "4": 0.2
+            "8": 0.6
+          pendingUrgencyTauMinutes: 1
+      nodeHealth:
+        enabled: true
+        aggressiveness: balanced
+        triggerConditions: [GpuUnhealthy]
+        signalOnly: false
+        healthCooldownFloorMinutes: 1
+        nodeSuspicionWindowMinutes: 1
+    defaultMovable: true
+    recentPlacementCooldownMinutes: 1
+    perWorkloadCooldownMinutes: 1
+    perNodeCooldownMinutes: 1
+    rawDeploymentMigrationEnabled: true
+    omenativeMigrationEnabled: true
+    lwsRecommendationsEnabled: true
+    recommendationsConfigMapEnabled: true
+    recommendationsConfigMapName: alfred-recommendations
+    maxInFlightMigrations: 3
+    maxMigrationsPerHour: 10
+    emergencyPendingAgeMinutes: 1
+    maintenanceWindows: []
+    spotPolicy:
+      avoidAsTarget: true
+      preferAsSource: true
+      preemptibleLabels:
+        - node.kubernetes.io/preemptible
+        - cloud.google.com/gke-preemptible
+    allowCrossTenantOptimization: true
+    logLevel: info
+    structuredLogging: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alfred-recommendations
+  namespace: ome

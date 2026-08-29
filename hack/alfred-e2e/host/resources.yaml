@@ -1,0 +1,148 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kwok-cluster
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kwok-cluster
+  template:
+    metadata:
+      labels:
+        app: kwok-cluster
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: cluster
+          image: registry.k8s.io/kwok/cluster:v0.8.0-k8s.v1.33.12
+          imagePullPolicy: IfNotPresent
+          # No runAsNonRoot: the KWOK all-in-one image declares no USER and
+          # its entrypoint writes control-plane state as root.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: apiserver
+              containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: apiserver
+            periodSeconds: 2
+            failureThreshold: 60
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kwok-cluster
+spec:
+  selector:
+    app: kwok-cluster
+  ports:
+    - name: apiserver
+      port: 8080
+      targetPort: apiserver
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nested-kubeconfig
+data:
+  config: |
+    apiVersion: v1
+    kind: Config
+    clusters:
+      - name: kwok
+        cluster:
+          server: http://kwok-cluster:8080
+    contexts:
+      - name: kwok
+        context:
+          cluster: kwok
+          user: anonymous
+    current-context: kwok
+    users:
+      - name: anonymous
+        user: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alfred-under-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alfred-under-test
+  template:
+    metadata:
+      labels:
+        app: alfred-under-test
+    spec:
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: alfred-e2e-registry
+      containers:
+        - name: alfred
+          image: alfred-e2e-placeholder:latest
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          args:
+            - --metrics-bind-address=:8080
+            - --health-probe-bind-address=:8081
+            - --leader-elect=true
+            - --config-name=alfred-config
+            - --config-key=config.yaml
+          env:
+            - name: KUBECONFIG
+              value: /etc/nested/config
+            - name: POD_NAMESPACE
+              value: ome
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - name: metrics
+              containerPort: 8080
+            - name: health
+              containerPort: 8081
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            periodSeconds: 2
+            failureThreshold: 60
+          volumeMounts:
+            - name: kubeconfig
+              mountPath: /etc/nested
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      volumes:
+        - name: kubeconfig
+          configMap:
+            name: nested-kubeconfig

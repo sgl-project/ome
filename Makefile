@@ -743,6 +743,45 @@ integration-test: fmt vet manifests envtest ## 🧪 Run integration tests
 	go test -v ./tests/... -ginkgo.v -ginkgo.trace
 	@echo "✅ Integration tests passed"
 
+# Alfred's E2E harness runs a nested KWOK control-plane in an isolated host
+# namespace and points a real Alfred pod at that simulated API server.
+ALFRED_E2E_IMG ?= $(ALFRED_IMG)
+ALFRED_E2E_HOST_KUBECONFIG ?= $(KUBECONFIG)
+ALFRED_E2E_HOST_CONTEXT ?=
+ALFRED_E2E_NAMESPACE ?= alfred-e2e
+ALFRED_E2E_PULL_SECRET_SOURCE ?= ome/alfred-build-registry
+
+.PHONY: alfred-e2e-cluster
+alfred-e2e-cluster: kustomize ## 🎩 Create an isolated nested KWOK Alfred E2E cluster
+	@ALFRED_E2E_HOST_KUBECONFIG="$(ALFRED_E2E_HOST_KUBECONFIG)" \
+		ALFRED_E2E_HOST_CONTEXT="$(ALFRED_E2E_HOST_CONTEXT)" \
+		ALFRED_E2E_NAMESPACE="$(ALFRED_E2E_NAMESPACE)" \
+		ALFRED_E2E_PULL_SECRET_SOURCE="$(ALFRED_E2E_PULL_SECRET_SOURCE)" \
+		ALFRED_E2E_IMG="$(ALFRED_E2E_IMG)" \
+		KUSTOMIZE_BIN="$(KUSTOMIZE)" \
+		hack/alfred-e2e/create.sh
+
+.PHONY: alfred-e2e-fragmentation
+alfred-e2e-fragmentation: ## 🎩 Load and verify the deterministic fragmentation scenario
+	@ALFRED_E2E_HOST_KUBECONFIG="$(ALFRED_E2E_HOST_KUBECONFIG)" \
+		ALFRED_E2E_HOST_CONTEXT="$(ALFRED_E2E_HOST_CONTEXT)" \
+		ALFRED_E2E_NAMESPACE="$(ALFRED_E2E_NAMESPACE)" \
+		hack/alfred-e2e/fragmentation.sh
+
+.PHONY: alfred-e2e-verify
+alfred-e2e-verify: ## 🎩 Re-check Alfred metrics and recommendations in the E2E cluster
+	@ALFRED_E2E_HOST_KUBECONFIG="$(ALFRED_E2E_HOST_KUBECONFIG)" \
+		ALFRED_E2E_HOST_CONTEXT="$(ALFRED_E2E_HOST_CONTEXT)" \
+		ALFRED_E2E_NAMESPACE="$(ALFRED_E2E_NAMESPACE)" \
+		hack/alfred-e2e/verify.sh
+
+.PHONY: alfred-e2e-clean
+alfred-e2e-clean: ## 🎩 Delete the isolated nested-KWOK E2E namespace
+	@ALFRED_E2E_HOST_KUBECONFIG="$(ALFRED_E2E_HOST_KUBECONFIG)" \
+		ALFRED_E2E_HOST_CONTEXT="$(ALFRED_E2E_HOST_CONTEXT)" \
+		ALFRED_E2E_NAMESPACE="$(ALFRED_E2E_NAMESPACE)" \
+		hack/alfred-e2e/delete.sh
+
 
 .PHONY: site-server
 site-server: hugo ## 🌐 Start Hugo development server
