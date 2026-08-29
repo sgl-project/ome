@@ -20,6 +20,10 @@ seconds and single minutes so a cycle is observable inside the verifier's
 
 ## Run
 
+Requires `kubectl` and `jq` on PATH. The make targets provision kustomize into
+`bin/` themselves; only a direct `hack/alfred-e2e/create.sh` invocation needs
+`KUSTOMIZE_BIN` pointed at one.
+
 The host kubeconfig must point to a disposable/test Kubernetes cluster. The
 Alfred image must match the host node architecture. For a private image, name
 an existing `kubernetes.io/dockerconfigjson` pull secret to copy into the
@@ -28,7 +32,7 @@ isolated namespace.
 ```bash
 make alfred-e2e-cluster \
   ALFRED_E2E_HOST_KUBECONFIG=/path/to/host-kubeconfig \
-  ALFRED_E2E_IMG=fra.ocir.io/idqj093njucb/alfred-new:fra-test-6d936c56dea6 \
+  ALFRED_E2E_IMG=<registry>/<repo>/alfred:<tag> \
   ALFRED_E2E_PULL_SECRET_SOURCE=ome/alfred-build-registry
 
 make alfred-e2e-fragmentation \
@@ -64,3 +68,9 @@ Optional overrides:
 - `ALFRED_E2E_NESTED_PORT` — local tunnel port, default `18080`.
 - `KWOK_CLUSTER_IMAGE` — nested KWOK image, default
   `registry.k8s.io/kwok/cluster:v0.8.0-k8s.v1.33.12`.
+- `KUSTOMIZE_BIN` — kustomize binary, default `bin/kustomize`.
+
+The nested KWOK container runs as root: its all-in-one image declares no
+`USER` and writes control-plane state as root, so it meets the `baseline` Pod
+Security Standard but not `restricted`. Both containers drop all capabilities,
+disallow privilege escalation, and set `RuntimeDefault` seccomp.

@@ -17,6 +17,15 @@ spec:
         - name: cluster
           image: registry.k8s.io/kwok/cluster:v0.8.0-k8s.v1.33.12
           imagePullPolicy: IfNotPresent
+          # No runAsNonRoot: the KWOK all-in-one image declares no USER and
+          # its entrypoint writes control-plane state as root.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             - name: apiserver
               containerPort: 8080
@@ -88,6 +97,14 @@ spec:
         - name: alfred
           image: alfred-e2e-placeholder:latest
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
           args:
             - --metrics-bind-address=:8080
             - --health-probe-bind-address=:8081
