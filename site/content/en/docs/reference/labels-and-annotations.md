@@ -128,13 +128,10 @@ See [Ingress administration](/ome/docs/administration/ingress) for usage details
 
 ### Scheduling Labels
 
-| Label                          | Description                       |
-|--------------------------------|-----------------------------------|
-| `ray.io/scheduler-name`        | Ray scheduler name                |
-| `ray.io/priority-class-name`   | Ray priority class name           |
-| `raycluster/unavailable-since` | Ray cluster unavailable timestamp |
-| `volcano.sh/queue-name`        | Volcano queue name                |
-| `volcano.sh/job-name`          | Volcano job name                  |
+| Label                   | Description        |
+|-------------------------|--------------------|
+| `volcano.sh/queue-name` | Volcano queue name |
+| `volcano.sh/job-name`   | Volcano job name   |
 
 ### Kueue Labels
 

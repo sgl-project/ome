@@ -6005,7 +6005,7 @@
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         },
         "workers": {
-          "description": "WorkerPodSpec for the serving runtime, this is used for multi-node serving without Ray Cluster",
+          "description": "WorkerPodSpec for the serving runtime, this is used for multi-node serving",
           "$ref": "#/definitions/v1beta1.WorkerPodSpec"
         }
       }

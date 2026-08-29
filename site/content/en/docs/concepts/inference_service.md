@@ -160,7 +160,7 @@ This deployment mode offers direct Kubernetes management with standard HPA-based
 
 ### Multi-Node Mode
 
-Enables distributed model serving across multiple nodes using LeaderWorkerSet or Ray clusters.
+Enables distributed model serving across multiple nodes using LeaderWorkerSet.
 
 ```yaml
 apiVersion: ome.io/v1beta1
@@ -177,7 +177,7 @@ spec:
     worker:
       size: 1  # Number of worker nodes
 ```
-This deployment mode enables distributed inference using LeaderWorkerSet or Ray, with support for multi-GPU and multi-node setups, and is optimized for large language models through automatic coordination between nodes
+This deployment mode enables distributed inference using LeaderWorkerSet, with support for multi-GPU and multi-node setups, and is optimized for large language models through automatic coordination between nodes
 
 > **⚠️ WARNING**: Multi-node configurations typically require high-performance networking such as RoCE or InfiniBand, and performance may vary depending on the underlying network topology and hardware provided by different cloud vendors.
 
@@ -220,7 +220,7 @@ OME derives the deployment mode from the component spec rather than requiring yo
 - If `decoder.leader` **or** `decoder.worker` is set, the Decoder is deployed as Multi-Node.
 - Otherwise the component falls back to Raw Deployment.
 
-You can also force a specific distributed backend with the `ome.io/deploymentMode` annotation (for example `MultiNode` or `MultiNodeRayVLLM`); when present, the annotation takes precedence over the inferred mode.
+You can also force a specific deployment mode with the `ome.io/deploymentMode` annotation (for example `MultiNode`); when present, the annotation takes precedence over the inferred mode.
 
 > **Note**: The `decoder` component only supports Raw Deployment or Multi-Node.
 

@@ -10685,7 +10685,7 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 					},
 					"workers": {
 						SchemaProps: spec.SchemaProps{
-							Description: "WorkerPodSpec for the serving runtime, this is used for multi-node serving without Ray Cluster",
+							Description: "WorkerPodSpec for the serving runtime, this is used for multi-node serving",
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerPodSpec"),
 						},
 					},

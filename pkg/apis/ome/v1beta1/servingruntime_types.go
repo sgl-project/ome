@@ -219,7 +219,7 @@ type ServingRuntimeSpec struct {
 	// PodSpec for the serving runtime
 	ServingRuntimePodSpec `json:",inline"`
 
-	// WorkerPodSpec for the serving runtime, this is used for multi-node serving without Ray Cluster
+	// WorkerPodSpec for the serving runtime, this is used for multi-node serving
 	// +optional
 	WorkerPodSpec *WorkerPodSpec `json:"workers,omitempty"`
 

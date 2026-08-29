@@ -3723,7 +3723,7 @@ are hammered out.</p>
 <a href="#ome-io-v1beta1-WorkerPodSpec"><code>WorkerPodSpec</code></a>
 </td>
 <td>
-   <p>WorkerPodSpec for the serving runtime, this is used for multi-node serving without Ray Cluster</p>
+   <p>WorkerPodSpec for the serving runtime, this is used for multi-node serving</p>
 </td>
 </tr>
 <tr><td><code>acceleratorRequirements</code><br/>
