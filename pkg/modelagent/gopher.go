@@ -439,6 +439,11 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 		downloadStartTime := time.Now()
 		switch storageType {
 		case storage.StorageTypeOCI:
+			s.logger.Infof("Starting CNCF ModelPack download for model %s", modelInfo)
+			if err := s.processModelPackModel(ctx, task, baseModelSpec, modelInfo, modelType, namespace, name); err != nil {
+				return err
+			}
+		case storage.StorageTypeOCIObjectStore:
 			osUri, err := getTargetDirPath(&baseModelSpec)
 			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
 			if err != nil {
@@ -587,7 +592,7 @@ func (s *Gopher) processTaskWithOptions(task *GopherTask, allowFallbackDownload 
 
 		// Now proceed with deletion
 		switch storageType {
-		case storage.StorageTypeOCI:
+		case storage.StorageTypeOCI, storage.StorageTypeOCIObjectStore:
 			s.logger.Infof("Starting deletion for model %s", modelInfo)
 			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
 			// check if it needs to skip artifact deletion
@@ -752,7 +757,7 @@ func (s *Gopher) isStartupRevalidation(task *GopherTask) bool {
 		return false
 	}
 	storageType, err := storage.GetStorageType(*baseModelSpec.Storage.StorageUri)
-	if err != nil || storageType != storage.StorageTypeOCI {
+	if err != nil || (storageType != storage.StorageTypeOCI && storageType != storage.StorageTypeOCIObjectStore) {
 		return false
 	}
 

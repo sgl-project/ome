@@ -257,7 +257,7 @@ func TestValidateStorage(t *testing.T) {
 	}{
 		"Valid storage URI": {
 			storage: &v1beta1.StorageSpec{
-				StorageUri: ptr("oci://n/mynamespace/b/mybucket/o/path/to/object"),
+				StorageUri: ptr("ocios://n/mynamespace/b/mybucket/o/path/to/object"),
 			},
 			expected: gomega.BeNil(),
 		},
@@ -273,19 +273,19 @@ func TestValidateStorage(t *testing.T) {
 		},
 		"Invalid storage URI format - missing n": {
 			storage: &v1beta1.StorageSpec{
-				StorageUri: ptr("oci://mynamespace/b/mybucket/o/object"),
+				StorageUri: ptr("ocios://mynamespace/b/mybucket/o/object"),
 			},
 			expected: gomega.HaveOccurred(),
 		},
 		"Invalid storage URI format - missing b": {
 			storage: &v1beta1.StorageSpec{
-				StorageUri: ptr("oci://n/mynamespace/mybucket/o/object"),
+				StorageUri: ptr("ocios://n/mynamespace/mybucket/o/object"),
 			},
 			expected: gomega.HaveOccurred(),
 		},
 		"Invalid storage URI format - missing o": {
 			storage: &v1beta1.StorageSpec{
-				StorageUri: ptr("oci://n/mynamespace/b/mybucket/object"),
+				StorageUri: ptr("ocios://n/mynamespace/b/mybucket/object"),
 			},
 			expected: gomega.HaveOccurred(),
 		},

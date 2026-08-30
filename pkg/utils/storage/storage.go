@@ -8,7 +8,11 @@ import (
 )
 
 const (
-	// OCIStoragePrefix is the prefix for OCI storage URIs
+	// OCIStoragePrefix is the prefix for CNCF ModelPack OCI artifact URIs,
+	// e.g. oci://ghcr.io/org/model:tag.
+	//
+	// BREAKING: this previously addressed Oracle Cloud Object Storage
+	// (oci://n/{namespace}/b/{bucket}/o/{path}). See docs for migration.
 	OCIStoragePrefix = "oci://"
 	// PVCStoragePrefix is the prefix for PVC storage URIs
 	PVCStoragePrefix = "pvc://"
@@ -26,6 +30,12 @@ const (
 	GitHubStoragePrefix = "github://"
 	// LocalStoragePrefix is the prefix for local filesystem storage URIs
 	LocalStoragePrefix = "local://"
+	// OCIObjectStorePrefix is the prefix for Oracle Cloud Object Storage URIs.
+	//
+	// This is where oci:// URIs moved to: oci:// now names a CNCF ModelPack
+	// artifact. Format is unchanged otherwise:
+	// ocios://n/{namespace}/b/{bucket}/o/{object_path}
+	OCIObjectStorePrefix = "ocios://"
 )
 
 // StorageType is a string enum for storage type
@@ -50,14 +60,14 @@ const (
 	StorageTypeGitHub StorageType = "GITHUB"
 	// StorageTypeLocal is the value for local filesystem storage
 	StorageTypeLocal StorageType = "LOCAL"
+	// StorageTypeOCIObjectStore is the value for Oracle Cloud Object Storage
+	StorageTypeOCIObjectStore StorageType = "OCIOS"
 )
 
-// OCIStorageComponents represents the components of an OCI storage URI
+// OCIStorageComponents represents a CNCF ModelPack OCI artifact reference.
 type OCIStorageComponents struct {
-	Namespace  string
-	Bucket     string
-	Prefix     string
-	ObjectName string
+	// Reference is the registry reference, e.g. "ghcr.io/org/model:tag".
+	Reference string
 }
 
 // PVCStorageComponents represents the components of a PVC storage URI
@@ -112,23 +122,65 @@ type LocalStorageComponents struct {
 	Path string // Absolute or relative path to the model files
 }
 
-// ParseOCIStorageURI parses an OCI storage URI and returns its components
-// Format: oci://n/{namespace}/b/{bucket}/o/{object_path}
+// OCIObjectStoreComponents represents the components of an Oracle Cloud
+// Object Storage URI.
+type OCIObjectStoreComponents struct {
+	Namespace  string
+	Bucket     string
+	Prefix     string
+	ObjectName string
+}
+
+// ParseOCIObjectStoreURI parses an Oracle Object Storage URI.
+// Format: ocios://n/{namespace}/b/{bucket}/o/{object_path}
+func ParseOCIObjectStoreURI(uri string) (*OCIObjectStoreComponents, error) {
+	if !strings.HasPrefix(uri, OCIObjectStorePrefix) {
+		return nil, fmt.Errorf("invalid Object Storage URI format: missing %s prefix", OCIObjectStorePrefix)
+	}
+
+	parts := strings.Split(strings.TrimPrefix(uri, OCIObjectStorePrefix), "/")
+	if len(parts) < 6 || parts[0] != "n" || parts[2] != "b" || parts[4] != "o" {
+		return nil, fmt.Errorf("invalid Object Storage URI format. Expected: ocios://n/{namespace}/b/{bucket}/o/{object_path}")
+	}
+
+	return &OCIObjectStoreComponents{
+		Namespace: parts[1],
+		Bucket:    parts[3],
+		Prefix:    strings.Join(parts[5:], "/"),
+	}, nil
+}
+
+// ValidateOCIObjectStoreURI validates an Oracle Object Storage URI.
+func ValidateOCIObjectStoreURI(uri string) error {
+	_, err := ParseOCIObjectStoreURI(uri)
+	return err
+}
+
+// ParseOCIStorageURI parses a CNCF ModelPack OCI artifact URI.
+// Format: oci://{registry}/{repository}[:{tag}|@{digest}]
+//
+// The whole remainder is the reference: a repository name may contain slashes,
+// so there is nothing further to split.
 func ParseOCIStorageURI(uri string) (*OCIStorageComponents, error) {
 	if !strings.HasPrefix(uri, OCIStoragePrefix) {
 		return nil, fmt.Errorf("invalid OCI storage URI format: missing %s prefix", OCIStoragePrefix)
 	}
 
-	parts := strings.Split(strings.TrimPrefix(uri, OCIStoragePrefix), "/")
-	if len(parts) < 6 || parts[0] != "n" || parts[2] != "b" || parts[4] != "o" {
-		return nil, fmt.Errorf("invalid OCI storage URI format. Expected: oci://n/{namespace}/b/{bucket}/o/{object_path}")
+	reference := strings.TrimSpace(strings.TrimPrefix(uri, OCIStoragePrefix))
+	if reference == "" {
+		return nil, fmt.Errorf("invalid OCI storage URI: empty reference in %q", uri)
+	}
+	if strings.HasPrefix(reference, "n/") {
+		return nil, fmt.Errorf(
+			"%q looks like an Oracle Object Storage URI, which oci:// no longer addresses; "+
+				"oci:// now names a CNCF ModelPack artifact (oci://{registry}/{repository}:{tag})", uri)
+	}
+	if !strings.Contains(reference, "/") {
+		return nil, fmt.Errorf(
+			"invalid OCI storage URI %q: expected oci://{registry}/{repository}[:{tag}]", uri)
 	}
 
-	return &OCIStorageComponents{
-		Namespace: parts[1],
-		Bucket:    parts[3],
-		Prefix:    strings.Join(parts[5:], "/"),
-	}, nil
+	return &OCIStorageComponents{Reference: reference}, nil
 }
 
 // ValidateOCIStorageURI validates if the given URI matches OCI storage format
@@ -534,6 +586,8 @@ func ValidateLocalStorageURI(uri string) error {
 // GetStorageType determines the type of storage URI
 func GetStorageType(uri string) (StorageType, error) {
 	switch {
+	case strings.HasPrefix(uri, OCIObjectStorePrefix):
+		return StorageTypeOCIObjectStore, nil
 	case strings.HasPrefix(uri, OCIStoragePrefix):
 		return StorageTypeOCI, nil
 	case strings.HasPrefix(uri, PVCStoragePrefix):
@@ -567,6 +621,8 @@ func ValidateStorageURI(uri string) error {
 	switch storageType {
 	case StorageTypeOCI:
 		return ValidateOCIStorageURI(uri)
+	case StorageTypeOCIObjectStore:
+		return ValidateOCIObjectStoreURI(uri)
 	case StorageTypePVC:
 		return ValidatePVCStorageURI(uri)
 	case StorageTypeVendor:
@@ -601,7 +657,7 @@ func NewObjectURI(uriStr string) (*ociobjectstore.ObjectURI, error) {
 	}
 
 	switch storageType {
-	case StorageTypeOCI:
+	case StorageTypeOCIObjectStore:
 		return parseOCIObjectURI(uriStr)
 	case StorageTypeHuggingFace:
 		return parseHuggingFaceObjectURI(uriStr)
@@ -668,12 +724,12 @@ func parseHuggingFaceObjectURI(uriStr string) (*ociobjectstore.ObjectURI, error)
 
 // parseOCIObjectURI parses an OCI URI string into an ObjectURI
 func parseOCIObjectURI(uriStr string) (*ociobjectstore.ObjectURI, error) {
-	if !strings.HasPrefix(uriStr, OCIStoragePrefix) {
-		return nil, fmt.Errorf("URI must start with '%s'", OCIStoragePrefix)
+	if !strings.HasPrefix(uriStr, OCIObjectStorePrefix) {
+		return nil, fmt.Errorf("URI must start with '%s'", OCIObjectStorePrefix)
 	}
 
 	// Remove the scheme
-	uriStr = strings.TrimPrefix(uriStr, "oci://")
+	uriStr = strings.TrimPrefix(uriStr, OCIObjectStorePrefix)
 
 	// Check for the OCI specific format: n/namespace/b/bucket/o/prefix
 	if strings.HasPrefix(uriStr, "n/") {

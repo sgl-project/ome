@@ -112,7 +112,7 @@ func isObjectStorageDownloadTask(task *GopherTask) bool {
 		return false
 	}
 	storageType, err := storage.GetStorageType(*storageSpec.StorageUri)
-	return err == nil && storageType == storage.StorageTypeOCI
+	return err == nil && (storageType == storage.StorageTypeOCI || storageType == storage.StorageTypeOCIObjectStore)
 }
 
 func removeSupersededTasks(tasks []*GopherTask, deleteTask *GopherTask) []*GopherTask {

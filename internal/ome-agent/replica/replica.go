@@ -100,13 +100,13 @@ func NewReplicaAgent(config *Config) (*ReplicaAgent, error) {
 		return nil, fmt.Errorf("failed to parse target storage URI %s - %w", config.Target.StorageURIStr, err)
 	}
 
-	if sourceStorageType == storage.StorageTypeOCI {
+	if sourceStorageType == storage.StorageTypeOCIObjectStore {
 		sourceObjectURI.Region = config.Source.OCIOSDataStore.Config.Region
 		if !strings.HasSuffix(sourceObjectURI.Prefix, "/") && sourceObjectURI.Prefix != "" {
 			sourceObjectURI.Prefix += "/"
 		}
 	}
-	if targetStorageType == storage.StorageTypeOCI {
+	if targetStorageType == storage.StorageTypeOCIObjectStore {
 		targetObjectURI.Region = config.Target.OCIOSDataStore.Config.Region
 		if !strings.HasSuffix(targetObjectURI.Prefix, "/") && targetObjectURI.Prefix != "" {
 			targetObjectURI.Prefix += "/"
@@ -205,7 +205,7 @@ func (r *ReplicaAgent) prepareTargetArtifactUpload() (*targetArtifactUploadLock,
 	if !r.Config.TargetArtifactReuseAllowed {
 		return nil, false, nil
 	}
-	if r.ReplicationInput.TargetStorageType != storage.StorageTypeOCI {
+	if r.ReplicationInput.TargetStorageType != storage.StorageTypeOCIObjectStore {
 		return nil, false, nil
 	}
 	if r.Config.Target.OCIOSDataStore == nil {
@@ -436,7 +436,7 @@ func (r *ReplicaAgent) prepareTargetArtifactAfterLockAcquired() (bool, error) {
 	if !r.Config.TargetArtifactReuseAllowed {
 		return false, nil
 	}
-	if r.ReplicationInput.TargetStorageType != storage.StorageTypeOCI {
+	if r.ReplicationInput.TargetStorageType != storage.StorageTypeOCIObjectStore {
 		return false, nil
 	}
 	if r.Config.Target.OCIOSDataStore == nil {
@@ -458,7 +458,7 @@ func (r *ReplicaAgent) prepareTargetArtifactAfterLockAcquired() (bool, error) {
 // removeTargetArtifactCompletionMarkerBeforeOverwrite ensures readers cannot
 // treat a target prefix as complete while replication overwrites its objects.
 func (r *ReplicaAgent) removeTargetArtifactCompletionMarkerBeforeOverwrite() error {
-	if r.ReplicationInput.TargetStorageType != storage.StorageTypeOCI {
+	if r.ReplicationInput.TargetStorageType != storage.StorageTypeOCIObjectStore {
 		return nil
 	}
 	if r.Config.Target.OCIOSDataStore == nil {
@@ -477,7 +477,7 @@ func (r *ReplicaAgent) writeCompletionMarker() error {
 	if !r.Config.TargetArtifactReuseAllowed {
 		return nil
 	}
-	if r.ReplicationInput.TargetStorageType != storage.StorageTypeOCI {
+	if r.ReplicationInput.TargetStorageType != storage.StorageTypeOCIObjectStore {
 		r.Logger.Infof("Skipping target artifact completion marker for non-OCI target storage type %s", r.ReplicationInput.TargetStorageType)
 		return nil
 	}
@@ -552,7 +552,7 @@ func (r *ReplicaAgent) writeTerminationLog(message string) {
 
 func (r *ReplicaAgent) listSourceObjects() ([]common.ReplicationObject, error) {
 	switch r.ReplicationInput.SourceStorageType {
-	case storage.StorageTypeOCI:
+	case storage.StorageTypeOCIObjectStore:
 		listOfObjectSummary, err := r.Config.Source.OCIOSDataStore.ListObjects(r.ReplicationInput.Source)
 		if err != nil {
 			return nil, err

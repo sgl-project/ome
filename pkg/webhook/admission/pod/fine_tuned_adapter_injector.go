@@ -135,7 +135,7 @@ func (fa *FineTunedAdapterInjector) createInitContainer(envs []v1.EnvVar, mounts
 }
 
 // getFineTunedWeightUri retrieves the fine-tuned weight uri from the fine-tuned weight CR
-func (fa *FineTunedAdapterInjector) getFineTunedWeightUri(pod *v1.Pod) (*storage.OCIStorageComponents, error) {
+func (fa *FineTunedAdapterInjector) getFineTunedWeightUri(pod *v1.Pod) (*storage.OCIObjectStoreComponents, error) {
 	fineTunedWeight, err := isvcutils.GetFineTunedWeight(fa.client, fa.fineTunedWeightName)
 	if err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func (fa *FineTunedAdapterInjector) getFineTunedWeightUri(pod *v1.Pod) (*storage
 		return nil, fmt.Errorf("fine-tuned weight %q storage.storageUri is required", fa.fineTunedWeightName)
 	}
 
-	osUri, err := storage.ParseOCIStorageURI(*fineTunedWeight.Spec.Storage.StorageUri)
+	osUri, err := storage.ParseOCIObjectStoreURI(*fineTunedWeight.Spec.Storage.StorageUri)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +159,7 @@ func (fa *FineTunedAdapterInjector) getFineTunedWeightUri(pod *v1.Pod) (*storage
 }
 
 // getModelInitEnvs generates environment variables for the Model Init container.
-func (fa *FineTunedAdapterInjector) getModelInitEnvs(pod *v1.Pod, fineTunedWeightUri *storage.OCIStorageComponents) ([]v1.EnvVar, error) {
+func (fa *FineTunedAdapterInjector) getModelInitEnvs(pod *v1.Pod, fineTunedWeightUri *storage.OCIObjectStoreComponents) ([]v1.EnvVar, error) {
 	envVars := []v1.EnvVar{
 		{Name: constants.AgentAuthTypeEnvVarKey, Value: fa.AuthType},
 		{Name: constants.AgentCompartmentIDEnvVarKey, Value: fa.CompartmentId},

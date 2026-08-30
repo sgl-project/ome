@@ -65,7 +65,7 @@ spec:
    additionalRequestParams:
       temperature: "0.0"
    outputLocation:
-      storageUri: "oci://n/idqj093njucb/b/ome-benchmark-results/o/llama-3-1-70b-benchmark"
+      storageUri: "ocios://n/idqj093njucb/b/ome-benchmark-results/o/llama-3-1-70b-benchmark"
       parameters:
          auth: "instance_principal"
 ```
@@ -140,7 +140,7 @@ BenchmarkJob supports storing benchmark results in multiple cloud storage provid
 #### 1. OCI Object Storage
 ```yaml
 outputLocation:
-  storageUri: "oci://n/my-namespace/b/my-bucket/o/benchmark-results"
+  storageUri: "ocios://n/my-namespace/b/my-bucket/o/benchmark-results"
   parameters:
     auth: "instance_principal"  # Authentication type
     config_file: "/path/to/config"  # Optional: Config file for user_principal auth
@@ -201,7 +201,7 @@ outputLocation:
 
 | Provider | URI Format | Example |
 |----------|------------|---------|
-| OCI | `oci://n/{namespace}/b/{bucket}/o/{path}` | `oci://n/myns/b/mybucket/o/results` |
+| OCI | `ocios://n/{namespace}/b/{bucket}/o/{path}` | `ocios://n/myns/b/mybucket/o/results` |
 | S3 | `s3://{bucket}[@{region}]/{path}` | `s3://mybucket@us-west-2/results` |
 | Azure | `az://{account}/{container}/{path}` | `az://myaccount/mycontainer/results` |
 | GCS | `gs://{bucket}/{path}` | `gs://mybucket/results` |

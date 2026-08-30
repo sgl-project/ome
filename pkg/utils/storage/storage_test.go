@@ -9,18 +9,18 @@ import (
 	"sigs.k8s.io/ome/pkg/ociobjectstore"
 )
 
-func TestParseOCIStorageURI(t *testing.T) {
+func TestParseOCIObjectStoreURI(t *testing.T) {
 	tests := []struct {
 		name        string
 		uri         string
-		want        *OCIStorageComponents
+		want        *OCIObjectStoreComponents
 		wantErr     bool
 		errContains string
 	}{
 		{
 			name: "valid uri with simple path",
-			uri:  "oci://n/myns/b/mybucket/o/mypath",
-			want: &OCIStorageComponents{
+			uri:  "ocios://n/myns/b/mybucket/o/mypath",
+			want: &OCIObjectStoreComponents{
 				Namespace: "myns",
 				Bucket:    "mybucket",
 				Prefix:    "mypath",
@@ -29,8 +29,8 @@ func TestParseOCIStorageURI(t *testing.T) {
 		},
 		{
 			name: "valid uri with nested path",
-			uri:  "oci://n/myns/b/mybucket/o/path/to/my/object",
-			want: &OCIStorageComponents{
+			uri:  "ocios://n/myns/b/mybucket/o/path/to/my/object",
+			want: &OCIObjectStoreComponents{
 				Namespace: "myns",
 				Bucket:    "mybucket",
 				Prefix:    "path/to/my/object",
@@ -39,8 +39,8 @@ func TestParseOCIStorageURI(t *testing.T) {
 		},
 		{
 			name: "valid uri with special characters",
-			uri:  "oci://n/my-ns.123/b/my_bucket-123/o/path.with.dots/and-dashes",
-			want: &OCIStorageComponents{
+			uri:  "ocios://n/my-ns.123/b/my_bucket-123/o/path.with.dots/and-dashes",
+			want: &OCIObjectStoreComponents{
 				Namespace: "my-ns.123",
 				Bucket:    "my_bucket-123",
 				Prefix:    "path.with.dots/and-dashes",
@@ -51,55 +51,55 @@ func TestParseOCIStorageURI(t *testing.T) {
 			name:        "missing oci prefix",
 			uri:         "n/myns/b/mybucket/o/mypath",
 			wantErr:     true,
-			errContains: "missing oci:// prefix",
+			errContains: "missing ocios:// prefix",
 		},
 		{
 			name:        "missing namespace marker",
-			uri:         "oci://myns/b/mybucket/o/mypath",
+			uri:         "ocios://myns/b/mybucket/o/mypath",
 			wantErr:     true,
-			errContains: "invalid OCI storage URI format",
+			errContains: "invalid Object Storage URI format",
 		},
 		{
 			name:        "missing bucket marker",
-			uri:         "oci://n/myns/mybucket/o/mypath",
+			uri:         "ocios://n/myns/mybucket/o/mypath",
 			wantErr:     true,
-			errContains: "invalid OCI storage URI format",
+			errContains: "invalid Object Storage URI format",
 		},
 		{
 			name:        "missing object marker",
-			uri:         "oci://n/myns/b/mybucket/mypath",
+			uri:         "ocios://n/myns/b/mybucket/mypath",
 			wantErr:     true,
-			errContains: "invalid OCI storage URI format",
+			errContains: "invalid Object Storage URI format",
 		},
 		{
 			name:        "empty uri",
 			uri:         "",
 			wantErr:     true,
-			errContains: "missing oci:// prefix",
+			errContains: "missing ocios:// prefix",
 		},
 		{
 			name:        "only prefix",
-			uri:         "oci://",
+			uri:         "ocios://",
 			wantErr:     true,
-			errContains: "invalid OCI storage URI format",
+			errContains: "invalid Object Storage URI format",
 		},
 		{
 			name:        "missing path after object marker",
-			uri:         "oci://n/myns/b/mybucket/o",
+			uri:         "ocios://n/myns/b/mybucket/o",
 			wantErr:     true,
-			errContains: "invalid OCI storage URI format",
+			errContains: "invalid Object Storage URI format",
 		},
 		{
 			name:        "invalid order of markers",
-			uri:         "oci://b/mybucket/n/myns/o/mypath",
+			uri:         "ocios://b/mybucket/n/myns/o/mypath",
 			wantErr:     true,
-			errContains: "invalid OCI storage URI format",
+			errContains: "invalid Object Storage URI format",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseOCIStorageURI(tt.uri)
+			got, err := ParseOCIObjectStoreURI(tt.uri)
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.errContains != "" {
@@ -113,7 +113,7 @@ func TestParseOCIStorageURI(t *testing.T) {
 	}
 }
 
-func TestValidateOCIStorageURI(t *testing.T) {
+func TestValidateOCIObjectStoreURI(t *testing.T) {
 	tests := []struct {
 		name        string
 		uri         string
@@ -122,26 +122,26 @@ func TestValidateOCIStorageURI(t *testing.T) {
 	}{
 		{
 			name:    "valid uri",
-			uri:     "oci://n/myns/b/mybucket/o/mypath",
+			uri:     "ocios://n/myns/b/mybucket/o/mypath",
 			wantErr: false,
 		},
 		{
 			name:        "invalid uri",
 			uri:         "invalid://uri",
 			wantErr:     true,
-			errContains: "missing oci:// prefix",
+			errContains: "missing ocios:// prefix",
 		},
 		{
 			name:        "empty uri",
 			uri:         "",
 			wantErr:     true,
-			errContains: "missing oci:// prefix",
+			errContains: "missing ocios:// prefix",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateOCIStorageURI(tt.uri)
+			err := ValidateOCIObjectStoreURI(tt.uri)
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.errContains != "" {
@@ -333,7 +333,7 @@ func TestParsePVCStorageURI(t *testing.T) {
 		},
 		{
 			name:    "invalid uri - wrong scheme",
-			uri:     "oci://my-pvc/results",
+			uri:     "ocios://my-pvc/results",
 			want:    nil,
 			wantErr: true,
 		},
@@ -454,8 +454,13 @@ func TestGetStorageType(t *testing.T) {
 		errContains string
 	}{
 		{
-			name: "oci storage",
-			uri:  "oci://n/myns/b/mybucket/o/mypath",
+			name: "oci object storage",
+			uri:  "ocios://n/myns/b/mybucket/o/mypath",
+			want: StorageTypeOCIObjectStore,
+		},
+		{
+			name: "oci modelpack artifact",
+			uri:  "oci://ghcr.io/org/model:tag",
 			want: StorageTypeOCI,
 		},
 		{
@@ -536,7 +541,7 @@ func TestValidateStorageURI(t *testing.T) {
 	}{
 		{
 			name:    "valid oci uri",
-			uri:     "oci://n/myns/b/mybucket/o/mypath",
+			uri:     "ocios://n/myns/b/mybucket/o/mypath",
 			wantErr: false,
 		},
 		{
@@ -566,7 +571,7 @@ func TestValidateStorageURI(t *testing.T) {
 		},
 		{
 			name:    "invalid oci uri",
-			uri:     "oci://invalid",
+			uri:     "ocios://invalid",
 			wantErr: true,
 		},
 		{
@@ -926,37 +931,37 @@ func TestNewObjectURI(t *testing.T) {
 		// OCI URIs
 		{
 			name:    "valid n/namespace/b/bucket/o/prefix",
-			uri:     "oci://n/myns/b/mybucket/o/myprefix",
+			uri:     "ocios://n/myns/b/mybucket/o/myprefix",
 			expect:  &ociobjectstore.ObjectURI{Namespace: "myns", BucketName: "mybucket", Prefix: "myprefix"},
 			wantErr: false,
 		},
 		{
 			name:    "valid n/namespace/b/bucket/o/multi/level/prefix",
-			uri:     "oci://n/myns/b/mybucket/o/dir1/dir2/file.txt",
+			uri:     "ocios://n/myns/b/mybucket/o/dir1/dir2/file.txt",
 			expect:  &ociobjectstore.ObjectURI{Namespace: "myns", BucketName: "mybucket", Prefix: "dir1/dir2/file.txt"},
 			wantErr: false,
 		},
 		{
 			name:    "valid namespace@region/bucket/prefix",
-			uri:     "oci://myns@us-phoenix-1/mybucket/myprefix",
+			uri:     "ocios://myns@us-phoenix-1/mybucket/myprefix",
 			expect:  &ociobjectstore.ObjectURI{Namespace: "myns", Region: "us-phoenix-1", BucketName: "mybucket", Prefix: "myprefix"},
 			wantErr: false,
 		},
 		{
 			name:    "valid namespace@region/bucket with no prefix",
-			uri:     "oci://myns@us-phoenix-1/mybucket",
+			uri:     "ocios://myns@us-phoenix-1/mybucket",
 			expect:  &ociobjectstore.ObjectURI{Namespace: "myns", Region: "us-phoenix-1", BucketName: "mybucket", Prefix: ""},
 			wantErr: false,
 		},
 		{
 			name:    "valid bucket/prefix (no namespace/region)",
-			uri:     "oci://mybucket/myprefix",
+			uri:     "ocios://mybucket/myprefix",
 			expect:  &ociobjectstore.ObjectURI{Namespace: "", Region: "", BucketName: "mybucket", Prefix: "myprefix"},
 			wantErr: false,
 		},
 		{
 			name:    "valid bucket only (no namespace/region/prefix)",
-			uri:     "oci://mybucket",
+			uri:     "ocios://mybucket",
 			expect:  &ociobjectstore.ObjectURI{Namespace: "", Region: "", BucketName: "mybucket", Prefix: ""},
 			wantErr: false,
 		},
@@ -968,19 +973,19 @@ func TestNewObjectURI(t *testing.T) {
 		},
 		{
 			name:        "malformed n/namespace/b/bucket/o (too short)",
-			uri:         "oci://n/myns/b/mybucket",
+			uri:         "ocios://n/myns/b/mybucket",
 			wantErr:     true,
 			errContains: "invalid OCI URI format",
 		},
 		{
 			name:        "malformed n/namespace/b/bucket/x/extra",
-			uri:         "oci://n/myns/b/mybucket/x/extra",
+			uri:         "ocios://n/myns/b/mybucket/x/extra",
 			wantErr:     true,
 			errContains: "invalid OCI URI format",
 		},
 		{
 			name:        "namespace@region missing bucket",
-			uri:         "oci://myns@us-phoenix-1",
+			uri:         "ocios://myns@us-phoenix-1",
 			wantErr:     true,
 			errContains: "missing bucket name",
 		},
@@ -992,13 +997,13 @@ func TestNewObjectURI(t *testing.T) {
 		},
 		{
 			name:        "oci:// only",
-			uri:         "oci://",
+			uri:         "ocios://",
 			wantErr:     true,
 			errContains: "missing bucket name",
 		},
 		{
-			name:    "oci://n/namespace/b/bucket/o/ (empty prefix)",
-			uri:     "oci://n/myns/b/mybucket/o/",
+			name:    "ocios://n/namespace/b/bucket/o/ (empty prefix)",
+			uri:     "ocios://n/myns/b/mybucket/o/",
 			expect:  &ociobjectstore.ObjectURI{Namespace: "myns", BucketName: "mybucket", Prefix: ""},
 			wantErr: false,
 		},

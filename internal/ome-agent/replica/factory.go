@@ -11,7 +11,7 @@ func NewReplicator(r *ReplicaAgent) (replicator.Replicator, error) {
 	sourceStorageType := r.ReplicationInput.SourceStorageType
 	targetStorageType := r.ReplicationInput.TargetStorageType
 	switch {
-	case sourceStorageType == storage.StorageTypeHuggingFace && targetStorageType == storage.StorageTypeOCI:
+	case sourceStorageType == storage.StorageTypeHuggingFace && targetStorageType == storage.StorageTypeOCIObjectStore:
 		return &replicator.HFToOCIReplicator{
 			Logger: r.Logger,
 			Config: replicator.HFToOCIReplicatorConfig{
@@ -25,7 +25,7 @@ func NewReplicator(r *ReplicaAgent) (replicator.Replicator, error) {
 			},
 			ReplicationInput: r.ReplicationInput,
 		}, nil
-	case sourceStorageType == storage.StorageTypeOCI && targetStorageType == storage.StorageTypeOCI:
+	case sourceStorageType == storage.StorageTypeOCIObjectStore && targetStorageType == storage.StorageTypeOCIObjectStore:
 		return &replicator.OCIToOCIReplicator{
 			Logger: r.Logger,
 			Config: replicator.OCIToOCIReplicatorConfig{
@@ -37,7 +37,7 @@ func NewReplicator(r *ReplicaAgent) (replicator.Replicator, error) {
 			},
 			ReplicationInput: r.ReplicationInput,
 		}, nil
-	case sourceStorageType == storage.StorageTypePVC && targetStorageType == storage.StorageTypeOCI:
+	case sourceStorageType == storage.StorageTypePVC && targetStorageType == storage.StorageTypeOCIObjectStore:
 		return &replicator.PVCToOCIReplicator{
 			Logger: r.Logger,
 			Config: replicator.PVCToOCIReplicatorConfig{
@@ -59,7 +59,7 @@ func NewReplicator(r *ReplicaAgent) (replicator.Replicator, error) {
 			},
 			ReplicationInput: r.ReplicationInput,
 		}, nil
-	case sourceStorageType == storage.StorageTypeOCI && targetStorageType == storage.StorageTypePVC:
+	case sourceStorageType == storage.StorageTypeOCIObjectStore && targetStorageType == storage.StorageTypePVC:
 		return &replicator.OCIToPVCReplicator{
 			Logger: r.Logger,
 			Config: replicator.OCIToPVCReplicatorConfig{
