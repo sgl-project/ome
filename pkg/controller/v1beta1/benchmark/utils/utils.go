@@ -139,12 +139,12 @@ type storageArgsBuilder func(uri string, params map[string]string) ([]string, er
 
 // storageBuilders maps storage types to their argument builders
 var storageBuilders = map[storage.StorageType]storageArgsBuilder{
-	storage.StorageTypeOCI:    buildOCIArgs,
-	storage.StorageTypePVC:    buildPVCArgs,
-	storage.StorageTypeS3:     buildS3Args,
-	storage.StorageTypeAzure:  buildAzureArgs,
-	storage.StorageTypeGCS:    buildGCSArgs,
-	storage.StorageTypeGitHub: buildGitHubArgs,
+	storage.StorageTypeOCIObjectStore: buildOCIArgs,
+	storage.StorageTypePVC:            buildPVCArgs,
+	storage.StorageTypeS3:             buildS3Args,
+	storage.StorageTypeAzure:          buildAzureArgs,
+	storage.StorageTypeGCS:            buildGCSArgs,
+	storage.StorageTypeGitHub:         buildGitHubArgs,
 }
 
 // addParam appends a flag and value to args if the key exists in params
@@ -186,7 +186,7 @@ func BuildStorageArgs(storageSpec *v1beta1.StorageSpec) ([]string, error) {
 }
 
 func buildOCIArgs(uri string, params map[string]string) ([]string, error) {
-	components, err := storage.ParseOCIStorageURI(uri)
+	components, err := storage.ParseOCIObjectStoreURI(uri)
 	if err != nil {
 		return nil, fmt.Errorf("invalid OCI storage URI: %v", err)
 	}

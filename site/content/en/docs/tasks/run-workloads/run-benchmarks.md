@@ -115,7 +115,7 @@ spec:
     gpuType: "H100"
     gpuCount: 1
   outputLocation:
-    storageUri: "oci://n/idqj093njucb/b/ome-benchmark-results/o/e5-mistral-7b-instruct-benchmark"
+    storageUri: "ocios://n/idqj093njucb/b/ome-benchmark-results/o/e5-mistral-7b-instruct-benchmark"
     parameters:
       auth: "instance_principal"
       region: "eu-frankfurt-1"
@@ -165,7 +165,7 @@ spec:
     modelSize: "670B"
     deployment: "MultiNode-RDMA"
   outputLocation:
-    storageUri: "oci://n/idqj093njucb/b/ome-benchmark-results/o/deepseek-r1-benchmark"
+    storageUri: "ocios://n/idqj093njucb/b/ome-benchmark-results/o/deepseek-r1-benchmark"
     parameters:
       auth: "instance_principal"
       region: "us-phoenix-1"

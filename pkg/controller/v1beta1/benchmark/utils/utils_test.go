@@ -20,17 +20,17 @@ func strPtr(s string) *string {
 	return &s
 }
 
-func TestParseOCIStorageURI(t *testing.T) {
+func TestParseOCIObjectStoreURI(t *testing.T) {
 	tests := []struct {
 		name    string
 		uri     string
-		want    *storage.OCIStorageComponents
+		want    *storage.OCIObjectStoreComponents
 		wantErr bool
 	}{
 		{
 			name: "valid uri",
-			uri:  "oci://n/my-namespace/b/my-bucket/o/path/to/results",
-			want: &storage.OCIStorageComponents{
+			uri:  "ocios://n/my-namespace/b/my-bucket/o/path/to/results",
+			want: &storage.OCIObjectStoreComponents{
 				Namespace: "my-namespace",
 				Bucket:    "my-bucket",
 				Prefix:    "path/to/results",
@@ -39,7 +39,7 @@ func TestParseOCIStorageURI(t *testing.T) {
 		},
 		{
 			name:    "invalid uri - missing namespace",
-			uri:     "oci://n///b/my-bucket/o/results",
+			uri:     "ocios://n///b/my-bucket/o/results",
 			want:    nil,
 			wantErr: true,
 		},
@@ -57,8 +57,8 @@ func TestParseOCIStorageURI(t *testing.T) {
 		},
 		{
 			name: "valid uri - multiple path segments",
-			uri:  "oci://n/my-namespace/b/my-bucket/o/path/with/multiple/segments",
-			want: &storage.OCIStorageComponents{
+			uri:  "ocios://n/my-namespace/b/my-bucket/o/path/with/multiple/segments",
+			want: &storage.OCIObjectStoreComponents{
 				Namespace: "my-namespace",
 				Bucket:    "my-bucket",
 				Prefix:    "path/with/multiple/segments",
@@ -69,20 +69,20 @@ func TestParseOCIStorageURI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := storage.ParseOCIStorageURI(tt.uri)
+			got, err := storage.ParseOCIObjectStoreURI(tt.uri)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseOCIStorageURI() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ParseOCIObjectStoreURI() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ParseOCIStorageURI() = %v, want %v", got, tt.want)
+				t.Errorf("ParseOCIObjectStoreURI() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
 func TestBuildStorageArgs(t *testing.T) {
-	ociStorageUri := "oci://n/my-namespace/b/my-bucket/o/results"
+	ociStorageUri := "ocios://n/my-namespace/b/my-bucket/o/results"
 	pvcStorageUri := "pvc://my-pvc/experiment-results"
 	tests := []struct {
 		name        string

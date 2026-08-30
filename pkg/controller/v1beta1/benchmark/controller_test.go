@@ -331,7 +331,7 @@ func TestBenchmarkJobReconciler_createPodSpec(t *testing.T) {
 					TrafficScenarios:        []string{"scenario1", "scenario2"},
 					NumConcurrency:          []int{1, 2, 4},
 					OutputLocation: &v1beta1.StorageSpec{
-						StorageUri: StringPtr("oci://n/my-namespace/b/my-bucket/o/results"),
+						StorageUri: StringPtr("ocios://n/my-namespace/b/my-bucket/o/results"),
 					},
 				},
 			},
@@ -436,7 +436,7 @@ func TestBenchmarkJobReconciler_buildBenchmarkCommand(t *testing.T) {
 						GpuCount: 1,
 					},
 					OutputLocation: &v1beta1.StorageSpec{
-						StorageUri: StringPtr("oci://n/my-namespace/b/my-bucket/o/results"),
+						StorageUri: StringPtr("ocios://n/my-namespace/b/my-bucket/o/results"),
 					},
 				},
 			},
@@ -725,7 +725,7 @@ func TestBenchmarkJobReconciler_createPodSpec_NodeAffinity(t *testing.T) {
 			MaxTimePerIteration:     IntPtr(60),
 			MaxRequestsPerIteration: IntPtr(100),
 			OutputLocation: &v1beta1.StorageSpec{
-				StorageUri: StringPtr("oci://n/my-namespace/b/my-bucket/o/results"),
+				StorageUri: StringPtr("ocios://n/my-namespace/b/my-bucket/o/results"),
 			},
 		},
 	}
@@ -818,7 +818,7 @@ func TestBenchmarkJobReconciler_createPodSpec_NodeAffinity_WithPodOverride(t *te
 			MaxTimePerIteration:     IntPtr(60),
 			MaxRequestsPerIteration: IntPtr(100),
 			OutputLocation: &v1beta1.StorageSpec{
-				StorageUri: StringPtr("oci://n/my-namespace/b/my-bucket/o/results"),
+				StorageUri: StringPtr("ocios://n/my-namespace/b/my-bucket/o/results"),
 			},
 			// PodOverride triggers the applyPodOverrides path
 			PodOverride: &v1beta1.PodOverride{

@@ -6,6 +6,14 @@ description: >
   Base Model defines foundation models that can be automatically downloaded, parsed, and served across your cluster.
 ---
 
+
+> **Breaking change:** `oci://` now addresses a [CNCF ModelPack](https://github.com/modelpack/model-spec)
+> artifact in a container registry (`oci://{registry}/{repository}:{tag}`), pulled through a running
+> [`llmman serve`](https://github.com/llmmanorg/llmman) daemon. Oracle Cloud Object Storage moved to
+> `ocios://`, with an otherwise identical format. Parsing an old `oci://n/...` URI now fails with a
+> message naming the replacement.
+
+
 ## What is a Base Model?
 
 A Base Model in OME is a Kubernetes resource that represents a foundation AI model (like GPT, Llama, or Mistral) that you want to use for inference workloads. Think of it as a blueprint that tells OME where to find your model, how to download it, and where to store it on your cluster nodes.
@@ -48,7 +56,7 @@ spec:
     name: transformers
     version: "4.36.0"
   storage:
-    storageUri: oci://n/ai-models/b/llm-store/o/meta/llama-3.1-70b-instruct/
+    storageUri: ocios://n/ai-models/b/llm-store/o/meta/llama-3.1-70b-instruct/
     path: /raid/models/llama-3.1-70b-instruct
     storageKey: oci-credentials
     parameters:
@@ -103,13 +111,13 @@ OME supports multiple storage backends to work with your existing infrastructure
 
 Store your models in OCI Object Storage using this URI format:
 ```
-oci://n/{namespace}/b/{bucket}/o/{object_path}
+ocios://n/{namespace}/b/{bucket}/o/{object_path}
 ```
 
 Example:
 ```yaml
 storage:
-  storageUri: "oci://n/mycompany/b/ai-models/o/llama/llama-3-70b/"
+  storageUri: "ocios://n/mycompany/b/ai-models/o/llama/llama-3-70b/"
   path: "/raid/models/llama-3-70b-instruct"
   parameters:
     region: "us-phoenix-1"
@@ -175,7 +183,7 @@ Control which nodes download and store your models using node selectors and affi
 ### Simple Node Selection
 ```yaml
 storage:
-  storageUri: "oci://n/mycompany/b/models/o/llama-70b/"
+  storageUri: "ocios://n/mycompany/b/models/o/llama-70b/"
   nodeSelector:
     node.kubernetes.io/instance-type: "GPU.A100.4"
     models.ome.io/storage-tier: "fast-ssd"
@@ -508,7 +516,7 @@ spec:
 
   # Storage configuration
   storage:
-    storageUri: "oci://n/ai-models/b/llm-store/o/meta/llama-3.1-70b-instruct/"
+    storageUri: "ocios://n/ai-models/b/llm-store/o/meta/llama-3.1-70b-instruct/"
     path: "/raid/models/llama-3.1-70b-instruct"
     schemaPath: "config.json"
     storageKey: "oci-model-credentials"
@@ -578,7 +586,7 @@ spec:
 
   # Storage for fine-tuned weights
   storage:
-    storageUri: oci://n/mycompany/b/fine-tuned/o/llama-70b-finance-lora/
+    storageUri: ocios://n/mycompany/b/fine-tuned/o/llama-70b-finance-lora/
     path: /raid/fine-tuned/llama-70b-finance-lora
 
   # Training job reference

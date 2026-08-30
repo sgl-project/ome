@@ -3806,7 +3806,7 @@ This key will be used to fetch credentials during model download or access.</p>
    <p>StorageUri specifies the source URI of the model in a supported storage backend.
 Supported formats:</p>
 <ul>
-<li>OCI Object Storage:   oci://n/{namespace}/b/{bucket}/o/{object_path}</li>
+<li>OCI Object Storage:   ocios://n/{namespace}/b/{bucket}/o/{object_path}</li>
 <li>Persistent Volume:    pvc://{pvc-name}/{sub-path}</li>
 <li>Vendor-specific:      vendor://{vendor-name}/{resource-type}/{resource-path}
 This field is required.</li>

@@ -188,8 +188,13 @@ func TestValidateStorageURIWithLocal(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "valid oci storage",
-			uri:     "oci://n/myns/b/mybucket/o/mypath",
+			name:    "valid oci object storage",
+			uri:     "ocios://n/myns/b/mybucket/o/mypath",
+			wantErr: false,
+		},
+		{
+			name:    "valid oci modelpack artifact",
+			uri:     "oci://ghcr.io/org/model:tag",
 			wantErr: false,
 		},
 		{

@@ -40,7 +40,7 @@ spec:
 
   # Storage for the fine-tuned weights (same StorageSpec as base models)
   storage:
-    storageUri: oci://n/mycompany/b/fine-tuned/o/llama-70b-finance-lora/
+    storageUri: ocios://n/mycompany/b/fine-tuned/o/llama-70b-finance-lora/
     path: /raid/fine-tuned/llama-70b-finance-lora
 ```
 
@@ -83,7 +83,7 @@ FineTunedWeight uses the same `StorageSpec` as [BaseModel](/ome/docs/concepts/ba
 ```yaml
 spec:
   storage:
-    storageUri: oci://n/mycompany/b/fine-tuned/o/llama-70b-finance-lora/
+    storageUri: ocios://n/mycompany/b/fine-tuned/o/llama-70b-finance-lora/
     path: /raid/fine-tuned/llama-70b-finance-lora
     storageKey: oci-model-credentials
     parameters:
@@ -137,7 +137,7 @@ spec:
 
   # Storage for fine-tuned weights
   storage:
-    storageUri: oci://n/mycompany/b/fine-tuned/o/llama-70b-finance-lora/
+    storageUri: ocios://n/mycompany/b/fine-tuned/o/llama-70b-finance-lora/
     path: /raid/fine-tuned/llama-70b-finance-lora
     storageKey: oci-model-credentials
     parameters:
