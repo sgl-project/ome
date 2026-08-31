@@ -76,7 +76,6 @@ func compareRuntimeRevisionEntries(a, b RuntimeRevisionEntry) int {
 		cmp.Compare(a.Revision.Namespace, b.Revision.Namespace),
 		cmp.Compare(a.Revision.Name, b.Revision.Name),
 		cmp.Compare(a.Revision.UID, b.Revision.UID),
-		cmp.Compare(a.Revision.ResourceVersion, b.Revision.ResourceVersion),
 		cmp.Compare(a.Hash, b.Hash),
 		compareRuntimeObjectReferences(a.Source, b.Source),
 		slices.Compare(a.Roles, b.Roles),
@@ -108,7 +107,6 @@ func compareRuntimeObjectReferences(a, b *RuntimeObjectReference) int {
 		cmp.Compare(a.Name, b.Name),
 		cmp.Compare(a.UID, b.UID),
 		cmp.Compare(a.Generation, b.Generation),
-		cmp.Compare(a.ResourceVersion, b.ResourceVersion),
 	} {
 		if result != 0 {
 			return result

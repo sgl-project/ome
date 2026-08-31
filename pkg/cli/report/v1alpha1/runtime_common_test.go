@@ -2,6 +2,7 @@ package v1alpha1_test
 
 import (
 	"bytes"
+	"os/exec"
 	"reflect"
 	"strings"
 	"testing"
@@ -109,6 +110,7 @@ func TestRuntimeReportCommonSchemaIsTypedAndAllowlisted(t *testing.T) {
 	types := []reflect.Type{
 		reflect.TypeOf(v1alpha1.RuntimeEnvelope[v1alpha1.RuntimeEffectiveContent]{}),
 		reflect.TypeOf(v1alpha1.RuntimeEnvelope[v1alpha1.RuntimeHistoryContent]{}),
+		reflect.TypeOf(v1alpha1.RuntimeSourceReference{}),
 		reflect.TypeOf(v1alpha1.RuntimeObjectReference{}),
 		reflect.TypeOf(v1alpha1.RuntimeRevisionReference{}),
 		reflect.TypeOf(v1alpha1.RuntimeComponent{}),
@@ -119,6 +121,14 @@ func TestRuntimeReportCommonSchemaIsTypedAndAllowlisted(t *testing.T) {
 	}
 }
 
+func TestRuntimeEnvelopeRejectsEmbeddedExternalContent(t *testing.T) {
+	command := exec.CommandContext(t.Context(), "go", "test", "./testdata/hostile_runtime_content")
+	output, err := command.CombinedOutput()
+
+	require.Error(t, err, "hostile embedded content unexpectedly instantiated RuntimeEnvelope:\n%s", output)
+	assert.Contains(t, string(output), "hostileContent does not satisfy")
+}
+
 func TestRuntimeEnvelopeWarningsAreCodeOnlyAndCanonical(t *testing.T) {
 	now := time.Date(2026, time.August, 31, 18, 30, 0, 0, time.UTC)
 	sourceTime := time.Date(2026, time.August, 31, 11, 20, 0, 0, time.FixedZone("test", -7*60*60))
@@ -127,7 +137,7 @@ func TestRuntimeEnvelopeWarningsAreCodeOnlyAndCanonical(t *testing.T) {
 		v1alpha1.RuntimeEffectiveContent{},
 		fixedClock{now: now},
 	)
-	reportValue.Sources = []v1alpha1.SourceReference{
+	reportValue.Sources = []v1alpha1.RuntimeSourceReference{
 		{Kind: "Pod", Namespace: "prod", Name: "z", CollectedAt: sourceTime},
 		{Kind: "InferenceService", Namespace: "prod", Name: "chat"},
 	}
@@ -163,6 +173,111 @@ func TestRuntimeEnvelopeWarningsAreCodeOnlyAndCanonical(t *testing.T) {
 	assert.NotContains(t, output.String(), `"message"`)
 }
 
+func TestRuntimeEnvelopeCanonicalOrdersEveryRuntimeSourceField(t *testing.T) {
+	collectedAt := time.Date(2026, time.August, 31, 18, 20, 0, 0, time.UTC)
+	base := v1alpha1.RuntimeSourceReference{
+		Kind: "Pod", Namespace: "prod", Name: "runtime", UID: "uid", Generation: 2,
+		Evidence: v1alpha1.EvidenceObserved, CollectedAt: collectedAt,
+		UnavailableReason: v1alpha1.UnavailableNotFound,
+	}
+	tests := []struct {
+		name  string
+		early v1alpha1.RuntimeSourceReference
+		late  v1alpha1.RuntimeSourceReference
+	}{
+		{
+			name: "kind",
+			early: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.Kind = "A"
+			}),
+			late: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.Kind = "Z"
+			}),
+		},
+		{
+			name: "namespace",
+			early: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.Namespace = "a"
+			}),
+			late: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.Namespace = "z"
+			}),
+		},
+		{
+			name: "name",
+			early: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.Name = "a"
+			}),
+			late: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.Name = "z"
+			}),
+		},
+		{
+			name: "uid",
+			early: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.UID = "a"
+			}),
+			late: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.UID = "z"
+			}),
+		},
+		{
+			name: "generation",
+			early: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.Generation = 1
+			}),
+			late: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.Generation = 3
+			}),
+		},
+		{
+			name: "evidence",
+			early: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.Evidence = v1alpha1.EvidenceDeclared
+			}),
+			late: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.Evidence = v1alpha1.EvidenceReported
+			}),
+		},
+		{
+			name: "collected at",
+			early: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.CollectedAt = collectedAt.Add(-time.Minute)
+			}),
+			late: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.CollectedAt = collectedAt.Add(time.Minute)
+			}),
+		},
+		{
+			name: "unavailable reason",
+			early: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.UnavailableReason = v1alpha1.UnavailableNotFound
+			}),
+			late: withRuntimeSource(base, func(source *v1alpha1.RuntimeSourceReference) {
+				source.UnavailableReason = v1alpha1.UnavailableUnsupportedAPI
+			}),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			forward := v1alpha1.NewRuntimeEffectiveReport(
+				v1alpha1.Metadata{}, v1alpha1.RuntimeEffectiveContent{}, fixedClock{now: collectedAt},
+			)
+			forward.Sources = []v1alpha1.RuntimeSourceReference{tt.early, tt.late}
+			reverse := forward
+			reverse.Sources = []v1alpha1.RuntimeSourceReference{tt.late, tt.early}
+
+			forward = forward.Canonical()
+			reverse = reverse.Canonical()
+
+			assert.Equal(t, forward.Sources, reverse.Sources, "input order must not affect canonical source ordering")
+			require.Len(t, forward.Sources, 2)
+			assert.Equal(t, tt.early, forward.Sources[0])
+		})
+	}
+}
+
 func TestRuntimeEnvelopeAcceptsDefaultSystemClock(t *testing.T) {
 	before := time.Now().UTC()
 	reportValue := v1alpha1.NewRuntimeHistoryReport(
@@ -196,19 +311,20 @@ func TestRuntimeEnvelopeCanonicalRestoresFixedKind(t *testing.T) {
 
 func TestRuntimeReportSchemaAuditRejectsEveryUnsafeFieldCategory(t *testing.T) {
 	typ := reflect.TypeOf(struct {
-		Image       string   `json:"image"`
-		Command     string   `json:"command"`
-		Args        []string `json:"args"`
-		Env         []string `json:"env"`
-		Environment []string `json:"environment"`
-		Secret      string   `json:"secret"`
-		Label       string   `json:"label"`
-		Annotation  string   `json:"annotation"`
-		RawReason   string   `json:"rawReason"`
-		Error       string   `json:"error"`
-		Message     string   `json:"message"`
-		Token       string   `json:"token"`
-		SyncToken   string   `json:"syncToken"`
+		Image           string   `json:"image"`
+		Command         string   `json:"command"`
+		Args            []string `json:"args"`
+		Env             []string `json:"env"`
+		Environment     []string `json:"environment"`
+		Secret          string   `json:"secret"`
+		Label           string   `json:"label"`
+		Annotation      string   `json:"annotation"`
+		RawReason       string   `json:"rawReason"`
+		Error           string   `json:"error"`
+		Message         string   `json:"message"`
+		Token           string   `json:"token"`
+		SyncToken       string   `json:"syncToken"`
+		ResourceVersion string   `json:"resourceVersion"`
 	}{})
 
 	for i := 0; i < typ.NumField(); i++ {
@@ -274,7 +390,7 @@ func assertRuntimeReportFieldNames(t *testing.T, typ reflect.Type, seen map[refl
 func isForbiddenRuntimeSchemaField(field reflect.StructField) bool {
 	jsonName := strings.Split(field.Tag.Get("json"), ",")[0]
 	for _, name := range []string{strings.ToLower(field.Name), strings.ToLower(jsonName)} {
-		if name == "env" || name == "reason" || strings.Contains(name, "rawreason") {
+		if name == "env" || name == "reason" || name == "resourceversion" || strings.Contains(name, "rawreason") {
 			return true
 		}
 		for _, fragment := range []string{
@@ -287,4 +403,12 @@ func isForbiddenRuntimeSchemaField(field reflect.StructField) bool {
 		}
 	}
 	return false
+}
+
+func withRuntimeSource(
+	source v1alpha1.RuntimeSourceReference,
+	change func(*v1alpha1.RuntimeSourceReference),
+) v1alpha1.RuntimeSourceReference {
+	change(&source)
+	return source
 }

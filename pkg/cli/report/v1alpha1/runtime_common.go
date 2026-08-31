@@ -242,9 +242,23 @@ type RuntimeWarning struct {
 	Code WarningCode `json:"code"`
 }
 
+// RuntimeSourceReference identifies one allowlisted source used to build a
+// runtime report. It deliberately omits Kubernetes resource versions.
+type RuntimeSourceReference struct {
+	Kind              string            `json:"kind"`
+	Namespace         string            `json:"namespace,omitempty"`
+	Name              string            `json:"name"`
+	UID               string            `json:"uid,omitempty"`
+	Generation        int64             `json:"generation,omitempty"`
+	Evidence          EvidenceLevel     `json:"evidence"`
+	CollectedAt       time.Time         `json:"collectedAt"`
+	UnavailableReason UnavailableReason `json:"unavailableReason,omitempty"`
+}
+
 type runtimeContent[T any] interface {
 	Content[T]
 	runtimeReportKind() string
+	RuntimeEffectiveContent | RuntimeHistoryContent
 }
 
 // RuntimeEnvelope carries the fields shared by runtime reports. It is kept
@@ -252,13 +266,13 @@ type runtimeContent[T any] interface {
 // carry arbitrary warning messages. Its sealed content contract also lets
 // canonicalization restore the report kind.
 type RuntimeEnvelope[T runtimeContent[T]] struct {
-	APIVersion  string            `json:"apiVersion"`
-	Kind        string            `json:"kind"`
-	Metadata    Metadata          `json:"metadata"`
-	CollectedAt time.Time         `json:"collectedAt"`
-	Sources     []SourceReference `json:"sources"`
-	Content     T                 `json:"content"`
-	Warnings    []RuntimeWarning  `json:"warnings"`
+	APIVersion  string                   `json:"apiVersion"`
+	Kind        string                   `json:"kind"`
+	Metadata    Metadata                 `json:"metadata"`
+	CollectedAt time.Time                `json:"collectedAt"`
+	Sources     []RuntimeSourceReference `json:"sources"`
+	Content     T                        `json:"content"`
+	Warnings    []RuntimeWarning         `json:"warnings"`
 }
 
 func newRuntimeEnvelope[T runtimeContent[T]](metadata Metadata, content T, clock Clock) RuntimeEnvelope[T] {
@@ -270,7 +284,7 @@ func newRuntimeEnvelope[T runtimeContent[T]](metadata Metadata, content T, clock
 		Kind:        content.runtimeReportKind(),
 		Metadata:    metadata,
 		CollectedAt: clock.Now().UTC(),
-		Sources:     []SourceReference{},
+		Sources:     []RuntimeSourceReference{},
 		Content:     content,
 		Warnings:    []RuntimeWarning{},
 	}).Canonical()
@@ -283,7 +297,7 @@ func (e RuntimeEnvelope[T]) Canonical() RuntimeEnvelope[T] {
 	result.APIVersion = APIVersion
 	result.Kind = e.Content.runtimeReportKind()
 	result.CollectedAt = e.CollectedAt.UTC()
-	result.Sources = append([]SourceReference{}, e.Sources...)
+	result.Sources = append([]RuntimeSourceReference{}, e.Sources...)
 	for i := range result.Sources {
 		if result.Sources[i].CollectedAt.IsZero() {
 			result.Sources[i].CollectedAt = result.CollectedAt
@@ -292,7 +306,7 @@ func (e RuntimeEnvelope[T]) Canonical() RuntimeEnvelope[T] {
 		}
 	}
 	sort.SliceStable(result.Sources, func(i, j int) bool {
-		return sourceLess(result.Sources[i], result.Sources[j])
+		return runtimeSourceLess(result.Sources[i], result.Sources[j])
 	})
 	result.Warnings = append([]RuntimeWarning{}, e.Warnings...)
 	sort.SliceStable(result.Warnings, func(i, j int) bool {
@@ -302,6 +316,31 @@ func (e RuntimeEnvelope[T]) Canonical() RuntimeEnvelope[T] {
 	return result
 }
 
+func runtimeSourceLess(a, b RuntimeSourceReference) bool {
+	if a.Kind != b.Kind {
+		return a.Kind < b.Kind
+	}
+	if a.Namespace != b.Namespace {
+		return a.Namespace < b.Namespace
+	}
+	if a.Name != b.Name {
+		return a.Name < b.Name
+	}
+	if a.UID != b.UID {
+		return a.UID < b.UID
+	}
+	if a.Generation != b.Generation {
+		return a.Generation < b.Generation
+	}
+	if a.Evidence != b.Evidence {
+		return a.Evidence < b.Evidence
+	}
+	if !a.CollectedAt.Equal(b.CollectedAt) {
+		return a.CollectedAt.Before(b.CollectedAt)
+	}
+	return a.UnavailableReason < b.UnavailableReason
+}
+
 // Table returns the human-readable view of the canonical typed content.
 func (e RuntimeEnvelope[T]) Table() report.Table {
 	return e.Content.Table()
@@ -309,22 +348,20 @@ func (e RuntimeEnvelope[T]) Table() report.Table {
 
 // RuntimeObjectReference is an allowlisted runtime object identity.
 type RuntimeObjectReference struct {
-	APIVersion      string      `json:"apiVersion"`
-	Kind            RuntimeKind `json:"kind"`
-	Namespace       string      `json:"namespace,omitempty"`
-	Name            string      `json:"name"`
-	UID             string      `json:"uid,omitempty"`
-	Generation      int64       `json:"generation,omitempty"`
-	ResourceVersion string      `json:"resourceVersion,omitempty"`
+	APIVersion string      `json:"apiVersion"`
+	Kind       RuntimeKind `json:"kind"`
+	Namespace  string      `json:"namespace,omitempty"`
+	Name       string      `json:"name"`
+	UID        string      `json:"uid,omitempty"`
+	Generation int64       `json:"generation,omitempty"`
 }
 
 // RuntimeRevisionReference is an allowlisted ControllerRevision identity.
 type RuntimeRevisionReference struct {
-	Namespace       string    `json:"namespace"`
-	Name            string    `json:"name"`
-	UID             string    `json:"uid,omitempty"`
-	ResourceVersion string    `json:"resourceVersion,omitempty"`
-	CreatedAt       time.Time `json:"createdAt"`
+	Namespace string    `json:"namespace"`
+	Name      string    `json:"name"`
+	UID       string    `json:"uid,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // RuntimeComponent summarizes one runtime component's deployment mode.

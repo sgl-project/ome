@@ -58,7 +58,7 @@ func TestRuntimeHistoryCanonicalIsDeterministicForConflictingEntries(t *testing.
 	source := runtimeObject(v1alpha1.RuntimeKindServingRuntime, "prod", "vllm")
 	base := v1alpha1.RuntimeRevisionEntry{
 		Revision: v1alpha1.RuntimeRevisionReference{
-			Namespace: "ome", Name: "revision", UID: "uid", ResourceVersion: "1", CreatedAt: createdAt,
+			Namespace: "ome", Name: "revision", UID: "uid", CreatedAt: createdAt,
 		},
 		Source: &source, Hash: "aaaaaaaa",
 		Roles:          []v1alpha1.RuntimeRevisionRole{v1alpha1.RuntimeRevisionRoleHistory},
@@ -110,20 +110,6 @@ func TestRuntimeHistoryCanonicalIsDeterministicForConflictingEntries(t *testing.
 				return entry
 			},
 			assert: func(t *testing.T, entry v1alpha1.RuntimeRevisionEntry) { assert.Equal(t, "a", entry.Revision.UID) },
-		},
-		{
-			name: "revision resource version",
-			early: func(entry v1alpha1.RuntimeRevisionEntry) v1alpha1.RuntimeRevisionEntry {
-				entry.Revision.ResourceVersion = "a"
-				return entry
-			},
-			late: func(entry v1alpha1.RuntimeRevisionEntry) v1alpha1.RuntimeRevisionEntry {
-				entry.Revision.ResourceVersion = "z"
-				return entry
-			},
-			assert: func(t *testing.T, entry v1alpha1.RuntimeRevisionEntry) {
-				assert.Equal(t, "a", entry.Revision.ResourceVersion)
-			},
 		},
 		{
 			name: "hash",
@@ -230,11 +216,11 @@ func TestRuntimeHistoryCanonicalOrdersEverySourceIdentityField(t *testing.T) {
 	createdAt := time.Date(2026, time.August, 31, 18, 20, 0, 0, time.UTC)
 	baseSource := v1alpha1.RuntimeObjectReference{
 		APIVersion: "ome.io/v1beta1", Kind: v1alpha1.RuntimeKindServingRuntime,
-		Namespace: "prod", Name: "vllm", UID: "uid", Generation: 2, ResourceVersion: "2",
+		Namespace: "prod", Name: "vllm", UID: "uid", Generation: 2,
 	}
 	baseEntry := v1alpha1.RuntimeRevisionEntry{
 		Revision: v1alpha1.RuntimeRevisionReference{
-			Namespace: "ome", Name: "revision", UID: "uid", ResourceVersion: "1", CreatedAt: createdAt,
+			Namespace: "ome", Name: "revision", UID: "uid", CreatedAt: createdAt,
 		},
 		Hash: "aaaaaaaa", Roles: []v1alpha1.RuntimeRevisionRole{}, Issues: []v1alpha1.RuntimeIssueCode{},
 	}
@@ -274,11 +260,6 @@ func TestRuntimeHistoryCanonicalOrdersEverySourceIdentityField(t *testing.T) {
 			name:  "generation",
 			early: runtimeSourceCopy(baseSource, func(source *v1alpha1.RuntimeObjectReference) { source.Generation = 1 }),
 			late:  runtimeSourceCopy(baseSource, func(source *v1alpha1.RuntimeObjectReference) { source.Generation = 3 }),
-		},
-		{
-			name:  "resource version",
-			early: runtimeSourceCopy(baseSource, func(source *v1alpha1.RuntimeObjectReference) { source.ResourceVersion = "1" }),
-			late:  runtimeSourceCopy(baseSource, func(source *v1alpha1.RuntimeObjectReference) { source.ResourceVersion = "3" }),
 		},
 	}
 
