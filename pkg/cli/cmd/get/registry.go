@@ -36,6 +36,7 @@ type entry struct {
 	Aliases    []string
 	Namespaced bool
 	Columns    []column
+	TableRows  func(runtime.Object, bool) [][]string
 	List       listFunc
 	GetOne     getFunc
 }
@@ -697,7 +698,21 @@ var inferenceReplicasEntry = &entry{
 		{Name: "NAME", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return r.Name })},
 		{Name: "COMPONENT", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return printers.OrDash(string(r.Spec.Component)) })},
 		{Name: "PARENT", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return printers.OrDash(r.Spec.ParentRef.Name) })},
-		{Name: "REPLICAS", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return fmt.Sprintf("%d", r.Status.Replicas) })},
+		{Name: "DESIRED", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return int32OrDash(r.Spec.Replicas) })},
+		{Name: "CURRENT", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return fmt.Sprintf("%d", r.Status.Replicas) })},
+		{Name: "READY", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return fmt.Sprintf("%d", r.Status.ReadyReplicas) })},
+		{Name: "AVAILABLE", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return fmt.Sprintf("%d", r.Status.AvailableReplicas) })},
+		{Name: "LIFECYCLE", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return inferenceReplicaLifecycle(r).state })},
+		{Name: "REASON", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return inferenceReplicaLifecycle(r).reason })},
+		{Name: "SERVING", Wide: true, Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return fmt.Sprintf("%d", r.Status.ServingReplicas) })},
+		{Name: "UPDATED", Wide: true, Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return fmt.Sprintf("%d", r.Status.UpdatedReplicas) })},
+		{Name: "CURRENT-REVISION", Wide: true, Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return printers.OrDash(r.Status.CurrentRevision) })},
+		{Name: "UPDATE-REVISION", Wide: true, Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return printers.OrDash(r.Status.UpdateRevision) })},
+		{Name: "MIGRATIONS", Wide: true, Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return fmt.Sprintf("%d", len(r.Status.Migrations)) })},
+		{Name: "ENCODING", Wide: true, Extract: safeCol(instanceStatusEncoding)},
+		{Name: "PAUSED", Wide: true, Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return fmt.Sprintf("%t", r.Spec.Paused) })},
+		{Name: "COORDINATION", Wide: true, Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return printers.OrDash(r.Status.CoordinationGroupRef) })},
+		{Name: "LIFECYCLE-FRESHNESS", Wide: true, Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return inferenceReplicaLifecycle(r).freshness })},
 		{Name: "AGE", Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return printers.Age(r.CreationTimestamp) })},
 	},
 	List: func(ctx context.Context, f factory.Factory, ns string, opts metav1.ListOptions) ([]runtime.Object, error) {
@@ -727,18 +742,78 @@ var inferenceReplicasEntry = &entry{
 	},
 }
 
+func int32OrDash(value *int32) string {
+	if value == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%d", *value)
+}
+
+func instanceStatusEncoding(replica *v1beta1.InferenceReplica) string {
+	if replica.Status.InstanceStatusEncoding == nil {
+		return "DenseV1"
+	}
+	return printers.OrDash(string(*replica.Status.InstanceStatusEncoding))
+}
+
+type inferenceReplicaLifecycleValue struct {
+	state     string
+	reason    string
+	freshness string
+}
+
+func inferenceReplicaLifecycle(replica *v1beta1.InferenceReplica) inferenceReplicaLifecycleValue {
+	// RolloutStalled is advisory and may coexist with Ready=True. Prefer an
+	// active stall so inventory cannot make a serving-but-wedged rollout look
+	// healthy. Otherwise Ready is the primary lifecycle condition.
+	stalled := meta.FindStatusCondition(replica.Status.Conditions, "RolloutStalled")
+	if stalled != nil && stalled.Status == metav1.ConditionTrue {
+		return inferenceReplicaLifecycleFromCondition(stalled, replica.Generation)
+	}
+	ready := meta.FindStatusCondition(replica.Status.Conditions, "Ready")
+	if ready != nil {
+		return inferenceReplicaLifecycleFromCondition(ready, replica.Generation)
+	}
+	if stalled != nil {
+		return inferenceReplicaLifecycleFromCondition(stalled, replica.Generation)
+	}
+	return inferenceReplicaLifecycleValue{state: "Unavailable", reason: "-", freshness: "Unavailable"}
+}
+
+func inferenceReplicaLifecycleFromCondition(condition *metav1.Condition, generation int64) inferenceReplicaLifecycleValue {
+	return inferenceReplicaLifecycleValue{
+		state:     fmt.Sprintf("%s=%s", condition.Type, condition.Status),
+		reason:    printers.OrDash(condition.Reason),
+		freshness: generationFreshness(generation, condition.ObservedGeneration),
+	}
+}
+
 var workloadClustersEntry = &entry{
 	Canonical:  "workloadclusters",
 	Aliases:    []string{"workloadcluster", "wc"},
 	Namespaced: false,
 	Columns: []column{
 		{Name: "NAME", Extract: safeCol(func(w *v1beta1.WorkloadCluster) string { return w.Name })},
+		{Name: "CONNECTION", Extract: safeCol(func(w *v1beta1.WorkloadCluster) string { return workloadClusterConnection(w).kind })},
+		{Name: "REFERENCE", Extract: safeCol(func(w *v1beta1.WorkloadCluster) string { return workloadClusterConnection(w).reference })},
+		{Name: "KEY", Extract: safeCol(func(w *v1beta1.WorkloadCluster) string { return workloadClusterConnection(w).key })},
 		{Name: "READY", Extract: safeCol(func(w *v1beta1.WorkloadCluster) string {
-			c := meta.FindStatusCondition(w.Status.Conditions, v1beta1.WorkloadClusterReady)
-			if c == nil {
-				return "Unknown"
+			return conditionStatus(w.Status.Conditions, v1beta1.WorkloadClusterReady)
+		})},
+		{Name: "GENERATION", Extract: safeCol(func(w *v1beta1.WorkloadCluster) string { return fmt.Sprintf("%d", w.Generation) })},
+		{Name: "OBSERVED-GENERATION", Extract: safeCol(func(w *v1beta1.WorkloadCluster) string {
+			condition := meta.FindStatusCondition(w.Status.Conditions, v1beta1.WorkloadClusterReady)
+			if condition == nil || condition.ObservedGeneration == 0 {
+				return "-"
 			}
-			return string(c.Status)
+			return fmt.Sprintf("%d", condition.ObservedGeneration)
+		})},
+		{Name: "REASON", Wide: true, Extract: safeCol(func(w *v1beta1.WorkloadCluster) string {
+			condition := meta.FindStatusCondition(w.Status.Conditions, v1beta1.WorkloadClusterReady)
+			if condition == nil {
+				return "-"
+			}
+			return printers.OrDash(condition.Reason)
 		})},
 		{Name: "AGE", Extract: safeCol(func(w *v1beta1.WorkloadCluster) string { return printers.Age(w.CreationTimestamp) })},
 	},
@@ -769,6 +844,257 @@ var workloadClustersEntry = &entry{
 	},
 }
 
+type workloadClusterConnectionValue struct {
+	kind      string
+	reference string
+	key       string
+}
+
+func workloadClusterConnection(cluster *v1beta1.WorkloadCluster) workloadClusterConnectionValue {
+	source := cluster.Spec.ClusterSource
+	switch {
+	case source.KubeConfig != nil && source.ClusterProfileRef == nil:
+		key := source.KubeConfig.Key
+		if key == "" {
+			key = "kubeconfig"
+		}
+		name := source.KubeConfig.SecretRef.Name
+		if name == "" {
+			return workloadClusterConnectionValue{kind: "KubeConfig", reference: "-", key: key}
+		}
+		if source.KubeConfig.SecretRef.Namespace != "" {
+			name = source.KubeConfig.SecretRef.Namespace + "/" + name
+		}
+		return workloadClusterConnectionValue{kind: "KubeConfig", reference: printers.OrDash(name), key: key}
+	case source.ClusterProfileRef != nil && source.KubeConfig == nil:
+		return workloadClusterConnectionValue{kind: "ClusterProfile", reference: printers.OrDash(source.ClusterProfileRef.Name), key: "-"}
+	default:
+		return workloadClusterConnectionValue{kind: "Invalid", reference: "-", key: "-"}
+	}
+}
+
+type acceleratorQuotaBudgetRow struct {
+	resource        string
+	flavor          string
+	nominal         string
+	admitted        string
+	source          string
+	statusFreshness string
+	borrowed        string
+	reserved        string
+}
+
+func acceleratorQuotaBudgetRows(quota *v1beta1.AcceleratorQuota) []acceleratorQuotaBudgetRow {
+	statusFreshness := acceleratorQuotaStatusFreshness(quota)
+	rows := make([]acceleratorQuotaBudgetRow, 0, len(quota.Status.Budgets)+len(quota.Spec.Budgets))
+	if len(quota.Status.Budgets) > 0 {
+		for _, budget := range quota.Status.Budgets {
+			rows = append(rows, acceleratorQuotaBudgetRow{
+				resource:        budget.ResourceName,
+				flavor:          budget.ResourceFlavor,
+				nominal:         budget.Nominal.String(),
+				admitted:        budget.Admitted.String(),
+				source:          "Reported",
+				statusFreshness: statusFreshness,
+				borrowed:        budget.Borrowed.String(),
+				reserved:        budget.Reserved.String(),
+			})
+		}
+	}
+	// Current status is authoritative for the flattened budget view. When it
+	// has not observed metadata.generation, retain the current declaration as
+	// separate evidence instead of hiding it behind stale reported rows.
+	if len(quota.Spec.Budgets) > 0 && (len(quota.Status.Budgets) == 0 || statusFreshness != "Current") {
+		for _, budget := range quota.Spec.Budgets {
+			rows = append(rows, acceleratorQuotaBudgetRow{
+				resource:        budget.ResourceName,
+				flavor:          budget.ResourceFlavor,
+				nominal:         budget.Nominal.String(),
+				admitted:        "-",
+				source:          "Declared",
+				statusFreshness: statusFreshness,
+				borrowed:        "-",
+				reserved:        "-",
+			})
+		}
+	}
+	if len(rows) == 0 {
+		rows = append(rows, acceleratorQuotaBudgetRow{
+			resource: "-", flavor: "-", nominal: "-", admitted: "-", source: "Unavailable",
+			statusFreshness: statusFreshness, borrowed: "-", reserved: "-",
+		})
+	}
+	return sortAcceleratorQuotaBudgetRows(rows)
+}
+
+func sortAcceleratorQuotaBudgetRows(rows []acceleratorQuotaBudgetRow) []acceleratorQuotaBudgetRow {
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].resource != rows[j].resource {
+			return rows[i].resource < rows[j].resource
+		}
+		if rows[i].flavor != rows[j].flavor {
+			return rows[i].flavor < rows[j].flavor
+		}
+		if rows[i].source != rows[j].source {
+			return rows[i].source == "Declared"
+		}
+		return false
+	})
+	return rows
+}
+
+func acceleratorQuotaStatusFreshness(quota *v1beta1.AcceleratorQuota) string {
+	if quota.Status.ObservedGeneration == 0 {
+		// Zero generations occur only in synthetic objects. Preserve the useful
+		// convention that populated synthetic status is current in unit tests.
+		if quota.Generation == 0 && (len(quota.Status.Budgets) > 0 || len(quota.Status.Conditions) > 0) {
+			return "Current"
+		}
+		return "Unobserved"
+	}
+	return generationFreshness(quota.Generation, quota.Status.ObservedGeneration)
+}
+
+func generationFreshness(generation, observedGeneration int64) string {
+	if generation == observedGeneration {
+		return "Current"
+	}
+	if observedGeneration == 0 {
+		return "Unobserved"
+	}
+	return "Stale"
+}
+
+func acceleratorQuotaParent(quota *v1beta1.AcceleratorQuota) string {
+	if quota.Spec.ParentRef == nil {
+		return "-"
+	}
+	return printers.OrDash(quota.Spec.ParentRef.Name)
+}
+
+func conditionStatus(conditions []metav1.Condition, conditionType string) string {
+	condition := meta.FindStatusCondition(conditions, conditionType)
+	if condition == nil {
+		return "Unknown"
+	}
+	return string(condition.Status)
+}
+
+func firstAcceleratorQuotaBudget(quota *v1beta1.AcceleratorQuota) acceleratorQuotaBudgetRow {
+	return acceleratorQuotaBudgetRows(quota)[0]
+}
+
+var acceleratorQuotasEntry = &entry{
+	Canonical:  "acceleratorquotas",
+	Aliases:    []string{"acceleratorquota", "aq"},
+	Namespaced: false,
+	Columns: []column{
+		{Name: "NAME", Extract: safeCol(func(q *v1beta1.AcceleratorQuota) string { return q.Name })},
+		{Name: "ROLE", Extract: safeCol(func(q *v1beta1.AcceleratorQuota) string { return printers.OrDash(string(q.Spec.Role)) })},
+		{Name: "PARENT", Extract: safeCol(acceleratorQuotaParent)},
+		{Name: "RESOURCE", Extract: safeCol(func(q *v1beta1.AcceleratorQuota) string {
+			return printers.OrDash(firstAcceleratorQuotaBudget(q).resource)
+		})},
+		{Name: "FLAVOR", Extract: safeCol(func(q *v1beta1.AcceleratorQuota) string {
+			return printers.OrDash(firstAcceleratorQuotaBudget(q).flavor)
+		})},
+		{Name: "NOMINAL", Extract: safeCol(func(q *v1beta1.AcceleratorQuota) string {
+			return printers.OrDash(firstAcceleratorQuotaBudget(q).nominal)
+		})},
+		{Name: "ADMITTED", Extract: safeCol(func(q *v1beta1.AcceleratorQuota) string {
+			return printers.OrDash(firstAcceleratorQuotaBudget(q).admitted)
+		})},
+		{Name: "SOURCE", Extract: safeCol(func(q *v1beta1.AcceleratorQuota) string {
+			return firstAcceleratorQuotaBudget(q).source
+		})},
+		{Name: "STATUS-FRESHNESS", Extract: safeCol(func(q *v1beta1.AcceleratorQuota) string {
+			return firstAcceleratorQuotaBudget(q).statusFreshness
+		})},
+		{Name: "READY", Extract: safeCol(func(q *v1beta1.AcceleratorQuota) string {
+			return conditionStatus(q.Status.Conditions, v1beta1.AcceleratorQuotaReady)
+		})},
+		{Name: "DEGRADED", Extract: safeCol(func(q *v1beta1.AcceleratorQuota) string {
+			return conditionStatus(q.Status.Conditions, v1beta1.AcceleratorQuotaDegraded)
+		})},
+		{Name: "AGE", Extract: safeCol(func(q *v1beta1.AcceleratorQuota) string { return printers.Age(q.CreationTimestamp) })},
+		{Name: "BORROWED", Wide: true, Extract: safeCol(func(q *v1beta1.AcceleratorQuota) string {
+			return printers.OrDash(firstAcceleratorQuotaBudget(q).borrowed)
+		})},
+		{Name: "RESERVED", Wide: true, Extract: safeCol(func(q *v1beta1.AcceleratorQuota) string {
+			return printers.OrDash(firstAcceleratorQuotaBudget(q).reserved)
+		})},
+		{Name: "PATH", Wide: true, Extract: safeCol(func(q *v1beta1.AcceleratorQuota) string { return printers.OrDash(q.Status.Path) })},
+	},
+	TableRows: acceleratorQuotaTableRows,
+	List: func(ctx context.Context, f factory.Factory, ns string, opts metav1.ListOptions) ([]runtime.Object, error) {
+		client, err := f.OMEClient()
+		if err != nil {
+			return nil, err
+		}
+		return paging.ListAllPaged(ctx, func(pageOpts metav1.ListOptions) ([]runtime.Object, string, error) {
+			pageOpts.LabelSelector = opts.LabelSelector
+			list, err := client.OmeV1beta1().AcceleratorQuotas().List(ctx, pageOpts)
+			if err != nil {
+				return nil, "", err
+			}
+			items := make([]runtime.Object, 0, len(list.Items))
+			for index := range list.Items {
+				items = append(items, &list.Items[index])
+			}
+			return items, list.Continue, nil
+		})
+	},
+	GetOne: func(ctx context.Context, f factory.Factory, ns, name string) (runtime.Object, error) {
+		client, err := f.OMEClient()
+		if err != nil {
+			return nil, err
+		}
+		return client.OmeV1beta1().AcceleratorQuotas().Get(ctx, name, metav1.GetOptions{})
+	},
+}
+
+const (
+	acceleratorQuotaColumns     = 12
+	acceleratorQuotaWideColumns = 15
+)
+
+func acceleratorQuotaTableRows(obj runtime.Object, wide bool) [][]string {
+	quota, ok := obj.(*v1beta1.AcceleratorQuota)
+	if !ok {
+		width := acceleratorQuotaColumns
+		if wide {
+			width = acceleratorQuotaWideColumns
+		}
+		row := make([]string, width)
+		for index := range row {
+			row[index] = "?"
+		}
+		return [][]string{row}
+	}
+	rows := make([][]string, 0, len(acceleratorQuotaBudgetRows(quota)))
+	for _, budget := range acceleratorQuotaBudgetRows(quota) {
+		row := []string{
+			quota.Name,
+			printers.OrDash(string(quota.Spec.Role)),
+			acceleratorQuotaParent(quota),
+			printers.OrDash(budget.resource),
+			printers.OrDash(budget.flavor),
+			printers.OrDash(budget.nominal),
+			printers.OrDash(budget.admitted),
+			budget.source,
+			budget.statusFreshness,
+			conditionStatus(quota.Status.Conditions, v1beta1.AcceleratorQuotaReady),
+			conditionStatus(quota.Status.Conditions, v1beta1.AcceleratorQuotaDegraded),
+			printers.Age(quota.CreationTimestamp),
+		}
+		if wide {
+			row = append(row, printers.OrDash(budget.borrowed), printers.OrDash(budget.reserved), printers.OrDash(quota.Status.Path))
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
 // registry lists every resource `kubectl ome get` knows how to render. Adding
 // a resource means adding an entry here, never a new command.
 var registry = []*entry{
@@ -776,6 +1102,6 @@ var registry = []*entry{
 	modelsEntry,
 	baseModelsEntry, clusterBaseModelsEntry,
 	runtimesEntry, servingRuntimesEntry, clusterServingRuntimesEntry,
-	acceleratorClassesEntry, benchmarkJobsEntry,
+	acceleratorClassesEntry, acceleratorQuotasEntry, benchmarkJobsEntry,
 	fineTunedWeightsEntry, inferenceReplicasEntry, workloadClustersEntry,
 }

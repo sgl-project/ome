@@ -6,10 +6,12 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 	"sigs.k8s.io/yaml"
@@ -219,4 +221,107 @@ func TestGetSelectorSurvivesPaging(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "gpu-isvc")
 	assert.NotContains(t, out, "cpu-isvc")
+}
+
+func TestGetAcceleratorQuotaFlattensBudgetRows(t *testing.T) {
+	quota := &v1beta1.AcceleratorQuota{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-a"},
+		Spec: v1beta1.AcceleratorQuotaSpec{
+			Role:      v1beta1.AcceleratorQuotaRoleClusterQueue,
+			ParentRef: &v1beta1.AcceleratorQuotaParentRef{Name: "root"},
+		},
+		Status: v1beta1.AcceleratorQuotaStatus{
+			Budgets: []v1beta1.AcceleratorBudgetStatus{
+				{ResourceName: "nvidia.com/gpu", ResourceFlavor: "h200", Nominal: resource.MustParse("4"), Admitted: resource.MustParse("1")},
+				{ResourceName: "nvidia.com/gpu", ResourceFlavor: "h100", Nominal: resource.MustParse("8"), Admitted: resource.MustParse("3")},
+			},
+			Conditions: []metav1.Condition{{Type: v1beta1.AcceleratorQuotaReady, Status: metav1.ConditionTrue}},
+		},
+	}
+	f := factory.Static{OME: omefake.NewSimpleClientset(quota), NS: "team-a"}
+
+	out, err := execute(t, f, "aq")
+	require.NoError(t, err)
+	assert.Equal(t, 2, strings.Count(out, "team-a"), out)
+	assert.Contains(t, out, "h100")
+	assert.Contains(t, out, "h200")
+	assert.Equal(t, 2, strings.Count(out, "Reported"), "each status-backed row must label its evidence")
+	assert.Less(t, strings.Index(out, "h100"), strings.Index(out, "h200"), "budget rows must be deterministic")
+}
+
+func TestGetAcceleratorQuotaRawJSONRemainsUnflattened(t *testing.T) {
+	quota := &v1beta1.AcceleratorQuota{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-a"},
+		Status: v1beta1.AcceleratorQuotaStatus{Budgets: []v1beta1.AcceleratorBudgetStatus{
+			{ResourceName: "nvidia.com/gpu", ResourceFlavor: "h100"},
+			{ResourceName: "nvidia.com/gpu", ResourceFlavor: "h200"},
+		}},
+	}
+	f := factory.Static{OME: omefake.NewSimpleClientset(quota), NS: "team-a"}
+
+	out, err := execute(t, f, "acceleratorquotas", "-o", "json")
+	require.NoError(t, err)
+	var list struct {
+		Items []struct {
+			Status struct {
+				Budgets []json.RawMessage `json:"budgets"`
+			} `json:"status"`
+		} `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out), &list))
+	require.Len(t, list.Items, 1)
+	assert.Len(t, list.Items[0].Status.Budgets, 2, "machine output must preserve one API object")
+}
+
+func TestGetAcceleratorQuotaFallsBackToDeclaredBudget(t *testing.T) {
+	quota := &v1beta1.AcceleratorQuota{
+		ObjectMeta: metav1.ObjectMeta{Name: "unreported"},
+		Spec: v1beta1.AcceleratorQuotaSpec{
+			Role: v1beta1.AcceleratorQuotaRoleClusterQueue,
+			Budgets: []v1beta1.AcceleratorBudget{{
+				ResourceName: "nvidia.com/gpu", ResourceFlavor: "b200", Nominal: resource.MustParse("16"),
+			}},
+		},
+	}
+	f := factory.Static{OME: omefake.NewSimpleClientset(quota), NS: "team-a"}
+
+	out, err := execute(t, f, "aq")
+	require.NoError(t, err)
+	assert.Contains(t, out, "b200")
+	assert.Contains(t, out, "16")
+	assert.Contains(t, out, "Declared")
+	assert.Contains(t, out, "Unknown", "missing status must not be presented as healthy")
+}
+
+func TestGetAcceleratorQuotaPreservesStaleAndCurrentBudgets(t *testing.T) {
+	quota := &v1beta1.AcceleratorQuota{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-a", Generation: 2},
+		Spec: v1beta1.AcceleratorQuotaSpec{
+			Role: v1beta1.AcceleratorQuotaRoleClusterQueue,
+			Budgets: []v1beta1.AcceleratorBudget{
+				{ResourceName: "nvidia.com/gpu", ResourceFlavor: "h100", Nominal: resource.MustParse("8")},
+				{ResourceName: "nvidia.com/gpu", ResourceFlavor: "h200", Nominal: resource.MustParse("4")},
+			},
+		},
+		Status: v1beta1.AcceleratorQuotaStatus{
+			ObservedGeneration: 1,
+			Budgets: []v1beta1.AcceleratorBudgetStatus{{
+				ResourceName: "nvidia.com/gpu", ResourceFlavor: "h100",
+				Nominal: resource.MustParse("2"), Admitted: resource.MustParse("2"),
+			}},
+			Conditions: []metav1.Condition{{
+				Type: v1beta1.AcceleratorQuotaReady, Status: metav1.ConditionTrue,
+			}},
+		},
+	}
+	f := factory.Static{OME: omefake.NewSimpleClientset(quota), NS: "team-a"}
+
+	out, err := execute(t, f, "aq")
+	require.NoError(t, err)
+	assert.Equal(t, 3, strings.Count(out, "team-a"), out)
+	assert.Equal(t, 2, strings.Count(out, "Declared"), out)
+	assert.Equal(t, 1, strings.Count(out, "Reported"), out)
+	assert.Equal(t, 3, strings.Count(out, "Stale"), out)
+	assert.Contains(t, out, "h200", "a current declaration absent from stale status must remain visible")
+	assert.Less(t, strings.Index(out, "Declared"), strings.Index(out, "Reported"), "current declaration must precede stale reported data for the same budget")
 }
