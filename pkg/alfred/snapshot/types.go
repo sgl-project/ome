@@ -212,6 +212,7 @@ type InFlight struct {
 	Phase       v1beta1.MigrationPhase
 	FromNode    string
 	RequestedAt time.Time
+	RequestedBy string
 }
 
 // Model reference kinds for ModelKey.Kind.

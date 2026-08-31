@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
-	"sigs.k8s.io/ome/pkg/migration"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/audit"
 	"sigs.k8s.io/ome/pkg/utils/storage"
 )
 
@@ -370,23 +370,23 @@ func applyWorkloadOverrides(w *Workload, annotations map[string]string) {
 func applyMigrationState(w *Workload, isvc *v1beta1.InferenceService) {
 	inFlight := map[string]InFlight{}
 
-	requests, malformed := migration.ExtractRequests(isvc.Annotations)
-	// Malformed request annotations are kept visible: the workload still
-	// carries a write the executor must ack-reject, and hiding it would
-	// make the workload look clean to policies and the reporter.
-	for _, m := range malformed {
-		if w.MalformedRequests == nil {
-			w.MalformedRequests = map[string]string{}
+	for key, raw := range isvc.Annotations {
+		if !strings.HasPrefix(key, audit.MigrationRequestAnnotationPrefix) {
+			continue
 		}
-		w.MalformedRequests[m.UUID] = m.Err.Error()
-	}
-	for _, req := range requests {
-		inFlight[req.UUID] = InFlight{
-			UUID:        req.UUID,
-			Component:   v1beta1.ComponentType(req.Request.Component),
-			FromNode:    req.Request.FromNode,
-			RequestedAt: req.Request.RequestedAt.Time,
+		uuid := strings.TrimPrefix(key, audit.MigrationRequestAnnotationPrefix)
+		pending, err := parsePendingMigration(uuid, raw, w)
+		if err != nil {
+			// Malformed request annotations stay visible: any prefixed
+			// write keeps the workload busy until the executor acknowledges
+			// or rejects it.
+			if w.MalformedRequests == nil {
+				w.MalformedRequests = map[string]string{}
+			}
+			w.MalformedRequests[uuid] = err.Error()
+			continue
 		}
+		inFlight[uuid] = pending
 	}
 
 	for i := range isvc.Status.MigrationHistory {
@@ -410,12 +410,17 @@ func applyMigrationState(w *Workload, isvc *v1beta1.InferenceService) {
 		}
 		// Non-terminal history is authoritative over the bare
 		// annotation: it carries mode and phase.
+		requestedBy := entry.RequestedBy
+		if requestedBy == "" {
+			requestedBy = inFlight[entry.ID].RequestedBy
+		}
 		inFlight[entry.ID] = InFlight{
 			UUID:        entry.ID,
 			Component:   entry.Component,
 			Mode:        entry.Mode,
 			Phase:       entry.Phase,
 			RequestedAt: entry.RequestedAt.Time,
+			RequestedBy: requestedBy,
 		}
 	}
 
