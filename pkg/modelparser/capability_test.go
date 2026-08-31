@@ -28,11 +28,11 @@ func TestCapabilityToOME(t *testing.T) {
 		{modelconfig.CapabilityImageTextToVideo, v1beta1.ModelCapabilityImageTextToVideo},
 		{modelconfig.CapabilityTextToAudio, v1beta1.ModelCapabilityTextToAudio},
 		{modelconfig.CapabilityImageTextToAudio, v1beta1.ModelCapabilityImageTextToAudio},
-		{modelconfig.CapabilityVideoTextToAudio, v1beta1.ModelCapabilityVideoTextToAudio},
 		{modelconfig.CapabilityVideoTextToText, v1beta1.ModelCapabilityVideoTextToText},
+		{modelconfig.CapabilityVideoTextToAudio, v1beta1.ModelCapabilityVideoTextToAudio},
 		{modelconfig.CapabilityAudioToText, v1beta1.ModelCapabilityAudioToText},
-		{modelconfig.CapabilityAudioToAudio, v1beta1.ModelCapabilityAudioToAudio},
 		{modelconfig.CapabilityAudioTextToText, v1beta1.ModelCapabilityAudioTextToText},
+		{modelconfig.CapabilityAudioToAudio, v1beta1.ModelCapabilityAudioToAudio},
 		{modelconfig.CapabilityEmbedding, v1beta1.ModelCapabilityEmbedding},
 	}
 	for _, tc := range cases {

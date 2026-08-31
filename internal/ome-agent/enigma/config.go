@@ -9,6 +9,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/configutils"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/imds"
 	"sigs.k8s.io/ome/pkg/logging"
 	utils "sigs.k8s.io/ome/pkg/utils"
 	"sigs.k8s.io/ome/pkg/vault/kmscrypto"
@@ -129,7 +130,7 @@ func WithViper(v *viper.Viper, logger logging.Interface) Option {
 func configureTensorRTLLM(c *Config, v *viper.Viper, logger logging.Interface) error {
 	var nodeShapeAlias string
 	if v.GetString("node_shape_alias") == "" {
-		nodeShape, err := utils.GetNodeInstanceType(logger)
+		nodeShape, err := getNodeInstanceType(logger)
 		if err != nil {
 			return fmt.Errorf("failed to get node instance type: %w", err)
 		}
@@ -168,4 +169,16 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("config validation failed: %w", err)
 	}
 	return nil
+}
+
+// getNodeInstanceType retrieves the instance type of the node.
+// NOTE: This implementation is currently specific to Oracle Cloud Infrastructure (OCI)
+// and uses the OCI IMDS client. A future refactor is needed to support
+// other cloud providers' metadata services.
+func getNodeInstanceType(logger logging.Interface) (string, error) {
+	client, err := imds.NewClient(imds.DefaultConfig(), logger)
+	if err != nil {
+		return "", err
+	}
+	return client.GetInstanceShape()
 }

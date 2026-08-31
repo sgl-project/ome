@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"os"
 	"sync"
-
-	"sigs.k8s.io/ome/pkg/imds"
-	"sigs.k8s.io/ome/pkg/logging"
 )
 
 const (
@@ -27,7 +24,6 @@ var defaultInstanceTypeMap = map[string]string{
 	"BM.GPU.H200.8":    "H200",
 	"BM.GPU.H200-NC.8": "H200",
 	"BM.GPU.B200.8":    "B200",
-	"BM.GPU.B300.8":    "B300",
 
 	// AWS instance types
 	"p5.48xlarge": "H100",
@@ -84,18 +80,6 @@ func loadInstanceTypeMapFromEnv() (map[string]string, error) {
 	}
 
 	return configMap, nil
-}
-
-// GetNodeInstanceType retrieves the instance type of the node.
-// NOTE: This implementation is currently specific to Oracle Cloud Infrastructure (OCI)
-// and uses the OCI IMDS client. A future refactor is needed to support
-// other cloud providers' metadata services.
-func GetNodeInstanceType(logger logging.Interface) (string, error) {
-	client, err := imds.NewClient(imds.DefaultConfig(), logger)
-	if err != nil {
-		return "", err
-	}
-	return client.GetInstanceShape()
 }
 
 func GetInstanceTypeShortName(currentInstanceType string) (string, error) {

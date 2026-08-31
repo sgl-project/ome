@@ -24,6 +24,9 @@ func (s *DefaultRuntimeScorer) CalculateScore(runtime *v1beta1.ServingRuntimeSpe
 	var maxScore int64 = 0
 
 	for _, supportedFormat := range runtime.SupportedModelFormats {
+		if modelRequiresCacheProvider(model) && !supportedFormatSupportsModelCacheProvider(supportedFormat, s.config.ModelCacheProvider) {
+			continue
+		}
 
 		if supportedFormat.AutoSelect != nil && !(*supportedFormat.AutoSelect) {
 			continue
@@ -82,6 +85,9 @@ func (s *DefaultRuntimeScorer) CompareRuntimes(r1, r2 RuntimeMatch, model *v1bet
 }
 
 func (s *DefaultRuntimeScorer) CalculateFormatScore(model *v1beta1.BaseModelSpec, supportedFormat v1beta1.SupportedModelFormat, priority int64) int64 {
+	if modelRequiresCacheProvider(model) && !supportedFormatSupportsModelCacheProvider(supportedFormat, s.config.ModelCacheProvider) {
+		return 0
+	}
 
 	modelFormatMatches := false
 	if supportedFormat.ModelFormat != nil {

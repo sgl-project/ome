@@ -62,12 +62,21 @@ func (e *NoRuntimeFoundError) Error() string {
 }
 
 // RuntimeNotFoundError indicates that a specified runtime doesn't exist.
+// Kind (a ServingRuntimeRef.Kind value, or "") records the declared ref
+// kind that scoped the failed lookup.
 type RuntimeNotFoundError struct {
 	RuntimeName string
 	Namespace   string
+	Kind        string
 }
 
 func (e *RuntimeNotFoundError) Error() string {
+	// A ServingRuntime-kind lookup never consults cluster scope, so the
+	// message must not claim it was searched.
+	if e.Kind == KindServingRuntime {
+		return fmt.Sprintf("ServingRuntime %s not found in namespace %s",
+			e.RuntimeName, e.Namespace)
+	}
 	return fmt.Sprintf("runtime %s not found in namespace %s or at cluster scope",
 		e.RuntimeName, e.Namespace)
 }

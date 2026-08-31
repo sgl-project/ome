@@ -1066,6 +1066,401 @@ func TestGetSupportedModelFormat_CustomRuntime(t *testing.T) {
 	}
 }
 
+func TestSupportedRuntimeWithAC(t *testing.T) {
+	// Create a fake fakeClient with our custom types registered
+	fakeClient := createFakeClient()
+	ac1 := "nvidia-tesla-t4"
+	ac2 := "H100"
+	// Create test base models with different formats and sizes
+	baseModels := []struct {
+		name  string
+		model *v1beta1.BaseModelSpec
+	}{
+		{
+			name: "small-pytorch-model",
+			model: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+				ModelParameterSize: ptr("7B"),
+			},
+		},
+	}
+	// Create test serving runtimes with different capabilities
+	runtimes := []*v1beta1.ServingRuntime{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pytorch-rt",
+				Namespace: "default",
+			},
+			Spec: v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						ModelFormat: &v1beta1.ModelFormat{
+							Name:   "pytorch",
+							Weight: 10,
+						},
+						AutoSelect: ptr(true),
+						Priority:   ptr(int32(2)),
+					},
+				},
+				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
+					Min: ptr("1B"),
+					Max: ptr("10B"),
+				},
+				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
+					AcceleratorClasses: []string{"nvidia-tesla-t4", "nvidia-tesla-v100", "nvidia-a100"},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pytorch-rt-1",
+				Namespace: "default",
+			},
+			Spec: v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						ModelFormat: &v1beta1.ModelFormat{
+							Name:   "pytorch",
+							Weight: 8,
+						},
+						AutoSelect: ptr(true),
+						Priority:   ptr(int32(1)),
+					},
+				},
+				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
+					Min: ptr("1B"),
+					Max: ptr("8B"),
+				},
+				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
+					AcceleratorClasses: []string{"nvidia-tesla-t4", "nvidia-tesla-v100", "nvidia-a100"},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pytorch-rt-2",
+				Namespace: "default",
+			},
+			Spec: v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						ModelFormat: &v1beta1.ModelFormat{
+							Name:   "pytorch",
+							Weight: 12,
+						},
+						AutoSelect: ptr(true),
+					},
+				},
+				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
+					Min: ptr("50B"),
+					Max: ptr("100B"),
+				},
+				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
+					AcceleratorClasses: []string{"nvidia-tesla-t4", "nvidia-tesla-v100", "nvidia-a100"},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pytorch-rt-3",
+				Namespace: "default",
+			},
+			Spec: v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						ModelFormat: &v1beta1.ModelFormat{
+							Name:   "pytorch",
+							Weight: 12,
+						},
+						AutoSelect: ptr(true),
+					},
+				},
+				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
+					Min: ptr("1B"),
+					Max: ptr("10B"),
+				},
+				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
+					AcceleratorClasses: []string{"H100"},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pytorch-rt-4",
+				Namespace: "default",
+			},
+			Spec: v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						ModelFormat: &v1beta1.ModelFormat{
+							Name:   "pytorch",
+							Weight: 12,
+						},
+						AutoSelect: ptr(true),
+					},
+				},
+				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
+					Min: ptr("1B"),
+					Max: ptr("10B"),
+				},
+				AcceleratorRequirements: &v1beta1.AcceleratorRequirements{
+					AcceleratorClasses: []string{"H100", "nvidia-tesla-t4", "nvidia-tesla-v100", "nvidia-a100"},
+				},
+			},
+		},
+	}
+	infereceServices := []*v1beta1.InferenceService{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "isvc-with-ac",
+				Namespace: "default",
+			},
+			Spec: v1beta1.InferenceServiceSpec{
+				AcceleratorSelector: &v1beta1.AcceleratorSelector{
+					AcceleratorClass: &ac1,
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "isvc-without-ac",
+				Namespace: "default",
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "isvc-with-ac-h100",
+				Namespace: "default",
+			},
+			Spec: v1beta1.InferenceServiceSpec{
+				AcceleratorSelector: &v1beta1.AcceleratorSelector{
+					AcceleratorClass: &ac2,
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "isvc-with-engine-ac",
+				Namespace: "default",
+			},
+			Spec: v1beta1.InferenceServiceSpec{
+				Engine: &v1beta1.EngineSpec{
+					AcceleratorOverride: &v1beta1.AcceleratorSelector{
+						AcceleratorClass: &ac1,
+					},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "isvc-with-engine-without-ac",
+				Namespace: "default",
+			},
+			Spec: v1beta1.InferenceServiceSpec{
+				Engine: &v1beta1.EngineSpec{},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "isvc-with-decoder-ac",
+				Namespace: "default",
+			},
+			Spec: v1beta1.InferenceServiceSpec{
+				Decoder: &v1beta1.DecoderSpec{
+					AcceleratorOverride: &v1beta1.AcceleratorSelector{
+						AcceleratorClass: &ac1,
+					},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "isvc-with-decoder-without-ac",
+				Namespace: "default",
+			},
+			Spec: v1beta1.InferenceServiceSpec{
+				Decoder: &v1beta1.DecoderSpec{},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "isvc-with-decoder-engine-diff-ac",
+				Namespace: "default",
+			},
+			Spec: v1beta1.InferenceServiceSpec{
+				Decoder: &v1beta1.DecoderSpec{
+					AcceleratorOverride: &v1beta1.AcceleratorSelector{
+						AcceleratorClass: &ac1,
+					},
+				},
+				Engine: &v1beta1.EngineSpec{
+					AcceleratorOverride: &v1beta1.AcceleratorSelector{
+						AcceleratorClass: &ac2,
+					},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "isvc-with-annotation-ac",
+				Namespace: "default",
+				Annotations: map[string]string{
+					"ome.io/accelerator-class": "nvidia-tesla-t4",
+				},
+			},
+			Spec: v1beta1.InferenceServiceSpec{},
+		},
+	}
+	// Add all runtimes to the fake client
+	ctx := context.Background()
+	for _, rt := range runtimes {
+		assert.NoError(t, fakeClient.Create(ctx, rt))
+	}
+	for _, isvc := range infereceServices {
+		assert.NoError(t, fakeClient.Create(ctx, isvc))
+	}
+
+	// Create selector
+	selector := New(fakeClient)
+	tests := []struct {
+		name                 string
+		model                *v1beta1.BaseModelSpec
+		inferenceService     *v1beta1.InferenceService
+		expectedRuntimeNames []string
+		expectError          bool
+	}{
+		{
+			name:             "select with inference service ac",
+			model:            baseModels[0].model,
+			inferenceService: infereceServices[0],
+			expectedRuntimeNames: []string{
+				"pytorch-rt",
+				"pytorch-rt-4",
+				"pytorch-rt-1",
+			},
+			expectError: false,
+		},
+		{
+
+			name:             "select without inference service ac",
+			model:            baseModels[0].model,
+			inferenceService: infereceServices[1],
+			expectedRuntimeNames: []string{
+				"pytorch-rt",
+				"pytorch-rt-3",
+				"pytorch-rt-4",
+				"pytorch-rt-1",
+			},
+			expectError: false,
+		},
+		{
+
+			name:             "select with inference service ac-h100",
+			model:            baseModels[0].model,
+			inferenceService: infereceServices[2],
+			expectedRuntimeNames: []string{
+				"pytorch-rt-3",
+				"pytorch-rt-4",
+			},
+			expectError: false,
+		},
+		{
+
+			name:             "select with inference service engine-ac",
+			model:            baseModels[0].model,
+			inferenceService: infereceServices[3],
+			expectedRuntimeNames: []string{
+				"pytorch-rt",
+				"pytorch-rt-4",
+				"pytorch-rt-1",
+			},
+			expectError: false,
+		},
+		{
+
+			name:             "select without inference service engine-ac",
+			model:            baseModels[0].model,
+			inferenceService: infereceServices[4],
+			expectedRuntimeNames: []string{
+				"pytorch-rt",
+				"pytorch-rt-3",
+				"pytorch-rt-4",
+				"pytorch-rt-1",
+			},
+			expectError: false,
+		},
+		{
+
+			name:             "select without inference service decoder-ac",
+			model:            baseModels[0].model,
+			inferenceService: infereceServices[5],
+			expectedRuntimeNames: []string{
+				"pytorch-rt",
+				"pytorch-rt-4",
+				"pytorch-rt-1",
+			},
+			expectError: false,
+		},
+		{
+			name:             "select without inference service decoder-ac",
+			model:            baseModels[0].model,
+			inferenceService: infereceServices[6],
+			expectedRuntimeNames: []string{
+				"pytorch-rt",
+				"pytorch-rt-3",
+				"pytorch-rt-4",
+				"pytorch-rt-1",
+			},
+			expectError: false,
+		},
+		{
+
+			name:             "select without inference service decoder-engine-diff-ac",
+			model:            baseModels[0].model,
+			inferenceService: infereceServices[7],
+			expectedRuntimeNames: []string{
+				"pytorch-rt-4",
+			},
+			expectError: false,
+		},
+		{
+
+			name:             "select with inference service annotation ac",
+			model:            baseModels[0].model,
+			inferenceService: infereceServices[8],
+			expectedRuntimeNames: []string{
+				"pytorch-rt",
+				"pytorch-rt-4",
+				"pytorch-rt-1",
+			},
+			expectError: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isvc := tt.inferenceService
+			// Ensure fields used by matcher are non-nil
+			matches, err := selector.GetCompatibleRuntimes(ctx, tt.model, isvc, "default")
+			if tt.expectError {
+				assert.Empty(t, matches)
+				// Try SelectRuntime to get the error
+				_, err := selector.SelectRuntime(ctx, tt.model, isvc)
+				assert.Error(t, err)
+				assert.True(t, IsNoRuntimeFoundError(err))
+			} else {
+				assert.NoError(t, err)
+				assert.Len(t, matches, len(tt.expectedRuntimeNames))
+
+				for i, match := range matches {
+					assert.Equal(t, tt.expectedRuntimeNames[i], match.Name)
+				}
+			}
+		})
+	}
+}
+
 // A lean InferenceService carries no model at all; both selector entry
 // points must reject a nil model with a typed error instead of
 // dereferencing it.

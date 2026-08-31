@@ -35,7 +35,7 @@ type Selector interface {
     // Get accelerator class for a specific component
     GetAcceleratorClass(ctx context.Context, isvc *v1beta1.InferenceService,
                         runtime *v1beta1.ServingRuntimeSpec,
-                        component v1beta1.ComponentType) (*v1beta1.AcceleratorClassSpec, string, error)
+                        component v1beta1.ComponentType) (*v1beta1.AcceleratorClass, string, error)
 }
 ```
 
@@ -48,7 +48,7 @@ type AcceleratorFetcher interface {
     FetchAcceleratorClasses(ctx context.Context) (*AcceleratorCollection, error)
 
     // Get specific accelerator class by name
-    GetAcceleratorClass(ctx context.Context, name string) (*v1beta1.AcceleratorClassSpec, bool, error)
+    GetAcceleratorClass(ctx context.Context, name string) (*v1beta1.AcceleratorClass, bool, error)
 }
 ```
 
@@ -74,12 +74,12 @@ The selector follows a prioritized selection logic:
    - Determine effective policy from:
      - Component-specific override policy
      - InferenceService-level policy
-     - Default policy (FirstAvailable)
+     - If neither is set, no accelerator class is selected
    - Apply policy logic:
-     - **FirstAvailable**: Return the first accelerator from runtime requirements (currently implemented)
-     - **BestFit**: Select based on best resource match (TODO)
-     - **Cheapest**: Select based on cost optimization (TODO)
-     - **MostCapable**: Select based on maximum capabilities (TODO)
+     - **FirstAvailable**: Return the first eligible accelerator from runtime requirements
+     - **BestFit**: Select based on best resource match (memory + compute scoring)
+     - **Cheapest**: Select based on cost optimization
+     - **MostCapable**: Select based on maximum capabilities
 
 4. **Fetch and Return**
    - Fetch the selected accelerator class spec from the cluster
@@ -97,7 +97,7 @@ InferenceService.AcceleratorSelector.AcceleratorClass
 Policy-based selection:
   - Component.AcceleratorOverride.Policy
   - InferenceService.AcceleratorSelector.Policy
-  - Default Policy (FirstAvailable)
+  - No policy set → no accelerator class selected
     ↓
 Lowest Priority
 ```
@@ -229,9 +229,6 @@ type Config struct {
 
     // EnableDetailedLogging enables verbose logging for debugging
     EnableDetailedLogging bool
-
-    // DefaultPolicy is used when no policy is specified
-    DefaultPolicy v1beta1.AcceleratorSelectionPolicy
 }
 ```
 
@@ -241,7 +238,6 @@ type Config struct {
 config := &acceleratorclassselector.Config{
     Client:                mgr.GetClient(),
     EnableDetailedLogging: true,
-    DefaultPolicy:         v1beta1.BestFitPolicy,
 }
 
 selector := acceleratorclassselector.NewWithConfig(config)
@@ -303,22 +299,22 @@ podSpec := buildPodSpec(runtime, engineAcc)
 
 ## Selection Policies
 
-### FirstAvailable (Default)
-- Returns the first accelerator class from runtime's `AcceleratorRequirements.AcceleratorClasses`
+### FirstAvailable
+- Returns the first eligible accelerator class from runtime's `AcceleratorRequirements.AcceleratorClasses`
 - Fast and predictable
 - Best for simple deployments
 
-### BestFit (TODO)
+### BestFit
 - Selects accelerator that best matches model requirements
 - Considers memory, compute capability, and features
 - Optimizes resource utilization
 
-### Cheapest (TODO)
+### Cheapest
 - Selects lowest-cost accelerator that meets requirements
 - Uses `AcceleratorClass.Spec.Cost` information
 - Optimizes for cost efficiency
 
-### MostCapable (TODO)
+### MostCapable
 - Selects accelerator with maximum capabilities
 - Optimizes for performance
 - Best for latency-sensitive workloads
@@ -369,7 +365,6 @@ go test -v
 
 - **[runtimeselector](../runtimeselector/README.md)**: Selects serving runtime based on model requirements
 - **AcceleratorClass CRD**: Defines cluster-wide accelerator resources and capabilities
-- **[OEP-0003](../../oeps/0003-accelerator-aware-runtime-selection/README.md)**: Accelerator-Aware Runtime Selection design
 
 ## Example AcceleratorClass
 

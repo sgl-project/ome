@@ -8,6 +8,23 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
+// Runtime kind names accepted by GetRuntime's kind argument. They mirror
+// the ServingRuntimeRef.Kind API values; an empty kind means the reference
+// did not declare a scope.
+const (
+	KindServingRuntime        = "ServingRuntime"
+	KindClusterServingRuntime = "ClusterServingRuntime"
+)
+
+// RefKind returns the runtime kind declared on an explicit runtime
+// reference, or "" when the ref (or its Kind) is absent.
+func RefKind(ref *v1beta1.ServingRuntimeRef) string {
+	if ref == nil || ref.Kind == nil {
+		return ""
+	}
+	return *ref.Kind
+}
+
 // Selector is the main interface for runtime selection.
 type Selector interface {
 	// SelectRuntime returns the highest-scoring runtime that supports the
@@ -22,9 +39,11 @@ type Selector interface {
 	// error explaining why it isn't. Used to validate user-pinned runtimes.
 	ValidateRuntime(ctx context.Context, runtimeName string, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) error
 
-	// GetRuntime fetches a runtime by name. The bool return reports whether
-	// the resolved runtime was cluster-scoped.
-	GetRuntime(ctx context.Context, name string, namespace string) (*v1beta1.ServingRuntimeSpec, bool, error)
+	// GetRuntime fetches a runtime by name. kind (a ServingRuntimeRef.Kind
+	// value, or "" when undeclared) scopes the lookup — see
+	// DefaultRuntimeFetcher.GetRuntime for the precedence rules. The bool
+	// return reports whether the resolved runtime was cluster-scoped.
+	GetRuntime(ctx context.Context, name string, namespace string, kind string) (*v1beta1.ServingRuntimeSpec, bool, error)
 
 	// GetSupportedModelFormat picks the best SupportedModelFormat for a
 	// runtime-model pair. When userSpecifiedRuntime is true all
@@ -70,7 +89,7 @@ type MatchDetails struct {
 // RuntimeFetcher abstracts the fetching of runtime resources.
 type RuntimeFetcher interface {
 	FetchRuntimes(ctx context.Context, namespace string) (*RuntimeCollection, error)
-	GetRuntime(ctx context.Context, name string, namespace string) (*v1beta1.ServingRuntimeSpec, bool, error)
+	GetRuntime(ctx context.Context, name string, namespace string, kind string) (*v1beta1.ServingRuntimeSpec, bool, error)
 }
 
 // RuntimeCollection holds both namespace and cluster scoped runtimes.

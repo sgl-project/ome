@@ -54,7 +54,7 @@ func (r *InferenceServiceReconciler) resolvePinnedRuntime(
 	// runtime is tolerated when a pin exists: pinning's whole point is
 	// that the ISVC keeps serving the pinned revision, so the gap
 	// surfaces as RuntimeDrifted instead of a hard reconcile error.
-	liveSpec, _, liveErr := r.RuntimeSelector.GetRuntime(ctx, runtimeName, isvc.Namespace)
+	liveSpec, _, liveErr := r.RuntimeSelector.GetRuntime(ctx, runtimeName, isvc.Namespace, runtimeselector.RefKind(isvc.Spec.Runtime))
 	sourceMissing := runtimeselector.IsRuntimeNotFoundError(liveErr)
 	if liveErr != nil && !sourceMissing {
 		return pinResult{}, fmt.Errorf("resolve live runtime %s: %w", runtimeName, liveErr)

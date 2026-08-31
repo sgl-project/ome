@@ -114,9 +114,35 @@ func TestGetRuntime(t *testing.T) {
 		},
 	}
 
+	// Same-named runtimes in both scopes; the specs differ so the test can
+	// tell which one a lookup resolved.
+	collidingNamespaced := &v1beta1.ServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "colliding-runtime",
+			Namespace: "default",
+		},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "pytorch"}},
+			},
+		},
+	}
+	collidingCluster := &v1beta1.ClusterServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "colliding-runtime",
+		},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{ModelFormat: &v1beta1.ModelFormat{Name: "tensorflow"}},
+			},
+		},
+	}
+
 	fakeClient := createFakeClient()
 	assert.NoError(t, fakeClient.Create(ctx, namespaceRuntime))
 	assert.NoError(t, fakeClient.Create(ctx, clusterRuntime))
+	assert.NoError(t, fakeClient.Create(ctx, collidingNamespaced))
+	assert.NoError(t, fakeClient.Create(ctx, collidingCluster))
 
 	fetcher := NewDefaultRuntimeFetcher(fakeClient)
 
@@ -124,10 +150,11 @@ func TestGetRuntime(t *testing.T) {
 		name          string
 		runtimeName   string
 		namespace     string
+		kind          string
 		expectFound   bool
 		expectCluster bool
+		expectFormat  string
 		expectError   bool
-		errorType     error
 	}{
 		{
 			name:          "find namespace runtime",
@@ -157,11 +184,69 @@ func TestGetRuntime(t *testing.T) {
 			expectFound: false,
 			expectError: true,
 		},
+		{
+			name:          "no kind: namespaced wins the collision",
+			runtimeName:   "colliding-runtime",
+			namespace:     "default",
+			expectFound:   true,
+			expectCluster: false,
+			expectFormat:  "pytorch",
+		},
+		{
+			name:          "ClusterServingRuntime kind wins the collision",
+			runtimeName:   "colliding-runtime",
+			namespace:     "default",
+			kind:          KindClusterServingRuntime,
+			expectFound:   true,
+			expectCluster: true,
+			expectFormat:  "tensorflow",
+		},
+		{
+			name:          "ServingRuntime kind wins the collision",
+			runtimeName:   "colliding-runtime",
+			namespace:     "default",
+			kind:          KindServingRuntime,
+			expectFound:   true,
+			expectCluster: false,
+			expectFormat:  "pytorch",
+		},
+		{
+			name:          "ClusterServingRuntime kind falls back to a namespaced-only runtime",
+			runtimeName:   "namespace-runtime",
+			namespace:     "default",
+			kind:          KindClusterServingRuntime,
+			expectFound:   true,
+			expectCluster: false,
+		},
+		{
+			name:        "ServingRuntime kind never falls back to a cluster-only runtime",
+			runtimeName: "cluster-runtime",
+			namespace:   "default",
+			kind:        KindServingRuntime,
+			expectFound: false,
+			expectError: true,
+		},
+		{
+			name:          "ServingRuntime kind finds the namespaced runtime",
+			runtimeName:   "namespace-runtime",
+			namespace:     "default",
+			kind:          KindServingRuntime,
+			expectFound:   true,
+			expectCluster: false,
+		},
+		{
+			name:        "ClusterServingRuntime kind with no runtime in either scope",
+			runtimeName: "non-existent",
+			namespace:   "default",
+			kind:        KindClusterServingRuntime,
+			expectFound: false,
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			spec, isCluster, err := fetcher.GetRuntime(ctx, tt.runtimeName, tt.namespace)
+			spec, isCluster, err := fetcher.GetRuntime(ctx, tt.runtimeName, tt.namespace, tt.kind)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -173,6 +258,9 @@ func TestGetRuntime(t *testing.T) {
 			if tt.expectFound {
 				assert.NotNil(t, spec)
 				assert.Equal(t, tt.expectCluster, isCluster)
+				if tt.expectFormat != "" {
+					assert.Equal(t, tt.expectFormat, spec.SupportedModelFormats[0].ModelFormat.Name)
+				}
 			} else {
 				assert.Nil(t, spec)
 			}

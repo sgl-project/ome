@@ -299,7 +299,7 @@ func candidateReason(
 	// ValidateRuntime agrees the runtime is compatible, yet it is missing
 	// from GetCompatibleRuntimes -- defect (a): recompute the real
 	// auto-select/score cause instead of assuming "no autoSelect entry".
-	spec, _, err := sel.GetRuntime(ctx, c.name, ns)
+	spec, _, err := sel.GetRuntime(ctx, c.name, ns, "")
 	if err != nil {
 		return "runtime is compatible but was not auto-selected, and the exact cause could not be recomputed: " + err.Error()
 	}

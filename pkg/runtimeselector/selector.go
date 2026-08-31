@@ -127,7 +127,14 @@ func (s *defaultSelector) ValidateRuntime(ctx context.Context, runtimeName strin
 		return err
 	}
 
-	runtimeSpec, isCluster, err := s.fetcher.GetRuntime(ctx, runtimeName, namespace)
+	// When the validated name is the ISVC's own runtime reference, honor
+	// its declared kind so validation inspects the same runtime the live
+	// fetch resolves on a namespaced/cluster name collision.
+	kind := ""
+	if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name == runtimeName {
+		kind = RefKind(isvc.Spec.Runtime)
+	}
+	runtimeSpec, isCluster, err := s.fetcher.GetRuntime(ctx, runtimeName, namespace, kind)
 	if err != nil {
 		return err
 	}
@@ -219,8 +226,8 @@ func (s *defaultSelector) sortMatches(matches []RuntimeMatch, model *v1beta1.Bas
 	})
 }
 
-func (s *defaultSelector) GetRuntime(ctx context.Context, name string, namespace string) (*v1beta1.ServingRuntimeSpec, bool, error) {
-	return s.fetcher.GetRuntime(ctx, name, namespace)
+func (s *defaultSelector) GetRuntime(ctx context.Context, name string, namespace string, kind string) (*v1beta1.ServingRuntimeSpec, bool, error) {
+	return s.fetcher.GetRuntime(ctx, name, namespace, kind)
 }
 
 func (s *defaultSelector) validateModel(model *v1beta1.BaseModelSpec) error {
