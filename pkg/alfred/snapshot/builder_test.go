@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
-	"sigs.k8s.io/ome/pkg/migration"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/audit"
 )
 
 var (
@@ -93,27 +94,32 @@ func omePod(namespace, name, node, isvc string, component string, gpus int64, re
 func buildTestSnapshot(t *testing.T) *ClusterSnapshot {
 	t.Helper()
 
-	requestPayload, err := (&migration.Request{
-		SchemaVersion: migration.SchemaVersionV1,
+	requestPayloadBytes, err := json.Marshal(audit.MigrationRequest{
+		SchemaVersion: audit.SchemaV1,
 		Component:     "engine",
+		Instance:      0,
 		FromNode:      "node1",
-		RequestedAt:   metav1.NewTime(buildNow.Add(-time.Minute)),
-	}).Marshal()
+		RequestedAt:   buildNow.Add(-time.Minute).Format(time.RFC3339),
+		RequestedBy:   "alfred-controller",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	requestPayload := string(requestPayloadBytes)
 	// ackedPayload shares its UUID ("done-1") with a terminal history entry
 	// below — the ack-race window where the executor has recorded the
 	// terminal outcome but not yet cleared the annotation.
-	ackedPayload, err := (&migration.Request{
-		SchemaVersion: migration.SchemaVersionV1,
+	ackedPayloadBytes, err := json.Marshal(audit.MigrationRequest{
+		SchemaVersion: audit.SchemaV1,
 		Component:     "engine",
+		Instance:      0,
 		FromNode:      "node2",
-		RequestedAt:   metav1.NewTime(buildNow.Add(-3 * time.Hour)),
-	}).Marshal()
+		RequestedAt:   buildNow.Add(-3 * time.Hour).Format(time.RFC3339),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	ackedPayload := string(ackedPayloadBytes)
 
 	llamaLabel := constants.GetClusterBaseModelLabel("llama")
 
@@ -206,9 +212,9 @@ func buildTestSnapshot(t *testing.T) *ClusterSnapshot {
 				constants.AlfredPriorityAnnotationKey:        "0.2",
 				constants.AlfredCooldownMinutesAnnotationKey: "60",
 				constants.AlfredTenantGroupAnnotationKey:     "team-alpha",
-				migration.AnnotationKey("req-1"):             requestPayload,
-				migration.AnnotationKey("done-1"):            ackedPayload,
-				migration.AnnotationKey("bad-1"):             "{not-json",
+				migrationAnnotationKey("req-1"):              requestPayload,
+				migrationAnnotationKey("done-1"):             ackedPayload,
+				migrationAnnotationKey("bad-1"):              "{not-json",
 			},
 		},
 		Spec: v1beta1.InferenceServiceSpec{
@@ -323,7 +329,7 @@ func TestBuildNodeAccounting(t *testing.T) {
 	}
 }
 
-func TestBuildWorkloads(t *testing.T) {
+func TestBuildWorkloadsAndMigrationState(t *testing.T) {
 	snap := buildTestSnapshot(t)
 
 	svcA := snap.Workloads[types.NamespacedName{Namespace: "prod", Name: "svc-a"}]
@@ -383,6 +389,9 @@ func TestBuildWorkloads(t *testing.T) {
 	}
 	if svcA.ActiveMigrations[1].UUID != "req-1" || svcA.ActiveMigrations[1].FromNode != "node1" {
 		t.Fatalf("ActiveMigrations[1]: %+v", svcA.ActiveMigrations[1])
+	}
+	if svcA.ActiveMigrations[1].RequestedBy != "alfred-controller" {
+		t.Fatalf("ActiveMigrations[1].RequestedBy = %q", svcA.ActiveMigrations[1].RequestedBy)
 	}
 }
 
