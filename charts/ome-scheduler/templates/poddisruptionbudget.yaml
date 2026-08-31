@@ -1,0 +1,17 @@
+{{- if and .Values.scheduler.podDisruptionBudget.enabled (ge (int .Values.scheduler.podDisruptionBudget.minAvailable) (int .Values.scheduler.replicaCount)) -}}
+{{- fail "scheduler.podDisruptionBudget.minAvailable must be less than scheduler.replicaCount so voluntary maintenance can make progress" -}}
+{{- end }}
+{{- if .Values.scheduler.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Values.scheduler.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-scheduler.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.scheduler.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "ome-scheduler.selectorLabels" . | nindent 6 }}
+{{- end }}

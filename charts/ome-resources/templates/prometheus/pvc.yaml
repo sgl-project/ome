@@ -1,0 +1,22 @@
+{{- if and .Values.prometheus.enabled .Values.prometheus.persistence.enabled (not .Values.prometheus.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ome-prometheus
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-prometheus.labels" . | nindent 4 }}
+  {{- with .Values.prometheus.persistence.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.prometheus.persistence.accessModes | nindent 4 }}
+  {{- with .Values.prometheus.persistence.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.prometheus.persistence.size }}
+{{- end }}

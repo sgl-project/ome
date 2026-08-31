@@ -1,0 +1,112 @@
+{{- if .Values.quotaManager.remoteAccess.enabled }}
+{{- $name := .Values.quotaManager.remoteAccess.name }}
+{{- $sa := .Values.quotaManager.remoteAccess.serviceAccount }}
+{{- $subjects := .Values.quotaManager.remoteAccess.subjects }}
+{{- if and (not $sa.create) (not $subjects) }}
+{{- fail "quotaManager.remoteAccess is enabled but binds to nobody: set serviceAccount.create=true or list subjects" }}
+{{- end }}
+# Installed on a WORKLOAD cluster, and used by nothing that runs there. This is
+# what a management plane is allowed to do when it projects quota nodes onto
+# this member: the member issues the grant, so the member decides its extent.
+#
+# This template defines PERMISSIONS, not an authentication method. How the
+# management plane proves who it is belongs to the platform rather than to a
+# chart — the transport accepts exec credential plugins, so a cloud workload
+# identity authenticates with nothing stored anywhere. Bind the role to whatever
+# identity that produces through `subjects`.
+#
+# Deliberately NOT a widening of ome-multicluster-access. That role is the
+# placement plane's — InferenceService CRUD plus reads on pods, podgroups and
+# runtimes — and the two planes should not be able to use each other's
+# credentials. Keeping them apart means a leaked quota credential cannot start
+# work, and a leaked placement credential cannot rewrite budgets.
+{{- if $sa.create }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+    ome.io/component: quota-remote-access
+{{- end }}
+{{- if and $sa.create $sa.staticToken }}
+---
+# A ServiceAccount token that never expires and never rotates, readable by
+# anyone who can read Secrets in this namespace. Opt-in, and the opposite of
+# what a production cluster should carry: prefer `kubectl create token`, which
+# issues a token with a lifetime, or an exec credential plugin, which stores no
+# credential at all.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ printf "%s-token" $name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+    ome.io/component: quota-remote-access
+  annotations:
+    kubernetes.io/service-account.name: {{ $name | quote }}
+type: kubernetes.io/service-account-token
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $name | quote }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+    ome.io/component: quota-remote-access
+rules:
+# Projected quota nodes: the management plane creates them, keeps them in step
+# with the fleet tree, and reaps them when a node leaves it or the cluster stops
+# matching. list/watch because a projection is reconciled against the whole set
+# on this cluster, not fetched one at a time.
+#
+# AcceleratorQuota is cluster-scoped, so this cannot be a namespaced Role.
+- apiGroups: ["ome.io"]
+  resources: ["acceleratorquotas"]
+  verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+# There is no status subresource rule here, and its absence is the design.
+#
+# Status on this cluster is written by the workload-mode manager that runs here:
+# it reports each node's position, what Kueue is holding against it, and the
+# capacity it derived from this cluster's own hardware. A management plane READS
+# all of that — reading needs no separate grant, since status arrives with the
+# object — but writing it would make two processes the author of one field, and
+# the remote one is the one with no way to observe what it is overwriting.
+#
+# Nor is there a grant on nodes, resourceflavors, or anything of Kueue's. The
+# management plane never measures this cluster and never materializes here; it
+# learns capacity from the root node's status, which the local manager derives.
+# Kueue write access on a member belongs to the process running beside Kueue.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $name | quote }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+    ome.io/component: quota-remote-access
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $name | quote }}
+subjects:
+{{- if $sa.create }}
+- kind: ServiceAccount
+  name: {{ $name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+{{- end }}
+{{- range $subjects }}
+- kind: {{ .kind | quote }}
+  name: {{ .name | quote }}
+  {{- if .namespace }}
+  namespace: {{ .namespace | quote }}
+  {{- end }}
+  {{- if ne .kind "ServiceAccount" }}
+  apiGroup: rbac.authorization.k8s.io
+  {{- end }}
+{{- end }}
+{{- end }}

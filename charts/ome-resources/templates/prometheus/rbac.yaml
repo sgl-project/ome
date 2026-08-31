@@ -1,0 +1,34 @@
+{{- if .Values.prometheus.enabled }}
+# Cluster-wide pod / service / endpoints read access so Prometheus
+# can discover OME-managed pods across all namespaces via
+# kubernetes_sd_configs. No write verbs — this Prometheus only
+# scrapes; it does not run an Alertmanager or remote-write.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ome-prometheus
+  labels:
+    {{- include "ome-prometheus.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - services
+      - endpoints
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ome-prometheus
+  labels:
+    {{- include "ome-prometheus.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ome-prometheus
+subjects:
+  - kind: ServiceAccount
+    name: ome-prometheus
+    namespace: {{ .Release.Namespace }}
+{{- end }}

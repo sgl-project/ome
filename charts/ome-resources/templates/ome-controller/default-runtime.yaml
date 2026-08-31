@@ -1,0 +1,178 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: default-runtime
+  labels:
+    app.kubernetes.io/name: default-runtime
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/part-of: ome
+    ome.io/component: default-runtime
+spec:
+  disabled: false
+  decoderConfig:
+    annotations:
+      fb.metric.schema: sglang_metrics
+      k8s.v1.cni.cncf.io/networks: '[{"name":"ibs0p0-macvlan","namespace":"cw-multus"},{"name":"ibs0p1-macvlan","namespace":"cw-multus"},{"name":"ibs0p2-macvlan","namespace":"cw-multus"},{"name":"ibs0p3-macvlan","namespace":"cw-multus"},{"name":"ibs1p0-macvlan","namespace":"cw-multus"},{"name":"ibs1p1-macvlan","namespace":"cw-multus"},{"name":"ibs1p2-macvlan","namespace":"cw-multus"},{"name":"ibs1p3-macvlan","namespace":"cw-multus"},{"name":"ibs2p0-macvlan","namespace":"cw-multus"},{"name":"ibs2p1-macvlan","namespace":"cw-multus"},{"name":"ibs2p2-macvlan","namespace":"cw-multus"},{"name":"ibs2p3-macvlan","namespace":"cw-multus"},{"name":"ibs3p0-macvlan","namespace":"cw-multus"},{"name":"ibs3p1-macvlan","namespace":"cw-multus"},{"name":"ibs3p2-macvlan","namespace":"cw-multus"},{"name":"ibs3p3-macvlan","namespace":"cw-multus"}]'
+    nodeSelector:
+      kubernetes.io/arch: arm64
+    runner:
+      name: worker
+      ports:
+        - containerPort: 30000
+          name: http
+          protocol: TCP
+        - containerPort: 8998
+          name: bootstrap
+          protocol: TCP
+      securityContext:
+        capabilities:
+          add:
+            - IPC_LOCK
+            - SYS_PTRACE
+        privileged: true
+      readinessProbe:
+        failureThreshold: 5
+        httpGet:
+          path: /health
+          port: 30000
+        initialDelaySeconds: 120
+        periodSeconds: 30
+        timeoutSeconds: 10
+      startupProbe:
+        failureThreshold: 60
+        httpGet:
+          path: /health
+          port: 30000
+        periodSeconds: 30
+        timeoutSeconds: 30
+      livenessProbe:
+        failureThreshold: 5
+        httpGet:
+          path: /health
+          port: 30000
+        periodSeconds: 60
+        timeoutSeconds: 30
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+        - mountPath: /tmp
+          name: tmp-storage
+    tolerations:
+      - effect: NoSchedule
+        key: nvidia.com/gpu
+        operator: Exists
+    volumes:
+      - emptyDir:
+          medium: Memory
+          sizeLimit: 940Gi
+        name: dshm
+      - emptyDir: {}
+        name: tmp-storage
+  engineConfig:
+    annotations:
+      fb.metric.schema: sglang_metrics
+      k8s.v1.cni.cncf.io/networks: '[{"name":"ibs0p0-macvlan","namespace":"cw-multus"},{"name":"ibs0p1-macvlan","namespace":"cw-multus"},{"name":"ibs0p2-macvlan","namespace":"cw-multus"},{"name":"ibs0p3-macvlan","namespace":"cw-multus"},{"name":"ibs1p0-macvlan","namespace":"cw-multus"},{"name":"ibs1p1-macvlan","namespace":"cw-multus"},{"name":"ibs1p2-macvlan","namespace":"cw-multus"},{"name":"ibs1p3-macvlan","namespace":"cw-multus"},{"name":"ibs2p0-macvlan","namespace":"cw-multus"},{"name":"ibs2p1-macvlan","namespace":"cw-multus"},{"name":"ibs2p2-macvlan","namespace":"cw-multus"},{"name":"ibs2p3-macvlan","namespace":"cw-multus"},{"name":"ibs3p0-macvlan","namespace":"cw-multus"},{"name":"ibs3p1-macvlan","namespace":"cw-multus"},{"name":"ibs3p2-macvlan","namespace":"cw-multus"},{"name":"ibs3p3-macvlan","namespace":"cw-multus"}]'
+    nodeSelector:
+      kubernetes.io/arch: arm64
+    runner:
+      name: worker
+      ports:
+        - containerPort: 30000
+          name: http
+          protocol: TCP
+        - containerPort: 8998
+          name: bootstrap
+          protocol: TCP
+      securityContext:
+        capabilities:
+          add:
+            - IPC_LOCK
+            - SYS_PTRACE
+        privileged: true
+      readinessProbe:
+        failureThreshold: 5
+        httpGet:
+          path: /health
+          port: 30000
+        initialDelaySeconds: 120
+        periodSeconds: 30
+        timeoutSeconds: 10
+      startupProbe:
+        failureThreshold: 60
+        httpGet:
+          path: /health
+          port: 30000
+        periodSeconds: 30
+        timeoutSeconds: 30
+      livenessProbe:
+        failureThreshold: 5
+        httpGet:
+          path: /health
+          port: 30000
+        periodSeconds: 60
+        timeoutSeconds: 30
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+        - mountPath: /tmp
+          name: tmp-storage
+    tolerations:
+      - effect: NoSchedule
+        key: nvidia.com/gpu
+        operator: Exists
+    volumes:
+      - emptyDir:
+          medium: Memory
+          sizeLimit: 940Gi
+        name: dshm
+      - emptyDir: {}
+        name: tmp-storage
+  routerConfig:
+    annotations:
+      fb.metric.schema: sglang_metrics
+    runner:
+      name: router
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: INFERENCESERVICE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['ome.io/inferenceservice']
+      livenessProbe:
+        failureThreshold: 5
+        httpGet:
+          path: /liveness
+          port: 30080
+        periodSeconds: 30
+        timeoutSeconds: 10
+      ports:
+        - containerPort: 30080
+          name: http
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+      readinessProbe:
+        failureThreshold: 5
+        httpGet:
+          path: /readiness
+          port: 30080
+        periodSeconds: 30
+        timeoutSeconds: 10
+      resources:
+        limits:
+          cpu: "32"
+          memory: 32Gi
+        requests:
+          cpu: "16"
+          memory: 16Gi
+      startupProbe:
+        failureThreshold: 30
+        httpGet:
+          path: /readiness
+          port: 30080
+        periodSeconds: 20
+        timeoutSeconds: 10

@@ -1,0 +1,53 @@
+{{- if .Values.scheduler.metrics.serviceMonitor.enabled }}
+{{- if not .Values.scheduler.metrics.service.enabled }}
+{{- fail "scheduler.metrics.serviceMonitor.enabled requires scheduler.metrics.service.enabled — the ServiceMonitor selects the metrics Service" -}}
+{{- end }}
+# Scrape the scheduler's metrics via prometheus-operator's ServiceMonitor CRD,
+# targeting the named `https-metrics` port on the metrics Service.
+#
+# Unlike the controller-manager's ServiceMonitor, this endpoint is HTTPS with
+# delegated authn/authz (the kube-scheduler contract), so the scrape must present
+# a bearer token and trust the serving certificate. The scheduler serves a
+# self-signed cert by default, hence insecureSkipVerify; point `tlsConfig` at a CA
+# instead if you front it with a known issuer.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Values.scheduler.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-scheduler.labels" . | nindent 4 }}
+    {{- with .Values.scheduler.metrics.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "ome-scheduler.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - port: https-metrics
+      path: /metrics
+      scheme: https
+      interval: {{ .Values.scheduler.metrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.scheduler.metrics.serviceMonitor.scrapeTimeout }}
+      # The scraping pod's own projected token. Its ServiceAccount must hold the
+      # /metrics grant — see scheduler.metrics.reader.serviceAccounts.
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        {{- with .Values.scheduler.metrics.serviceMonitor.tlsConfig }}
+        {{- toYaml . | nindent 8 }}
+        {{- else }}
+        insecureSkipVerify: true
+        {{- end }}
+      {{- with .Values.scheduler.metrics.serviceMonitor.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduler.metrics.serviceMonitor.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

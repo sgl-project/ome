@@ -1,0 +1,14 @@
+{{- if .Values.quotaManager.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Values.quotaManager.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.quotaManager.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "ome-quota-manager.selectorLabels" . | nindent 6 }}
+{{- end }}

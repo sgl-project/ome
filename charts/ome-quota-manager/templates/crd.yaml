@@ -1,0 +1,15 @@
+{{- if .Values.quotaManager.crd.install }}
+{{- /*
+The CRD is copied verbatim from config/crd/full by `make manifests`, then given
+a retention annotation. resource-policy: keep is not optional here: deleting a
+CustomResourceDefinition cascades to every AcceleratorQuota, each of those
+deletions is gated by this chart's own failurePolicy=Fail webhook, and by
+uninstall time the webhook has no endpoints — so an unprotected CRD would wedge
+in Terminating and take the tree down with it.
+*/}}
+{{- $crd := .Files.Get "files/ome.io_acceleratorquotas.yaml" | fromYaml }}
+{{- $meta := $crd.metadata }}
+{{- $_ := set $meta "annotations" (merge (dict "helm.sh/resource-policy" "keep") (default (dict) $meta.annotations)) }}
+{{- $_ := set $meta "labels" (merge (default (dict) $meta.labels) (fromYaml (include "ome-quota-manager.labels" .))) }}
+{{- toYaml $crd }}
+{{- end }}

@@ -1,0 +1,31 @@
+---
+# Supplemental read-only access aggregated into the built-in `view` ClusterRole,
+# covering the resources `view` misses but the read-plane needs:
+#
+#   * all ome.io CRDs (InferenceService, BaseModel, ServingRuntime, InferenceReplica, …)
+#   * cluster nodes
+#
+# Kubernetes' built-in `view` is aggregation-based: it does not cover custom
+# resources (their roles carry no aggregate-to-view label) and deliberately
+# excludes nodes (cluster-scoped infra). So a principal holding `view` — e.g. MUSE
+# authenticating to a GKE cluster via its K8S_CLUSTER ACL `ClusterRole:view` grant
+# — can read pods but is DENIED on ome.io resources and nodes. The result: empty
+# OME views and a capacity rollup (which needs node topology/allocatable) that
+# never syncs. This role closes both gaps the idiomatic way.
+#
+# Only `aggregate-to-view` is set: MUSE (and every read principal on these
+# clusters) comes in through `view`, so edit/admin aggregation would only widen
+# the grant with no consumer.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ome-supplemental-viewer
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+  - apiGroups: ["ome.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]

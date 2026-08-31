@@ -1,0 +1,22 @@
+{{- if .Values.scheduler.metrics.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.scheduler.name }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-scheduler.labels" . | nindent 4 }}
+  {{- with .Values.scheduler.metrics.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.scheduler.metrics.service.type }}
+  selector:
+    {{- include "ome-scheduler.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: https-metrics
+      port: {{ .Values.scheduler.metrics.service.port }}
+      targetPort: https-metrics
+      protocol: TCP
+{{- end }}

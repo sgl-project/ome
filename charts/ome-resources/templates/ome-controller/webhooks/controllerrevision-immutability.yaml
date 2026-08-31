@@ -1,3 +1,4 @@
+---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
@@ -6,31 +7,26 @@ metadata:
   annotations:
     cert-manager.io/inject-ca-from: ome/serving-cert
 webhooks:
+  # Scoped to the OME release namespace so StatefulSet/DaemonSet-owned
+  # ControllerRevisions elsewhere in the cluster are not gated. Inside
+  # the OME ns, the handler additionally checks the ome.io/created-by
+  # annotation before rejecting Update.
   - clientConfig:
       caBundle: Cg==
       service:
         name: ome-webhook-server-service
         namespace: {{ .Release.Namespace }}
         path: /validate-apps-v1-controllerrevision
-    failurePolicy: Ignore
+    failurePolicy: Fail
     name: controllerrevision-immutability.ome-webhook-server.validator
-    # Scope to OME's own namespace: every OME-written runtime-revision lives
-    # here, so this covers 100% of them while leaving StatefulSet/DaemonSet
-    # ControllerRevisions in every other namespace untouched (the apiserver
-    # filters them out before ever calling the webhook).
+    sideEffects: None
+    admissionReviewVersions: ["v1"]
     namespaceSelector:
       matchLabels:
         kubernetes.io/metadata.name: {{ .Release.Namespace }}
-    sideEffects: None
-    # Fail-open (Ignore) + a short timeout: a wedged webhook server adds at
-    # most 5s to an in-namespace ControllerRevision UPDATE, then admits it.
-    # The webhook is defense-in-depth (K8s already enforces .data/.revision
-    # immutability natively), so a brief gap only skips the .labels check.
-    timeoutSeconds: 5
-    admissionReviewVersions: ["v1"]
     rules:
       - apiGroups:
-          - apps
+          - "apps"
         apiVersions:
           - v1
         operations:

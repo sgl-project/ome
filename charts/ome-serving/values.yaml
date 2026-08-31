@@ -41,6 +41,10 @@ models:
     hfModelId: arcee-ai/AFM-4.5B-Base
     runtime:
       gpus: 1
+      # modelCacheProviders is intentionally opt-in. Set this only for
+      # runtime images that can load sharded models through the provider.
+      # modelCacheProviders:
+      #   - model_cache
 
   baichuan2-13b-chat:
     enabled: false

@@ -1,0 +1,79 @@
+# The scheduler's KubeSchedulerConfiguration. One profile whose schedulerName is
+# the opt-in name; OMEGangPack is enabled via multiPoint, which wires it into
+# every extension point it implements (PreFilter, Filter, PostFilter, Reserve,
+# Permit, PostBind, and EnqueueExtensions) — no per-hook
+# enumeration to drift.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.scheduler.name }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-scheduler.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    apiVersion: kubescheduler.config.k8s.io/v1
+    kind: KubeSchedulerConfiguration
+    leaderElection:
+      leaderElect: {{ .Values.scheduler.leaderElect }}
+      resourceName: {{ .Values.scheduler.name }}
+      resourceNamespace: {{ .Release.Namespace }}
+    profiles:
+      - schedulerName: {{ .Values.scheduler.name }}
+        {{- with .Values.scheduler.percentageOfNodesToScore }}
+        # Profile-scoped: only workloads that opt into this scheduler pay for the
+        # exhaustive feasibility scan that OMEGangPack's domain score needs.
+        percentageOfNodesToScore: {{ . }}
+        {{- end }}
+        plugins:
+          multiPoint:
+            enabled:
+              - name: OMEGangPack
+            {{- if .Values.scheduler.disablePreemption }}
+            disabled:
+              # Until OEP-0022 Phase C adds topology-aware preemption, the default
+              # preemptor is domain-blind for gangs: a no-fit gang carries no pin
+              # for Filter to enforce during preemption simulation, so it can evict
+              # victims scattered across domains that never assemble one whole free
+              # domain — churning pods for nothing. Disabling it here means
+              # ome-scheduler simply waits for capacity (the default scheduler still
+              # preempts for everything it schedules). Set disablePreemption: false
+              # to restore the built-in behavior.
+              - name: DefaultPreemption
+            {{- end }}
+          score:
+            enabled:
+              - name: NodeResourcesFit
+                weight: {{ .Values.scheduler.nodeResourcesFit.scoreWeight }}
+              # Domain-level bin-packing for standalone pods. OMEGangPack is
+              # already wired via multiPoint; this explicit entry only sets its
+              # Score weight (multiPoint does not re-add it).
+              - name: OMEGangPack
+                weight: {{ .Values.scheduler.omeGangPack.scoreWeight }}
+            {{- if .Values.scheduler.disablePodTopologySpreadScore }}
+            disabled:
+              # Soft topology spreading directly conflicts with OEP-0022's
+              # packing policy. Hard DoNotSchedule constraints still run via
+              # PodTopologySpread's PreFilter and Filter extension points.
+              - name: PodTopologySpread
+            {{- end }}
+        pluginConfig:
+          - name: OMEGangPack
+            args:
+              {{- with .Values.scheduler.plugin.topologyKey }}
+              topologyKey: {{ . | quote }}
+              {{- end }}
+              podGroupTopologyKeyAnnotation: {{ .Values.scheduler.plugin.podGroupTopologyKeyAnnotation | quote }}
+              unsupportedPlacementGroupLabel: {{ .Values.scheduler.plugin.unsupportedPlacementGroupLabel | quote }}
+              defaultPermitTimeoutSeconds: {{ .Values.scheduler.plugin.defaultPermitTimeoutSeconds }}
+              podGroupSyncTimeoutSeconds: {{ .Values.scheduler.plugin.podGroupSyncTimeoutSeconds }}
+              gcIntervalSeconds: {{ .Values.scheduler.plugin.gcIntervalSeconds }}
+              standaloneDomainPacking: {{ .Values.scheduler.plugin.standaloneDomainPacking }}
+          - name: NodeResourcesFit
+            args:
+              scoringStrategy:
+                type: MostAllocated
+                {{- with .Values.scheduler.nodeResourcesFit.resources }}
+                resources:
+                  {{- toYaml . | nindent 18 }}
+                {{- end }}

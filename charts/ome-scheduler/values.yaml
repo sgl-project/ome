@@ -1,0 +1,221 @@
+# Default values for ome-scheduler.
+
+global:
+  # Optional registry prefix applied to image repositories that don't already
+  # contain a '/'. Matches the ome-resources chart's convention.
+  hub: ""
+  # Image pull secrets applied to the scheduler pod (overridable per-component).
+  imagePullSecrets: []
+
+scheduler:
+  # The scheduler's profile name. This is the value workloads put in
+  # spec.schedulerName to be scheduled by ome-scheduler; it is also the
+  # leader-election lock name. No workload convention is baked into the binary —
+  # this name is the entire opt-in surface. It must be a DNS label of at most
+  # 55 characters so chart-generated Service names remain valid.
+  name: ome-scheduler
+
+  image:
+    repository: ome-scheduler
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  # HA by default: multiple replicas with leader election, so exactly one instance
+  # schedules and the rest are warm standbys for fast failover. A scheduler is a
+  # single-writer decision loop — you can never run more than one ACTIVE instance
+  # (two would double-bind pods), so leaderElect must stay true whenever
+  # replicaCount > 1. Scale down to 1 for constrained/dev clusters.
+  replicaCount: 2
+  leaderElect: true
+  # The OME controller publishes its topology contract with a fixed annotation
+  # name. Keep this enabled for OME workloads. Generic/non-OME PodGroup
+  # producers may disable it and configure their own annotation name below.
+  omeControllerIntegration:
+    enabled: true
+  # Required anti-affinity prevents a surge replica from sharing either
+  # scheduler node. Replace the standby in place so a two-node control pool can
+  # roll without deadlocking; maxUnavailable keeps one scheduler available.
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+
+  # klog verbosity. 2 is a reasonable production default. The gang pin/Filter
+  # decision trace lives at V(4) — raise to 4 to debug placement (which domain a
+  # gang pinned, pinStale inputs, per-domain free counts, Filter rejects).
+  verbosity: 2
+
+  # Disable the built-in DefaultPreemption plugin for this scheduler. Until
+  # topology-aware preemption lands (OEP-0022 Phase C), default preemption is
+  # domain-blind for gangs and can evict victims that never form a whole domain.
+  # Leave true so ome-scheduler waits for capacity instead; the default scheduler
+  # still preempts for its own workloads. Set false to restore built-in behavior.
+  disablePreemption: true
+
+  plugin:
+    # Node label that identifies an accelerator domain as a fallback for
+    # PodGroups without a per-gang annotation. Leave empty when every gang
+    # declares its key.
+    topologyKey: ""
+    # Metadata names are configuration so the scheduler plugin itself is not
+    # coupled to the OME controller API. This chart wires OME's PodGroup contract.
+    podGroupTopologyKeyAnnotation: ome.io/topology-key
+    # Partner-gang placement is not implemented yet. When this configured label
+    # is present, fail closed instead of silently placing partner gangs apart.
+    unsupportedPlacementGroupLabel: ome.io/placement-group
+    # Fallback when a PodGroup omits spec.scheduleTimeoutSeconds. This lives in
+    # chart configuration rather than being compiled into the scheduler.
+    defaultPermitTimeoutSeconds: 600
+    # Bound the optional initial PodGroup informer sync. The informer continues
+    # retrying after startup if the CRD is temporarily unavailable.
+    podGroupSyncTimeoutSeconds: 30
+    # Pin/reservation reconciliation cadence.
+    gcIntervalSeconds: 60
+    # Steer standalone (non-gang) whole-node pods toward already-busy domains, so
+    # partly-filled slices fill before empty ones open and whole slices stay free
+    # for multi-host gangs. Only takes effect when topologyKey above is set (e.g.
+    # cloud.google.com/gke-tpu-partition-2x2x2-id on a TPU pool), and its domain
+    # counts are only as complete as the node sample Score receives — see
+    # percentageOfNodesToScore below.
+    standaloneDomainPacking: true
+
+  # Domain-level packing score for standalone pods (OMEGangPack.Score). Weight it
+  # at/above nodeResourcesFit so the partition-level signal wins the tie that
+  # node-level MostAllocated cannot break (all empty whole-node candidates tie).
+  omeGangPack:
+    scoreWeight: 10
+
+  nodeResourcesFit:
+    # Node-level packing complements OMEGangPack's domain-level packing.
+    scoreWeight: 10
+    # Set fleet accelerator resources here as needed. CPU and memory retain
+    # sensible packing behavior on mixed nodes without assuming a GPU vendor.
+    resources:
+      - name: cpu
+        weight: 1
+      - name: memory
+        weight: 1
+
+  # Disable only PodTopologySpread's preference score, which contradicts
+  # packing. Its PreFilter/Filter path remains enabled for explicit hard
+  # DoNotSchedule constraints.
+  disablePodTopologySpreadScore: true
+
+  # How many of the cluster's nodes must pass Filter before the scheduler stops
+  # looking for more candidates. Unset leaves upstream's adaptive 5-50% band,
+  # which hands Score a sample of the feasible nodes; OMEGangPack derives its
+  # per-domain free-node counts from exactly that sample, so a partial view can
+  # rank an empty domain above a partly-filled one. Set to 100 wherever
+  # standaloneDomainPacking is active. Gang pods never rely on this — PreFilter
+  # already narrows them to a single domain.
+  percentageOfNodesToScore:
+
+  # The scheduler serves /metrics on a secure port (HTTPS + delegated authn/authz),
+  # the same contract as kube-scheduler. Scraping it therefore needs three things,
+  # not just a port: the scheduler authorized to verify callers (authDelegation),
+  # the scraper authorized to read /metrics (reader), and the scraper pointed at
+  # the endpoint (podAnnotations below, or a PodMonitor/ServiceMonitor).
+  metrics:
+    bindAddress: 0.0.0.0
+    securePort: 10259
+    # Lets the scheduler issue TokenReview/SubjectAccessReview to authorize
+    # scrape callers. Without it every /metrics request is rejected 401/403.
+    authDelegation:
+      enabled: true
+    reader:
+      # Create a ClusterRole granting `get` on the /metrics non-resource URL.
+      create: true
+      # Identities to bind that role to — the ServiceAccounts that scrape. Empty
+      # means the role is created but bound to nothing; the chart does not guess
+      # who scrapes in your environment.
+      serviceAccounts: []
+      #  - name: prometheus
+      #    namespace: monitoring
+    service:
+      enabled: true
+      type: ClusterIP
+      port: 10259
+      annotations: {}
+    # Scrape via prometheus-operator's ServiceMonitor CRD, the mechanism the
+    # ome-resources chart already uses for the controller-manager. On a
+    # Prometheus-Operator stack this — not the pod annotations below — is what
+    # creates the scrape target. Off by default: it requires the CRD.
+    serviceMonitor:
+      enabled: false
+      interval: 30s
+      scrapeTimeout: 10s
+      # Extra labels merged onto the ServiceMonitor, e.g. to match the operator's
+      # serviceMonitorSelector.
+      additionalLabels: {}
+      # TLS for the HTTPS metrics port. The scheduler serves a self-signed cert by
+      # default, so verification is skipped unless a CA is supplied here.
+      tlsConfig: {}
+      #  ca:
+      #    secret:
+      #      name: scrape-ca
+      #      key: ca.crt
+      #  serverName: ome-scheduler-metrics.ome.svc
+      relabelings: []
+      metricRelabelings: []
+
+  probes:
+    liveness:
+      path: /healthz
+      initialDelaySeconds: 15
+      periodSeconds: 20
+    readiness:
+      path: /readyz
+      initialDelaySeconds: 5
+
+  podDisruptionBudget:
+    enabled: true
+    # Must be lower than replicaCount. For a one-replica development install,
+    # disable the PDB or set this to 0 so upgrades and drains can proceed.
+    minAvailable: 1
+
+  resources:
+    # kube-scheduler informers cache cluster-wide Pods, Nodes, and PodGroups.
+    # Startup LIST processing temporarily uses more memory than steady state,
+    # so size the default for large production clusters; constrained/dev
+    # clusters can override these values.
+    requests:
+      cpu: 200m
+      memory: 4Gi
+    limits:
+      cpu: "2"
+      memory: 12Gi
+
+  nodeSelector: {}
+  # Keep the active scheduler and its standby off the same node. Required
+  # anti-affinity makes the HA claim concrete: a single node loss cannot remove
+  # both replicas. On a one-node development cluster, set replicaCount: 1.
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: ome-scheduler
+              app.kubernetes.io/component: scheduler
+          topologyKey: kubernetes.io/hostname
+  tolerations: []
+  # Prefer an even hostname distribution as a second line of defense if an
+  # operator replaces the affinity block with a less restrictive policy.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: ome-scheduler
+          app.kubernetes.io/component: scheduler
+  # Annotations on the scheduler pods. For annotation-based Prometheus discovery,
+  # the scheme must be https — the metrics port is TLS, so a plain-HTTP scrape
+  # fails. Left empty by default because discovery is environment-specific: many
+  # clusters use a PodMonitor/ServiceMonitor against the metrics Service instead.
+  podAnnotations: {}
+  #  prometheus.io/scrape: "true"
+  #  prometheus.io/scheme: "https"
+  #  prometheus.io/port: "10259"
+  #  prometheus.io/path: "/metrics"
+  imagePullSecrets: []

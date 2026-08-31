@@ -1,0 +1,36 @@
+{{- if .Values.podMonitor.enabled }}
+# model-agent runs as a DaemonSet with no fronting Service (it's a
+# node-local daemon, not addressed via cluster DNS), so PodMonitor is
+# the right scrape primitive — ServiceMonitor would need a synthetic
+# Service that serves no other purpose.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: ome-model-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/component: ome-model-agent-daemonset
+    {{- with .Values.podMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: ome-model-agent-daemonset
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.podMonitor.interval | default "30s" }}
+      scrapeTimeout: {{ .Values.podMonitor.scrapeTimeout | default "10s" }}
+      {{- with .Values.podMonitor.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podMonitor.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

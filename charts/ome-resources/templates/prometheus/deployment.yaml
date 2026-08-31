@@ -1,0 +1,127 @@
+{{- if .Values.prometheus.enabled }}
+# Single-replica Prometheus bundled for KEDA autoscaling input only. It is not
+# a general-purpose observability install: storage defaults to emptyDir,
+# retention is short, and there is no Alertmanager, recording rules, or
+# remote_write. Disable it when your cluster
+# already runs a Prometheus that scrapes OME pods.
+#
+# A ConfigMap change triggers a rollout via the checksum annotation
+# below; the `--web.enable-lifecycle` flag also allows an in-pod
+# `POST /-/reload` for operators who want zero-downtime reloads.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ome-prometheus
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-prometheus.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "ome-prometheus.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ome-prometheus.labels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/prometheus/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: ome-prometheus
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      {{- with .Values.prometheus.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.prometheus.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.prometheus.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: prometheus
+          image: "{{ .Values.prometheus.image.repository }}:{{ .Values.prometheus.image.tag }}"
+          imagePullPolicy: {{ .Values.prometheus.image.pullPolicy }}
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time={{ .Values.prometheus.retention }}
+            {{- with .Values.prometheus.retentionSize }}
+            - --storage.tsdb.retention.size={{ . }}
+            {{- end }}
+            {{- with .Values.prometheus.query.maxConcurrency }}
+            - --query.max-concurrency={{ . }}
+            {{- end }}
+            {{- with .Values.prometheus.query.maxSamples }}
+            - --query.max-samples={{ . | int64 }}
+            {{- end }}
+            {{- with .Values.prometheus.query.timeout }}
+            - --query.timeout={{ . }}
+            {{- end }}
+            - --web.enable-lifecycle
+            - --web.listen-address=:{{ .Values.prometheus.listenPort }}
+          {{- with .Values.prometheus.goMemLimit }}
+          env:
+            - name: GOMEMLIMIT
+              value: {{ . | quote }}
+          {{- end }}
+          ports:
+            - name: http-web
+              containerPort: {{ .Values.prometheus.listenPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http-web
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http-web
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.prometheus.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+              readOnly: true
+            - name: storage
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: ome-prometheus-config
+        - name: storage
+          {{- if .Values.prometheus.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default "ome-prometheus" .Values.prometheus.persistence.existingClaim | quote }}
+          {{- else }}
+          emptyDir:
+            sizeLimit: {{ .Values.prometheus.storage.sizeLimit }}
+          {{- end }}
+{{- end }}

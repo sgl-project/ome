@@ -1,0 +1,118 @@
+{{- if .Values.ome.multiclusterAccess.enabled }}
+{{- $serviceAccountName := "ome-multicluster-access" }}
+{{- $tokenSecretName := "ome-multicluster-access-token" }}
+{{- $clusterRoleName := "ome-multicluster-access" }}
+{{- $clusterRoleBindingName := "ome-multicluster-access" }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $serviceAccountName | quote }}
+  labels:
+    app.kubernetes.io/name: {{ $serviceAccountName | quote }}
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/part-of: ome
+    ome.io/component: multicluster-access
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $tokenSecretName | quote }}
+  labels:
+    app.kubernetes.io/name: {{ $serviceAccountName | quote }}
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/part-of: ome
+    ome.io/component: multicluster-access
+  annotations:
+    kubernetes.io/service-account.name: {{ $serviceAccountName | quote }}
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $clusterRoleName | quote }}
+  labels:
+    app.kubernetes.io/name: {{ $serviceAccountName | quote }}
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/part-of: ome
+    ome.io/component: multicluster-access
+rules:
+# Derived InferenceServices: the control plane fans these out onto the
+# workload cluster, observes their admission status, and reaps losers.
+- apiGroups:
+  - ome.io
+  resources:
+  - inferenceservices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# InferenceReplicas: read-only. The per-component IR status on the workload
+# cluster is the authoritative admission signal the placement controller reads
+# to select a winner and to count admitted replicas per home; the derived
+# ISVC's status does not carry it. IRs are projected by the workload cluster's
+# own reconciler, so the control plane never writes them.
+- apiGroups:
+  - ome.io
+  resources:
+  - inferencereplicas
+  verbs:
+  - get
+  - list
+  - watch
+# ClusterServingRuntimes: read-only. The control plane never writes runtimes
+# on workload clusters (those are managed per-cluster via GitOps); it only
+# reads them for runtime context. Write verbs were over-broad blast radius.
+- apiGroups:
+  - ome.io
+  resources:
+  - clusterservingruntimes
+  verbs:
+  - get
+  - list
+  - watch
+# Pods: read-only, needed so the placement controller can observe admission
+# on the workload cluster directly (pods released from / held by a scheduling
+# gate) instead of only trusting the mirrored derived-ISVC status.
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+# PodGroups (scheduler-plugins coscheduling): read-only, for gang-admission
+# observation. Optional CRD — absent on clusters without scheduler-plugins,
+# where this rule is simply inert.
+- apiGroups:
+  - scheduling.x-k8s.io
+  resources:
+  - podgroups
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $clusterRoleBindingName | quote }}
+  labels:
+    app.kubernetes.io/name: {{ $serviceAccountName | quote }}
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/part-of: ome
+    ome.io/component: multicluster-access
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $clusterRoleName | quote }}
+subjects:
+- kind: ServiceAccount
+  name: {{ $serviceAccountName | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+{{- end }}

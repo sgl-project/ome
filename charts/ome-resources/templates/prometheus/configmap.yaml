@@ -1,0 +1,173 @@
+{{- if .Values.prometheus.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ome-prometheus-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-prometheus.labels" . | nindent 4 }}
+data:
+  # Scrape config covers two pod populations:
+  #   1. InferenceService-owned pods (every deployment mode stamps
+  #      the `ome.io/inferenceservice` label on its pods — that's
+  #      the canonical OME-wide pod selector, not the OMENative-only
+  #      `ome.io/managed-by`).
+  #   2. OME control-plane pods (controller-manager, model-agent)
+  #      that opt in via the standard Prometheus annotation.
+  # Port + path resolve from the standard `prometheus.io/port` and
+  # `prometheus.io/path` annotations when set; otherwise Prometheus
+  # falls back to its discovery defaults.
+  prometheus.yml: |
+    global:
+      scrape_interval: {{ .Values.prometheus.scrapeInterval }}
+      scrape_timeout: {{ .Values.prometheus.scrapeTimeout }}
+      {{- with .Values.prometheus.externalLabels }}
+      external_labels:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    scrape_configs:
+      - job_name: ome-inferenceservice-pods
+        {{- with .Values.prometheus.scrapeLimits.sampleLimit }}
+        sample_limit: {{ . }}
+        {{- end }}
+        {{- with .Values.prometheus.scrapeLimits.targetLimit }}
+        target_limit: {{ . }}
+        {{- end }}
+        {{- with .Values.prometheus.scrapeLimits.labelLimit }}
+        label_limit: {{ . }}
+        {{- end }}
+        {{- with .Values.prometheus.scrapeLimits.labelNameLengthLimit }}
+        label_name_length_limit: {{ . }}
+        {{- end }}
+        {{- with .Values.prometheus.scrapeLimits.labelValueLengthLimit }}
+        label_value_length_limit: {{ . }}
+        {{- end }}
+        {{- with .Values.prometheus.scrapeLimits.bodySizeLimit }}
+        body_size_limit: {{ . }}
+        {{- end }}
+        {{- with .Values.prometheus.scrapeLimits.keepDroppedTargets }}
+        keep_dropped_targets: {{ . }}
+        {{- end }}
+        kubernetes_sd_configs:
+          - role: pod
+            # Server-side informer filter: discover ONLY InferenceService pods.
+            # The keep-relabel below runs AFTER discovery, so without this filter
+            # the pod informer would cache every pod in the cluster and OOM the
+            # bundled Prometheus on large multi-tenant clusters.
+            selectors:
+              - role: pod
+                label: "ome.io/inferenceservice"
+            {{- with .Values.prometheus.scrapeNamespaces }}
+            # Optionally hard-scope discovery to specific namespaces.
+            namespaces:
+              names:
+                {{- toYaml . | nindent 16 }}
+            {{- end }}
+        relabel_configs:
+          # Only pods owned by an InferenceService.
+          - source_labels: [__meta_kubernetes_pod_label_ome_io_inferenceservice]
+            regex: .+
+            action: keep
+          # Only Running and Ready pods (KEDA reads instantaneous values).
+          # Phase alone still admits a pod that is loading model weights: its
+          # metrics endpoint is not listening yet, so it reports a scrape
+          # failure for the whole load window.
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: Running
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_ready]
+            regex: "true"
+            action: keep
+          {{- if .Values.prometheus.requireScrapeAnnotation }}
+          # An explicit standard opt-out wins over the OME-level opt-in.
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            regex: "false"
+            action: drop
+          # Scraping is opt-in through either the standard annotation or OME's
+          # controller-level scrape setting.
+          - source_labels:
+              - __meta_kubernetes_pod_annotation_prometheus_io_scrape
+              - __meta_kubernetes_pod_annotation_ome_io_enable_prometheus_scraping
+            regex: "true;.*|.*;true"
+            action: keep
+          {{- else }}
+          # Compatibility mode scrapes every ISVC pod unless it explicitly
+          # opts out with the standard annotation.
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            regex: "false"
+            action: drop
+          {{- end }}
+          # Address: replace the discovered port with prometheus.io/port
+          # when set on the pod.
+          - source_labels:
+              - __address__
+              - __meta_kubernetes_pod_annotation_prometheus_io_port
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+            action: replace
+          # Metrics path: replace /metrics with prometheus.io/path
+          # when set on the pod.
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            regex: (.+)
+            target_label: __metrics_path__
+            action: replace
+          # Convenience labels for KEDA / dashboards.
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_ome_io_inferenceservice]
+            target_label: inferenceservice
+          # OME stamps the PLAIN `component` pod label
+          # (constants.OMEComponentLabel = "component"), not an
+          # ome.io/-prefixed one -- so source the unprefixed label.
+          - source_labels: [__meta_kubernetes_pod_label_component]
+            target_label: component
+        {{- with .Values.prometheus.metricRelabelConfigs }}
+        metric_relabel_configs:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+
+      - job_name: ome-control-plane
+        kubernetes_sd_configs:
+          - role: pod
+            # Control-plane pods are matched by annotation (which SD can't filter
+            # on), so scope discovery to this release's namespace -- where the
+            # controller-manager/model-agent run -- instead of all cluster pods.
+            namespaces:
+              names:
+                - {{ .Release.Namespace }}
+        relabel_configs:
+          # Opt-in via the standard prometheus.io/scrape annotation.
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            regex: "true"
+            action: keep
+          # Restrict to this release's namespace so we don't pick up
+          # unrelated annotated pods cluster-wide.
+          - source_labels: [__meta_kubernetes_namespace]
+            regex: {{ .Release.Namespace }}
+            action: keep
+          - source_labels:
+              - __address__
+              - __meta_kubernetes_pod_annotation_prometheus_io_port
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+            action: replace
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            regex: (.+)
+            target_label: __metrics_path__
+            action: replace
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+      {{- if .Values.prometheus.selfScrape.enabled }}
+      - job_name: ome-prometheus
+        static_configs:
+          - targets:
+              - {{ printf "127.0.0.1:%v" .Values.prometheus.listenPort | quote }}
+      {{- end }}
+{{- end }}

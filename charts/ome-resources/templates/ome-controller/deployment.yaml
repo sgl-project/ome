@@ -5,6 +5,7 @@ metadata:
   name: ome-controller-manager
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "ome.labels" . | nindent 4 }}
     control-plane: ome-controller-manager
     controller-tools.k8s.io: "1.0"
   annotations:
@@ -22,10 +23,14 @@ spec:
         controller-tools.k8s.io: "1.0"
         logging-forward: enabled
       annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/ome-controller/configmap.yaml") . | sha256sum }}
         kubectl.kubernetes.io/default-container: manager
         prometheus.io/scrape: 'true'
         prometheus.io/path: '/metrics'
         prometheus.io/port: '8080'
+        {{- with .Values.ome.controller.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       serviceAccountName: ome-controller-manager
       {{- with .Values.ome.controller.nodeSelector }}
@@ -60,6 +65,34 @@ spec:
         - "--leader-elect"
         - "--webhook"
         - "--zap-encoder=console"
+        {{- if .Values.ome.controller.inferenceServiceMaxConcurrentReconciles }}
+        - "--inferenceservice-max-concurrent-reconciles={{ .Values.ome.controller.inferenceServiceMaxConcurrentReconciles }}"
+        {{- end }}
+        {{- if .Values.ome.controller.inferenceReplicaMaxConcurrentReconciles }}
+        - "--inferencereplica-max-concurrent-reconciles={{ .Values.ome.controller.inferenceReplicaMaxConcurrentReconciles }}"
+        {{- end }}
+        {{- if .Values.ome.controller.configCacheTTL }}
+        - "--config-cache-ttl={{ .Values.ome.controller.configCacheTTL }}"
+        {{- end }}
+        {{- if .Values.ome.controller.kubeAPIQPS }}
+        - "--kube-api-qps={{ .Values.ome.controller.kubeAPIQPS }}"
+        {{- end }}
+        {{- if .Values.ome.controller.kubeAPIBurst }}
+        - "--kube-api-burst={{ .Values.ome.controller.kubeAPIBurst }}"
+        {{- end }}
+        {{- if .Values.ome.multicluster.enabled }}
+        - "--enable-multicluster"
+        {{- if .Values.ome.multicluster.role }}
+        - "--multicluster-role={{ .Values.ome.multicluster.role }}"
+        {{- end }}
+        {{- if .Values.ome.multicluster.execCredentials.enabled }}
+        - "--allow-exec-credentials"
+        - "--exec-credential-allowed-commands={{ .Values.ome.multicluster.execCredentials.allowedCommands }}"
+        {{- end }}
+        {{- with .Values.ome.multicluster.placementControlPlaneID }}
+        - "--placement-control-plane-id={{ . }}"
+        {{- end }}
+        {{- end }}
         env:
           - name: POD_NAMESPACE
             valueFrom:
