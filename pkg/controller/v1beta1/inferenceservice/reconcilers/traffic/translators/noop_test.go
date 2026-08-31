@@ -50,3 +50,16 @@ func TestNoop_Watches_ReturnsNil(t *testing.T) {
 		t.Fatalf("Watches() = %v, want nil", got)
 	}
 }
+
+func TestNoop_SupportedTrafficFields_IsEmpty(t *testing.T) {
+	// The Noop translator emits no typed spec.traffic field; declaring
+	// any capability would make the reconciler and webhook treat
+	// intent as honored when nothing is emitted at all.
+	got := NewNoop().SupportedTrafficFields()
+	if got == nil {
+		t.Fatalf("SupportedTrafficFields() must return a non-nil set")
+	}
+	if got.Len() != 0 {
+		t.Fatalf("SupportedTrafficFields() must be empty, got: %v", got.UnsortedList())
+	}
+}

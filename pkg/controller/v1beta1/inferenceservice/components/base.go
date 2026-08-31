@@ -1,30 +1,62 @@
 package components
 
 import (
+	"context"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strconv"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/podmonitor"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/status"
 	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/utils"
 )
 
 // BaseComponentFields contains common fields for all components
 type BaseComponentFields struct {
-	Client                            client.Client
-	Clientset                         kubernetes.Interface
+	Client    client.Client
+	Clientset kubernetes.Interface
+	// APIReader is the live (uncached) reader, typically mgr.GetAPIReader().
+	// Intended for reads where cache lag would be a correctness problem.
+	// Currently unread on the ISVC side — the InferenceReplica controller
+	// owns revision bookkeeping, audit ledger dedup, and EndpointSlice
+	// drain checks.
+	APIReader client.Reader
+	// Expectations is the OMENative per-controller create/delete
+	// bookkeeping cache. Currently unread on the ISVC side — the
+	// InferenceReplica controller owns its own instance. nil for
+	// non-OMENative modes.
+	Expectations *omenative.Expectations
+	// Recorder is the parent controller's event recorder.
+	Recorder record.EventRecorder
+	// GangSchedulingAvailable is the cluster-discovery boolean threaded
+	// from the InferenceServiceReconciler — true when the cluster has
+	// the scheduler-plugins `scheduling.x-k8s.io/v1alpha1/PodGroup` CRD
+	// installed. Currently unread on the ISVC side — the projected IR
+	// carries the flag and the IR controller consults it. Other
+	// deployment modes (Raw / MultiNode / PD) ignore this field.
+	GangSchedulingAvailable           bool
 	Scheme                            *runtime.Scheme
 	InferenceServiceConfig            *controllerconfig.InferenceServicesConfig
 	DeploymentMode                    constants.DeploymentModeType
@@ -40,12 +72,49 @@ type BaseComponentFields struct {
 	StatusManager                     *status.StatusReconciler
 	Log                               logr.Logger
 	SupportedModelFormat              *v1beta1.SupportedModelFormat
+	// Overlays is the resolver output for spec.model.overlays; nil when
+	// none declared. Consumed by UpdateVolumeMounts / UpdateEnvVariables
+	// / UpdatePodSpecVolumes.
+	Overlays []isvcutils.ResolvedOverlay
+}
+
+// newBaseComponentFields is the ONE place BaseComponentFields is
+// assembled from deps + inputs. Constructors pass their component's
+// logger name; nothing else differs per component. The fine-tuned
+// serving fields (FineTunedServing / FineTunedServingWithMergedWeights /
+// FineTunedWeights) are populated at reconcile time by
+// ReconcileFineTunedWeights, never at construction.
+func newBaseComponentFields(deps *ComponentDeps, in ComponentInputs, loggerName string) BaseComponentFields {
+	return BaseComponentFields{
+		Client:                  deps.Client,
+		Clientset:               deps.Clientset,
+		APIReader:               deps.APIReader,
+		Expectations:            deps.Expectations,
+		Recorder:                deps.Recorder,
+		GangSchedulingAvailable: deps.GangSchedulingAvailable,
+		Scheme:                  deps.Scheme,
+		InferenceServiceConfig:  deps.Config,
+		DeploymentMode:          in.DeploymentMode,
+		BaseModel:               in.BaseModel,
+		BaseModelMeta:           in.BaseModelMeta,
+		Runtime:                 in.Runtime,
+		RuntimeName:             in.RuntimeName,
+		StatusManager:           status.NewStatusReconciler(),
+		Log:                     ctrl.Log.WithName(loggerName),
+		SupportedModelFormat:    in.ModelFormat,
+		AcceleratorClass:        in.AcceleratorClass,
+		AcceleratorClassName:    in.AcceleratorClassName,
+		Overlays:                in.Overlays,
+	}
 }
 
 // Common methods as functions that operate on BaseComponentFields
 
 // ReconcileFineTunedWeights reconciles fine-tuned weights for any component
 func ReconcileFineTunedWeights(b *BaseComponentFields, isvc *v1beta1.InferenceService) error {
+	if isvc.Spec.Model == nil {
+		return nil
+	}
 	numOfFineTunedWeights := len(isvc.Spec.Model.FineTunedWeights)
 	if numOfFineTunedWeights == 0 {
 		return nil
@@ -89,11 +158,9 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 	}
 
 	// Add model volume mount if base model is specified and it's necessary
-	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModelMeta != nil {
+	if b.BaseModel != nil && !isShardedModel(b.BaseModel) && b.BaseModel.Storage != nil && b.BaseModelMeta != nil {
 		if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
 			if pvc := parsePVCComponents(b); pvc != nil {
-				// PVC-backed model: mount at the default model path, selecting
-				// the model directory within the claim via SubPath.
 				vm := corev1.VolumeMount{
 					Name:      b.BaseModelMeta.Name,
 					MountPath: constants.ModelDefaultMountPath,
@@ -111,6 +178,8 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 			}
 		}
 	}
+
+	AppendOverlayVolumeMounts(b, b.Overlays, container)
 
 	// Add fine-tuned serving volume mounts
 	if b.FineTunedServing {
@@ -149,21 +218,13 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 
 	if !b.FineTunedServing {
 		// Base model serving - add MODEL_PATH env variable if necessary
-		if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
-			if isPVCBaseModel(b) {
-				// PVC-backed model: weights are mounted at the default model
-				// path (Storage.Path is nil for pvc:// models).
-				b.Log.Info("Base model serving (PVC) - adding MODEL_PATH env variable if not provided", "inference service", isvc.Name, "namespace", isvc.Namespace)
-				isvcutils.AppendEnvVarsIfNotExist(container, &[]corev1.EnvVar{
-					{Name: constants.ModelPathEnvVarKey, Value: constants.ModelDefaultMountPath},
-				})
-			} else if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil {
-				b.Log.Info("Base model serving - adding MODEL_PATH env variable if not provided", "inference service", isvc.Name, "namespace", isvc.Namespace)
-				isvcutils.AppendEnvVarsIfNotExist(container, &[]corev1.EnvVar{
-					{Name: constants.ModelPathEnvVarKey, Value: *b.BaseModel.Storage.Path},
-				})
-			}
+		if modelPath, ok := modelPathEnvValue(b, objectMeta); ok {
+			b.Log.V(1).Info("Base model serving - adding MODEL_PATH env variable if not provided", "inference service", isvc.Name, "namespace", isvc.Namespace)
+			isvcutils.AppendEnvVarsIfNotExist(container, &[]corev1.EnvVar{
+				{Name: constants.ModelPathEnvVarKey, Value: modelPath},
+			})
 		}
+		AppendOverlayEnvVars(b, b.Overlays, container)
 	} else {
 		// Fine-tuned serving - add vendor-specific environment variables
 		if b.BaseModel != nil && b.BaseModel.Vendor != nil {
@@ -208,46 +269,53 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 	}
 }
 
-// UpdatePodSpecNodeSelector updates pod spec with node selector for model scheduling
+// UpdatePodSpecNodeSelector updates pod spec node selectors for scheduling.
 func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, componentType v1beta1.ComponentType) {
-	// Only add node selector if we have a base model
 	if b.BaseModel == nil || b.BaseModelMeta == nil {
+		applyMergedNodeSelector(b.Runtime, b.AcceleratorClass, isvc, podSpec, componentType)
 		return
 	}
 
 	// Skip node selector for fine-tuned serving with merged weights
 	// as they don't need the base model on the node
 	if b.FineTunedServingWithMergedWeights {
-		b.Log.Info("Skipping node selector for fine-tuned serving with merged weights",
+		b.Log.V(2).Info("Skipping node selector for fine-tuned serving with merged weights",
 			"inferenceService", isvc.Name, "namespace", isvc.Namespace)
 		return
 	}
 
-	// Skip the per-node model-ready affinity for PVC-backed models. PVCs
-	// aren't tied to specific nodes and the model agent never labels nodes
-	// for them, so the readiness selector would leave the pod unschedulable.
-	// The runtime/AcceleratorClass node selectors below still apply.
+	// Skip node selector for PVC-backed models. The model agent does not
+	// label nodes for PVC storage (PVCs aren't tied to specific nodes), so
+	// the K8s scheduler handles placement based on PVC accessibility.
 	if isPVCBaseModel(b) {
-		b.Log.Info("Skipping model-ready node selector for PVC-backed BaseModel",
+		b.Log.V(2).Info("Skipping model node selector for PVC-backed BaseModel; runtime/AcceleratorClass selectors still apply",
 			"inferenceService", isvc.Name, "namespace", isvc.Namespace)
-		mergedNodeSelector := isvcutils.MergeNodeSelector(b.Runtime, b.AcceleratorClass, isvc, componentType)
-		if len(mergedNodeSelector) > 0 {
-			if podSpec.NodeSelector == nil {
-				podSpec.NodeSelector = make(map[string]string)
-			}
-			for k, v := range mergedNodeSelector {
-				podSpec.NodeSelector[k] = v
-			}
-		}
+		applyMergedNodeSelector(b.Runtime, b.AcceleratorClass, isvc, podSpec, componentType)
 		return
 	}
 
 	// Add preferred node affinity for model readiness using the shared utility function
-	isvcutils.AddNodeSelectorForModelReadyNode(podSpec, b.BaseModelMeta)
+	if isShardedModel(b.BaseModel) {
+		b.Log.V(2).Info("Skipping per-node model readiness selector for sharded model",
+			"modelName", b.BaseModelMeta.Name,
+			"namespace", b.BaseModelMeta.Namespace,
+			"inferenceService", isvc.Name)
+	} else {
+		isvcutils.AddNodeSelectorForModelReadyNode(podSpec, b.BaseModelMeta)
+	}
 
-	// Add node selector merged from AcceleratorClass if applicable
-	// Only add mergedNodeSelector to engine and decoder component.
-	mergedNodeSelector := isvcutils.MergeNodeSelector(b.Runtime, b.AcceleratorClass, isvc, componentType)
+	applyMergedNodeSelector(b.Runtime, b.AcceleratorClass, isvc, podSpec, componentType)
+
+	if !isShardedModel(b.BaseModel) {
+		b.Log.V(1).Info("Added preferred node affinity for model scheduling",
+			"modelName", b.BaseModelMeta.Name,
+			"namespace", b.BaseModelMeta.Namespace,
+			"inferenceService", isvc.Name)
+	}
+}
+
+func applyMergedNodeSelector(runtime *v1beta1.ServingRuntimeSpec, acceleratorClass *v1beta1.AcceleratorClassSpec, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, componentType v1beta1.ComponentType) {
+	mergedNodeSelector := isvcutils.MergeNodeSelector(runtime, acceleratorClass, isvc, componentType)
 	if len(mergedNodeSelector) > 0 {
 		if podSpec.NodeSelector == nil {
 			podSpec.NodeSelector = make(map[string]string)
@@ -256,19 +324,13 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 			podSpec.NodeSelector[k] = v
 		}
 	}
-
-	b.Log.Info("Added preferred node affinity for model scheduling",
-		"modelName", b.BaseModelMeta.Name,
-		"namespace", b.BaseModelMeta.Namespace,
-		"inferenceService", isvc.Name)
 }
 
 // UpdatePodSpecVolumes updates pod spec with common volumes
 func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, objectMeta *metav1.ObjectMeta) {
-	// Add model volume if base model is specified
-	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModelMeta != nil {
+	// Add model volume if base model is specified.
+	if b.BaseModel != nil && !isShardedModel(b.BaseModel) && b.BaseModel.Storage != nil && b.BaseModelMeta != nil {
 		if pvc := parsePVCComponents(b); pvc != nil {
-			// PVC-backed model: mount the claim directly (read-only).
 			modelVolume := corev1.Volume{
 				Name: b.BaseModelMeta.Name,
 				VolumeSource: corev1.VolumeSource{
@@ -292,6 +354,8 @@ func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService
 		}
 	}
 
+	AppendOverlayVolumes(b, b.Overlays, podSpec)
+
 	// Add empty model directory volume if required for fine-tuned serving
 	if isvcutils.IsEmptyModelDirVolumeRequired(objectMeta.Annotations) {
 		emptyModelDirVolume := corev1.Volume{
@@ -306,7 +370,32 @@ func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService
 	}
 }
 
-// MergeRuntimeArgumentsOverride merges runtime argument overrides according AcceleratorClass into the container args
+func isShardedModel(model *v1beta1.BaseModelSpec) bool {
+	return model != nil && model.Distribution != nil && *model.Distribution == v1beta1.DistributionSharded
+}
+
+func modelPathEnvValue(b *BaseComponentFields, objectMeta *metav1.ObjectMeta) (string, bool) {
+	if b == nil || b.BaseModel == nil || b.BaseModel.Storage == nil {
+		return "", false
+	}
+	if isShardedModel(b.BaseModel) {
+		if b.BaseModel.Storage.StorageUri == nil || *b.BaseModel.Storage.StorageUri == "" {
+			return "", false
+		}
+		return *b.BaseModel.Storage.StorageUri, true
+	}
+	if objectMeta == nil || !isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
+		return "", false
+	}
+	if isPVCBaseModel(b) {
+		return constants.ModelDefaultMountPath, true
+	}
+	if b.BaseModel.Storage.Path == nil || *b.BaseModel.Storage.Path == "" {
+		return "", false
+	}
+	return *b.BaseModel.Storage.Path, true
+}
+
 func MergeRuntimeArgumentsOverride(b *BaseComponentFields, container *corev1.Container) {
 	// append arg var from runtime spec if it is specified
 	if b.SupportedModelFormat != nil && b.SupportedModelFormat.AcceleratorConfig != nil && b.AcceleratorClassName != "" {
@@ -322,22 +411,16 @@ func MergeRuntimeArgumentsOverride(b *BaseComponentFields, container *corev1.Con
 				tensorParallelismConfig := acceleratorModelConfig.TensorParallelismOverride
 
 				// Override tensor parallel size if specified
-				// --tp-size and --tp are used in sglang
-				// --tensor-parallel-size and -tp are used in vllm
+				// --tp-size and --tp are parameters used in sglang
+				// --tensor-parallel-size is the parameter used in vllm
 				if tensorParallelismConfig.TensorParallelSize != nil && *tensorParallelismConfig.TensorParallelSize > 0 {
-					overrideParam(container, []string{"--tp-size", "--tp", "--tensor-parallel-size", "-tp"}, *tensorParallelismConfig.TensorParallelSize)
+					overrideParam(container, []string{"--tp-size", "--tp", "--tensor-parallel-size"}, *tensorParallelismConfig.TensorParallelSize)
 				}
 				// Override pipeline parallel size if specified
-				// --pp-size and --pp are used in sglang
-				// --pipeline-parallel-size and -pp used in vllm
+				// --pp-size and --pp are parameters used in sglang
+				// --pipeline-parallel-size is parameter used in vllm
 				if tensorParallelismConfig.PipelineParallelSize != nil && *tensorParallelismConfig.PipelineParallelSize > 0 {
-					overrideParam(container, []string{"--pp-size", "--pp", "--pipeline-parallel-size", "-pp"}, *tensorParallelismConfig.PipelineParallelSize)
-				}
-				// Override data parallel size if specified.
-				// --dp-size, --dp used in sglang
-				// --data-parallel-size, -dp used in vllm
-				if tensorParallelismConfig.DataParallelSize != nil && *tensorParallelismConfig.DataParallelSize > 0 {
-					overrideParam(container, []string{"--dp-size", "--dp", "--data-parallel-size", "-dp"}, *tensorParallelismConfig.DataParallelSize)
+					overrideParam(container, []string{"--pp-size", "--pp", "--pipeline-parallel-size"}, *tensorParallelismConfig.PipelineParallelSize)
 				}
 			}
 		}
@@ -382,7 +465,7 @@ func MergeEngineResources(b *BaseComponentFields, isvc *v1beta1.InferenceService
 	if isvc.Spec.Engine != nil &&
 		(isvc.Spec.Engine.Runner == nil ||
 			isResourcesUnspecified(isvc.Spec.Engine.Runner.Container.Resources)) {
-		b.Log.Info("Merging resources for engine container as user did not specify resources in InferenceService")
+		b.Log.V(1).Info("Merging resources for engine container as user did not specify resources in InferenceService")
 		MergeResources(b, container)
 	}
 }
@@ -396,32 +479,59 @@ func MergeDecoderResources(b *BaseComponentFields, isvc *v1beta1.InferenceServic
 	if isvc.Spec.Decoder != nil &&
 		(isvc.Spec.Decoder.Runner == nil ||
 			isResourcesUnspecified(isvc.Spec.Decoder.Runner.Container.Resources)) {
-		b.Log.Info("Merging resources for decoder container as user did not specify resources in InferenceService")
+		b.Log.V(1).Info("Merging resources for decoder container as user did not specify resources in InferenceService")
 		MergeResources(b, container)
 	}
 }
 
-// UpdateEngineAffinity merges affinity from the accelerator class into the pod spec
-// It only merges when customer didn't specify affinity in the inference service
+// UpdateEngineAffinity applies the accelerator class's discovery affinity to the
+// engine pod spec when the user did not specify affinity in the InferenceService.
 func UpdateEngineAffinity(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec) {
-	if isvc.Spec.Engine != nil &&
-		isvc.Spec.Engine.PodSpec.Affinity == nil {
-		if b.AcceleratorClass != nil && b.AcceleratorClass.Discovery.Affinity != nil {
-			b.Log.Info("Merging affinity from accelerator class into engine pod spec as user did not specify affinity in InferenceService")
-			podSpec.Affinity = b.AcceleratorClass.Discovery.Affinity
-		}
+	if isvc.Spec.Engine != nil && isvc.Spec.Engine.PodSpec.Affinity == nil {
+		mergeAcceleratorAffinity(b, podSpec)
 	}
 }
 
-// UpdateDecoderAffinity merges affinity from the accelerator class into the pod spec
-// It only merges when customer didn't specify affinity in the inference service
+// UpdateDecoderAffinity applies the accelerator class's discovery affinity to the
+// decoder pod spec when the user did not specify affinity in the InferenceService.
 func UpdateDecoderAffinity(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec) {
-	if isvc.Spec.Decoder != nil &&
-		isvc.Spec.Decoder.PodSpec.Affinity == nil {
-		if b.AcceleratorClass != nil && b.AcceleratorClass.Discovery.Affinity != nil {
-			b.Log.Info("Merging affinity from accelerator class into decoder pod spec as user did not specify affinity in InferenceService")
-			podSpec.Affinity = b.AcceleratorClass.Discovery.Affinity
-		}
+	if isvc.Spec.Decoder != nil && isvc.Spec.Decoder.PodSpec.Affinity == nil {
+		mergeAcceleratorAffinity(b, podSpec)
+	}
+}
+
+// acceleratorProvidesParallelismOverride reports whether the selected
+// accelerator class supplies a TensorParallelismOverride for the matched
+// model format. Only then does the accelerator config own the parallelism
+// flags; otherwise the automatic PARALLELISM_SIZE computation still applies.
+func acceleratorProvidesParallelismOverride(b *BaseComponentFields) bool {
+	if b.AcceleratorClassName == "" || b.SupportedModelFormat == nil {
+		return false
+	}
+	acceleratorConfig := b.SupportedModelFormat.GetAcceleratorConfig(b.AcceleratorClassName)
+	return acceleratorConfig != nil && acceleratorConfig.TensorParallelismOverride != nil
+}
+
+// mergeAcceleratorAffinity fills the pod spec's NodeAffinity from the
+// accelerator class's discovery affinity when the pod spec has none.
+// Only NodeAffinity is taken: Discovery describes which NODES carry the
+// hardware, and copying class-level pod (anti-)affinity terms could
+// suppress the gang co-location terms OMENative injects per Instance
+// (a pre-existing required podAffinity on the gang topology key skips
+// the worker-follows-leader injection).
+func mergeAcceleratorAffinity(b *BaseComponentFields, podSpec *corev1.PodSpec) {
+	if b.AcceleratorClass == nil || b.AcceleratorClass.Discovery.Affinity == nil {
+		return
+	}
+	acAffinity := b.AcceleratorClass.Discovery.Affinity
+	if acAffinity.NodeAffinity == nil {
+		return
+	}
+	if podSpec.Affinity == nil {
+		podSpec.Affinity = &corev1.Affinity{}
+	}
+	if podSpec.Affinity.NodeAffinity == nil {
+		podSpec.Affinity.NodeAffinity = acAffinity.NodeAffinity.DeepCopy()
 	}
 }
 
@@ -449,22 +559,8 @@ func ProcessBaseAnnotations(b *BaseComponentFields, isvc *v1beta1.InferenceServi
 	}
 
 	if b.FineTunedServingWithMergedWeights {
-		// For FT serving using merged FT weights, no need base model, so:
-		// 1) add annotation to indicate using merged weights for FT serving;
-		// 2) add annotation to skip model init injection;
-		b.Log.Info("Fine-tuned serving with merged weights", "namespace", isvc.Namespace)
+		b.Log.V(1).Info("Fine-tuned serving with merged weights", "namespace", isvc.Namespace)
 		annotations[constants.FTServingWithMergedWeightsAnnotationKey] = "true"
-		annotations[constants.ModelInitInjectionKey] = "false"
-	} else if b.BaseModelMeta != nil {
-		// Add model init required annotations (for non-merged FT or regular serving)
-		baseModelDecryptionKeyName, ok := b.BaseModelMeta.Annotations[constants.BaseModelDecryptionKeyName]
-		if ok {
-			annotations[constants.BaseModelDecryptionKeyName] = baseModelDecryptionKeyName
-		}
-		baseModelDecryptionSecretName, ok := b.BaseModelMeta.Annotations[constants.BaseModelDecryptionSecretName]
-		if ok {
-			annotations[constants.BaseModelDecryptionSecretName] = baseModelDecryptionSecretName
-		}
 	}
 
 	// Add base model specific annotations
@@ -544,8 +640,11 @@ func ProcessBaseLabels(b *BaseComponentFields, isvc *v1beta1.InferenceService, c
 	return labels, nil
 }
 
-// UpdateComponentStatus updates component status based on deployment mode
-// This method provides a systematic way to handle status updates across all components
+// UpdateComponentStatus updates component status based on deployment mode.
+// All surviving deployment modes (RawDeployment, MultiNode, OMENative)
+// emit pods carrying the raw-deployment app label — the engine / decoder
+// / router previously routed the same constant pair through a per-component
+// getPodLabelInfo callback; that indirection was dead and is inlined here.
 func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, objectMeta metav1.ObjectMeta) error {
 	// Always initialize the component ready condition to ensure it's visible from the start
 	// The deployment reconciler will update the condition based on the actual deployment status:
@@ -553,10 +652,35 @@ func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceServic
 	// - RawDeployment: Updates when Deployment becomes available
 	b.StatusManager.InitializeComponentCondition(&isvc.Status, componentType)
 
+	// Mirror the resolved per-Component autoscaler block + canonical scale
+	// target onto status.components.<c>.{autoscaler, scaleTargetRef}.
+	// Runs before the lean-path return so operators always see the
+	// resolved class / managed-by / scale target — even on model-less
+	// ISVCs that exit early below.
+	//
+	// The live-mirror branches in writeComponentAutoscalerStatus degrade
+	// gracefully on NotFound (Component without a scaler yet), keeping
+	// ManagedBy correct for default class=hpa ISVCs and "none" for the
+	// AutoscalerNone / unknown branches.
+	if err := writeComponentAutoscalerStatus(b, isvc, componentType, objectMeta); err != nil {
+		return errors.Wrapf(err, "failed to write %s autoscaler status", componentType)
+	}
+
+	// Lean path: with no spec.model there is no model-loading lifecycle to
+	// surface — skip the modelStatus writer so we do not stamp a
+	// transitionStatus/modelRevisionStates block that will never reach
+	// "UpToDate"/"Loaded". The webhook permits omitting spec.model when
+	// spec.runtime is set explicitly; we honor that here by leaving
+	// status.modelStatus untouched.
+	if isvc.Spec.Model == nil {
+		return nil
+	}
+
 	// Update model status for all deployment modes based on actual pod information
 	rawDeployment := b.DeploymentMode == constants.RawDeployment
 	statusSpec := isvc.Status.Components[componentType]
-	podLabelKey, podLabelValue := getPodLabelInfo(rawDeployment, objectMeta, statusSpec)
+	podLabelKey := constants.RawDeploymentAppLabel
+	podLabelValue := constants.GetRawServiceLabel(objectMeta.Name)
 
 	pods, err := isvcutils.ListPodsByLabel(b.Client, isvc.ObjectMeta.Namespace, podLabelKey, podLabelValue)
 	if err != nil {
@@ -567,10 +691,328 @@ func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceServic
 	return nil
 }
 
-// getPodLabelInfo returns the pod label key and value based on the deployment mode.
-func getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMeta, statusSpec v1beta1.ComponentStatusSpec) (string, string) {
-	if rawDeployment {
-		return constants.RawDeploymentAppLabel, constants.TruncateNameWithMaxLength(objectMeta.Name, 63)
+// writeComponentAutoscalerStatus resolves the per-Component autoscaler and
+// stamps the resulting ComponentAutoscalerStatus + ScaleTargetRef onto
+// status.components.<c>.
+// Existing fields on the ComponentStatusSpec entry are preserved — only the
+// .autoscaler and .scaleTargetRef sub-fields are overwritten.
+//
+// See pkg/.../reconcilers/autoscaler/status.go for the underlying mapping
+// + live-mirror semantics.
+func writeComponentAutoscalerStatus(b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, objectMeta metav1.ObjectMeta) error {
+	var (
+		resolved *v1beta1.ComponentAutoscaler
+		source   autoscaler.SpecSource
+		err      error
+	)
+	if b.DeploymentMode == constants.RawDeployment {
+		resolved, source, err = autoscaler.ResolveRawComponentAutoscaler(b.Runtime, isvc, componentType, objectMeta.Annotations)
+		if err != nil {
+			return err
+		}
+	} else {
+		resolved, source = autoscaler.ResolveComponentAutoscaler(b.Runtime, isvc, componentType)
 	}
-	return constants.RevisionLabel, statusSpec.LatestReadyRevision
+
+	scaleTargetRef := canonicalScaleTargetRef(b.DeploymentMode, isvc.Name, objectMeta.Name, componentType)
+
+	// For OMENative-managed Components the dispatch names the HPA /
+	// ScaledObject after the InferenceReplica; for RawDeployment it uses
+	// the legacy component metadata Name. The writer matches that lookup
+	// pattern so the live mirror finds the right object.
+	objectName := objectMeta.Name
+	if irprojector.IsIRManagedComponent(b.DeploymentMode) {
+		objectName = irprojector.InferenceReplicaName(isvc.Name, componentType)
+	}
+
+	if isvc.Status.Components == nil {
+		isvc.Status.Components = map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{}
+	}
+	existing := isvc.Status.Components[componentType]
+
+	asStatus, stRef, err := autoscaler.WriteAutoscalerStatus(
+		context.Background(),
+		b.Client,
+		isvc.Namespace,
+		objectName,
+		resolved,
+		source,
+		scaleTargetRef,
+		existing.Autoscaler,
+	)
+	if err != nil {
+		return err
+	}
+
+	existing.Autoscaler = asStatus
+	existing.ScaleTargetRef = stRef
+	isvc.Status.Components[componentType] = existing
+	return nil
+}
+
+// canonicalScaleTargetRef returns the scale target an external scaler should
+// point at for the given Component. OMENative-managed (default + IR-projected)
+// → InferenceReplica's /scale subresource; everything else → the underlying
+// Deployment via the legacy component metadata Name.
+//
+// Empty values are returned when the deployment mode isn't recognized so the
+// status writer can surface "no published target" cleanly (the writer drops
+// an all-empty ScaleTargetRef rather than emitting an obviously-broken
+// `{apiVersion:"",kind:"",name:""}` block).
+func canonicalScaleTargetRef(mode constants.DeploymentModeType, isvcName, componentMetaName string, componentType v1beta1.ComponentType) v1beta1.ScaleTargetRef {
+	if irprojector.IsIRManagedComponent(mode) {
+		return v1beta1.ScaleTargetRef{
+			APIVersion: v1beta1.SchemeGroupVersion.String(),
+			Kind:       "InferenceReplica",
+			Name:       irprojector.InferenceReplicaName(isvcName, componentType),
+		}
+	}
+	switch mode {
+	case constants.RawDeployment:
+		return v1beta1.ScaleTargetRef{
+			APIVersion: "apps/v1",
+			Kind:       "Deployment",
+			Name:       componentMetaName,
+		}
+	default:
+		return v1beta1.ScaleTargetRef{}
+	}
+}
+
+// ReconcileOMENativeSubresources ensures the per-Component stable
+// Service (`<isvc>-<comp>`) and PodMonitor for an OMENative-managed
+// Component (engine / decoder / router). Engine, Decoder, and Router
+// share this implementation byte-for-byte — only the component enum,
+// the per-Component ComponentExtensionSpec, and (implicitly via
+// objectMeta.Name) the resource name differ.
+//
+// The base selector is the OMENative-specific three-key tuple
+// (InferenceServicePodLabel + OMEComponentLabel + ManagedBy=OMENative)
+// so the stable Service + PodMonitor scope to OMENative-stamped pods
+// only — a same-Component mode switch (engine OMENative -> engine
+// RawDeployment) doesn't strand traffic on the wrong pod set during
+// the transition. PodMonitor scrape port matches the Raw fallback
+// rules: prefer a port named "metrics", else the first declared port,
+// else "http".
+//
+// The stable Service adds leader filters only when the ISVC declares
+// Worker.Size. Runtime-only shape is not used here because this
+// Service spans revisions that may have different runner shapes.
+//
+// The multi-pod filter is runner=leader AND pod-ordinal=0: pod-ordinal
+// is numbered per runner, so the rank-0 worker also carries ordinal 0
+// and pod-ordinal alone would still admit a worker. runner=leader pins
+// the one serving pod.
+//
+// Single-pod Components keep the broader selector: SurgeThenDrain
+// alternates the pod-naming ordinal between 0 and 1 across surges
+// (see query.LabelPodOrdinal docstring), so pinning ordinal=0
+// would zero-endpoint the Service during the surge phase.
+//
+// PodMonitor intentionally uses the base selector (no pod-ordinal
+// filter) so Prometheus scrapes EVERY pod of the gang — workers
+// emit per-rank metrics too, and per-pod scraping is the standard
+// Prometheus model.
+//
+// When podSpec is nil (MinReplicas=0 cold-start, no rendered template)
+// both reconcilers no-op: the Service reconciler would emit a portless
+// ClusterIP and the PodMonitor would have no scrape target. Both are
+// restored on the next reconcile pass after scale-up.
+//
+// Inlined PodMonitor build (rather than via the shared podmonitor
+// reconciler) because the shared reconciler hardcodes the
+// `app=<name>` selector that matches Raw / MultiNode pods but NOT
+// OMENative pods. CreateOrUpdate is idempotent + drift-correcting on
+// the three labelSelector / NamespaceSelector / PodMetricsEndpoints
+// shape fields.
+func ReconcileOMENativeSubresources(
+	ctx context.Context,
+	b *BaseComponentFields,
+	isvc *v1beta1.InferenceService,
+	componentType v1beta1.ComponentType,
+	componentExt *v1beta1.ComponentExtensionSpec,
+	objectMeta metav1.ObjectMeta,
+	podSpec *corev1.PodSpec,
+) error {
+	if podSpec == nil {
+		return nil
+	}
+	// Base selector — narrows to OMENative-managed pods of this (ISVC,
+	// Component) pair. Used as-is for PodMonitor; augmented with a
+	// `runner=leader` + `pod-ordinal=0` filter when the ISVC declares a
+	// multi-pod shape (see function-level docstring for rationale).
+	baseSelector := omeNativeComponentSelector(isvc, componentType)
+	stableSelector := baseSelector
+	if isvcutils.IsMultiPodComponent(isvc, componentType) {
+		stableSelector = make(map[string]string, len(baseSelector)+2)
+		for k, v := range baseSelector {
+			stableSelector[k] = v
+		}
+		// Pod ordinals are numbered per runner, so worker ordinal 0 also carries
+		// this value. Combining the runner and ordinal selects only the leader.
+		stableSelector[query.LabelRunner] = string(v1beta1.RunnerNameLeader)
+		stableSelector[query.LabelPodOrdinal] = "0"
+	}
+	componentMeta := objectMeta.DeepCopy()
+	componentMeta.OwnerReferences = []metav1.OwnerReference{
+		*metav1.NewControllerRef(isvc, v1beta1.SchemeGroupVersion.WithKind("InferenceService")),
+	}
+
+	// Stable Service via the SAME top-level reconciler RawDeployment and
+	// MultiNode use; only the selector + owner refs are OMENative-shaped.
+	sr := service.NewServiceReconciler(b.Client, b.Scheme, *componentMeta, componentExt, podSpec, stableSelector)
+	if _, err := sr.Reconcile(); err != nil {
+		return errors.Wrap(err, "stable service")
+	}
+
+	// PodMonitor is optional: its scheme is registered only when the Prometheus
+	// operator CRD is present (manager startup). On a cluster without it, skip
+	// creation rather than failing the whole reconcile.
+	if !b.Scheme.Recognizes(monitoringv1.SchemeGroupVersion.WithKind(constants.PodMonitorKind)) {
+		return nil
+	}
+
+	// PodMonitor scrape port follows the Raw fallback rules: prefer a
+	// port named "metrics", else the first declared port, else "http".
+	portName := "http"
+	if len(podSpec.Containers) > 0 {
+		ports := podSpec.Containers[0].Ports
+		for _, p := range ports {
+			if p.Name == "metrics" {
+				portName = "metrics"
+				break
+			}
+		}
+		if portName == "http" && len(ports) > 0 && ports[0].Name != "" {
+			portName = ports[0].Name
+		}
+	}
+	target := &monitoringv1.PodMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      objectMeta.Name,
+			Namespace: objectMeta.Namespace,
+		},
+	}
+	if _, err := controllerutil.CreateOrUpdate(ctx, b.Client, target, func() error {
+		target.Spec.NamespaceSelector = monitoringv1.NamespaceSelector{
+			MatchNames: []string{objectMeta.Namespace},
+		}
+		target.Spec.Selector = metav1.LabelSelector{MatchLabels: baseSelector}
+		endpoints := []monitoringv1.PodMetricsEndpoint{{
+			Port:     &portName,
+			Path:     "/metrics",
+			Interval: "10s",
+		}}
+		endpoints = append(endpoints, podmonitor.ParseExtraEndpoints(objectMeta.Annotations)...)
+		target.Spec.PodMetricsEndpoints = endpoints
+		// Own copy of baseSelector for metadata.labels: ApplyManagedScrapeConfig
+		// merges cfg.Labels into it, and spec.selector.MatchLabels must NOT gain
+		// those labels (pods don't carry them).
+		target.Labels = maps.Clone(baseSelector)
+		// Cluster-scope PodMonitor defaults (metadata labels + endpoint
+		// relabelings) from the inferenceservice-config ConfigMap. Applied
+		// AFTER target.Labels/endpoints are set: labels merge into
+		// metadata.labels only (spec.selector keeps selecting pods by
+		// baseSelector), relabelings append to every endpoint. Without this the
+		// PodMonitor carries only OME's own labels and a label-selecting
+		// collector (e.g. an external target allocator) never scrapes it.
+		if b.InferenceServiceConfig != nil {
+			podmonitor.ApplyManagedScrapeConfig(target, b.InferenceServiceConfig.PodMonitor)
+		}
+		target.OwnerReferences = []metav1.OwnerReference{
+			*metav1.NewControllerRef(isvc, v1beta1.SchemeGroupVersion.WithKind("InferenceService")),
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrapf(err, "pod monitor %s/%s", target.Namespace, target.Name)
+	}
+	return nil
+}
+
+// ReconcileComponentObjectMeta builds the common ObjectMeta block
+// (Name, Namespace, Annotations, Labels) shared by engine / decoder /
+// router. The per-Component name is resolved upstream because the
+// fallback logic (Service-existence lookup, MultiNode gating) still
+// differs across components (see section 4 of the components-dispatch
+// review). The annotation / label maps are the per-Component merge
+// (ISVC + componentExt.Annotations / componentExt.Labels) already
+// performed by the caller.
+//
+// On annotation-build failure the returned ObjectMeta carries Name +
+// Namespace only; on label-build failure the returned ObjectMeta
+// carries Name + Namespace + Annotations — preserving the partial-
+// metadata error-return shape the individual receivers used to
+// surface.
+func ReconcileComponentObjectMeta(
+	b *BaseComponentFields,
+	isvc *v1beta1.InferenceService,
+	componentType v1beta1.ComponentType,
+	componentName string,
+	componentAnnotations map[string]string,
+	componentLabels map[string]string,
+) (metav1.ObjectMeta, error) {
+	annotations, err := ProcessComponentAnnotations(b, isvc, componentAnnotations)
+	if err != nil {
+		return metav1.ObjectMeta{
+			Name:      componentName,
+			Namespace: isvc.Namespace,
+		}, err
+	}
+
+	labels, err := ProcessComponentLabels(b, isvc, componentType, componentLabels)
+	if err != nil {
+		return metav1.ObjectMeta{
+			Name:        componentName,
+			Namespace:   isvc.Namespace,
+			Annotations: annotations,
+		}, err
+	}
+
+	return metav1.ObjectMeta{
+		Name:        componentName,
+		Namespace:   isvc.Namespace,
+		Labels:      labels,
+		Annotations: annotations,
+	}, nil
+}
+
+// ProcessComponentAnnotations performs the per-Component annotation
+// build: filter the ISVC-level annotations against the disallowed
+// list, union them with the Component-level annotations, then hand
+// off to ProcessBaseAnnotations for the FT / BaseModel / runtime
+// annotations the base layer adds.
+func ProcessComponentAnnotations(
+	b *BaseComponentFields,
+	isvc *v1beta1.InferenceService,
+	componentAnnotations map[string]string,
+) (map[string]string, error) {
+	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
+		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
+	})
+
+	mergedAnnotations := annotations
+	if componentAnnotations != nil {
+		mergedAnnotations = utils.Union(annotations, componentAnnotations)
+	}
+	delete(mergedAnnotations, constants.InferenceServiceInPlaceImageTransitionAnnotationKey)
+
+	return ProcessBaseAnnotations(b, isvc, mergedAnnotations)
+}
+
+// ProcessComponentLabels performs the per-Component label build:
+// union the ISVC-level labels with the Component-level labels, then
+// hand off to ProcessBaseLabels for the FT / BaseModel / runtime
+// labels the base layer adds.
+func ProcessComponentLabels(
+	b *BaseComponentFields,
+	isvc *v1beta1.InferenceService,
+	componentType v1beta1.ComponentType,
+	componentLabels map[string]string,
+) (map[string]string, error) {
+	// Union always copies: ProcessBaseLabels mutates the map it is
+	// handed, and aliasing isvc.Labels would leak one component's
+	// stamps into the next component's build.
+	mergedLabels := utils.Union(isvc.Labels, componentLabels)
+
+	return ProcessBaseLabels(b, isvc, componentType, mergedLabels)
 }

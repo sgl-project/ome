@@ -99,6 +99,19 @@ func (t *Translator) SupportedPassthroughPrefixes() []string {
 	return []string{constants.PassthroughIstioPrefix}
 }
 
+// SupportedTrafficFields returns the typed spec.traffic capability
+// tokens the DestinationRule emission covers. Multi-header hashing is
+// not declared — Istio's httpHeaderName is a single string — and
+// endpoint override has no DestinationRule analogue.
+func (t *Translator) SupportedTrafficFields() sets.Set[string] {
+	return sets.New(
+		constants.TrafficCapabilityAlgorithm,
+		constants.TrafficCapabilityHashHeader,
+		constants.TrafficCapabilityHashCookie,
+		constants.TrafficCapabilityHashSourceIP,
+	)
+}
+
 // Translate produces the DestinationRule for the InferenceService.
 // Deterministic — same inputs produce byte-identical output.
 func (t *Translator) Translate(
@@ -204,9 +217,9 @@ func applyLoadBalancer(dr *unstructured.Unstructured, spec *v1beta1.TrafficSpec)
 			return err
 		}
 	}
-	// EndpointOverride is Envoy-only; webhook should already block it
-	// here, but defensive: silently drop and let the reconciler
-	// surface UnsupportedField via the per-key matrix.
+	// EndpointOverride has no DestinationRule analogue. The intent is
+	// dropped here; SupportedTrafficFields does not declare it, so the
+	// reconciler surfaces it as an unsupported typed field.
 	return nil
 }
 
@@ -216,8 +229,11 @@ func applyConsistentHash(dr *unstructured.Unstructured, ch *v1beta1.ConsistentHa
 		if len(ch.Headers) == 0 {
 			return errors.New("consistentHash.type=Header requires at least one header")
 		}
-		// Istio's httpHeaderName is a single string; we pin to the first
-		// header. The webhook enforces this constraint at admission.
+		// Istio's httpHeaderName is a single string, so only the first
+		// header is emitted. Admission rejects multi-header specs when
+		// this translator is active (SupportedTrafficFields omits the
+		// multi-header capability); the reconciler surfaces any that
+		// slip through as an unsupported typed field.
 		if err := unstructured.SetNestedField(
 			dr.Object, ch.Headers[0].Name,
 			"spec", "trafficPolicy", "loadBalancer", "consistentHash", "httpHeaderName",

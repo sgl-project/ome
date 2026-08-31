@@ -3,6 +3,7 @@ package deployment
 import (
 	"context"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -28,36 +29,71 @@ type DeploymentReconciler struct {
 	scheme       *runtime.Scheme
 	Deployment   *appsv1.Deployment
 	componentExt *v1beta1.ComponentExtensionSpec
+	// ownedReplicas is the controller-authoritative replica count, non-nil
+	// only when no autoscaler owns spec.replicas and the component declares
+	// an explicit floor. nil means the live value is preserved.
+	ownedReplicas *int32
 }
 
 func NewDeploymentReconciler(client kclient.Client,
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
 	componentExt *v1beta1.ComponentExtensionSpec,
-	podSpec *corev1.PodSpec) *DeploymentReconciler {
+	podSpec *corev1.PodSpec,
+	resolvedAutoscaler *v1beta1.ComponentAutoscaler) *DeploymentReconciler {
+	ownedReplicas := controllerOwnedReplicas(resolvedAutoscaler, componentExt)
+	deployment := createRawDeployment(componentMeta, componentExt, podSpec)
+	deployment.Spec.Replicas = ownedReplicas
 	return &DeploymentReconciler{
-		client:       client,
-		scheme:       scheme,
-		Deployment:   createRawDeployment(componentMeta, componentExt, podSpec),
-		componentExt: componentExt,
+		client:        client,
+		scheme:        scheme,
+		Deployment:    deployment,
+		componentExt:  componentExt,
+		ownedReplicas: ownedReplicas,
 	}
+}
+
+// controllerOwnedReplicas returns the replica count the ISVC controller owns
+// for this Deployment, or nil when the count must be preserved as-is.
+//
+// Ownership mirrors the OMENative IR projector: every autoscaler class except
+// None has an external writer of spec.replicas (HPA and KEDA target the scale
+// subresource; External is an operator-managed scaler), so the controller must
+// not fight it. Only class None (nil resolves to None) leaves the controller
+// as the sole writer, and even then only an explicit positive minReplicas is
+// stamped — without a declared floor the live count stays untouched.
+func controllerOwnedReplicas(resolvedAutoscaler *v1beta1.ComponentAutoscaler, componentExt *v1beta1.ComponentExtensionSpec) *int32 {
+	if resolvedAutoscaler != nil && resolvedAutoscaler.Class != v1beta1.AutoscalerNone {
+		return nil
+	}
+	if componentExt == nil || componentExt.MinReplicas == nil || *componentExt.MinReplicas <= 0 {
+		return nil
+	}
+	replicas := int32(*componentExt.MinReplicas)
+	return &replicas
 }
 
 func createRawDeployment(componentMeta metav1.ObjectMeta,
 	componentExt *v1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec) *appsv1.Deployment {
 
-	podMetadata := componentMeta
-	podMetadata.Labels["app"] = constants.TruncateNameWithMaxLength(componentMeta.Name, 63)
+	// Deep-copy the metadata so pod-template label stamping cannot leak into
+	// the caller's maps or the Deployment's own object-level metadata.
+	deploymentMeta := *componentMeta.DeepCopy()
+	podMetadata := *componentMeta.DeepCopy()
+	if podMetadata.Labels == nil {
+		podMetadata.Labels = map[string]string{}
+	}
+	podMetadata.Labels[constants.RawDeploymentAppLabel] = constants.GetRawServiceLabel(componentMeta.Name)
 	utils.SetPodLabelsFromAnnotations(&podMetadata)
 	setDefaultPodSpec(podSpec)
 
 	deployment := &appsv1.Deployment{
-		ObjectMeta: componentMeta,
+		ObjectMeta: deploymentMeta,
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": constants.TruncateNameWithMaxLength(componentMeta.Name, 63),
+					constants.RawDeploymentAppLabel: constants.GetRawServiceLabel(componentMeta.Name),
 				},
 			},
 			Template: corev1.PodTemplateSpec{
@@ -89,21 +125,30 @@ func (r *DeploymentReconciler) checkDeploymentExist() (constants.CheckResultType
 		return constants.CheckResultUnknown, nil, err
 	}
 
-	// Ignore fields related to HPA scaling
-	ignoreFields := cmpopts.IgnoreFields(appsv1.DeploymentSpec{}, "Replicas")
-
 	// Perform a dry-run update to populate default values
 	if err := r.client.Update(context.TODO(), r.Deployment, kclient.DryRunAll); err != nil {
 		log.Error(err, "Failed to perform dry-run update of deployment", "namespace", r.Deployment.Namespace, "name", r.Deployment.Name)
 		return constants.CheckResultUnknown, nil, err
 	}
 
-	if existingDeployment.Spec.Replicas != nil {
-		r.Deployment.Spec.Replicas = existingDeployment.Spec.Replicas
-		log.V(1).Info("Preserving existing replicas in target state", "namespace", r.Deployment.Namespace, "name", r.Deployment.Name, "replicas", *r.Deployment.Spec.Replicas)
+	var diffOpts []cmp.Option
+	if r.ownedReplicas != nil {
+		// Controller-owned count: re-assert the declared floor after dry-run
+		// defaulting and keep Replicas in the diff so drift from the floor
+		// triggers an update.
+		r.Deployment.Spec.Replicas = r.ownedReplicas
+	} else {
+		// Scaler-owned count (or no declared floor): the live value is
+		// authoritative — carry it into the target state and exclude the
+		// field from the diff.
+		diffOpts = append(diffOpts, cmpopts.IgnoreFields(appsv1.DeploymentSpec{}, "Replicas"))
+		if existingDeployment.Spec.Replicas != nil {
+			r.Deployment.Spec.Replicas = existingDeployment.Spec.Replicas
+			log.V(1).Info("Preserving existing replicas in target state", "namespace", r.Deployment.Namespace, "name", r.Deployment.Name, "replicas", *r.Deployment.Spec.Replicas)
+		}
 	}
 
-	diff, err := kmp.SafeDiff(r.Deployment.Spec, existingDeployment.Spec, ignoreFields)
+	diff, err := kmp.SafeDiff(r.Deployment.Spec, existingDeployment.Spec, diffOpts...)
 	if err != nil {
 		return constants.CheckResultUnknown, nil, err
 	}
@@ -199,7 +244,7 @@ func (r *DeploymentReconciler) Reconcile() (*appsv1.Deployment, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Info("Reconciling deployment", "namespace", r.Deployment.Namespace, "name", r.Deployment.Name, "checkResult", checkResult.String())
+	log.V(1).Info("Reconciling deployment", "namespace", r.Deployment.Namespace, "name", r.Deployment.Name, "checkResult", checkResult.String())
 
 	var opErr error
 	switch checkResult {

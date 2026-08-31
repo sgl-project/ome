@@ -579,3 +579,65 @@ func findContainer(containers []v1.Container, name string) *v1.Container {
 	}
 	return nil
 }
+
+// TestPodSpecReconciler_ImagePrecedence pins the merge contract: the
+// user-supplied ISVC container image overrides the CSR runner image
+// when both are set, and the CSR runner image fills in when the ISVC
+// container omits image (Container.Image has omitempty so an unset
+// value is dropped from the strategic-merge payload).
+func TestPodSpecReconciler_ImagePrecedence(t *testing.T) {
+	tests := []struct {
+		name          string
+		isvcImage     string
+		runnerImage   string
+		expectedImage string
+		why           string
+	}{
+		{
+			name:          "ISVC image set: ISVC wins",
+			isvcImage:     "user/pinned:v42",
+			runnerImage:   "runtime/default:v1",
+			expectedImage: "user/pinned:v42",
+			why:           "user-supplied ISVC image is the strategic-merge override and must win",
+		},
+		{
+			name:          "ISVC image empty: CSR runner image fills in",
+			isvcImage:     "",
+			runnerImage:   "runtime/default:v1",
+			expectedImage: "runtime/default:v1",
+			why:           "Container.Image is omitempty; empty ISVC value drops from the merge payload so runtime base survives",
+		},
+		{
+			name:          "Both empty: rendered pod also has empty image",
+			isvcImage:     "",
+			runnerImage:   "",
+			expectedImage: "",
+			why:           "no source of truth for image — controller does not synthesize one",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &PodSpecReconciler{Log: ctrl.Log.WithName("test")}
+			isvc := &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			}
+			basePodSpec := &v1beta1.PodSpec{
+				Containers: []v1.Container{{
+					Name:  constants.MainContainerName,
+					Image: tt.isvcImage,
+				}},
+			}
+			runnerSpec := &v1beta1.RunnerSpec{
+				Container: v1.Container{
+					Name:  constants.MainContainerName,
+					Image: tt.runnerImage,
+				},
+			}
+			podSpec, err := r.ReconcilePodSpec(isvc, &metav1.ObjectMeta{}, basePodSpec, runnerSpec)
+			require.NoError(t, err)
+			require.Len(t, podSpec.Containers, 1)
+			assert.Equal(t, tt.expectedImage, podSpec.Containers[0].Image, tt.why)
+		})
+	}
+}

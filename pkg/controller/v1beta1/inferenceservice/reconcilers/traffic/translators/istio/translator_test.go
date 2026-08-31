@@ -368,4 +368,33 @@ func TestObserveAcceptance_OtherConditionTypes_Ignored(t *testing.T) {
 	}
 }
 
+func TestSupportedTrafficFields_DeclaresDestinationRuleCoverage(t *testing.T) {
+	got := New().SupportedTrafficFields()
+	want := []string{
+		constants.TrafficCapabilityAlgorithm,
+		constants.TrafficCapabilityHashHeader,
+		constants.TrafficCapabilityHashCookie,
+		constants.TrafficCapabilityHashSourceIP,
+	}
+	for _, capability := range want {
+		if !got.Has(capability) {
+			t.Errorf("SupportedTrafficFields() missing %q", capability)
+		}
+	}
+	// httpHeaderName is a single string, so multi-header concatenation
+	// must NOT be declared; endpoint override has no DR analogue.
+	for _, capability := range []string{
+		constants.TrafficCapabilityHashMultipleHeaders,
+		constants.TrafficCapabilityEndpointOverrideHeader,
+		constants.TrafficCapabilityEndpointOverrideMetadata,
+	} {
+		if got.Has(capability) {
+			t.Errorf("SupportedTrafficFields() must not declare %q", capability)
+		}
+	}
+	if got.Len() != len(want) {
+		t.Errorf("SupportedTrafficFields() has %d tokens, want %d: %v", got.Len(), len(want), got.UnsortedList())
+	}
+}
+
 func i32p(v int32) *int32 { return &v }

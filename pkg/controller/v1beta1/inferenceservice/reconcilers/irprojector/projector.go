@@ -34,6 +34,10 @@ package irprojector
 import (
 	"context"
 	"fmt"
+	"math"
+	"sort"
+	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -52,7 +56,7 @@ import (
 // IsIRManagedComponent returns true when the given Component should be
 // driven through the InferenceReplica path. Only constants.OMENative
 // routes through the IR-managed path; every other mode (RawDeployment,
-// …) falls through to its own dispatch branch in
+// MultiNode, …) falls through to its own dispatch branch in
 // components/{engine,decoder,router}.go.
 //
 // OMENative-mode Components ALWAYS route through the IR-managed path —
@@ -140,6 +144,13 @@ type Params struct {
 	// Client is the controller-runtime client used to CreateOrUpdate
 	// the IR. The ISVC controller already holds this.
 	Client client.Client
+
+	// Reader is the live (uncached) reader used to re-read the IR inside
+	// the conflict-retry loop. A 409 means the apiserver holds a newer
+	// ResourceVersion than the informer has observed, so re-reading the
+	// cache resubmits the same stale base and burns the whole backoff.
+	// Optional; nil falls back to Client.
+	Reader client.Reader
 }
 
 // EnsureInferenceReplica computes the desired IR Spec from Params,
@@ -173,9 +184,13 @@ func EnsureInferenceReplica(ctx context.Context, p Params) (*v1beta1.InferenceRe
 		"inferencereplica", key)
 
 	var committed *v1beta1.InferenceReplica
+	reads := client.Reader(p.Client)
+	if p.Reader != nil {
+		reads = p.Reader
+	}
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		ir := &v1beta1.InferenceReplica{}
-		getErr := p.Client.Get(ctx, key, ir)
+		getErr := reads.Get(ctx, key, ir)
 		switch {
 		case apierrors.IsNotFound(getErr):
 			ir = newInferenceReplica(p, name)
@@ -324,6 +339,24 @@ func applyDesiredSpec(ir *v1beta1.InferenceReplica, p Params, name string) {
 	}
 	ir.Annotations[constants.InferenceReplicaControllerWriteAnnotationKey] = constants.InferenceReplicaControllerWriteAnnotationVal
 
+	// Stamp the parent ISVC generation this projection reflects. The
+	// stamp lands on every projector pass — including passes that leave
+	// the Spec untouched — so coordination gates can tell a Component
+	// whose projection is still catching up with an ISVC bump apart
+	// from one that genuinely has nothing to roll. Object-level
+	// annotation only: it never reaches pod templates or the revision
+	// hash (revisionHash covers pod-template inputs, not IR metadata).
+	ir.Annotations[constants.InferenceReplicaParentGenerationAnnotationKey] =
+		strconv.FormatInt(p.ISVC.Generation, 10)
+
+	// Record inherited ISVC annotation keys so revision hashing can ignore object-only
+	// metadata without changing pod metadata propagation.
+	if excluded := objectScopedAnnotationKeys(p); len(excluded) > 0 {
+		ir.Annotations[constants.RevisionExcludedAnnotationKeysAnnotationKey] = strings.Join(excluded, ",")
+	} else {
+		delete(ir.Annotations, constants.RevisionExcludedAnnotationKeysAnnotationKey)
+	}
+
 	// Labels track the per-Component ObjectMeta the omenative path
 	// would have stamped on pods — copying them onto the IR itself
 	// gives kubectl-side filterability without changing the pod
@@ -350,6 +383,7 @@ func applyDesiredSpec(ir *v1beta1.InferenceReplica, p Params, name string) {
 	ir.Spec.Runners = runnersFromParams(p)
 	ir.Spec.Lifecycle = lifecycleFromComponentExt(p.ComponentExt)
 	ir.Spec.Paused = p.ISVC.Annotations[constants.PausedRolloutAnnotation] == "true"
+	ir.Spec.RevisionHistoryLimit = revisionHistoryLimitFromISVC(p.ISVC)
 	// Project the resolved gang co-location key verbatim. The IR
 	// controller reads it to auto-generate the worker→leader podAffinity
 	// for multi-node Components; nil is a no-op there.
@@ -505,6 +539,30 @@ func runnersFromParams(p Params) []v1beta1.Runner {
 	return out
 }
 
+// objectScopedAnnotationKeys returns sorted ISVC annotation keys that were not declared
+// on the component and therefore do not define pod revision identity.
+func objectScopedAnnotationKeys(p Params) []string {
+	if len(p.ISVC.Annotations) == 0 {
+		return nil
+	}
+	var declared map[string]string
+	if p.ComponentExt != nil {
+		declared = p.ComponentExt.Annotations
+	}
+	keys := make([]string, 0, len(p.ISVC.Annotations))
+	for k := range p.ISVC.Annotations {
+		if _, ok := declared[k]; ok {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 // templateObjectMeta builds the PodTemplateSpec.ObjectMeta stamped on
 // every Runner. It merges TWO sources:
 //
@@ -557,6 +615,25 @@ func templateObjectMeta(p Params) metav1.ObjectMeta {
 		Labels:      labels,
 		Annotations: annotations,
 	}
+}
+
+// revisionHistoryLimitFromISVC projects the operator-facing
+// ome.io/revision-history-limit ISVC annotation onto the IR Spec. The
+// admission webhook rejects non-integer and non-positive values, so a
+// malformed value here (written before the webhook was active, or
+// bypassing it) projects as nil — the IR controller then falls back to
+// the operator-level config default instead of honoring a bad value.
+func revisionHistoryLimitFromISVC(isvc *v1beta1.InferenceService) *int32 {
+	raw, ok := isvc.Annotations[constants.RevisionHistoryLimitAnnotation]
+	if !ok {
+		return nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 || n > math.MaxInt32 {
+		return nil
+	}
+	v := int32(n)
+	return &v
 }
 
 // lifecycleFromComponentExt deep-copies the LifecycleSpec when set

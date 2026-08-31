@@ -1,191 +1,20 @@
 package keda
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
 )
-
-func TestGetScaledObjectTriggers(t *testing.T) {
-	serviceName := "my-model"
-	namespace := "test"
-
-	testCases := []struct {
-		name                    string
-		metadata                metav1.ObjectMeta
-		kedaConfig              *v1beta1.KedaConfig
-		expectedAuthRef         *kedav1.AuthenticationRef
-		expectedAuthModesInMeta string
-		expectedServerAddress   string
-	}{
-		{
-			name: "No authenticationRef - should create trigger without auth",
-			metadata: metav1.ObjectMeta{
-				Name:      serviceName,
-				Namespace: namespace,
-			},
-			kedaConfig: &v1beta1.KedaConfig{
-				EnableKeda:        true,
-				PromServerAddress: "http://prometheus:9090",
-				ScalingThreshold:  "10",
-			},
-			expectedAuthRef:         nil,
-			expectedAuthModesInMeta: "",
-			expectedServerAddress:   "http://prometheus:9090",
-		},
-		{
-			name: "With TriggerAuthentication - should include authenticationRef",
-			metadata: metav1.ObjectMeta{
-				Name:      serviceName,
-				Namespace: namespace,
-			},
-			kedaConfig: &v1beta1.KedaConfig{
-				EnableKeda:        true,
-				PromServerAddress: "https://prometheus.grafana.net/api/prom",
-				ScalingThreshold:  "0.07",
-				AuthenticationRef: &v1beta1.ScalerAuthenticationRef{
-					Name: "grafana-cloud-auth",
-					Kind: "TriggerAuthentication",
-				},
-				AuthModes: "basic",
-			},
-			expectedAuthRef: &kedav1.AuthenticationRef{
-				Name: "grafana-cloud-auth",
-				Kind: "TriggerAuthentication",
-			},
-			expectedAuthModesInMeta: "basic",
-			expectedServerAddress:   "https://prometheus.grafana.net/api/prom",
-		},
-		{
-			name: "With ClusterTriggerAuthentication - should include authenticationRef with ClusterTriggerAuthentication kind",
-			metadata: metav1.ObjectMeta{
-				Name:      serviceName,
-				Namespace: namespace,
-			},
-			kedaConfig: &v1beta1.KedaConfig{
-				EnableKeda:        true,
-				PromServerAddress: "https://prometheus.grafana.net/api/prom",
-				ScalingThreshold:  "10",
-				AuthenticationRef: &v1beta1.ScalerAuthenticationRef{
-					Name: "cluster-wide-auth",
-					Kind: "ClusterTriggerAuthentication",
-				},
-				AuthModes: "tls,basic",
-			},
-			expectedAuthRef: &kedav1.AuthenticationRef{
-				Name: "cluster-wide-auth",
-				Kind: "ClusterTriggerAuthentication",
-			},
-			expectedAuthModesInMeta: "tls,basic",
-			expectedServerAddress:   "https://prometheus.grafana.net/api/prom",
-		},
-		{
-			name: "With authenticationRef but no kind - should default to TriggerAuthentication",
-			metadata: metav1.ObjectMeta{
-				Name:      serviceName,
-				Namespace: namespace,
-			},
-			kedaConfig: &v1beta1.KedaConfig{
-				EnableKeda:        true,
-				PromServerAddress: "https://prometheus.grafana.net/api/prom",
-				ScalingThreshold:  "10",
-				AuthenticationRef: &v1beta1.ScalerAuthenticationRef{
-					Name: "my-auth",
-					// Kind is empty - should default to TriggerAuthentication
-				},
-				AuthModes: "bearer",
-			},
-			expectedAuthRef: &kedav1.AuthenticationRef{
-				Name: "my-auth",
-				Kind: "TriggerAuthentication", // Default
-			},
-			expectedAuthModesInMeta: "bearer",
-			expectedServerAddress:   "https://prometheus.grafana.net/api/prom",
-		},
-		{
-			name: "With authModes but no authenticationRef - authModes should NOT be in metadata",
-			metadata: metav1.ObjectMeta{
-				Name:      serviceName,
-				Namespace: namespace,
-			},
-			kedaConfig: &v1beta1.KedaConfig{
-				EnableKeda:        true,
-				PromServerAddress: "http://prometheus:9090",
-				ScalingThreshold:  "10",
-				AuthModes:         "basic", // This should be ignored without authenticationRef
-			},
-			expectedAuthRef:         nil,
-			expectedAuthModesInMeta: "", // authModes is NOT added without authenticationRef
-			expectedServerAddress:   "http://prometheus:9090",
-		},
-		{
-			name: "With nil kedaConfig - should use defaults",
-			metadata: metav1.ObjectMeta{
-				Name:      serviceName,
-				Namespace: namespace,
-			},
-			kedaConfig:              nil,
-			expectedAuthRef:         nil,
-			expectedAuthModesInMeta: "",
-			expectedServerAddress:   "http://prometheus-operated.monitoring.svc.cluster.local:9090",
-		},
-	}
-
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			triggers := getScaledObjectTriggers(tt.metadata, &v1beta1.ComponentExtensionSpec{}, tt.kedaConfig)
-
-			if len(triggers) != 1 {
-				t.Fatalf("Expected 1 trigger, got %d", len(triggers))
-			}
-
-			trigger := triggers[0]
-
-			// Check trigger type
-			if trigger.Type != "prometheus" {
-				t.Errorf("Expected trigger type 'prometheus', got '%s'", trigger.Type)
-			}
-
-			// Check authenticationRef
-			if tt.expectedAuthRef == nil {
-				if trigger.AuthenticationRef != nil {
-					t.Errorf("Expected no authenticationRef, but got %+v", trigger.AuthenticationRef)
-				}
-			} else {
-				if trigger.AuthenticationRef == nil {
-					t.Errorf("Expected authenticationRef %+v, but got nil", tt.expectedAuthRef)
-				} else {
-					if diff := cmp.Diff(tt.expectedAuthRef, trigger.AuthenticationRef); diff != "" {
-						t.Errorf("AuthenticationRef mismatch (-want +got): %s", diff)
-					}
-				}
-			}
-
-			// Check authModes in metadata
-			authModes, hasAuthModes := trigger.Metadata["authModes"]
-			if tt.expectedAuthModesInMeta == "" {
-				if hasAuthModes {
-					t.Errorf("Expected no authModes in metadata, but got '%s'", authModes)
-				}
-			} else {
-				if !hasAuthModes {
-					t.Errorf("Expected authModes '%s' in metadata, but not found", tt.expectedAuthModesInMeta)
-				} else if authModes != tt.expectedAuthModesInMeta {
-					t.Errorf("Expected authModes '%s', got '%s'", tt.expectedAuthModesInMeta, authModes)
-				}
-			}
-
-			// Check serverAddress
-			if trigger.Metadata["serverAddress"] != tt.expectedServerAddress {
-				t.Errorf("Expected serverAddress '%s', got '%s'", tt.expectedServerAddress, trigger.Metadata["serverAddress"])
-			}
-		})
-	}
-}
 
 func TestCalculateMinMaxReplicas(t *testing.T) {
 	testCases := []struct {
@@ -233,6 +62,405 @@ func TestCalculateMinMaxReplicas(t *testing.T) {
 			}
 			if maxReplicas != tt.expectedMaxReplica {
 				t.Errorf("Expected maxReplicas %d, got %d", tt.expectedMaxReplica, maxReplicas)
+			}
+		})
+	}
+}
+
+// TestCreateScaledObject_IRScaleTarget verifies the IR-managed wiring:
+// when the caller passes an InferenceReplica ScaleTarget and a KedaAutoscaler
+// with a single trigger, the generator emits a ScaledObject targeting the IR
+// with the trigger forwarded verbatim and the default min/max bounds applied.
+func TestCreateScaledObject_IRScaleTarget(t *testing.T) {
+	componentMeta := metav1.ObjectMeta{
+		Name:      "foo-engine",
+		Namespace: "ns",
+	}
+	scaleTargetRef := kedav1.ScaleTarget{
+		APIVersion: "ome.io/v1beta1",
+		Kind:       "InferenceReplica",
+		Name:       "foo-engine",
+	}
+	kedaSpec := &v1beta1.KedaAutoscaler{
+		Triggers: []kedav1.ScaleTriggers{
+			{
+				Type: "prometheus",
+				Metadata: map[string]string{
+					"serverAddress": "http://prom:9090",
+					"metricName":    "tps",
+					"query":         "sum(rate(http_requests_total[1m]))",
+					"threshold":     "10",
+				},
+			},
+		},
+	}
+
+	got := createScaledObject(componentMeta, scaleTargetRef, kedaSpec, 1, 5)
+
+	if got.Name != utils.GetScaledObjectName("foo-engine") {
+		t.Errorf("Name mismatch: want %s, got %s", utils.GetScaledObjectName("foo-engine"), got.Name)
+	}
+	if got.Namespace != "ns" {
+		t.Errorf("Namespace mismatch: want ns, got %s", got.Namespace)
+	}
+	if got.Spec.ScaleTargetRef == nil {
+		t.Fatal("Expected ScaleTargetRef to be set, got nil")
+	}
+	if diff := cmp.Diff(scaleTargetRef, *got.Spec.ScaleTargetRef); diff != "" {
+		t.Errorf("ScaleTargetRef mismatch (-want +got): %s", diff)
+	}
+	if got.Spec.MinReplicaCount == nil || *got.Spec.MinReplicaCount != 1 {
+		t.Errorf("MinReplicaCount: want 1, got %v", got.Spec.MinReplicaCount)
+	}
+	if got.Spec.MaxReplicaCount == nil || *got.Spec.MaxReplicaCount != 5 {
+		t.Errorf("MaxReplicaCount: want 5, got %v", got.Spec.MaxReplicaCount)
+	}
+	if diff := cmp.Diff(kedaSpec.Triggers, got.Spec.Triggers); diff != "" {
+		t.Errorf("Triggers not passed verbatim (-want +got): %s", diff)
+	}
+}
+
+// TestCreateScaledObject_AdvancedPassThrough pins the verbatim contract for
+// the KEDA Advanced block: the entire AdvancedConfig struct
+// (HorizontalPodAutoscalerConfig, RestoreToOriginalReplicaCount) must land
+// on the ScaledObject without any field-level filtering.
+func TestCreateScaledObject_AdvancedPassThrough(t *testing.T) {
+	componentMeta := metav1.ObjectMeta{Name: "foo-engine", Namespace: "ns"}
+	scaleTargetRef := kedav1.ScaleTarget{
+		APIVersion: "ome.io/v1beta1",
+		Kind:       "InferenceReplica",
+		Name:       "foo-engine",
+	}
+	restoreOriginal := true
+	advanced := &kedav1.AdvancedConfig{
+		HorizontalPodAutoscalerConfig: &kedav1.HorizontalPodAutoscalerConfig{
+			Name: "custom-hpa-name",
+		},
+		RestoreToOriginalReplicaCount: restoreOriginal,
+	}
+	kedaSpec := &v1beta1.KedaAutoscaler{
+		Triggers: []kedav1.ScaleTriggers{
+			{Type: "cpu", Metadata: map[string]string{"value": "50"}},
+		},
+		Advanced: advanced,
+	}
+
+	got := createScaledObject(componentMeta, scaleTargetRef, kedaSpec, 1, 3)
+
+	if diff := cmp.Diff(advanced, got.Spec.Advanced); diff != "" {
+		t.Errorf("Advanced not passed verbatim (-want +got): %s", diff)
+	}
+}
+
+// TestCreateScaledObject_PollingCooldownFallback pins the verbatim contract
+// for the scalar pass-through fields: PollingInterval, CooldownPeriod,
+// IdleReplicaCount, Fallback. Each must
+// land on the ScaledObject as the same pointer/struct.
+func TestCreateScaledObject_PollingCooldownFallback(t *testing.T) {
+	componentMeta := metav1.ObjectMeta{Name: "foo-engine", Namespace: "ns"}
+	scaleTargetRef := kedav1.ScaleTarget{
+		APIVersion: "ome.io/v1beta1",
+		Kind:       "InferenceReplica",
+		Name:       "foo-engine",
+	}
+	polling := int32(15)
+	cooldown := int32(120)
+	idle := int32(0)
+	fallback := &kedav1.Fallback{
+		FailureThreshold: 3,
+		Replicas:         2,
+	}
+	kedaSpec := &v1beta1.KedaAutoscaler{
+		Triggers: []kedav1.ScaleTriggers{
+			{Type: "cpu", Metadata: map[string]string{"value": "50"}},
+		},
+		PollingInterval:  &polling,
+		CooldownPeriod:   &cooldown,
+		IdleReplicaCount: &idle,
+		Fallback:         fallback,
+	}
+
+	got := createScaledObject(componentMeta, scaleTargetRef, kedaSpec, 1, 3)
+
+	if got.Spec.PollingInterval == nil || *got.Spec.PollingInterval != polling {
+		t.Errorf("PollingInterval: want %d, got %v", polling, got.Spec.PollingInterval)
+	}
+	if got.Spec.CooldownPeriod == nil || *got.Spec.CooldownPeriod != cooldown {
+		t.Errorf("CooldownPeriod: want %d, got %v", cooldown, got.Spec.CooldownPeriod)
+	}
+	if got.Spec.IdleReplicaCount == nil || *got.Spec.IdleReplicaCount != idle {
+		t.Errorf("IdleReplicaCount: want %d, got %v", idle, got.Spec.IdleReplicaCount)
+	}
+	if diff := cmp.Diff(fallback, got.Spec.Fallback); diff != "" {
+		t.Errorf("Fallback not passed verbatim (-want +got): %s", diff)
+	}
+}
+
+// TestCreateScaledObject_ComponentExtShim_Identical pins the byte-identical
+// contract for the Raw Deployment dispatch path: the shim must emit the
+// same ScaledObject as createScaledObject when given a componentExt with
+// an Autoscaler.Keda block (the canonical authoring location). Also covers
+// the `k8slens-edit-resource-version` label filtering quirk.
+func TestCreateScaledObject_ComponentExtShim_Identical(t *testing.T) {
+	componentMeta := metav1.ObjectMeta{
+		Name:      "raw-engine",
+		Namespace: "ns",
+		Labels: map[string]string{
+			"app":                           "raw-engine",
+			"k8slens-edit-resource-version": "skip-me",
+		},
+		Annotations: map[string]string{"foo": "bar"},
+	}
+	polling := int32(30)
+	keda := &v1beta1.KedaAutoscaler{
+		Triggers: []kedav1.ScaleTriggers{
+			{
+				Type: "prometheus",
+				Metadata: map[string]string{
+					"serverAddress": "http://prom:9090",
+					"metricName":    "tps",
+					"query":         "sum(rate(http_requests_total[1m]))",
+					"threshold":     "10",
+				},
+			},
+		},
+		PollingInterval: &polling,
+	}
+	componentExt := &v1beta1.ComponentExtensionSpec{
+		MinReplicas: intPtr(2),
+		MaxReplicas: 6,
+		Autoscaler: &v1beta1.ComponentAutoscaler{
+			Class: v1beta1.AutoscalerKEDA,
+			Keda:  keda,
+		},
+	}
+
+	minReplicas := int32(2)
+	maxReplicas := int32(6)
+	expected := &kedav1.ScaledObject{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        utils.GetScaledObjectName("raw-engine"),
+			Namespace:   "ns",
+			Labels:      map[string]string{"app": "raw-engine"},
+			Annotations: map[string]string{"foo": "bar"},
+		},
+		Spec: kedav1.ScaledObjectSpec{
+			ScaleTargetRef: &kedav1.ScaleTarget{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+				Name:       "raw-engine",
+			},
+			MinReplicaCount: &minReplicas,
+			MaxReplicaCount: &maxReplicas,
+			Triggers:        keda.Triggers,
+			PollingInterval: &polling,
+		},
+	}
+
+	got := createScaledObjectFromComponentExt(componentMeta, componentExt)
+
+	if diff := cmp.Diff(expected, got); diff != "" {
+		t.Errorf("ComponentExt shim is not byte-identical (-want +got): %s", diff)
+	}
+}
+
+func TestSemanticScaledObjectEquals_ControllerOwner(t *testing.T) {
+	controller := true
+	desiredOwner := metav1.OwnerReference{
+		APIVersion: "ome.io/v1beta1",
+		Kind:       "InferenceService",
+		Name:       "demo",
+		UID:        "isvc-uid",
+		Controller: &controller,
+	}
+	staleOwner := desiredOwner
+	staleOwner.Name = "stale"
+
+	desired := &kedav1.ScaledObject{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{desiredOwner}}}
+	existing := &kedav1.ScaledObject{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{staleOwner}}}
+	if semanticScaledObjectEquals(desired, existing) {
+		t.Fatal("ScaledObjects with different controller metadata must not be equal")
+	}
+
+	nonControllerOwner := desiredOwner
+	nonControllerOwner.Controller = nil
+	existing.OwnerReferences = []metav1.OwnerReference{desiredOwner, nonControllerOwner}
+	if !semanticScaledObjectEquals(desired, existing) {
+		t.Fatal("unrelated non-controller owner references must not force an update")
+	}
+}
+
+func TestSemanticScaledObjectEquals_Metadata(t *testing.T) {
+	desired := &kedav1.ScaledObject{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:      map[string]string{"component": "engine"},
+			Annotations: map[string]string{"example.com/control": "enabled"},
+		},
+	}
+	existing := desired.DeepCopy()
+	if !semanticScaledObjectEquals(desired, existing) {
+		t.Fatal("identical ScaledObject metadata must compare equal")
+	}
+
+	existing.Labels["component"] = "decoder"
+	if semanticScaledObjectEquals(desired, existing) {
+		t.Fatal("different ScaledObject labels must force an update")
+	}
+
+	existing = desired.DeepCopy()
+	existing.Annotations["example.com/control"] = "disabled"
+	if semanticScaledObjectEquals(desired, existing) {
+		t.Fatal("different ScaledObject annotations must force an update")
+	}
+
+	existing = desired.DeepCopy()
+	existing.Labels["example.com/injected"] = "keep"
+	existing.Annotations["example.com/injected"] = "keep"
+	if !semanticScaledObjectEquals(desired, existing) {
+		t.Fatal("injected ScaledObject metadata must not force an update")
+	}
+}
+
+func TestKEDAReconcilerUpdatePreservesUnmanagedMetadata(t *testing.T) {
+	controller := true
+	owner := metav1.OwnerReference{
+		APIVersion: v1beta1.SchemeGroupVersion.String(),
+		Kind:       "InferenceService",
+		Name:       "demo",
+		UID:        "isvc-uid",
+		Controller: &controller,
+	}
+	nonController := owner
+	nonController.Name = "observer"
+	nonController.UID = "observer-uid"
+	nonController.Controller = nil
+	maxExisting := int32(3)
+	maxDesired := int32(5)
+
+	existing := &kedav1.ScaledObject{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "scaledobject-demo-engine",
+			Namespace:   "test-ns",
+			UID:         "scaledobject-uid",
+			Labels:      map[string]string{"component": "decoder", "example.com/injected": "keep"},
+			Annotations: map[string]string{"example.com/managed": "old", "example.com/injected": "keep"},
+			Finalizers:  []string{"example.com/finalizer"},
+			OwnerReferences: []metav1.OwnerReference{
+				owner,
+				nonController,
+			},
+		},
+		Spec: kedav1.ScaledObjectSpec{
+			MaxReplicaCount: &maxExisting,
+			Triggers:        []kedav1.ScaleTriggers{{Type: "cron"}},
+		},
+	}
+	desired := &kedav1.ScaledObject{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            existing.Name,
+			Namespace:       existing.Namespace,
+			Labels:          map[string]string{"component": "engine"},
+			Annotations:     map[string]string{"example.com/managed": "new"},
+			OwnerReferences: []metav1.OwnerReference{owner},
+		},
+		Spec: kedav1.ScaledObjectSpec{
+			MaxReplicaCount: &maxDesired,
+			Triggers:        []kedav1.ScaleTriggers{{Type: "cron"}},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	if err := kedav1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
+	r := &KEDAReconciler{client: cl, ScaledObject: desired}
+	if err := r.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+
+	got := &kedav1.ScaledObject{}
+	if err := cl.Get(context.Background(), types.NamespacedName{Namespace: existing.Namespace, Name: existing.Name}, got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Spec.MaxReplicaCount == nil || *got.Spec.MaxReplicaCount != maxDesired {
+		t.Fatalf("MaxReplicaCount = %v, want %d", got.Spec.MaxReplicaCount, maxDesired)
+	}
+	if got.Labels["component"] != "engine" || got.Labels["example.com/injected"] != "keep" {
+		t.Fatalf("labels = %#v", got.Labels)
+	}
+	if got.Annotations["example.com/managed"] != "new" || got.Annotations["example.com/injected"] != "keep" {
+		t.Fatalf("annotations = %#v", got.Annotations)
+	}
+	if diff := cmp.Diff([]string{"example.com/finalizer"}, got.Finalizers); diff != "" {
+		t.Fatalf("finalizers mismatch (-want +got): %s", diff)
+	}
+	if !containsOwnerReference(got.OwnerReferences, nonController) {
+		t.Fatalf("non-controller owner reference was dropped: %#v", got.OwnerReferences)
+	}
+}
+
+func containsOwnerReference(refs []metav1.OwnerReference, want metav1.OwnerReference) bool {
+	for _, ref := range refs {
+		if ref == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestKEDAReconcilerRejectsForeignController(t *testing.T) {
+	controller := true
+	expectedOwner := metav1.OwnerReference{
+		APIVersion: "ome.io/v1beta1",
+		Kind:       "InferenceService",
+		Name:       "demo",
+		UID:        "expected-uid",
+		Controller: &controller,
+	}
+	foreignOwner := expectedOwner
+	foreignOwner.Name = "other"
+	foreignOwner.UID = "foreign-uid"
+
+	tests := []struct {
+		name   string
+		owners []metav1.OwnerReference
+	}{
+		{name: "ownerless"},
+		{name: "different controller", owners: []metav1.OwnerReference{foreignOwner}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			desired := &kedav1.ScaledObject{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace:       "test-ns",
+					Name:            "scaledobject-demo-engine",
+					OwnerReferences: []metav1.OwnerReference{expectedOwner},
+				},
+			}
+			existing := desired.DeepCopy()
+			existing.UID = types.UID("scaledobject-uid")
+			existing.OwnerReferences = tt.owners
+
+			scheme := runtime.NewScheme()
+			if err := kedav1.AddToScheme(scheme); err != nil {
+				t.Fatal(err)
+			}
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
+			r := &KEDAReconciler{client: cl, ScaledObject: desired}
+
+			err := r.Reconcile()
+			if err == nil || !strings.Contains(err.Error(), "not controlled by expected owner") {
+				t.Fatalf("expected ownership error, got %v", err)
+			}
+
+			got := &kedav1.ScaledObject{}
+			if err := cl.Get(context.Background(), types.NamespacedName{Namespace: desired.Namespace, Name: desired.Name}, got); err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(tt.owners, got.OwnerReferences); diff != "" {
+				t.Errorf("owner references changed (-want +got): %s", diff)
 			}
 		})
 	}

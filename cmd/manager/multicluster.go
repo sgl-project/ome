@@ -209,6 +209,13 @@ func setupMultiCluster(mgr manager.Manager, clientSet kubernetes.Interface, opti
 		convergeOpts = append(convergeOpts, placement.WithStatusEvents(funnel.Events()))
 	}
 
+	// Derived workloads are only Kueue-gated when they carry a queue label, so
+	// an unset queue means placement bypasses quota entirely — worth saying out
+	// loud rather than discovering it from admitted pods.
+	if w.localQueue == "" {
+		setupLog.Info("placement: no localQueue configured; derived workloads will not carry a Kueue queue label and will not be quota-gated")
+	}
+
 	if err := (&placement.Reconciler{
 		Client:                  mgr.GetClient(),
 		APIReader:               mgr.GetAPIReader(),

@@ -188,14 +188,14 @@ func TestIngressReconciler_GetDeploymentMode(t *testing.T) {
 			expectedMode: constants.RawDeployment,
 		},
 		{
-			name: "multinode deployment mode - engine with leader and worker resolves to MultiNode",
+			name: "leader/worker shape infers OMENative",
 			engine: &v1beta1.EngineSpec{
 				Leader: &v1beta1.LeaderSpec{},
 				Worker: &v1beta1.WorkerSpec{},
 			},
 			decoder:      nil,
 			router:       nil,
-			expectedMode: constants.MultiNode,
+			expectedMode: constants.OMENative,
 		},
 		{
 			name:         "no components - defaults to raw deployment",

@@ -121,12 +121,10 @@ func (r *ExternalServiceReconciler) determineTargetSelector(isvc *v1beta1.Infere
 		baseSelector[constants.OMEComponentLabel] = string(v1beta1.RouterComponent)
 		return baseSelector
 	}
-
 	if isvc.Spec.Engine != nil {
 		baseSelector[constants.OMEComponentLabel] = string(v1beta1.EngineComponent)
 		return baseSelector
 	}
-
 	return baseSelector
 }
 

@@ -136,6 +136,7 @@ func (r *Reconciler) Reconcile(
 		GatewayAcceptanceReason:  acceptance.Reason,
 		GatewayAcceptanceMessage: acceptance.Message,
 		UnsupportedAnnotations:   ComputeUnsupportedAnnotations(isvc.Annotations, r.translator),
+		UnsupportedFields:        ComputeUnsupportedTrafficFields(intent.Traffic, r.translator),
 	})
 
 	return out, translateErr

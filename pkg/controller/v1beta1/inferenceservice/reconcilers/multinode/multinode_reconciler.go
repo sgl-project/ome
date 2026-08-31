@@ -12,21 +12,20 @@ import (
 	lwsSpec "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
-	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/services"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/istiosidecar"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/lws"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/podmonitor"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
 )
 
 type MultiNodeReconciler struct {
-	client       client.Client
-	scheme       *runtime.Scheme
-	LWS          *lws.LWSReconciler
-	URL          *knapis.URL
-	IstioSidecar *istiosidecar.IstioSidecarReconciler
-	Service      *service.ServiceReconciler
+	client     client.Client
+	scheme     *runtime.Scheme
+	LWS        *lws.LWSReconciler
+	URL        *knapis.URL
+	Service    *service.ServiceReconciler
+	PodMonitor *podmonitor.PodMonitorReconciler
 }
 
 func NewMultiNodeReconciler(client client.Client,
@@ -42,20 +41,15 @@ func NewMultiNodeReconciler(client client.Client,
 	if err != nil {
 		return nil, err
 	}
-	var enabled bool
-	istioSidecarInjection, ok := componentMeta.Labels[constants.IstioSidecarInjectionLabel]
-	if ok && istioSidecarInjection == "true" {
-		enabled = true
-	}
 	selector := map[string]string{lwsSpec.WorkerIndexLabelKey: "0"}
 
 	return &MultiNodeReconciler{
-		client:       client,
-		scheme:       scheme,
-		LWS:          lws.NewLWSReconciler(client, scheme, headPodSpec, workerPodSpec, int32(workerSize), componentExt, componentMeta),
-		URL:          url,
-		IstioSidecar: istiosidecar.NewIstioSidecarReconciler(client, scheme, componentMeta, enabled),
-		Service:      service.NewServiceReconciler(client, scheme, componentMeta, componentExt, headPodSpec, selector),
+		client:     client,
+		scheme:     scheme,
+		LWS:        lws.NewLWSReconciler(client, scheme, headPodSpec, workerPodSpec, int32(workerSize), componentExt, componentMeta),
+		URL:        url,
+		Service:    service.NewServiceReconciler(client, scheme, componentMeta, componentExt, headPodSpec, selector),
+		PodMonitor: podmonitor.NewPodMonitorReconciler(client, scheme, componentMeta, headPodSpec),
 	}, nil
 }
 
@@ -81,10 +75,10 @@ func (r *MultiNodeReconciler) Reconcile() (*lwsSpec.LeaderWorkerSet, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := r.IstioSidecar.Reconcile(); err != nil {
+	if _, err := r.Service.Reconcile(); err != nil {
 		return nil, err
 	}
-	if _, err := r.Service.Reconcile(); err != nil {
+	if _, err := r.PodMonitor.Reconcile(); err != nil {
 		return nil, err
 	}
 	return existingLWS, nil

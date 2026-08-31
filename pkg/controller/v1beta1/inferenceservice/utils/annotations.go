@@ -40,15 +40,11 @@ func GetDeploymentMode(annotations map[string]string, deployConfig *controllerco
 }
 
 func IsOriginalModelVolumeMountNecessary(annotations map[string]string) bool {
-	return annotations[constants.ModelInitInjectionKey] != "true" &&
-		annotations[constants.FTServingWithMergedWeightsAnnotationKey] != "true"
+	return annotations[constants.FTServingWithMergedWeightsAnnotationKey] != "true"
 }
 
 func IsEmptyModelDirVolumeRequired(annotations map[string]string) bool {
-	modelInitInject := annotations[constants.ModelInitInjectionKey]
-	fineTunedAdapterInject := annotations[constants.FineTunedAdapterInjectionKey]
-
-	return modelInitInject == "true" || len(fineTunedAdapterInject) > 0
+	return len(annotations[constants.FineTunedAdapterInjectionKey]) > 0
 }
 
 func IsCohereCommand1TFewFTServing(servingPodObjectMeta *metav1.ObjectMeta) bool {
@@ -121,10 +117,6 @@ func ResolveIngressConfig(baseConfig *controllerconfig.IngressConfig, annotation
 	// Boolean overrides
 	if disableCreation, exists := annotations[constants.IngressDisableCreation]; exists {
 		resolved.DisableIngressCreation = disableCreation == "true"
-	}
-
-	if disableVirtualHost, exists := annotations[constants.IngressDisableIstioVirtualHost]; exists {
-		resolved.DisableIstioVirtualHost = disableVirtualHost == "true"
 	}
 
 	// Gateway / host-scheme overrides — let a single ISVC target a different

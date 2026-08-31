@@ -22,6 +22,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferencereplica"
 )
 
 func TestCleanupRemovedComponents(t *testing.T) {
@@ -187,6 +188,87 @@ func TestCleanupRemovedComponents(t *testing.T) {
 	}
 }
 
+// TestCleanupRemovedComponentsSweepsInferenceReplicas verifies the sweep
+// requests deletion of a removed component's InferenceReplica (finalizer-
+// drained teardown: DeletionTimestamp set, finalizer intact) while leaving
+// active components' IRs untouched.
+func TestCleanupRemovedComponentsSweepsInferenceReplicas(t *testing.T) {
+	ctx := context.Background()
+	ctx = log.IntoContext(ctx, log.Log)
+
+	scheme := runtime.NewScheme()
+	_ = v1beta1.AddToScheme(scheme)
+
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-isvc",
+			Namespace: "default",
+			UID:       "test-uid",
+		},
+	}
+
+	engineIR := createInferenceReplica("test-isvc-engine", "default", "test-isvc", "test-uid", v1beta1.EngineComponent)
+	decoderIR := createInferenceReplica("test-isvc-decoder", "default", "test-isvc", "test-uid", v1beta1.DecoderComponent)
+
+	fakeClient := fakeclient.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(isvc, engineIR, decoderIR).
+		Build()
+
+	r := &InferenceServiceReconciler{
+		Client:    fakeClient,
+		Clientset: fake.NewSimpleClientset(),
+	}
+
+	// Decoder removed from the spec.
+	err := r.cleanupRemovedComponents(ctx, isvc, &v1beta1.EngineSpec{}, nil, nil)
+	require.NoError(t, err)
+
+	// Decoder IR: deletion requested, finalizer still present (drained path).
+	decoder := &v1beta1.InferenceReplica{}
+	require.NoError(t, fakeClient.Get(ctx, types.NamespacedName{Name: "test-isvc-decoder", Namespace: "default"}, decoder),
+		"decoder IR should still be observable while the teardown finalizer drains it")
+	assert.NotNil(t, decoder.DeletionTimestamp, "decoder IR should have deletion requested after component removal")
+	assert.Contains(t, decoder.Finalizers, inferencereplica.TeardownFinalizer,
+		"decoder IR should keep the teardown finalizer so pods drain before it vanishes")
+
+	// Engine IR: untouched.
+	engine := &v1beta1.InferenceReplica{}
+	require.NoError(t, fakeClient.Get(ctx, types.NamespacedName{Name: "test-isvc-engine", Namespace: "default"}, engine))
+	assert.Nil(t, engine.DeletionTimestamp, "active engine IR must not be deleted")
+}
+
+// createInferenceReplica mirrors the projector's IR shape: name
+// <isvc>-<component>, the sweep's selector labels, the ISVC controller
+// owner-ref, and the IR controller's teardown finalizer.
+func createInferenceReplica(name, namespace, isvcName, uid string, component v1beta1.ComponentType) *v1beta1.InferenceReplica {
+	controller := true
+	return &v1beta1.InferenceReplica{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				constants.InferenceServicePodLabelKey: isvcName,
+				constants.OMEComponentLabel:           string(component),
+			},
+			Finalizers: []string{inferencereplica.TeardownFinalizer},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind:       "InferenceService",
+					APIVersion: v1beta1.SchemeGroupVersion.String(),
+					Name:       isvcName,
+					UID:        types.UID(uid),
+					Controller: &controller,
+				},
+			},
+		},
+		Spec: v1beta1.InferenceReplicaSpec{
+			ParentRef: v1beta1.ParentReference{Name: isvcName},
+			Component: component,
+		},
+	}
+}
+
 func TestIsOwnedBy(t *testing.T) {
 	isvc := &v1beta1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{
@@ -295,6 +377,7 @@ func TestGetAvailableResourceTypes(t *testing.T) {
 		{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
 		{Group: "", Version: "v1", Kind: "ServiceAccount"},
 		{Group: "", Version: "v1", Kind: "PersistentVolumeClaim"},
+		v1beta1.SchemeGroupVersion.WithKind("InferenceReplica"),
 	}
 
 	for _, expected := range expectedCoreTypes {

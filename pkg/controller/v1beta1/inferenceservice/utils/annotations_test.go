@@ -12,12 +12,13 @@ import (
 func TestResolveIngressConfig(t *testing.T) {
 	// Base config from ConfigMap
 	baseConfig := &controllerconfig.IngressConfig{
-		IngressDomain:           "svc.cluster.local",
-		DomainTemplate:          "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
-		UrlScheme:               "http",
-		PathTemplate:            "",
-		DisableIstioVirtualHost: false,
-		DisableIngressCreation:  false,
+		IngressGateway:         "istio-system/ingress-gateway",
+		IngressServiceName:     "istio-ingressgateway.istio-system.svc.cluster.local",
+		IngressDomain:          "svc.cluster.local",
+		DomainTemplate:         "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
+		UrlScheme:              "http",
+		PathTemplate:           "",
+		DisableIngressCreation: false,
 	}
 
 	tests := []struct {
@@ -36,12 +37,13 @@ func TestResolveIngressConfig(t *testing.T) {
 				constants.IngressDomainTemplate: "{{ .Name }}-custom.example.com",
 			},
 			expected: &controllerconfig.IngressConfig{
-				IngressDomain:           "svc.cluster.local",
-				DomainTemplate:          "{{ .Name }}-custom.example.com",
-				UrlScheme:               "http",
-				PathTemplate:            "",
-				DisableIstioVirtualHost: false,
-				DisableIngressCreation:  false,
+				IngressGateway:         "istio-system/ingress-gateway",
+				IngressServiceName:     "istio-ingressgateway.istio-system.svc.cluster.local",
+				IngressDomain:          "svc.cluster.local",
+				DomainTemplate:         "{{ .Name }}-custom.example.com",
+				UrlScheme:              "http",
+				PathTemplate:           "",
+				DisableIngressCreation: false,
 			},
 		},
 		{
@@ -51,12 +53,13 @@ func TestResolveIngressConfig(t *testing.T) {
 				constants.IngressURLScheme: "https",
 			},
 			expected: &controllerconfig.IngressConfig{
-				IngressDomain:           "my-domain.com",
-				DomainTemplate:          "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
-				UrlScheme:               "https",
-				PathTemplate:            "",
-				DisableIstioVirtualHost: false,
-				DisableIngressCreation:  false,
+				IngressGateway:         "istio-system/ingress-gateway",
+				IngressServiceName:     "istio-ingressgateway.istio-system.svc.cluster.local",
+				IngressDomain:          "my-domain.com",
+				DomainTemplate:         "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
+				UrlScheme:              "https",
+				PathTemplate:           "",
+				DisableIngressCreation: false,
 			},
 		},
 		{
@@ -65,11 +68,12 @@ func TestResolveIngressConfig(t *testing.T) {
 				constants.IngressAdditionalDomains: "alt1.com, alt2.com, alt3.com",
 			},
 			expected: &controllerconfig.IngressConfig{
+				IngressGateway:           "istio-system/ingress-gateway",
+				IngressServiceName:       "istio-ingressgateway.istio-system.svc.cluster.local",
 				IngressDomain:            "svc.cluster.local",
 				DomainTemplate:           "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
 				UrlScheme:                "http",
 				PathTemplate:             "",
-				DisableIstioVirtualHost:  false,
 				DisableIngressCreation:   false,
 				AdditionalIngressDomains: &[]string{"alt1.com", "alt2.com", "alt3.com"},
 			},
@@ -81,12 +85,13 @@ func TestResolveIngressConfig(t *testing.T) {
 				constants.IngressDisableCreation:         "true",
 			},
 			expected: &controllerconfig.IngressConfig{
-				IngressDomain:           "svc.cluster.local",
-				DomainTemplate:          "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
-				UrlScheme:               "http",
-				PathTemplate:            "",
-				DisableIstioVirtualHost: true,
-				DisableIngressCreation:  true,
+				IngressGateway:         "istio-system/ingress-gateway",
+				IngressServiceName:     "istio-ingressgateway.istio-system.svc.cluster.local",
+				IngressDomain:          "svc.cluster.local",
+				DomainTemplate:         "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
+				UrlScheme:              "http",
+				PathTemplate:           "",
+				DisableIngressCreation: true,
 			},
 		},
 		{
@@ -95,12 +100,13 @@ func TestResolveIngressConfig(t *testing.T) {
 				constants.IngressPathTemplate: "/api/v1/models/{{ .Name }}",
 			},
 			expected: &controllerconfig.IngressConfig{
-				IngressDomain:           "svc.cluster.local",
-				DomainTemplate:          "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
-				UrlScheme:               "http",
-				PathTemplate:            "/api/v1/models/{{ .Name }}",
-				DisableIstioVirtualHost: false,
-				DisableIngressCreation:  false,
+				IngressGateway:         "istio-system/ingress-gateway",
+				IngressServiceName:     "istio-ingressgateway.istio-system.svc.cluster.local",
+				IngressDomain:          "svc.cluster.local",
+				DomainTemplate:         "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
+				UrlScheme:              "http",
+				PathTemplate:           "/api/v1/models/{{ .Name }}",
+				DisableIngressCreation: false,
 			},
 		},
 		{
@@ -115,11 +121,12 @@ func TestResolveIngressConfig(t *testing.T) {
 				constants.IngressDisableCreation:         "false",
 			},
 			expected: &controllerconfig.IngressConfig{
+				IngressGateway:           "istio-system/ingress-gateway",
+				IngressServiceName:       "istio-ingressgateway.istio-system.svc.cluster.local",
 				IngressDomain:            "company.com",
 				DomainTemplate:           "{{ .Name }}-prod.company.com",
 				UrlScheme:                "https",
 				PathTemplate:             "/ml/{{ .Name }}",
-				DisableIstioVirtualHost:  false,
 				DisableIngressCreation:   false,
 				AdditionalIngressDomains: &[]string{"backup.com", "mirror.net"},
 			},
@@ -132,6 +139,89 @@ func TestResolveIngressConfig(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+
+	t.Run("consistent hash headers are preserved", func(t *testing.T) {
+		configWithHeaders := &controllerconfig.IngressConfig{
+			IngressDomain:         "svc.cluster.local",
+			ConsistentHashHeaders: []string{"x-routing-key", "x-tenant-key"},
+		}
+		result := ResolveIngressConfig(configWithHeaders, map[string]string{})
+		assert.Equal(t, []string{"x-routing-key", "x-tenant-key"}, result.ConsistentHashHeaders)
+	})
+
+	// Guards against the resolver silently dropping a field: set every field,
+	// then a no-annotation resolve must return an equal config. This would have
+	// caught PerISVCSubdomain being omitted from the copy.
+	t.Run("every base-config field is carried", func(t *testing.T) {
+		className := "nginx"
+		full := &controllerconfig.IngressConfig{
+			IngressGateway:           "gw-ns/gw",
+			IngressServiceName:       "svc.ns.svc.cluster.local",
+			OmeIngressGateway:        "gw-ns/ome-gw",
+			IngressDomain:            "example.com",
+			IngressClassName:         &className,
+			AdditionalIngressDomains: &[]string{"alt.example.com"},
+			DomainTemplate:           "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
+			UrlScheme:                "https",
+			PathTemplate:             "/{{ .Namespace }}/{{ .Name }}",
+			DisableIngressCreation:   true,
+			EnableGatewayAPI:         true,
+			ConsistentHashHeaders:    []string{"x-key"},
+			PerISVCSubdomain:         true,
+		}
+		result := ResolveIngressConfig(full, map[string]string{})
+		assert.Equal(t, full, result, "ResolveIngressConfig must carry every base-config field")
+		assert.True(t, result.PerISVCSubdomain, "perISVCSubdomain must survive ResolveIngressConfig")
+	})
+}
+
+// TestResolveIngressConfig_GatewayHostOverrides covers the per-ISVC gateway/host
+// annotation overrides so a single ISVC can differ from the cluster default.
+func TestResolveIngressConfig_GatewayHostOverrides(t *testing.T) {
+	base := &controllerconfig.IngressConfig{
+		OmeIngressGateway: "envoy-gateway-system/int-gw",
+		IngressDomain:     "int.example.com",
+		SharedHostPrefix:  "llm",
+		PerISVCSubdomain:  false,
+	}
+
+	t.Run("gateway + perISVCSubdomain + sharedHostPrefix overrides", func(t *testing.T) {
+		got := ResolveIngressConfig(base, map[string]string{
+			constants.IngressGatewayOverride:  "envoy-gateway-system/ext-gw",
+			constants.IngressPerISVCSubdomain: "true",
+			constants.IngressSharedHostPrefix: "serving",
+		})
+		assert.Equal(t, "envoy-gateway-system/ext-gw", got.OmeIngressGateway)
+		assert.True(t, got.PerISVCSubdomain)
+		assert.Equal(t, "serving", got.SharedHostPrefix)
+		// base must be untouched
+		assert.Equal(t, "envoy-gateway-system/int-gw", base.OmeIngressGateway)
+		assert.False(t, base.PerISVCSubdomain)
+	})
+
+	t.Run("empty sharedHostPrefix annotation means no prefix", func(t *testing.T) {
+		got := ResolveIngressConfig(base, map[string]string{
+			constants.IngressSharedHostPrefix: "",
+		})
+		assert.Equal(t, "", got.SharedHostPrefix)
+	})
+
+	t.Run("additionalIngressGateways parsed from JSON", func(t *testing.T) {
+		got := ResolveIngressConfig(base, map[string]string{
+			constants.IngressAdditionalGateways: `[{"omeIngressGateway":"envoy-gateway-system/ext-gw","ingressDomain":"ext.example.com"}]`,
+		})
+		if assert.Len(t, got.AdditionalIngressGateways, 1) {
+			assert.Equal(t, "envoy-gateway-system/ext-gw", got.AdditionalIngressGateways[0].OmeIngressGateway)
+			assert.Equal(t, "ext.example.com", got.AdditionalIngressGateways[0].IngressDomain)
+		}
+	})
+
+	t.Run("malformed additionalIngressGateways is ignored", func(t *testing.T) {
+		got := ResolveIngressConfig(base, map[string]string{
+			constants.IngressAdditionalGateways: "not-json",
+		})
+		assert.Nil(t, got.AdditionalIngressGateways)
+	})
 }
 
 func TestGetDeploymentModeFromAnnotations(t *testing.T) {
@@ -152,14 +242,6 @@ func TestGetDeploymentModeFromAnnotations(t *testing.T) {
 			annotations:   map[string]string{},
 			expectedMode:  "",
 			expectedFound: false,
-		},
-		{
-			name: "valid MultiNode mode",
-			annotations: map[string]string{
-				constants.DeploymentMode: string(constants.MultiNode),
-			},
-			expectedMode:  constants.MultiNode,
-			expectedFound: true,
 		},
 		{
 			name: "valid RawDeployment mode",
@@ -183,6 +265,14 @@ func TestGetDeploymentModeFromAnnotations(t *testing.T) {
 				constants.DeploymentMode: string(constants.VirtualDeployment),
 			},
 			expectedMode:  constants.VirtualDeployment,
+			expectedFound: true,
+		},
+		{
+			name: "valid OMENative mode",
+			annotations: map[string]string{
+				constants.DeploymentMode: string(constants.OMENative),
+			},
+			expectedMode:  constants.OMENative,
 			expectedFound: true,
 		},
 		{

@@ -42,19 +42,12 @@ func TestComponentIRStatus_MissingIRReturnsNil(t *testing.T) {
 	}
 }
 
-func TestComponentIRStatus_NilReaderErrors(t *testing.T) {
-	// A nil reader is a wiring bug: it must surface as an error (so gate
-	// callers fail closed) rather than being mistaken for a missing IR —
-	// and must not panic the reconcile.
+func TestComponentIRStatus_NilReaderReturnsNil(t *testing.T) {
+	// A nil reader must degrade to "no authoritative status" (nil, nil)
+	// rather than panicking a reconcile.
 	got, err := ComponentIRStatus(context.Background(), nil, "ns", "svc", v1beta1.EngineComponent)
-	if err == nil {
-		t.Fatalf("nil reader must return an error; got (%+v, nil)", got)
-	}
-	if got != nil {
-		t.Fatalf("nil reader must return nil status; got %+v", got)
-	}
-	if !strings.Contains(err.Error(), "nil reader") {
-		t.Errorf("error should name the nil-reader cause: %v", err)
+	if err != nil || got != nil {
+		t.Fatalf("nil reader must return (nil, nil); got (%+v, %v)", got, err)
 	}
 }
 
@@ -74,6 +67,80 @@ func TestComponentIRStatus_ReadErrorPropagatesWrapped(t *testing.T) {
 	got, err := ComponentIRStatus(context.Background(), erroringReader{}, "ns", "svc", v1beta1.EngineComponent)
 	if err == nil || got != nil {
 		t.Fatalf("read error must propagate with nil status; got (%+v, %v)", got, err)
+	}
+	if !strings.Contains(err.Error(), "get InferenceReplica ns/") || !strings.Contains(err.Error(), "simulated apiserver failure") {
+		t.Errorf("error should wrap the IR key and cause: %v", err)
+	}
+}
+
+func TestComponentIRPartition_ReadsProjectedSpec(t *testing.T) {
+	// The partition comes from the projected IR spec — the merged
+	// ISVC↔runtime lifecycle — so a value the operator only set on the
+	// ServingRuntime is still visible here.
+	partition := int32(2)
+	ir := &v1beta1.InferenceReplica{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: InferenceReplicaName("svc", v1beta1.EngineComponent)},
+		Spec: v1beta1.InferenceReplicaSpec{
+			Lifecycle: &v1beta1.LifecycleSpec{
+				UpdateStrategy: &v1beta1.UpdateStrategy{
+					RollingUpdate: &v1beta1.RollingUpdate{Partition: &partition},
+				},
+			},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(ir).Build()
+
+	got, err := ComponentIRPartition(context.Background(), c, "ns", "svc", v1beta1.EngineComponent)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if got != 2 {
+		t.Fatalf("partition: got %d want 2", got)
+	}
+}
+
+func TestComponentIRPartition_UnsetLifecycleIsZero(t *testing.T) {
+	// Every level of the lifecycle chain may be nil; all resolve to the
+	// API-defined partition 0 ("update every Instance").
+	for name, lc := range map[string]*v1beta1.LifecycleSpec{
+		"nil lifecycle":      nil,
+		"nil updateStrategy": {},
+		"nil rollingUpdate":  {UpdateStrategy: &v1beta1.UpdateStrategy{}},
+		"nil partition":      {UpdateStrategy: &v1beta1.UpdateStrategy{RollingUpdate: &v1beta1.RollingUpdate{}}},
+	} {
+		ir := &v1beta1.InferenceReplica{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: InferenceReplicaName("svc", v1beta1.EngineComponent)},
+			Spec:       v1beta1.InferenceReplicaSpec{Lifecycle: lc},
+		}
+		c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(ir).Build()
+		got, err := ComponentIRPartition(context.Background(), c, "ns", "svc", v1beta1.EngineComponent)
+		if err != nil || got != 0 {
+			t.Errorf("%s: got (%d, %v) want (0, nil)", name, got, err)
+		}
+	}
+}
+
+func TestComponentIRPartition_MissingIRIsZero(t *testing.T) {
+	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	got, err := ComponentIRPartition(context.Background(), c, "ns", "svc", v1beta1.EngineComponent)
+	if err != nil || got != 0 {
+		t.Fatalf("missing IR must return (0, nil); got (%d, %v)", got, err)
+	}
+}
+
+func TestComponentIRPartition_NilReaderIsZero(t *testing.T) {
+	got, err := ComponentIRPartition(context.Background(), nil, "ns", "svc", v1beta1.EngineComponent)
+	if err != nil || got != 0 {
+		t.Fatalf("nil reader must return (0, nil); got (%d, %v)", got, err)
+	}
+}
+
+func TestComponentIRPartition_ReadErrorPropagatesWrapped(t *testing.T) {
+	// A transient read failure must not read as "no partition" — the
+	// coordination callers fail closed on it.
+	got, err := ComponentIRPartition(context.Background(), erroringReader{}, "ns", "svc", v1beta1.EngineComponent)
+	if err == nil {
+		t.Fatalf("read error must propagate; got (%d, nil)", got)
 	}
 	if !strings.Contains(err.Error(), "get InferenceReplica ns/") || !strings.Contains(err.Error(), "simulated apiserver failure") {
 		t.Errorf("error should wrap the IR key and cause: %v", err)

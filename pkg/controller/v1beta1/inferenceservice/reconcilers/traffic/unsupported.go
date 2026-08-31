@@ -6,7 +6,9 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/validation"
 )
 
 // allBackendAnnotationKeys is the canonical set of ome.io/* keys that
@@ -79,6 +81,30 @@ func ComputeUnsupportedAnnotations(annotations map[string]string, translator Tra
 		// Bucket 2: pass-through annotation under a known prefix.
 		if isPassthroughKey(key) && !hasMatchingPrefix(key, ownedPrefixes) {
 			unsupported = append(unsupported, key)
+		}
+	}
+	sort.Strings(unsupported)
+	return unsupported
+}
+
+// ComputeUnsupportedTrafficFields returns the sorted list of typed
+// spec.traffic capability tokens the InferenceService requires that
+// the active translator does not declare in SupportedTrafficFields.
+// These are fields Translate drops (or partially applies); the status
+// writer surfaces them in the BackendPolicyUnsupportedFields condition
+// alongside dropped annotations. The required set comes from the same
+// validation helper the admission webhook uses, so the two views of
+// "what this spec needs" cannot drift.
+func ComputeUnsupportedTrafficFields(spec *v1beta1.TrafficSpec, translator Translator) []string {
+	required := validation.RequiredTrafficCapabilities(spec)
+	if len(required) == 0 {
+		return nil
+	}
+	supported := translator.SupportedTrafficFields()
+	var unsupported []string
+	for _, capability := range required {
+		if !supported.Has(capability) {
+			unsupported = append(unsupported, capability)
 		}
 	}
 	sort.Strings(unsupported)

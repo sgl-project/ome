@@ -1,0 +1,54 @@
+# golangci-lint configuration.
+#
+# Only the suppressions below are carved out; every other lint failure
+# is enforced.
+
+run:
+  timeout: 15m
+
+issues:
+  # Don't auto-collapse identical issues across files.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    # Tests routinely ignore errors from setup helpers (WriteFile,
+    # WriteString, Register, mock writer.Write, etc.). Treating those
+    # as lint failures buys nothing.
+    - path: _test\.go
+      linters:
+        - errcheck
+
+    # Functional-option pattern: the return value of opt(config) is
+    # intentionally discarded. Only one site in this file.
+    - path: pkg/hfutil/hub/download\.go
+      linters:
+        - errcheck
+
+    # Ineffectual assignment — fires from both staticcheck (SA4006) and
+    # the ineffassign linter on the same line. Upstream-inherited site
+    # in modelagent/gopher.go.
+    - path: pkg/modelagent/gopher\.go
+      linters:
+        - staticcheck
+      text: "SA4006"
+    - path: pkg/modelagent/gopher\.go
+      linters:
+        - ineffassign
+
+    # SA6002 (passing []byte to sync.Pool.Put causes header allocation).
+    # Real but small perf issue we can fix later.
+    - path: pkg/ociobjectstore/(os_parallel_download|utils)\.go
+      linters:
+        - staticcheck
+      text: "SA6002"
+
+    # reconcile.Result.Requeue is deprecated in favour of RequeueAfter, but
+    # the two are not interchangeable: Requeue re-enqueues through the
+    # controller's rate limiter, RequeueAfter pins a fixed delay. Every site
+    # that sets it wants the backoff, so converting them means choosing a
+    # delay per reconciler — a behavioural change to the core loops, not a
+    # rename. Suppressed until that migration is done deliberately.
+    - linters:
+        - staticcheck
+      text: "SA1019: .*\\.Requeue is deprecated"

@@ -33,6 +33,14 @@ rules:
   - list
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - pods/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - admissionregistration.k8s.io
   resources:
   - mutatingwebhookconfigurations
@@ -92,6 +100,26 @@ rules:
   - patch
   - update
 - apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - gateway.envoyproxy.io
+  resources:
+  - backendtrafficpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - gateway.networking.k8s.io
   resources:
   - httproutes
@@ -103,6 +131,14 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - httproutes/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - keda.sh
   resources:
@@ -145,11 +181,9 @@ rules:
   - patch
   - update
 - apiGroups:
-  - networking.istio.io
+  - monitoring.coreos.com
   resources:
-  - sidecars
-  - virtualservices
-  - virtualservices/finalizers
+  - podmonitors
   verbs:
   - create
   - delete
@@ -161,11 +195,15 @@ rules:
 - apiGroups:
   - networking.istio.io
   resources:
-  - virtualservices/status
+  - sidecars
   verbs:
+  - create
+  - delete
   - get
+  - list
   - patch
   - update
+  - watch
 - apiGroups:
   - networking.k8s.io
   resources:
@@ -190,6 +228,7 @@ rules:
   - clusterservingruntimes/finalizers
   - finetunedweights
   - finetunedweights/finalizers
+  - inferencereplicas
   - inferenceservices
   - inferenceservices/finalizers
   - servingruntimes
@@ -208,6 +247,7 @@ rules:
   resources:
   - acceleratorclasses/finalizers
   - clusterbasemodels/finalizers
+  - inferencereplicas/finalizers
   verbs:
   - update
 - apiGroups:
@@ -220,6 +260,8 @@ rules:
   - clusterbasemodels/status
   - clusterservingruntimes/status
   - finetunedweights/status
+  - inferencereplicas/scale
+  - inferencereplicas/status
   - inferenceservices/status
   - servingruntimes/status
   - workloadclusters/status
@@ -253,10 +295,9 @@ rules:
   - update
   - watch
 - apiGroups:
-  - serving.knative.dev
+  - scheduling.x-k8s.io
   resources:
-  - services
-  - services/finalizers
+  - podgroups
   verbs:
   - create
   - delete
@@ -265,11 +306,3 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - serving.knative.dev
-  resources:
-  - services/status
-  verbs:
-  - get
-  - patch
-  - update

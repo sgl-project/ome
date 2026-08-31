@@ -11,34 +11,10 @@ import (
 	"sigs.k8s.io/ome/pkg/utils"
 )
 
-// TopLevelComponentReadyFromLifecycle derives the standard top-level
-// component-ready condition (EngineReady / DecoderReady / RouterReady) from
-// OMENative counters, honoring the Component's disruption budget. Returns nil for
-// unknown Component types so callers leave the condition surface untouched.
-//
-// Ready is availability-based, not strict: True when the number of serving
-// Instances is at or above the Component's availability floor (see
-// utils.AvailabilityFloor) — the same MinAvailable/MaxUnavailable that drive the
-// Component's PodDisruptionBudget, falling back to its rolling-update
-// MaxUnavailable (defaulted 25% for OMENative). This mirrors how RawDeployment
-// derives readiness from a Deployment's maxUnavailable-thresholded Available
-// condition, so a Component serving 9/10 Instances (within budget) reports Ready
-// instead of flapping to NotReady on every single-Instance disruption or
-// in-budget rollout. A genuine outage below the floor still reports NotReady.
-// The floor is never below 1 for a Component with desired Instances, so a budget
-// that permits every Instance to be down cannot report a zero-serving Component
-// as Ready.
-//
-// The reason distinguishes fully-converged ("Ready") from serving-at-or-above-
-// floor but not fully rolled out ("MinimumAvailable"), so rollout progress stays
-// visible. `ext` may be nil (e.g. a hand-crafted object bypassing the defaulter),
-// in which case the floor is strict (all Instances must serve).
-//
-// Lives in the neutral inferenceservice/status package — the single source of
-// truth for the Ready predicate that the IR-managed projector (irprojector
-// status.go) calls. The IR's own Ready condition derives the same way via
-// utils.AvailabilityFloor.
-func TopLevelComponentReadyFromLifecycle(component v1beta1.ComponentType, cs *v1beta1.LifecycleStatus, ext *v1beta1.ComponentExtensionSpec) *apis.Condition {
+// TopLevelComponentReadyFromLifecycle derives Instance readiness using only lifecycle rollingUpdate.maxUnavailable; PDB fields are unrelated.
+// An absent lifecycle budget is strict, and desiredReplicas keeps surge from inflating the floor.
+// Unknown Component types return nil.
+func TopLevelComponentReadyFromLifecycle(component v1beta1.ComponentType, cs *v1beta1.LifecycleStatus, lifecycle *v1beta1.LifecycleSpec, desiredReplicas *int32) *apis.Condition {
 	var readyType apis.ConditionType
 	switch component {
 	case v1beta1.EngineComponent:
@@ -57,14 +33,7 @@ func TopLevelComponentReadyFromLifecycle(component v1beta1.ComponentType, cs *v1
 		cond.Message = "Component has no desired Instances"
 		return cond
 	}
-	floor := utils.AvailabilityFloor(cs.Replicas, extMinAvailable(ext), extMaxUnavailable(ext), rolloutMaxUnavailable(ext))
-	// A budget permitting every Instance to be down (MaxUnavailable "100%", or
-	// an integer at or above Replicas) yields a zero floor, which would report
-	// Ready for a Component serving no traffic. Replicas > 0 here, so require
-	// at least one serving Instance.
-	if floor < 1 {
-		floor = 1
-	}
+	floor := InstanceAvailabilityFloor(cs.Replicas, desiredReplicas, lifecycle)
 	switch {
 	case cs.ReadyReplicas >= cs.Replicas:
 		cond.Status = corev1.ConditionTrue
@@ -82,26 +51,25 @@ func TopLevelComponentReadyFromLifecycle(component v1beta1.ComponentType, cs *v1
 	return cond
 }
 
-// extMinAvailable / extMaxUnavailable / rolloutMaxUnavailable pull the disruption
-// budget off a (possibly nil) ComponentExtensionSpec: the PDB MinAvailable /
-// MaxUnavailable, and the rolling-update MaxUnavailable fallback.
-func extMinAvailable(ext *v1beta1.ComponentExtensionSpec) *intstr.IntOrString {
-	if ext == nil {
-		return nil
-	}
-	return ext.MinAvailable
+// InstanceAvailabilityFloor returns the lifecycle availability floor for desired Instances.
+// The desired count excludes rollout surge; nil or non-positive desired values use the live count.
+func InstanceAvailabilityFloor(actual int32, desired *int32, lifecycle *v1beta1.LifecycleSpec) int32 {
+	return utils.AvailabilityFloor(floorBasis(actual, desired), nil, nil, rolloutMaxUnavailable(lifecycle))
 }
 
-func extMaxUnavailable(ext *v1beta1.ComponentExtensionSpec) *intstr.IntOrString {
-	if ext == nil {
-		return nil
+// floorBasis is the desired Instance count the availability floor scales against,
+// nil/non-positive falls back to live count.
+func floorBasis(actual int32, desired *int32) int32 {
+	if desired == nil || *desired <= 0 || *desired >= actual {
+		return actual
 	}
-	return ext.MaxUnavailable
+	return *desired
 }
 
-func rolloutMaxUnavailable(ext *v1beta1.ComponentExtensionSpec) *intstr.IntOrString {
-	if ext == nil || ext.Lifecycle == nil || ext.Lifecycle.UpdateStrategy == nil || ext.Lifecycle.UpdateStrategy.RollingUpdate == nil {
+// rolloutMaxUnavailable returns the Instance rollout availability budget.
+func rolloutMaxUnavailable(lifecycle *v1beta1.LifecycleSpec) *intstr.IntOrString {
+	if lifecycle == nil || lifecycle.UpdateStrategy == nil || lifecycle.UpdateStrategy.RollingUpdate == nil {
 		return nil
 	}
-	return ext.Lifecycle.UpdateStrategy.RollingUpdate.MaxUnavailable
+	return lifecycle.UpdateStrategy.RollingUpdate.MaxUnavailable
 }

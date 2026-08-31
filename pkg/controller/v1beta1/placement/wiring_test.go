@@ -1,8 +1,8 @@
 package placement
 
 // validateWiring is the composition-root guard: production setup must
-// fail fast when the live reader is missing instead of silently
-// degrading every conflict-retry read to the lagging cache.
+// fail fast when the authoritative reader is missing instead of
+// silently degrading every live read to the lagging cache.
 
 import (
 	"testing"

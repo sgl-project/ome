@@ -68,6 +68,14 @@ func (n *Noop) SupportedPassthroughPrefixes() []string {
 	return nil
 }
 
+// SupportedTrafficFields returns the empty set: the Noop translator
+// emits no typed spec.traffic field. The reconciler does not surface
+// UnsupportedField for noop — the NoTranslatorAvailable condition
+// already explains that no traffic intent takes effect.
+func (n *Noop) SupportedTrafficFields() sets.Set[string] {
+	return sets.New[string]()
+}
+
 // Translate is a no-op. Returning (nil, nil, nil) signals "no resource
 // needed for this intent" per the Translator contract.
 func (n *Noop) Translate(

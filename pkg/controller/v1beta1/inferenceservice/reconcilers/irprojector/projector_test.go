@@ -108,12 +108,13 @@ func TestIsIRManagedComponent_OMENativeMode_True(t *testing.T) {
 
 // TestIsIRManagedComponent_NonOMENativeMode_False pins the routing
 // boundary: only OMENative-mode Components flow through the
-// IR-managed path. RawDeployment, PDDisaggregated, VirtualDeployment
-// all fall through to their own dispatch branches.
+// IR-managed path. RawDeployment, MultiNode, PDDisaggregated,
+// VirtualDeployment all fall through to their own dispatch branches.
 func TestIsIRManagedComponent_NonOMENativeMode_False(t *testing.T) {
 	g := gomega.NewWithT(t)
 	for _, mode := range []constants.DeploymentModeType{
 		constants.RawDeployment,
+		constants.MultiNode,
 		constants.PDDisaggregated,
 		constants.VirtualDeployment,
 		constants.DeploymentModeType(""), // unresolved / unknown
@@ -215,6 +216,45 @@ func TestEnsureInferenceReplica_ProjectsPauseAnnotationAndClearsOnRemoval(t *tes
 		"removing the parent annotation must clear the projected circuit breaker")
 }
 
+// TestEnsureInferenceReplica_ProjectsRevisionHistoryLimit pins the
+// annotation → IR Spec projection for the retention cap: a positive
+// ome.io/revision-history-limit on the parent ISVC lands on
+// Spec.RevisionHistoryLimit, removal clears it (falls back to the
+// operator-level config default), and a malformed or non-positive value
+// projects as nil instead of being honored.
+func TestEnsureInferenceReplica_ProjectsRevisionHistoryLimit(t *testing.T) {
+	g := gomega.NewWithT(t)
+	isvc := baselineISVC("llama", "prod")
+	isvc.Annotations = map[string]string{constants.RevisionHistoryLimitAnnotation: "3"}
+	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+
+	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	key := types.NamespacedName{Name: "llama-engine", Namespace: "prod"}
+	got := &v1beta1.InferenceReplica{}
+	g.Expect(c.Get(context.Background(), key, got)).To(gomega.Succeed())
+	g.Expect(got.Spec.RevisionHistoryLimit).To(gomega.HaveValue(gomega.Equal(int32(3))),
+		"a positive annotation value must project onto Spec.RevisionHistoryLimit")
+
+	delete(isvc.Annotations, constants.RevisionHistoryLimitAnnotation)
+	_, err = EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	cleared := &v1beta1.InferenceReplica{}
+	g.Expect(c.Get(context.Background(), key, cleared)).To(gomega.Succeed())
+	g.Expect(cleared.Spec.RevisionHistoryLimit).To(gomega.BeNil(),
+		"removing the annotation must clear the projection (config default applies)")
+
+	for _, bad := range []string{"0", "-1", "many"} {
+		isvc.Annotations = map[string]string{constants.RevisionHistoryLimitAnnotation: bad}
+		_, err = EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		out := &v1beta1.InferenceReplica{}
+		g.Expect(c.Get(context.Background(), key, out)).To(gomega.Succeed())
+		g.Expect(out.Spec.RevisionHistoryLimit).To(gomega.BeNil(),
+			"malformed or non-positive annotation value %q must project as nil, never be honored", bad)
+	}
+}
+
 // TestEnsureInferenceReplica_Update_PreservesGeneration pins the
 // update path: the projector emits the same IR Spec on a second
 // invocation, so the apiserver-side Generation should NOT bump (no
@@ -286,6 +326,40 @@ func TestEnsureInferenceReplica_NoChange_IssuesNoWrite(t *testing.T) {
 	_, err = EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(writes).To(gomega.Equal(0), "identical re-projection must issue no writes")
+}
+
+// TestEnsureInferenceReplica_StampsParentGeneration pins the parent-
+// generation stamp: a created IR carries the parent ISVC's generation,
+// and a generation-only bump (no projected-spec diff) still re-stamps
+// the annotation. The Sequential gate's projection-lag signal relies on
+// the stamp advancing even for Components whose projected spec the bump
+// did not touch — that is what releases a later-in-Order Component from
+// waiting on an idle earlier one.
+func TestEnsureInferenceReplica_StampsParentGeneration(t *testing.T) {
+	g := gomega.NewWithT(t)
+	isvc := baselineISVC("llama", "prod")
+	isvc.Generation = 3
+	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+
+	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	got := &v1beta1.InferenceReplica{}
+	key := types.NamespacedName{Name: "llama-engine", Namespace: "prod"}
+	g.Expect(c.Get(context.Background(), key, got)).To(gomega.Succeed())
+	g.Expect(got.Annotations).To(gomega.HaveKeyWithValue(
+		constants.InferenceReplicaParentGenerationAnnotationKey, "3"),
+		"created IR must carry the parent ISVC generation")
+
+	// Generation-only bump: the projected spec is unchanged, but the
+	// stamp must still advance via an annotation-only patch.
+	isvc.Generation = 4
+	_, err = EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Expect(c.Get(context.Background(), key, got)).To(gomega.Succeed())
+	g.Expect(got.Annotations).To(gomega.HaveKeyWithValue(
+		constants.InferenceReplicaParentGenerationAnnotationKey, "4"),
+		"re-projection must advance the stamp even with no spec diff")
 }
 
 // TestEnsureInferenceReplica_SpecChange_IssuesMergePatch pins the change
@@ -1054,7 +1128,7 @@ func TestEnsureInferenceReplica_AutoscalerProjection_DeepCopies(t *testing.T) {
 		types.NamespacedName{Name: "llama-engine", Namespace: "prod"}, got)).To(gomega.Succeed())
 
 	// Mutate the input AFTER projection. If the projector aliased the
-	// pointer, the live IR would show the mutation through the Get
+	// pointer, the live IR would show the mutation through Gets
 	// fake-client round-trip (fake client stores by reference for in-memory).
 	p.ResolvedAutoscaler.Class = v1beta1.AutoscalerNone
 	p.ResolvedAutoscaler.Keda.Triggers[0].Type = "mutated"
@@ -1065,4 +1139,105 @@ func TestEnsureInferenceReplica_AutoscalerProjection_DeepCopies(t *testing.T) {
 	g.Expect(got2.Spec.Autoscaler).To(gomega.Equal(original),
 		"post-projection input mutation must NOT leak into the stored IR — "+
 			"ir.Spec.Autoscaler must be a deep copy of p.ResolvedAutoscaler")
+}
+
+// TestObjectScopedAnnotationKeys verifies that component annotations remain revision inputs.
+func TestObjectScopedAnnotationKeys(t *testing.T) {
+	g := gomega.NewWithT(t)
+	isvc := baselineISVC("llama", "prod")
+	isvc.Annotations = map[string]string{
+		"editor.example.com/resource-version": "v1beta1",
+		"apply.example.com/state":             "{}",
+		"ome.io/rollout-nonce":                "7", // also declared below
+	}
+	// Component metadata remains part of revision identity.
+	isvc.Spec.Engine.Annotations = map[string]string{
+		"ome.io/rollout-nonce": "7",
+	}
+
+	got := objectScopedAnnotationKeys(minimalParams(t, isvc, nil))
+	g.Expect(got).To(gomega.Equal([]string{
+		"apply.example.com/state",
+		"editor.example.com/resource-version",
+	}), "object-scoped keys = ISVC-object annotation keys minus component-declared keys, sorted")
+}
+
+func TestObjectScopedAnnotationKeys_NoISVCAnnotations_Nil(t *testing.T) {
+	g := gomega.NewWithT(t)
+	isvc := baselineISVC("llama", "prod")
+	isvc.Annotations = nil
+	g.Expect(objectScopedAnnotationKeys(minimalParams(t, isvc, nil))).To(gomega.BeNil())
+}
+
+// TestEnsureInferenceReplica_StampsRevisionExcludedAnnotations verifies the projected key set.
+func TestEnsureInferenceReplica_StampsRevisionExcludedAnnotations(t *testing.T) {
+	g := gomega.NewWithT(t)
+	isvc := baselineISVC("llama", "prod")
+	isvc.Annotations = map[string]string{
+		"editor.example.com/resource-version": "v1beta1",
+		"delivery.example.com/tracking-id":    "app:ome",
+		"ome.io/rollout-nonce":                "7", // declared on component -> excluded from the list
+	}
+	isvc.Spec.Engine.Annotations = map[string]string{
+		"ome.io/rollout-nonce": "7",
+	}
+	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+
+	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	got := &v1beta1.InferenceReplica{}
+	g.Expect(c.Get(context.Background(),
+		types.NamespacedName{Name: "llama-engine", Namespace: "prod"}, got)).To(gomega.Succeed())
+
+	g.Expect(got.Annotations).To(gomega.HaveKeyWithValue(
+		constants.RevisionExcludedAnnotationKeysAnnotationKey,
+		"delivery.example.com/tracking-id,editor.example.com/resource-version"),
+		"projector records inherited ISVC annotation keys but not the "+
+			"component-declared ome.io/rollout-nonce")
+}
+
+func TestEnsureInferenceReplica_PreservesReleaseHeldRevisionAnnotation(t *testing.T) {
+	g := gomega.NewWithT(t)
+	isvc := baselineISVC("llama", "prod")
+	isvc.Annotations = map[string]string{"editor.example.com/resource-version": "v1beta1"}
+	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	p := minimalParams(t, isvc, c)
+
+	_, err := EnsureInferenceReplica(context.Background(), p)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	key := types.NamespacedName{Name: "llama-engine", Namespace: "prod"}
+	ir := &v1beta1.InferenceReplica{}
+	g.Expect(c.Get(context.Background(), key, ir)).To(gomega.Succeed())
+	ir.Annotations[constants.ReleaseHeldRevisionAnnotationKey] = "blocked-revision"
+	g.Expect(c.Update(context.Background(), ir)).To(gomega.Succeed())
+
+	_, err = EnsureInferenceReplica(context.Background(), p)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	updated := &v1beta1.InferenceReplica{}
+	g.Expect(c.Get(context.Background(), key, updated)).To(gomega.Succeed())
+	g.Expect(updated.Annotations).To(gomega.HaveKeyWithValue(
+		constants.ReleaseHeldRevisionAnnotationKey, "blocked-revision"))
+	g.Expect(updated.Annotations).To(gomega.HaveKeyWithValue(
+		constants.RevisionExcludedAnnotationKeysAnnotationKey,
+		"editor.example.com/resource-version"))
+}
+
+func TestEnsureInferenceReplica_NoISVCAnnotations_NoExcludeStamp(t *testing.T) {
+	g := gomega.NewWithT(t)
+	isvc := baselineISVC("llama", "prod")
+	isvc.Annotations = nil
+	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+
+	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	got := &v1beta1.InferenceReplica{}
+	g.Expect(c.Get(context.Background(),
+		types.NamespacedName{Name: "llama-engine", Namespace: "prod"}, got)).To(gomega.Succeed())
+	g.Expect(got.Annotations).NotTo(gomega.HaveKey(
+		constants.RevisionExcludedAnnotationKeysAnnotationKey),
+		"no ISVC object annotations -> no exclude stamp")
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -47,7 +48,7 @@ func NewRBACReconciler(
 
 // Reconcile ensures the RBAC resources are created and configured correctly
 func (r *RBACReconciler) Reconcile() error {
-	r.Log.Info("Reconciling RBAC resources", "name", r.objectMeta.Name, "namespace", r.objectMeta.Namespace, "component", r.componentType)
+	r.Log.V(1).Info("Reconciling RBAC resources", "name", r.objectMeta.Name, "namespace", r.objectMeta.Namespace, "component", r.componentType)
 
 	serviceAccountName := r.GetServiceAccountName()
 
@@ -137,7 +138,7 @@ func (r *RBACReconciler) Reconcile() error {
 		}
 	}
 
-	r.Log.Info("Successfully reconciled RBAC resources", "name", r.objectMeta.Name, "namespace", r.objectMeta.Namespace)
+	r.Log.V(1).Info("Successfully reconciled RBAC resources", "name", r.objectMeta.Name, "namespace", r.objectMeta.Namespace)
 	return nil
 }
 
@@ -146,23 +147,89 @@ func (r *RBACReconciler) GetServiceAccountName() string {
 	return fmt.Sprintf("%s-%s", r.inferenceService.Name, string(r.componentType))
 }
 
-// createOrUpdate creates or updates a Kubernetes resource
+// createOrUpdate creates the resource when absent, and otherwise issues an
+// Update only when the live object differs from the desired one in a field OME
+// manages. This avoids a no-op PUT (and the accompanying log line) on every
+// reconcile when nothing has changed.
 func (r *RBACReconciler) createOrUpdate(obj client.Object) error {
 	key := client.ObjectKeyFromObject(obj)
+	kind := resourceKind(obj)
 	existing := obj.DeepCopyObject().(client.Object)
 
 	err := r.client.Get(context.Background(), key, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Create the resource
-			r.Log.Info("Creating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
+			r.Log.Info("Creating resource", "kind", kind, "name", obj.GetName())
 			return r.client.Create(context.Background(), obj)
 		}
 		return err
 	}
 
+	if rbacSemanticEquals(obj, existing) {
+		// Steady state: nothing OME manages has drifted, skip the PUT.
+		r.Log.V(1).Info("Resource already up to date", "kind", kind, "name", obj.GetName())
+		return nil
+	}
+
 	// Update the resource
-	r.Log.Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
+	r.Log.Info("Updating resource", "kind", kind, "name", obj.GetName())
 	obj.SetResourceVersion(existing.GetResourceVersion())
 	return r.client.Update(context.Background(), obj)
+}
+
+// resourceKind derives a human-readable kind for logging. Typed objects built
+// in-code don't carry a populated GroupVersionKind, so fall back to the Go type
+// name instead of logging an empty string.
+func resourceKind(obj client.Object) string {
+	if k := obj.GetObjectKind().GroupVersionKind().Kind; k != "" {
+		return k
+	}
+	switch obj.(type) {
+	case *corev1.ServiceAccount:
+		return "ServiceAccount"
+	case *rbacv1.Role:
+		return "Role"
+	case *rbacv1.RoleBinding:
+		return "RoleBinding"
+	default:
+		return fmt.Sprintf("%T", obj)
+	}
+}
+
+// rbacSemanticEquals reports whether the desired object matches the live one in
+// every field OME manages: the metadata it stamps (Labels, Annotations,
+// OwnerReferences) plus the type-specific payload (Role.Rules,
+// RoleBinding.RoleRef/Subjects). ServiceAccounts carry no managed payload beyond
+// metadata. Server-populated fields (resourceVersion, secrets, etc.) are
+// ignored so a steady object does not trigger a write.
+func rbacSemanticEquals(desired, existing client.Object) bool {
+	if !equality.Semantic.DeepEqual(desired.GetLabels(), existing.GetLabels()) {
+		return false
+	}
+	if !equality.Semantic.DeepEqual(desired.GetAnnotations(), existing.GetAnnotations()) {
+		return false
+	}
+	if !equality.Semantic.DeepEqual(desired.GetOwnerReferences(), existing.GetOwnerReferences()) {
+		return false
+	}
+
+	switch d := desired.(type) {
+	case *rbacv1.Role:
+		e, ok := existing.(*rbacv1.Role)
+		if !ok {
+			return false
+		}
+		return equality.Semantic.DeepEqual(d.Rules, e.Rules)
+	case *rbacv1.RoleBinding:
+		e, ok := existing.(*rbacv1.RoleBinding)
+		if !ok {
+			return false
+		}
+		return equality.Semantic.DeepEqual(d.RoleRef, e.RoleRef) &&
+			equality.Semantic.DeepEqual(d.Subjects, e.Subjects)
+	default:
+		// ServiceAccount and anything else: metadata is the only managed surface.
+		return true
+	}
 }

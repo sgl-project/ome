@@ -3,6 +3,7 @@ package endpoint
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -142,17 +144,6 @@ func TestBuildResources_RouteNamespaceOverride(t *testing.T) {
 		"backendRef namespace tracks the route namespace")
 }
 
-type routeUpdateFailClient struct {
-	client.Client
-}
-
-func (c routeUpdateFailClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-	if _, ok := obj.(*gatewayapiv1.HTTPRoute); ok {
-		return errors.New("route update failed")
-	}
-	return c.Client.Update(ctx, obj, opts...)
-}
-
 func TestBuildHTTPRoute_BareGatewayName(t *testing.T) {
 	cfg := baseConfig()
 	cfg.GlobalGateway = "global-gw" // no namespace
@@ -164,6 +155,19 @@ func TestBuildHTTPRoute_BareGatewayName(t *testing.T) {
 	require.NotNil(t, pr.Namespace)
 	assert.Equal(t, "", string(*pr.Namespace), "bare gateway name yields empty (route-local) namespace")
 	assert.Equal(t, "global-gw", string(pr.Name))
+}
+
+// routeUpdateFailClient fails HTTPRoute updates so a Publish that cannot
+// repoint the route is observable.
+type routeUpdateFailClient struct {
+	client.Client
+}
+
+func (c routeUpdateFailClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if _, ok := obj.(*gatewayapiv1.HTTPRoute); ok {
+		return errors.New("route update failed")
+	}
+	return c.Client.Update(ctx, obj, opts...)
 }
 
 func TestPublish_SingleHomeCreatesResources(t *testing.T) {
@@ -270,45 +274,6 @@ func TestPublish_WinnerMovesClustersInSingle(t *testing.T) {
 	assert.Equal(t, gatewayapiv1.ObjectName("svc-global-cluster-b"), route.Spec.Rules[0].BackendRefs[0].Name)
 }
 
-func TestPublish_RouteUpdateFailureKeepsOldBackendService(t *testing.T) {
-	s := pubScheme(t)
-	c := fakeclient.NewClientBuilder().WithScheme(s).Build()
-	p := NewGatewayAPIPublisher(c, baseConfig())
-	isvc := testISVC()
-	require.NoError(t, p.Publish(context.Background(), isvc, oneHome("h", "cluster-a", "a.example")))
-
-	p.client = routeUpdateFailClient{Client: c}
-	err := p.Publish(context.Background(), isvc, oneHome("h", "cluster-b", "b.example"))
-	require.Error(t, err)
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "svc-global-cluster-a", Namespace: "prod"}, &corev1.Service{}),
-		"old Service remains while the route still references it")
-}
-
-func TestPublish_SharedRouteNamespaceIsolatesSameNameSources(t *testing.T) {
-	s := pubScheme(t)
-	c := fakeclient.NewClientBuilder().WithScheme(s).Build()
-	cfg := baseConfig()
-	cfg.RouteNamespace = "ome-gateways"
-	p := NewGatewayAPIPublisher(c, cfg)
-	a := testISVC()
-	a.Namespace = "team-a"
-	b := testISVC()
-	b.Namespace = "team-b"
-
-	require.NoError(t, p.Publish(context.Background(), a, oneHome("a.global.example", "cluster-a", "a.example")))
-	require.NoError(t, p.Publish(context.Background(), b, oneHome("b.global.example", "cluster-b", "b.example")))
-	assert.NotEqual(t, p.routeName(a), p.routeName(b))
-	assert.NotEqual(t, p.serviceName(a, "cluster-a"), p.serviceName(b, "cluster-b"))
-	ownedA, err := p.ownedServices(context.Background(), a)
-	require.NoError(t, err)
-	require.Len(t, ownedA, 1)
-	assert.Equal(t, "team-a", ownedA[0].Labels[PlacementEndpointISVCNamespaceLabel])
-
-	require.NoError(t, p.Unpublish(context.Background(), a))
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: p.routeName(b), Namespace: "ome-gateways"}, &gatewayapiv1.HTTPRoute{}))
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: p.serviceName(b, "cluster-b"), Namespace: "ome-gateways"}, &corev1.Service{}))
-}
-
 func TestUnpublish_DeletesRouteAndAllServices(t *testing.T) {
 	s := pubScheme(t)
 	c := fakeclient.NewClientBuilder().WithScheme(s).Build()
@@ -365,4 +330,95 @@ func TestBuildHTTPRoute_UnweightedFallsBackToEqual(t *testing.T) {
 	require.Len(t, refs, 2)
 	assert.Equal(t, int32(1), *refs[0].Weight)
 	assert.Equal(t, int32(1), *refs[1].Weight)
+}
+
+func TestPublish_RouteUpdateFailureKeepsOldBackendService(t *testing.T) {
+	s := pubScheme(t)
+	c := fakeclient.NewClientBuilder().WithScheme(s).Build()
+	p := NewGatewayAPIPublisher(c, baseConfig())
+	isvc := testISVC()
+	require.NoError(t, p.Publish(context.Background(), isvc, oneHome("h", "cluster-a", "a.example")))
+
+	p.client = routeUpdateFailClient{Client: c}
+	err := p.Publish(context.Background(), isvc, oneHome("h", "cluster-b", "b.example"))
+	require.Error(t, err)
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "svc-global-cluster-a", Namespace: "prod"}, &corev1.Service{}),
+		"old Service remains while the route still references it")
+}
+
+func TestPublish_SharedRouteNamespaceIsolatesSameNameSources(t *testing.T) {
+	s := pubScheme(t)
+	c := fakeclient.NewClientBuilder().WithScheme(s).Build()
+	cfg := baseConfig()
+	cfg.RouteNamespace = "ome-gateways"
+	p := NewGatewayAPIPublisher(c, cfg)
+	a := testISVC()
+	a.Namespace = "team-a"
+	b := testISVC()
+	b.Namespace = "team-b"
+
+	require.NoError(t, p.Publish(context.Background(), a, oneHome("a.global.example", "cluster-a", "a.example")))
+	require.NoError(t, p.Publish(context.Background(), b, oneHome("b.global.example", "cluster-b", "b.example")))
+	assert.NotEqual(t, p.routeName(a), p.routeName(b))
+	assert.NotEqual(t, p.serviceName(a, "cluster-a"), p.serviceName(b, "cluster-b"))
+	ownedA, err := p.ownedServices(context.Background(), a)
+	require.NoError(t, err)
+	require.Len(t, ownedA, 1)
+	assert.Equal(t, "team-a", ownedA[0].Labels[PlacementEndpointISVCNamespaceLabel])
+
+	require.NoError(t, p.Unpublish(context.Background(), a))
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: p.routeName(b), Namespace: "ome-gateways"}, &gatewayapiv1.HTTPRoute{}))
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: p.serviceName(b, "cluster-b"), Namespace: "ome-gateways"}, &corev1.Service{}))
+}
+
+func TestResourceNames_BoundedToDNSLabelLimit(t *testing.T) {
+	cfg := baseConfig()
+	cfg.RouteNamespace = "ome-gateways"
+	p := NewGatewayAPIPublisher(nil, cfg)
+	isvc := testISVC()
+	isvc.Namespace = strings.Repeat("n", 60)
+	isvc.Name = strings.Repeat("s", 60)
+
+	assert.LessOrEqual(t, len(p.routeName(isvc)), validation.DNS1035LabelMaxLength)
+	assert.LessOrEqual(t, len(p.serviceName(isvc, "cluster-a")), validation.DNS1035LabelMaxLength)
+	assert.NotEqual(t, p.serviceName(isvc, "cluster-a"), p.serviceName(isvc, "cluster-b"),
+		"per-home names stay distinct after truncation")
+}
+
+// Two distinct sources must never share a published name. A plain
+// namespace-name join collides across the hyphen, which would let one source
+// overwrite or delete the other's route in a shared RouteNamespace.
+func TestResourceBaseNameIsInjectiveAcrossNamespaces(t *testing.T) {
+	p := &GatewayAPIPublisher{config: Config{RouteNamespace: "gw"}}
+
+	pairs := [][2]string{
+		{"a", "b-c"},
+		{"a-b", "c"},
+		{"gw", "x-y"},
+		{"x", "y"},
+	}
+	seen := map[string][2]string{}
+	for _, ns := range pairs {
+		isvc := &v1beta1.InferenceService{
+			ObjectMeta: metav1.ObjectMeta{Namespace: ns[0], Name: ns[1]},
+		}
+		got := p.routeName(isvc)
+		if other, dup := seen[got]; dup {
+			t.Fatalf("route name %q collides: %s/%s and %s/%s", got, other[0], other[1], ns[0], ns[1])
+		}
+		seen[got] = ns
+	}
+}
+
+// Service names must be DNS-1035 labels, which have to start with a letter.
+func TestBoundedResourceNameStartsWithLetter(t *testing.T) {
+	for _, in := range []string{"9team-svc", "0", "abc"} {
+		got := boundedResourceName(in)
+		if got == "" || got[0] < 'a' || got[0] > 'z' {
+			t.Fatalf("boundedResourceName(%q) = %q, must start with a lowercase letter", in, got)
+		}
+		if len(got) > validation.DNS1035LabelMaxLength {
+			t.Fatalf("boundedResourceName(%q) = %q exceeds the DNS label limit", in, got)
+		}
+	}
 }

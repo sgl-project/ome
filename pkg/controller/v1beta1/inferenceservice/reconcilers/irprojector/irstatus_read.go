@@ -10,24 +10,15 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-// ComponentIRStatus returns the authoritative InferenceReplica status for one
-// Component of an ISVC, read via the supplied reader (cached client is fine —
-// these are non-destructive coordination reads). Returns (nil, nil) when the IR
-// does not exist yet, so callers treat "no authoritative status" the same as the
-// pre-migration empty projection. Any other read failure is returned as a
-// wrapped error — callers MUST distinguish it from the missing-IR case: a
-// transient read error is not "no observation yet", and safety gates that treat
-// it that way fail open. A nil reader is likewise an error, not a missing IR —
-// it signals a wiring bug the caller must not silently absorb. This is the
-// single source of truth every in-cluster decision reads instead of the ISVC's
-// copied LifecycleStatus.
-func ComponentIRStatus(ctx context.Context, reads client.Reader, namespace, isvcName string, c v1beta1.ComponentType) (*v1beta1.InferenceReplicaStatus, error) {
-	// A nil reader is a wiring bug, not an absent IR. Surface it as an
-	// error so safety gates fail closed instead of mistaking it for the
-	// missing-IR case, while still not panicking the reconcile.
+// ComponentIR returns the authoritative InferenceReplica for one Component of
+// an ISVC. Returns (nil, nil) when the IR does not exist yet. Any other read
+// failure is returned as a wrapped error so safety gates can distinguish a
+// missing observation from an unreliable read.
+func ComponentIR(ctx context.Context, reads client.Reader, namespace, isvcName string, c v1beta1.ComponentType) (*v1beta1.InferenceReplica, error) {
+	// A nil reader degrades to "no authoritative status" rather than
+	// panicking a reconcile — same result callers get for a missing IR.
 	if reads == nil {
-		return nil, fmt.Errorf("nil reader for InferenceReplica %s/%s (component %s)",
-			namespace, InferenceReplicaName(isvcName, c), c)
+		return nil, nil
 	}
 	ir := &v1beta1.InferenceReplica{}
 	key := types.NamespacedName{Namespace: namespace, Name: InferenceReplicaName(isvcName, c)}
@@ -37,5 +28,54 @@ func ComponentIRStatus(ctx context.Context, reads client.Reader, namespace, isvc
 		}
 		return nil, fmt.Errorf("get InferenceReplica %s/%s: %w", key.Namespace, key.Name, err)
 	}
+	return ir, nil
+}
+
+// IRPartition returns the effective rollingUpdate partition carried on a
+// projected InferenceReplica spec, or 0 (the API-defined "update every
+// Instance" value) when the IR is nil or no partition is set. Shared by
+// ComponentIRPartition and callers that already hold the IR object.
+func IRPartition(ir *v1beta1.InferenceReplica) int32 {
+	if ir == nil {
+		return 0
+	}
+	lc := ir.Spec.Lifecycle
+	if lc == nil || lc.UpdateStrategy == nil || lc.UpdateStrategy.RollingUpdate == nil || lc.UpdateStrategy.RollingUpdate.Partition == nil {
+		return 0
+	}
+	return *lc.UpdateStrategy.RollingUpdate.Partition
+}
+
+// ComponentIRStatus returns the authoritative InferenceReplica status for one
+// Component of an ISVC, read via the supplied reader. The full-object reader
+// owns missing and error semantics so status-only consumers share the same
+// behavior as consumers that also need desired spec state.
+func ComponentIRStatus(ctx context.Context, reads client.Reader, namespace, isvcName string, c v1beta1.ComponentType) (*v1beta1.InferenceReplicaStatus, error) {
+	ir, err := ComponentIR(ctx, reads, namespace, isvcName, c)
+	if err != nil || ir == nil {
+		return nil, err
+	}
 	return &ir.Status, nil
+}
+
+// ComponentIRPartition returns the effective rollingUpdate partition for one
+// Component of an ISVC, read from the projected InferenceReplica spec
+// (spec.lifecycle.updateStrategy.rollingUpdate.partition). The IR spec carries
+// the merged ISVC↔runtime lifecycle, so this is the partition the workload
+// controller actually stages Instances at — including a partition inherited
+// from the ServingRuntime, which the raw ISVC spec never shows. Coordination
+// MUST read this value rather than re-deriving it from the unmerged ISVC:
+// a raw-spec read reports partition 0 for a runtime-staged Component and
+// treats its held Instances as an incomplete rollout forever.
+//
+// Returns 0 when the IR does not exist yet or no partition is set (the
+// API-defined "update every Instance" value). Any other read failure is
+// returned as a wrapped error so safety gates can fail closed instead of
+// mistaking a flaky read for "no partition".
+func ComponentIRPartition(ctx context.Context, reads client.Reader, namespace, isvcName string, c v1beta1.ComponentType) (int32, error) {
+	ir, err := ComponentIR(ctx, reads, namespace, isvcName, c)
+	if err != nil {
+		return 0, err
+	}
+	return IRPartition(ir), nil
 }

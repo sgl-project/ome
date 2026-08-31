@@ -14,8 +14,8 @@ func isPVCBaseModel(b *BaseComponentFields) bool {
 }
 
 // parsePVCComponents returns the parsed PVC URI for b's BaseModel. Returns
-// nil if the model is not PVC-backed or the URI is malformed; the caller is
-// expected to have validated the model upstream (via the BaseModel
+// nil if the model is not PVC-backed or the URI is malformed; the caller
+// is expected to have validated the model upstream (via the BaseModel
 // reconciler / admission webhook), so a parse error here is treated as
 // "no PVC" rather than fatal.
 func parsePVCComponents(b *BaseComponentFields) *storage.PVCStorageComponents {
@@ -25,8 +25,8 @@ func parsePVCComponents(b *BaseComponentFields) *storage.PVCStorageComponents {
 	return parsePVCStorage(b.BaseModel.Storage)
 }
 
-// isPVCStorage / parsePVCStorage are the StorageSpec-level forms behind the
-// BaseModel helpers above.
+// isPVCStorage / parsePVCStorage: Storage-spec-level forms used by
+// overlay.go so it doesn't need a BaseComponentFields.
 func isPVCStorage(s *v1beta1.StorageSpec) bool {
 	if s == nil || s.StorageUri == nil {
 		return false

@@ -8,6 +8,7 @@ import (
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	"github.com/onsi/gomega"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	v1 "k8s.io/api/core/v1"
@@ -25,11 +26,108 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 )
 
-// Helper function for creating int32 pointers
-func int32Ptr(i int32) *int32 {
-	return &i
+func TestDecoderReconcileOMENativeSubresources_LeaderSelector(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(v1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(monitoringv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	tests := []struct {
+		name                  string
+		workerSize            *int
+		wantStableSelectorHas string
+	}{
+		{
+			name:                  "single-pod decoder has no pod-ordinal filter",
+			workerSize:            nil,
+			wantStableSelectorHas: "",
+		},
+		{
+			name:                  "multi-pod decoder selects leader ordinal zero",
+			workerSize:            intPtr(3),
+			wantStableSelectorHas: "0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decoderSpec := &v1beta1.DecoderSpec{
+				PodSpec: v1beta1.PodSpec{
+					Containers: []v1.Container{{Name: "decoder", Image: "decoder:v1"}},
+				},
+			}
+			if tt.workerSize != nil {
+				decoderSpec.Leader = &v1beta1.LeaderSpec{
+					PodSpec: v1beta1.PodSpec{
+						Containers: []v1.Container{{Name: "decoder", Image: "decoder:v1"}},
+					},
+				}
+				decoderSpec.Worker = &v1beta1.WorkerSpec{
+					Size: tt.workerSize,
+					PodSpec: v1beta1.PodSpec{
+						Containers: []v1.Container{{Name: "decoder", Image: "decoder:v1"}},
+					},
+				}
+			}
+
+			isvc := &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-isvc", Namespace: "default",
+					UID: types.UID("test-isvc-uid"),
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Decoder: decoderSpec,
+				},
+			}
+			objectMeta := metav1.ObjectMeta{
+				Name:      "test-isvc-decoder",
+				Namespace: "default",
+			}
+			podSpec := &v1.PodSpec{
+				Containers: []v1.Container{{Name: "decoder", Image: "decoder:v1",
+					Ports: []v1.ContainerPort{{Name: "http", ContainerPort: 8080}}}},
+			}
+
+			c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
+			clientset := fake.NewClientset()
+			decoder := NewDecoder(
+				&ComponentDeps{Client: c, Clientset: clientset, Scheme: scheme, Config: &controllerconfig.InferenceServicesConfig{}},
+				ComponentInputs{DeploymentMode: constants.OMENative},
+				decoderSpec,
+			).(*Decoder)
+
+			err := decoder.reconcileOMENativeSubresources(context.Background(), isvc, objectMeta, podSpec)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+
+			svc := &v1.Service{}
+			g.Expect(c.Get(context.Background(),
+				client.ObjectKey{Namespace: "default", Name: "test-isvc-decoder"},
+				svc)).To(gomega.Succeed())
+			g.Expect(svc.Spec.Selector).To(gomega.HaveKeyWithValue(
+				constants.OMEComponentLabel, string(v1beta1.DecoderComponent)))
+			if tt.wantStableSelectorHas == "" {
+				g.Expect(svc.Spec.Selector).NotTo(gomega.HaveKey(query.LabelPodOrdinal))
+				g.Expect(svc.Spec.Selector).NotTo(gomega.HaveKey(query.LabelRunner))
+			} else {
+				g.Expect(svc.Spec.Selector).To(gomega.HaveKeyWithValue(
+					query.LabelPodOrdinal, tt.wantStableSelectorHas))
+				g.Expect(svc.Spec.Selector).To(gomega.HaveKeyWithValue(
+					query.LabelRunner, string(v1beta1.RunnerNameLeader)))
+			}
+
+			pm := &monitoringv1.PodMonitor{}
+			g.Expect(c.Get(context.Background(),
+				client.ObjectKey{Namespace: "default", Name: "test-isvc-decoder"},
+				pm)).To(gomega.Succeed())
+			g.Expect(pm.Spec.Selector.MatchLabels).NotTo(gomega.HaveKey(query.LabelPodOrdinal))
+			g.Expect(pm.Spec.Selector.MatchLabels).NotTo(gomega.HaveKey(query.LabelRunner))
+		})
+	}
 }
 
 func TestDecoderReconcile(t *testing.T) {
@@ -44,6 +142,7 @@ func TestDecoderReconcile(t *testing.T) {
 	g.Expect(kedav1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(autoscalingv2.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(policyv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(monitoringv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 
 	tests := []struct {
 		name           string
@@ -317,6 +416,9 @@ func TestDecoderReconcile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.isvc != nil && tt.isvc.UID == "" {
+				tt.isvc.UID = types.UID(tt.isvc.Name + "-uid")
+			}
 			// Create fake client
 			c := ctrlclientfake.NewClientBuilder().
 				WithScheme(scheme).
@@ -336,23 +438,19 @@ func TestDecoderReconcile(t *testing.T) {
 
 			// Create decoder component
 			decoder := NewDecoder(
-				c,
-				clientset,
-				scheme,
-				isvcConfig,
-				tt.deploymentMode,
-				tt.baseModel,
-				tt.baseModelMeta,
+				&ComponentDeps{Client: c, Clientset: clientset, Scheme: scheme, Config: isvcConfig},
+				ComponentInputs{
+					DeploymentMode: tt.deploymentMode,
+					BaseModel:      tt.baseModel,
+					BaseModelMeta:  tt.baseModelMeta,
+					Runtime:        tt.runtime,
+					RuntimeName:    tt.runtimeName,
+				},
 				tt.decoderSpec,
-				tt.runtime,
-				tt.runtimeName,
-				nil, // supportedModelFormat
-				nil, // acceleratorClass
-				"",  // acceleratorClassName
 			)
 
 			// Reconcile
-			result, err := decoder.Reconcile(tt.isvc)
+			result, err := decoder.Reconcile(context.TODO(), tt.isvc)
 
 			if tt.wantErr {
 				g.Expect(err).To(gomega.HaveOccurred())
@@ -461,23 +559,18 @@ func TestDecoderReconcileObjectMeta(t *testing.T) {
 
 			// Create decoder using the constructor
 			decoder := NewDecoder(
-				c,
-				clientset,
-				scheme,
-				&controllerconfig.InferenceServicesConfig{},
-				constants.RawDeployment,
-				tt.baseModel,
-				tt.baseModelMeta,
+				&ComponentDeps{Client: c, Clientset: clientset, Scheme: scheme, Config: &controllerconfig.InferenceServicesConfig{}},
+				ComponentInputs{
+					DeploymentMode: constants.RawDeployment,
+					BaseModel:      tt.baseModel,
+					BaseModelMeta:  tt.baseModelMeta,
+					RuntimeName:    tt.runtimeName,
+				},
 				tt.decoderSpec,
-				nil, // runtime
-				tt.runtimeName,
-				nil, // supportedModelFormat
-				nil, // acceleratorClass
-				"",  // acceleratorClassName
 			).(*Decoder)
 
 			// Test reconcileObjectMeta
-			objectMeta, err := decoder.reconcileObjectMeta(tt.isvc)
+			objectMeta, err := decoder.reconcileObjectMeta(context.TODO(), tt.isvc)
 			g.Expect(err).NotTo(gomega.HaveOccurred())
 
 			// Validate name
@@ -571,19 +664,9 @@ func TestDecoderWorkerPodSpec(t *testing.T) {
 
 			// Create decoder using the constructor
 			decoder := NewDecoder(
-				c,
-				clientset,
-				scheme,
-				&controllerconfig.InferenceServicesConfig{},
-				constants.RawDeployment,
-				nil, // baseModel
-				nil, // baseModelMeta
+				&ComponentDeps{Client: c, Clientset: clientset, Scheme: scheme, Config: &controllerconfig.InferenceServicesConfig{}},
+				ComponentInputs{DeploymentMode: constants.RawDeployment},
 				tt.decoderSpec,
-				nil, // runtime
-				"",  // runtimeName
-				nil, // supportedModelFormat
-				nil, // acceleratorClass
-				"",  // acceleratorClassName
 			).(*Decoder)
 
 			podSpec, err := decoder.reconcileWorkerPodSpec(isvc, objectMeta)
@@ -649,19 +732,12 @@ func TestDecoderComponentConfig(t *testing.T) {
 
 			// Create decoder using the constructor
 			decoder := NewDecoder(
-				c,
-				clientset,
-				scheme,
-				&controllerconfig.InferenceServicesConfig{},
-				constants.RawDeployment,
-				nil, // baseModel
-				nil, // baseModelMeta
+				&ComponentDeps{Client: c, Clientset: clientset, Scheme: scheme, Config: &controllerconfig.InferenceServicesConfig{}},
+				ComponentInputs{
+					DeploymentMode: constants.RawDeployment,
+					RuntimeName:    "test-runtime",
+				},
 				tt.decoderSpec,
-				nil, // runtime
-				"test-runtime",
-				nil, // supportedModelFormat
-				nil, // acceleratorClass
-				"",  // acceleratorClassName
 			).(*Decoder)
 
 			// Test GetComponentType
@@ -802,19 +878,13 @@ func TestDecoderAcceleratorOverride(t *testing.T) {
 
 			// Create decoder component
 			decoder := NewDecoder(
-				c,
-				clientset,
-				scheme,
-				&controllerconfig.InferenceServicesConfig{},
-				constants.RawDeployment,
-				nil, // baseModel
-				nil, // baseModelMeta
+				&ComponentDeps{Client: c, Clientset: clientset, Scheme: scheme, Config: &controllerconfig.InferenceServicesConfig{}},
+				ComponentInputs{
+					DeploymentMode: constants.RawDeployment,
+					Runtime:        tt.runtime,
+					RuntimeName:    "test-runtime",
+				},
 				tt.decoderSpec,
-				tt.runtime,
-				"test-runtime",
-				nil, // supportedModelFormat
-				nil, // acceleratorClass
-				"",  // acceleratorClassName
 			)
 
 			// Test that decoder implements ComponentConfig interface
@@ -1042,6 +1112,78 @@ func TestDecoderSetupMocks(t *testing.T) {
 	}
 }
 
+// TestDecoderUsesLeaderTemplate pins the structural predicate that drives
+// pod-template selection in decoder.reconcilePodSpec. The earlier
+// implementation switched on d.DeploymentMode and only sourced the Leader
+// template under `case constants.MultiNode`. A multi-pod OMENative decoder
+// (Leader/Worker set, DeploymentMode == OMENative) fell to the default
+// branch and collapsed onto the empty top-level runner — reconcilePodSpec
+// then failed with "no containers found in pod spec and no runner spec
+// provided", which short-circuited the component loop and left the decoder
+// (and router) InferenceReplicas un-projected. decoderUsesLeaderTemplate
+// decouples template selection from dispatch-mode classification, matching
+// engineUsesLeaderTemplate.
+func TestDecoderUsesLeaderTemplate(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	tests := []struct {
+		name     string
+		spec     *v1beta1.DecoderSpec
+		expected bool
+	}{
+		{
+			name:     "nil spec returns false",
+			spec:     nil,
+			expected: false,
+		},
+		{
+			name:     "empty spec — no leader — false",
+			spec:     &v1beta1.DecoderSpec{},
+			expected: false,
+		},
+		{
+			name: "leader set — true (regardless of mode)",
+			spec: &v1beta1.DecoderSpec{
+				Leader: &v1beta1.LeaderSpec{
+					PodSpec: v1beta1.PodSpec{
+						Containers: []v1.Container{{Name: "leader"}},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "leader + worker set — true (multi-pod OMENative shape)",
+			spec: &v1beta1.DecoderSpec{
+				Leader: &v1beta1.LeaderSpec{
+					PodSpec: v1beta1.PodSpec{
+						Containers: []v1.Container{{Name: "leader"}},
+					},
+				},
+				Worker: &v1beta1.WorkerSpec{
+					Size: intPtr(2),
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "worker only — false (template still from top-level)",
+			spec: &v1beta1.DecoderSpec{
+				Worker: &v1beta1.WorkerSpec{
+					Size: intPtr(2),
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g.Expect(decoderUsesLeaderTemplate(tt.spec)).To(gomega.Equal(tt.expected))
+		})
+	}
+}
+
 func TestDecoderResourceMerging(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
@@ -1175,19 +1317,15 @@ func TestDecoderResourceMerging(t *testing.T) {
 			c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
 
 			decoder := NewDecoder(
-				c,
-				clientset,
-				scheme,
-				&controllerconfig.InferenceServicesConfig{},
-				constants.RawDeployment,
-				nil, // baseModel
-				nil, // baseModelMeta
+				&ComponentDeps{Client: c, Clientset: clientset, Scheme: scheme, Config: &controllerconfig.InferenceServicesConfig{}},
+				ComponentInputs{
+					DeploymentMode:       constants.RawDeployment,
+					Runtime:              tt.runtime,
+					RuntimeName:          "test-runtime",
+					AcceleratorClass:     tt.acceleratorClass,
+					AcceleratorClassName: "test-accel-class",
+				},
 				tt.decoderSpec,
-				tt.runtime,
-				"test-runtime",
-				nil, // supportedModelFormat
-				tt.acceleratorClass,
-				"test-accel-class",
 			).(*Decoder)
 
 			// Call reconcilePodSpec which internally calls MergeDecoderResources
@@ -1356,19 +1494,14 @@ func TestDecoderAffinityMerging(t *testing.T) {
 			c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
 
 			decoder := NewDecoder(
-				c,
-				clientset,
-				scheme,
-				&controllerconfig.InferenceServicesConfig{},
-				constants.RawDeployment,
-				nil, // baseModel
-				nil, // baseModelMeta
+				&ComponentDeps{Client: c, Clientset: clientset, Scheme: scheme, Config: &controllerconfig.InferenceServicesConfig{}},
+				ComponentInputs{
+					DeploymentMode:       constants.RawDeployment,
+					RuntimeName:          "test-runtime",
+					AcceleratorClass:     tt.acceleratorClass,
+					AcceleratorClassName: "test-accel-class",
+				},
 				tt.decoderSpec,
-				nil, // runtime
-				"test-runtime",
-				nil, // supportedModelFormat
-				tt.acceleratorClass,
-				"test-accel-class",
 			).(*Decoder)
 
 			// Call reconcilePodSpec which internally calls UpdateDecoderAffinity
@@ -1382,4 +1515,9 @@ func TestDecoderAffinityMerging(t *testing.T) {
 			}
 		})
 	}
+}
+
+// int32Ptr returns a pointer to the given int32.
+func int32Ptr(i int32) *int32 {
+	return &i
 }

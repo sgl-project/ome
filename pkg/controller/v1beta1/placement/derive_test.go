@@ -21,7 +21,7 @@ func TestDeriveISVC(t *testing.T) {
 				LocalQueueAnnotation:                "serving-lq",
 				AcceleratorRequirementsAnnotation:   "gpu=gb300",
 				ClusterSelectorAnnotation:           "provider=cloud-a",
-				constants.RolloutPromoteAnnotation:  "full",
+				constants.RolloutPromoteAnnotation:  "abc123def",
 				constants.RolloutRollbackAnnotation: "true",
 				constants.NetworkVisibility:         "cluster-local", // an ingress override that SHOULD ride along
 			},
@@ -70,12 +70,12 @@ func TestDeriveISVC(t *testing.T) {
 	// rides along untouched.
 	assert.Equal(t, "cluster-local", d.Annotations[constants.NetworkVisibility])
 
-	// queue defaulting: no LocalQueueAnnotation and no configured queue ->
-	// DefaultLocalQueue.
+	// no LocalQueueAnnotation and no configured queue -> no queue label.
 	src2 := src.DeepCopy()
 	delete(src2.Annotations, LocalQueueAnnotation)
 	d2 := DeriveISVC(src2, "", "")
-	assert.Equal(t, DefaultLocalQueue, d2.Spec.Engine.ComponentExtensionSpec.Labels[constants.KueueQueueLabelKey])
+	_, hasQueue := d2.Spec.Engine.ComponentExtensionSpec.Labels[constants.KueueQueueLabelKey]
+	assert.False(t, hasQueue, "no queue configured -> nothing stamped")
 	// empty control-plane id leaves the identity label unset (single-CP behavior).
 	_, hasCP := d2.Labels[PlacementControlPlaneLabel]
 	assert.False(t, hasCP)
@@ -122,9 +122,9 @@ func TestSetDerivedReplicas(t *testing.T) {
 }
 
 // The queue a derived workload joins is operator-configurable: a per-ISVC
-// annotation wins, then the configured queue, and only then the in-package
-// fallback. Without the middle rung a fleet whose LocalQueue is not named
-// "default" gets deriveds Kueue never admits.
+// annotation wins, then the configured queue. The queue names a resource the
+// operator provisioned, so an unconfigured fleet gets no label rather than a
+// guessed name Kueue would never match.
 func TestDeriveISVC_LocalQueuePrecedence(t *testing.T) {
 	base := &v1beta1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "prod", Name: "svc", UID: "uid-1"},
@@ -136,10 +136,10 @@ func TestDeriveISVC_LocalQueuePrecedence(t *testing.T) {
 		return d.Spec.Engine.ComponentExtensionSpec.Labels[constants.KueueQueueLabelKey]
 	}
 
-	assert.Equal(t, DefaultLocalQueue, queueOf(DeriveISVC(base, "", "")),
-		"nothing configured -> in-package fallback")
+	assert.Empty(t, queueOf(DeriveISVC(base, "", "")),
+		"nothing configured -> no queue label")
 	assert.Equal(t, "gpu-queue", queueOf(DeriveISVC(base, "", "gpu-queue")),
-		"configured queue must beat the in-package fallback")
+		"configured queue is stamped when no annotation is set")
 
 	annotated := base.DeepCopy()
 	annotated.Annotations = map[string]string{LocalQueueAnnotation: "per-isvc"}

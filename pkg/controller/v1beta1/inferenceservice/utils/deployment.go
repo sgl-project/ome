@@ -15,14 +15,13 @@ import (
 //  2. specMode — the typed top-level spec.deploymentMode field. When set,
 //     propagates to every Component without mutating per-Component
 //     annotations (kept clean for `kubectl get -o yaml`).
-//  3. Leader/Worker shape inference → MultiNode.
+//  3. Leader/Worker shape inference → OMENative (native multi-node).
 //  4. Default → RawDeployment.
 func DetermineEngineDeploymentMode(engine *v1beta1.EngineSpec, specMode *constants.DeploymentModeType) constants.DeploymentModeType {
 	if engine == nil {
 		return constants.RawDeployment
 	}
 
-	// Check for deployment mode annotation
 	if mode, found := GetDeploymentModeFromAnnotations(engine.Annotations); found {
 		return mode
 	}
@@ -31,9 +30,12 @@ func DetermineEngineDeploymentMode(engine *v1beta1.EngineSpec, specMode *constan
 		return mode
 	}
 
-	// Multi-node if leader and worker are defined
+	// Multi-node (leader/worker) resolves to OMENative, which handles
+	// multi-node serving natively. LeaderWorkerSet-backed MultiNode is
+	// selected only by an explicit deployment-mode annotation or config
+	// default, never by shape inference.
 	if engine.Leader != nil || engine.Worker != nil {
-		return constants.MultiNode
+		return constants.OMENative
 	}
 
 	// Default to raw deployment
@@ -41,13 +43,12 @@ func DetermineEngineDeploymentMode(engine *v1beta1.EngineSpec, specMode *constan
 }
 
 // DetermineDeploymentModes determines the deployment modes for all components based on their specs.
-// See DetermineEngineDeploymentMode for the precedence chain that also governs the Decoder.
+// See DetermineEngineDeploymentMode for the precedence chain that also governs Decoder and Router.
 func DetermineDeploymentModes(engine *v1beta1.EngineSpec, decoder *v1beta1.DecoderSpec, router *v1beta1.RouterSpec, runtime *v1beta1.ServingRuntimeSpec, specMode *constants.DeploymentModeType) (engineMode, decoderMode, routerMode constants.DeploymentModeType, err error) {
 	engineMode = determineComponentDeploymentMode(engine, runtime, specMode)
 	decoderMode = determineComponentDeploymentMode(decoder, runtime, specMode)
 	routerMode = determineComponentDeploymentMode(router, runtime, specMode)
 
-	// At least the engine must be present
 	if engine == nil {
 		return "", "", "", fmt.Errorf("engine component is required")
 	}
@@ -56,13 +57,12 @@ func DetermineDeploymentModes(engine *v1beta1.EngineSpec, decoder *v1beta1.Decod
 }
 
 // determineComponentDeploymentMode determines deployment mode for a generic component.
-// Per-Component annotation > spec.deploymentMode (specMode) > Leader/Worker shape
-// (MultiNode) > RawDeployment default. The Router has no Leader/Worker shape and its
-// reconciler only supports RawDeployment, so it always resolves to RawDeployment.
+// Per-Component annotation > spec.deploymentMode (specMode) > Leader/Worker shape (OMENative) >
+// RawDeployment default. Symmetric for Engine, Decoder, and Router so PD-disaggregated
+// ISVCs can opt each component into OMENative independently.
 func determineComponentDeploymentMode(spec interface{}, runtime *v1beta1.ServingRuntimeSpec, specMode *constants.DeploymentModeType) constants.DeploymentModeType {
 	switch s := spec.(type) {
 	case *v1beta1.EngineSpec:
-		// Delegate to the existing working function
 		return DetermineEngineDeploymentMode(s, specMode)
 	case *v1beta1.DecoderSpec:
 		if s == nil {
@@ -74,22 +74,32 @@ func determineComponentDeploymentMode(spec interface{}, runtime *v1beta1.Serving
 		if mode, found := deploymentModeFromSpecField(specMode); found {
 			return mode
 		}
-		// Multi-node if leader and worker are defined
 		if s.Leader != nil || s.Worker != nil {
-			return constants.MultiNode
+			return constants.OMENative
 		}
 		return constants.RawDeployment
 	case *v1beta1.RouterSpec:
+		if s == nil {
+			return constants.RawDeployment
+		}
+		if mode, found := GetDeploymentModeFromAnnotations(s.Annotations); found {
+			return mode
+		}
+		if mode, found := deploymentModeFromSpecField(specMode); found {
+			return mode
+		}
 		return constants.RawDeployment
 	}
 
-	// Default to raw deployment for unknown types
 	return constants.RawDeployment
 }
 
-// deploymentModeFromSpecField reads the typed top-level spec.deploymentMode
-// value; unset or invalid values are ignored (the webhook validates the
-// field, so invalid only occurs on admission-bypassed writes).
+// deploymentModeFromSpecField returns (mode, true) when the typed
+// spec.deploymentMode field is set to a valid value. Invalid values are
+// ignored here; the CRD enum marker rejects them at admission time so
+// reaching this code with an invalid value would indicate a CRD/schema
+// mismatch — quietly falling through to the next precedence rung is the
+// safer behavior.
 func deploymentModeFromSpecField(specMode *constants.DeploymentModeType) (constants.DeploymentModeType, bool) {
 	if specMode == nil {
 		return "", false
@@ -111,4 +121,40 @@ func DetermineEntrypointComponent(isvc *v1beta1.InferenceService) v1beta1.Compon
 
 	// Default to engine
 	return v1beta1.EngineComponent
+}
+
+// IsMultiPodComponent reports whether a Component has a positive Worker.Size.
+// Router is always single-pod.
+func IsMultiPodComponent(isvc *v1beta1.InferenceService, component v1beta1.ComponentType) bool {
+	if isvc == nil {
+		return false
+	}
+	switch component {
+	case v1beta1.EngineComponent:
+		return engineSpawnsMultiplePods(isvc.Spec.Engine)
+	case v1beta1.DecoderComponent:
+		return decoderSpawnsMultiplePods(isvc.Spec.Decoder)
+	default:
+		// Router and any future single-pod-only Component types.
+		return false
+	}
+}
+
+// engineSpawnsMultiplePods is the Engine-specific tail of
+// IsMultiPodComponent. It requires a positive Worker.Size so selector
+// tightening only applies when at least two pods exist per Instance.
+func engineSpawnsMultiplePods(engine *v1beta1.EngineSpec) bool {
+	if engine == nil {
+		return false
+	}
+	return engine.Worker != nil && engine.Worker.Size != nil && *engine.Worker.Size > 0
+}
+
+// decoderSpawnsMultiplePods is the Decoder-specific tail of
+// IsMultiPodComponent. See engineSpawnsMultiplePods for rationale.
+func decoderSpawnsMultiplePods(decoder *v1beta1.DecoderSpec) bool {
+	if decoder == nil {
+		return false
+	}
+	return decoder.Worker != nil && decoder.Worker.Size != nil && *decoder.Worker.Size > 0
 }

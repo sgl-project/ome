@@ -22,9 +22,11 @@ const (
 	// Services, so teardown and stale-home GC list by this label rather than a
 	// single fixed name.
 	PlacementEndpointISVCLabel = "ome.io/placement-endpoint-isvc"
-	// PlacementEndpointISVCNamespaceLabel records the source InferenceService
-	// namespace. Name alone is not unique when RouteNamespace co-locates
-	// resources from multiple source namespaces.
+
+	// PlacementEndpointISVCNamespaceLabel records the source InferenceService's
+	// namespace. Paired with PlacementEndpointISVCLabel it identifies the owner
+	// exactly: the name alone is ambiguous when a shared RouteNamespace holds
+	// resources from several source namespaces.
 	PlacementEndpointISVCNamespaceLabel = "ome.io/placement-endpoint-isvc-namespace"
 
 	// EndpointFinalizer keeps a placed InferenceService around long enough for the

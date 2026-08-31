@@ -63,7 +63,7 @@ func (c *ConfigMapReconciler) Reconcile(ctx context.Context, isvc *v1beta1.Infer
 	// If no model is specified, we don't need a model config ConfigMap.
 	if isvc.Spec.Model == nil {
 		// TODO: Consider deleting an existing ConfigMap if the model spec is removed.
-		ctxLog.Info("No model specified in InferenceService, skipping ModelConfig reconciliation", "InferenceService", isvc.Name)
+		ctxLog.V(1).Info("No model specified in InferenceService, skipping ModelConfig reconciliation", "InferenceService", isvc.Name)
 		return ctrl.Result{}, nil
 	}
 

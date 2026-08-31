@@ -2,12 +2,15 @@ package inferenceservice
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	policyv1 "k8s.io/api/policy/v1"
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	"github.com/onsi/gomega"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	v1 "k8s.io/api/core/v1"
@@ -17,18 +20,21 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
+	knapis "knative.dev/pkg/apis"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	"sigs.k8s.io/ome/pkg/acceleratorclassselector"
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/status"
+	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"sigs.k8s.io/ome/pkg/runtimeselector"
-	omeTesting "sigs.k8s.io/ome/pkg/testing"
+	omeTesting "sigs.k8s.io/ome/pkg/utils/testing"
 )
 
 func TestInferenceServiceReconcile(t *testing.T) {
@@ -51,6 +57,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 	g.Expect(kedav1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(autoscalingv2.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(policyv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(monitoringv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 
 	tests := []struct {
 		name        string
@@ -73,6 +80,10 @@ func TestInferenceServiceReconcile(t *testing.T) {
 						Kind: stringPtr("BaseModel"),
 					},
 					Engine: &v1beta1.EngineSpec{
+						ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+							MinReplicas: intPtr(1),
+							MaxReplicas: 3,
+						},
 						PodSpec: v1beta1.PodSpec{
 							Containers: []v1.Container{
 								{
@@ -186,6 +197,10 @@ func TestInferenceServiceReconcile(t *testing.T) {
 						Kind: stringPtr("BaseModel"),
 					},
 					Engine: &v1beta1.EngineSpec{
+						ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+							MinReplicas: intPtr(1),
+							MaxReplicas: 3,
+						},
 						PodSpec: v1beta1.PodSpec{
 							Containers: []v1.Container{
 								{
@@ -196,6 +211,10 @@ func TestInferenceServiceReconcile(t *testing.T) {
 						},
 					},
 					Decoder: &v1beta1.DecoderSpec{
+						ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+							MinReplicas: intPtr(1),
+							MaxReplicas: 3,
+						},
 						PodSpec: v1beta1.PodSpec{
 							Containers: []v1.Container{
 								{
@@ -307,6 +326,10 @@ func TestInferenceServiceReconcile(t *testing.T) {
 						Name: "custom-runtime",
 					},
 					Engine: &v1beta1.EngineSpec{
+						ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+							MinReplicas: intPtr(1),
+							MaxReplicas: 3,
+						},
 						PodSpec: v1beta1.PodSpec{
 							Containers: []v1.Container{
 								{
@@ -404,7 +427,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 			},
 		},
 		{
-			name: "Multi-node engine deployment",
+			name: "Explicit MultiNode annotation dispatches LeaderWorkerSet",
 			isvc: &v1beta1.InferenceService{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-multinode",
@@ -416,6 +439,11 @@ func TestInferenceServiceReconcile(t *testing.T) {
 						Kind: stringPtr("BaseModel"),
 					},
 					Engine: &v1beta1.EngineSpec{
+						ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+							Annotations: map[string]string{
+								constants.DeploymentMode: string(constants.MultiNode),
+							},
+						},
 						Leader: &v1beta1.LeaderSpec{
 							PodSpec: v1beta1.PodSpec{
 								Containers: []v1.Container{
@@ -522,6 +550,9 @@ func TestInferenceServiceReconcile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.isvc.UID == "" {
+				tt.isvc.UID = types.UID(tt.isvc.Name + "-uid")
+			}
 			// Create fake client
 			c := ctrlclientfake.NewClientBuilder().
 				WithScheme(scheme).
@@ -543,12 +574,12 @@ func TestInferenceServiceReconcile(t *testing.T) {
 			// Create reconciler
 			reconciler := &InferenceServiceReconciler{
 				Client:                   c,
+				APIReader:                c,
 				ClientConfig:             &rest.Config{},
 				Clientset:                clientset,
 				Log:                      ctrl.Log.WithName("test"),
 				Scheme:                   scheme,
 				Recorder:                 recorder,
-				StatusManager:            status.NewStatusReconciler(),
 				RuntimeSelector:          runtimeselector.New(c),
 				AcceleratorClassSelector: acceleratorclassselector.New(c),
 			}
@@ -579,7 +610,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 			} else {
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 				if tt.wantRequeue {
-					g.Expect(result.IsZero()).To(gomega.BeFalse(), "Expected requeue for test: %s", tt.name)
+					g.Expect(result.Requeue).To(gomega.BeTrue(), "Expected requeue for test: %s", tt.name)
 				} else {
 					g.Expect(result).To(gomega.Equal(ctrl.Result{}))
 				}
@@ -591,6 +622,223 @@ func TestInferenceServiceReconcile(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestUpdateStatusFlushesCoordinationWrites is the regression test for
+// a bug where per-Component requeues would drop coordination's in-memory
+// status mutations. When a Component asks the reconciler to requeue, the
+// controller now flushes coordination's in-memory status mutations
+// (Status.RolloutCoordination, per-Component Status.Components.<c>.Traffic[])
+// BEFORE returning the requeue. Before the fix, those writes were dropped
+// on every requeuing pass — the steady state during active rollouts —
+// because updateStatus ran only on the no-requeue tail of Reconcile.
+//
+// This test asserts the contract updateStatus must satisfy for the fix
+// to be effective: an in-memory desiredService with coordination-style
+// Status mutations is persisted to the apiserver in one call. If
+// updateStatus ever stops persisting those fields (e.g., a future
+// refactor that scopes the writes), this test fails immediately.
+func TestUpdateStatusFlushesCoordinationWrites(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(v1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	// Seed the apiserver with an ISVC whose Status has no Traffic and
+	// no RolloutCoordination — the pre-coordination baseline at the
+	// top of a Reconcile pass.
+	existing := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-isvc",
+			Namespace: "default",
+		},
+		Spec: v1beta1.InferenceServiceSpec{
+			Model: &v1beta1.ModelRef{
+				Name: "base-model",
+				Kind: stringPtr("BaseModel"),
+			},
+			Engine: &v1beta1.EngineSpec{},
+		},
+		Status: v1beta1.InferenceServiceStatus{
+			Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
+				v1beta1.EngineComponent: {},
+			},
+		},
+	}
+
+	c := ctrlclientfake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(existing).
+		WithStatusSubresource(existing).
+		Build()
+
+	reconciler := &InferenceServiceReconciler{
+		Client:    c,
+		APIReader: c,
+		Scheme:    scheme,
+		Log:       ctrl.Log.WithName("test"),
+		Recorder:  record.NewFakeRecorder(10),
+	}
+
+	// Simulate what coordination.Reconcile mutates in-memory: per-
+	// Component Traffic[] and Status.RolloutCoordination. This is the
+	// exact in-memory state the controller would hold after the
+	// per-Component loop + coordination layer ran, and before the
+	// requeue short-circuit at controller.go:500.
+	desired := existing.DeepCopy()
+	desired.Status.Components[v1beta1.EngineComponent] = v1beta1.ComponentStatusSpec{
+		Traffic: []v1beta1.ComponentTrafficTarget{
+			{
+				RevisionName:   "test-isvc-engine-rev-abc123",
+				Percent:        100,
+				LatestRevision: true,
+			},
+		},
+	}
+	desired.Status.RolloutCoordination = &v1beta1.RolloutCoordinationStatus{
+		Groups: []v1beta1.RolloutCoordinationGroupStatus{{
+			Name:       "0",
+			Components: []v1beta1.ComponentType{v1beta1.EngineComponent},
+			Policy:     v1beta1.CoordinationPolicyIndependent,
+			Phase:      v1beta1.CoordinationPhaseIdle,
+		}},
+	}
+
+	err := reconciler.updateStatus(desired, constants.RawDeployment)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	// Re-fetch from the fake apiserver and verify both coordination
+	// writes landed. Pre-fix, the controller never called updateStatus
+	// on the requeue short-circuit path, so these fields stayed unset
+	// across every requeueing reconcile — i.e., the entire duration of
+	// an active rollout.
+	flushed := &v1beta1.InferenceService{}
+	g.Expect(c.Get(context.TODO(), types.NamespacedName{
+		Name:      existing.Name,
+		Namespace: existing.Namespace,
+	}, flushed)).NotTo(gomega.HaveOccurred())
+
+	g.Expect(flushed.Status.Components).To(gomega.HaveKey(v1beta1.EngineComponent))
+	g.Expect(flushed.Status.Components[v1beta1.EngineComponent].Traffic).To(gomega.HaveLen(1))
+	g.Expect(flushed.Status.Components[v1beta1.EngineComponent].Traffic[0].RevisionName).
+		To(gomega.Equal("test-isvc-engine-rev-abc123"))
+	g.Expect(flushed.Status.Components[v1beta1.EngineComponent].Traffic[0].Percent).
+		To(gomega.Equal(int32(100)))
+
+	g.Expect(flushed.Status.RolloutCoordination).NotTo(gomega.BeNil())
+	g.Expect(flushed.Status.RolloutCoordination.Groups).To(gomega.HaveLen(1))
+	g.Expect(flushed.Status.RolloutCoordination.Groups[0].Phase).
+		To(gomega.Equal(v1beta1.CoordinationPhaseIdle))
+}
+
+// TestUpdateStatusPersistsCanaryStepDespiteStaleCache reproduces the
+// manual-canary promote wedge. Durable metadata patches (the canary
+// engine's deferred promote-annotation removal, or any external
+// annotator) bump the ISVC resourceVersion between reconciles, while
+// status.canary.currentStep rides the controller's deferred status flush.
+// If updateStatus reads its optimistic-lock base from the informer
+// cache — which still holds the pre-patch resourceVersion — the status
+// write 409s, RetryOnConflict re-reads the same stale cache and exhausts,
+// and the step increment is dropped. The rollout then wedges at Paused
+// step 0.
+//
+// The retry base must come from the authoritative reader (APIReader), not
+// the cache, so the write lands on the live resourceVersion. This test
+// pins that contract. A fake-client-only test can't catch this: with no
+// cache/live resourceVersion skew there is no conflict.
+func TestUpdateStatusPersistsCanaryStepDespiteStaleCache(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(v1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	const canaryHash = "bbfb0fd4"
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-isvc",
+			Namespace: "default",
+			Annotations: map[string]string{
+				constants.RolloutPromoteAnnotation: canaryHash,
+			},
+		},
+		Spec: v1beta1.InferenceServiceSpec{
+			Model:  &v1beta1.ModelRef{Name: "base-model", Kind: stringPtr("BaseModel")},
+			Engine: &v1beta1.EngineSpec{},
+		},
+		Status: v1beta1.InferenceServiceStatus{
+			Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
+				v1beta1.EngineComponent: {},
+			},
+			Canary: &v1beta1.CanaryStatus{
+				CanaryRevisionHash: canaryHash,
+				CurrentStep:        0,
+			},
+		},
+	}
+
+	// live models the apiserver.
+	live := ctrlclientfake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(isvc).
+		WithStatusSubresource(isvc).
+		Build()
+	nn := types.NamespacedName{Name: isvc.Name, Namespace: isvc.Namespace}
+
+	// Snapshot the informer cache's view BEFORE the metadata patch: the
+	// promote annotation is still present at the pre-patch resourceVersion.
+	staleCache := &v1beta1.InferenceService{}
+	g.Expect(live.Get(context.TODO(), nn, staleCache)).NotTo(gomega.HaveOccurred())
+
+	// A durable metadata write removes the promote annotation, bumping the
+	// live resourceVersion past what the cache holds. Status (currentStep) is
+	// untouched here — it rides the in-memory desiredService below.
+	bumped := staleCache.DeepCopy()
+	delete(bumped.Annotations, constants.RolloutPromoteAnnotation)
+	g.Expect(live.Update(context.TODO(), bumped)).NotTo(gomega.HaveOccurred())
+
+	// r.Client models the cache: every Get returns the stale pre-patch
+	// snapshot. Status().Update passes through to live, which enforces
+	// optimistic concurrency against the bumped resourceVersion.
+	cached := interceptor.NewClient(live, interceptor.Funcs{
+		Get: func(_ context.Context, _ client.WithWatch, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
+			out, ok := obj.(*v1beta1.InferenceService)
+			g.Expect(ok).To(gomega.BeTrue())
+			staleCache.DeepCopyInto(out)
+			return nil
+		},
+	})
+
+	reconciler := &InferenceServiceReconciler{
+		Client:    cached,
+		APIReader: live,
+		Scheme:    scheme,
+		Log:       ctrl.Log.WithName("test"),
+		Recorder:  record.NewFakeRecorder(10),
+	}
+
+	// desiredService is the in-memory ISVC after the canary advance:
+	// currentStep has advanced to 1 with the applied promote recorded in the
+	// same status mutation.
+	desired := staleCache.DeepCopy()
+	desired.Status.Canary.CurrentStep = 1
+	desired.Status.Canary.PromotedThrough = canaryHash
+
+	err := reconciler.updateStatus(desired, constants.OMENative)
+	g.Expect(err).NotTo(gomega.HaveOccurred(),
+		"status flush must not lose an optimistic-lock race to a concurrent metadata patch")
+
+	// The authoritative store must show the advanced step. Pre-fix, the
+	// retry base came from the stale cache, so the write 409'd and
+	// currentStep stayed 0 — the wedged-at-Paused-step-0 symptom.
+	persisted := &v1beta1.InferenceService{}
+	g.Expect(live.Get(context.TODO(), nn, persisted)).NotTo(gomega.HaveOccurred())
+	g.Expect(persisted.Status.Canary).NotTo(gomega.BeNil())
+	g.Expect(persisted.Status.Canary.CurrentStep).To(gomega.Equal(int32(1)),
+		"canary step advance must persist to the live apiserver despite the stale cache")
+	g.Expect(persisted.Status.Canary.PromotedThrough).To(gomega.Equal(canaryHash),
+		"the applied promote record must land in the same status write as the advance")
 }
 
 func TestDetermineDeploymentModes(t *testing.T) {
@@ -701,8 +949,64 @@ func determineEngineDeploymentMode(engineSpec *v1beta1.EngineSpec) constants.Dep
 	if engineSpec.Leader != nil || engineSpec.Worker != nil {
 		return constants.MultiNode
 	}
-	// Note: In real implementation, the deployment mode would be determined by annotations/config
 	return constants.RawDeployment
+}
+
+func TestValidateResolvedRuntimeEnabled(t *testing.T) {
+	disabled := true
+	tests := []struct {
+		name        string
+		runtimeName string
+		runtimeSpec *v1beta1.ServingRuntimeSpec
+		isCluster   bool
+		wantErr     bool
+	}{
+		{
+			name:        "nil runtime spec",
+			runtimeName: "nil-runtime",
+		},
+		{
+			name:        "enabled runtime",
+			runtimeName: "enabled-runtime",
+			runtimeSpec: &v1beta1.ServingRuntimeSpec{},
+		},
+		{
+			name:        "disabled namespaced runtime",
+			runtimeName: "namespaced-runtime",
+			runtimeSpec: &v1beta1.ServingRuntimeSpec{Disabled: &disabled},
+			wantErr:     true,
+		},
+		{
+			name:        "disabled cluster runtime",
+			runtimeName: "cluster-runtime",
+			runtimeSpec: &v1beta1.ServingRuntimeSpec{Disabled: &disabled},
+			isCluster:   true,
+			wantErr:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateResolvedRuntimeEnabled(tt.runtimeSpec, tt.runtimeName, tt.isCluster)
+			if !tt.wantErr {
+				if err != nil {
+					t.Fatalf("validateResolvedRuntimeEnabled() error = %v", err)
+				}
+				return
+			}
+
+			var disabledErr *runtimeselector.RuntimeDisabledError
+			if !errors.As(err, &disabledErr) {
+				t.Fatalf("validateResolvedRuntimeEnabled() error = %T, want *runtimeselector.RuntimeDisabledError", err)
+			}
+			if disabledErr.RuntimeName != tt.runtimeName {
+				t.Errorf("RuntimeName = %q, want %q", disabledErr.RuntimeName, tt.runtimeName)
+			}
+			if disabledErr.IsCluster != tt.isCluster {
+				t.Errorf("IsCluster = %t, want %t", disabledErr.IsCluster, tt.isCluster)
+			}
+		})
+	}
 }
 
 func TestEnsureIngressDisableAnnotation(t *testing.T) {
@@ -908,5 +1212,159 @@ func TestMergeRuntimeSpecs(t *testing.T) {
 				g.Expect(tt.isvc.Spec.Decoder.Containers[0].Image).To(gomega.Equal(tt.expectedDecoderImg))
 			}
 		})
+	}
+}
+
+// TestSetOverlaysReadyConditionPreservesConditionSet guards against the
+// pre-fix behavior where setOverlaysReadyCondition raw-replaced the whole
+// conditions slice (wiping every other condition) and restamped
+// LastTransitionTime each pass, forcing a status write per reconcile.
+func TestSetOverlaysReadyConditionPreservesConditionSet(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "overlay-isvc", Namespace: "default"},
+		Spec: v1beta1.InferenceServiceSpec{
+			Model: &v1beta1.ModelRef{
+				Name:     "base-model",
+				Overlays: []v1beta1.ModelOverlayRef{{Name: "ov1"}},
+			},
+		},
+	}
+	isvc.Status.SetCondition(v1beta1.EngineReady, &knapis.Condition{
+		Type:   v1beta1.EngineReady,
+		Status: v1.ConditionTrue,
+	})
+
+	overlays := []isvcutils.ResolvedOverlay{{
+		Ref:        v1beta1.ModelOverlayRef{Name: "ov1"},
+		SkipReason: "overlay ov1 not found",
+	}}
+	setOverlaysReadyCondition(isvc, overlays)
+
+	g.Expect(isvc.Status.GetCondition(v1beta1.EngineReady)).NotTo(gomega.BeNil(),
+		"pre-existing conditions must survive the overlay condition write")
+	cond := isvc.Status.GetCondition(v1beta1.OverlaysReady)
+	g.Expect(cond).NotTo(gomega.BeNil())
+	g.Expect(cond.Status).To(gomega.Equal(v1.ConditionFalse))
+	firstTransition := cond.LastTransitionTime
+
+	setOverlaysReadyCondition(isvc, overlays)
+
+	g.Expect(isvc.Status.GetCondition(v1beta1.EngineReady)).NotTo(gomega.BeNil())
+	again := isvc.Status.GetCondition(v1beta1.OverlaysReady)
+	g.Expect(again.LastTransitionTime).To(gomega.Equal(firstTransition),
+		"an unchanged condition must not churn LastTransitionTime")
+}
+
+// TestIsvcsReferencingRuntimeWakesUnresolvedAutoSelect covers the runtime
+// fan-out for auto-select ISVCs: an ISVC with no spec.runtime that is parked
+// on RuntimeReady=False has no name reference to index on, so runtime
+// create/update events must wake it through the unresolved index — otherwise
+// creating a compatible runtime later never revives it.
+func TestIsvcsReferencingRuntimeWakesUnresolvedAutoSelect(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	named := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "named", Namespace: "ns1"},
+		Spec:       v1beta1.InferenceServiceSpec{Runtime: &v1beta1.ServingRuntimeRef{Name: "rt-a"}},
+	}
+	otherNamed := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "other-named", Namespace: "ns1"},
+		Spec:       v1beta1.InferenceServiceSpec{Runtime: &v1beta1.ServingRuntimeRef{Name: "rt-b"}},
+	}
+	autoStuck := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "auto-stuck", Namespace: "ns1"},
+		Spec:       v1beta1.InferenceServiceSpec{Model: &v1beta1.ModelRef{Name: "m"}},
+	}
+	autoStuck.Status.SetCondition(v1beta1.RuntimeReady, &knapis.Condition{
+		Type: v1beta1.RuntimeReady, Status: v1.ConditionFalse, Reason: "RuntimeNotFound",
+	})
+	autoStuckOtherNs := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "auto-stuck-2", Namespace: "ns2"},
+		Spec:       v1beta1.InferenceServiceSpec{Model: &v1beta1.ModelRef{Name: "m"}},
+	}
+	autoStuckOtherNs.Status.SetCondition(v1beta1.RuntimeReady, &knapis.Condition{
+		Type: v1beta1.RuntimeReady, Status: v1.ConditionFalse, Reason: "RuntimeNotFound",
+	})
+	autoHealthy := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "auto-healthy", Namespace: "ns1"},
+		Spec:       v1beta1.InferenceServiceSpec{Model: &v1beta1.ModelRef{Name: "m"}},
+	}
+
+	c := ctrlclientfake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(named, otherNamed, autoStuck, autoStuckOtherNs, autoHealthy).
+		WithIndex(&v1beta1.InferenceService{}, isvcRuntimeNameIndexField, isvcRuntimeNameIndexExtractor).
+		WithIndex(&v1beta1.InferenceService{}, isvcRuntimeUnresolvedIndexField, isvcRuntimeUnresolvedIndexExtractor).
+		Build()
+
+	r := &InferenceServiceReconciler{Client: c, Log: ctrl.Log.WithName("test")}
+
+	requestKeys := func(reqs []reconcile.Request) []string {
+		keys := make([]string, 0, len(reqs))
+		for _, req := range reqs {
+			keys = append(keys, fmt.Sprintf("%s/%s", req.Namespace, req.Name))
+		}
+		return keys
+	}
+
+	// Cluster-scoped runtime: wakes the named referencer plus every
+	// unresolved auto-select ISVC in any namespace — not healthy ones.
+	reqs := r.isvcsReferencingRuntime(context.TODO(), &v1beta1.ClusterServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "rt-a"},
+	})
+	g.Expect(requestKeys(reqs)).To(gomega.ConsistOf("ns1/named", "ns1/auto-stuck", "ns2/auto-stuck-2"))
+
+	// Namespaced runtime: same-namespace matches only.
+	reqs = r.isvcsReferencingRuntime(context.TODO(), &v1beta1.ServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "rt-a", Namespace: "ns1"},
+	})
+	g.Expect(requestKeys(reqs)).To(gomega.ConsistOf("ns1/named", "ns1/auto-stuck"))
+}
+
+// TestMarkRuntimeUnresolvedEventPreservesPercent pins the Recorder.Event
+// fix: an error message containing '%' must land in the event verbatim, not
+// be mangled by printf-format interpretation (e.g. "%!o(MISSING)").
+func TestMarkRuntimeUnresolvedEventPreservesPercent(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "pct-isvc", Namespace: "default"},
+		Spec: v1beta1.InferenceServiceSpec{
+			Model:  &v1beta1.ModelRef{Name: "m"},
+			Engine: &v1beta1.EngineSpec{},
+		},
+	}
+	c := ctrlclientfake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(isvc).
+		WithStatusSubresource(isvc).
+		Build()
+	rec := record.NewFakeRecorder(10)
+	r := &InferenceServiceReconciler{
+		Client:    c,
+		APIReader: c,
+		Scheme:    scheme,
+		Log:       ctrl.Log.WithName("test"),
+		Recorder:  rec,
+	}
+
+	cause := errors.New("no runtime supports quantization fp8 (50% of formats matched)")
+	_, err := r.markRuntimeUnresolved(isvc, constants.RawDeployment, "m", cause)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	select {
+	case ev := <-rec.Events:
+		g.Expect(ev).To(gomega.ContainSubstring("50% of formats matched"))
+		g.Expect(ev).NotTo(gomega.ContainSubstring("MISSING"))
+	default:
+		t.Fatal("expected a RuntimeNotFound event")
 	}
 }

@@ -203,6 +203,24 @@ func TestReconcile_BackendDisabledCleansPublishedResources(t *testing.T) {
 	assert.NotContains(t, cur.Finalizers, EndpointFinalizer)
 }
 
+func TestReconcile_BackendDisabledReleasesDeletedISVC(t *testing.T) {
+	cfg := baseConfig()
+	r, c := newReconciler(t, cfg, placedISVC("cluster-a", "svc.prod.cloud-a.example"))
+	reconcile(t, r) // publish + finalizer
+
+	cur := &v1beta1.InferenceService{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "svc", Namespace: "prod"}, cur))
+	require.NoError(t, c.Delete(context.Background(), cur))
+	r.Config.GlobalGateway = ""
+
+	reconcile(t, r)
+
+	err := c.Get(context.Background(), types.NamespacedName{Name: "svc", Namespace: "prod"}, &v1beta1.InferenceService{})
+	assert.True(t, apierrors.IsNotFound(err), "an ISVC deleted while the backend is disabled is still released")
+	err = c.Get(context.Background(), types.NamespacedName{Name: "svc-global-cluster-a", Namespace: "prod"}, &corev1.Service{})
+	assert.True(t, apierrors.IsNotFound(err), "its published Service is torn down first")
+}
+
 func TestReconcile_NoGlobalHostNeverPublishes(t *testing.T) {
 	cfg := baseConfig()
 	cfg.GlobalHostTemplate = "" // no template, ISVC has no annotation -> no host
@@ -325,19 +343,6 @@ func TestPlacementPublishChange(t *testing.T) {
 		assert.True(t, placementPublishChange.Update(updateEvent(old, nw)))
 	})
 
-	t.Run("candidate-only change passes", func(t *testing.T) {
-		old := base.DeepCopy()
-		nw := base.DeepCopy()
-		old.Status.Placement.Cluster = ""
-		old.Status.Placement.Endpoint = nil
-		old.Status.Placement.Candidates = []v1beta1.CandidatePlacement{{
-			Cluster: "cloud-a", Phase: v1beta1.CandidatePhaseAdmitted, Endpoint: apis.HTTPS("a.example"), ReadyReplicas: 1,
-		}}
-		nw.Status.Placement = old.Status.Placement.DeepCopy()
-		nw.Status.Placement.Candidates[0].ReadyReplicas = 2
-		assert.True(t, placementPublishChange.Update(updateEvent(old, nw)))
-	})
-
 	t.Run("unrelated spec churn is dropped", func(t *testing.T) {
 		old := base.DeepCopy()
 		nw := base.DeepCopy()
@@ -357,6 +362,19 @@ func TestPlacementPublishChange(t *testing.T) {
 		nw := base.DeepCopy()
 		now := metav1.Now()
 		nw.DeletionTimestamp = &now
+		assert.True(t, placementPublishChange.Update(updateEvent(old, nw)))
+	})
+
+	t.Run("candidate-only change passes", func(t *testing.T) {
+		old := base.DeepCopy()
+		nw := base.DeepCopy()
+		old.Status.Placement.Cluster = ""
+		old.Status.Placement.Endpoint = nil
+		old.Status.Placement.Candidates = []v1beta1.CandidatePlacement{{
+			Cluster: "cloud-a", Phase: v1beta1.CandidatePhaseAdmitted, Endpoint: apis.HTTPS("a.example"), ReadyReplicas: 1,
+		}}
+		nw.Status.Placement = old.Status.Placement.DeepCopy()
+		nw.Status.Placement.Candidates[0].ReadyReplicas = 2
 		assert.True(t, placementPublishChange.Update(updateEvent(old, nw)))
 	})
 }

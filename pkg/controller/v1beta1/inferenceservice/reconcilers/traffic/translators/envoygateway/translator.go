@@ -154,6 +154,22 @@ func (t *Translator) SupportedAnnotations() sets.Set[string] {
 	)
 }
 
+// SupportedTrafficFields returns the typed spec.traffic capability
+// tokens the BackendTrafficPolicy emission covers: every algorithm,
+// all hash sources including multi-header concatenation, and
+// header-based endpoint override. The reserved Metadata endpoint
+// override is not declared because nothing is emitted for it.
+func (t *Translator) SupportedTrafficFields() sets.Set[string] {
+	return sets.New(
+		constants.TrafficCapabilityAlgorithm,
+		constants.TrafficCapabilityHashHeader,
+		constants.TrafficCapabilityHashMultipleHeaders,
+		constants.TrafficCapabilityHashCookie,
+		constants.TrafficCapabilityHashSourceIP,
+		constants.TrafficCapabilityEndpointOverrideHeader,
+	)
+}
+
 // Translate produces the BackendTrafficPolicy resource for the
 // InferenceService. Deterministic — same inputs produce byte-identical
 // output, so the reconciler's coarse Update doesn't churn the API
@@ -346,7 +362,10 @@ func applyEndpointOverride(btp *unstructured.Unstructured, eo *v1beta1.EndpointO
 			return fmt.Errorf("set endpointOverride.extractFrom: %w", err)
 		}
 	case v1beta1.EndpointOverrideTypeMetadata:
-		// Reserved for future use per the API doc; webhook gates it.
+		// Reserved value with no BackendTrafficPolicy emission. It is
+		// absent from SupportedTrafficFields, so admission rejects it
+		// and the reconciler surfaces it as an unsupported typed field
+		// if one slips through.
 	}
 	return nil
 }

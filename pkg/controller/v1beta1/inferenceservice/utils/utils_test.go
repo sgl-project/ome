@@ -123,28 +123,13 @@ func TestIsEmptyModelDirVolumeRequired(t *testing.T) {
 		expected    bool
 	}{
 		{
-			name:        "both annotations empty",
+			name:        "no annotations",
 			annotations: map[string]string{},
 			expected:    false,
 		},
 		{
-			name: "model init injection true",
-			annotations: map[string]string{
-				constants.ModelInitInjectionKey: "true",
-			},
-			expected: true,
-		},
-		{
 			name: "fine tuned adapter injection annotation present",
 			annotations: map[string]string{
-				constants.FineTunedAdapterInjectionKey: "amaaaaaask7dceya3ro4ls2wit3tu5dkk2u2ijvbbu4gmhbrsjeytwc2yagq",
-			},
-			expected: true,
-		},
-		{
-			name: "both annotations present - model init true",
-			annotations: map[string]string{
-				constants.ModelInitInjectionKey:        "true",
 				constants.FineTunedAdapterInjectionKey: "amaaaaaask7dceya3ro4ls2wit3tu5dkk2u2ijvbbu4gmhbrsjeytwc2yagq",
 			},
 			expected: true,
@@ -171,23 +156,8 @@ func TestIsOriginalModelVolumeMountNecessary(t *testing.T) {
 			expected:    true,
 		},
 		{
-			name: "model init injection true",
-			annotations: map[string]string{
-				constants.ModelInitInjectionKey: "true",
-			},
-			expected: false,
-		},
-		{
 			name: "ft serving with merged weights true",
 			annotations: map[string]string{
-				constants.FTServingWithMergedWeightsAnnotationKey: "true",
-			},
-			expected: false,
-		},
-		{
-			name: "both annotations true",
-			annotations: map[string]string{
-				constants.ModelInitInjectionKey:                   "true",
 				constants.FTServingWithMergedWeightsAnnotationKey: "true",
 			},
 			expected: false,
@@ -602,6 +572,7 @@ func TestMergeRouterSpec(t *testing.T) {
 
 func TestMergeEngineSpec(t *testing.T) {
 	intPtr := func(i int) *int { return &i }
+	int64Ptr := func(i int64) *int64 { return &i }
 
 	tests := []struct {
 		name           string
@@ -942,8 +913,9 @@ func TestMergeEngineSpec(t *testing.T) {
 			name: "complex merge scenario - partial overrides",
 			runtimeEngine: &v1beta1.EngineSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(1),
-					MaxReplicas: 5,
+					MinReplicas:    intPtr(1),
+					MaxReplicas:    5,
+					TimeoutSeconds: int64Ptr(50),
 				},
 				PodSpec: v1beta1.PodSpec{
 					ServiceAccountName: "runtime-sa",
@@ -980,7 +952,8 @@ func TestMergeEngineSpec(t *testing.T) {
 			},
 			isvcEngine: &v1beta1.EngineSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MaxReplicas: 10,
+					MaxReplicas:    10,
+					TimeoutSeconds: int64Ptr(80),
 				},
 				PodSpec: v1beta1.PodSpec{
 					Containers: []v1.Container{
@@ -1002,8 +975,9 @@ func TestMergeEngineSpec(t *testing.T) {
 			},
 			expectedEngine: &v1beta1.EngineSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(1),
-					MaxReplicas: 10,
+					MinReplicas:    intPtr(1),
+					MaxReplicas:    10,
+					TimeoutSeconds: int64Ptr(80),
 				},
 				PodSpec: v1beta1.PodSpec{
 					ServiceAccountName: "runtime-sa",
@@ -1121,8 +1095,103 @@ func TestMergeEngineSpec(t *testing.T) {
 	}
 }
 
+// TestMergeRunnerName_RestoresFromRuntimeWhenISVCNameEmpty pins the
+// fix: when a user patches only the runner image
+// (kubectl-defaulted zero values for unmentioned fields produce
+// `runner: {image: ..., name: "", resources: {}}` on the ISVC), the
+// merged runner MUST keep the runtime's container name. Otherwise the
+// rendered pod has `spec.containers[0].name = ""` and apiserver
+// rejects the create with `spec.containers[0].name: Required value`,
+// deadlocking the OMENative rollout in step=Drain.
+//
+// Covers all three component paths (engine/decoder/router) so the
+// fix can't regress for any single one.
+func TestMergeRunnerName_RestoresFromRuntimeWhenISVCNameEmpty(t *testing.T) {
+	t.Run("engine", func(t *testing.T) {
+		runtime := &v1beta1.EngineSpec{Runner: &v1beta1.RunnerSpec{Container: v1.Container{Name: "ome-container", Image: "runtime:v1"}}}
+		isvc := &v1beta1.EngineSpec{Runner: &v1beta1.RunnerSpec{Container: v1.Container{Image: "user:v2"}}}
+		merged, err := MergeEngineSpec(runtime, isvc)
+		assert.NoError(t, err)
+		assert.Equal(t, "ome-container", merged.Runner.Name, "container name must come from runtime when ISVC didn't set it")
+		assert.Equal(t, "user:v2", merged.Runner.Image, "user's image override must still apply")
+	})
+	t.Run("decoder", func(t *testing.T) {
+		runtime := &v1beta1.DecoderSpec{Runner: &v1beta1.RunnerSpec{Container: v1.Container{Name: "decoder-runner", Image: "runtime:v1"}}}
+		isvc := &v1beta1.DecoderSpec{Runner: &v1beta1.RunnerSpec{Container: v1.Container{Image: "user:v2"}}}
+		merged, err := MergeDecoderSpec(runtime, isvc)
+		assert.NoError(t, err)
+		assert.Equal(t, "decoder-runner", merged.Runner.Name)
+		assert.Equal(t, "user:v2", merged.Runner.Image)
+	})
+	t.Run("router", func(t *testing.T) {
+		runtime := &v1beta1.RouterSpec{Runner: &v1beta1.RunnerSpec{Container: v1.Container{Name: "router-runner", Image: "runtime:v1"}}}
+		isvc := &v1beta1.RouterSpec{Runner: &v1beta1.RunnerSpec{Container: v1.Container{Image: "user:v2"}}}
+		merged, err := MergeRouterSpec(isvc, runtime)
+		assert.NoError(t, err)
+		assert.Equal(t, "router-runner", merged.Runner.Name)
+		assert.Equal(t, "user:v2", merged.Runner.Image)
+	})
+	t.Run("explicit-name-still-wins", func(t *testing.T) {
+		// Defensive: if the user DID set a non-empty name, the merge
+		// must honor it (no surprise restore).
+		runtime := &v1beta1.EngineSpec{Runner: &v1beta1.RunnerSpec{Container: v1.Container{Name: "runtime-name", Image: "runtime:v1"}}}
+		isvc := &v1beta1.EngineSpec{Runner: &v1beta1.RunnerSpec{Container: v1.Container{Name: "user-name", Image: "user:v2"}}}
+		merged, err := MergeEngineSpec(runtime, isvc)
+		assert.NoError(t, err)
+		assert.Equal(t, "user-name", merged.Runner.Name, "explicit user name must override runtime name")
+	})
+}
+
+// TestMergeTopologyKey_Resolution pins the effective-topologyKey rule for
+// the gang co-location field: the ISVC component value (spec.engine /
+// spec.decoder topologyKey) wins when set, otherwise the runtime
+// component-config value (engineConfig / decoderConfig topologyKey) is
+// inherited; unset on both stays nil (opt-in, zero behavior change).
+func TestMergeTopologyKey_Resolution(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+
+	t.Run("engine-isvc-overrides-runtime", func(t *testing.T) {
+		runtime := &v1beta1.EngineSpec{TopologyKey: strPtr("runtime.domain/key")}
+		isvc := &v1beta1.EngineSpec{TopologyKey: strPtr("isvc.domain/key")}
+		merged, err := MergeEngineSpec(runtime, isvc)
+		assert.NoError(t, err)
+		assert.NotNil(t, merged.TopologyKey)
+		assert.Equal(t, "isvc.domain/key", *merged.TopologyKey, "ISVC topologyKey must override the runtime value")
+	})
+	t.Run("engine-inherits-runtime-when-isvc-unset", func(t *testing.T) {
+		runtime := &v1beta1.EngineSpec{TopologyKey: strPtr("topology.example.com/domain")}
+		isvc := &v1beta1.EngineSpec{} // no topologyKey
+		merged, err := MergeEngineSpec(runtime, isvc)
+		assert.NoError(t, err)
+		assert.NotNil(t, merged.TopologyKey, "runtime topologyKey must be inherited when ISVC leaves it unset")
+		assert.Equal(t, "topology.example.com/domain", *merged.TopologyKey)
+	})
+	t.Run("engine-nil-on-both", func(t *testing.T) {
+		merged, err := MergeEngineSpec(&v1beta1.EngineSpec{}, &v1beta1.EngineSpec{})
+		assert.NoError(t, err)
+		assert.Nil(t, merged.TopologyKey, "unset on both runtime and ISVC must stay nil")
+	})
+	t.Run("decoder-isvc-overrides-runtime", func(t *testing.T) {
+		runtime := &v1beta1.DecoderSpec{TopologyKey: strPtr("runtime.domain/key")}
+		isvc := &v1beta1.DecoderSpec{TopologyKey: strPtr("isvc.domain/key")}
+		merged, err := MergeDecoderSpec(runtime, isvc)
+		assert.NoError(t, err)
+		assert.NotNil(t, merged.TopologyKey)
+		assert.Equal(t, "isvc.domain/key", *merged.TopologyKey)
+	})
+	t.Run("decoder-inherits-runtime-when-isvc-unset", func(t *testing.T) {
+		runtime := &v1beta1.DecoderSpec{TopologyKey: strPtr("topology.example.com/domain")}
+		isvc := &v1beta1.DecoderSpec{}
+		merged, err := MergeDecoderSpec(runtime, isvc)
+		assert.NoError(t, err)
+		assert.NotNil(t, merged.TopologyKey)
+		assert.Equal(t, "topology.example.com/domain", *merged.TopologyKey)
+	})
+}
+
 func TestMergeDecoderSpec(t *testing.T) {
 	intPtr := func(i int) *int { return &i }
+	int64Ptr := func(i int64) *int64 { return &i }
 
 	tests := []struct {
 		name            string
@@ -1274,8 +1343,9 @@ func TestMergeDecoderSpec(t *testing.T) {
 			name: "complex PD-disaggregated decoder merge",
 			runtimeDecoder: &v1beta1.DecoderSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(2),
-					MaxReplicas: 8,
+					MinReplicas:    intPtr(2),
+					MaxReplicas:    8,
+					TimeoutSeconds: int64Ptr(80),
 				},
 				PodSpec: v1beta1.PodSpec{
 					Containers: []v1.Container{
@@ -1328,8 +1398,9 @@ func TestMergeDecoderSpec(t *testing.T) {
 			},
 			expectedDecoder: &v1beta1.DecoderSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(2),
-					MaxReplicas: 16,
+					MinReplicas:    intPtr(2),
+					MaxReplicas:    16,
+					TimeoutSeconds: int64Ptr(80),
 				},
 				PodSpec: v1beta1.PodSpec{
 					Containers: []v1.Container{
@@ -1410,6 +1481,15 @@ func TestMergeDecoderSpec(t *testing.T) {
 			expectedDecoder: &v1beta1.DecoderSpec{
 				Runner: &v1beta1.RunnerSpec{
 					Container: v1.Container{
+						// Name restored from runtime — ISVC RunnerSpec
+						// omitted Name (kubectl-defaulted zero value
+						// because the patch only set image-adjacent
+						// fields), which would otherwise wipe the
+						// runtime's name and produce a pod apiserver
+						// rejects with `spec.containers[0].name:
+						// Required value`. See restoreRunnerName in
+						// merging.go.
+						Name:    "decoder-runner",
 						Image:   "runtime-decoder:v1",
 						Command: []string{"/bin/decode"},
 						Args:    []string{"--mode", "batch", "--batch-size", "64"},
@@ -1468,30 +1548,21 @@ func TestDetermineEngineDeploymentMode(t *testing.T) {
 				Leader: &v1beta1.LeaderSpec{},
 				Worker: &v1beta1.WorkerSpec{},
 			},
-			expectedMode: constants.MultiNode,
+			expectedMode: constants.OMENative,
 		},
 		{
 			name: "multi-node with only leader",
 			engine: &v1beta1.EngineSpec{
 				Leader: &v1beta1.LeaderSpec{},
 			},
-			expectedMode: constants.MultiNode,
+			expectedMode: constants.OMENative,
 		},
 		{
 			name: "multi-node with only worker",
 			engine: &v1beta1.EngineSpec{
 				Worker: &v1beta1.WorkerSpec{},
 			},
-			expectedMode: constants.MultiNode,
-		},
-		{
-			name: "min replicas 0 falls back to raw deployment",
-			engine: &v1beta1.EngineSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(0),
-				},
-			},
-			expectedMode: constants.RawDeployment,
+			expectedMode: constants.OMENative,
 		},
 		{
 			name: "raw deployment with min replicas > 0",
@@ -1520,16 +1591,6 @@ func TestDetermineEngineDeploymentMode(t *testing.T) {
 			expectedMode: constants.RawDeployment,
 		},
 		{
-			name: "multi-node takes precedence over min replicas 0",
-			engine: &v1beta1.EngineSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(0),
-				},
-				Leader: &v1beta1.LeaderSpec{},
-			},
-			expectedMode: constants.MultiNode,
-		},
-		{
 			name: "annotation with MultiNode takes highest precedence",
 			engine: &v1beta1.EngineSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
@@ -1552,7 +1613,7 @@ func TestDetermineEngineDeploymentMode(t *testing.T) {
 				},
 				Leader: &v1beta1.LeaderSpec{},
 			},
-			expectedMode: constants.MultiNode,
+			expectedMode: constants.OMENative,
 		},
 		{
 			name: "empty annotations map, falls back to leader check",
@@ -1563,7 +1624,7 @@ func TestDetermineEngineDeploymentMode(t *testing.T) {
 				},
 				Leader: &v1beta1.LeaderSpec{},
 			},
-			expectedMode: constants.MultiNode,
+			expectedMode: constants.OMENative,
 		},
 		{
 			name: "annotation overrides leader and min replicas 0",
@@ -1643,6 +1704,152 @@ func TestDetermineEntrypointComponent(t *testing.T) {
 			assert.Equal(t, tt.expectedEntrypoint, entrypoint)
 		})
 	}
+}
+
+func TestMergedRunnerPorts(t *testing.T) {
+	enginePorts := []v1.ContainerPort{
+		{Name: "http", ContainerPort: 8000},
+		{Name: "dist", ContainerPort: 5000},
+	}
+	routerPorts := []v1.ContainerPort{{Name: "http", ContainerPort: 30080}}
+
+	engine := &v1beta1.EngineSpec{Runner: &v1beta1.RunnerSpec{Container: v1.Container{Ports: enginePorts}}}
+	router := &v1beta1.RouterSpec{Runner: &v1beta1.RunnerSpec{Container: v1.Container{Ports: routerPorts}}}
+	// Decoder present but portless: omitted, so the caller sees "undeclared"
+	// rather than an empty-but-present entry it might read as authoritative.
+	decoder := &v1beta1.DecoderSpec{Runner: &v1beta1.RunnerSpec{}}
+
+	got := MergedRunnerPorts(engine, decoder, router)
+	assert.Equal(t, enginePorts, got[v1beta1.EngineComponent])
+	assert.Equal(t, routerPorts, got[v1beta1.RouterComponent])
+	assert.NotContains(t, got, v1beta1.DecoderComponent)
+
+	// Absent Components and portless Components contribute nothing.
+	assert.Empty(t, MergedRunnerPorts(nil, nil, nil))
+	assert.Empty(t, MergedRunnerPorts(&v1beta1.EngineSpec{}, nil, nil))
+}
+
+// The serving container's ports can be declared on the Component's own pod
+// container rather than on the runner; the pod renderer merges the two, so
+// port resolution must follow the same path.
+func TestMergedRunnerPorts_FallsBackToPodContainer(t *testing.T) {
+	podPorts := []v1.ContainerPort{{Name: "http", ContainerPort: 8080}}
+
+	t.Run("no runner uses the first container", func(t *testing.T) {
+		engine := &v1beta1.EngineSpec{PodSpec: v1beta1.PodSpec{
+			Containers: []v1.Container{{Name: "ome-container", Ports: podPorts}},
+		}}
+		assert.Equal(t, podPorts, MergedRunnerPorts(engine, nil, nil)[v1beta1.EngineComponent])
+	})
+
+	t.Run("portless runner uses the container it merges into", func(t *testing.T) {
+		engine := &v1beta1.EngineSpec{
+			Runner: &v1beta1.RunnerSpec{Container: v1.Container{Name: "runner"}},
+			PodSpec: v1beta1.PodSpec{Containers: []v1.Container{
+				{Name: "sidecar", Ports: []v1.ContainerPort{{Name: "http", ContainerPort: 9999}}},
+				{Name: "runner", Ports: podPorts},
+			}},
+		}
+		assert.Equal(t, podPorts, MergedRunnerPorts(engine, nil, nil)[v1beta1.EngineComponent])
+	})
+}
+
+func TestMergedRunnerPorts_UsesEffectiveLeaderTemplateForMultiPod(t *testing.T) {
+	workerSize := 1
+	cases := []struct {
+		name      string
+		engine    *v1beta1.EngineSpec
+		decoder   *v1beta1.DecoderSpec
+		component v1beta1.ComponentType
+		want      []v1.ContainerPort
+	}{
+		{
+			name: "Engine Leader runner",
+			engine: &v1beta1.EngineSpec{
+				Leader: &v1beta1.LeaderSpec{Runner: &v1beta1.RunnerSpec{Container: v1.Container{
+					Ports: []v1.ContainerPort{{Name: "http", ContainerPort: 8100}},
+				}}},
+				Worker: &v1beta1.WorkerSpec{Size: &workerSize},
+			},
+			component: v1beta1.EngineComponent,
+			want:      []v1.ContainerPort{{Name: "http", ContainerPort: 8100}},
+		},
+		{
+			name: "Engine Leader pod container",
+			engine: &v1beta1.EngineSpec{
+				Leader: &v1beta1.LeaderSpec{PodSpec: v1beta1.PodSpec{Containers: []v1.Container{{
+					Name: "engine", Ports: []v1.ContainerPort{{Name: "http", ContainerPort: 8200}},
+				}}}},
+				Worker: &v1beta1.WorkerSpec{Size: &workerSize},
+			},
+			component: v1beta1.EngineComponent,
+			want:      []v1.ContainerPort{{Name: "http", ContainerPort: 8200}},
+		},
+		{
+			name: "Decoder Leader runner",
+			decoder: &v1beta1.DecoderSpec{
+				Leader: &v1beta1.LeaderSpec{Runner: &v1beta1.RunnerSpec{Container: v1.Container{
+					Ports: []v1.ContainerPort{{Name: "http", ContainerPort: 8300}},
+				}}},
+				Worker: &v1beta1.WorkerSpec{Size: &workerSize},
+			},
+			component: v1beta1.DecoderComponent,
+			want:      []v1.ContainerPort{{Name: "http", ContainerPort: 8300}},
+		},
+		{
+			name: "Decoder Leader pod container",
+			decoder: &v1beta1.DecoderSpec{
+				Leader: &v1beta1.LeaderSpec{PodSpec: v1beta1.PodSpec{Containers: []v1.Container{{
+					Name: "decoder", Ports: []v1.ContainerPort{{Name: "http", ContainerPort: 8400}},
+				}}}},
+				Worker: &v1beta1.WorkerSpec{Size: &workerSize},
+			},
+			component: v1beta1.DecoderComponent,
+			want:      []v1.ContainerPort{{Name: "http", ContainerPort: 8400}},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var (
+				engine  = tc.engine
+				decoder = tc.decoder
+				err     error
+			)
+			if engine != nil {
+				engine, err = MergeEngineSpec(engine, &v1beta1.EngineSpec{})
+				if err != nil {
+					t.Fatalf("MergeEngineSpec: %v", err)
+				}
+			}
+			if decoder != nil {
+				decoder, err = MergeDecoderSpec(decoder, &v1beta1.DecoderSpec{})
+				if err != nil {
+					t.Fatalf("MergeDecoderSpec: %v", err)
+				}
+			}
+			assert.Equal(t, tc.want, MergedRunnerPorts(engine, decoder, nil)[tc.component])
+		})
+	}
+}
+
+func TestMergedRunnerPorts_InvalidMultiPodShapeUsesTopLevelTemplate(t *testing.T) {
+	topLevelPorts := []v1.ContainerPort{{Name: "http", ContainerPort: 8500}}
+	leaderPorts := []v1.ContainerPort{{Name: "http", ContainerPort: 8600}}
+	zeroWorkers := 0
+
+	engine := &v1beta1.EngineSpec{
+		Runner: &v1beta1.RunnerSpec{Container: v1.Container{Ports: topLevelPorts}},
+		Leader: &v1beta1.LeaderSpec{Runner: &v1beta1.RunnerSpec{Container: v1.Container{Ports: leaderPorts}}},
+		Worker: &v1beta1.WorkerSpec{Size: &zeroWorkers},
+	}
+	decoder := &v1beta1.DecoderSpec{
+		Runner: &v1beta1.RunnerSpec{Container: v1.Container{Ports: topLevelPorts}},
+		Leader: &v1beta1.LeaderSpec{Runner: &v1beta1.RunnerSpec{Container: v1.Container{Ports: leaderPorts}}},
+	}
+
+	got := MergedRunnerPorts(engine, decoder, nil)
+	assert.Equal(t, topLevelPorts, got[v1beta1.EngineComponent])
+	assert.Equal(t, topLevelPorts, got[v1beta1.DecoderComponent])
 }
 
 func TestGetTargetServicePort(t *testing.T) {

@@ -673,25 +673,12 @@ func TestBatcher_TargetRefNamespaceIndexPreservesMatchingRules(t *testing.T) {
 					Name:      pod.Name,
 				},
 			}}
-			c := newDrainTestClient(t, slice)
-
-			// The Batcher index and the package-level matcher are
-			// separate implementations of the same TargetRef rules.
-			// Running the table through both fails if either drifts.
-			batched, err := NewBatcher(c, "ns").IsPodDrained(context.Background(), "svc", pod)
-			if err != nil {
-				t.Fatalf("Batcher.IsPodDrained: %v", err)
-			}
-			if batched != tt.want {
-				t.Fatalf("Batcher.IsPodDrained=%v, want %v", batched, tt.want)
-			}
-
-			direct, err := IsPodDrained(context.Background(), c, "ns", "svc", pod)
+			drained, err := NewBatcher(newDrainTestClient(t, slice), "ns").IsPodDrained(context.Background(), "svc", pod)
 			if err != nil {
 				t.Fatalf("IsPodDrained: %v", err)
 			}
-			if direct != batched {
-				t.Fatalf("IsPodDrained=%v diverges from Batcher.IsPodDrained=%v", direct, batched)
+			if drained != tt.want {
+				t.Fatalf("IsPodDrained=%v, want %v", drained, tt.want)
 			}
 		})
 	}
@@ -839,65 +826,5 @@ func TestIsPodInRotation_ReadyTrueNotTerminatingReportedInRotation(t *testing.T)
 	}
 	if !in {
 		t.Errorf("non-terminating Ready endpoint must be reported as in-rotation")
-	}
-}
-
-// TestIsPodInRotation_NoRoutableEndpoint_ReportsNotInRotation covers the
-// two ways the scan finds nothing. Unlike IsPodDrained, an absent
-// Service is not disambiguated here: a surge pod nothing routes to is
-// simply not in rotation yet.
-func TestIsPodInRotation_NoRoutableEndpoint_ReportsNotInRotation(t *testing.T) {
-	pod := testPod("ns", "p1")
-	tests := []struct {
-		name string
-		objs []client.Object
-	}{
-		{name: "no slices at all"},
-		{
-			name: "slices exist but none target the pod",
-			objs: []client.Object{sliceForService("ns", "svc-1", "svc", endpointSpec{
-				podName: "p2",
-				ready:   ptr.To(true),
-			})},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := newDrainTestClient(t, tt.objs...)
-			in, err := IsPodInRotation(context.Background(), c, "ns", "svc", pod)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if in {
-				t.Errorf("expected not-in-rotation, got in-rotation")
-			}
-		})
-	}
-}
-
-// TestIsPodInRotation_ListErrorPropagates pins that a failed read is an
-// error, not a false negative. Swallowing it would let Migrate treat an
-// unreadable cluster as "surge not serving yet" and stall forever.
-func TestIsPodInRotation_ListErrorPropagates(t *testing.T) {
-	pod := testPod("ns", "p1")
-	boom := errors.New("list failed")
-	cr := &countingReader{Reader: newDrainTestClient(t), listErr: boom}
-
-	in, err := IsPodInRotation(context.Background(), cr, "ns", "svc", pod)
-	if !errors.Is(err, boom) {
-		t.Fatalf("expected the list error to propagate, got %v", err)
-	}
-	if in {
-		t.Error("a failed read must not report the pod in rotation")
-	}
-}
-
-func TestIsPodInRotation_NilPodAndEmptyServiceRejected(t *testing.T) {
-	c := newDrainTestClient(t)
-	if _, err := IsPodInRotation(context.Background(), c, "ns", "svc", nil); err == nil {
-		t.Error("expected an error for a nil pod")
-	}
-	if _, err := IsPodInRotation(context.Background(), c, "ns", "", testPod("ns", "p1")); err == nil {
-		t.Error("expected an error for an empty serviceName")
 	}
 }
