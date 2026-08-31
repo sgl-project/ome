@@ -78,8 +78,10 @@ type ConsistentHashSpec struct {
 	Type HashType `json:"type"`
 
 	// Headers to hash on. Required when Type=Header (one or more).
-	// Multiple headers are concatenated by the translator before
-	// hashing. Forbidden when Type is not Header.
+	// Translators that support multi-header hashing concatenate the
+	// headers before hashing; when the active translator supports only
+	// single-header hashing, multi-header specs are rejected at
+	// admission. Forbidden when Type is not Header.
 	// +optional
 	// +listType=atomic
 	Headers []HashHeader `json:"headers,omitempty"`
@@ -152,6 +154,7 @@ const (
 	// header.
 	EndpointOverrideTypeHeader EndpointOverrideType = "Header"
 	// EndpointOverrideTypeMetadata reads the override from request
-	// metadata (impl-specific; reserved for future use).
+	// metadata. Reserved: no translator emits it, and admission
+	// rejects the value until one declares the capability.
 	EndpointOverrideTypeMetadata EndpointOverrideType = "Metadata"
 )

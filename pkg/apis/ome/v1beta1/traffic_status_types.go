@@ -64,11 +64,13 @@ const (
 
 	// TrafficConditionBackendPolicyUnsupportedFields is added (with
 	// Status=True, Reason=UnsupportedField) when the operator
-	// declared ome.io/* traffic annotations the active translator
-	// does not honor — for example, an ome.io/dr.* (Istio
-	// pass-through) annotation on an Envoy-Gateway cluster. The
-	// message lists every dropped key so operators see exactly what
-	// was ignored without inspecting the policy resource.
+	// declared typed spec.traffic fields or ome.io/* traffic
+	// annotations the active translator does not honor — for example,
+	// an endpointOverride or an ome.io/dr.* (Istio pass-through)
+	// annotation on an Envoy-Gateway cluster. The message names the
+	// active translator and lists every dropped field and key so
+	// operators see exactly what was ignored without inspecting the
+	// policy resource.
 	//
 	// The condition is omitted entirely when nothing was dropped
 	// (positive-polarity convention: absence = nothing to worry

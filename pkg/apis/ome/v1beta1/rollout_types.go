@@ -20,10 +20,13 @@ type RolloutSpec struct {
 	// one-at-a-time, put each in its own group, in order — a group needs only its
 	// components; the progression may be omitted and defaults to blueGreen.
 	//
-	// Cross-group sequencing is currently enforced only for a run of
-	// single-Component blueGreen groups (the classic one-at-a-time shape); mixed
-	// progressions and multi-Component ordered groups roll concurrently on their
-	// disjoint Components today — the general group sequencer is a follow-on.
+	// Cross-group sequencing is enforced only for a run of single-Component
+	// blueGreen groups (the classic one-at-a-time shape). Admission rejects any
+	// other multi-group list — a rollingUpdate, canary, or multi-Component group
+	// in an ordered list would run concurrently, and an ordering the engine does
+	// not enforce is rejected rather than accepted. The rejection applies on
+	// create and on any update that changes spec.rollout, so stored objects
+	// keep reconciling until their rollout is next edited.
 	//
 	// Only meaningful for OMENative-managed Components.
 	// +optional
@@ -52,11 +55,12 @@ type RolloutGroup struct {
 	Components []ComponentType `json:"components"`
 
 	// Order optionally pins the sequence in which this group's Components roll.
-	// It is honored today only when the group resolves to the internal Sequential
-	// path (a run of single-Component groups); on a multi-Component blueGreen,
-	// rollingUpdate, or canary group the Components currently advance together and
-	// Order is not yet applied as a surge sequence. Ignored on single-Component
-	// groups. Must reference only Components in this group.
+	// No progression applies it — the Components in a group advance together —
+	// so admission rejects a non-empty order (on create and on any update that
+	// changes spec.rollout) rather than accept a sequence the engine does not
+	// enforce. To roll Components one at a time, declare one single-Component
+	// blueGreen group per Component, in the desired list order. Must reference
+	// only Components in this group.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MaxItems=3
@@ -167,8 +171,8 @@ type RolloutGroupStep struct {
 // flips traffic atomically. It is also the default progression a group falls back
 // to when none of canary/blueGreen/rollingUpdate is set. It carries no traffic
 // steps (the flip is all-or-nothing); surge sequencing across Components is the
-// group-level Order field, not a blue-green-specific knob. Empty today, reserved
-// for future blue-green-specific options (e.g. a pre-flip verification window).
+// group-level Order field, not a blue-green-specific knob. Empty; reserved for
+// blue-green-specific options (e.g. a pre-flip verification window).
 type GroupBlueGreen struct{}
 
 // GroupRollingUpdate replaces pods gradually, paced by the surge/unavailable
@@ -192,10 +196,14 @@ type GroupRollingUpdate struct {
 // cross-Component replica ratio observed at rollout start (e.g. prefill:decode).
 type MaintainRatio struct {
 	// Tolerance is the maximum percentage drift from the starting ratio. A roll
-	// step that would exceed it is paused until the pools rebalance. Default 5.
+	// step that would exceed it is paused until the pools rebalance. An explicit
+	// 0 means zero drift. When omitted, the operator-configured default (the
+	// coordination block of the operator's ConfigMap) applies; if the operator
+	// configures no default either, the group rolls with no drift bound.
+	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100
-	Tolerance int32 `json:"tolerance"`
+	Tolerance *int32 `json:"tolerance,omitempty"`
 }
 
 // RolloutPause holds a rollout at a step boundary; its meaning depends on the
@@ -267,7 +275,7 @@ type AnalysisPrometheus struct {
 
 	// AuthRef points at a Secret key (in the InferenceService's namespace) holding
 	// a bearer token sent as "Authorization: Bearer <token>". Omit for an
-	// unauthenticated Prometheus (the bundled one). TLS/mTLS is not yet supported.
+	// unauthenticated Prometheus (the bundled one). TLS/mTLS is not supported.
 	// +optional
 	AuthRef *corev1.SecretKeySelector `json:"authRef,omitempty"`
 
@@ -281,8 +289,9 @@ type AnalysisPrometheus struct {
 }
 
 // AnalysisMetric is one success condition: a PromQL query whose scalar result is
-// compared against Threshold with Operator. A multi-series result is reduced by
-// max (the worst series) before comparison.
+// compared against Threshold with Operator. A multi-series result is reduced to
+// the worst series for the operator before comparison — the maximum for LT/LTE,
+// the minimum for GT/GTE — so the metric passes only when every series passes.
 type AnalysisMetric struct {
 	// Name identifies the metric in status and events; unique within Metrics.
 	Name string `json:"name"`
@@ -290,7 +299,8 @@ type AnalysisMetric struct {
 	// Query is a PromQL expression, templated with the rollout's revision context
 	// before execution. Available variables: {{.Namespace}}, {{.ISVCName}},
 	// {{.Component}}, {{.CanaryService}}, {{.StableService}}, {{.CanaryRevision}},
-	// {{.StableRevision}}. The query must reduce to a single value.
+	// {{.StableRevision}}. A result with multiple series is reduced to the worst
+	// series for Operator before comparison.
 	Query string `json:"query"`
 
 	// Operator is the comparison applied as "result <Operator> Threshold" to

@@ -2547,35 +2547,6 @@ spec:
                       x-kubernetes-list-map-keys:
                         - name
                       x-kubernetes-list-type: map
-                    kedaConfig:
-                      properties:
-                        authModes:
-                          type: string
-                        authenticationRef:
-                          properties:
-                            kind:
-                              default: TriggerAuthentication
-                              enum:
-                                - TriggerAuthentication
-                                - ClusterTriggerAuthentication
-                              type: string
-                            name:
-                              minLength: 1
-                              type: string
-                          required:
-                            - name
-                          type: object
-                        customPromQuery:
-                          type: string
-                        enableKeda:
-                          type: boolean
-                        promServerAddress:
-                          type: string
-                        scalingOperator:
-                          type: string
-                        scalingThreshold:
-                          type: string
-                      type: object
                     labels:
                       additionalProperties:
                         type: string
@@ -7655,13 +7626,6 @@ spec:
                       type: object
                     runtimeClassName:
                       type: string
-                    scaleMetric:
-                      enum:
-                        - cpu
-                        - memory
-                      type: string
-                    scaleTarget:
-                      type: integer
                     schedulerName:
                       type: string
                     schedulingGates:
@@ -15375,35 +15339,6 @@ spec:
                       x-kubernetes-list-map-keys:
                         - name
                       x-kubernetes-list-type: map
-                    kedaConfig:
-                      properties:
-                        authModes:
-                          type: string
-                        authenticationRef:
-                          properties:
-                            kind:
-                              default: TriggerAuthentication
-                              enum:
-                                - TriggerAuthentication
-                                - ClusterTriggerAuthentication
-                              type: string
-                            name:
-                              minLength: 1
-                              type: string
-                          required:
-                            - name
-                          type: object
-                        customPromQuery:
-                          type: string
-                        enableKeda:
-                          type: boolean
-                        promServerAddress:
-                          type: string
-                        scalingOperator:
-                          type: string
-                        scalingThreshold:
-                          type: string
-                      type: object
                     labels:
                       additionalProperties:
                         type: string
@@ -20483,13 +20418,6 @@ spec:
                       type: object
                     runtimeClassName:
                       type: string
-                    scaleMetric:
-                      enum:
-                        - cpu
-                        - memory
-                      type: string
-                    scaleTarget:
-                      type: integer
                     schedulerName:
                       type: string
                     schedulingGates:
@@ -25741,33 +25669,6 @@ spec:
                           x-kubernetes-list-type: map
                       type: object
                   type: object
-                kedaConfig:
-                  properties:
-                    authModes:
-                      type: string
-                    authenticationRef:
-                      properties:
-                        kind:
-                          default: TriggerAuthentication
-                          enum:
-                            - TriggerAuthentication
-                            - ClusterTriggerAuthentication
-                          type: string
-                        name:
-                          minLength: 1
-                          type: string
-                      type: object
-                    customPromQuery:
-                      type: string
-                    enableKeda:
-                      type: boolean
-                    promServerAddress:
-                      type: string
-                    scalingOperator:
-                      type: string
-                    scalingThreshold:
-                      type: string
-                  type: object
                 model:
                   properties:
                     apiGroup:
@@ -25954,8 +25855,6 @@ spec:
                                 maximum: 100
                                 minimum: 0
                                 type: integer
-                            required:
-                              - tolerance
                             type: object
                           order:
                             items:
@@ -28405,35 +28304,6 @@ spec:
                       x-kubernetes-list-map-keys:
                         - name
                       x-kubernetes-list-type: map
-                    kedaConfig:
-                      properties:
-                        authModes:
-                          type: string
-                        authenticationRef:
-                          properties:
-                            kind:
-                              default: TriggerAuthentication
-                              enum:
-                                - TriggerAuthentication
-                                - ClusterTriggerAuthentication
-                              type: string
-                            name:
-                              minLength: 1
-                              type: string
-                          required:
-                            - name
-                          type: object
-                        customPromQuery:
-                          type: string
-                        enableKeda:
-                          type: boolean
-                        promServerAddress:
-                          type: string
-                        scalingOperator:
-                          type: string
-                        scalingThreshold:
-                          type: string
-                      type: object
                     labels:
                       additionalProperties:
                         type: string
@@ -29239,13 +29109,6 @@ spec:
                       type: object
                     runtimeClassName:
                       type: string
-                    scaleMetric:
-                      enum:
-                        - cpu
-                        - memory
-                      type: string
-                    scaleTarget:
-                      type: integer
                     schedulerName:
                       type: string
                     schedulingGates:
@@ -30410,7 +30273,11 @@ spec:
                     observedTrafficWeight:
                       format: int32
                       type: integer
+                    promotedThrough:
+                      type: string
                     rolledBackRevisionHash:
+                      type: string
+                    stableRevisionHash:
                       type: string
                     stepEnteredTime:
                       format: date-time
@@ -30504,8 +30371,6 @@ spec:
                           specSource:
                             type: string
                         type: object
-                      latestCreatedRevision:
-                        type: string
                       latestReadyRevision:
                         type: string
                       latestRolledoutRevision:
@@ -30762,7 +30627,6 @@ spec:
                             - BaseModelNotReady
                             - BaseModelNotFound
                             - ModelLoadFailed
-                            - ContainerStartupFailed
                             - RuntimeUnhealthy
                             - RuntimeDisabled
                             - NoSupportingRuntime
@@ -30808,7 +30672,6 @@ spec:
                         - activeModelState
                       type: object
                     transitionStatus:
-                      default: UpToDate
                       enum:
                         - ""
                         - UpToDate
@@ -30816,8 +30679,6 @@ spec:
                         - BlockedByFailedLoad
                         - InvalidSpec
                       type: string
-                  required:
-                    - transitionStatus
                   type: object
                 mountedOverlays:
                   items:
@@ -30876,6 +30737,11 @@ spec:
                     endpoint:
                       type: string
                     phase:
+                      enum:
+                        - Pending
+                        - Racing
+                        - Placed
+                        - Failed
                       type: string
                   type: object
                 rolloutCoordination:

@@ -13,6 +13,7 @@ import (
 type OmeV1beta1Interface interface {
 	RESTClient() rest.Interface
 	AcceleratorClassesGetter
+	AcceleratorQuotasGetter
 	BaseModelsGetter
 	BenchmarkJobsGetter
 	ClusterBaseModelsGetter
@@ -31,6 +32,10 @@ type OmeV1beta1Client struct {
 
 func (c *OmeV1beta1Client) AcceleratorClasses() AcceleratorClassInterface {
 	return newAcceleratorClasses(c)
+}
+
+func (c *OmeV1beta1Client) AcceleratorQuotas() AcceleratorQuotaInterface {
+	return newAcceleratorQuotas(c)
 }
 
 func (c *OmeV1beta1Client) BaseModels(namespace string) BaseModelInterface {

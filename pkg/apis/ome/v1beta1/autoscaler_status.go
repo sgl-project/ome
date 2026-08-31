@@ -32,7 +32,7 @@ const (
 	// has no way to read the external scaler's state.
 	AutoscalerManagedByExternal AutoscalerManagedBy = "external"
 
-	// AutoscalerManagedByNone means no scaler is active for this
+	// AutoscalerManagedByNone means no OME-managed scaler is active for this
 	// Component. Conditions empty; replica counters zero.
 	AutoscalerManagedByNone AutoscalerManagedBy = "none"
 )
@@ -44,14 +44,15 @@ const (
 // doing — all from the parent ISVC without chasing IRs and scalers
 // separately.
 //
-// Populated by the ISVC status writer for OMENative-managed Components.
+// Populated by the ISVC status writer for RawDeployment- and
+// OMENative-managed Components.
 // The writer degrades gracefully when a Component has no live scaler —
 // ManagedBy reports "none" and counters stay zero without crashing.
 //
 // Alpha. The shape may change without notice.
 type ComponentAutoscalerStatus struct {
-	// Class echoes the resolved autoscaler class as picked by
-	// ResolveComponentAutoscaler. One of HPA | KEDA | External | None.
+	// Class echoes the resolved autoscaler class as picked by the
+	// Component's deployment-mode resolver. One of HPA | KEDA | External | None.
 	// Mirrors the input that drove dispatch so the operator can confirm
 	// the inheritance chain landed on the expected class.
 	// +optional
@@ -65,14 +66,15 @@ type ComponentAutoscalerStatus struct {
 	//     replica counters below mirror its live status.
 	//   - "external": operator-owned scaler; OME publishes
 	//     scaleTargetRef and stays out. Conditions empty.
-	//   - "none": no scaler at all. Conditions empty; counters zero.
+	//   - "none": no OME-managed scaler is active. Conditions empty;
+	//     counters zero.
 	// +kubebuilder:validation:Enum=ome;external;none
 	// +optional
 	ManagedBy AutoscalerManagedBy `json:"managedBy,omitempty"`
 
-	// SpecSource reports which layer of the ISVC -> runtime -> default
+	// SpecSource reports which layer of the ISVC -> runtime -> legacy -> default
 	// inheritance chain produced the resolved Autoscaler block. One of
-	// "isvc" | "runtime" | "default". Mirrors autoscaler.SpecSource so
+	// "isvc" | "runtime" | "legacy" | "default". Mirrors autoscaler.SpecSource so
 	// the operator can debug which layer is contributing the live config.
 	// +optional
 	SpecSource string `json:"specSource,omitempty"`
@@ -114,9 +116,8 @@ type ComponentAutoscalerStatus struct {
 // which object to point at (the same GroupKind the user would target
 // with kubectl scale <kind>/<name>).
 //
-// Empty when the Component has no active scaler (e.g., legacy
-// RawDeployment Components that have not migrated to the new Autoscaler
-// block).
+// Published for every reconciled RawDeployment or OMENative Component,
+// including when no OME-managed scaler is active.
 //
 // Alpha. The shape may change without notice.
 type ScaleTargetRef struct {
