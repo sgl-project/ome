@@ -48,11 +48,6 @@ OME Resources and Controller
 | ome.controller.tag | string | `"v0.1.2"` |  |
 | ome.controller.tolerations | list | `[]` |  |
 | ome.controller.topologySpreadConstraints | list | `[]` |  |
-| ome.kedaConfig.customPromQuery | string | `""` |  |
-| ome.kedaConfig.enableKeda | bool | `true` |  |
-| ome.kedaConfig.promServerAddress | string | `"http://prometheus-operated.monitoring.svc.cluster.local:9090"` |  |
-| ome.kedaConfig.scalingOperator | string | `"GreaterThanOrEqual"` |  |
-| ome.kedaConfig.scalingThreshold | string | `"10"` |  |
 | ome.metricsaggregator.enableMetricAggregation | string | `"false"` |  |
 | ome.metricsaggregator.enablePrometheusScraping | string | `"false"` |  |
 | ome.multiclusterAccess.enabled | bool | `true` | Install ServiceAccount, token Secret, and scoped RBAC for InferenceDeploymentOperator. |

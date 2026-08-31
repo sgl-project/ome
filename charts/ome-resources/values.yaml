@@ -113,12 +113,6 @@ ome:
     memoryRequest: "2Gi"
     cpuLimit: "2"
     memoryLimit: "2Gi"
-  kedaConfig:
-    enableKeda: true
-    promServerAddress: "http://prometheus-operated.monitoring.svc.cluster.local:9090"
-    customPromQuery: ""
-    scalingThreshold: "10"
-    scalingOperator: "GreaterThanOrEqual"
 
   controller:
     replicaCount: 3
@@ -425,9 +419,9 @@ modelAgent:
     gpu-b200-sxm: B200
     gpu-l40s: L40S
   # Deploy the model-agent DaemonSet (node-local model download/cache).
-  # Required for BaseModel/ClusterBaseModel-backed model resolution.
-  # Installs whose runtimes fetch models themselves can leave this off.
-  enabled: true
+  # Required for BaseModel/ClusterBaseModel-backed model resolution;
+  # enable it unless your runtimes fetch models themselves.
+  enabled: false
   # Additional annotations applied to the model-agent pod template.
   # Same shape and intent as ome.controller.podAnnotations above.
   podAnnotations: {}
