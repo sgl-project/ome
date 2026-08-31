@@ -1,0 +1,80 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: acceleratorquotas.ome.io
+spec:
+  group: ome.io
+  names:
+    kind: AcceleratorQuota
+    listKind: AcceleratorQuotaList
+    plural: acceleratorquotas
+    shortNames:
+    - aq
+    singular: acceleratorquota
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.role
+      name: Role
+      type: string
+    - jsonPath: .spec.parentRef.name
+      name: Parent
+      type: string
+    - jsonPath: .status.budgets[0].resourceName
+      name: Resource
+      type: string
+    - jsonPath: .status.budgets[0].resourceFlavor
+      name: Flavor
+      type: string
+    - jsonPath: .status.budgets[0].nominal
+      name: Nominal
+      type: string
+    - jsonPath: .status.budgets[0].admitted
+      name: Admitted
+      type: string
+    - jsonPath: .status.budgets[0].borrowed
+      name: Borrowed
+      priority: 1
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Degraded")].status
+      name: Degraded
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.path
+      name: Path
+      priority: 1
+      type: string
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            type: object
+            x-kubernetes-map-type: atomic
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            type: object
+            x-kubernetes-map-type: atomic
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+        x-kubernetes-validations:
+        - message: an AcceleratorQuota name may not exceed 63 characters; it is copied
+            into a label value on every Kueue object the node materializes
+          rule: size(self.metadata.name) <= 63
+    served: true
+    storage: true
+    subresources:
+      status: {}

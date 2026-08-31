@@ -3,9 +3,9 @@
 // The operator-facing surface for declaring how OMENative-managed
 // Components within an InferenceService coordinate during a rollout is
 // spec.rollout (see rollout_types.go). The RolloutCoordinationSpec and
-// RolloutCoordinationGroup types below are unused — superseded by
-// spec.rollout — and are retained for compatibility, scheduled for
-// removal. The status and policy/pacing types remain in use.
+// RolloutCoordinationGroup types below are superseded by spec.rollout
+// and retained only for compatibility. The status and policy/pacing
+// types remain in use.
 package v1beta1
 
 import (
@@ -18,8 +18,7 @@ import (
 // that roll together and the policy that governs their coordination.
 // Components not listed in any group roll independently.
 //
-// Unused — superseded by spec.rollout (RolloutSpec); retained for
-// compatibility, scheduled for removal.
+// Superseded by spec.rollout (RolloutSpec); retained for compatibility.
 type RolloutCoordinationSpec struct {
 	// Groups is the list of coordination groups. Each group binds a
 	// set of Components under one policy. A Component may appear in
@@ -32,8 +31,8 @@ type RolloutCoordinationSpec struct {
 // RolloutCoordinationGroup binds a set of Components under one
 // coordination policy.
 //
-// Unused — superseded by spec.rollout.groups[] (RolloutGroup); retained
-// for compatibility, scheduled for removal.
+// Superseded by spec.rollout.groups[] (RolloutGroup); retained for
+// compatibility.
 type RolloutCoordinationGroup struct {
 	// Components lists the Component names included in this group.
 	// Valid values: "router", "engine", "decoder".
@@ -90,9 +89,9 @@ const (
 	CoordinationPolicyBlueGreen CoordinationPolicy = "BlueGreen"
 
 	// CoordinationPolicyIndependent rolls each Component on its own. The
-	// group declaration is documentation only; behavior matches the
-	// historical default. Useful as an explicit assertion that the
-	// operator has considered coordination and decided against it.
+	// group declaration is documentation only; behavior is identical to
+	// Components not listed in any group. Useful as an explicit assertion
+	// that the operator has considered coordination and decided against it.
 	CoordinationPolicyIndependent CoordinationPolicy = "Independent"
 
 	// CoordinationPolicyRollingUpdate rolls Components in parallel
@@ -149,7 +148,10 @@ type CoordinationPacing struct {
 	// starting_ratio ± this percent, and resumes once the pools
 	// rebalance. Example: a group that starts 2:1 with a value of 5 holds
 	// the live proportion between 1.9:1 and 2.1:1. For three or more
-	// components every pair is checked. Default: 5 (i.e. 5%).
+	// components every pair is checked. When nil, the operator-configured
+	// default (the coordination block of the operator's ConfigMap) applies
+	// at resolution; unresolved (nil after resolution) means no drift
+	// bound is enforced.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100
@@ -333,3 +335,11 @@ const CompositePhaseSequentialFailed = "Sequential.Failed"
 // RolloutCoordinationReady is the InferenceServiceStatus condition
 // type for coordination readiness. True when every group is Idle.
 const RolloutCoordinationReady = "RolloutCoordinationReady"
+
+// CoordinationAdvisory is the InferenceServiceStatus condition type for
+// the "multiple OMENative Components but no coordination group" hint.
+// True (active) records that the advisory applies; it is the "already
+// advised" memory so the ConsiderCoordinationGroup event fires once on
+// transition, not every reconcile. Not a dependent of the Ready
+// conditionSet, so it never affects overall readiness.
+const CoordinationAdvisory = "CoordinationAdvisory"

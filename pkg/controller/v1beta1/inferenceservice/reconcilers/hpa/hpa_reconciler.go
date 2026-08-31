@@ -106,16 +106,10 @@ func getTargetUtilization(metadata metav1.ObjectMeta, componentExt *v1beta1.Comp
 			return int32(utilization)
 		}
 	}
-	if componentExt.ScaleTarget != nil {
-		return int32(*componentExt.ScaleTarget)
-	}
 	return constants.DefaultCPUUtilization
 }
 
 func getResourceName(componentExt *v1beta1.ComponentExtensionSpec) corev1.ResourceName {
-	if componentExt.ScaleMetric != nil {
-		return corev1.ResourceName(*componentExt.ScaleMetric)
-	}
 	return corev1.ResourceCPU
 }
 

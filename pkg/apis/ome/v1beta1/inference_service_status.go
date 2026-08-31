@@ -103,9 +103,6 @@ type MountedOverlay struct {
 
 // ComponentStatusSpec describes the state of the component
 type ComponentStatusSpec struct {
-	// Latest revision name that is created
-	// +optional
-	LatestCreatedRevision string `json:"latestCreatedRevision,omitempty"`
 	// URL holds the primary url for this component.
 	// It generally has the form http[s]://{name}.{namespace}.{cluster-level-suffix}
 	// +optional
@@ -116,6 +113,9 @@ type ComponentStatusSpec struct {
 	// Addressable endpoint for the InferenceService
 	// +optional
 	Address *duckv1.Addressable `json:"address,omitempty"`
+	// SelectedAccelerator shows which AcceleratorClass was selected
+	// +optional
+	SelectedAccelerator *AcceleratorSelection `json:"selectedAccelerator,omitempty"`
 
 	// Lifecycle reports OMENative-managed lifecycle state for this Component
 	// when the Component resolves to deploymentMode OMENative
@@ -130,28 +130,33 @@ type ComponentStatusSpec struct {
 	// Component. One of Stable, Canarying,
 	// BlueGreenStandby, Pending, Paused, Promoting, RollingBack,
 	// RolledBack, Failed. Empty when no rollout is in flight on this
-	// Component (also empty for Components on deployment modes that
-	// haven't implemented the rollout contract yet — e.g. RawDeployment
-	// in alpha).
+	// Component (also empty for Components on deployment modes without
+	// the rollout contract — e.g. RawDeployment).
 	// +optional
 	// +kubebuilder:validation:Enum=Stable;Canarying;BlueGreenStandby;Pending;Paused;Promoting;RollingBack;RolledBack;Failed
 	RolloutPhase RolloutPhase `json:"rolloutPhase,omitempty"`
 
-	// LatestReadyRevision names the most recent ControllerRevision
-	// whose pods reached Ready. Equal to LatestRolledoutRevision once
-	// the rollout completes; set ahead of it during in-flight rollouts.
+	// LatestReadyRevision is the per-revision Service name
+	// (`<isvc>-<component>-rev-<hash>`) fronting the most recent
+	// revision whose pods reached Ready. Equal to
+	// LatestRolledoutRevision once the rollout completes; set ahead of
+	// it during in-flight rollouts.
 	// +optional
 	LatestReadyRevision string `json:"latestReadyRevision,omitempty"`
 
-	// LatestRolledoutRevision names the most recent ControllerRevision
+	// LatestRolledoutRevision is the per-revision Service name
+	// (`<isvc>-<component>-rev-<hash>`) of the most recent revision
 	// that fully owns this Component's traffic (i.e., the rollout has
 	// completed). Drives the consumer-side HTTPRoute backendRef.
 	// +optional
 	LatestRolledoutRevision string `json:"latestRolledoutRevision,omitempty"`
 
-	// PreviousRolledoutRevision names the prior rolled-out
-	// ControllerRevision, retained for diagnosis and traffic
-	// reference during partial rollbacks.
+	// PreviousRolledoutRevision is the per-revision Service name
+	// (`<isvc>-<component>-rev-<hash>`) of the revision that fully
+	// owned this Component's traffic immediately before
+	// LatestRolledoutRevision; recorded when LatestRolledoutRevision
+	// advances. Retained for diagnosis and traffic reference during
+	// partial rollbacks.
 	// +optional
 	PreviousRolledoutRevision string `json:"previousRolledoutRevision,omitempty"`
 
@@ -168,10 +173,8 @@ type ComponentStatusSpec struct {
 	// Class / ManagedBy / SpecSource and (when ManagedBy == "ome") live
 	// CurrentReplicas / DesiredReplicas / LastScaleTime / Conditions
 	// mirrored from the underlying HPA or ScaledObject. Populated by
-	// the ISVC status writer; nil for Components that don't go through
-	// the new resolver yet (e.g., RawDeployment Components that haven't
-	// migrated). See ComponentAutoscalerStatus for the full field
-	// semantics.
+	// the ISVC status writer for RawDeployment- and OMENative-managed
+	// Components. See ComponentAutoscalerStatus for the full field semantics.
 	// +optional
 	Autoscaler *ComponentAutoscalerStatus `json:"autoscaler,omitempty"`
 
@@ -185,33 +188,6 @@ type ComponentStatusSpec struct {
 	// OME-managed HPA / SO is active.
 	// +optional
 	ScaleTargetRef *ScaleTargetRef `json:"scaleTargetRef,omitempty"`
-
-	// SelectedAccelerator shows which AcceleratorClass was selected
-	// +optional
-	SelectedAccelerator *AcceleratorSelection `json:"selectedAccelerator,omitempty"`
-}
-
-// ComponentTrafficTarget describes the percentage of traffic routed to
-// one revision of one Component. RevisionName is the per-revision
-// Service name produced by OMENative's coordination layer (e.g.
-// `llama-engine-rev-abc123`), which the HTTPRoute builder
-// consumes directly as a backend reference.
-
-type AcceleratorSelection struct {
-	// AcceleratorClass that was selected
-	AcceleratorClass string `json:"acceleratorClass"`
-
-	// Reason explains why this accelerator was selected
-	// +optional
-	Reason string `json:"reason,omitempty"`
-
-	// NodeSelector that was applied to pods
-	// +optional
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-
-	// ResourceRequests that were applied to pods
-	// +optional
-	ResourceRequests map[string]string `json:"resourceRequests,omitempty"`
 }
 
 // ComponentTrafficTarget describes the percentage of traffic routed to
@@ -239,6 +215,24 @@ type ComponentTrafficTarget struct {
 	// LatestRolledoutRevision for the Component.
 	// +optional
 	LatestRevision bool `json:"latestRevision,omitempty"`
+}
+
+// AcceleratorSelection shows what accelerator was selected and why
+type AcceleratorSelection struct {
+	// AcceleratorClass that was selected
+	AcceleratorClass string `json:"acceleratorClass"`
+
+	// Reason explains why this accelerator was selected
+	// +optional
+	Reason string `json:"reason,omitempty"`
+
+	// NodeSelector that was applied to pods
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// ResourceRequests that were applied to pods
+	// +optional
+	ResourceRequests map[string]string `json:"resourceRequests,omitempty"`
 }
 
 // ComponentType contains the different types of components of the service
@@ -275,11 +269,16 @@ const (
 )
 
 type ModelStatus struct {
-	// Whether the available model server endpoints reflect the current Spec or is in transition
-	// +kubebuilder:default=UpToDate
-	TransitionStatus TransitionStatus `json:"transitionStatus"`
+	// Whether the available predictor endpoints reflect the current Spec or is in transition.
+	// Empty when the InferenceService is "lean" (no spec.model is declared) and
+	// no model-loading lifecycle applies; the controller leaves this field
+	// unset in that case. Populated as "InProgress" → "UpToDate" (or
+	// "BlockedByFailedLoad"/"InvalidSpec") by the controller once a model
+	// is referenced.
+	// +optional
+	TransitionStatus TransitionStatus `json:"transitionStatus,omitempty"`
 
-	// State information of the model.
+	// State information of the predictor's model.
 	// +optional
 	ModelRevisionStates *ModelRevisionStates `json:"modelRevisionStates,omitempty"`
 
@@ -287,7 +286,7 @@ type ModelStatus struct {
 	// +optional
 	LastFailureInfo *FailureInfo `json:"lastFailureInfo,omitempty"`
 
-	// Model copy information of the model.
+	// Model copy information of the predictor's model.
 	// +optional
 	ModelCopies *ModelCopies `json:"modelCopies,omitempty"`
 }
@@ -301,10 +300,10 @@ type ModelRevisionStates struct {
 }
 
 type ModelCopies struct {
-	// How many copies of this model failed to load recently
+	// How many copies of this predictor's models failed to load recently
 	// +kubebuilder:default=0
 	FailedCopies int `json:"failedCopies"`
-	// Total number copies of this model that are currently loaded
+	// Total number copies of this predictor's models that are currently loaded
 	// +optional
 	TotalCopies int `json:"totalCopies,omitempty"`
 }
@@ -315,13 +314,13 @@ type TransitionStatus string
 
 // TransitionStatus Enum values
 const (
-	// Model is up-to-date (reflects current spec)
+	// Predictor is up-to-date (reflects current spec)
 	UpToDate TransitionStatus = "UpToDate"
 	// Waiting for target model to reach state of active model
 	InProgress TransitionStatus = "InProgress"
 	// Target model failed to load
 	BlockedByFailedLoad TransitionStatus = "BlockedByFailedLoad"
-	// Target model spec failed validation
+	// Target predictor spec failed validation
 	InvalidSpec TransitionStatus = "InvalidSpec"
 )
 
@@ -344,15 +343,13 @@ const (
 )
 
 // FailureReason enum
-// +kubebuilder:validation:Enum=BaseModelNotReady;BaseModelNotFound;ModelLoadFailed;ContainerStartupFailed;RuntimeUnhealthy;RuntimeDisabled;NoSupportingRuntime;RuntimeNotRecognized
+// +kubebuilder:validation:Enum=BaseModelNotReady;BaseModelNotFound;ModelLoadFailed;RuntimeUnhealthy;RuntimeDisabled;NoSupportingRuntime;RuntimeNotRecognized
 type FailureReason string
 
 // FailureReason enum values
 const (
 	// ModelLoadFailed The model failed to load within a ServingRuntime container
 	ModelLoadFailed FailureReason = "ModelLoadFailed"
-	// ContainerStartupFailed Serving container failed to start before becoming ready
-	ContainerStartupFailed FailureReason = "ContainerStartupFailed"
 	// RuntimeUnhealthy Corresponding ServingRuntime containers failed to start or are unhealthy
 	RuntimeUnhealthy FailureReason = "RuntimeUnhealthy"
 	// RuntimeDisabled The ServingRuntime is disabled
@@ -468,19 +465,6 @@ func (ss *InferenceServiceStatus) SetCondition(conditionType apis.ConditionType,
 
 // PlacementPhase is the coarse state of an InferenceService's multi-cluster placement.
 // +kubebuilder:validation:Enum=Pending;Racing;Placed;Failed
-
-func (ss *InferenceServiceStatus) IsConditionFalse(t apis.ConditionType) bool {
-	condition := conditionSet.Manage(ss).GetCondition(t)
-	return condition != nil && condition.Status == v1.ConditionFalse
-}
-
-// IsConditionUnknown returns if a given condition is Unknown
-
-func (ss *InferenceServiceStatus) InitializeConditions() {
-	conditionSet.Manage(ss).InitializeConditions()
-}
-
-// IsReady returns the overall readiness for the inference service.
 type PlacementPhase string
 
 const (

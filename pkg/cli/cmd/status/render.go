@@ -113,7 +113,7 @@ func componentLabel(ct v1beta1.ComponentType) string {
 // writeComponent renders one Components section: the revision header line
 // plus a pod table (or a "(no pods)" placeholder).
 func writeComponent(w io.Writer, label string, spec v1beta1.ComponentStatusSpec, pods []corev1.Pod) error {
-	fmt.Fprintf(w, "  %s   revision %s\n", label, printers.OrDash(spec.LatestCreatedRevision))
+	fmt.Fprintf(w, "  %s   revision %s\n", label, printers.OrDash(spec.LatestReadyRevision))
 	if len(pods) == 0 {
 		fmt.Fprintf(w, "    (no pods)\n")
 		return nil

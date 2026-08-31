@@ -17,7 +17,7 @@ func TestGetScaledObjectTriggers(t *testing.T) {
 	testCases := []struct {
 		name                    string
 		metadata                metav1.ObjectMeta
-		inferenceServiceSpec    v1beta1.InferenceServiceSpec
+		kedaConfig              *v1beta1.KedaConfig
 		expectedAuthRef         *kedav1.AuthenticationRef
 		expectedAuthModesInMeta string
 		expectedServerAddress   string
@@ -28,12 +28,10 @@ func TestGetScaledObjectTriggers(t *testing.T) {
 				Name:      serviceName,
 				Namespace: namespace,
 			},
-			inferenceServiceSpec: v1beta1.InferenceServiceSpec{
-				KedaConfig: &v1beta1.KedaConfig{
-					EnableKeda:        true,
-					PromServerAddress: "http://prometheus:9090",
-					ScalingThreshold:  "10",
-				},
+			kedaConfig: &v1beta1.KedaConfig{
+				EnableKeda:        true,
+				PromServerAddress: "http://prometheus:9090",
+				ScalingThreshold:  "10",
 			},
 			expectedAuthRef:         nil,
 			expectedAuthModesInMeta: "",
@@ -45,17 +43,15 @@ func TestGetScaledObjectTriggers(t *testing.T) {
 				Name:      serviceName,
 				Namespace: namespace,
 			},
-			inferenceServiceSpec: v1beta1.InferenceServiceSpec{
-				KedaConfig: &v1beta1.KedaConfig{
-					EnableKeda:        true,
-					PromServerAddress: "https://prometheus.grafana.net/api/prom",
-					ScalingThreshold:  "0.07",
-					AuthenticationRef: &v1beta1.ScalerAuthenticationRef{
-						Name: "grafana-cloud-auth",
-						Kind: "TriggerAuthentication",
-					},
-					AuthModes: "basic",
+			kedaConfig: &v1beta1.KedaConfig{
+				EnableKeda:        true,
+				PromServerAddress: "https://prometheus.grafana.net/api/prom",
+				ScalingThreshold:  "0.07",
+				AuthenticationRef: &v1beta1.ScalerAuthenticationRef{
+					Name: "grafana-cloud-auth",
+					Kind: "TriggerAuthentication",
 				},
+				AuthModes: "basic",
 			},
 			expectedAuthRef: &kedav1.AuthenticationRef{
 				Name: "grafana-cloud-auth",
@@ -70,17 +66,15 @@ func TestGetScaledObjectTriggers(t *testing.T) {
 				Name:      serviceName,
 				Namespace: namespace,
 			},
-			inferenceServiceSpec: v1beta1.InferenceServiceSpec{
-				KedaConfig: &v1beta1.KedaConfig{
-					EnableKeda:        true,
-					PromServerAddress: "https://prometheus.grafana.net/api/prom",
-					ScalingThreshold:  "10",
-					AuthenticationRef: &v1beta1.ScalerAuthenticationRef{
-						Name: "cluster-wide-auth",
-						Kind: "ClusterTriggerAuthentication",
-					},
-					AuthModes: "tls,basic",
+			kedaConfig: &v1beta1.KedaConfig{
+				EnableKeda:        true,
+				PromServerAddress: "https://prometheus.grafana.net/api/prom",
+				ScalingThreshold:  "10",
+				AuthenticationRef: &v1beta1.ScalerAuthenticationRef{
+					Name: "cluster-wide-auth",
+					Kind: "ClusterTriggerAuthentication",
 				},
+				AuthModes: "tls,basic",
 			},
 			expectedAuthRef: &kedav1.AuthenticationRef{
 				Name: "cluster-wide-auth",
@@ -95,17 +89,15 @@ func TestGetScaledObjectTriggers(t *testing.T) {
 				Name:      serviceName,
 				Namespace: namespace,
 			},
-			inferenceServiceSpec: v1beta1.InferenceServiceSpec{
-				KedaConfig: &v1beta1.KedaConfig{
-					EnableKeda:        true,
-					PromServerAddress: "https://prometheus.grafana.net/api/prom",
-					ScalingThreshold:  "10",
-					AuthenticationRef: &v1beta1.ScalerAuthenticationRef{
-						Name: "my-auth",
-						// Kind is empty - should default to TriggerAuthentication
-					},
-					AuthModes: "bearer",
+			kedaConfig: &v1beta1.KedaConfig{
+				EnableKeda:        true,
+				PromServerAddress: "https://prometheus.grafana.net/api/prom",
+				ScalingThreshold:  "10",
+				AuthenticationRef: &v1beta1.ScalerAuthenticationRef{
+					Name: "my-auth",
+					// Kind is empty - should default to TriggerAuthentication
 				},
+				AuthModes: "bearer",
 			},
 			expectedAuthRef: &kedav1.AuthenticationRef{
 				Name: "my-auth",
@@ -120,13 +112,11 @@ func TestGetScaledObjectTriggers(t *testing.T) {
 				Name:      serviceName,
 				Namespace: namespace,
 			},
-			inferenceServiceSpec: v1beta1.InferenceServiceSpec{
-				KedaConfig: &v1beta1.KedaConfig{
-					EnableKeda:        true,
-					PromServerAddress: "http://prometheus:9090",
-					ScalingThreshold:  "10",
-					AuthModes:         "basic", // This should be ignored without authenticationRef
-				},
+			kedaConfig: &v1beta1.KedaConfig{
+				EnableKeda:        true,
+				PromServerAddress: "http://prometheus:9090",
+				ScalingThreshold:  "10",
+				AuthModes:         "basic", // This should be ignored without authenticationRef
 			},
 			expectedAuthRef:         nil,
 			expectedAuthModesInMeta: "", // authModes is NOT added without authenticationRef
@@ -138,9 +128,7 @@ func TestGetScaledObjectTriggers(t *testing.T) {
 				Name:      serviceName,
 				Namespace: namespace,
 			},
-			inferenceServiceSpec: v1beta1.InferenceServiceSpec{
-				KedaConfig: nil,
-			},
+			kedaConfig:              nil,
 			expectedAuthRef:         nil,
 			expectedAuthModesInMeta: "",
 			expectedServerAddress:   "http://prometheus-operated.monitoring.svc.cluster.local:9090",
@@ -149,7 +137,7 @@ func TestGetScaledObjectTriggers(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			triggers := getScaledObjectTriggers(tt.metadata, &v1beta1.ComponentExtensionSpec{}, tt.inferenceServiceSpec.KedaConfig)
+			triggers := getScaledObjectTriggers(tt.metadata, &v1beta1.ComponentExtensionSpec{}, tt.kedaConfig)
 
 			if len(triggers) != 1 {
 				t.Fatalf("Expected 1 trigger, got %d", len(triggers))

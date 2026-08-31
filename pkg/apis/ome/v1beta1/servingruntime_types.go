@@ -9,19 +9,19 @@ import (
 
 // +k8s:openapi-gen=true
 type SupportedModelFormat struct {
-	// TODO this field is being used as model format name, and this is not correct, we should deprecate this and use Name from ModelFormat
-	// Name of the model
+	// Name of the model format this entry describes; matched against the
+	// model's format name during runtime selection. ModelFormat.Name is
+	// the preferred field for new runtimes.
 	// +optional
 	Name string `json:"name"`
 	// ModelFormat of the model, e.g., "PyTorch", "TensorFlow", "ONNX", "SafeTensors"
 	// +required
 	ModelFormat *ModelFormat `json:"modelFormat"`
-	// +optional
-	// DEPRECATED: This field is deprecated and will be removed in future releases.
+	// Deprecated: not consulted during runtime selection.
 	// +optional
 	ModelType *string `json:"modelType,omitempty"`
 	// Version of the model format.
-	// Used in validating that a runtime supports a model.
+	// Used in validating that a runtime supports a predictor.
 	// It Can be "major", "major.minor" or "major.minor.patch".
 	// +optional
 	Version *string `json:"version,omitempty"`
@@ -40,12 +40,17 @@ type SupportedModelFormat struct {
 	// +optional
 	DiffusionPipeline *DiffusionPipelineSpec `json:"diffusionPipeline,omitempty"`
 
+	// ModelCacheProviders lists model cache providers this runtime can load
+	// from when a BaseModel uses sharded distribution. Empty means this format
+	// supports only the default local/per-node model loading path.
+	// +optional
+	// +listType=atomic
+	ModelCacheProviders []ModelCacheProvider `json:"modelCacheProviders,omitempty"`
+
 	// Set to true to allow the ServingRuntime to be used for automatic model placement if
 	// this model format is specified with no explicit runtime.
 	// +optional
 	AutoSelect *bool `json:"autoSelect,omitempty"`
-
-	// +kubebuilder:validation:Minimum=1
 
 	// Priority of this serving runtime for auto selection.
 	// This is used to select the serving runtime if more than one serving runtime supports the same model format.
@@ -53,12 +58,23 @@ type SupportedModelFormat struct {
 	// Priority is not considered if AutoSelect is either false or not specified.
 	// Priority can be overridden by specifying the runtime in the InferenceService.
 	// +optional
+	// +kubebuilder:validation:Minimum=1
 	Priority *int32 `json:"priority,omitempty"`
 
 	// AcceleratorConfig provides accelerator-specific overrides for this model format
 	// +optional
 	AcceleratorConfig map[string]*AcceleratorModelConfig `json:"acceleratorConfig,omitempty"`
 }
+
+// ModelCacheProvider identifies a model cache provider implementation that a
+// runtime knows how to consume.
+type ModelCacheProvider string
+
+const (
+	// DragonFly is the provider name used by the sharded model-cache
+	// integration.
+	DragonFly ModelCacheProvider = "model_cache"
+)
 
 // AcceleratorModelConfig provides accelerator-specific overrides for this model format
 // +k8s:openapi-gen=true
@@ -136,12 +152,12 @@ type ServingRuntimePodSpec struct {
 	// +optional
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 
-	// Labels that will be add to the pod.
+	// Labels that will be added to the pod.
 	// More info: http://kubernetes.io/docs/user-guide/labels
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
 
-	// Annotations that will be add to the pod.
+	// Annotations that will be added to the pod.
 	// More info: http://kubernetes.io/docs/user-guide/annotations
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
@@ -183,9 +199,7 @@ type ServingRuntimePodSpec struct {
 	HostNetwork bool `json:"hostNetwork,omitempty" protobuf:"varint,11,opt,name=hostNetwork"`
 }
 
-// ServingRuntimeSpec defines the desired state of ServingRuntime. This spec is currently provisional
-// and are subject to change as details regarding single-model serving and multi-model serving
-// are hammered out.
+// ServingRuntimeSpec defines the desired state of ServingRuntime.
 // +k8s:openapi-gen=true
 type ServingRuntimeSpec struct {
 	// Model formats and version supported by this runtime
@@ -219,9 +233,11 @@ type ServingRuntimeSpec struct {
 	// PodSpec for the serving runtime
 	ServingRuntimePodSpec `json:",inline"`
 
-	// WorkerPodSpec for the serving runtime, this is used for multi-node serving
+	// ScalingPolicy default for InferenceServices binding this runtime.
+	// Replaced wholesale by isvc.spec.scalingPolicy when set on the ISVC.
+	// Alpha. The API may change without notice.
 	// +optional
-	WorkerPodSpec *WorkerPodSpec `json:"workers,omitempty"`
+	ScalingPolicy *ScalingPolicy `json:"scalingPolicy,omitempty"`
 
 	// AcceleratorRequirements specifies the accelerator requirements for this runtime
 	// +optional
@@ -263,24 +279,21 @@ type AcceleratorRequirements struct {
 	PreferredPrecisions []string `json:"preferredPrecisions,omitempty"`
 }
 
-type WorkerPodSpec struct {
-	// Size of the worker, this is the number of pods in the worker.
-	// +immutable
-	// +optional
-	Size *int `json:"size"`
-
-	// PodSpec for the worker
-	// +optional
-	ServingRuntimePodSpec `json:",inline"`
-}
-
 // ModelSizeRangeSpec defines the range of model sizes supported by this runtime
 // +k8s:openapi-gen=true
 type ModelSizeRangeSpec struct {
-	// Minimum size of the model in bytes
+	// Minimum model parameter count supported by this runtime, given as a
+	// string with an optional suffix M (million), B (billion), or T (trillion),
+	// e.g. "1B", "7B", "70B", "1T". It is compared against the model's parameter
+	// size during runtime auto-selection. A value not in the <number>[M|B|T]
+	// form is treated as 0.
 	// +optional
 	Min *string `json:"min,omitempty"`
-	// Maximum size of the model in bytes
+	// Maximum model parameter count supported by this runtime, given as a
+	// string with an optional suffix M (million), B (billion), or T (trillion),
+	// e.g. "1B", "7B", "70B", "1T". It is compared against the model's parameter
+	// size during runtime auto-selection. A value not in the <number>[M|B|T]
+	// form is treated as 0.
 	// +optional
 	Max *string `json:"max,omitempty"`
 }
@@ -288,12 +301,31 @@ type ModelSizeRangeSpec struct {
 // ServingRuntimeStatus defines the observed state of ServingRuntime
 // +k8s:openapi-gen=true
 type ServingRuntimeStatus struct {
+	// InheritanceChain lists the runtime names walked when resolving
+	// the ome.io/inherit-from chain, in root-first order. Single-entry
+	// list ([self]) when no inheritance is declared. Operator-visible
+	// only — consumers re-walk the chain in-memory at use time rather
+	// than reading a pre-computed spec from status (avoids storing
+	// the fully-merged spec, which is large).
+	// +optional
+	// +listType=atomic
+	InheritanceChain []string `json:"inheritanceChain,omitempty"`
+
+	// Conditions reflect the runtime controller's view of inheritance
+	// resolution. Currently only InheritanceReady (True/False) is
+	// surfaced. Informational — consumers can block on
+	// InheritanceReady=False if they want to gate on chain health.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // ServingRuntime is the Schema for the servingruntimes API
 // +k8s:openapi-gen=true
 // +genclient
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Disabled",type="boolean",JSONPath=".spec.disabled"
 // +kubebuilder:printcolumn:name="ModelFormat",type=string,JSONPath=".spec.supportedModelFormats[*].modelFormat.name"
 // +kubebuilder:printcolumn:name="ModelFramework",type=string,JSONPath=".spec.supportedModelFormats[*].modelFramework.name"
@@ -326,6 +358,7 @@ type ServingRuntimeList struct {
 // +genclient:nonNamespaced
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope="Cluster"
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Disabled",type="boolean",JSONPath=".spec.disabled"
 // +kubebuilder:printcolumn:name="ModelFormat",type=string,JSONPath=".spec.supportedModelFormats[*].modelFormat.name"
 // +kubebuilder:printcolumn:name="ModelFramework",type=string,JSONPath=".spec.supportedModelFormats[*].modelFramework.name"

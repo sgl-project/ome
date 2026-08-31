@@ -1,4 +1,4 @@
-// Package v1beta1 contains API Schema definitions for the serving v1beta1 API group
+// Package v1beta1 contains the OME v1beta1 API group Schema definitions.
 // +k8s:openapi-gen=true
 // +kubebuilder:object:generate=true
 // +k8s:defaulter-gen=TypeMeta

@@ -171,6 +171,7 @@ type AcceleratorResource struct {
 	Name string `json:"name"`
 
 	// Quantity per accelerator
+	// +optional
 	// +kubebuilder:default="1"
 	Quantity resource.Quantity `json:"quantity,omitempty"`
 
@@ -209,8 +210,11 @@ type AcceleratorClassStatus struct {
 
 	// Conditions represent the latest available observations
 	// +optional
-	// +listType=atomic
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// +listType=map
+	// +listMapKey=type
+	// +patchStrategy=merge
+	// +patchMergeKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 
 	// AvailableNodes is the number of nodes that have this accelerator available
 	// +optional

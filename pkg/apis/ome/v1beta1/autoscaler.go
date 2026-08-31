@@ -28,10 +28,9 @@ const (
 
 // ComponentAutoscaler configures the autoscaler for a single Component
 // (engine / decoder / router). Takes priority over the legacy
-// ome.io/autoscalerClass annotation for this Component. Alpha.
-// The API may change without notice. This is the only supported way to
-// configure per-Component autoscaling on an ISVC — the legacy ScaleTarget
-// / ScaleMetric fields have been removed from ComponentExtensionSpec.
+// ome.io/autoscalerClass annotation for this Component, and is the only
+// way to configure per-Component autoscaling on an InferenceService.
+// Alpha. The API may change without notice.
 type ComponentAutoscaler struct {
 	// Class selects the autoscaler implementation.
 	// +kubebuilder:validation:Enum=HPA;KEDA;External;None
@@ -124,7 +123,7 @@ type ScalingPolicy struct {
 	// +kubebuilder:default=Independent
 	Mode ScalingMode `json:"mode"`
 
-	// Proportional configuration; required when Mode == "proportional".
+	// Proportional configuration; required when Mode == "Proportional".
 	// +optional
 	Proportional *ProportionalPolicy `json:"proportional,omitempty"`
 }

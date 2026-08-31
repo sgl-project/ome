@@ -22,9 +22,6 @@ func TestCreateHPA(t *testing.T) {
 		componentExt *v1beta1.ComponentExtensionSpec
 	}
 
-	cpuResource := v1beta1.MetricCPU
-	memoryResource := v1beta1.MetricMemory
-
 	testInput := map[string]args{
 		"igdefaulthpa": {
 			objectMeta: metav1.ObjectMeta{
@@ -55,8 +52,6 @@ func TestCreateHPA(t *testing.T) {
 			componentExt: &v1beta1.ComponentExtensionSpec{
 				MinReplicas: isvc.GetIntReference(2),
 				MaxReplicas: 5,
-				ScaleTarget: isvc.GetIntReference(30),
-				ScaleMetric: &cpuResource,
 			},
 		},
 		"enginedefaulthpa": {
@@ -64,8 +59,6 @@ func TestCreateHPA(t *testing.T) {
 			componentExt: &v1beta1.ComponentExtensionSpec{
 				MinReplicas: nil,
 				MaxReplicas: 0,
-				ScaleTarget: nil,
-				ScaleMetric: &memoryResource,
 			},
 		},
 		"enginespecifiedhpa": {
@@ -73,8 +66,6 @@ func TestCreateHPA(t *testing.T) {
 			componentExt: &v1beta1.ComponentExtensionSpec{
 				MinReplicas: isvc.GetIntReference(5),
 				MaxReplicas: 10,
-				ScaleTarget: isvc.GetIntReference(50),
-				ScaleMetric: &cpuResource,
 			},
 		},
 		"invalidinputhpa": {
@@ -82,8 +73,6 @@ func TestCreateHPA(t *testing.T) {
 			componentExt: &v1beta1.ComponentExtensionSpec{
 				MinReplicas: isvc.GetIntReference(0),
 				MaxReplicas: -10,
-				ScaleTarget: nil,
-				ScaleMetric: &memoryResource,
 			},
 		},
 	}
@@ -91,9 +80,7 @@ func TestCreateHPA(t *testing.T) {
 	defaultminreplicas := int32(1)
 	defaultutilization := int32(80)
 	igminreplicas := int32(2)
-	igutilization := int32(30)
 	engineminreplicas := int32(5)
-	engineutilization := int32(50)
 
 	expectedHPASpecs := map[string]*autoscalingv2.HorizontalPodAutoscaler{
 		"igdefaulthpa": {
@@ -138,7 +125,7 @@ func TestCreateHPA(t *testing.T) {
 							Name: v1.ResourceName("cpu"),
 							Target: autoscalingv2.MetricTarget{
 								Type:               "Utilization",
-								AverageUtilization: &igutilization,
+								AverageUtilization: &defaultutilization,
 							},
 						},
 					},
@@ -159,7 +146,7 @@ func TestCreateHPA(t *testing.T) {
 					{
 						Type: autoscalingv2.ResourceMetricSourceType,
 						Resource: &autoscalingv2.ResourceMetricSource{
-							Name: v1.ResourceName("memory"),
+							Name: v1.ResourceName("cpu"),
 							Target: autoscalingv2.MetricTarget{
 								Type:               "Utilization",
 								AverageUtilization: &defaultutilization,
@@ -186,7 +173,7 @@ func TestCreateHPA(t *testing.T) {
 							Name: v1.ResourceName("cpu"),
 							Target: autoscalingv2.MetricTarget{
 								Type:               "Utilization",
-								AverageUtilization: &engineutilization,
+								AverageUtilization: &defaultutilization,
 							},
 						},
 					},

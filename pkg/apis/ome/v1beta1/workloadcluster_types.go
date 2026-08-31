@@ -65,7 +65,7 @@ type KubeConfigSource struct {
 }
 
 // ClusterProfileRef references a SIG-Multicluster cluster-inventory-api
-// ClusterProfile. Phase 1 records the reference but does not yet resolve it.
+// ClusterProfile. The reference is recorded but not resolved.
 type ClusterProfileRef struct {
 	// +required
 	Name string `json:"name"`

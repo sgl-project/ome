@@ -148,7 +148,7 @@ func TestValidateCoordination_RatioBalancedWithBlueGreenAccepted(t *testing.T) {
 			{
 				Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
 				BlueGreen:     &v1beta1.GroupBlueGreen{},
-				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: 5},
+				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptrInt32(5)},
 			},
 		},
 	}
@@ -334,7 +334,7 @@ func TestValidateCoordination_RatioBalancedWithZeroBudgetNotRejected(t *testing.
 			{
 				Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
 				BlueGreen:     &v1beta1.GroupBlueGreen{},
-				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: 5},
+				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptrInt32(5)},
 			},
 		},
 	}
@@ -390,7 +390,7 @@ func TestCoordinationRatioToleranceWarning_AboveThreshold(t *testing.T) {
 			{
 				Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
 				BlueGreen:     &v1beta1.GroupBlueGreen{},
-				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: 80},
+				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptrInt32(80)},
 			},
 		},
 	}
@@ -407,7 +407,7 @@ func TestCoordinationRatioToleranceWarning_BelowThresholdEmpty(t *testing.T) {
 			{
 				Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
 				BlueGreen:     &v1beta1.GroupBlueGreen{},
-				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: 5},
+				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptrInt32(5)},
 			},
 		},
 	}
@@ -445,3 +445,5 @@ func omeNativeEngineOnlySpec() *v1beta1.InferenceServiceSpec {
 		},
 	}
 }
+
+func ptrInt32(v int32) *int32 { return &v }

@@ -45,8 +45,8 @@ func TestRenderNotReady(t *testing.T) {
 					{Type: apis.ConditionReady, Status: corev1.ConditionFalse, Reason: "DecoderNotReady"},
 				}},
 				Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
-					v1beta1.EngineComponent:  {LatestCreatedRevision: "llama-70b-engine-00002"},
-					v1beta1.DecoderComponent: {LatestCreatedRevision: "llama-70b-decoder-00002"},
+					v1beta1.EngineComponent:  {LatestReadyRevision: "llama-70b-engine-00002"},
+					v1beta1.DecoderComponent: {LatestReadyRevision: "llama-70b-decoder-00002"},
 				},
 			},
 		},

@@ -11,6 +11,14 @@ type CanaryStatus struct {
 	// +optional
 	CanaryRevisionHash string `json:"canaryRevisionHash,omitempty"`
 
+	// StableRevisionHash is the revision hash that was serving as stable when
+	// the canary began — the rollback target. It is preserved across mid-canary
+	// retargets so a rollback always returns to the pre-canary stable revision,
+	// never to a partially-rolled intermediate. Cleared when the canary
+	// completes (the canary revision becomes the new stable).
+	// +optional
+	StableRevisionHash string `json:"stableRevisionHash,omitempty"`
+
 	// CurrentStep is the zero-based index into spec.rollout.groups[i].canary.steps.
 	CurrentStep int32 `json:"currentStep"`
 
@@ -23,6 +31,17 @@ type CanaryStatus struct {
 	// for the canary revision (mirrors the active step's TrafficWeight once
 	// applied).
 	ObservedTrafficWeight int32 `json:"observedTrafficWeight"`
+
+	// PromotedThrough is the ome.io/rollout-promote value the most recent step
+	// advance applied. It is stamped in the same status write as the advance —
+	// the durable record of the promotion, since metadata (the annotation) and
+	// status cannot be written atomically. While set, a lingering annotation
+	// with this value is inert (already applied; removal is retried
+	// best-effort). While the rollout is in progress it clears once the
+	// annotation is observed removed, re-arming manual promotion for later
+	// steps.
+	// +optional
+	PromotedThrough string `json:"promotedThrough,omitempty"`
 
 	// RolledBackRevisionHash is set when a rollback (ome.io/rollout-rollback)
 	// abandons a canary: it records the rejected revision hash. While set, the
