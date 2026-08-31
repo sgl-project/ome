@@ -1,0 +1,16 @@
+title: Comprehensive kubectl-ome Operations
+oep-number: "0011.1"
+authors:
+  - "@pallasathena92"
+status: provisional
+creation-date: 2026-08-31
+reviewers:
+  - TBD
+approvers:
+  - TBD
+
+see-also:
+  - "/oeps/0011-kubectl-ome-plugin"
+
+# The target maturity stage in the current dev cycle for this OEP.
+stage: alpha
