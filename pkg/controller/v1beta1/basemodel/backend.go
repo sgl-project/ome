@@ -24,19 +24,16 @@ func pickBackend(backends []shared.Backend, spec *v1beta1.BaseModelSpec) shared.
 	panic("basemodel: no default backend registered (expected per-node fallback last)")
 }
 
-// perNodeBackend is the observational default: it reflects the per-node
-// model-status ConfigMaps written by the model-agent DaemonSet into the
-// model's status. It always matches and is the registry fallback.
+// perNodeBackend wraps pernode.Reconcile with a pre-step that scrubs
+// PVC artifacts left over when a model's URI flips away from pvc://.
+// Lives here (not in pernode/) so that cross-backend cleanup doesn't
+// drag a pernode→pvc import.
 type perNodeBackend struct{}
 
 func (perNodeBackend) Name() string                          { return "pernode" }
 func (perNodeBackend) Matches(_ *v1beta1.BaseModelSpec) bool { return true }
 
 func (perNodeBackend) Reconcile(ctx context.Context, a shared.BackendArgs) (ctrl.Result, error) {
-	// A model whose storage URI flipped away from pvc:// lands on the
-	// per-node backend; scrub any leftover PVC Job / ConfigMap / conditions
-	// before running the per-node flow. Idempotent no-op when there are no
-	// PVC artifacts (the common case).
 	if err := pvc.CleanupStaleArtifacts(ctx, a.Client, a.Log, a.Obj, a.IsClusterScoped); err != nil {
 		a.Log.Error(err, "Failed to clean up stale PVC artifacts after URI swap")
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
@@ -47,7 +44,6 @@ func (perNodeBackend) Reconcile(ctx context.Context, a shared.BackendArgs) (ctrl
 		return ctrl.Result{RequeueAfter: time.Minute}, err
 	}
 
-	// Requeue while downloading to ensure status is updated regularly
 	if a.Status.State == v1beta1.LifeCycleStateImporting || a.Status.State == v1beta1.LifeCycleStateInTransit {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}

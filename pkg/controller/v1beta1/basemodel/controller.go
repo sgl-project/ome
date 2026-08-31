@@ -37,7 +37,6 @@ import (
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get
 
-// BaseModelReconciler reconciles BaseModel objects
 type BaseModelReconciler struct {
 	client.Client
 	Log            logr.Logger
@@ -45,7 +44,6 @@ type BaseModelReconciler struct {
 	OmeAgentConfig *controllerconfig.OmeAgentConfig
 }
 
-// ClusterBaseModelReconciler reconciles ClusterBaseModel objects
 type ClusterBaseModelReconciler struct {
 	client.Client
 	Log            logr.Logger
@@ -54,7 +52,7 @@ type ClusterBaseModelReconciler struct {
 }
 
 // backends builds the dispatch slice in match order: pvc → pernode.
-// perNodeBackend always matches, so it goes last as the fallback.
+// perNodeBackend always matches, so it goes last.
 func (r *BaseModelReconciler) backends() []shared.Backend {
 	return []shared.Backend{
 		pvc.New(r.OmeAgentConfig),
@@ -69,14 +67,12 @@ func (r *ClusterBaseModelReconciler) backends() []shared.Backend {
 	}
 }
 
-// Reconcile handles BaseModel reconciliation
 func (r *BaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("basemodel", req.NamespacedName)
 
 	baseModel := &v1beta1.BaseModel{}
 	if err := r.Get(ctx, req.NamespacedName, baseModel); err != nil {
 		if errors.IsNotFound(err) {
-			// Object not found, return without error since it was likely deleted
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get BaseModel")
@@ -85,14 +81,12 @@ func (r *BaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return reconcileModel(ctx, r.Client, r.Scheme, log, r.backends(), baseModel, constants.BaseModelFinalizer, false, "BaseModel")
 }
 
-// Reconcile handles ClusterBaseModel reconciliation
 func (r *ClusterBaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("clusterbasemodel", req.NamespacedName)
 
 	clusterBaseModel := &v1beta1.ClusterBaseModel{}
 	if err := r.Get(ctx, req.NamespacedName, clusterBaseModel); err != nil {
 		if errors.IsNotFound(err) {
-			// Object not found, return without error since it was likely deleted
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get ClusterBaseModel")
@@ -101,9 +95,6 @@ func (r *ClusterBaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return reconcileModel(ctx, r.Client, r.Scheme, log, r.backends(), clusterBaseModel, constants.ClusterBaseModelFinalizer, true, "ClusterBaseModel")
 }
 
-// reconcileModel is the backend-agnostic reconcile core: resolve the
-// spec/status, pick the backend, add the finalizer, and dispatch
-// deletion/reconcile to that backend.
 func reconcileModel(ctx context.Context, c client.Client, scheme *runtime.Scheme, log logr.Logger, backends []shared.Backend, obj client.Object, finalizer string, isClusterScoped bool, kind string) (ctrl.Result, error) {
 	spec, status, err := shared.ModelSpecAndStatus(obj)
 	if err != nil {
@@ -125,13 +116,11 @@ func reconcileModel(ctx context.Context, c client.Client, scheme *runtime.Scheme
 		Kind:            kind,
 	}
 
-	// Handle deletion
 	if !obj.GetDeletionTimestamp().IsZero() {
 		log.Info("Handling " + kind + " deletion via " + backend.Name() + " backend")
 		return backend.HandleDeletion(ctx, args)
 	}
 
-	// Add finalizer if not present
 	if !controllerutil.ContainsFinalizer(obj, finalizer) {
 		log.Info("Adding finalizer to " + kind)
 		controllerutil.AddFinalizer(obj, finalizer)
@@ -145,7 +134,6 @@ func reconcileModel(ctx context.Context, c client.Client, scheme *runtime.Scheme
 	return backend.Reconcile(ctx, args)
 }
 
-// SetupWithManager sets up the BaseModel controller with the Manager
 func (r *BaseModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta1.BaseModel{}).
@@ -153,11 +141,11 @@ func (r *BaseModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				return pernode.MapConfigMapToModelRequests(obj, r.Log, true) // true = namespaced
+				return pernode.MapConfigMapToModelRequests(obj, r.Log, true)
 			}),
-			// OR'd: per-node basemodel-status ConfigMaps (agent flow) +
-			// per-PVC pvc-status ConfigMaps (extraction Job output). Both are
-			// keyed by GetModelConfigMapKey, so one mapper fits both.
+			// OR'd: per-node basemodel-status ConfigMaps (agent flow)
+			// + per-PVC pvc-status ConfigMaps (extraction Job output).
+			// Both keyed by GetModelConfigMapKey, so one mapper fits both.
 			builder.WithPredicates(predicate.Or(pernode.CreateModelStatusConfigMapPredicate(), createPVCStatusConfigMapPredicate())),
 		).
 		Watches(
@@ -177,7 +165,6 @@ func (r *BaseModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// SetupWithManager sets up the ClusterBaseModel controller with the Manager
 func (r *ClusterBaseModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta1.ClusterBaseModel{}).
@@ -185,7 +172,7 @@ func (r *ClusterBaseModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				return pernode.MapConfigMapToModelRequests(obj, r.Log, false) // false = cluster-scoped
+				return pernode.MapConfigMapToModelRequests(obj, r.Log, false)
 			}),
 			builder.WithPredicates(predicate.Or(pernode.CreateModelStatusConfigMapPredicate(), createPVCStatusConfigMapPredicate())),
 		).
@@ -206,9 +193,9 @@ func (r *ClusterBaseModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// createPVCStatusConfigMapPredicate fires on ConfigMaps in the OME namespace
-// carrying the PVC-status label. Lives here (not in pvc/) because it's OR'd
-// with pernode's predicate in the single ConfigMap watch.
+// createPVCStatusConfigMapPredicate fires on ConfigMaps in the OME
+// namespace carrying the PVC-status label. Lives here (not in pvc/)
+// because it's OR'd with pernode's predicate in one watch.
 func createPVCStatusConfigMapPredicate() predicate.Predicate {
 	isPVC := func(obj client.Object) bool {
 		if obj.GetNamespace() != constants.OMENamespace {

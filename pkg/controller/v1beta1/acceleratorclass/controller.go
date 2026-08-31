@@ -3,7 +3,6 @@ package acceleratorclass
 import (
 	"context"
 	"sort"
-	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -18,7 +17,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -50,11 +51,19 @@ func (r *AcceleratorClassReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	// Handle deletion
+	// Handle deletion. Finalizer writes race with the Node-watch fan-out and
+	// this controller's own status patches, so optimistic-lock conflicts are a
+	// normal outcome — requeue instead of surfacing an error.
 	if !ac.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(ac, constants.AcceleratorClassFinalizer) {
 			controllerutil.RemoveFinalizer(ac, constants.AcceleratorClassFinalizer)
 			if err := r.Update(ctx, ac); err != nil {
+				if errors.IsNotFound(err) {
+					return ctrl.Result{}, nil
+				}
+				if errors.IsConflict(err) {
+					return ctrl.Result{Requeue: true}, nil
+				}
 				return ctrl.Result{}, err
 			}
 		}
@@ -65,6 +74,12 @@ func (r *AcceleratorClassReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if !controllerutil.ContainsFinalizer(ac, constants.AcceleratorClassFinalizer) {
 		controllerutil.AddFinalizer(ac, constants.AcceleratorClassFinalizer)
 		if err := r.Update(ctx, ac); err != nil {
+			if errors.IsNotFound(err) {
+				return ctrl.Result{}, nil
+			}
+			if errors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
 			return ctrl.Result{}, err
 		}
 	}
@@ -88,7 +103,9 @@ func (r *AcceleratorClassReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	sort.Strings(matchedNodes)
 
-	// In Reconcile, after computing desired fields (without setting LastUpdated yet):
+	// Re-fetch the latest object and patch status against it so the patch
+	// base carries a fresh resourceVersion; LastUpdated is stamped only when
+	// the rest of the status actually changed.
 	latest := &v1beta1.AcceleratorClass{}
 	if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -129,7 +146,20 @@ func (r *AcceleratorClassReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 				return requests
 			}),
-			builder.WithPredicates(),
+			builder.WithPredicates(predicate.Funcs{
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					oldNode, okOld := e.ObjectOld.(*corev1.Node)
+					newNode, okNew := e.ObjectNew.(*corev1.Node)
+					if !okOld || !okNew {
+						return true
+					}
+					// Discovery matches on labels; capability matching on
+					// capacity. Everything else (conditions, images,
+					// heartbeats) cannot change class membership.
+					return !equality.Semantic.DeepEqual(oldNode.Labels, newNode.Labels) ||
+						!equality.Semantic.DeepEqual(oldNode.Status.Capacity, newNode.Status.Capacity)
+				},
+			}),
 		).
 		Complete(r)
 }
@@ -147,63 +177,20 @@ func nodePassesDiscovery(ac *v1beta1.AcceleratorClass, node *corev1.Node) bool {
 	return true
 }
 
+// nodeMatchCapabilities checks the node actually exposes the accelerator
+// hardware this class declares. capabilities.memoryGB describes per-device
+// GPU memory, which no standard node resource reports — the reliable signal
+// is the class's declared extended resources (e.g. nvidia.com/gpu) being
+// present in the node's capacity.
 func nodeMatchCapabilities(ac *v1beta1.AcceleratorClass, node *corev1.Node) bool {
-	// memoryGB: compare with node memory capacity
-	if ac.Spec.Capabilities.MemoryGB != nil {
-		memQty := node.Status.Capacity[corev1.ResourceMemory]
-		if memQty.Cmp(*ac.Spec.Capabilities.MemoryGB) < 0 {
+	for _, res := range ac.Spec.Resources {
+		qty, ok := node.Status.Capacity[corev1.ResourceName(res.Name)]
+		if !ok || qty.IsZero() {
 			return false
 		}
 	}
 
 	return true
-}
-
-func getGPUCapacity(node *corev1.Node) (total int64, byResource map[string]int64) {
-	byResource = make(map[string]int64)
-
-	// Prefer Capacity if you want physical capacity; use Allocatable if you care about schedulable.
-	res := node.Status.Capacity
-	if len(res) == 0 {
-		res = node.Status.Allocatable
-	}
-
-	for name, q := range res {
-		n := string(name)
-
-		// NVIDIA classic
-		if n == "nvidia.com/gpu" {
-			v := q.Value()
-			byResource[n] = v
-			total += v
-			continue
-		}
-
-		// NVIDIA MIG profiles (treat as accelerators; not equivalent to card count)
-		if strings.HasPrefix(n, "nvidia.com/mig-") {
-			v := q.Value()
-			byResource[n] += v
-			total += v
-			continue
-		}
-
-		// AMD (common)
-		if n == "amd.com/gpu" {
-			v := q.Value()
-			byResource[n] = v
-			total += v
-			continue
-		}
-
-		// Intel (common plugin exposes under gpu.intel.com/*; skip memory-only resources)
-		if strings.HasPrefix(n, "gpu.intel.com/") && !strings.Contains(n, "memory") {
-			v := q.Value()
-			byResource[n] += v
-			total += v
-			continue
-		}
-	}
-	return total, byResource
 }
 
 // returns true if equal when ignoring LastUpdated

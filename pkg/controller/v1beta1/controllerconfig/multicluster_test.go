@@ -163,7 +163,7 @@ func TestNewMultiClusterConfig(t *testing.T) {
 	}
 }
 
-// A stated-but-unparsable duration must fail at startup rather than read as
+// A stated-but-unparseable duration must fail at startup rather than read as
 // "not set": the forgiving accessors would discard the operator's intended
 // value for the life of the process, with the built-in default silently
 // standing in.

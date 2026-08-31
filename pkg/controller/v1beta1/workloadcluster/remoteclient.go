@@ -33,6 +33,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -44,11 +45,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
-
-// DefaultRemoteCacheSyncTimeout bounds the initial informer LIST/sync during a
-// connection build. A remote cache that cannot start must fail the connection
-// rather than leave later reads or handler registration blocked indefinitely.
-const DefaultRemoteCacheSyncTimeout = time.Minute
 
 // cacheIndexOption defines a field to index on the cache before starting
 type CacheIndexOption struct {
@@ -85,34 +81,122 @@ type selectivelyCachingClient struct {
 	client.WithWatch
 	cachedReader client.Reader
 	cache        cache.Cache
-	scheme       *runtime.Scheme
-	cachedKinds  sets.Set[schema.GroupKind]
-	synced       *atomic.Bool
+	// cacheCtx is the context the background cache runs under. Disconnect
+	// cancels it to tear the cache down, and once that has happened the cache
+	// can never serve a read again — but controller-runtime does not surface
+	// that as an error. Informers.Start leaves `started` true when it stops and
+	// only sets `stopped`, so a kind whose informer does not exist yet is
+	// created, silently NOT started (startInformerLocked returns early on
+	// `stopped`), and still reported as started; Informers.Get then parks in
+	// WaitForCacheSync on an informer that can never sync, bounded only by the
+	// CALLER's context. For a reconcile that context is the manager's, i.e.
+	// effectively forever, and under the single-worker default one such read
+	// wedges the controller for the lifetime of the process. Every cached-path
+	// read therefore consults this and falls back to the direct client rather
+	// than handing the caller a hang.
+	//
+	// Nil means "always live", so hand-built clients in tests keep the
+	// pre-existing behavior.
+	cacheCtx    context.Context
+	scheme      *runtime.Scheme
+	cachedKinds sets.Set[schema.GroupKind]
+	synced      *atomic.Bool
+}
+
+// cacheStopped reports whether the background cache has been torn down.
+func (c *selectivelyCachingClient) cacheStopped() bool {
+	return c.cacheCtx != nil && c.cacheCtx.Err() != nil
+}
+
+// servesFromCache reports whether a read of gk should route to the cached
+// reader: the kind must be configured for caching AND the cache must still be
+// running. A stopped cache is skipped rather than consulted, because a read
+// that reaches it does not fail — it blocks (see cacheCtx).
+func (c *selectivelyCachingClient) servesFromCache(gk schema.GroupKind) bool {
+	return c.cachedKinds.Has(gk) && !c.cacheStopped()
+}
+
+// cacheReadContext derives the context for a cached-path read: it ends when
+// EITHER the caller's context ends or the cache is torn down. This closes the
+// window where the cache is live at the servesFromCache check and cancelled a
+// moment later, with the read already parked inside WaitForCacheSync. The
+// returned release func must be called to drop the AfterFunc registration.
+func (c *selectivelyCachingClient) cacheReadContext(ctx context.Context) (context.Context, func()) {
+	if c.cacheCtx == nil {
+		return ctx, func() {}
+	}
+	rctx, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(c.cacheCtx, cancel)
+	return rctx, func() {
+		stop()
+		cancel()
+	}
+}
+
+// cacheDiedDuringRead reports whether a failed cached read should be retried
+// against the direct client: the cache went away mid-read while the caller's
+// own context is still live, so the failure is a teardown artifact rather than
+// a real read error the caller should have to interpret.
+func (c *selectivelyCachingClient) cacheDiedDuringRead(ctx context.Context) bool {
+	return c.cacheStopped() && ctx.Err() == nil
 }
 
 func (c *selectivelyCachingClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	// Metadata-only reads use a distinct informer type from the structured
+	// objects configured in cachedKinds, so they must remain direct reads.
+	if _, metadataOnly := obj.(*metav1.PartialObjectMetadata); metadataOnly {
+		return c.WithWatch.Get(ctx, key, obj, opts...)
+	}
+
 	gvk, err := apiutil.GVKForObject(obj, c.scheme)
 	if err != nil {
 		return err
 	}
-	gk := gvk.GroupKind()
-	if c.cachedKinds.Has(gk) && (c.synced.Load() || c.cache.WaitForCacheSync(ctx)) {
-		return c.cachedReader.Get(ctx, key, obj, opts...)
+	if !c.servesFromCache(gvk.GroupKind()) {
+		return c.WithWatch.Get(ctx, key, obj, opts...)
 	}
-	return c.WithWatch.Get(ctx, key, obj, opts...)
+
+	rctx, release := c.cacheReadContext(ctx)
+	defer release()
+	if !c.synced.Load() && !c.cache.WaitForCacheSync(rctx) {
+		return c.WithWatch.Get(ctx, key, obj, opts...)
+	}
+	if err := c.cachedReader.Get(rctx, key, obj, opts...); err != nil {
+		if c.cacheDiedDuringRead(ctx) {
+			return c.WithWatch.Get(ctx, key, obj, opts...)
+		}
+		return err
+	}
+	return nil
 }
 
 func (c *selectivelyCachingClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	if _, metadataOnly := list.(*metav1.PartialObjectMetadataList); metadataOnly {
+		return c.WithWatch.List(ctx, list, opts...)
+	}
+
 	gvk, err := apiutil.GVKForObject(list, c.scheme)
 	if err != nil {
 		return err
 	}
 	gk := gvk.GroupKind()
 	gk.Kind = strings.TrimSuffix(gk.Kind, "List")
-	if c.cachedKinds.Has(gk) && (c.synced.Load() || c.cache.WaitForCacheSync(ctx)) {
-		return c.cachedReader.List(ctx, list, opts...)
+	if !c.servesFromCache(gk) {
+		return c.WithWatch.List(ctx, list, opts...)
 	}
-	return c.WithWatch.List(ctx, list, opts...)
+
+	rctx, release := c.cacheReadContext(ctx)
+	defer release()
+	if !c.synced.Load() && !c.cache.WaitForCacheSync(rctx) {
+		return c.WithWatch.List(ctx, list, opts...)
+	}
+	if err := c.cachedReader.List(rctx, list, opts...); err != nil {
+		if c.cacheDiedDuringRead(ctx) {
+			return c.WithWatch.List(ctx, list, opts...)
+		}
+		return err
+	}
+	return nil
 }
 
 func (c *selectivelyCachingClient) AddCacheEventHandler(ctx context.Context, obj client.Object, handler toolscache.ResourceEventHandler) (toolscache.ResourceEventHandlerRegistration, error) {
@@ -124,7 +208,16 @@ func (c *selectivelyCachingClient) AddCacheEventHandler(ctx context.Context, obj
 	if !c.cachedKinds.Has(gk) {
 		return nil, fmt.Errorf("kind %s is not cached", gvk.String())
 	}
-	inf, err := c.cache.GetInformer(ctx, obj)
+	// GetInformer reaches the same lazily-created-informer path as a cached
+	// read, so registering a handler on a torn-down cache would block instead
+	// of failing. Report it: the caller's reconnect path can act on an error,
+	// never on a hang.
+	if c.cacheStopped() {
+		return nil, fmt.Errorf("cannot add event handler for kind %s: remote cache is stopped", gvk.String())
+	}
+	rctx, release := c.cacheReadContext(ctx)
+	defer release()
+	inf, err := c.cache.GetInformer(rctx, obj)
 	if err != nil {
 		return nil, fmt.Errorf("getting informer for caching: %w", err)
 	}
@@ -144,6 +237,11 @@ var podGroupKind = corev1.SchemeGroupVersion.WithKind("Pod").GroupKind()
 // unfiltered. There is intentionally no in-code default selector — the value is
 // the caller's to supply, per the repo's no-magic-values rule. Caching Pods is
 // rejected outright: the remote cache must never LIST+WATCH cluster-wide Pods.
+//
+// syncTimeout bounds the initial informer LIST/sync: a cache that cannot start
+// or sync fails the construction rather than leaving later reads and handler
+// registration blocked on a cache that never becomes usable. It is the caller's
+// to supply; non-positive bounds the wait by ctx alone.
 func NewSelectivelyCachingClient(
 	ctx context.Context,
 	restConfig *rest.Config,
@@ -152,6 +250,7 @@ func NewSelectivelyCachingClient(
 	cachedKinds sets.Set[schema.GroupKind],
 	indexes []CacheIndexOption,
 	defaultSelector labels.Selector,
+	syncTimeout time.Duration,
 ) (SelectivelyCachingClient, error) {
 	if cachedKinds.Has(podGroupKind) {
 		return nil, fmt.Errorf("refusing to cache kind %s: the remote cache must never hold cluster-wide Pods", podGroupKind.String())
@@ -188,8 +287,12 @@ func NewSelectivelyCachingClient(
 		defer cancelRun()
 		startErr <- remoteCache.Start(runCtx)
 	}()
-	syncCtx, cancelSync := context.WithTimeout(runCtx, DefaultRemoteCacheSyncTimeout)
-	defer cancelSync()
+	syncCtx := runCtx
+	if syncTimeout > 0 {
+		var cancelSync context.CancelFunc
+		syncCtx, cancelSync = context.WithTimeout(runCtx, syncTimeout)
+		defer cancelSync()
+	}
 	syncDone := make(chan bool, 1)
 	go func() { syncDone <- remoteCache.WaitForCacheSync(syncCtx) }()
 	select {
@@ -215,9 +318,13 @@ func NewSelectivelyCachingClient(
 		WithWatch:    directClient,
 		cachedReader: remoteCache,
 		cache:        remoteCache,
-		scheme:       scheme,
-		cachedKinds:  cachedKinds,
-		synced:       &synced,
+		// ctx is the caller's cache context (Manager.buildRemoteClient derives a
+		// cancellable one per connection and cancels it on Disconnect), which is
+		// exactly the lifetime the cached read paths must respect.
+		cacheCtx:    ctx,
+		scheme:      scheme,
+		cachedKinds: cachedKinds,
+		synced:      &synced,
 	}
 
 	return cachedClient, nil

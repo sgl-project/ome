@@ -40,8 +40,8 @@ const (
 
 	// metadataJobAgentConfigPath is the path to the bundled ome-agent
 	// config file inside the standard ome-agent image
-	// (dockerfiles/ome-agent.Dockerfile:85). The agent's configProvider
-	// (cmd/ome-agent/config.go:28) errors with "no config file provided"
+	// (dockerfiles/ome-agent.Dockerfile). The agent's configProvider
+	// (cmd/ome-agent/config.go) errors with "no config file provided"
 	// if --config is empty, even though `model-metadata` reads all its
 	// runtime params from --model-path / --basemodel-name / etc. flags.
 	// Passing the bundled path satisfies the gratuitous existence check

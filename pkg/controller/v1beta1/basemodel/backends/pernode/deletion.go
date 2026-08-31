@@ -13,22 +13,25 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
-	"sigs.k8s.io/ome/pkg/modelagent"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/shared"
 )
 
-// HandleModelDeletion is the per-node deletion handler. It waits for every
+// HandleModelDeletion is the per-node deletion handler. Waits for every
 // node's model-agent to clear or mark-deleted the model in its per-node
-// ConfigMap before dropping the finalizer. This prevents orphaned models
-// when nodes are down or agents aren't running.
+// ConfigMap before dropping the finalizer.
 func HandleModelDeletion(ctx context.Context, kubeClient client.Client, obj client.Object, finalizer string) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
+		// Before removing the finalizer, make sure all entries are cleared from ConfigMaps
+		// This prevents orphaned models when nodes are down or agents aren't running
+
 		// Determine model name, namespace and if it's cluster-scoped
 		modelName := obj.GetName()
 		var modelNamespace string
 		var isClusterScope bool
 
+		// Set namespace and scope based on object type
 		switch typedObj := obj.(type) {
 		case *v1beta1.BaseModel:
 			modelNamespace = typedObj.Namespace
@@ -62,6 +65,7 @@ func HandleModelDeletion(ctx context.Context, kubeClient client.Client, obj clie
 
 		for i := range configMaps.Items {
 			configMap := &configMaps.Items[i]
+			// Check if the model exists in this ConfigMap
 			data, exists := configMap.Data[modelKey]
 			if !exists {
 				continue
@@ -69,10 +73,10 @@ func HandleModelDeletion(ctx context.Context, kubeClient client.Client, obj clie
 			nodesWithModel++
 
 			// Check if it's already marked for deletion
-			var modelEntry modelagent.ModelEntry
+			var modelEntry shared.ModelEntry
 			if err := json.Unmarshal([]byte(data), &modelEntry); err == nil {
 				// If model entry is present but not marked as deleted, add it to the list
-				if modelEntry.Status != modelagent.ModelStatusDeleted {
+				if modelEntry.Status != shared.ModelStatusDeleted {
 					modelsNotDeleted = append(modelsNotDeleted, configMap.Name)
 				}
 			} else {

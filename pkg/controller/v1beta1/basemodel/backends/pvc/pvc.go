@@ -22,7 +22,6 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/shared"
-	"sigs.k8s.io/ome/pkg/modelagent"
 	"sigs.k8s.io/ome/pkg/utils/storage"
 )
 
@@ -39,7 +38,7 @@ import (
 // per-PVC ConfigMap, both cache-backed.
 const pvcRequeueAfter = 5 * time.Second
 
-// IsPVCStorage reports whether the given BaseModel/ClusterBaseModel spec
+// isPVCStorage reports whether the given BaseModel/ClusterBaseModel spec
 // references a PVC-backed storage URI.
 func IsPVCStorage(spec *v1beta1.BaseModelSpec) bool {
 	if spec == nil || spec.Storage == nil || spec.Storage.StorageUri == nil {
@@ -78,8 +77,8 @@ func resolvePVCNamespace(modelNamespace string, isClusterScoped bool, components
 	return modelNamespace, nil
 }
 
-// Reconcile handles the PVC-specific reconcile flow for a BaseModel or
-// ClusterBaseModel:
+// reconcilePVCStorage handles the PVC-specific reconcile flow for a BaseModel
+// or ClusterBaseModel:
 //
 //  1. Parse the URI, resolve the PVC namespace, validate the PVC exists
 //     and is Bound (pre-Job).
@@ -301,7 +300,7 @@ func applyPVCStatusFromConfigMap(ctx context.Context, kubeClient client.Client, 
 			v1beta1.ModelConditionReasonPVCMetadataExtracting,
 			fmt.Sprintf("PVC metadata ConfigMap %s lacks entry %q yet", cmName, modelKey))
 	}
-	var entry modelagent.ModelEntry
+	var entry shared.ModelEntry
 	if err := json.Unmarshal([]byte(raw), &entry); err != nil {
 		log.Error(err, "Failed to parse PVC ConfigMap model entry", "configMap", cmName, "key", modelKey)
 		return setPVCInTransitStatus(ctx, kubeClient, log, obj,
@@ -310,7 +309,7 @@ func applyPVCStatusFromConfigMap(ctx context.Context, kubeClient client.Client, 
 	}
 
 	switch entry.Status {
-	case modelagent.ModelStatusReady:
+	case shared.ModelStatusReady:
 		// Apply spec from the agent's parsed metadata. Re-read the latest
 		// CR to avoid clobbering concurrent edits.
 		if entry.Config != nil {
@@ -320,7 +319,7 @@ func applyPVCStatusFromConfigMap(ctx context.Context, kubeClient client.Client, 
 		}
 		return setPVCReadyStatus(ctx, kubeClient, log, obj,
 			fmt.Sprintf("PVC metadata extraction succeeded; ConfigMap %s applied", cmName))
-	case modelagent.ModelStatusFailed:
+	case shared.ModelStatusFailed:
 		msg := cm.Annotations[constants.PVCMetadataLastErrorAnnotation]
 		if msg == "" {
 			msg = "agent reported Failed without an error message"
@@ -335,7 +334,7 @@ func applyPVCStatusFromConfigMap(ctx context.Context, kubeClient client.Client, 
 
 // applyPVCSpecUpdate applies the agent's ModelConfig to the model spec,
 // reading the latest CR via retry-on-conflict to avoid clobbering writes.
-func applyPVCSpecUpdate(ctx context.Context, kubeClient client.Client, log logr.Logger, obj client.Object, cfg *modelagent.ModelConfig) error {
+func applyPVCSpecUpdate(ctx context.Context, kubeClient client.Client, log logr.Logger, obj client.Object, cfg *shared.ModelConfig) error {
 	return shared.RetryUpdate(ctx, kubeClient, log, obj, "pvc-spec", func(ctx context.Context, c client.Client, latest client.Object) error {
 		var spec *v1beta1.BaseModelSpec
 		switch m := latest.(type) {
@@ -353,10 +352,10 @@ func applyPVCSpecUpdate(ctx context.Context, kubeClient client.Client, log logr.
 	})
 }
 
-// HandleModelDeletion is the deletion path for PVC-backed BaseModel and
-// ClusterBaseModel. Unlike per-node models, PVC models have no agent to
-// mark Status=Deleted across N nodes — there is exactly one ConfigMap to
-// clean up. Order: delete the Job first so the agent stops re-creating
+// handlePVCModelDeletion is the deletion path for PVC-backed BaseModel
+// and ClusterBaseModel. Unlike per-node models, PVC models have no agent
+// to mark Status=Deleted across N nodes — there is exactly one ConfigMap
+// to clean up. Order: delete the Job first so the agent stops re-creating
 // the ConfigMap, then delete the ConfigMap, then drop the finalizer.
 func HandleModelDeletion(ctx context.Context, kubeClient client.Client, log logr.Logger, obj client.Object, isClusterScoped bool, finalizer string) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(obj, finalizer) {
@@ -404,9 +403,9 @@ func HandleModelDeletion(ctx context.Context, kubeClient client.Client, log logr
 	return ctrl.Result{}, nil
 }
 
-// CleanupStaleArtifacts deletes any per-PVC ConfigMap, any metadata
-// extraction Jobs, and strips PVC-specific stale conditions from a
-// BaseModel/ClusterBaseModel that is no longer PVC-backed.
+// cleanupStalePVCArtifacts deletes any per-PVC ConfigMap, any
+// metadata extraction Jobs, and strips PVC-specific stale conditions
+// from a BaseModel/ClusterBaseModel that is no longer PVC-backed.
 //
 // Called when a model whose previous spec was pvc:// has its
 // storage URI changed to a non-PVC backend (oci://, hf://, etc.).
@@ -448,7 +447,7 @@ func CleanupStaleArtifacts(ctx context.Context, kubeClient client.Client, log lo
 	}
 
 	// 3. Strip PVC-specific conditions from the CR's status. We re-fetch
-	// inside RetryUpdate to avoid clobbering concurrent edits. No-op if
+	// inside retryUpdate to avoid clobbering concurrent edits. No-op if
 	// no PVC conditions are present.
 	return shared.RetryUpdate(ctx, kubeClient, log, obj, "pvc-condition-cleanup", func(ctx context.Context, c client.Client, latest client.Object) error {
 		var conditions *[]metav1.Condition
@@ -458,7 +457,7 @@ func CleanupStaleArtifacts(ctx context.Context, kubeClient client.Client, log lo
 		case *v1beta1.ClusterBaseModel:
 			conditions = &m.Status.Conditions
 		default:
-			return fmt.Errorf("CleanupStaleArtifacts: unsupported type %T", latest)
+			return fmt.Errorf("cleanupStalePVCArtifacts: unsupported type %T", latest)
 		}
 		filtered := make([]metav1.Condition, 0, len(*conditions))
 		removed := false
@@ -479,7 +478,7 @@ func CleanupStaleArtifacts(ctx context.Context, kubeClient client.Client, log lo
 
 // isPVCConditionReason reports whether the supplied condition Reason
 // is part of the PVC reconcile branch's reason set. Used by
-// CleanupStaleArtifacts to identify stale conditions left behind
+// cleanupStalePVCArtifacts to identify stale conditions left behind
 // after a URI swap from pvc:// to non-PVC.
 func isPVCConditionReason(reason string) bool {
 	switch reason {

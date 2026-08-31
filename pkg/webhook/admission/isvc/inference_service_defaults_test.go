@@ -50,6 +50,21 @@ func stringPtr(s string) *string {
 func intPtr(i int) *int {
 	return &i
 }
+
+// testReplicaDefaults mirrors the chart-shipped deploy.replicas block
+// (min=1, max engine/decoder=3, router=2).
+func testReplicaDefaults() *controllerconfig.ReplicasDefaultsConfig {
+	return &controllerconfig.ReplicasDefaultsConfig{
+		DefaultMinReplicas: intPtr(1),
+		DefaultMaxReplicas: controllerconfig.ComponentMaxReplicasDefaults{
+			Engine:  intPtr(3),
+			Decoder: intPtr(3),
+			Router:  intPtr(2),
+		},
+	}
+}
+
+// createBasicInferenceService creates a basic InferenceService for testing
 func createBasicInferenceService(name, namespace string) *v1beta1.InferenceService {
 	return &v1beta1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{
@@ -253,6 +268,242 @@ func TestDefaultInferenceService_OMENativeBudgetViaAnnotationAndHeuristic(t *tes
 	}
 }
 
+func TestDefaultComponents(t *testing.T) {
+	t.Run("defaultEngine", func(t *testing.T) {
+		tests := []struct {
+			name            string
+			engine          *v1beta1.EngineSpec
+			wantMinReplicas int
+			wantMaxReplicas int
+		}{
+			{
+				name:            "nil MinReplicas should be set to 1",
+				engine:          &v1beta1.EngineSpec{},
+				wantMinReplicas: 1,
+				wantMaxReplicas: 3,
+			},
+			{
+				name: "existing values should be preserved",
+				engine: &v1beta1.EngineSpec{
+					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+						MinReplicas: intPtr(2),
+						MaxReplicas: 5,
+					},
+				},
+				wantMinReplicas: 2,
+				wantMaxReplicas: 5,
+			},
+			{
+				name: "unset MaxReplicas is clamped up to MinReplicas above the default",
+				engine: &v1beta1.EngineSpec{
+					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+						MinReplicas: intPtr(5),
+					},
+				},
+				wantMinReplicas: 5,
+				wantMaxReplicas: 5,
+			},
+			{
+				name: "unset MaxReplicas keeps the default when MinReplicas is below it",
+				engine: &v1beta1.EngineSpec{
+					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+						MinReplicas: intPtr(2),
+					},
+				},
+				wantMinReplicas: 2,
+				wantMaxReplicas: 3,
+			},
+			{
+				name: "explicit MaxReplicas below MinReplicas is preserved for validation",
+				engine: &v1beta1.EngineSpec{
+					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+						MinReplicas: intPtr(5),
+						MaxReplicas: 2,
+					},
+				},
+				wantMinReplicas: 5,
+				wantMaxReplicas: 2,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				defaultEngine(tt.engine, nil, testReplicaDefaults())
+				require.NotNil(t, tt.engine.MinReplicas)
+				assert.Equal(t, tt.wantMinReplicas, *tt.engine.MinReplicas)
+				assert.Equal(t, tt.wantMaxReplicas, tt.engine.MaxReplicas)
+			})
+		}
+	})
+
+	t.Run("defaultDecoder", func(t *testing.T) {
+		tests := []struct {
+			name            string
+			decoder         *v1beta1.DecoderSpec
+			wantMinReplicas int
+			wantMaxReplicas int
+		}{
+			{
+				name:            "nil MinReplicas should be set to 1",
+				decoder:         &v1beta1.DecoderSpec{},
+				wantMinReplicas: 1,
+				wantMaxReplicas: 3,
+			},
+			{
+				name: "existing values should be preserved",
+				decoder: &v1beta1.DecoderSpec{
+					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+						MinReplicas: intPtr(2),
+						MaxReplicas: 5,
+					},
+				},
+				wantMinReplicas: 2,
+				wantMaxReplicas: 5,
+			},
+			{
+				name: "unset MaxReplicas is clamped up to MinReplicas above the default",
+				decoder: &v1beta1.DecoderSpec{
+					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+						MinReplicas: intPtr(5),
+					},
+				},
+				wantMinReplicas: 5,
+				wantMaxReplicas: 5,
+			},
+			{
+				name: "explicit MaxReplicas below MinReplicas is preserved for validation",
+				decoder: &v1beta1.DecoderSpec{
+					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+						MinReplicas: intPtr(5),
+						MaxReplicas: 2,
+					},
+				},
+				wantMinReplicas: 5,
+				wantMaxReplicas: 2,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				defaultDecoder(tt.decoder, nil, testReplicaDefaults())
+				require.NotNil(t, tt.decoder.MinReplicas)
+				assert.Equal(t, tt.wantMinReplicas, *tt.decoder.MinReplicas)
+				assert.Equal(t, tt.wantMaxReplicas, tt.decoder.MaxReplicas)
+			})
+		}
+	})
+
+	t.Run("defaultRouter", func(t *testing.T) {
+		tests := []struct {
+			name            string
+			router          *v1beta1.RouterSpec
+			wantMinReplicas int
+			wantMaxReplicas int
+		}{
+			{
+				name:            "nil MinReplicas should be set to 1",
+				router:          &v1beta1.RouterSpec{},
+				wantMinReplicas: 1,
+				wantMaxReplicas: 2,
+			},
+			{
+				name: "existing values should be preserved",
+				router: &v1beta1.RouterSpec{
+					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+						MinReplicas: intPtr(2),
+						MaxReplicas: 5,
+					},
+				},
+				wantMinReplicas: 2,
+				wantMaxReplicas: 5,
+			},
+			{
+				name: "unset MaxReplicas is clamped up to MinReplicas above the default",
+				router: &v1beta1.RouterSpec{
+					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+						MinReplicas: intPtr(5),
+					},
+				},
+				wantMinReplicas: 5,
+				wantMaxReplicas: 5,
+			},
+			{
+				name: "explicit MaxReplicas below MinReplicas is preserved for validation",
+				router: &v1beta1.RouterSpec{
+					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+						MinReplicas: intPtr(5),
+						MaxReplicas: 2,
+					},
+				},
+				wantMinReplicas: 5,
+				wantMaxReplicas: 2,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				defaultRouter(tt.router, nil, testReplicaDefaults())
+				require.NotNil(t, tt.router.MinReplicas)
+				assert.Equal(t, tt.wantMinReplicas, *tt.router.MinReplicas)
+				assert.Equal(t, tt.wantMaxReplicas, tt.router.MaxReplicas)
+			})
+		}
+	})
+}
+
+// TestDefaultComponents_UnconfiguredReplicaDefaults pins the degrade path:
+// without a deploy.replicas config block there is nothing to stamp — the
+// defaulter stores the spec exactly as authored instead of injecting
+// literals baked into the binary.
+func TestDefaultComponents_UnconfiguredReplicaDefaults(t *testing.T) {
+	t.Run("nil config leaves replica bounds as authored", func(t *testing.T) {
+		engine := &v1beta1.EngineSpec{}
+		defaultEngine(engine, nil, nil)
+		assert.Nil(t, engine.MinReplicas)
+		assert.Zero(t, engine.MaxReplicas)
+
+		decoder := &v1beta1.DecoderSpec{
+			ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: intPtr(5)},
+		}
+		defaultDecoder(decoder, nil, nil)
+		assert.Equal(t, 5, *decoder.MinReplicas)
+		assert.Zero(t, decoder.MaxReplicas)
+
+		router := &v1beta1.RouterSpec{
+			ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: intPtr(2), MaxReplicas: 4},
+		}
+		defaultRouter(router, nil, nil)
+		assert.Equal(t, 2, *router.MinReplicas)
+		assert.Equal(t, 4, router.MaxReplicas)
+	})
+
+	t.Run("partially configured block defaults only the configured fields", func(t *testing.T) {
+		// Only the min default configured: max stays unset.
+		minOnly := &controllerconfig.ReplicasDefaultsConfig{DefaultMinReplicas: intPtr(1)}
+		engine := &v1beta1.EngineSpec{}
+		defaultEngine(engine, nil, minOnly)
+		assert.Equal(t, 1, *engine.MinReplicas)
+		assert.Zero(t, engine.MaxReplicas)
+
+		// Only the engine max default configured: min stays unset, and
+		// the clamp still raises the filled max to an authored floor.
+		maxOnly := &controllerconfig.ReplicasDefaultsConfig{
+			DefaultMaxReplicas: controllerconfig.ComponentMaxReplicasDefaults{Engine: intPtr(3)},
+		}
+		clamped := &v1beta1.EngineSpec{
+			ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: intPtr(5)},
+		}
+		defaultEngine(clamped, nil, maxOnly)
+		assert.Equal(t, 5, *clamped.MinReplicas)
+		assert.Equal(t, 5, clamped.MaxReplicas)
+
+		unset := &v1beta1.EngineSpec{}
+		defaultEngine(unset, nil, maxOnly)
+		assert.Nil(t, unset.MinReplicas)
+		assert.Equal(t, 3, unset.MaxReplicas)
+	})
+}
+
 func int32Ptr(v int32) *int32 { return &v }
 
 func assertUnresolvedShapePolicies(t *testing.T, lifecycle *v1beta1.LifecycleSpec) {
@@ -277,14 +528,14 @@ func TestDefaultOMENativeEngineAndDecoder_DeferPoliciesWhenRunnerShapeIsUnresolv
 
 	t.Run("Engine", func(t *testing.T) {
 		engine := &v1beta1.EngineSpec{}
-		defaultEngine(engine, &mode)
+		defaultEngine(engine, &mode, testReplicaDefaults())
 
 		assertUnresolvedShapePolicies(t, engine.Lifecycle)
 	})
 
 	t.Run("Decoder", func(t *testing.T) {
 		decoder := &v1beta1.DecoderSpec{}
-		defaultDecoder(decoder, &mode)
+		defaultDecoder(decoder, &mode, testReplicaDefaults())
 
 		assertUnresolvedShapePolicies(t, decoder.Lifecycle)
 	})
@@ -514,7 +765,7 @@ func TestDefaultEngine_OMENativeAnnotationTriggersDefaults(t *testing.T) {
 		Leader: &v1beta1.LeaderSpec{},
 		Worker: &v1beta1.WorkerSpec{Size: func() *int { v := 3; return &v }()},
 	}
-	defaultEngine(engine, nil)
+	defaultEngine(engine, nil, nil)
 	require.NotNil(t, engine.Lifecycle)
 	require.NotNil(t, engine.Lifecycle.RestartPolicy)
 	assert.Equal(t, v1beta1.InstanceRestartPolicyRecreateInstance, *engine.Lifecycle.RestartPolicy)
@@ -526,7 +777,7 @@ func TestDefaultRouter_OMENativeAlwaysSinglePod(t *testing.T) {
 			Annotations: map[string]string{constants.DeploymentMode: string(constants.OMENative)},
 		},
 	}
-	defaultRouter(router, nil)
+	defaultRouter(router, nil, nil)
 	require.NotNil(t, router.Lifecycle)
 	require.NotNil(t, router.Lifecycle.RestartPolicy)
 	assert.Equal(t, v1beta1.InstanceRestartPolicyNone, *router.Lifecycle.RestartPolicy)
@@ -600,7 +851,7 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 			Leader: &v1beta1.LeaderSpec{},
 			Worker: &v1beta1.WorkerSpec{},
 		}
-		defaultEngine(engine, nil)
+		defaultEngine(engine, nil, nil)
 		require.NotNil(t, engine.Worker.Size)
 		assert.Equal(t, 1, *engine.Worker.Size)
 		// downstream multi-pod detection should kick in:
@@ -616,7 +867,7 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 			Leader: &v1beta1.LeaderSpec{},
 			Worker: &v1beta1.WorkerSpec{Size: intPtr(3)},
 		}
-		defaultEngine(engine, nil)
+		defaultEngine(engine, nil, nil)
 		require.NotNil(t, engine.Worker.Size)
 		assert.Equal(t, 3, *engine.Worker.Size)
 	})
@@ -629,7 +880,7 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 			Leader: &v1beta1.LeaderSpec{},
 			Worker: &v1beta1.WorkerSpec{Size: intPtr(0)},
 		}
-		defaultEngine(engine, nil)
+		defaultEngine(engine, nil, nil)
 		require.NotNil(t, engine.Worker.Size)
 		assert.Equal(t, 0, *engine.Worker.Size)
 	})
@@ -639,7 +890,7 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 		// defaulter handles. The validator catches it with
 		// LeaderRequiresWorker.
 		engine := &v1beta1.EngineSpec{Leader: &v1beta1.LeaderSpec{}}
-		defaultEngine(engine, nil)
+		defaultEngine(engine, nil, nil)
 		assert.Nil(t, engine.Worker)
 	})
 
@@ -649,7 +900,7 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 		// WorkerRequiresLeader; the malformed Size remains for the
 		// error message to surface.
 		engine := &v1beta1.EngineSpec{Worker: &v1beta1.WorkerSpec{}}
-		defaultEngine(engine, nil)
+		defaultEngine(engine, nil, nil)
 		assert.Nil(t, engine.Worker.Size)
 	})
 
@@ -661,7 +912,7 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 			Leader: &v1beta1.LeaderSpec{},
 			Worker: &v1beta1.WorkerSpec{},
 		}
-		defaultDecoder(decoder, nil)
+		defaultDecoder(decoder, nil, nil)
 		require.NotNil(t, decoder.Worker.Size)
 		assert.Equal(t, 1, *decoder.Worker.Size)
 		require.NotNil(t, decoder.Lifecycle)
@@ -673,7 +924,7 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 
 	t.Run("single-pod engine — Worker field unset, no panic", func(t *testing.T) {
 		engine := &v1beta1.EngineSpec{}
-		defaultEngine(engine, nil)
+		defaultEngine(engine, nil, nil)
 		assert.Nil(t, engine.Worker)
 		assert.Nil(t, engine.Leader)
 	})

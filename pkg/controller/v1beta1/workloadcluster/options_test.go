@@ -196,6 +196,15 @@ func (b *blockingWatchClient) Watch(ctx context.Context, _ client.ObjectList, _ 
 	return nil, ctx.Err()
 }
 
+// immediateWatchClient returns an empty watch right away (success path).
+type immediateWatchClient struct {
+	client.WithWatch
+}
+
+func (i *immediateWatchClient) Watch(_ context.Context, _ client.ObjectList, _ ...client.ListOption) (watch.Interface, error) {
+	return watch.NewEmptyWatch(), nil
+}
+
 // stubbornWatchClient simulates a broken client that ignores context
 // cancellation. establishWatch must still return at its timeout.
 type stubbornWatchClient struct {
@@ -208,19 +217,18 @@ func (s *stubbornWatchClient) Watch(context.Context, client.ObjectList, ...clien
 	return nil, errors.New("released")
 }
 
-// immediateWatchClient returns an empty watch right away (success path).
-type immediateWatchClient struct {
-	client.WithWatch
-}
-
-func (i *immediateWatchClient) Watch(_ context.Context, _ client.ObjectList, _ ...client.ListOption) (watch.Interface, error) {
-	return watch.NewEmptyWatch(), nil
-}
-
 func TestEstablishWatch_TimesOut(t *testing.T) {
 	c := &blockingWatchClient{WithWatch: fake.NewClientBuilder().Build()}
 	_, err := establishWatch(context.Background(), c, &corev1.PodList{}, 20*time.Millisecond)
 	require.ErrorIs(t, err, errWatchEstablishTimeout)
+}
+
+func TestEstablishWatch_Succeeds(t *testing.T) {
+	c := &immediateWatchClient{WithWatch: fake.NewClientBuilder().Build()}
+	w, err := establishWatch(context.Background(), c, &corev1.PodList{}, time.Second)
+	require.NoError(t, err)
+	require.NotNil(t, w)
+	w.Stop() // cancelOnStopWatcher.Stop must not panic
 }
 
 func TestEstablishWatch_TimeoutDoesNotWaitForClientCancellation(t *testing.T) {
@@ -233,14 +241,6 @@ func TestEstablishWatch_TimeoutDoesNotWaitForClientCancellation(t *testing.T) {
 	close(release)
 }
 
-func TestEstablishWatch_Succeeds(t *testing.T) {
-	c := &immediateWatchClient{WithWatch: fake.NewClientBuilder().Build()}
-	w, err := establishWatch(context.Background(), c, &corev1.PodList{}, time.Second)
-	require.NoError(t, err)
-	require.NotNil(t, w)
-	w.Stop() // cancelOnStopWatcher.Stop must not panic
-}
-
 // TestManager_EstablishWatch_NotConnected: a cluster with no client returns
 // (nil,false,nil) rather than erroring.
 func TestManager_EstablishWatch_NotConnected(t *testing.T) {
@@ -248,8 +248,8 @@ func TestManager_EstablishWatch_NotConnected(t *testing.T) {
 	w, generation, connected, err := m.EstablishWatch(context.Background(), "nope", &corev1.PodList{}, 1)
 	require.NoError(t, err)
 	assert.False(t, connected)
-	assert.Zero(t, generation)
 	assert.Nil(t, w)
+	assert.Zero(t, generation)
 }
 
 // TestManager_EstablishWatch_TimesOut wires a connected blocking client and a
@@ -269,8 +269,8 @@ func TestManager_EstablishWatch_TimesOut(t *testing.T) {
 
 	_, generation, connected, err := m.EstablishWatch(context.Background(), "c1", &corev1.PodList{}, 1)
 	assert.True(t, connected)
-	assert.NotZero(t, generation)
 	require.ErrorIs(t, err, errWatchEstablishTimeout)
+	assert.NotZero(t, generation)
 }
 
 // blockingCachingClient adapts blockingWatchClient to SelectivelyCachingClient
@@ -293,7 +293,6 @@ func TestResolveConfig_Defaults(t *testing.T) {
 	assert.Equal(t, DefaultHealthInterval, c.healthInterval)
 	assert.Equal(t, DefaultConnectionGracePeriod, c.connectionGracePeriod)
 	assert.Equal(t, DefaultEventsBatchPeriod, c.eventsBatchPeriod)
-	assert.Equal(t, DefaultProbeTimeout, c.probeTimeout)
 	assert.Equal(t, DefaultEstablishInitialTimeout, c.reconnect.establishInitial)
 	assert.Equal(t, DefaultEstablishMaxTimeout, c.reconnect.establishMax)
 	assert.Equal(t, DefaultReconnectRetryMax, c.reconnect.retryMax)
@@ -321,22 +320,6 @@ func TestResolveConfig_SeedsAndOptions(t *testing.T) {
 	assert.Equal(t, 6*time.Millisecond, c.reconnect.establishMax)
 	assert.Equal(t, 7*time.Millisecond, c.reconnect.retryInitial)
 	assert.Equal(t, 8*time.Millisecond, c.reconnect.retryMax)
-}
-
-// TestProbeTimeout_ConfiguredValueWins: the probe budget is config-driven — the
-// configured per-call value reaches the reachability probe, and only an unset
-// knob falls back to the in-package default.
-func TestProbeTimeout_ConfiguredValueWins(t *testing.T) {
-	r := &Reconciler{}
-	assert.Equal(t, DefaultProbeTimeout, r.probeTimeout())
-
-	r = &Reconciler{ProbeTimeout: 250 * time.Millisecond}
-	assert.Equal(t, 250*time.Millisecond, r.probeTimeout(), "struct field must apply before Setup")
-
-	c := r.resolveConfig()
-	assert.Equal(t, 250*time.Millisecond, c.probeTimeout, "struct field must seed the resolved config")
-	r.cfg = &c
-	assert.Equal(t, 250*time.Millisecond, r.probeTimeout(), "resolved config must win after Setup")
 }
 
 // TestResolveConfig_NegativeGraceDisables: a negative ConnectionGracePeriod is a
@@ -375,3 +358,19 @@ func TestReconcile_RetryBackoffSpacesRequeue(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 4*time.Second, res3.RequeueAfter, "third failure -> doubled again")
 }
+
+// TestProbeTimeout_ConfiguredValueWins: the probe budget is config-driven — the
+// configured per-call value reaches the reachability probe, and only an unset
+// knob falls back to the in-package default.
+func TestProbeTimeout_ConfiguredValueWins(t *testing.T) {
+	r := &Reconciler{ProbeTimeout: 250 * time.Millisecond}
+	assert.Equal(t, 250*time.Millisecond, r.probeTimeout(), "struct field must apply before Setup")
+
+	c := r.resolveConfig()
+	assert.Equal(t, 250*time.Millisecond, c.probeTimeout, "struct field must seed the resolved config")
+	r.cfg = &c
+	assert.Equal(t, 250*time.Millisecond, r.probeTimeout(), "resolved config must win after Setup")
+}
+
+// TestResolveConfig_NegativeGraceDisables: a negative ConnectionGracePeriod is a
+// deliberate "disable grace" and must be preserved (not replaced by the default).

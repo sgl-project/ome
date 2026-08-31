@@ -94,14 +94,15 @@ type controllerConfig struct {
 	// previously-reachable cluster tolerates transient probe failures before it
 	// is flipped Ready=False and disconnected.
 	connectionGracePeriod time.Duration
-	// probeTimeout bounds the default reachability probe's single request.
-	probeTimeout time.Duration
 	// eventsBatchPeriod debounces Secret-change re-enqueues: a rotated kubeconfig
 	// Secret often updates several keys in quick succession, and batching folds
 	// that burst into one reconcile.
 	eventsBatchPeriod time.Duration
 	// reconnect governs (re)establish/retry backoff for the remote transport.
 	reconnect reconnectBackoff
+	// probeTimeout bounds one reachability probe at the client level.
+	// Non-positive leaves the probe bounded by its context alone.
+	probeTimeout time.Duration
 }
 
 // Option mutates the reconciler's timing configuration at Setup: the
@@ -187,9 +188,6 @@ func (r *Reconciler) resolveConfig(opts ...Option) controllerConfig {
 	// explicit "disable grace" and is preserved.
 	if c.connectionGracePeriod == 0 {
 		c.connectionGracePeriod = DefaultConnectionGracePeriod
-	}
-	if c.probeTimeout <= 0 {
-		c.probeTimeout = DefaultProbeTimeout
 	}
 	if c.eventsBatchPeriod <= 0 {
 		c.eventsBatchPeriod = DefaultEventsBatchPeriod
