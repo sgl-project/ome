@@ -93,6 +93,7 @@ func TestRuntimeStateBindsCollectedInferenceServiceIdentity(t *testing.T) {
 	assert.Equal(t, want, state.InferenceServiceIdentity())
 	assert.Equal(t, InferenceServiceIdentity{}, (*RuntimeState)(nil).InferenceServiceIdentity())
 	assert.True(t, state.MatchesInferenceService(isvc.DeepCopy()))
+	assert.False(t, (&RuntimeState{}).MatchesInferenceService(&v1beta1.InferenceService{}))
 	assert.False(t, state.MatchesInferenceService(nil))
 	assert.False(t, (*RuntimeState)(nil).MatchesInferenceService(isvc))
 

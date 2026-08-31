@@ -20,7 +20,9 @@ import (
 
 func inspectRuntimeRevision(
 	revision *appsv1.ControllerRevision,
-	expectedNamespace, expectedName, runtimeName, sourceKind, sourceNamespace string,
+	expectedNamespace, expectedName, runtimeName string,
+	sourceKind runtimerevision.SourceKind,
+	sourceNamespace string,
 ) RuntimeRevisionObservation {
 	observation := RuntimeRevisionObservation{
 		Available: false, Consistency: RevisionConsistencyUnknown,
@@ -67,7 +69,7 @@ func inspectRuntimeRevision(
 	}
 	observedKindValid := observation.SourceKind == string(runtimerevision.KindClusterServingRuntime) ||
 		observation.SourceKind == string(runtimerevision.KindServingRuntime)
-	if !observedKindValid || (sourceKind != "" && observation.SourceKind != sourceKind) {
+	if !observedKindValid || (sourceKind != "" && observation.SourceKind != string(sourceKind)) {
 		addCode(RevisionConsistencySourceKind)
 	}
 	observedNamespaceValid := (observation.SourceKind == string(runtimerevision.KindClusterServingRuntime) && observation.SourceNamespace == "") ||
@@ -380,9 +382,9 @@ func (s *RuntimeState) LiveAvailability() LiveRuntimeAvailability {
 	}
 }
 
-// InferenceServiceIdentity returns the exact primary object identity whose
-// snapshot produced this runtime evidence. Projection layers must compare all
-// three fields before associating the state with an InferenceService.
+// InferenceServiceIdentity returns the safe primary object identity whose
+// snapshot produced this runtime evidence. Call MatchesInferenceService when
+// exact snapshot validation is required.
 func (s *RuntimeState) InferenceServiceIdentity() InferenceServiceIdentity {
 	if s == nil {
 		return InferenceServiceIdentity{}
@@ -398,6 +400,10 @@ func (s *RuntimeState) MatchesInferenceService(candidate *v1beta1.InferenceServi
 		return false
 	}
 	identity := s.inferenceService.identity
+	if identity.Name == "" || identity.Namespace == "" || identity.UID == "" ||
+		s.inferenceService.resourceVersion == "" {
+		return false
+	}
 	return identity.Name == candidate.Name &&
 		identity.Namespace == candidate.Namespace &&
 		identity.UID == string(candidate.UID) &&

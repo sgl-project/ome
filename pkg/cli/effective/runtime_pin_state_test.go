@@ -20,54 +20,64 @@ import (
 	"sigs.k8s.io/ome/pkg/runtimeselector"
 )
 
-func TestResolvePinRemainsActiveWhenLiveSourceIsMissingOrDisabled(t *testing.T) {
+func TestResolvePinRemainsActiveWhenLiveSourceIsMissing(t *testing.T) {
 	autoSync := false
 	revision := revisionFixture(t, runtimeselector.KindClusterServingRuntime, "", "runtime", runtimeSpecFixture("pin"))
-	tests := []struct {
-		name             string
-		liveErr          error
-		wantAvailability LiveRuntimeAvailability
-	}{
-		{
-			name: "not found",
-			liveErr: &runtimeselector.RuntimeNotFoundError{
+	resolver, err := newRuntimePinResolver(
+		func(string) revisionNamespace {
+			return revisionNamespaceStub{get: func(context.Context, string, metav1.GetOptions) (*appsv1.ControllerRevision, error) {
+				return revision.DeepCopy(), nil
+			}}
+		},
+		liveRuntimeResolverFunc(func(context.Context, *v1beta1.InferenceService) (*LiveConfiguration, error) {
+			return nil, &runtimeselector.RuntimeNotFoundError{
 				RuntimeName: "runtime", Namespace: "workloads",
-			},
-			wantAvailability: LiveRuntimeNotFound,
-		},
-		{
-			name:             "disabled",
-			liveErr:          &runtimeselector.RuntimeDisabledError{RuntimeName: "runtime", IsCluster: true},
-			wantAvailability: LiveRuntimeDisabled,
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			resolver, err := newRuntimePinResolver(
-				func(string) revisionNamespace {
-					return revisionNamespaceStub{get: func(context.Context, string, metav1.GetOptions) (*appsv1.ControllerRevision, error) {
-						return revision.DeepCopy(), nil
-					}}
-				},
-				liveRuntimeResolverFunc(func(context.Context, *v1beta1.InferenceService) (*LiveConfiguration, error) {
-					return nil, test.liveErr
-				}),
-				"ome", testPinLimits,
-			)
-			require.NoError(t, err)
-			isvc := pinISVC("runtime", &autoSync, "")
-			isvc.Status.PinnedRevisionName = revision.Name
+			}
+		}),
+		"ome", testPinLimits,
+	)
+	require.NoError(t, err)
+	isvc := pinISVC("runtime", &autoSync, "")
+	isvc.Status.PinnedRevisionName = revision.Name
 
-			state, err := resolver.Resolve(context.Background(), isvc, RuntimeResolveOptions{})
+	state, err := resolver.Resolve(context.Background(), isvc, RuntimeResolveOptions{})
 
-			require.NoError(t, err)
-			assert.Equal(t, test.wantAvailability, state.LiveAvailability())
-			assert.Equal(t, RuntimePinStateResolved, state.PinState)
-			active, err := state.RequireActive()
-			require.NoError(t, err)
-			assert.Equal(t, revision.Name, active.RevisionName)
-		})
-	}
+	require.NoError(t, err)
+	assert.Equal(t, LiveRuntimeNotFound, state.LiveAvailability())
+	assert.Equal(t, RuntimePinStateResolved, state.PinState)
+	active, err := state.RequireActive()
+	require.NoError(t, err)
+	assert.Equal(t, revision.Name, active.RevisionName)
+}
+
+func TestResolveDisabledLiveSourceCollectsPinButDoesNotLabelItActive(t *testing.T) {
+	autoSync := false
+	revision := revisionFixture(t, runtimeselector.KindClusterServingRuntime, "", "runtime", runtimeSpecFixture("pin"))
+	var getCalls int
+	resolver, err := newRuntimePinResolver(
+		func(string) revisionNamespace {
+			return revisionNamespaceStub{get: func(context.Context, string, metav1.GetOptions) (*appsv1.ControllerRevision, error) {
+				getCalls++
+				return revision.DeepCopy(), nil
+			}}
+		},
+		liveRuntimeResolverFunc(func(context.Context, *v1beta1.InferenceService) (*LiveConfiguration, error) {
+			return nil, &runtimeselector.RuntimeDisabledError{RuntimeName: "runtime", IsCluster: true}
+		}),
+		"ome", testPinLimits,
+	)
+	require.NoError(t, err)
+	isvc := pinISVC("runtime", &autoSync, "")
+	isvc.Status.PinnedRevisionName = revision.Name
+
+	state, err := resolver.Resolve(context.Background(), isvc, RuntimeResolveOptions{})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, getCalls)
+	assert.Equal(t, LiveRuntimeDisabled, state.LiveAvailability())
+	assert.Equal(t, RuntimePinStateUnavailable, state.PinState)
+	_, err = state.RequireActive()
+	assert.ErrorIs(t, err, ErrActiveRuntimeUnavailable)
 }
 
 func TestResolveHardLiveFailureCollectsExactPinButDoesNotLabelItActive(t *testing.T) {

@@ -40,10 +40,10 @@ func (r *RuntimePinResolver) collectHistory(
 	observedPages := 0
 	result, err := paging.ListBounded(ctx, base, r.limits, func(
 		requestCtx context.Context,
-		options metav1.ListOptions,
+		listOptions metav1.ListOptions,
 	) (paging.Page[appsv1.ControllerRevision], error) {
 		requestedPages++
-		list, err := r.revisions(r.omeNamespace).List(requestCtx, options)
+		list, err := r.revisions(r.omeNamespace).List(requestCtx, listOptions)
 		if err != nil {
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				return paging.Page[appsv1.ControllerRevision]{}, ctxErr
@@ -72,7 +72,7 @@ func (r *RuntimePinResolver) collectHistory(
 		revision := result.Items[i].DeepCopy()
 		observation := inspectRuntimeRevision(
 			revision, r.omeNamespace, "", state.RuntimeName,
-			state.DeclaredSourceKind, state.DeclaredSourceNamespace,
+			runtimerevision.SourceKind(state.DeclaredSourceKind), state.DeclaredSourceNamespace,
 		)
 		observation.roles = []RuntimeRevisionRole{RuntimeRevisionRoleHistory}
 		historyObservations = append(historyObservations, observation)

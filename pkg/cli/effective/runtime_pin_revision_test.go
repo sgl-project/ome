@@ -310,6 +310,42 @@ func TestRevisionEvidenceExposesSafeAssociationDisabledStateAndIssueKey(t *testi
 	assert.Equal(t, missingName, issues[0].RevisionName)
 }
 
+func TestResolveNilExactRevisionResponseIsUnavailable(t *testing.T) {
+	autoSync := false
+	const revisionName = "empty-revision-response"
+	resolver, err := newRuntimePinResolver(
+		func(string) revisionNamespace {
+			return revisionNamespaceStub{get: func(context.Context, string, metav1.GetOptions) (*appsv1.ControllerRevision, error) {
+				return nil, nil
+			}}
+		},
+		liveRuntimeResolverFunc(func(context.Context, *v1beta1.InferenceService) (*LiveConfiguration, error) {
+			return livePinFixture("runtime", runtimeselector.KindClusterServingRuntime, "", false), nil
+		}),
+		"ome", testPinLimits,
+	)
+	require.NoError(t, err)
+	isvc := pinISVC("runtime", &autoSync, "")
+	isvc.Status.PinnedRevisionName = revisionName
+
+	state, err := resolver.Resolve(context.Background(), isvc, RuntimeResolveOptions{})
+
+	require.NoError(t, err)
+	assert.Equal(t, RuntimePinStateUnavailable, state.PinState)
+	_, err = state.RequireActive()
+	assert.ErrorIs(t, err, ErrActiveRuntimeUnavailable)
+	observations := state.RevisionObservations()
+	require.Len(t, observations, 1)
+	assert.False(t, observations[0].ObjectReturned())
+	assert.Equal(t, revisionName, observations[0].ExpectedName())
+	assert.Equal(t, "ome", observations[0].ExpectedNamespace())
+	issues := state.SourceIssues()
+	require.Len(t, issues, 1)
+	assert.Equal(t, RuntimeSourceIssueRevisionGetFailed, issues[0].Code)
+	assert.Equal(t, revisionName, issues[0].RevisionName)
+	assert.ErrorContains(t, errors.Unwrap(issues[0]), "empty response")
+}
+
 func TestMalformedRevisionStillExposesReturnedIdentity(t *testing.T) {
 	revision := revisionFixture(t, runtimeselector.KindClusterServingRuntime, "", "runtime", runtimeSpecFixture("bad"))
 	revision.Data.Raw = []byte(`{`)

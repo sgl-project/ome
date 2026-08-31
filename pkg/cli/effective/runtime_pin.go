@@ -314,8 +314,8 @@ func (RuntimeRevisionObservation) GoString() string {
 	return "<effective.RuntimeRevisionObservation redacted>"
 }
 
-// InferenceServiceIdentity binds collected evidence to the exact primary
-// object snapshot that requested it.
+// InferenceServiceIdentity is the safe primary object identity associated with
+// collected evidence. Exact snapshot metadata remains private to RuntimeState.
 type InferenceServiceIdentity struct {
 	Name      string
 	Namespace string
@@ -524,10 +524,10 @@ func runtimePinIntent(isvc *v1beta1.InferenceService) (RuntimePinMode, string, s
 		}
 		return RuntimePinModeInvalidPin, "", ""
 	}
-	kind := runtimeselector.KindClusterServingRuntime
+	kind := string(runtimerevision.KindClusterServingRuntime)
 	namespace := ""
 	if ref.Kind != nil && *ref.Kind == runtimeselector.KindServingRuntime {
-		kind = runtimeselector.KindServingRuntime
+		kind = string(runtimerevision.KindServingRuntime)
 		namespace = isvc.Namespace
 	}
 	if runtimeAutoSyncEnabled(ref) {
@@ -540,7 +540,7 @@ func runtimePinIntent(isvc *v1beta1.InferenceService) (RuntimePinMode, string, s
 }
 
 func (r *RuntimePinResolver) selectActive(isvc *v1beta1.InferenceService, state *RuntimeState) {
-	if state.liveAvailability == liveUnreadable {
+	if state.liveAvailability == liveUnreadable || state.liveAvailability == liveDisabled {
 		state.PinState = RuntimePinStateUnavailable
 		return
 	}
@@ -688,6 +688,9 @@ func (r *RuntimePinResolver) collectExactRevision(ctx context.Context, state *Ru
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return ctxErr
 	}
+	if err == nil && revision == nil {
+		err = errors.New("runtime revision read returned an empty response")
+	}
 	if err != nil {
 		observation := RuntimeRevisionObservation{
 			roles: []RuntimeRevisionRole{role}, Available: false,
@@ -705,7 +708,7 @@ func (r *RuntimePinResolver) collectExactRevision(ctx context.Context, state *Ru
 	}
 	observation := inspectRuntimeRevision(
 		revision, r.omeNamespace, name, state.RuntimeName,
-		state.DeclaredSourceKind, state.DeclaredSourceNamespace,
+		runtimerevision.SourceKind(state.DeclaredSourceKind), state.DeclaredSourceNamespace,
 	)
 	observation.roles = []RuntimeRevisionRole{role}
 	state.revisions = append(state.revisions, observation)
