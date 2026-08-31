@@ -1,0 +1,212 @@
+package v1alpha1
+
+import (
+	"cmp"
+	"fmt"
+	"slices"
+	"sort"
+	"strings"
+	"time"
+
+	"sigs.k8s.io/ome/pkg/cli/report"
+)
+
+const RuntimeHistoryReportKind = "RuntimeHistoryReport"
+
+// RuntimeRevisionEntry is an allowlisted revision history observation.
+type RuntimeRevisionEntry struct {
+	Revision       RuntimeRevisionReference `json:"revision"`
+	Source         *RuntimeObjectReference  `json:"source,omitempty"`
+	Hash           string                   `json:"hash,omitempty"`
+	Roles          []RuntimeRevisionRole    `json:"roles"`
+	Consistency    RevisionConsistency      `json:"consistency"`
+	RelationToLive RevisionRelation         `json:"relationToLive"`
+	Issues         []RuntimeIssueCode       `json:"issues"`
+}
+
+// RuntimeHistoryContent reports a bounded runtime revision history window.
+type RuntimeHistoryContent struct {
+	Runtime        *RuntimeObjectReference `json:"runtime,omitempty"`
+	Observation    HistoryObservationState `json:"observation"`
+	Completeness   HistoryCompleteness     `json:"completeness"`
+	RequestedPages int                     `json:"requestedPages"`
+	ObservedPages  int                     `json:"observedPages"`
+	Revisions      []RuntimeRevisionEntry  `json:"revisions"`
+	Issues         []RuntimeIssue          `json:"issues"`
+}
+
+// NewRuntimeHistoryReport creates a canonical runtime history report.
+func NewRuntimeHistoryReport(metadata Metadata, content RuntimeHistoryContent, clock Clock) RuntimeEnvelope[RuntimeHistoryContent] {
+	return newRuntimeEnvelope(metadata, content, clock)
+}
+
+func (RuntimeHistoryContent) runtimeReportKind() string {
+	return RuntimeHistoryReportKind
+}
+
+// Canonical returns a deeply copied deterministic history report content.
+func (c RuntimeHistoryContent) Canonical() RuntimeHistoryContent {
+	result := c
+	result.Runtime = copyRuntimeObjectReference(c.Runtime)
+	result.Revisions = make([]RuntimeRevisionEntry, len(c.Revisions))
+	for i := range c.Revisions {
+		result.Revisions[i] = c.Revisions[i].canonical()
+	}
+	sort.Slice(result.Revisions, func(i, j int) bool {
+		return compareRuntimeRevisionEntries(result.Revisions[i], result.Revisions[j]) < 0
+	})
+	result.Issues = append([]RuntimeIssue{}, c.Issues...)
+	sort.Slice(result.Issues, func(i, j int) bool {
+		if result.Issues[i].Code != result.Issues[j].Code {
+			return result.Issues[i].Code < result.Issues[j].Code
+		}
+		return result.Issues[i].Revision < result.Issues[j].Revision
+	})
+	return result
+}
+
+func compareRuntimeRevisionEntries(a, b RuntimeRevisionEntry) int {
+	if !a.Revision.CreatedAt.Equal(b.Revision.CreatedAt) {
+		if a.Revision.CreatedAt.After(b.Revision.CreatedAt) {
+			return -1
+		}
+		return 1
+	}
+	for _, result := range []int{
+		cmp.Compare(a.Revision.Namespace, b.Revision.Namespace),
+		cmp.Compare(a.Revision.Name, b.Revision.Name),
+		cmp.Compare(a.Revision.UID, b.Revision.UID),
+		cmp.Compare(a.Revision.ResourceVersion, b.Revision.ResourceVersion),
+		cmp.Compare(a.Hash, b.Hash),
+		compareRuntimeObjectReferences(a.Source, b.Source),
+		slices.Compare(a.Roles, b.Roles),
+		cmp.Compare(a.Consistency, b.Consistency),
+		cmp.Compare(a.RelationToLive, b.RelationToLive),
+		slices.Compare(a.Issues, b.Issues),
+	} {
+		if result != 0 {
+			return result
+		}
+	}
+	return 0
+}
+
+func compareRuntimeObjectReferences(a, b *RuntimeObjectReference) int {
+	if a == nil {
+		if b == nil {
+			return 0
+		}
+		return -1
+	}
+	if b == nil {
+		return 1
+	}
+	for _, result := range []int{
+		cmp.Compare(a.APIVersion, b.APIVersion),
+		cmp.Compare(a.Kind, b.Kind),
+		cmp.Compare(a.Namespace, b.Namespace),
+		cmp.Compare(a.Name, b.Name),
+		cmp.Compare(a.UID, b.UID),
+		cmp.Compare(a.Generation, b.Generation),
+		cmp.Compare(a.ResourceVersion, b.ResourceVersion),
+	} {
+		if result != 0 {
+			return result
+		}
+	}
+	return 0
+}
+
+// Table returns the deterministic human-readable revision history view.
+func (c RuntimeHistoryContent) Table() report.Table {
+	canonical := c.Canonical()
+	table := report.Table{
+		Headers: []string{
+			"OBSERVATION", "COMPLETENESS", "PAGES", "REVISION", "CREATED", "HASH", "ROLES", "SOURCE",
+			"CONSISTENCY", "RELATION", "REVISION-ISSUES", "REPORT-ISSUES",
+		},
+		Rows: make([][]string, 0, len(canonical.Revisions)),
+	}
+	observation := orDash(string(canonical.Observation))
+	completeness := orDash(string(canonical.Completeness))
+	pages := fmt.Sprintf("%d/%d", canonical.ObservedPages, canonical.RequestedPages)
+	reportIssues := joinRuntimeIssues(canonical.Issues)
+	for _, entry := range canonical.Revisions {
+		table.Rows = append(table.Rows, []string{
+			observation,
+			completeness,
+			pages,
+			orDash(entry.Revision.Name),
+			formatRevisionTime(entry.Revision.CreatedAt),
+			orDash(entry.Hash),
+			joinRevisionRoles(entry.Roles),
+			runtimeReferenceDisplay(entry.Source),
+			orDash(string(entry.Consistency)),
+			orDash(string(entry.RelationToLive)),
+			joinIssueCodes(entry.Issues),
+			reportIssues,
+		})
+	}
+	if len(table.Rows) == 0 {
+		table.Rows = append(table.Rows, []string{
+			observation, completeness, pages, "-", "-", "-", "-", "-", "-", "-", "-", reportIssues,
+		})
+	}
+	return table
+}
+
+func (entry RuntimeRevisionEntry) canonical() RuntimeRevisionEntry {
+	result := entry
+	result.Revision.CreatedAt = entry.Revision.CreatedAt.UTC()
+	result.Source = copyRuntimeObjectReference(entry.Source)
+	result.Roles = append([]RuntimeRevisionRole{}, entry.Roles...)
+	sort.Slice(result.Roles, func(i, j int) bool {
+		if revisionRoleOrder(result.Roles[i]) != revisionRoleOrder(result.Roles[j]) {
+			return revisionRoleOrder(result.Roles[i]) < revisionRoleOrder(result.Roles[j])
+		}
+		return result.Roles[i] < result.Roles[j]
+	})
+	result.Issues = append([]RuntimeIssueCode{}, entry.Issues...)
+	sort.Slice(result.Issues, func(i, j int) bool {
+		return result.Issues[i] < result.Issues[j]
+	})
+	return result
+}
+
+func revisionRoleOrder(role RuntimeRevisionRole) int {
+	switch role {
+	case RuntimeRevisionRoleActive:
+		return 0
+	case RuntimeRevisionRoleRequested:
+		return 1
+	case RuntimeRevisionRoleReported:
+		return 2
+	case RuntimeRevisionRoleHistory:
+		return 3
+	default:
+		return 4
+	}
+}
+
+func formatRevisionTime(createdAt time.Time) string {
+	if createdAt.IsZero() {
+		return "-"
+	}
+	return createdAt.UTC().Format(time.RFC3339)
+}
+
+func joinRevisionRoles(roles []RuntimeRevisionRole) string {
+	values := make([]string, len(roles))
+	for i, role := range roles {
+		values[i] = string(role)
+	}
+	return orDash(strings.Join(values, ","))
+}
+
+func joinIssueCodes(issues []RuntimeIssueCode) string {
+	values := make([]string, len(issues))
+	for i, issue := range issues {
+		values[i] = string(issue)
+	}
+	return orDash(strings.Join(values, ","))
+}

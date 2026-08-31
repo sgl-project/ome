@@ -112,10 +112,3 @@ func yesNo(value bool) string {
 	}
 	return "No"
 }
-
-func orDash(value string) string {
-	if value == "" {
-		return "-"
-	}
-	return value
-}
