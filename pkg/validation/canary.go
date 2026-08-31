@@ -47,6 +47,9 @@ const ReasonAnalysisInvalid = "AnalysisInvalid"
 //   - Every Component in the group is OMENative — other modes wedge at Pending.
 //   - Final step Traffic == 100 — otherwise the rollout never fully cuts over.
 //   - Final step Capacity == 100% — otherwise it completes on a partial fleet.
+//   - Every step Capacity parses strictly (integer >= 0, or "<N>%" with N in
+//     [0,100]) — the runtime resolver maps unparsable values to zero, so a
+//     malformed capacity would silently stage no new pods.
 //   - Traffic in [0,100], non-decreasing, and Traffic>0 requires Capacity>0.
 //   - Each analysis step's config is complete and well-formed (delegated to
 //     validateCanaryAnalysis).
@@ -122,24 +125,33 @@ func ValidateCanary(spec *v1beta1.InferenceServiceSpec) error {
 		if last.Traffic != 100 {
 			return fmt.Errorf("spec.rollout.groups[%d].canary final step traffic must be 100, got %d (%s)", gi, last.Traffic, ReasonCanaryInvalid)
 		}
-		// Only the percentage form is checkable at admission (absolute counts need
-		// the desired replica count); the done sentinel also forces partition 0.
-		if pct, ok := percentValue(last.Capacity); ok && pct != 100 {
-			return fmt.Errorf("spec.rollout.groups[%d].canary final step capacity must be 100%% (rollout completes at full capacity), got %q (%s)",
-				gi, last.Capacity.String(), ReasonCanaryInvalid)
-		}
 		var prevWeight int32
 		for i, s := range c.Steps {
+			// Strict capacity parsing: the runtime resolver maps anything it cannot
+			// parse to zero new capacity, so admission must reject every such form
+			// instead of letting a step silently stage nothing.
+			val, isPercent, perr := parseCanaryCapacity(s.Capacity)
+			if perr != nil {
+				return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d].capacity: %v (%s)", gi, i, perr, ReasonCanaryInvalid)
+			}
 			if s.Traffic < 0 || s.Traffic > 100 {
-				return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d]: traffic %d must be in [0,100] (%s)", gi, i, s.Traffic, ReasonCanaryInvalid)
+				return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d].traffic: traffic %d must be in [0,100] (%s)", gi, i, s.Traffic, ReasonCanaryInvalid)
 			}
 			if s.Traffic < prevWeight {
-				return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d]: traffic %d must be >= the previous step's %d (canary weights are non-decreasing) (%s)",
+				return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d].traffic: traffic %d must be >= the previous step's %d (canary weights are non-decreasing) (%s)",
 					gi, i, s.Traffic, prevWeight, ReasonCanaryInvalid)
 			}
 			prevWeight = s.Traffic
-			if s.Traffic > 0 && newCapacityIsZero(s.Capacity) {
-				return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d]: traffic %d>0 requires capacity>0 (%s)", gi, i, s.Traffic, ReasonCanaryInvalid)
+			if s.Traffic > 0 && val == 0 {
+				return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d].capacity: capacity %q resolves to zero new capacity but traffic is %d — a step cannot send traffic to zero capacity (%s)",
+					gi, i, s.Capacity.String(), s.Traffic, ReasonCanaryInvalid)
+			}
+			// Only the percentage form of the final capacity is checkable at
+			// admission (absolute counts need the desired replica count); the done
+			// sentinel also forces partition 0.
+			if i == len(c.Steps)-1 && isPercent && val != 100 {
+				return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d].capacity: final step capacity must be 100%% (rollout completes at full capacity), got %q (%s)",
+					gi, i, s.Capacity.String(), ReasonCanaryInvalid)
 			}
 		}
 	}
@@ -206,25 +218,36 @@ func validateAnalysisMetrics(gi, si int, metrics []v1beta1.AnalysisMetric) error
 	return nil
 }
 
-// percentValue extracts the integer N from an IntOrString "<N>%" form.
-func percentValue(v intstr.IntOrString) (int, bool) {
-	if v.Type != intstr.String || !strings.HasSuffix(v.StrVal, "%") {
-		return 0, false
-	}
-	n, err := strconv.Atoi(strings.TrimSuffix(v.StrVal, "%"))
-	if err != nil {
-		return 0, false
-	}
-	return n, true
-}
-
-// newCapacityIsZero reports whether a step's Capacity resolves to zero pods
-// regardless of how it is expressed (integer 0, "0", or "0%").
-func newCapacityIsZero(c intstr.IntOrString) bool {
+// parseCanaryCapacity strictly resolves a step's Capacity to its numeric value.
+// A string must be "<N>%" with integer N in [0,100]; an integer must be >= 0.
+// Everything else is rejected: the runtime int/percent resolver maps a value it
+// cannot parse to zero, so an admission-time reject here is the only thing
+// standing between a typo and a step that silently stages no new capacity.
+// Absolute counts must use the integer form — a quoted count like "3" is not a
+// percentage and would resolve to zero at runtime.
+func parseCanaryCapacity(c intstr.IntOrString) (value int, isPercent bool, err error) {
 	if c.Type == intstr.Int {
-		return c.IntValue() == 0
+		n := c.IntValue()
+		if n < 0 {
+			return 0, false, fmt.Errorf("capacity %d must not be negative", n)
+		}
+		return n, false, nil
 	}
-	return c.StrVal == "0" || c.StrVal == "0%"
+	raw := c.StrVal
+	if !strings.HasSuffix(raw, "%") {
+		return 0, false, fmt.Errorf("capacity %q is not a percentage — use \"<N>%%\" for a fraction of desired replicas, or an unquoted integer for an absolute count", raw)
+	}
+	n, atoiErr := strconv.Atoi(strings.TrimSuffix(raw, "%"))
+	if atoiErr != nil {
+		return 0, true, fmt.Errorf("capacity %q is not a valid percentage — use \"<N>%%\" with integer N in [0,100]", raw)
+	}
+	if n < 0 {
+		return 0, true, fmt.Errorf("capacity %q must not be negative", raw)
+	}
+	if n > 100 {
+		return 0, true, fmt.Errorf("capacity %q must not exceed 100%% (capacity is a fraction of desired replicas)", raw)
+	}
+	return n, true, nil
 }
 
 // canaryEntrypoint returns the ISVC's external entrypoint Component, mirroring

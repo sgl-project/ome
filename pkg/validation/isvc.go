@@ -297,11 +297,10 @@ func ValidateEngineDecoderDeploymentMode(spec *v1beta1.InferenceServiceSpec) err
 //  2. spec.deploymentMode (the typed top-level default).
 //  3. Empty string when neither is set.
 //
-// Shape-derived behavior (Leader/Worker → multi-node OMENative;
-// PDDisaggregated from Engine+Decoder pairing) is intentionally NOT
-// considered here: this helper is consumed by admission rules that only
-// care about the DISPATCH backend (OMENative vs RawDeployment), not the
-// shape.
+// Shape-derived modes (MultiNode from Leader/Worker; PDDisaggregated
+// from Engine+Decoder pairing) are intentionally NOT considered here:
+// this helper is consumed by admission rules that only care about the
+// DISPATCH backend (OMENative vs RawDeployment), not the shape.
 func resolveComponentDeploymentMode(annotations map[string]string, specMode *constants.DeploymentModeType) string {
 	if mode, ok := annotations[constants.DeploymentMode]; ok && mode != "" {
 		return mode

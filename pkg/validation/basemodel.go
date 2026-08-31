@@ -1,5 +1,3 @@
-// Package validation holds pure validation helpers (no Kubernetes client
-// dependencies) shared between CRD validators and admission webhooks.
 package validation
 
 import (
@@ -9,14 +7,12 @@ import (
 	"sigs.k8s.io/ome/pkg/utils/storage"
 )
 
-// ValidatePVCStorage enforces the pvc:// URI rules for a BaseModel /
-// ClusterBaseModel spec:
+// ValidatePVCStorage enforces the PVC URI shape rules:
 //
 //   - namespaced BaseModel: pvc:// URIs must NOT carry a namespace prefix
-//     (pvc://{pvc-name}/{sub-path}); the model's own namespace is used.
 //   - ClusterBaseModel: pvc:// URIs MUST carry a namespace prefix
-//     (pvc://{namespace}:{pvc-name}/{sub-path}).
-//   - the URI itself must parse (a sub-path is required).
+//   - the URI itself must parse
+//   - PVC + distribution=Sharded is rejected
 //
 // Non-PVC URIs are accepted unchanged.
 func ValidatePVCStorage(spec *v1beta1.BaseModelSpec, isClusterScoped bool) error {
@@ -27,6 +23,10 @@ func ValidatePVCStorage(spec *v1beta1.BaseModelSpec, isClusterScoped bool) error
 	storageType, err := storage.GetStorageType(uri)
 	if err != nil || storageType != storage.StorageTypePVC {
 		return nil
+	}
+
+	if spec.Distribution != nil && *spec.Distribution == v1beta1.DistributionSharded {
+		return fmt.Errorf("PVC storage URIs are not compatible with distribution=Sharded; use distribution=PerNode (or omit) for pvc:// models")
 	}
 
 	components, err := storage.ParsePVCStorageURI(uri)

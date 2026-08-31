@@ -1,9 +1,9 @@
 // Per-Component LifecycleSpec.UpdateStrategy.RollingUpdate validation.
 //
-// The CRD schema's XIntOrString marker already gates the structural
-// shape (must parse as integer or string). These helpers add the
-// semantic checks the apiserver can't express: percent strings must
-// match "<n>%" with 0 <= n <= 100, integer values must be >= 0.
+// The semantic IntOrString rules (integers >= 0, percent strings
+// "<n>%" with 0 <= n <= 100) live in the shared
+// validateBudgetIntOrString helper in budget.go; this file composes
+// the per-Component field paths and adds the zero-budget pair rule.
 //
 // As of the per-Component MaxSurge/MaxUnavailable wire-up, the rollout
 // budget now reads the per-Component RollingUpdate fields directly
@@ -77,10 +77,11 @@ func validateComponentLifecycle(name string, lc *v1beta1.LifecycleSpec) error {
 		return nil
 	}
 	ru := lc.UpdateStrategy.RollingUpdate
-	if err := validateRollingUpdateIntOrString(name, "maxUnavailable", ru.MaxUnavailable); err != nil {
+	base := fmt.Sprintf("spec.%s.lifecycle.updateStrategy.rollingUpdate.", name)
+	if err := validateBudgetIntOrString(base+"maxUnavailable", ru.MaxUnavailable); err != nil {
 		return err
 	}
-	if err := validateRollingUpdateIntOrString(name, "maxSurge", ru.MaxSurge); err != nil {
+	if err := validateBudgetIntOrString(base+"maxSurge", ru.MaxSurge); err != nil {
 		return err
 	}
 	if err := validateRollingUpdateNotBothZero(name, ru.MaxSurge, ru.MaxUnavailable); err != nil {
@@ -142,41 +143,4 @@ func explicitZero(v *intstr.IntOrString) bool {
 		return false
 	}
 	return pct == 0
-}
-
-// validateRollingUpdateIntOrString enforces:
-//   - integer values >= 0
-//   - string values match "<n>%" with 0 <= n <= 100
-//
-// Returns nil for nil inputs (the workload reconciler defaults nil to
-// 25% — both the API documentation and pacingWithDefaults agree on
-// the same fallback).
-func validateRollingUpdateIntOrString(component, field string, v *intstr.IntOrString) error {
-	if v == nil {
-		return nil
-	}
-	if v.Type == intstr.Int {
-		if v.IntValue() < 0 {
-			return fmt.Errorf("spec.%s.lifecycle.updateStrategy.rollingUpdate.%s=%d must be >= 0 (%s)",
-				component, field, v.IntValue(), ReasonInvalidRollingUpdateInteger)
-		}
-		return nil
-	}
-	// String form — must be "<n>%" with 0 <= n <= 100.
-	s := v.StrVal
-	if !strings.HasSuffix(s, "%") {
-		return fmt.Errorf("spec.%s.lifecycle.updateStrategy.rollingUpdate.%s=%q must be an integer count or a percent string like \"25%%\" (%s)",
-			component, field, s, ReasonInvalidRollingUpdatePercent)
-	}
-	pctStr := strings.TrimSuffix(s, "%")
-	pct, err := strconv.Atoi(pctStr)
-	if err != nil {
-		return fmt.Errorf("spec.%s.lifecycle.updateStrategy.rollingUpdate.%s=%q has a malformed percent value (%s)",
-			component, field, s, ReasonInvalidRollingUpdatePercent)
-	}
-	if pct < 0 || pct > 100 {
-		return fmt.Errorf("spec.%s.lifecycle.updateStrategy.rollingUpdate.%s=%q percent must be between 0%% and 100%% (%s)",
-			component, field, s, ReasonInvalidRollingUpdatePercent)
-	}
-	return nil
 }

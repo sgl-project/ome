@@ -7,6 +7,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 )
@@ -78,6 +79,154 @@ func TestValidateCanary_TrafficToZeroPercentCapacity(t *testing.T) {
 	)
 	if err := ValidateCanary(spec); err == nil {
 		t.Fatal(`traffic>0 with "0%" Capacity must be rejected`)
+	}
+}
+
+// TestParseCanaryCapacity covers the strict parser: the runtime int/percent
+// resolver maps anything unparsable to zero, so the parser must reject every
+// form the resolver would drop and accept exactly the forms it resolves.
+func TestParseCanaryCapacity(t *testing.T) {
+	cases := []struct {
+		name      string
+		in        intstr.IntOrString
+		value     int
+		isPercent bool
+		wantErr   bool
+	}{
+		{name: "int zero", in: intstr.FromInt(0), value: 0},
+		{name: "int positive", in: intstr.FromInt(3), value: 3},
+		{name: "int negative", in: intstr.FromInt(-1), wantErr: true},
+		{name: "percent zero", in: intstr.FromString("0%"), value: 0, isPercent: true},
+		{name: "percent mid", in: intstr.FromString("50%"), value: 50, isPercent: true},
+		{name: "percent full", in: intstr.FromString("100%"), value: 100, isPercent: true},
+		{name: "percent explicit plus sign", in: intstr.FromString("+10%"), value: 10, isPercent: true},
+		{name: "malformed word", in: intstr.FromString("abc"), wantErr: true},
+		{name: "empty string", in: intstr.FromString(""), wantErr: true},
+		{name: "bare percent sign", in: intstr.FromString("%"), wantErr: true},
+		{name: "non-numeric percent", in: intstr.FromString("abc%"), wantErr: true},
+		{name: "negative percent", in: intstr.FromString("-10%"), wantErr: true},
+		{name: "percent above 100", in: intstr.FromString("150%"), wantErr: true},
+		{name: "inner whitespace", in: intstr.FromString("10 %"), wantErr: true},
+		{name: "quoted absolute count", in: intstr.FromString("3"), wantErr: true},
+		{name: "fractional percent", in: intstr.FromString("10.5%"), wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			value, isPercent, err := parseCanaryCapacity(tc.in)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("parseCanaryCapacity(%v) = (%d, %v, nil), want error", tc.in, value, isPercent)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseCanaryCapacity(%v): unexpected error: %v", tc.in, err)
+			}
+			if value != tc.value || isPercent != tc.isPercent {
+				t.Fatalf("parseCanaryCapacity(%v) = (%d, %v), want (%d, %v)", tc.in, value, isPercent, tc.value, tc.isPercent)
+			}
+		})
+	}
+}
+
+// TestValidateCanary_CapacityStrictlyParsed: capacities the runtime resolver
+// would silently map to zero (or that are semantically out of range) are
+// rejected at admission, with the exact steps[i].capacity field path.
+func TestValidateCanary_CapacityStrictlyParsed(t *testing.T) {
+	final := v1beta1.RolloutGroupStep{Capacity: intstr.FromString("100%"), Traffic: 100}
+	cases := []struct {
+		name     string
+		capacity intstr.IntOrString
+	}{
+		{name: "malformed string", capacity: intstr.FromString("abc")},
+		{name: "negative integer", capacity: intstr.FromInt(-1)},
+		{name: "negative percent", capacity: intstr.FromString("-10%")},
+		{name: "percent above 100", capacity: intstr.FromString("150%")},
+		{name: "quoted absolute count", capacity: intstr.FromString("3")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := canarySpec(v1beta1.RolloutGroupStep{Capacity: tc.capacity, Traffic: 10}, final)
+			err := ValidateCanary(spec)
+			if err == nil || !strings.Contains(err.Error(), ReasonCanaryInvalid) {
+				t.Fatalf("capacity %v must be rejected with %s, got: %v", tc.capacity, ReasonCanaryInvalid, err)
+			}
+			if !strings.Contains(err.Error(), "spec.rollout.groups[0].canary.steps[0].capacity") {
+				t.Fatalf("error must carry the exact field path, got: %v", err)
+			}
+		})
+	}
+}
+
+// TestValidateCanary_MalformedFinalCapacityRejected: a malformed final-step
+// capacity slipping through would let the done sentinel run on a plan whose
+// last declared capacity is unparsable.
+func TestValidateCanary_MalformedFinalCapacityRejected(t *testing.T) {
+	spec := canarySpec(
+		v1beta1.RolloutGroupStep{Capacity: intstr.FromString("10%"), Traffic: 10},
+		v1beta1.RolloutGroupStep{Capacity: intstr.FromString("abc"), Traffic: 100},
+	)
+	err := ValidateCanary(spec)
+	if err == nil || !strings.Contains(err.Error(), "spec.rollout.groups[0].canary.steps[1].capacity") {
+		t.Fatalf("malformed final capacity must be rejected with its field path, got: %v", err)
+	}
+}
+
+func TestValidateCanary_FinalPercentCapacityNot100(t *testing.T) {
+	spec := canarySpec(
+		v1beta1.RolloutGroupStep{Capacity: intstr.FromString("10%"), Traffic: 10},
+		v1beta1.RolloutGroupStep{Capacity: intstr.FromString("50%"), Traffic: 100},
+	)
+	err := ValidateCanary(spec)
+	if err == nil || !strings.Contains(err.Error(), "spec.rollout.groups[0].canary.steps[1].capacity") {
+		t.Fatalf("final percent capacity below 100%% must be rejected with its field path, got: %v", err)
+	}
+}
+
+// TestValidateCanary_ValidPlansStayAccepted: every capacity form the runtime
+// resolver handles today keeps admitting — absolute integer steps, an absolute
+// final step (admission cannot compare it to desired replicas), and a zero
+// capacity paired with zero traffic.
+func TestValidateCanary_ValidPlansStayAccepted(t *testing.T) {
+	cases := []struct {
+		name  string
+		steps []v1beta1.RolloutGroupStep
+	}{
+		{
+			name: "percent steps",
+			steps: []v1beta1.RolloutGroupStep{
+				{Capacity: intstr.FromString("25%"), Traffic: 10},
+				{Capacity: intstr.FromString("100%"), Traffic: 100},
+			},
+		},
+		{
+			name: "absolute integer step",
+			steps: []v1beta1.RolloutGroupStep{
+				{Capacity: intstr.FromInt(1), Traffic: 10},
+				{Capacity: intstr.FromString("100%"), Traffic: 100},
+			},
+		},
+		{
+			name: "absolute final step",
+			steps: []v1beta1.RolloutGroupStep{
+				{Capacity: intstr.FromString("50%"), Traffic: 50},
+				{Capacity: intstr.FromInt(5), Traffic: 100},
+			},
+		},
+		{
+			name: "zero capacity with zero traffic",
+			steps: []v1beta1.RolloutGroupStep{
+				{Capacity: intstr.FromInt(0), Traffic: 0},
+				{Capacity: intstr.FromString("100%"), Traffic: 100},
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := ValidateCanary(canarySpec(tc.steps...)); err != nil {
+				t.Fatalf("valid plan rejected: %v", err)
+			}
+		})
 	}
 }
 
@@ -274,7 +423,7 @@ func TestValidateCanary_MaintainRatioRejected(t *testing.T) {
 		Rollout: &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{
 			{
 				Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
-				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptrInt32(5)},
+				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptr.To(int32(5))},
 				Canary:        &v1beta1.GroupCanary{Steps: []v1beta1.RolloutGroupStep{final}},
 			},
 		}},
