@@ -55,7 +55,7 @@ repos:
       - id: helm-lint
         name: helm lint
         description: Lint Helm charts
-        entry: bash -c 'for chart in charts/*/; do helm lint "$chart" || exit 1; done'
+        entry: bash -c 'for chart in charts/*/; do values="$chart/ci/pre-commit-values.yaml"; if [ -f "$values" ]; then helm lint "$chart" -f "$values" --kube-version 1.35.0 || exit 1; else helm lint "$chart" --kube-version 1.35.0 || exit 1; fi; done'
         language: system
         always_run: true
         pass_filenames: false
@@ -63,7 +63,7 @@ repos:
       - id: helm-template
         name: helm template
         description: Validate Helm chart rendering
-        entry: bash -c 'for chart in charts/*/; do helm template test "$chart" --debug || exit 1; done'
+        entry: bash -c 'for chart in charts/*/; do values="$chart/ci/pre-commit-values.yaml"; if [ -f "$values" ]; then helm template test "$chart" -f "$values" --kube-version 1.35.0 --debug || exit 1; else helm template test "$chart" --kube-version 1.35.0 --debug || exit 1; fi; done'
         language: system
         always_run: true
         pass_filenames: false
