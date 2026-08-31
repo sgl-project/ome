@@ -181,7 +181,7 @@ func buildDefaultServicePort(name, appProtocol string) corev1.ServicePort {
 // Reconcile ensures the Service matches the desired state
 func (r *ServiceReconciler) Reconcile() (*corev1.Service, error) {
 	checkResult, existingService, err := r.checkServiceState()
-	log.Info("Reconcile service", "namespace", r.Service.Namespace, "name", r.Service.Name, "checkResult", checkResult)
+	log.V(1).Info("Reconcile service", "namespace", r.Service.Namespace, "name", r.Service.Name, "checkResult", checkResult)
 	if err != nil {
 		return nil, err
 	}

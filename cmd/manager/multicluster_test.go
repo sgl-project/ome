@@ -144,14 +144,14 @@ func TestResolveMCWiringMissingConfigMapErrors(t *testing.T) {
 }
 
 // The operator-configured LocalQueue must reach the placement reconciler; if it
-// stops being mapped, deriveds silently fall back to the in-package default and
-// Kueue never admits them on a fleet that names its queue anything else.
+// stops being mapped, deriveds carry no queue label and Kueue never admits them
+// on a fleet that gates admission on a LocalQueue.
 func TestResolveMCWiringCarriesLocalQueue(t *testing.T) {
 	w := mcWiringFromJSON(t, `{"placement":{"localQueue":"gpu-queue"}}`)
 	assert.Equal(t, "gpu-queue", w.localQueue)
 
 	assert.Empty(t, mcWiringFromJSON(t, `{"placement":{}}`).localQueue,
-		"absent knob stays empty so placement applies its own fallback")
+		"absent knob stays empty so the per-ISVC annotation is the only queue source")
 }
 
 // The dispatcher falls back to AllAtOnce for anything it does not recognize, so

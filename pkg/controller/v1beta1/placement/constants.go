@@ -27,9 +27,9 @@ const (
 	ClusterSelectorAnnotation = "ome.io/cluster-selector"
 
 	// LocalQueueAnnotation names the Kueue LocalQueue the derived workload's
-	// pods join on the target cluster. Defaults to DefaultLocalQueue.
+	// pods join on the target cluster. It overrides the operator-configured
+	// queue; with neither set, no queue label is stamped.
 	LocalQueueAnnotation = "ome.io/local-queue"
-	DefaultLocalQueue    = "default"
 
 	// PlacementOriginLabel marks a derived ISVC as created by this control
 	// plane (for tracking + future GC). Value: the source ISVC's origin id.

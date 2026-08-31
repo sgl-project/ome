@@ -81,6 +81,17 @@ type Translator interface {
 	// pkg/constants/traffic_annotations.go.
 	SupportedPassthroughPrefixes() []string
 
+	// SupportedTrafficFields returns the set of typed spec.traffic
+	// capability tokens (pkg/constants TrafficCapability*) this
+	// translator emits. The reconciler surfaces required-but-
+	// undeclared capabilities as an UnsupportedField condition naming
+	// the field and the active translator; the admission webhook
+	// receives the same set so intent that must not degrade silently
+	// (reserved values, partially-applied hash keys) is rejected up
+	// front. Returning an empty set is valid — it means the translator
+	// emits no typed traffic field (legitimate for a stub).
+	SupportedTrafficFields() sets.Set[string]
+
 	// Translate produces the backend policy resource for the
 	// InferenceService given the resolved intent and the list of
 	// OME-managed HTTPRoute names the policy must target (top-level,

@@ -1,6 +1,8 @@
 package common
 
 import (
+	"context"
+
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -12,7 +14,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinode"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/pdb"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/raw"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/status"
 )
@@ -20,6 +24,7 @@ import (
 // DeploymentReconciler handles common deployment reconciliation logic
 type DeploymentReconciler struct {
 	Client        client.Client
+	APIReader     client.Reader
 	Clientset     kubernetes.Interface
 	Scheme        *runtime.Scheme
 	StatusManager *status.StatusReconciler
@@ -28,13 +33,24 @@ type DeploymentReconciler struct {
 
 // ReconcileRawDeployment handles raw Kubernetes deployment
 func (r *DeploymentReconciler) ReconcileRawDeployment(
+	ctx context.Context,
 	isvc *v1beta1.InferenceService,
 	objectMeta metav1.ObjectMeta,
 	podSpec *v1.PodSpec,
 	componentSpec *v1beta1.ComponentExtensionSpec,
 	componentType v1beta1.ComponentType,
+	resolvedAutoscaler *v1beta1.ComponentAutoscaler,
+	pdbRequest pdb.Request,
 ) (ctrl.Result, error) {
-	reconciler, err := raw.NewRawKubeReconciler(r.Client, r.Clientset, r.Scheme, objectMeta, componentSpec, nil, podSpec)
+	// The synthetic Engine spec carries component settings to the Raw
+	// Deployment and Service builders.
+	inferenceServiceSpec := &v1beta1.InferenceServiceSpec{
+		Engine: &v1beta1.EngineSpec{
+			ComponentExtensionSpec: *componentSpec,
+		},
+	}
+
+	reconciler, err := raw.NewRawKubeReconciler(r.Client, r.APIReader, r.Clientset, r.Scheme, pdbRequest, objectMeta, inferenceServiceSpec, podSpec, resolvedAutoscaler)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to create RawKubeReconciler for %s", componentType)
 	}
@@ -43,9 +59,19 @@ func (r *DeploymentReconciler) ReconcileRawDeployment(
 		return ctrl.Result{}, err
 	}
 
-	deployment, err := reconciler.Reconcile()
+	deployment, err := reconciler.Reconcile(ctx)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile %s", componentType)
+	}
+	if err := autoscaler.DispatchForRawComponent(ctx, autoscaler.RawDispatchInput{
+		Client:             r.Client,
+		Scheme:             r.Scheme,
+		ISVC:               isvc,
+		ComponentMeta:      objectMeta,
+		ResolvedAutoscaler: resolvedAutoscaler,
+		ComponentExt:       componentSpec,
+	}); err != nil {
+		return ctrl.Result{}, errors.Wrapf(err, "failed to dispatch autoscaler for raw %s", componentType)
 	}
 
 	r.StatusManager.PropagateRawStatus(&isvc.Status, componentType, deployment, reconciler.URL)
@@ -90,11 +116,10 @@ func (r *DeploymentReconciler) setRawReferences(isvc *v1beta1.InferenceService, 
 	if err := controllerutil.SetControllerReference(isvc, reconciler.Service.Service, r.Scheme); err != nil {
 		return errors.Wrapf(err, "failed to set service owner reference")
 	}
-	if err := controllerutil.SetControllerReference(isvc, reconciler.PodDisruptionBudget.PDB, r.Scheme); err != nil {
-		return errors.Wrapf(err, "failed to set pdb owner reference")
+	if err := controllerutil.SetControllerReference(isvc, reconciler.PodMonitor.PodMonitor, r.Scheme); err != nil {
+		return errors.Wrapf(err, "failed to set podmonitor owner reference")
 	}
-
-	return reconciler.Scaler.Autoscaler.SetControllerReferences(isvc, r.Scheme)
+	return nil
 }
 
 // setMultiNodeReferences sets the necessary references for multi-node deployment
@@ -103,5 +128,11 @@ func (r *DeploymentReconciler) setMultiNodeReferences(isvc *v1beta1.InferenceSer
 	if err != nil {
 		return errors.Wrapf(err, "failed to set lws owner reference")
 	}
-	return controllerutil.SetControllerReference(isvc, mnr.Service.Service, r.Scheme)
+	if err := controllerutil.SetControllerReference(isvc, mnr.Service.Service, r.Scheme); err != nil {
+		return errors.Wrapf(err, "failed to set service owner reference")
+	}
+	if err := controllerutil.SetControllerReference(isvc, mnr.PodMonitor.PodMonitor, r.Scheme); err != nil {
+		return errors.Wrapf(err, "failed to set podmonitor owner reference")
+	}
+	return nil
 }

@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
+	knapis "knative.dev/pkg/apis"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -52,7 +54,7 @@ import (
 // Sequence per Component:
 //
 //  1. Skip Components whose resolved deployment mode is not
-//     OMENative — the RawDeployment path already wrote
+//     OMENative — the RawDeployment / MultiNode path already wrote
 //     ISVC.Status.Components[c].Lifecycle in its own pass.
 //
 //  2. Fetch the IR by name. NotFound is non-fatal — the IR may not
@@ -70,7 +72,10 @@ import (
 // ability in operator logs. A real read/write error (apiserver
 // outage, permission denied) is returned to the caller so the
 // reconcile retries; transient NotFound on the IR Get is swallowed.
-func AggregateIRStatus(ctx context.Context, c client.Client, isvc *v1beta1.InferenceService, componentModes map[v1beta1.ComponentType]constants.DeploymentModeType) error {
+func AggregateIRStatus(ctx context.Context, c client.Client, reads client.Reader, isvc *v1beta1.InferenceService, componentModes map[v1beta1.ComponentType]constants.DeploymentModeType) error {
+	if reads == nil {
+		reads = c
+	}
 	if c == nil {
 		return fmt.Errorf("AggregateIRStatus: nil client")
 	}
@@ -81,35 +86,13 @@ func AggregateIRStatus(ctx context.Context, c client.Client, isvc *v1beta1.Infer
 	for _, comp := range allDeclaredComponents(isvc) {
 		mode := componentModes[comp]
 		// Non-OMENative Components are reconciled by their own dispatch
-		// path (RawDeployment), which already wrote their status subtree;
-		// skip them here.
+		// path (RawDeployment / MultiNode), which already wrote their
+		// status subtree; skip them here.
 		if !IsIRManagedComponent(mode) {
 			continue
 		}
-		if err := aggregateOneComponent(ctx, c, isvc, comp); err != nil {
+		if err := aggregateOneComponent(ctx, c, reads, isvc, comp); err != nil {
 			return err
-		}
-	}
-	return nil
-}
-
-// componentExtFor returns the ComponentExtensionSpec for one Component of the
-// ISVC (Engine / Decoder / Router), or nil when that Component isn't declared.
-// Its MinAvailable / MaxUnavailable (and rolling-update MaxUnavailable) set the
-// availability floor for the Component-ready condition.
-func componentExtFor(isvc *v1beta1.InferenceService, component v1beta1.ComponentType) *v1beta1.ComponentExtensionSpec {
-	switch component {
-	case v1beta1.EngineComponent:
-		if isvc.Spec.Engine != nil {
-			return &isvc.Spec.Engine.ComponentExtensionSpec
-		}
-	case v1beta1.DecoderComponent:
-		if isvc.Spec.Decoder != nil {
-			return &isvc.Spec.Decoder.ComponentExtensionSpec
-		}
-	case v1beta1.RouterComponent:
-		if isvc.Spec.Router != nil {
-			return &isvc.Spec.Router.ComponentExtensionSpec
 		}
 	}
 	return nil
@@ -125,7 +108,7 @@ func componentExtFor(isvc *v1beta1.InferenceService, component v1beta1.Component
 //
 // On apierrors.IsNotFound for the ISVC Update: returns nil so a
 // race with ISVC deletion drops cleanly.
-func aggregateOneComponent(ctx context.Context, c client.Client, isvc *v1beta1.InferenceService, component v1beta1.ComponentType) error {
+func aggregateOneComponent(ctx context.Context, c client.Client, reads client.Reader, isvc *v1beta1.InferenceService, component v1beta1.ComponentType) error {
 	name := InferenceReplicaName(isvc.Name, component)
 	key := types.NamespacedName{Namespace: isvc.Namespace, Name: name}
 	ir := &v1beta1.InferenceReplica{}
@@ -157,11 +140,23 @@ func aggregateOneComponent(ctx context.Context, c client.Client, isvc *v1beta1.I
 	// separate reconcile would re-enter AggregateIRStatus). On a peer
 	// status-write conflict we re-Get the ISVC and re-stamp, but the
 	// condition itself is stable for this pass.
-	topCond := status.TopLevelComponentReadyFromLifecycle(component, desired, componentExtFor(isvc, component))
+	// The committed IR carries the merged Instance lifecycle policy. Pod-level
+	// disruption policy on the parent ISVC is independent of this readiness floor.
+	// ir.Spec.Replicas supplies the desired count so surge does not inflate it.
+	topCond := status.TopLevelComponentReadyFromLifecycle(component, desired, ir.Spec.Lifecycle, ir.Spec.Replicas)
 	isvcKey := client.ObjectKeyFromObject(isvc)
+	// Stamping topCond recomputes the aggregate Ready condition, so for an
+	// OMENative ISVC this write is usually the one that first flips Ready
+	// True — the reconciler's own status flush then sees it already set.
+	// Capture the transition here so end-to-end deployment latency is not
+	// systematically dropped for the components that use this path.
+	var (
+		readyFlipped bool
+		prevReady    *knapis.Condition
+	)
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		fresh := &v1beta1.InferenceService{}
-		if err := c.Get(ctx, isvcKey, fresh); err != nil {
+		if err := reads.Get(ctx, isvcKey, fresh); err != nil {
 			if apierrors.IsNotFound(err) {
 				return nil
 			}
@@ -203,9 +198,15 @@ func aggregateOneComponent(ctx context.Context, c client.Client, isvc *v1beta1.I
 			}
 			return fmt.Errorf("update ISVC status: %w", err)
 		}
+		prevReady = before.GetCondition(knapis.ConditionReady)
+		readyFlipped = status.IsReadyTrue(fresh.Status) &&
+			(prevReady == nil || prevReady.Status != v1.ConditionTrue)
 		return nil
 	}); err != nil {
 		return fmt.Errorf("AggregateIRStatus: persist component=%s status: %w", component, err)
+	}
+	if readyFlipped {
+		status.ObserveTimeToReady(isvc, prevReady)
 	}
 
 	// Mirror onto the caller's in-memory ISVC so downstream code in

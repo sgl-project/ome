@@ -37,6 +37,7 @@ type stubTranslator struct {
 	respErr          error
 
 	supports         sets.Set[string]
+	supportsFields   sets.Set[string]
 	supportedPrefixs []string
 	watches          client.Object
 
@@ -55,6 +56,12 @@ func (s *stubTranslator) SupportedAnnotations() sets.Set[string] {
 }
 func (s *stubTranslator) Watches() client.Object                 { return s.watches }
 func (s *stubTranslator) SupportedPassthroughPrefixes() []string { return s.supportedPrefixs }
+func (s *stubTranslator) SupportedTrafficFields() sets.Set[string] {
+	if s.supportsFields == nil {
+		return sets.New[string]()
+	}
+	return s.supportsFields
+}
 func (s *stubTranslator) Translate(
 	isvc *v1beta1.InferenceService,
 	targetHTTPRoutes []string,
@@ -679,6 +686,59 @@ func TestReconcile_SurfacesUnsupportedAnnotationsFromIsvc(t *testing.T) {
 		if !strings.Contains(uc.Message, want) {
 			t.Errorf("Message should list %q, got: %q", want, uc.Message)
 		}
+	}
+}
+
+func TestReconcile_SurfacesUnsupportedTypedTrafficFields(t *testing.T) {
+	// DestinationRule-style translator: declares algorithm +
+	// single-header hashing, but not endpoint override. The ISVC's
+	// typed endpointOverride must surface in the UnsupportedFields
+	// condition message along with the translator name.
+	desired := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "isvc-dr", Namespace: "default"},
+	}
+	tr := &stubTranslator{
+		name:    "istio",
+		respObj: desired,
+		watches: &corev1.ConfigMap{},
+		supportsFields: sets.New(
+			"spec.traffic.algorithm",
+			"spec.traffic.consistentHash.type=Header",
+		),
+	}
+	r, _ := newReconcilerWithStub(t, tr)
+
+	isvc := newISVC("isvc")
+	isvc.Spec.Traffic = &v1beta1.TrafficSpec{
+		Algorithm: ptrAlg(v1beta1.LoadBalancingTypeRoundRobin),
+		EndpointOverride: &v1beta1.EndpointOverrideSpec{
+			Type:    v1beta1.EndpointOverrideTypeHeader,
+			Headers: []v1beta1.HashHeader{{Name: "x-endpoint"}},
+		},
+	}
+
+	got, err := r.Reconcile(context.Background(), isvc, []string{"isvc"})
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	var uc *metav1.Condition
+	for i := range got.Conditions {
+		if got.Conditions[i].Type == v1beta1.TrafficConditionBackendPolicyUnsupportedFields {
+			uc = &got.Conditions[i]
+		}
+	}
+	if uc == nil {
+		t.Fatalf("UnsupportedFields condition missing: %+v", got.Conditions)
+	}
+	if !strings.Contains(uc.Message, "spec.traffic.endpointOverride.type=Header") {
+		t.Errorf("Message should name the dropped typed field, got: %q", uc.Message)
+	}
+	if !strings.Contains(uc.Message, "istio") {
+		t.Errorf("Message should name the active translator, got: %q", uc.Message)
+	}
+	// The declared algorithm IS honored and must not be listed.
+	if strings.Contains(uc.Message, "spec.traffic.algorithm") {
+		t.Errorf("Message must not list honored fields, got: %q", uc.Message)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 
 	goerrors "github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -18,21 +19,28 @@ import (
 // It first tries to find a namespace-scoped BaseModel, then falls back to a cluster-scoped ClusterBaseModel.
 // Returns the model spec, metadata, and any error encountered.
 func GetBaseModel(cl client.Client, name string, namespace string) (*v1beta1.BaseModelSpec, *metav1.ObjectMeta, error) {
+	spec, meta, _, err := GetBaseModelWithStatus(cl, name, namespace)
+	return spec, meta, err
+}
+
+// GetBaseModelWithStatus retrieves a BaseModel or ClusterBaseModel by name and
+// returns its spec, metadata, and status.
+func GetBaseModelWithStatus(cl client.Client, name string, namespace string) (*v1beta1.BaseModelSpec, *metav1.ObjectMeta, *v1beta1.ModelStatusSpec, error) {
 	baseModel := &v1beta1.BaseModel{}
 	err := cl.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, baseModel)
 	if err == nil {
-		return &baseModel.Spec, &baseModel.ObjectMeta, nil
+		return &baseModel.Spec, &baseModel.ObjectMeta, &baseModel.Status, nil
 	} else if !errors.IsNotFound(err) {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	clusterBaseModel := &v1beta1.ClusterBaseModel{}
 	err = cl.Get(context.TODO(), client.ObjectKey{Name: name}, clusterBaseModel)
 	if err == nil {
-		return &clusterBaseModel.Spec, &clusterBaseModel.ObjectMeta, nil
+		return &clusterBaseModel.Spec, &clusterBaseModel.ObjectMeta, &clusterBaseModel.Status, nil
 	} else if !errors.IsNotFound(err) {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return nil, nil, goerrors.New("No BaseModel or ClusterBaseModel with the name: " + name)
+	return nil, nil, nil, goerrors.New("No BaseModel or ClusterBaseModel with the name: " + name)
 }
 
 // GetFineTunedWeight Get the fine-tuned weight from the given fine-tuned weight name.
@@ -47,25 +55,56 @@ func GetFineTunedWeight(cl client.Client, name string) (*v1beta1.FineTunedWeight
 	return nil, goerrors.New("No FineTunedWeight with the name: " + name)
 }
 
-// ReconcileBaseModel retrieves and validates the base model for an
-// InferenceService. Returns (nil, nil, nil) when the ISVC has no model
-// reference — the lean path where the operator specifies the runtime
-// directly and skips model-parsing/auto-selection.
+// ReconcileBaseModel retrieves and validates the base model for an InferenceService
 func ReconcileBaseModel(cl client.Client, isvc *v1beta1.InferenceService) (*v1beta1.BaseModelSpec, *metav1.ObjectMeta, error) {
+	spec, meta, _, err := ReconcileBaseModelWithStatus(cl, isvc)
+	return spec, meta, err
+}
+
+// ReconcileBaseModelWithStatus retrieves and validates the base model for an
+// InferenceService and also returns the model status for readiness checks.
+// Returns (nil, nil, nil, nil) when the ISVC has no model reference — the
+// lean path where the operator specifies runtime directly and skips
+// model-parsing/auto-selection.
+func ReconcileBaseModelWithStatus(cl client.Client, isvc *v1beta1.InferenceService) (*v1beta1.BaseModelSpec, *metav1.ObjectMeta, *v1beta1.ModelStatusSpec, error) {
 	if isvc.Spec.Model == nil || isvc.Spec.Model.Name == "" {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
-	baseModel, baseModelMeta, err := GetBaseModel(cl, isvc.Spec.Model.Name, isvc.Namespace)
+	baseModel, baseModelMeta, baseModelStatus, err := GetBaseModelWithStatus(cl, isvc.Spec.Model.Name, isvc.Namespace)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	if baseModel.Disabled != nil && *baseModel.Disabled {
-		return nil, nil, fmt.Errorf("specified base model %s is disabled", isvc.Spec.Model.Name)
+		return nil, nil, nil, fmt.Errorf("specified base model %s is disabled", isvc.Spec.Model.Name)
 	}
 
-	return baseModel, baseModelMeta, nil
+	return baseModel, baseModelMeta, baseModelStatus, nil
+}
+
+// IsShardedBaseModel reports whether a model uses sharded distribution.
+func IsShardedBaseModel(model *v1beta1.BaseModelSpec) bool {
+	return model != nil && model.Distribution != nil && *model.Distribution == v1beta1.DistributionSharded
+}
+
+// ShardedBaseModelReady reports whether the status for a sharded BaseModel is
+// ready for an InferenceService consumer to reconcile runtime resources.
+func ShardedBaseModelReady(status *v1beta1.ModelStatusSpec, generation int64) (bool, string) {
+	if status == nil {
+		return false, "model status is not available"
+	}
+	readyCondition := meta.FindStatusCondition(status.Conditions, v1beta1.ModelConditionReady)
+	if readyCondition == nil {
+		return false, "model Ready condition is not available"
+	}
+	if readyCondition.Status != metav1.ConditionTrue {
+		return false, readyCondition.Message
+	}
+	if readyCondition.ObservedGeneration != generation {
+		return false, "model Ready condition has not observed the latest generation"
+	}
+	return true, readyCondition.Message
 }
 
 // MergeRuntimeSpecs merges the runtime and isvc specs to get final engine, decoder, and router specs

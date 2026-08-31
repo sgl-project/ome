@@ -24,7 +24,7 @@ repos:
     rev: v2.4.1
     hooks:
       - id: codespell
-        args: ['-L', 'AfterAll,NotIn,UpToDate,WithT,allReady,rouge']
+        args: ['-L', 'AfterAll,NotIn,UpToDate,WithT,allReady,rouge,trough']
         exclude: |
           (?x)^(
             charts/.*/templates/.*\.yaml$|

@@ -23,7 +23,8 @@ import (
 // endpoint), programs the configured Publisher so the global host resolves to
 // the winner's ingress. It repoints the backend on re-placement and tears it
 // down when the ISVC is no longer placed or is deleted. When the Publisher's
-// backend is not configured (no global gateway), Reconcile no-ops.
+// backend is not configured, Reconcile publishes nothing and releases whatever
+// it already owns.
 type Reconciler struct {
 	client.Client
 	Log logr.Logger
@@ -47,9 +48,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, err
 	}
 
-	// Backend not configured: do nothing, and do not strand a finalizer.
+	// Backend not configured: tear down anything already published — it carries no
+	// OwnerReferences, so dropping the finalizer without unpublishing leaks it —
+	// and release the object, deleted or not.
 	if !r.Config.IsEnabled() {
-		if controllerutil.ContainsFinalizer(isvc, EndpointFinalizer) && isvc.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(isvc, EndpointFinalizer) {
 			if err := r.Publisher.Unpublish(ctx, isvc); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -238,7 +241,7 @@ var placementPublishChange = predicate.Funcs{
 
 // placementEqual reports whether two PlacementStatus values agree on the fields
 // the publisher consumes: phase, winner cluster, endpoint host, and the
-// candidate-derived serving homes (including weights).
+// candidate-derived serving homes (including their weights).
 func placementEqual(a, b *v1beta1.PlacementStatus) bool {
 	if a == nil || b == nil {
 		return a == b

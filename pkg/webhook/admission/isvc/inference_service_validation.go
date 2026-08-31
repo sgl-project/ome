@@ -3,6 +3,7 @@ package isvc
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -14,6 +15,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/audit"
 	"sigs.k8s.io/ome/pkg/runtimerevision"
 	"sigs.k8s.io/ome/pkg/runtimeselector"
 	"sigs.k8s.io/ome/pkg/utils/storage"
@@ -80,6 +82,9 @@ func (v *InferenceServiceValidator) ValidateCreate(ctx context.Context, obj runt
 	}
 	// old=nil: every migration-request annotation present at CREATE is
 	// an add and gets validated (parity with the update path).
+	if err := validateAddedMigrationRequests(nil, isvc); err != nil {
+		return nil, err
+	}
 	// old=nil: CREATE rejects every multi-pod OMENative Component that
 	// sets lifecycle.readyPolicy=None.
 	if err := validateMultiPodReadyPolicyNone(nil, isvc); err != nil {
@@ -121,6 +126,9 @@ func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldObj, 
 	if err := validation.ValidateScalingPolicyUpdate(oldIsvc.Spec.ScalingPolicy, isvc.Spec.ScalingPolicy, "spec.scalingPolicy"); err != nil {
 		return nil, err
 	}
+	if err := validateAddedMigrationRequests(oldIsvc, isvc); err != nil {
+		return nil, err
+	}
 	if err := validateMultiPodReadyPolicyNone(oldIsvc, isvc); err != nil {
 		return nil, err
 	}
@@ -138,6 +146,69 @@ func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldObj, 
 	return warnings, nil
 }
 
+// validateAddedMigrationRequests validates every migration-request
+// annotation (ome.io/migration-request-v1-<uuid>) this write ADDS —
+// present in the new object with a value absent or different in the
+// old. A nil oldIsvc (CREATE) treats every present annotation as an
+// add. Pre-existing unchanged annotations are never re-validated, and
+// deletions are always admitted: the controller consumes the mailbox
+// by deleting keys, so a delete must never be blocked.
+func validateAddedMigrationRequests(oldIsvc, isvc *v1beta1.InferenceService) error {
+	var oldAnnotations map[string]string
+	if oldIsvc != nil {
+		oldAnnotations = oldIsvc.Annotations
+	}
+	for key, raw := range isvc.Annotations {
+		if !strings.HasPrefix(key, audit.MigrationRequestAnnotationPrefix) {
+			continue
+		}
+		if oldRaw, existed := oldAnnotations[key]; existed && oldRaw == raw {
+			continue
+		}
+		uuid := audit.ExtractRequestUUID(key)
+		if uuid == "" {
+			return fmt.Errorf("migration request %s: annotation key carries no request UUID", key)
+		}
+		req, err := audit.ParseMigrationRequest(raw)
+		if err != nil {
+			return fmt.Errorf("migration request %s: %v", uuid, err)
+		}
+		if err := validateMigrationRequestComponent(isvc, req.Component); err != nil {
+			return fmt.Errorf("migration request %s: %v", uuid, err)
+		}
+		if req.Instance < 0 {
+			return fmt.Errorf("migration request %s: instance must be >= 0, got %d", uuid, req.Instance)
+		}
+	}
+	return nil
+}
+
+// validateMigrationRequestComponent checks a migration request's
+// component against the components this ISVC declares: engine always;
+// decoder / router only when their spec blocks are present (same
+// enumeration rule as isvcAutoscalerChecks).
+func validateMigrationRequestComponent(isvc *v1beta1.InferenceService, component string) error {
+	switch component {
+	case string(v1beta1.EngineComponent):
+		return nil
+	case string(v1beta1.DecoderComponent):
+		if isvc.Spec.Decoder != nil {
+			return nil
+		}
+	case string(v1beta1.RouterComponent):
+		if isvc.Spec.Router != nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("component %q does not exist on this InferenceService", component)
+}
+
+// validateLegacyAutoscalerFieldsFromCtx pulls the raw admission request
+// out of ctx and runs the defense-in-depth check for the deleted
+// scaleTarget / scaleMetric fields. Silently no-ops when the request
+// cannot be retrieved (e.g., when the validator is invoked from a unit
+// test that doesn't stamp the ctx), so it never blocks tests that only
+// feed a typed object.
 func validateLegacyAutoscalerFieldsFromCtx(ctx context.Context) error {
 	req, err := admission.RequestFromContext(ctx)
 	if err != nil {

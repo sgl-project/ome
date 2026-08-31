@@ -16,6 +16,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
@@ -112,14 +113,6 @@ func TestRBACReconciler_GetServiceAccountName(t *testing.T) {
 			},
 			componentType: v1beta1.RouterComponent,
 			expected:      "my-service-router",
-		},
-		{
-			name: "engine component",
-			inferenceService: &v1beta1.InferenceService{
-				ObjectMeta: metav1.ObjectMeta{Name: "inference-svc"},
-			},
-			componentType: v1beta1.EngineComponent,
-			expected:      "inference-svc-engine",
 		},
 		{
 			name: "decoder component",
@@ -485,6 +478,149 @@ func TestRBACReconciler_createOrUpdate_Error(t *testing.T) {
 
 	err := reconciler.createOrUpdate(sa)
 	assert.Error(t, err)
+}
+
+// countingClient wraps a client and tracks how many Update calls are issued so
+// tests can assert that a steady reconcile is a true no-op (no PUT).
+func countingClient(inner client.WithWatch, updates *int) client.Client {
+	return interceptor.NewClient(inner, interceptor.Funcs{
+		Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+			*updates++
+			return c.Update(ctx, obj, opts...)
+		},
+	})
+}
+
+// TestRBACReconciler_createOrUpdate_NoOpWhenUnchanged verifies that a steady
+// object (live == desired) does not trigger an Update PUT.
+func TestRBACReconciler_createOrUpdate_NoOpWhenUnchanged(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+
+	labels := map[string]string{"app": "test-app"}
+	owner := []metav1.OwnerReference{{
+		APIVersion: "ome.io/v1beta1",
+		Kind:       "InferenceService",
+		Name:       testInferenceService,
+		UID:        "test-uid",
+	}}
+
+	cases := []struct {
+		name    string
+		desired client.Object
+		live    client.Object
+	}{
+		{
+			name: "ServiceAccount unchanged",
+			desired: &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: "sa", Namespace: testNamespace, Labels: labels, OwnerReferences: owner},
+			},
+			live: &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: "sa", Namespace: testNamespace, Labels: labels, OwnerReferences: owner},
+			},
+		},
+		{
+			name: "Role unchanged",
+			desired: &rbacv1.Role{
+				ObjectMeta: metav1.ObjectMeta{Name: "role", Namespace: testNamespace, Labels: labels, OwnerReferences: owner},
+				Rules: []rbacv1.PolicyRule{{
+					APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get", "list", "watch"},
+				}},
+			},
+			live: &rbacv1.Role{
+				ObjectMeta: metav1.ObjectMeta{Name: "role", Namespace: testNamespace, Labels: labels, OwnerReferences: owner},
+				Rules: []rbacv1.PolicyRule{{
+					APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get", "list", "watch"},
+				}},
+			},
+		},
+		{
+			name: "RoleBinding unchanged",
+			desired: &rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: "rb", Namespace: testNamespace, Labels: labels, OwnerReferences: owner},
+				RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: "role"},
+				Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: "sa", Namespace: testNamespace}},
+			},
+			live: &rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: "rb", Namespace: testNamespace, Labels: labels, OwnerReferences: owner},
+				RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: "role"},
+				Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: "sa", Namespace: testNamespace}},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			updates := 0
+			base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.live).Build()
+			reconciler := &RBACReconciler{client: countingClient(base, &updates), Log: logr.Discard()}
+
+			require.NoError(t, reconciler.createOrUpdate(tc.desired))
+			assert.Equal(t, 0, updates, "steady %s must not issue an Update PUT", tc.name)
+		})
+	}
+}
+
+// TestRBACReconciler_createOrUpdate_UpdatesOnDrift verifies that a real
+// difference in a managed field does trigger exactly one Update.
+func TestRBACReconciler_createOrUpdate_UpdatesOnDrift(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+
+	cases := []struct {
+		name    string
+		desired client.Object
+		live    client.Object
+	}{
+		{
+			name: "ServiceAccount label drift",
+			desired: &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: "sa", Namespace: testNamespace, Labels: map[string]string{"app": "new"}},
+			},
+			live: &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: "sa", Namespace: testNamespace, Labels: map[string]string{"app": "old"}},
+			},
+		},
+		{
+			name: "Role rules drift",
+			desired: &rbacv1.Role{
+				ObjectMeta: metav1.ObjectMeta{Name: "role", Namespace: testNamespace},
+				Rules: []rbacv1.PolicyRule{{
+					APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get", "list", "watch"},
+				}},
+			},
+			live: &rbacv1.Role{
+				ObjectMeta: metav1.ObjectMeta{Name: "role", Namespace: testNamespace},
+				Rules: []rbacv1.PolicyRule{{
+					APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get"},
+				}},
+			},
+		},
+		{
+			name: "RoleBinding subjects drift",
+			desired: &rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: "rb", Namespace: testNamespace},
+				RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: "role"},
+				Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: "new-sa", Namespace: testNamespace}},
+			},
+			live: &rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: "rb", Namespace: testNamespace},
+				RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: "role"},
+				Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: "old-sa", Namespace: testNamespace}},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			updates := 0
+			base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.live).Build()
+			reconciler := &RBACReconciler{client: countingClient(base, &updates), Log: logr.Discard()}
+
+			require.NoError(t, reconciler.createOrUpdate(tc.desired))
+			assert.Equal(t, 1, updates, "drifted %s must issue exactly one Update PUT", tc.name)
+		})
+	}
 }
 
 // Benchmark tests

@@ -659,3 +659,28 @@ func TestObserveAcceptance_NonUnstructuredInput_IsPending(t *testing.T) {
 		t.Fatalf("nil input -> Pending, got %d", got.State)
 	}
 }
+
+func TestSupportedTrafficFields_DeclaresBTPCoverage(t *testing.T) {
+	got := New().SupportedTrafficFields()
+	want := []string{
+		constants.TrafficCapabilityAlgorithm,
+		constants.TrafficCapabilityHashHeader,
+		constants.TrafficCapabilityHashMultipleHeaders,
+		constants.TrafficCapabilityHashCookie,
+		constants.TrafficCapabilityHashSourceIP,
+		constants.TrafficCapabilityEndpointOverrideHeader,
+	}
+	for _, capability := range want {
+		if !got.Has(capability) {
+			t.Errorf("SupportedTrafficFields() missing %q", capability)
+		}
+	}
+	// The reserved Metadata endpoint override emits nothing and must
+	// stay undeclared so admission keeps rejecting it.
+	if got.Has(constants.TrafficCapabilityEndpointOverrideMetadata) {
+		t.Errorf("SupportedTrafficFields() must not declare %q", constants.TrafficCapabilityEndpointOverrideMetadata)
+	}
+	if got.Len() != len(want) {
+		t.Errorf("SupportedTrafficFields() has %d tokens, want %d: %v", got.Len(), len(want), got.UnsortedList())
+	}
+}

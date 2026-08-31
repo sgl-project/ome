@@ -94,6 +94,64 @@ func GetTargetServicePort(ctx context.Context, c client.Client, isvc *v1beta1.In
 	return port, nil
 }
 
+// MergedRunnerPorts collects the container ports each merged Component's
+// effective serving template declares, keyed by Component type. Per-revision
+// routing uses the Leader template for multi-pod Engine and Decoder shapes and
+// the top-level template for single-pod Components and Router.
+//
+// A Component whose merged spec is absent, or whose runner container
+// declares no port, is omitted: the caller decides how to degrade rather
+// than receiving an invented port.
+func MergedRunnerPorts(engine *v1beta1.EngineSpec, decoder *v1beta1.DecoderSpec, router *v1beta1.RouterSpec) map[v1beta1.ComponentType][]corev1.ContainerPort {
+	out := make(map[v1beta1.ComponentType][]corev1.ContainerPort, 3)
+	if engine != nil {
+		runner, containers := engine.Runner, engine.Containers
+		if engine.Leader != nil && engineSpawnsMultiplePods(engine) {
+			runner, containers = engine.Leader.Runner, engine.Leader.Containers
+		}
+		if ports := runnerContainerPorts(runner, containers); len(ports) > 0 {
+			out[v1beta1.EngineComponent] = ports
+		}
+	}
+	if decoder != nil {
+		runner, containers := decoder.Runner, decoder.Containers
+		if decoder.Leader != nil && decoderSpawnsMultiplePods(decoder) {
+			runner, containers = decoder.Leader.Runner, decoder.Leader.Containers
+		}
+		if ports := runnerContainerPorts(runner, containers); len(ports) > 0 {
+			out[v1beta1.DecoderComponent] = ports
+		}
+	}
+	if router != nil {
+		if ports := runnerContainerPorts(router.Runner, router.Containers); len(ports) > 0 {
+			out[v1beta1.RouterComponent] = ports
+		}
+	}
+	return out
+}
+
+// runnerContainerPorts returns the ports of the container that serves a
+// Component's traffic, resolved the way the pod renderer resolves it: the
+// Runner's own ports win, otherwise the ports of the pod container the
+// Runner merges into — the one sharing its name, or the first container
+// when the Runner is absent or unnamed.
+func runnerContainerPorts(runner *v1beta1.RunnerSpec, containers []corev1.Container) []corev1.ContainerPort {
+	if runner != nil && len(runner.Container.Ports) > 0 {
+		return runner.Container.Ports
+	}
+	if len(containers) == 0 {
+		return nil
+	}
+	if runner != nil && runner.Container.Name != "" {
+		for i := range containers {
+			if containers[i].Name == runner.Container.Name {
+				return containers[i].Ports
+			}
+		}
+	}
+	return containers[0].Ports
+}
+
 // ResolveServicePort returns the first port of the named Service, which is
 // the authoritative serving port a component exposes (Services are built
 // from the merged runner's containerPort before ingress runs). It falls
@@ -117,8 +175,6 @@ func ResolveServicePort(ctx context.Context, c client.Client, namespace, service
 
 // AddNodeSelectorForModelReadyNode adds a node selector to the pod spec
 // for scheduling pods on nodes where the base model is ready.
-// This is used by both InferenceService and BenchmarkJob controllers to ensure pods
-// are scheduled on nodes with the model available.
 //
 // Parameters:
 //   - podSpec: The pod spec to update (must not be nil)

@@ -64,6 +64,44 @@ func TestDefaultStrategyFactory_CreateStrategyWithOptions(t *testing.T) {
 			expectedError:    false,
 		},
 		{
+			name:           "multinode deployment mode with kubernetes ingress",
+			deploymentMode: string(constants.MultiNode),
+			opts: interfaces.ReconcilerOptions{
+				Client: createFakeClient(t),
+				Scheme: createScheme(t),
+				IngressConfig: &controllerconfig.IngressConfig{
+					EnableGatewayAPI:       false,
+					IngressDomain:          "example.com",
+					IngressClassName:       stringPtr("nginx"),
+					DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
+					UrlScheme:              "https",
+					DisableIngressCreation: false,
+				},
+				IsvcConfig: &controllerconfig.InferenceServicesConfig{},
+			},
+			expectedStrategy: "KubernetesIngress",
+			expectedError:    false,
+		},
+		{
+			name:           "multinode deployment mode with gateway api",
+			deploymentMode: string(constants.MultiNode),
+			opts: interfaces.ReconcilerOptions{
+				Client: createFakeClient(t),
+				Scheme: createScheme(t),
+				IngressConfig: &controllerconfig.IngressConfig{
+					EnableGatewayAPI:       true,
+					IngressDomain:          "example.com",
+					OmeIngressGateway:      "istio-system/gateway",
+					DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
+					UrlScheme:              "https",
+					DisableIngressCreation: false,
+				},
+				IsvcConfig: &controllerconfig.InferenceServicesConfig{},
+			},
+			expectedStrategy: "GatewayAPI",
+			expectedError:    false,
+		},
+		{
 			name:           "omenative deployment mode with kubernetes ingress",
 			deploymentMode: string(constants.OMENative),
 			opts: interfaces.ReconcilerOptions{

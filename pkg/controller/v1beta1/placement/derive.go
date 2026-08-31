@@ -20,7 +20,7 @@ import (
 //     so the worker reconciler does not (re)act on the control plane's decisions.
 //
 // localQueue is the operator-configured LocalQueue used when the source carries
-// no LocalQueueAnnotation; empty falls back to DefaultLocalQueue.
+// no LocalQueueAnnotation; with neither set the queue label is left unstamped.
 func DeriveISVC(src *v1beta1.InferenceService, controlPlaneID, localQueue string) *v1beta1.InferenceService {
 	d := src.DeepCopy()
 
@@ -35,14 +35,10 @@ func DeriveISVC(src *v1beta1.InferenceService, controlPlaneID, localQueue string
 	d.ManagedFields = nil
 	d.Status = v1beta1.InferenceServiceStatus{}
 
-	// Resolve queue name: per-ISVC annotation, then the operator-configured
-	// queue, then the in-package fallback.
+	// Resolve queue name: per-ISVC annotation, then the operator-configured queue.
 	queue := src.Annotations[LocalQueueAnnotation]
 	if queue == "" {
 		queue = localQueue
-	}
-	if queue == "" {
-		queue = DefaultLocalQueue
 	}
 
 	// Add origin markers.
@@ -66,15 +62,19 @@ func DeriveISVC(src *v1beta1.InferenceService, controlPlaneID, localQueue string
 		delete(d.Annotations, k)
 	}
 
-	// Stamp Kueue gating on each component.
-	if d.Spec.Engine != nil {
-		stampQueue(&d.Spec.Engine.ComponentExtensionSpec, queue)
-	}
-	if d.Spec.Decoder != nil {
-		stampQueue(&d.Spec.Decoder.ComponentExtensionSpec, queue)
-	}
-	if d.Spec.Router != nil {
-		stampQueue(&d.Spec.Router.ComponentExtensionSpec, queue)
+	// Stamp Kueue gating on each component. An unresolved queue leaves the label
+	// off — the queue names an operator-provisioned resource, so there is no
+	// in-code default to guess.
+	if queue != "" {
+		if d.Spec.Engine != nil {
+			stampQueue(&d.Spec.Engine.ComponentExtensionSpec, queue)
+		}
+		if d.Spec.Decoder != nil {
+			stampQueue(&d.Spec.Decoder.ComponentExtensionSpec, queue)
+		}
+		if d.Spec.Router != nil {
+			stampQueue(&d.Spec.Router.ComponentExtensionSpec, queue)
+		}
 	}
 
 	return d

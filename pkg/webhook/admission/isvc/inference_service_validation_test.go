@@ -2921,6 +2921,184 @@ func TestDeploymentStrategyWarnings(t *testing.T) {
 // =============================================================================
 // MIGRATION-REQUEST ANNOTATION VALIDATION (mailbox admission)
 // =============================================================================
+
+// migrationAnnISVC builds a minimal ISVC that passes every other
+// validation rule (runtime-only, no model, no client lookups) so each
+// case exercises only the migration-request annotation checks.
+// withDecoder adds Engine+Decoder so the decoder component exists.
+func migrationAnnISVC(annotations map[string]string, withDecoder bool) *v1beta1.InferenceService {
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "mig-isvc",
+			Namespace:   "default",
+			Annotations: annotations,
+		},
+		Spec: v1beta1.InferenceServiceSpec{
+			Runtime: &v1beta1.ServingRuntimeRef{Name: "test-runtime", AutoSync: boolPtr(false)},
+		},
+	}
+	if withDecoder {
+		isvc.Spec.Engine = &v1beta1.EngineSpec{
+			PodSpec: v1beta1.PodSpec{
+				Containers: []v1.Container{{Name: "ome-container", Image: "x"}},
+			},
+		}
+		isvc.Spec.Decoder = &v1beta1.DecoderSpec{
+			PodSpec: v1beta1.PodSpec{
+				Containers: []v1.Container{{Name: "ome-container", Image: "x"}},
+			},
+		}
+	}
+	return isvc
+}
+
+func TestValidateUpdate_MigrationRequestAnnotations(t *testing.T) {
+	const prefix = "ome.io/migration-request-v1-"
+	validEngineReq := `{"schemaVersion":"v1","component":"engine","instance":0,"from_node":"node-a"}`
+
+	tests := []struct {
+		name        string
+		oldAnn      map[string]string
+		newAnn      map[string]string
+		withDecoder bool
+		wantErr     string // empty = admitted
+	}{
+		{
+			name:    "valid engine request added is accepted",
+			newAnn:  map[string]string{prefix + "u1": validEngineReq},
+			wantErr: "",
+		},
+		{
+			name:    "garbage JSON denied with the request UUID named",
+			newAnn:  map[string]string{prefix + "u2": `{not-json`},
+			wantErr: "migration request u2",
+		},
+		{
+			name:    "unknown schemaVersion denied",
+			newAnn:  map[string]string{prefix + "u3": `{"schemaVersion":"v9","component":"engine","instance":0,"from_node":"n"}`},
+			wantErr: "UnsupportedSchemaVersion",
+		},
+		{
+			name:    "component the ISVC lacks is denied",
+			newAnn:  map[string]string{prefix + "u4": `{"schemaVersion":"v1","component":"decoder","instance":0,"from_node":"n"}`},
+			wantErr: `component "decoder" does not exist`,
+		},
+		{
+			name:        "decoder request accepted when the spec declares a decoder",
+			newAnn:      map[string]string{prefix + "u5": `{"schemaVersion":"v1","component":"decoder","instance":0,"from_node":"n"}`},
+			withDecoder: true,
+			wantErr:     "",
+		},
+		{
+			name:    "unknown component name denied",
+			newAnn:  map[string]string{prefix + "u6": `{"schemaVersion":"v1","component":"sidecar","instance":0,"from_node":"n"}`},
+			wantErr: `component "sidecar" does not exist`,
+		},
+		{
+			name:    "negative instance denied",
+			newAnn:  map[string]string{prefix + "u7": `{"schemaVersion":"v1","component":"engine","instance":-1,"from_node":"n"}`},
+			wantErr: "instance must be >= 0",
+		},
+		{
+			name:    "bare prefix key (no UUID) denied",
+			newAnn:  map[string]string{prefix: validEngineReq},
+			wantErr: "carries no request UUID",
+		},
+		{
+			name:    "pre-existing unchanged annotation is NOT re-validated",
+			oldAnn:  map[string]string{prefix + "u8": `{not-json`},
+			newAnn:  map[string]string{prefix + "u8": `{not-json`},
+			wantErr: "",
+		},
+		{
+			name:    "changed value of an existing key IS re-validated",
+			oldAnn:  map[string]string{prefix + "u9": validEngineReq},
+			newAnn:  map[string]string{prefix + "u9": `{not-json`},
+			wantErr: "migration request u9",
+		},
+		{
+			name:    "deletion of an annotation is always allowed",
+			oldAnn:  map[string]string{prefix + "u10": `{not-json`},
+			newAnn:  nil,
+			wantErr: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &InferenceServiceValidator{}
+			oldIsvc := migrationAnnISVC(tt.oldAnn, tt.withDecoder)
+			newIsvc := migrationAnnISVC(tt.newAnn, tt.withDecoder)
+			_, err := v.ValidateUpdate(context.Background(), oldIsvc, newIsvc)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestValidateCreate_MigrationRequestAnnotations pins CREATE parity:
+// migration-request annotations present at object creation get the
+// same validation as ones added by an update (old=nil semantics —
+// every present annotation is an add).
+func TestValidateCreate_MigrationRequestAnnotations(t *testing.T) {
+	const prefix = "ome.io/migration-request-v1-"
+	tests := []struct {
+		name    string
+		ann     map[string]string
+		wantErr string
+	}{
+		{
+			name:    "valid engine request on create is accepted",
+			ann:     map[string]string{prefix + "c1": `{"schemaVersion":"v1","component":"engine","instance":0,"from_node":"node-a"}`},
+			wantErr: "",
+		},
+		{
+			name:    "garbage JSON on create is denied",
+			ann:     map[string]string{prefix + "c2": `{not-json`},
+			wantErr: "migration request c2",
+		},
+		{
+			name:    "unknown schemaVersion on create is denied",
+			ann:     map[string]string{prefix + "c3": `{"schemaVersion":"v9","component":"engine","instance":0,"from_node":"n"}`},
+			wantErr: "UnsupportedSchemaVersion",
+		},
+		{
+			name:    "component the ISVC lacks on create is denied",
+			ann:     map[string]string{prefix + "c4": `{"schemaVersion":"v1","component":"decoder","instance":0,"from_node":"n"}`},
+			wantErr: `component "decoder" does not exist`,
+		},
+		{
+			name:    "negative instance on create is denied",
+			ann:     map[string]string{prefix + "c5": `{"schemaVersion":"v1","component":"engine","instance":-1,"from_node":"n"}`},
+			wantErr: "instance must be >= 0",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &InferenceServiceValidator{}
+			_, err := v.ValidateCreate(context.Background(), migrationAnnISVC(tt.ann, false))
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// REPLICA BOUNDS + POD DISRUPTION BUDGET VALIDATION TESTS
+// =============================================================================
+
+// componentExtISVC builds a minimal valid ISVC whose engine skips
+// runtime/model resolution (explicit runtime ref with autoSync=false plus a
+// full runner config), so per-Component extension checks are exercised in
+// isolation. mutate applies the per-case component fields.
 func componentExtISVC(mutate func(isvc *v1beta1.InferenceService)) *v1beta1.InferenceService {
 	isvc := &v1beta1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-isvc", Namespace: "default"},

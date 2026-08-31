@@ -44,8 +44,9 @@ type Config struct {
 	RouteNamespace string
 
 	// BackendPort is the port on the winning cluster's ingress the global host
-	// routes to. Zero leaves the HTTPRoute backendRef port unset (invalid for a
-	// Gateway API backend); supply it via config.
+	// routes to. Required: a non-positive port would yield a port-0 backend
+	// Service and HTTPRoute backendRef, so it disables the backend
+	// (IsEnabled()==false) instead — supply it via config.
 	BackendPort int32
 
 	// Labels are stamped onto every resource the publisher creates, so an
@@ -60,8 +61,9 @@ type HostTemplateData struct {
 }
 
 // IsEnabled reports whether the Gateway API backend is configured enough to run.
-// Without a global gateway there is nothing to attach a route to, so the backend
-// stays off rather than guessing one.
+// Without a global gateway there is nothing to attach a route to, and without a
+// backend port the published Service and backendRef would be invalid, so the
+// backend stays off rather than guessing either.
 func (c Config) IsEnabled() bool {
 	return strings.TrimSpace(c.GlobalGateway) != "" && c.BackendPort > 0
 }

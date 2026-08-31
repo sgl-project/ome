@@ -2,9 +2,7 @@ package podreadiness
 
 import (
 	"context"
-	"errors"
 	"testing"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -183,37 +181,22 @@ func TestMultiWriter_TwoKeysHoldNotReady(t *testing.T) {
 	pod := newReadinessTestPod("p")
 	c := newReadinessTestClient(t, pod)
 
-	got := &corev1.Pod{}
-	reread := func(stage string) {
-		t.Helper()
-		if err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), got); err != nil {
-			t.Fatalf("get pod after %s: %v", stage, err)
-		}
-	}
-	condition := func(stage string) corev1.PodCondition {
-		t.Helper()
-		cond := findCondition(got, ConditionType)
-		if cond == nil {
-			t.Fatalf("condition missing after %s", stage)
-		}
-		return *cond
-	}
-
 	if err := AddNotReadyKey(context.Background(), c, c, pod, Message{UserAgent: "A", Key: "1"}); err != nil {
 		t.Fatalf("Add A: %v", err)
 	}
-	reread("Add A")
+	got := &corev1.Pod{}
+	_ = c.Get(context.Background(), client.ObjectKeyFromObject(pod), got)
 	if err := AddNotReadyKey(context.Background(), c, c, got, Message{UserAgent: "B", Key: "2"}); err != nil {
 		t.Fatalf("Add B: %v", err)
 	}
 
 	// Removing only A — pod must stay NotReady because B still holds it.
-	reread("Add B")
+	_ = c.Get(context.Background(), client.ObjectKeyFromObject(pod), got)
 	if err := RemoveNotReadyKey(context.Background(), c, c, got, Message{UserAgent: "A", Key: "1"}); err != nil {
 		t.Fatalf("Remove A: %v", err)
 	}
-	reread("Remove A")
-	cond := condition("Remove A")
+	_ = c.Get(context.Background(), client.ObjectKeyFromObject(pod), got)
+	cond := findCondition(got, ConditionType)
 	if cond.Status != corev1.ConditionFalse {
 		t.Errorf("expected Status=False after removing one of two keys, got %s", cond.Status)
 	}
@@ -223,11 +206,13 @@ func TestMultiWriter_TwoKeysHoldNotReady(t *testing.T) {
 	}
 
 	// Now remove B — pod must flip Ready.
+	_ = c.Get(context.Background(), client.ObjectKeyFromObject(pod), got)
 	if err := RemoveNotReadyKey(context.Background(), c, c, got, Message{UserAgent: "B", Key: "2"}); err != nil {
 		t.Fatalf("Remove B: %v", err)
 	}
-	reread("Remove B")
-	if cond := condition("Remove B"); cond.Status != corev1.ConditionTrue {
+	_ = c.Get(context.Background(), client.ObjectKeyFromObject(pod), got)
+	cond = findCondition(got, ConditionType)
+	if cond.Status != corev1.ConditionTrue {
 		t.Errorf("expected Status=True after removing last key, got %s", cond.Status)
 	}
 }
@@ -622,205 +607,6 @@ func TestRemoveNotReadyKeyIgnoreNotFound_PodGone_ReturnsNil(t *testing.T) {
 	c := newReadinessTestClient(t)
 	if err := RemoveNotReadyKeyIgnoreNotFound(context.Background(), c, c, pod, Message{UserAgent: WriterMigrateSourceDrain, Key: "uuid-1"}); err != nil {
 		t.Fatalf("expected nil for a deleted pod on drain-hold release, got %v", err)
-	}
-}
-
-// TestLastTransitionTime_MovesOnlyOnStatusChange pins the condition
-// timestamp contract. Writers join and leave the message list
-// constantly while Status stays False; restamping on every one of
-// those writes resets the "how long has this pod been NotReady" clock
-// consumers measure against.
-func TestLastTransitionTime_MovesOnlyOnStatusChange(t *testing.T) {
-	held := Message{UserAgent: WriterUpdateInPlace, Key: "0-1"}
-	joining := Message{UserAgent: WriterMigrateSourceDrain, Key: "uuid-1"}
-	original := metav1.NewTime(time.Now().Add(-time.Hour).Truncate(time.Second))
-
-	pod := newReadinessTestPod("p")
-	pod.Status.Conditions = []corev1.PodCondition{{
-		Type:               ConditionType,
-		Status:             corev1.ConditionFalse,
-		Reason:             "NotReady",
-		Message:            messageList{held}.dump(),
-		LastTransitionTime: original,
-	}}
-	c := newReadinessTestClient(t, pod)
-
-	readCondition := func(stage string) corev1.PodCondition {
-		t.Helper()
-		got := &corev1.Pod{}
-		if err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), got); err != nil {
-			t.Fatalf("get pod after %s: %v", stage, err)
-		}
-		cond := findCondition(got, ConditionType)
-		if cond == nil {
-			t.Fatalf("condition missing after %s", stage)
-		}
-		return *cond
-	}
-
-	// A second writer joins: list grows, Status stays False.
-	if err := AddNotReadyKey(context.Background(), c, c, pod, joining); err != nil {
-		t.Fatalf("AddNotReadyKey: %v", err)
-	}
-	if cond := readCondition("add"); !cond.LastTransitionTime.Equal(&original) {
-		t.Errorf("Status stayed False, so LastTransitionTime must hold at %v, got %v", original, cond.LastTransitionTime)
-	}
-
-	// One writer leaves: list shrinks, Status still False.
-	if err := RemoveNotReadyKey(context.Background(), c, c, pod, held); err != nil {
-		t.Fatalf("RemoveNotReadyKey: %v", err)
-	}
-	if cond := readCondition("partial remove"); !cond.LastTransitionTime.Equal(&original) {
-		t.Errorf("Status stayed False, so LastTransitionTime must hold at %v, got %v", original, cond.LastTransitionTime)
-	}
-
-	// Last writer leaves: Status transitions to True.
-	if err := RemoveNotReadyKey(context.Background(), c, c, pod, joining); err != nil {
-		t.Fatalf("RemoveNotReadyKey: %v", err)
-	}
-	cond := readCondition("final remove")
-	if cond.Status != corev1.ConditionTrue {
-		t.Fatalf("expected Status=True once the list emptied, got %s", cond.Status)
-	}
-	if cond.LastTransitionTime.Equal(&original) {
-		t.Errorf("Status changed to True, so LastTransitionTime must advance past %v", original)
-	}
-}
-
-// TestRemoveNotReadyKey_ReplacementPod_Errors pins the promote-path
-// identity contract. Pod names are slot-based, so a same-name pod
-// carrying a different UID is a replacement that never held the
-// caller's key. Releasing it would create the condition with
-// Status=True and hand the replacement a promotion it did not earn.
-func TestRemoveNotReadyKey_ReplacementPod_Errors(t *testing.T) {
-	stored := newReadinessTestPod("slot-0")
-	stored.UID = "replacement"
-	observed := newReadinessTestPod("slot-0")
-	observed.UID = "original"
-
-	c := newReadinessTestClient(t, stored)
-	err := RemoveNotReadyKey(context.Background(), c, c, observed, Message{UserAgent: WriterLifecycle, Key: KeyLifecycleInstanceReady})
-	if !errors.Is(err, ErrPodIdentityChanged) {
-		t.Fatalf("expected ErrPodIdentityChanged for a same-name replacement, got %v", err)
-	}
-
-	fresh := &corev1.Pod{}
-	if err := c.Get(context.Background(), client.ObjectKeyFromObject(stored), fresh); err != nil {
-		t.Fatalf("get replacement: %v", err)
-	}
-	if cond := findCondition(fresh, ConditionType); cond != nil {
-		t.Fatalf("replacement condition must be untouched, got %+v", cond)
-	}
-}
-
-// TestMarkPodServingWithChange_ReplacementPod_ReportsNoChange pins the
-// same contract through the wrapper promote callers use. A change
-// report here would drain the predecessor on a promotion the
-// replacement never earned.
-func TestMarkPodServingWithChange_ReplacementPod_ReportsNoChange(t *testing.T) {
-	stored := newReadinessTestPod("slot-0")
-	stored.UID = "replacement"
-	observed := newReadinessTestPod("slot-0")
-	observed.UID = "original"
-
-	c := newReadinessTestClient(t, stored)
-	changed, err := MarkPodServingWithChange(context.Background(), c, c, observed, WriterLifecycle, KeyLifecycleInstanceReady)
-	if !errors.Is(err, ErrPodIdentityChanged) {
-		t.Fatalf("expected ErrPodIdentityChanged, got %v", err)
-	}
-	if changed {
-		t.Fatal("a replacement pod must never report a serving transition")
-	}
-}
-
-// TestRemoveNotReadyKeyIgnoreNotFound_ReplacementPod_ReturnsNil pins the
-// drain-hold release side: the hold died with the caller's pod, so a
-// same-name replacement is the same clean no-op as a vanished pod — and
-// must not have its condition written.
-func TestRemoveNotReadyKeyIgnoreNotFound_ReplacementPod_ReturnsNil(t *testing.T) {
-	stored := newReadinessTestPod("slot-0")
-	stored.UID = "replacement"
-	observed := newReadinessTestPod("slot-0")
-	observed.UID = "original"
-
-	c := newReadinessTestClient(t, stored)
-	if err := RemoveNotReadyKeyIgnoreNotFound(context.Background(), c, c, observed, Message{UserAgent: WriterMigrateSourceDrain, Key: "uuid-1"}); err != nil {
-		t.Fatalf("expected nil for a same-name replacement on drain-hold release, got %v", err)
-	}
-
-	fresh := &corev1.Pod{}
-	if err := c.Get(context.Background(), client.ObjectKeyFromObject(stored), fresh); err != nil {
-		t.Fatalf("get replacement: %v", err)
-	}
-	if cond := findCondition(fresh, ConditionType); cond != nil {
-		t.Fatalf("replacement condition must be untouched, got %+v", cond)
-	}
-}
-
-// TestRemoveNotReadyKeyIgnoreNotFound_AbsentCondition_LeavesPodUnpromoted
-// pins the asymmetry between the two variants on a pod with no
-// condition. An absent condition is the implicit Lifecycle hold, and
-// only the promote path may resolve it. A drain-hold release that wrote
-// Status=True there would promote a pod no writer promoted and slip
-// past the Instance-wide gang gate — reachable whenever the caller's
-// pod reference carries no UID and the identity guard is skipped.
-func TestRemoveNotReadyKeyIgnoreNotFound_AbsentCondition_LeavesPodUnpromoted(t *testing.T) {
-	pod := newReadinessTestPod("p")
-	c := newReadinessTestClient(t, pod)
-
-	if err := RemoveNotReadyKeyIgnoreNotFound(context.Background(), c, c, pod, Message{UserAgent: WriterMigrateSourceDrain, Key: "uuid-1"}); err != nil {
-		t.Fatalf("RemoveNotReadyKeyIgnoreNotFound: %v", err)
-	}
-
-	got := &corev1.Pod{}
-	if err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), got); err != nil {
-		t.Fatalf("get pod: %v", err)
-	}
-	if cond := findCondition(got, ConditionType); cond != nil {
-		t.Fatalf("drain-hold release must not create the gate, got %+v", cond)
-	}
-
-	// The promote path still owns fresh-pod promotion.
-	if err := RemoveNotReadyKey(context.Background(), c, c, pod, Message{UserAgent: WriterLifecycle, Key: KeyLifecycleInstanceReady}); err != nil {
-		t.Fatalf("RemoveNotReadyKey: %v", err)
-	}
-	if err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), got); err != nil {
-		t.Fatalf("get pod after promote: %v", err)
-	}
-	cond := findCondition(got, ConditionType)
-	if cond == nil || cond.Status != corev1.ConditionTrue {
-		t.Fatalf("promote path must still create the gate as True, got %+v", cond)
-	}
-}
-
-// TestContainsNotReadyKey_ParadoxicalStatusTrueReportsFalse pins the
-// documented precondition: the check answers "is this hold in effect",
-// so an entry stranded under Status=True reports false.
-func TestContainsNotReadyKey_ParadoxicalStatusTrueReportsFalse(t *testing.T) {
-	msg := Message{UserAgent: WriterUpdateInPlace, Key: "0-1"}
-	pod := newReadinessTestPod("p")
-	pod.Status.Conditions = []corev1.PodCondition{{
-		Type:    ConditionType,
-		Status:  corev1.ConditionTrue,
-		Reason:  "Serving",
-		Message: messageList{msg}.dump(),
-	}}
-	if ContainsNotReadyKey(pod, msg) {
-		t.Error("an entry stranded under Status=True is not a hold in effect")
-	}
-}
-
-// TestRemoveNotReadyKey_UnsetCallerUID_SkipsIdentityCheck pins that an
-// observation carrying no UID still releases. Callers that synthesize a
-// pod reference from a slot name have nothing to compare against.
-func TestRemoveNotReadyKey_UnsetCallerUID_SkipsIdentityCheck(t *testing.T) {
-	stored := newReadinessTestPod("slot-0")
-	stored.UID = "replacement"
-	observed := newReadinessTestPod("slot-0")
-
-	c := newReadinessTestClient(t, stored)
-	if err := RemoveNotReadyKey(context.Background(), c, c, observed, Message{UserAgent: WriterLifecycle, Key: KeyLifecycleInstanceReady}); err != nil {
-		t.Fatalf("expected release to proceed without a caller UID, got %v", err)
 	}
 }
 

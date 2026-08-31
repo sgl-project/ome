@@ -14,10 +14,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
-// MergeRuntimeContainers merges the override Container struct with the runtime Container struct, allowing users
-func MergeRuntimeContainers(runtimeContainer *v1.Container, overrideContainer *v1.Container) (*v1.Container, error) {
+// MergeRuntimeContainers Merge the predictor Container struct with the runtime Container struct, allowing users
+func MergeRuntimeContainers(runtimeContainer *v1.Container, predictorContainer *v1.Container) (*v1.Container, error) {
 	// Save runtime container name, as the name can be overridden as empty string during the Unmarshal below
 	// since the Name field does not have the 'omitempty' struct tag.
 	runtimeContainerName := runtimeContainer.Name
@@ -28,7 +29,7 @@ func MergeRuntimeContainers(runtimeContainer *v1.Container, overrideContainer *v
 		return nil, err
 	}
 
-	overrides, err := json.Marshal(overrideContainer)
+	overrides, err := json.Marshal(predictorContainer)
 	if err != nil {
 		return nil, err
 	}
@@ -43,12 +44,22 @@ func MergeRuntimeContainers(runtimeContainer *v1.Container, overrideContainer *v
 		return nil, err
 	}
 
+	// Container name precedence walk: predictor (post-merge) wins, then
+	// fall back to the runtime's pre-merge name, then to the canonical
+	// "ome-container" default. The final default prevents the apiserver
+	// "spec.containers[0].name: Required value" rejection when neither
+	// the ServingRuntime's runner nor the ISVC's runner sets a container
+	// name (an empty merged Name deadlocks OMENative rollouts at Pod
+	// create time).
 	if mergedContainer.Name == "" {
 		mergedContainer.Name = runtimeContainerName
 	}
+	if mergedContainer.Name == "" {
+		mergedContainer.Name = constants.MainContainerName
+	}
 
 	// Strategic merge patch will replace args but more useful behaviour here is to concatenate
-	mergedContainer.Args = append(append([]string{}, runtimeContainer.Args...), overrideContainer.Args...)
+	mergedContainer.Args = append(append([]string{}, runtimeContainer.Args...), predictorContainer.Args...)
 
 	return &mergedContainer, nil
 }
@@ -92,12 +103,92 @@ func MergeRouterSpec(isvcRouter, runtimeRouter *v1beta1.RouterSpec) (*v1beta1.Ro
 		return isvcRouter.DeepCopy(), nil
 	}
 
-	return mergeSpec(v1beta1.RouterSpec{
+	merged, err := mergeSpec(v1beta1.RouterSpec{
 		ComponentExtensionSpec: runtimeRouter.ComponentExtensionSpec,
 		PodSpec:                runtimeRouter.PodSpec,
 		Runner:                 runtimeRouter.Runner,
 		Config:                 runtimeRouter.Config,
 	}, *isvcRouter)
+	if err != nil {
+		return nil, err
+	}
+	restoreRunnerName(merged.Runner, runtimeRouter.Runner)
+	return merged, nil
+}
+
+// restoreRunnerName fixes the strategic-merge-patch blind spot where
+// the user-provided RunnerSpec sets `name: ""` (the common case when
+// only an image override is supplied — kubectl-defaulted zero value for
+// fields the patch didn't mention). v1.Container.Name has no
+// `omitempty` struct tag, so the empty string round-trips through
+// JSON and overwrites the runtime's name during merge, producing a
+// pod whose container has no name. apiserver then rejects pod creates
+// with `spec.containers[0].name: Required value`, deadlocking
+// OMENative rollouts. Same shape as the post-merge fixup
+// MergeRuntimeContainers applies at the v1.Container level.
+//
+// Precedence walk: (1) preserve the merged name when set, (2) fall back
+// to the runtime RunnerSpec's name, (3) fall back to the canonical
+// "ome-container" default when neither side names the container — same
+// final default MergeRuntimeContainers applies, kept in sync so the two
+// merge paths produce identical Pod-name behavior. The merged pointer
+// may be nil — guard accordingly. The runtime pointer is allowed to be
+// nil too; in that case we still apply the canonical default if merged
+// is non-nil with an empty name.
+func restoreRunnerName(merged, runtime *v1beta1.RunnerSpec) {
+	if merged == nil {
+		return
+	}
+	if merged.Name == "" && runtime != nil {
+		merged.Name = runtime.Name
+	}
+	if merged.Name == "" {
+		merged.Name = constants.MainContainerName
+	}
+}
+
+// foldComponentPodSpecIntoLeaderWorker folds the component-level PodSpec
+// (the inline EngineSpec/DecoderSpec PodSpec) into the Leader and Worker
+// pod templates of a multi-pod component, reusing the same strategic-merge
+// path (mergeSpec) as every other merge in this file.
+//
+// Why this exists: for a multi-node component the renderer
+// (engine.go/decoder.go reconcilePodSpec/reconcileWorkerPodSpec) sources its
+// base PodSpec from Leader.PodSpec / Worker.PodSpec — NOT from the
+// component-level PodSpec. Without this fold, component-level pod fields
+// (volumes, nodeSelector, tolerations, affinity, imagePullSecrets, ...)
+// declared on engineConfig/decoderConfig are silently dropped from the
+// leader/worker pods while their container volumeMounts still apply, so a
+// runtime declaring `engineConfig.volumes:[dshm]` + a leader runner mounting
+// `dshm` renders a Pod that mounts a volume that doesn't exist → the
+// apiserver rejects it ("volumeMounts[0].name: Not found: dshm").
+//
+// The component PodSpec is the base and the leader/worker PodSpec is the
+// override, so leader/worker entries win — with the standard strategic-merge
+// semantics carried by the PodSpec field tags: name-keyed lists (volumes,
+// imagePullSecrets) merge by name; atomic fields (nodeSelector, tolerations)
+// are replaced wholesale when the child sets them; structs (affinity,
+// securityContext) deep-merge. Single-pod components render straight from the
+// component-level PodSpec, which is left intact, so they're unaffected.
+func foldComponentPodSpecIntoLeaderWorker(component *v1beta1.PodSpec, leader *v1beta1.LeaderSpec, worker *v1beta1.WorkerSpec) error {
+	if component == nil {
+		return nil
+	}
+	if leader != nil {
+		folded, err := mergeSpec(*component, leader.PodSpec)
+		if err != nil {
+			return err
+		}
+		leader.PodSpec = *folded
+	}
+	if worker != nil {
+		folded, err := mergeSpec(*component, worker.PodSpec)
+		if err != nil {
+			return err
+		}
+		worker.PodSpec = *folded
+	}
+	return nil
 }
 
 // MergeEngineSpec merges a runtime-provided EngineSpec with a user-provided EngineSpec from InferenceService.
@@ -109,16 +200,29 @@ func MergeEngineSpec(runtimeEngine, isvcEngine *v1beta1.EngineSpec) (*v1beta1.En
 		return nil, nil
 	case runtimeEngine == nil:
 		// if engine is not specified in runtime, return a copy of isvcEngine
-		return isvcEngine.DeepCopy(), nil
+		merged := isvcEngine.DeepCopy()
+		if err := foldComponentPodSpecIntoLeaderWorker(&merged.PodSpec, merged.Leader, merged.Worker); err != nil {
+			return nil, err
+		}
+		return merged, nil
 	}
 
-	return mergeSpec(v1beta1.EngineSpec{
+	merged, err := mergeSpec(v1beta1.EngineSpec{
 		ComponentExtensionSpec: runtimeEngine.ComponentExtensionSpec,
 		PodSpec:                runtimeEngine.PodSpec,
 		Runner:                 runtimeEngine.Runner,
 		Leader:                 runtimeEngine.Leader,
 		Worker:                 runtimeEngine.Worker,
+		TopologyKey:            runtimeEngine.TopologyKey,
 	}, *isvcEngine)
+	if err != nil {
+		return nil, err
+	}
+	restoreRunnerName(merged.Runner, runtimeEngine.Runner)
+	if err := foldComponentPodSpecIntoLeaderWorker(&merged.PodSpec, merged.Leader, merged.Worker); err != nil {
+		return nil, err
+	}
+	return merged, nil
 }
 
 // MergeDecoderSpec merges a runtime-provided DecoderSpec with a user-provided DecoderSpec from InferenceService.
@@ -130,16 +234,29 @@ func MergeDecoderSpec(runtimeDecoder, isvcDecoder *v1beta1.DecoderSpec) (*v1beta
 		return nil, nil
 	case runtimeDecoder == nil:
 		// if decoder is not specified in runtime, return a copy of isvcDecoder
-		return isvcDecoder.DeepCopy(), nil
+		merged := isvcDecoder.DeepCopy()
+		if err := foldComponentPodSpecIntoLeaderWorker(&merged.PodSpec, merged.Leader, merged.Worker); err != nil {
+			return nil, err
+		}
+		return merged, nil
 	}
 
-	return mergeSpec(v1beta1.DecoderSpec{
+	merged, err := mergeSpec(v1beta1.DecoderSpec{
 		ComponentExtensionSpec: runtimeDecoder.ComponentExtensionSpec,
 		PodSpec:                runtimeDecoder.PodSpec,
 		Runner:                 runtimeDecoder.Runner,
 		Leader:                 runtimeDecoder.Leader,
 		Worker:                 runtimeDecoder.Worker,
+		TopologyKey:            runtimeDecoder.TopologyKey,
 	}, *isvcDecoder)
+	if err != nil {
+		return nil, err
+	}
+	restoreRunnerName(merged.Runner, runtimeDecoder.Runner)
+	if err := foldComponentPodSpecIntoLeaderWorker(&merged.PodSpec, merged.Leader, merged.Worker); err != nil {
+		return nil, err
+	}
+	return merged, nil
 }
 
 // ConvertPodSpec converts v1beta1.PodSpec to v1.PodSpec
@@ -259,9 +376,10 @@ func MergeSchedulerName(runtime *v1beta1.ServingRuntimeSpec, engine *v1beta1.Eng
 	}
 }
 
-// MergeResource merges resource requests and limits from runtime, accelerator class, and container spec.
-// It only merges resources from the runtime and accelerator class when the user has not explicitly specified resources in the InferenceService spec.
-// The acceleratorClass takes precedence and overrides the runtime resource, if it existed.
+// MergeResource fills the container's resource requests/limits from
+// the matching runtime container when the operator hasn't set them on
+// the InferenceService spec (fill-only), then applies the accelerator
+// class's declared resources, which take precedence over the runtime's.
 func MergeResource(container *v1.Container, acceleratorClass *v1beta1.AcceleratorClassSpec, runtime *v1beta1.ServingRuntimeSpec) {
 	if container == nil {
 		return

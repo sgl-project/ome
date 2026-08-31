@@ -92,7 +92,8 @@ type Reconciler struct {
 	Requeue time.Duration
 	// LocalQueue is the Kueue LocalQueue a derived workload's pods join when the
 	// source ISVC carries no per-ISVC queue annotation. It names a resource the
-	// operator created, so it is config-driven; empty leaves DefaultLocalQueue.
+	// operator provisioned, so it is config-driven (manager flag / chart) with no
+	// in-code default; empty leaves the queue label off the derived.
 	LocalQueue string
 	// ControlPlaneID is this control plane's identity, stamped onto every derived
 	// ISVC (PlacementControlPlaneLabel) so the GC sweep only reaps deriveds THIS
@@ -219,10 +220,14 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		// set is diagnosable instead of an indistinguishable Pending.
 		r.Log.Info("no placement candidates", "isvc", isvc.Namespace+"/"+isvc.Name,
 			"reason", reason, "error", err)
-		if err == nil && reason == MatchReasonNoReadyClusters && isvc.Status.Placement != nil {
+		if err == nil && reason == MatchReasonNoReadyClusters && isvc.Status.Placement != nil &&
+			placementTargetExists(isvc.Status.Placement, clusters.Items) {
 			// Fleet readiness is sampled and can disappear for one health interval.
 			// Preserve the last-known placement (including its endpoint and homes)
 			// rather than publishing Pending and derouting still-serving traffic.
+			// Retention keys on the target still EXISTING, not on it being ready,
+			// so a decommissioned fleet falls through to Pending instead of
+			// pinning the InferenceService to a cluster that is gone.
 			return ctrl.Result{RequeueAfter: r.requeue()}, nil
 		}
 		return r.writePlacement(ctx, isvc, placementResult{phase: v1beta1.PlacementPhasePending})
@@ -428,6 +433,26 @@ func placementMode(isvc *v1beta1.InferenceService) v1beta1.PlacementMode {
 //
 // There is deliberately no sticky-winner / re-race path here: those protect the
 // single-home invariant, which All does not have. Each home is independent.
+// placementTargetExists reports whether the placement still names at least one
+// WorkloadCluster that is present in the fleet, in any readiness state.
+func placementTargetExists(pl *v1beta1.PlacementStatus, clusters []v1beta1.WorkloadCluster) bool {
+	present := make(map[string]struct{}, len(clusters))
+	for i := range clusters {
+		present[clusters[i].Name] = struct{}{}
+	}
+	if pl.Cluster != "" {
+		if _, ok := present[pl.Cluster]; ok {
+			return true
+		}
+	}
+	for _, c := range pl.Candidates {
+		if _, ok := present[c.Cluster]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Reconciler) reconcileAll(ctx context.Context, isvc *v1beta1.InferenceService, candidates []string) (ctrl.Result, error) {
 	placed, err := r.fanOut(ctx, isvc, candidates)
 	if err != nil {
@@ -437,12 +462,32 @@ func (r *Reconciler) reconcileAll(ctx context.Context, isvc *v1beta1.InferenceSe
 		return r.writePlacement(ctx, isvc, placementResult{phase: v1beta1.PlacementPhasePending})
 	}
 
+	// A home that cannot be read this pass keeps whatever it published last:
+	// dropping it from candidates would tell the endpoint publisher to delete
+	// that backend, so a transient read error would deroute live traffic.
+	prev := make(map[string]v1beta1.CandidatePlacement, len(placed))
+	if isvc.Status.Placement != nil {
+		for _, c := range isvc.Status.Placement.Candidates {
+			prev[c.Cluster] = c
+		}
+	}
+	carryForward := func(c string) (v1beta1.CandidatePlacement, bool) {
+		p, ok := prev[c]
+		return p, ok
+	}
+
 	cands := make([]v1beta1.CandidatePlacement, 0, len(placed))
 	admitted := 0
 	for _, c := range placed {
 		derived, ok, err := r.getDerived(ctx, c, isvc)
 		if err != nil {
-			r.Log.Error(err, "all: reading derived failed; skipping home", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
+			r.Log.Error(err, "all: reading derived failed; keeping last-known home state", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
+			if p, had := carryForward(c); had {
+				cands = append(cands, p)
+				if p.Phase == v1beta1.CandidatePhaseAdmitted {
+					admitted++
+				}
+			}
 			continue
 		}
 		if !ok {
@@ -454,7 +499,13 @@ func (r *Reconciler) reconcileAll(ctx context.Context, isvc *v1beta1.InferenceSe
 		}
 		statuses, err := componentIRStatuses(ctx, cl, derived)
 		if err != nil {
-			r.Log.Error(err, "all: reading IR statuses failed; skipping home", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
+			r.Log.Error(err, "all: reading IR statuses failed; keeping last-known home state", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
+			if p, had := carryForward(c); had {
+				cands = append(cands, p)
+				if p.Phase == v1beta1.CandidatePhaseAdmitted {
+					admitted++
+				}
+			}
 			continue
 		}
 		if AllComponentsAdmitted(derived, statuses) {
@@ -522,19 +573,42 @@ func (r *Reconciler) reconcileSplit(ctx context.Context, isvc *v1beta1.Inference
 		admitted, ready int32
 		endpoint        *apis.URL
 		present, sliver bool
+		// unreadable marks a home whose state could not be read this pass, as
+		// distinct from one observed to hold nothing. Apportionment credits it
+		// with its last published count so a transient read error cannot look
+		// like freed capacity and provision a duplicate elsewhere, and the
+		// apply phase leaves it alone.
+		unreadable bool
+	}
+	// Last published per-home counts, used to keep an unreadable home's share
+	// stable across the pass.
+	lastAdmitted := make(map[string]int32, len(candidates))
+	lastCand := make(map[string]v1beta1.CandidatePlacement, len(candidates))
+	if isvc.Status.Placement != nil {
+		for _, c := range isvc.Status.Placement.Candidates {
+			lastAdmitted[c.Cluster] = c.AdmittedReplicas
+			lastCand[c.Cluster] = c
+		}
 	}
 	obs := make(map[string]*homeObs, len(candidates))
 	admitted := make(map[string]int32, len(candidates))
+	markUnreadable := func(c string, o *homeObs) {
+		o.unreadable = true
+		o.present = false
+		admitted[c] = lastAdmitted[c]
+	}
 	for _, c := range candidates {
 		o := &homeObs{}
 		obs[c] = o
 		cl, ok := r.Clusters.ClientFor(c)
 		if !ok {
+			markUnreadable(c, o)
 			continue // disconnected; retry next poll
 		}
 		derived, ok, err := r.getDerived(ctx, c, isvc)
 		if err != nil {
-			r.Log.Error(err, "split: reading derived failed; skipping observation", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
+			r.Log.Error(err, "split: reading derived failed; keeping last-known home state", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
+			markUnreadable(c, o)
 			continue
 		}
 		if !ok {
@@ -543,8 +617,8 @@ func (r *Reconciler) reconcileSplit(ctx context.Context, isvc *v1beta1.Inference
 		o.present = true
 		statuses, err := componentIRStatuses(ctx, cl, derived)
 		if err != nil {
-			r.Log.Error(err, "split: reading IR statuses failed; skipping observation", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
-			o.present = false
+			r.Log.Error(err, "split: reading IR statuses failed; keeping last-known home state", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
+			markUnreadable(c, o)
 			continue
 		}
 		o.admitted = splitAdmittedReplicas(scaleComps, statuses)
@@ -567,6 +641,19 @@ func (r *Reconciler) reconcileSplit(ctx context.Context, isvc *v1beta1.Inference
 	cands := make([]v1beta1.CandidatePlacement, 0, len(candidates))
 	for _, c := range candidates {
 		o := obs[c]
+		if o.unreadable {
+			if p, had := lastCand[c]; had {
+				cands = append(cands, p)
+				if p.Phase == v1beta1.CandidatePhaseAdmitted {
+					counted := p.AdmittedReplicas
+					if t := targets[c]; counted > t {
+						counted = t
+					}
+					admittedTotal += counted
+				}
+			}
+			continue
+		}
 		if o.sliver || targets[c] <= 0 {
 			// Sliver, or not needed (Packed floor met / trimmed away): sweep any derived.
 			if o.present {
@@ -834,12 +921,15 @@ func connectedSet(clusters ClusterClients) map[string]bool {
 // instance) prevents a PD service from being declared placed while only the
 // engine has cleared Kueue and the decoder is still gated. When several clusters
 // fully admit near-simultaneously the lowest-named candidate wins — a
-// deterministic tie-break, not literally "first in wall-clock time".
+// deterministic tie-break, not literally "first in wall-clock time". A candidate
+// whose derived or IR status cannot be read this pass is skipped, so one
+// unreachable cluster cannot deny the race to its healthy peers.
 func (r *Reconciler) findWinner(ctx context.Context, isvc *v1beta1.InferenceService, placed []string) (string, error) {
 	for _, c := range placed {
 		derived, ok, err := r.getDerived(ctx, c, isvc)
 		if err != nil {
-			return "", err
+			r.Log.Error(err, "race: reading derived failed; skipping candidate", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
+			continue
 		}
 		if !ok {
 			continue
@@ -852,7 +942,8 @@ func (r *Reconciler) findWinner(ctx context.Context, isvc *v1beta1.InferenceServ
 		// c (source of truth; the derived ISVC no longer mirrors it).
 		statuses, err := componentIRStatuses(ctx, cl, derived)
 		if err != nil {
-			return "", err
+			r.Log.Error(err, "race: reading IR statuses failed; skipping candidate", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
+			continue
 		}
 		if AllComponentsAdmitted(derived, statuses) {
 			return c, nil
@@ -1264,12 +1355,12 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, opts ...ConvergeOption) 
 	return b.Complete(r)
 }
 
-// validateWiring rejects a mis-wired reconciler at setup. The live reader is a
-// correctness dependency, not a convenience: without it the conflict-retry loop
-// re-reads a stale cached base and burns its whole backoff on the same 409.
+// validateWiring rejects a mis-wired reconciler at setup. The
+// authoritative (live) reader is a correctness dependency — see
+// workload/types AuthoritativeReader.
 func (r *Reconciler) validateWiring() error {
 	if r.APIReader == nil {
-		return fmt.Errorf("placement: APIReader (live, uncached reader) must be wired")
+		return fmt.Errorf("placement: APIReader (AuthoritativeReader) must be wired")
 	}
 	return nil
 }

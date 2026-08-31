@@ -2,6 +2,7 @@ package traffic
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -18,13 +19,20 @@ import (
 type classifyStub struct {
 	name     string
 	supports sets.Set[string]
+	fields   sets.Set[string]
 	prefixes []string
 }
 
 func (c *classifyStub) Name() string                           { return c.name }
 func (c *classifyStub) SupportedAnnotations() sets.Set[string] { return c.supports }
 func (c *classifyStub) SupportedPassthroughPrefixes() []string { return c.prefixes }
-func (c *classifyStub) Watches() client.Object                 { panic("Watches not relevant") }
+func (c *classifyStub) SupportedTrafficFields() sets.Set[string] {
+	if c.fields == nil {
+		return sets.New[string]()
+	}
+	return c.fields
+}
+func (c *classifyStub) Watches() client.Object { panic("Watches not relevant") }
 func (c *classifyStub) Translate(
 	_ *v1beta1.InferenceService, _ []string, _ *ResolvedIntent,
 ) (client.Object, []string, error) {
@@ -170,5 +178,73 @@ func TestComputeUnsupportedAnnotations_ForeignNamespaceIgnored(t *testing.T) {
 	}
 	if got := ComputeUnsupportedAnnotations(in, tr); got != nil {
 		t.Fatalf("foreign annotations must be ignored, got: %v", got)
+	}
+}
+
+func TestComputeUnsupportedTrafficFields_AllDeclared_ReturnsNil(t *testing.T) {
+	tr := &classifyStub{
+		name: "envoy-gateway",
+		fields: sets.New(
+			constants.TrafficCapabilityAlgorithm,
+			constants.TrafficCapabilityHashHeader,
+			constants.TrafficCapabilityEndpointOverrideHeader,
+		),
+	}
+	alg := v1beta1.LoadBalancingTypeConsistentHash
+	spec := &v1beta1.TrafficSpec{
+		Algorithm: &alg,
+		ConsistentHash: &v1beta1.ConsistentHashSpec{
+			Type:    v1beta1.HashTypeHeader,
+			Headers: []v1beta1.HashHeader{{Name: "x-tenant"}},
+		},
+		EndpointOverride: &v1beta1.EndpointOverrideSpec{
+			Type:    v1beta1.EndpointOverrideTypeHeader,
+			Headers: []v1beta1.HashHeader{{Name: "x-endpoint"}},
+		},
+	}
+	if got := ComputeUnsupportedTrafficFields(spec, tr); got != nil {
+		t.Fatalf("all fields declared -> nil, got %v", got)
+	}
+}
+
+func TestComputeUnsupportedTrafficFields_UndeclaredFieldsSurface(t *testing.T) {
+	// DestinationRule-shaped translator: hashes a single header and
+	// has no endpoint-override analogue. Both dropped behaviors must
+	// surface, sorted.
+	tr := &classifyStub{
+		name: "istio",
+		fields: sets.New(
+			constants.TrafficCapabilityAlgorithm,
+			constants.TrafficCapabilityHashHeader,
+		),
+	}
+	alg := v1beta1.LoadBalancingTypeConsistentHash
+	spec := &v1beta1.TrafficSpec{
+		Algorithm: &alg,
+		ConsistentHash: &v1beta1.ConsistentHashSpec{
+			Type:    v1beta1.HashTypeHeader,
+			Headers: []v1beta1.HashHeader{{Name: "x-tenant"}, {Name: "x-session"}},
+		},
+		EndpointOverride: &v1beta1.EndpointOverrideSpec{
+			Type:    v1beta1.EndpointOverrideTypeHeader,
+			Headers: []v1beta1.HashHeader{{Name: "x-endpoint"}},
+		},
+	}
+	got := ComputeUnsupportedTrafficFields(spec, tr)
+	want := []string{
+		constants.TrafficCapabilityHashMultipleHeaders,
+		constants.TrafficCapabilityEndpointOverrideHeader,
+	}
+	sortedWant := append([]string(nil), want...)
+	sort.Strings(sortedWant)
+	if !reflect.DeepEqual(got, sortedWant) {
+		t.Fatalf("got %v, want %v", got, sortedWant)
+	}
+}
+
+func TestComputeUnsupportedTrafficFields_NilTraffic_ReturnsNil(t *testing.T) {
+	tr := &classifyStub{name: "istio", fields: sets.New[string]()}
+	if got := ComputeUnsupportedTrafficFields(nil, tr); got != nil {
+		t.Fatalf("nil traffic -> nil, got %v", got)
 	}
 }

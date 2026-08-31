@@ -58,7 +58,6 @@ func TestExternalServiceReconciler_shouldCreateExternalService(t *testing.T) {
 				},
 				Spec: v1beta1.InferenceServiceSpec{
 					Router: &v1beta1.RouterSpec{},
-					Model:  &v1beta1.ModelRef{Name: "test-model"},
 				},
 			},
 			ingressConfig: &controllerconfig.IngressConfig{
@@ -66,23 +65,6 @@ func TestExternalServiceReconciler_shouldCreateExternalService(t *testing.T) {
 			},
 			expected:    true,
 			description: "should create external service when ingress is disabled and router component exists",
-		},
-		{
-			name: "should create when ingress disabled and has engine",
-			isvc: &v1beta1.InferenceService{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-service",
-					Namespace: "default",
-				},
-				Spec: v1beta1.InferenceServiceSpec{
-					Engine: &v1beta1.EngineSpec{},
-				},
-			},
-			ingressConfig: &controllerconfig.IngressConfig{
-				DisableIngressCreation: true,
-			},
-			expected:    true,
-			description: "should create external service when ingress is disabled and engine component exists",
 		},
 		{
 			name: "should not create when ingress enabled",
@@ -310,7 +292,7 @@ func TestExternalServiceReconciler_buildExternalService(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1beta1.InferenceServiceSpec{
-					Model: &v1beta1.ModelRef{Name: "test-model"},
+					Engine: &v1beta1.EngineSpec{},
 				},
 			},
 			internalService:    nil, // No internal service
@@ -582,7 +564,6 @@ func TestExternalServiceReconciler_getDeploymentMode(t *testing.T) {
 						Leader: &v1beta1.LeaderSpec{},
 						Worker: &v1beta1.WorkerSpec{},
 					},
-					Model: &v1beta1.ModelRef{Name: "test-model"},
 				},
 			},
 			expectedMode: constants.MultiNode,
@@ -599,7 +580,6 @@ func TestExternalServiceReconciler_getDeploymentMode(t *testing.T) {
 					Engine: &v1beta1.EngineSpec{
 						Leader: &v1beta1.LeaderSpec{},
 					},
-					Model: &v1beta1.ModelRef{Name: "test-model"},
 				},
 			},
 			expectedMode: constants.MultiNode,
@@ -614,25 +594,10 @@ func TestExternalServiceReconciler_getDeploymentMode(t *testing.T) {
 				},
 				Spec: v1beta1.InferenceServiceSpec{
 					Engine: &v1beta1.EngineSpec{},
-					Model:  &v1beta1.ModelRef{Name: "test-model"},
 				},
 			},
 			expectedMode: constants.RawDeployment,
 			description:  "should detect raw deployment for regular engine without leader/worker",
-		},
-		{
-			name: "raw deployment for engine",
-			isvc: &v1beta1.InferenceService{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-service",
-					Namespace: "default",
-				},
-				Spec: v1beta1.InferenceServiceSpec{
-					Model: &v1beta1.ModelRef{Name: "test-model"},
-				},
-			},
-			expectedMode: constants.RawDeployment,
-			description:  "should detect raw deployment for engine-only spec",
 		},
 	}
 

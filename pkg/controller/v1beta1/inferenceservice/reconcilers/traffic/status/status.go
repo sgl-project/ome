@@ -15,6 +15,7 @@ package status
 
 import (
 	"fmt"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -127,13 +128,21 @@ type BuildArgs struct {
 	// (wrong pass-through prefix, or a per-key annotation outside
 	// SupportedAnnotations). Sorted for deterministic messages.
 	//
-	// When non-empty, Build adds a second condition of type
-	// BackendPolicyUnsupportedFields=True with the list in the
-	// message. The condition is omitted when this slice is empty
-	// (positive-polarity: absence = nothing dropped) and on noop /
-	// TranslationFailed branches where the primary condition already
-	// explains the situation.
+	// When this or UnsupportedFields is non-empty, Build adds a second
+	// condition of type BackendPolicyUnsupportedFields=True with both
+	// lists in the message. The condition is omitted when both slices
+	// are empty (positive-polarity: absence = nothing dropped) and on
+	// noop / TranslationFailed branches where the primary condition
+	// already explains the situation.
 	UnsupportedAnnotations []string
+
+	// UnsupportedFields lists typed spec.traffic capability tokens the
+	// operator declared that the active translator does not implement
+	// (e.g. endpointOverride on a DestinationRule backend). Sorted for
+	// deterministic messages. Feeds the same
+	// BackendPolicyUnsupportedFields condition as
+	// UnsupportedAnnotations.
+	UnsupportedFields []string
 
 	// ObservedGeneration is the InferenceService.metadata.generation
 	// observed when this reconcile started. Stamped into the
@@ -185,12 +194,13 @@ func Build(args BuildArgs) *v1beta1.TrafficStatus {
 
 // buildUnsupportedFieldsCondition returns the
 // BackendPolicyUnsupportedFields condition and true when the active
-// translator dropped operator-declared annotations. Returns ok=false
-// when there is nothing to report, or when another condition already
-// explains the situation (noop / TranslationFailed) and listing the
-// dropped keys would be redundant noise.
+// translator dropped operator-declared typed spec.traffic fields or
+// annotations. Returns ok=false when there is nothing to report, or
+// when another condition already explains the situation (noop /
+// TranslationFailed) and listing the dropped keys would be redundant
+// noise.
 func buildUnsupportedFieldsCondition(args BuildArgs) (metav1.Condition, bool) {
-	if len(args.UnsupportedAnnotations) == 0 {
+	if len(args.UnsupportedAnnotations) == 0 && len(args.UnsupportedFields) == 0 {
 		return metav1.Condition{}, false
 	}
 	if args.TranslateErr != nil {
@@ -199,6 +209,19 @@ func buildUnsupportedFieldsCondition(args BuildArgs) (metav1.Condition, bool) {
 	if args.TranslatorName == NoopTranslatorName {
 		return metav1.Condition{}, false
 	}
+	var parts []string
+	if len(args.UnsupportedFields) > 0 {
+		parts = append(parts, fmt.Sprintf(
+			"%d typed spec.traffic field(s) %v",
+			len(args.UnsupportedFields), args.UnsupportedFields,
+		))
+	}
+	if len(args.UnsupportedAnnotations) > 0 {
+		parts = append(parts, fmt.Sprintf(
+			"%d operator-declared annotation(s) %v",
+			len(args.UnsupportedAnnotations), args.UnsupportedAnnotations,
+		))
+	}
 	return metav1.Condition{
 		Type:               v1beta1.TrafficConditionBackendPolicyUnsupportedFields,
 		Status:             metav1.ConditionTrue,
@@ -206,8 +229,8 @@ func buildUnsupportedFieldsCondition(args BuildArgs) (metav1.Condition, bool) {
 		LastTransitionTime: args.Now,
 		ObservedGeneration: args.ObservedGeneration,
 		Message: fmt.Sprintf(
-			"translator %q dropped %d operator-declared annotation(s): %v",
-			args.TranslatorName, len(args.UnsupportedAnnotations), args.UnsupportedAnnotations,
+			"translator %q does not honor %s",
+			args.TranslatorName, strings.Join(parts, "; "),
 		),
 	}, true
 }

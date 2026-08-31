@@ -49,10 +49,10 @@ func IsPodDrained(ctx context.Context, reader client.Reader, namespace, serviceN
 		// Distinguish "no Service at all" (drain trivially complete —
 		// nothing routes to anything) from "Service exists but slices
 		// haven't propagated yet" (cache cold-start, kube-controller-
-		// manager lag, no matching pods yet). Without this
-		// disambiguation the latter is indistinguishable from the
-		// former and fails open, reporting drain done while a serving
-		// pod is about to get an image patch or delete.
+		// manager lag, no matching pods yet). The latter looks the
+		// same as the former without this disambiguation, and we'd
+		// previously fail-open and report drain done while a serving
+		// pod was about to get an image patch or delete.
 		return drainedWhenSliceListEmpty(ctx, reader, namespace, serviceName)
 	}
 

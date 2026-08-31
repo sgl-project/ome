@@ -4,18 +4,20 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	istionetworking "istio.io/api/networking/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -100,6 +102,79 @@ func TestDefaultOptions(t *testing.T) {
 	assert.False(t, opts.enableWebhook)
 	assert.Equal(t, ":8081", opts.probeAddr)
 	assert.Equal(t, LeaderElectionNamespace, opts.leaderElectionNamespace)
+	// Multi-cluster topology/identity/security flag defaults (the tunables moved
+	// to the ConfigMap; these five stay flags).
+	assert.False(t, opts.enableMultiCluster)
+	assert.Equal(t, "", opts.multiClusterRole)
+	assert.False(t, opts.allowExecCredentials)
+	assert.Equal(t, "aws,gke-gcloud-auth-plugin,kubelogin", opts.execCredentialAllowedCmds)
+	assert.Equal(t, "", opts.placementControlPlaneID)
+	// No in-code default: the chart is the source of truth, and zero leaves
+	// controller-runtime's own default in place.
+	assert.Zero(t, opts.kubeAPIQPS)
+	assert.Zero(t, opts.kubeAPIBurst)
+}
+
+func TestGetOptionsKubeAPIRateLimits(t *testing.T) {
+	oldArgs := os.Args
+	defer func() {
+		os.Args = oldArgs
+		flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	}()
+
+	flag.CommandLine = flag.NewFlagSet("cmd", flag.ExitOnError)
+	os.Args = []string{"cmd", "--kube-api-qps=50", "--kube-api-burst=100"}
+
+	o := GetOptions()
+	assert.Equal(t, 50.0, o.kubeAPIQPS)
+	assert.Equal(t, 100, o.kubeAPIBurst)
+}
+
+func TestApplyKubeAPIRateLimits(t *testing.T) {
+	cfg := &rest.Config{}
+	applyKubeAPIRateLimits(cfg, 50, 100)
+	assert.EqualValues(t, 50, cfg.QPS)
+	assert.Equal(t, 100, cfg.Burst)
+
+	// Zero must not clobber a value already on the config — that would silently
+	// drop the caller below controller-runtime's default.
+	unset := &rest.Config{QPS: 20, Burst: 30}
+	applyKubeAPIRateLimits(unset, 0, 0)
+	assert.EqualValues(t, 20, unset.QPS)
+	assert.Equal(t, 30, unset.Burst)
+
+	// The two limits are independent.
+	qpsOnly := &rest.Config{QPS: 20, Burst: 30}
+	applyKubeAPIRateLimits(qpsOnly, 50, 0)
+	assert.EqualValues(t, 50, qpsOnly.QPS)
+	assert.Equal(t, 30, qpsOnly.Burst)
+}
+
+// TestGetOptionsMultiCluster asserts the five retained multi-cluster flags parse
+// and bind onto Options (the tunables are ConfigMap-driven and tested separately).
+func TestGetOptionsMultiCluster(t *testing.T) {
+	oldArgs := os.Args
+	defer func() {
+		os.Args = oldArgs
+		flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	}()
+
+	flag.CommandLine = flag.NewFlagSet("cmd", flag.ExitOnError)
+	os.Args = []string{
+		"cmd",
+		"--enable-multicluster",
+		"--multicluster-role=control-plane",
+		"--allow-exec-credentials",
+		"--exec-credential-allowed-commands=aws,foo",
+		"--placement-control-plane-id=cp-1",
+	}
+
+	o := GetOptions()
+	assert.True(t, o.enableMultiCluster)
+	assert.Equal(t, "control-plane", o.multiClusterRole)
+	assert.True(t, o.allowExecCredentials)
+	assert.Equal(t, "aws,foo", o.execCredentialAllowedCmds)
+	assert.Equal(t, "cp-1", o.placementControlPlaneID)
 }
 
 // Mock for testing CRD availability
@@ -165,6 +240,36 @@ func TestHealthProbeConfiguration(t *testing.T) {
 	assert.Equal(t, ":9091", customOpts.probeAddr, "Custom health probe address should be set correctly")
 }
 
+func TestManagerProbeChecker(t *testing.T) {
+	t.Run("webhook disabled", func(t *testing.T) {
+		checker := managerProbeChecker(false, func() webhook.Server {
+			t.Fatal("webhook server getter was called")
+			return nil
+		})
+		require.NoError(t, checker(nil))
+	})
+
+	t.Run("webhook enabled", func(t *testing.T) {
+		want := errors.New("webhook probe")
+		calls := 0
+		checker := managerProbeChecker(true, func() webhook.Server {
+			calls++
+			return webhookServerWithChecker{checker: func(*http.Request) error { return want }}
+		})
+		require.Equal(t, 1, calls)
+		require.ErrorIs(t, checker(nil), want)
+	})
+}
+
+type webhookServerWithChecker struct {
+	webhook.Server
+	checker healthz.Checker
+}
+
+func (s webhookServerWithChecker) StartedChecker() healthz.Checker {
+	return s.checker
+}
+
 func TestWebhookConfiguration(t *testing.T) {
 	opts := DefaultOptions()
 	assert.Equal(t, 9443, opts.webhookPort, "Default webhook port should be 9443")
@@ -188,12 +293,6 @@ func TestMetricsConfiguration(t *testing.T) {
 	assert.Equal(t, ":9090", customOpts.metricsAddr, "Custom metrics address should be set correctly")
 }
 
-func TestInit(t *testing.T) {
-	// Test that init() function sets the Istio API client flags correctly
-	require.True(t, istionetworking.VirtualServiceUnmarshaler.AllowUnknownFields)
-	require.True(t, istionetworking.GatewayUnmarshaler.AllowUnknownFields)
-}
-
 // TestManagerSetup tests the manager configuration
 func TestManagerSetup(t *testing.T) {
 	tests := []struct {
@@ -206,8 +305,8 @@ func TestManagerSetup(t *testing.T) {
 		{
 			name: "valid configuration",
 			opts: Options{
-				metricsAddr:             ":18080",
-				probeAddr:               ":18081",
+				metricsAddr:             "127.0.0.1:0",
+				probeAddr:               "127.0.0.1:0",
 				webhookPort:             18443,
 				leaderElectionNamespace: LeaderElectionNamespace,
 			},
@@ -216,8 +315,8 @@ func TestManagerSetup(t *testing.T) {
 		{
 			name: "custom metrics port",
 			opts: Options{
-				metricsAddr:             ":19090",
-				probeAddr:               ":19081",
+				metricsAddr:             "127.0.0.1:0",
+				probeAddr:               "127.0.0.1:0",
 				webhookPort:             19443,
 				leaderElectionNamespace: LeaderElectionNamespace,
 			},
@@ -275,6 +374,184 @@ func createMockConfigMap() *corev1.ConfigMap {
 				"ingressService": "test-service"
 			}`,
 		},
+	}
+}
+
+func TestLoadPodBatchSizes(t *testing.T) {
+	tests := []struct {
+		name          string
+		configMapData map[string]string
+		omitConfigMap bool
+		wantScaleUp   int32
+		wantScaleDown int32
+		wantInterval  time.Duration
+		wantError     string
+	}{
+		{
+			name: "positive configured values",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{"scaleUpPodBatchSize":37,"scaleDownPodBatchSize":41,"scaleDownRequeueInterval":"7s"}`,
+			},
+			wantScaleUp:   37,
+			wantScaleDown: 41,
+			wantInterval:  7 * time.Second,
+		},
+		{
+			name: "scale-up field does not configure scale-down",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{"scaleUpPodBatchSize":37}`,
+			},
+			wantScaleUp: 37,
+		},
+		{
+			name: "scale-down field does not configure scale-up",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{"scaleDownPodBatchSize":41}`,
+			},
+			wantScaleDown: 41,
+		},
+		{
+			name: "requeue interval does not configure either batch size",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{"scaleDownRequeueInterval":"11s"}`,
+			},
+			wantInterval: 11 * time.Second,
+		},
+		{
+			name:          "absent lifecycle key preserves compatibility behavior",
+			configMapData: map[string]string{},
+		},
+		{
+			name: "absent field preserves compatibility behavior",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{}`,
+			},
+		},
+		{
+			name:          "missing ConfigMap is rejected",
+			omitConfigMap: true,
+			wantError:     `configmaps "inferenceservice-config" not found`,
+		},
+		{
+			name: "malformed lifecycle JSON is rejected",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{not-json`,
+			},
+			wantError: "unable to parse lifecycle config json",
+		},
+		{
+			name: "zero scale-up is rejected",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{"scaleUpPodBatchSize":0}`,
+			},
+			wantError: "must be > 0, got 0",
+		},
+		{
+			name: "negative scale-up is rejected",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{"scaleUpPodBatchSize":-1}`,
+			},
+			wantError: "must be > 0, got -1",
+		},
+		{
+			name: "zero scale-down is rejected",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{"scaleDownPodBatchSize":0}`,
+			},
+			wantError: "must be > 0, got 0",
+		},
+		{
+			name: "negative scale-down is rejected",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{"scaleDownPodBatchSize":-1}`,
+			},
+			wantError: "must be > 0, got -1",
+		},
+		{
+			name: "malformed scale-down type is rejected",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{"scaleDownPodBatchSize":"many"}`,
+			},
+			wantError: "cannot unmarshal string",
+		},
+		{
+			name: "malformed requeue interval is rejected",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{"scaleDownRequeueInterval":"many"}`,
+			},
+			wantError: "lifecycle.scaleDownRequeueInterval",
+		},
+		{
+			name: "explicit empty requeue interval is rejected",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{"scaleDownRequeueInterval":""}`,
+			},
+			wantError: "lifecycle.scaleDownRequeueInterval",
+		},
+		{
+			name: "zero requeue interval is rejected",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{"scaleDownRequeueInterval":"0s"}`,
+			},
+			wantError: "must be > 0, got 0s",
+		},
+		{
+			name: "negative requeue interval is rejected",
+			configMapData: map[string]string{
+				controllerconfig.LifecycleConfigName: `{"scaleDownRequeueInterval":"-1s"}`,
+			},
+			wantError: "must be > 0, got -1s",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clientset := fake.NewSimpleClientset()
+			if !tt.omitConfigMap {
+				_, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Create(
+					context.Background(),
+					&corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      constants.InferenceServiceConfigMapName,
+							Namespace: constants.OMENamespace,
+						},
+						Data: tt.configMapData,
+					},
+					metav1.CreateOptions{},
+				)
+				require.NoError(t, err)
+			}
+
+			before := len(clientset.Actions())
+			got, err := loadPodBatchSizes(clientset)
+			if tt.wantError != "" {
+				require.ErrorContains(t, err, tt.wantError)
+				assert.Equal(t, controllerconfig.PodBatchSizes{}, got)
+			} else {
+				require.NoError(t, err)
+				if tt.wantScaleUp == 0 {
+					assert.Nil(t, got.ScaleUp)
+				} else {
+					require.NotNil(t, got.ScaleUp)
+					assert.Equal(t, tt.wantScaleUp, *got.ScaleUp)
+				}
+				if tt.wantScaleDown == 0 {
+					assert.Nil(t, got.ScaleDown)
+				} else {
+					require.NotNil(t, got.ScaleDown)
+					assert.Equal(t, tt.wantScaleDown, *got.ScaleDown)
+				}
+				assert.Equal(t, tt.wantInterval, got.ScaleDownRequeueInterval)
+			}
+
+			getCount := 0
+			for _, action := range clientset.Actions()[before:] {
+				if action.GetVerb() == "get" && action.GetResource().Resource == "configmaps" {
+					getCount++
+				}
+			}
+			assert.Equal(t, 1, getCount, "scale settings must share one ConfigMap GET")
+		})
 	}
 }
 

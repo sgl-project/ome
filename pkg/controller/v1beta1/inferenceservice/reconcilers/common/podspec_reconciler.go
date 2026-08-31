@@ -94,8 +94,13 @@ func (r *PodSpecReconciler) ReconcileWorkerPodSpec(
 			container = &podSpec.Containers[containerIdx]
 		}
 
-		// Merge with leader's runner container
-		mergedContainer, err := isvcutils.MergeRuntimeContainers(container, &leaderRunnerSpec.Container)
+		// Merge with leader's runner container. Argument order: runtime
+		// (CSR runner) is the base, user (ISVC worker) is the strategic-
+		// merge override — predictor wins on field-level conflicts so a
+		// user-pinned image overrides the runtime default. With
+		// omitempty on Container.Image, an unset ISVC image cleanly
+		// falls back to the runtime image.
+		mergedContainer, err := isvcutils.MergeRuntimeContainers(&leaderRunnerSpec.Container, container)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to merge worker container with leader runner")
 		}
@@ -144,8 +149,13 @@ func (r *PodSpecReconciler) resolveContainer(podSpec *v1.PodSpec, runnerSpec *v1
 			container = &podSpec.Containers[containerIdx]
 		}
 
-		// Merge with runner container
-		mergedContainer, err := isvcutils.MergeRuntimeContainers(container, &runnerSpec.Container)
+		// Merge with runner container. Argument order: runtime (CSR
+		// runner) is the base, user (ISVC container) is the strategic-
+		// merge override — predictor wins on field-level conflicts so a
+		// user-pinned image overrides the runtime default. With
+		// omitempty on Container.Image, an unset ISVC image cleanly
+		// falls back to the runtime image.
+		mergedContainer, err := isvcutils.MergeRuntimeContainers(&runnerSpec.Container, container)
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "failed to merge runner container")
 		}

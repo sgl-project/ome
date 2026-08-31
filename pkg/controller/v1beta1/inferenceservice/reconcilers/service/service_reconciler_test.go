@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -102,7 +103,6 @@ func TestBuildServiceFiltersAnnotations(t *testing.T) {
 				Name:      "test-service",
 				Namespace: "default",
 				Annotations: map[string]string{
-					constants.ModelInitInjectionKey:        "true",
 					constants.FineTunedAdapterInjectionKey: "weight-name",
 					constants.ServingSidecarInjectionKey:   "true",
 					"ome.io/base-model-name":               "test-model",
@@ -112,7 +112,6 @@ func TestBuildServiceFiltersAnnotations(t *testing.T) {
 				"ome.io/base-model-name": "test-model",
 			},
 			unexpectedAnnotations: []string{
-				constants.ModelInitInjectionKey,
 				constants.FineTunedAdapterInjectionKey,
 				constants.ServingSidecarInjectionKey,
 			},
@@ -122,13 +121,13 @@ func TestBuildServiceFiltersAnnotations(t *testing.T) {
 				Name:      "test-service",
 				Namespace: "default",
 				Annotations: map[string]string{
-					"k8s.grafana.com/scrape":        "true",
-					"networking.gke.io/interfaces":  "[...]",
-					constants.ModelInitInjectionKey: "true",
-					"rdma.ome.io/auto-inject":       "true",
-					"ome.io/base-model-name":        "test-model",
-					"ome.io/service-type":           "ClusterIP",
-					"meta.helm.sh/release-name":     "test",
+					"k8s.grafana.com/scrape":               "true",
+					"networking.gke.io/interfaces":         "[...]",
+					constants.FineTunedAdapterInjectionKey: "weight-name",
+					"rdma.ome.io/auto-inject":              "true",
+					"ome.io/base-model-name":               "test-model",
+					"ome.io/service-type":                  "ClusterIP",
+					"meta.helm.sh/release-name":            "test",
 				},
 			},
 			expectedAnnotations: map[string]string{
@@ -139,7 +138,7 @@ func TestBuildServiceFiltersAnnotations(t *testing.T) {
 			unexpectedAnnotations: []string{
 				"k8s.grafana.com/scrape",
 				"networking.gke.io/interfaces",
-				constants.ModelInitInjectionKey,
+				constants.FineTunedAdapterInjectionKey,
 				"rdma.ome.io/auto-inject",
 			},
 		},
@@ -302,6 +301,7 @@ func TestBuildServiceWithEmptyAnnotations(t *testing.T) {
 		t.Errorf("Expected empty annotations, got %v", service.Annotations)
 	}
 }
+
 func TestBuildServiceSetsConfiguredPortAppProtocols(t *testing.T) {
 	podSpec := &corev1.PodSpec{
 		Containers: []corev1.Container{{
@@ -376,5 +376,128 @@ func TestServiceReconcilerAddsAppProtocolToExistingService(t *testing.T) {
 	}
 	if got.Spec.Ports[0].AppProtocol == nil || *got.Spec.Ports[0].AppProtocol != "kubernetes.io/h2c" {
 		t.Errorf("appProtocol: got %v, want kubernetes.io/h2c", got.Spec.Ports[0].AppProtocol)
+	}
+}
+
+// TestServiceReconciler_OMENativeShape verifies the top-level
+// ServiceReconciler emits the per-Component stable Service the
+// OMENative dispatch path expects. OMENative ISVCs route through this
+// same reconciler rather than an omenative-side duplicate.
+// This test pins the contract: given an OMENative-shape selector +
+// Component meta name, the reconciler emits a Service with the
+// expected Name, Namespace, Selector (including the
+// LabelManagedBy=OMENative discriminator), Type, OwnerReferences, and
+// derived Ports. Object-presence + spec only — no traffic-routing
+// assertions.
+func TestServiceReconciler_OMENativeShape(t *testing.T) {
+	ns := "prod"
+	isvcName := "llama-70b"
+	component := v1beta1.EngineComponent
+	serviceName := isvcName + "-" + string(component) // matches query.StableServiceName
+
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add corev1: %v", err)
+	}
+	if err := v1beta1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add v1beta1: %v", err)
+	}
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      isvcName,
+			Namespace: ns,
+			UID:       types.UID(isvcName + "-uid"),
+		},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(isvc).
+		Build()
+
+	// componentMeta as the OMENative caller assembles it: name matches
+	// query.StableServiceName(isvcName, component), with the
+	// per-Component OwnerReferences stamped on it (mirrors the
+	// reconcileOMENativeSubresources wiring in
+	// components/{engine,decoder,router}.go).
+	componentMeta := metav1.ObjectMeta{
+		Name:      serviceName,
+		Namespace: ns,
+		OwnerReferences: []metav1.OwnerReference{
+			*metav1.NewControllerRef(isvc, v1beta1.SchemeGroupVersion.WithKind("InferenceService")),
+		},
+	}
+	// OMENative-shape selector: three keys including the
+	// LabelManagedBy=OMENative discriminator. This is what the
+	// omenative.componentSelector helper emits.
+	selector := map[string]string{
+		constants.InferenceServicePodLabelKey: isvcName,
+		constants.OMEComponentLabel:           string(component),
+		"ome.io/managed-by":                   "OMENative",
+	}
+	// Rendered PodSpec with a single container declaring port 8080 —
+	// matches what the OMENative renderer emits today.
+	podSpec := &corev1.PodSpec{
+		Containers: []corev1.Container{{
+			Name: "runner",
+			Ports: []corev1.ContainerPort{{
+				Name:          "http",
+				ContainerPort: 8080,
+				Protocol:      corev1.ProtocolTCP,
+			}},
+		}},
+	}
+
+	componentExt := &v1beta1.ComponentExtensionSpec{
+		ServicePortAppProtocols: map[string]string{"http": "kubernetes.io/h2c"},
+	}
+	sr := NewServiceReconciler(c, scheme, componentMeta, componentExt, podSpec, selector)
+	if _, err := sr.Reconcile(); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	got := &corev1.Service{}
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: ns, Name: serviceName}, got); err != nil {
+		t.Fatalf("get Service after reconcile: %v", err)
+	}
+
+	if got.Name != serviceName {
+		t.Errorf("Service.Name: got %q want %q", got.Name, serviceName)
+	}
+	if got.Namespace != ns {
+		t.Errorf("Service.Namespace: got %q want %q", got.Namespace, ns)
+	}
+	if got.Spec.Type != corev1.ServiceTypeClusterIP {
+		t.Errorf("Service.Spec.Type: got %q want ClusterIP", got.Spec.Type)
+	}
+	// LabelManagedBy is load-bearing for the OMENative path: scopes the
+	// Service to OMENative-managed pods so a same-component mode-switch
+	// (engine OMENative → engine RawDeployment) doesn't strand traffic
+	// on the wrong pod set. Drop the assertion if/when the discriminator
+	// becomes provably unnecessary.
+	if diff := cmp.Diff(selector, got.Spec.Selector); diff != "" {
+		t.Errorf("Service.Spec.Selector (-want +got):\n%s", diff)
+	}
+	if len(got.Spec.Ports) != 1 {
+		t.Fatalf("Service.Spec.Ports: got %d ports want 1", len(got.Spec.Ports))
+	}
+	port := got.Spec.Ports[0]
+	if port.Name != "http" {
+		t.Errorf("Service.Spec.Ports[0].Name: got %q want http", port.Name)
+	}
+	if port.Port != 8080 {
+		t.Errorf("Service.Spec.Ports[0].Port: got %d want 8080", port.Port)
+	}
+	if port.AppProtocol == nil || *port.AppProtocol != "kubernetes.io/h2c" {
+		t.Errorf("Service.Spec.Ports[0].AppProtocol: got %v want kubernetes.io/h2c", port.AppProtocol)
+	}
+	if len(got.OwnerReferences) != 1 {
+		t.Fatalf("Service.OwnerReferences: got %d want 1", len(got.OwnerReferences))
+	}
+	ref := got.OwnerReferences[0]
+	if ref.Kind != "InferenceService" || ref.Name != isvcName {
+		t.Errorf("Service.OwnerReferences[0]: got Kind=%q Name=%q want InferenceService/%s", ref.Kind, ref.Name, isvcName)
+	}
+	if ref.Controller == nil || !*ref.Controller {
+		t.Errorf("Service.OwnerReferences[0].Controller: want true, got %v", ref.Controller)
 	}
 }

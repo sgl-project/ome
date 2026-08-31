@@ -407,6 +407,74 @@ func TestBuild_UnsupportedFields_AddsSecondCondition(t *testing.T) {
 	}
 }
 
+func TestBuild_UnsupportedTypedFields_AddsSecondCondition(t *testing.T) {
+	policy := newEmittedPolicy("foo-dr")
+	got := Build(BuildArgs{
+		TranslatorName:    "istio",
+		HasIntent:         true,
+		EmittedPolicy:     policy,
+		UnsupportedFields: []string{"spec.traffic.endpointOverride.type=Header"},
+		Now:               fixedNow,
+	})
+	if len(got.Conditions) != 2 {
+		t.Fatalf("expected 2 conditions, got %d: %+v", len(got.Conditions), got.Conditions)
+	}
+	var uc *metav1.Condition
+	for i := range got.Conditions {
+		if got.Conditions[i].Type == v1beta1.TrafficConditionBackendPolicyUnsupportedFields {
+			uc = &got.Conditions[i]
+			break
+		}
+	}
+	if uc == nil {
+		t.Fatalf("BackendPolicyUnsupportedFields condition missing: %+v", got.Conditions)
+	}
+	if uc.Status != metav1.ConditionTrue {
+		t.Fatalf("Status = %q, want True", uc.Status)
+	}
+	if uc.Reason != v1beta1.TrafficReasonUnsupportedField {
+		t.Fatalf("Reason = %q, want UnsupportedField", uc.Reason)
+	}
+	// The condition must name both the active translator and the
+	// dropped typed field so operators know what was ignored and why.
+	if !strings.Contains(uc.Message, "istio") {
+		t.Fatalf("Message should name the active translator: %q", uc.Message)
+	}
+	if !strings.Contains(uc.Message, "spec.traffic.endpointOverride.type=Header") {
+		t.Fatalf("Message should name the dropped typed field: %q", uc.Message)
+	}
+}
+
+func TestBuild_UnsupportedTypedFieldsAndAnnotations_SingleMergedCondition(t *testing.T) {
+	policy := newEmittedPolicy("foo-dr")
+	got := Build(BuildArgs{
+		TranslatorName:         "istio",
+		HasIntent:              true,
+		EmittedPolicy:          policy,
+		UnsupportedFields:      []string{"spec.traffic.consistentHash.headers(multiple)"},
+		UnsupportedAnnotations: []string{"ome.io/btp.loadBalancer.slowStart.window"},
+		Now:                    fixedNow,
+	})
+	if len(got.Conditions) != 2 {
+		t.Fatalf("both sources merge into ONE UnsupportedFields condition, got %d: %+v",
+			len(got.Conditions), got.Conditions)
+	}
+	var uc *metav1.Condition
+	for i := range got.Conditions {
+		if got.Conditions[i].Type == v1beta1.TrafficConditionBackendPolicyUnsupportedFields {
+			uc = &got.Conditions[i]
+			break
+		}
+	}
+	if uc == nil {
+		t.Fatalf("BackendPolicyUnsupportedFields condition missing: %+v", got.Conditions)
+	}
+	if !strings.Contains(uc.Message, "spec.traffic.consistentHash.headers(multiple)") ||
+		!strings.Contains(uc.Message, "ome.io/btp.loadBalancer.slowStart.window") {
+		t.Fatalf("Message should list both the typed field and the annotation: %q", uc.Message)
+	}
+}
+
 func TestBuild_UnsupportedFields_EmptyList_OmitsCondition(t *testing.T) {
 	policy := newEmittedPolicy("foo-btp")
 	got := Build(BuildArgs{

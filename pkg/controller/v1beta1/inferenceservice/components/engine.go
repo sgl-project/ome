@@ -8,20 +8,16 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/common"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/status"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/pdb"
 	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
-	"sigs.k8s.io/ome/pkg/utils"
 )
 
 var _ Component = &Engine{}
@@ -35,46 +31,22 @@ type Engine struct {
 	podSpecReconciler    *common.PodSpecReconciler
 }
 
-// NewEngine creates a new Engine component instance
-func NewEngine(
-	client client.Client,
-	clientset kubernetes.Interface,
-	scheme *runtime.Scheme,
-	inferenceServiceConfig *controllerconfig.InferenceServicesConfig,
-	deploymentMode constants.DeploymentModeType,
-	baseModel *v1beta1.BaseModelSpec,
-	baseModelMeta *metav1.ObjectMeta,
-	engineSpec *v1beta1.EngineSpec,
-	runtime *v1beta1.ServingRuntimeSpec,
-	runtimeName string,
-	supportedModelFormat *v1beta1.SupportedModelFormat,
-	acceleratorClass *v1beta1.AcceleratorClassSpec,
-	acceleratorClassName string,
-) Component {
-	base := BaseComponentFields{
-		Client:                 client,
-		Clientset:              clientset,
-		Scheme:                 scheme,
-		InferenceServiceConfig: inferenceServiceConfig,
-		DeploymentMode:         deploymentMode,
-		BaseModel:              baseModel,
-		BaseModelMeta:          baseModelMeta,
-		Runtime:                runtime,
-		RuntimeName:            runtimeName,
-		StatusManager:          status.NewStatusReconciler(),
-		Log:                    ctrl.Log.WithName("EngineReconciler"),
-		AcceleratorClass:       acceleratorClass,
-		AcceleratorClassName:   acceleratorClassName,
-		SupportedModelFormat:   supportedModelFormat,
-	}
+// NewEngine creates a new Engine component instance. deps carries the
+// process-lifetime wiring (client, live APIReader, Expectations cache,
+// recorder — any may be nil; the OMENative backend falls back to the
+// cached client, the DefaultExpectations singleton, and a no-op event
+// recorder respectively); in carries the per-reconcile pipeline output.
+func NewEngine(deps *ComponentDeps, in ComponentInputs, engineSpec *v1beta1.EngineSpec) Component {
+	base := newBaseComponentFields(deps, in, "EngineReconciler")
 
 	return &Engine{
 		BaseComponentFields: base,
 		engineSpec:          engineSpec,
 		deploymentReconciler: &common.DeploymentReconciler{
-			Client:        client,
-			Clientset:     clientset,
-			Scheme:        scheme,
+			Client:        deps.Client,
+			APIReader:     deps.APIReader,
+			Clientset:     deps.Clientset,
+			Scheme:        deps.Scheme,
 			StatusManager: base.StatusManager,
 			Log:           base.Log,
 		},
@@ -85,8 +57,8 @@ func NewEngine(
 }
 
 // Reconcile implements the Component interface for Engine
-func (e *Engine) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
-	e.Log.Info("Reconciling engine component", "inferenceService", isvc.Name, "namespace", isvc.Namespace)
+func (e *Engine) Reconcile(ctx context.Context, isvc *v1beta1.InferenceService) (ctrl.Result, error) {
+	e.Log.V(1).Info("Reconciling engine component", "inferenceService", isvc.Name, "namespace", isvc.Namespace)
 
 	// Validate engine spec
 	if e.engineSpec == nil {
@@ -101,9 +73,23 @@ func (e *Engine) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 	}
 
 	// Reconcile object metadata
-	objectMeta, err := e.reconcileObjectMeta(isvc)
+	objectMeta, err := e.reconcileObjectMeta(ctx, isvc)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile object metadata")
+	}
+	pdbRequest, err := resolveComponentPDBRequest(
+		&e.BaseComponentFields,
+		isvc,
+		e.DeploymentMode,
+		v1beta1.EngineComponent,
+		objectMeta,
+		&e.engineSpec.ComponentExtensionSpec,
+	)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to resolve engine PodDisruptionBudget")
+	}
+	if err := preflightComponentPDB(ctx, &e.BaseComponentFields, pdbRequest); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to preflight engine PodDisruptionBudget")
 	}
 
 	// Reconcile pod spec
@@ -121,9 +107,32 @@ func (e *Engine) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 	// Get worker size
 	size := e.getWorkerSize()
 
-	// Reconcile deployment based on deployment mode
-	if result, err := e.reconcileDeployment(isvc, objectMeta, podSpec, size, workerPodSpec); err != nil {
-		return result, err
+	// Reconcile deployment based on deployment mode. The deployment
+	// reconciler's RequeueAfter MUST be preserved through the rest of
+	// this function — OMENative's per-Instance dispatcher uses it to
+	// re-run after a Sequential / Ratio gate denial OR to poll an
+	// in-flight Update / Create. Discarding it strands the rollout
+	// until an unrelated watch event happens to fire another reconcile
+	// (the post-decoder Sequential stall).
+	deploymentResult, err := e.reconcileDeployment(ctx, isvc, objectMeta, podSpec, size, workerPodSpec, pdbRequest)
+	if err != nil {
+		return deploymentResult, err
+	}
+
+	// Per-Component stable Service + PodMonitor for OMENative. Inlined
+	// here (rather than driven from the IR controller) because every
+	// top-level per-Component sub-resource is owned by the ISVC
+	// controller; the IR controller manages only pods + the per-Component
+	// headless Service (whose naming is tied to the per-Component pod
+	// template).
+	//
+	// Raw / MultiNode keep their dispatcher-side service+podmonitor calls
+	// because their selectors are mode-specific (Raw: nil → pod template
+	// labels; MultiNode: worker-index=0 leader-only routing).
+	if e.DeploymentMode == constants.OMENative {
+		if err := e.reconcileOMENativeSubresources(ctx, isvc, objectMeta, podSpec); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to reconcile engine OMENative sub-resources")
+		}
 	}
 
 	// Update engine status
@@ -131,7 +140,15 @@ func (e *Engine) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	return deploymentResult, nil
+}
+
+// reconcileOMENativeSubresources delegates to the shared
+// ReconcileOMENativeSubresources helper in base.go — engine, decoder,
+// and router emit byte-identical Service + PodMonitor pairs; only the
+// component enum and ComponentExtensionSpec pointer differ.
+func (e *Engine) reconcileOMENativeSubresources(ctx context.Context, isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec) error {
+	return ReconcileOMENativeSubresources(ctx, &e.BaseComponentFields, isvc, v1beta1.EngineComponent, &e.engineSpec.ComponentExtensionSpec, objectMeta, podSpec)
 }
 
 // getWorkerSize returns the worker size for multi-node deployments
@@ -150,61 +167,82 @@ func (e *Engine) getWorkerSize() int {
 }
 
 // reconcileDeployment manages the deployment logic for different deployment modes
-func (e *Engine) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec, workerSize int, workerPodSpec *v1.PodSpec) (ctrl.Result, error) {
+func (e *Engine) reconcileDeployment(ctx context.Context, isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec, workerSize int, workerPodSpec *v1.PodSpec, pdbRequest pdb.Request) (ctrl.Result, error) {
 	switch e.DeploymentMode {
 	case constants.RawDeployment:
-		return e.deploymentReconciler.ReconcileRawDeployment(isvc, objectMeta, podSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
+		resolvedAS, _, err := autoscaler.ResolveRawComponentAutoscaler(e.Runtime, isvc, v1beta1.EngineComponent, objectMeta.Annotations)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to resolve autoscaler for raw engine")
+		}
+		return e.deploymentReconciler.ReconcileRawDeployment(ctx, isvc, objectMeta, podSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent, resolvedAS, pdbRequest)
 	case constants.MultiNode:
 		return e.deploymentReconciler.ReconcileMultiNodeDeployment(isvc, objectMeta, podSpec, workerSize, workerPodSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
 	case constants.OMENative:
-		return e.projectInferenceReplica(isvc, objectMeta, podSpec, workerSize, workerPodSpec)
+		// Admission rejects orphan Leader/Worker and Worker.Size <= 0, so
+		// the only valid multi-pod shape has both fields set.
+		multiPod := e.engineSpec.Leader != nil && e.engineSpec.Worker != nil
+		// OMENative-mode Components dispatch through the InferenceReplica
+		// path: the ISVC controller projects the desired per-Component
+		// spec onto an InferenceReplica object; the IR controller drives
+		// per-Instance lifecycle from there.
+		//
+		// Resolve the authoritative ComponentAutoscaler from the
+		// ISVC → runtime → default chain. The resolved block is
+		// projected onto ir.Spec.Autoscaler by the projector and
+		// dispatched as HPA / KEDA / external / none against the
+		// committed IR (autoscaler dispatch is always-on per Component).
+		resolvedAS, _ := autoscaler.ResolveComponentAutoscaler(e.Runtime, isvc, v1beta1.EngineComponent)
+		ir, err := irprojector.EnsureInferenceReplica(ctx, irprojector.Params{
+			ISVC:               isvc,
+			Component:          v1beta1.EngineComponent,
+			ComponentExt:       &e.engineSpec.ComponentExtensionSpec,
+			ObjectMeta:         objectMeta,
+			PodSpec:            podSpec,
+			WorkerPodSpec:      workerPodSpec,
+			WorkerSize:         workerSize,
+			MultiPod:           multiPod,
+			TopologyKey:        e.engineSpec.TopologyKey,
+			ResolvedAutoscaler: resolvedAS,
+			Client:             e.Client,
+			Reader:             e.APIReader,
+		})
+		if err != nil {
+			if apierrors.IsConflict(err) {
+				// Benign: a concurrent IR status write bumped the object.
+				// Re-read and reproject next pass instead of surfacing a hard
+				// error, which would fast-loop the ISVC reconcile.
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, errors.Wrap(err, "failed to project InferenceReplica for engine")
+		}
+		if err := ReconcileOMENativePDB(
+			ctx,
+			&e.BaseComponentFields,
+			v1beta1.EngineComponent,
+			ir,
+			pdbRequest,
+		); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to reconcile engine OMENative PodDisruptionBudget")
+		}
+		// Autoscaler dispatch is always-on per InferenceReplica.
+		// Owner-ref the HPA / SO to the IR so GC cascades
+		// when the IR is deleted; ScaleTargetRef points at the IR's
+		// /scale subresource. external + none are status-field twins —
+		// both fall through to the dispatch's "delete both" branch
+		// with no separate code path.
+		if err := autoscaler.DispatchForIRComponent(ctx, autoscaler.IRDispatchInput{
+			Client:             e.Client,
+			Scheme:             e.Scheme,
+			IR:                 ir,
+			ResolvedAutoscaler: resolvedAS,
+			ComponentExt:       &e.engineSpec.ComponentExtensionSpec,
+		}); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to dispatch autoscaler for engine")
+		}
+		return ctrl.Result{}, nil
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for engine")
 	}
-}
-
-// projectInferenceReplica renders this Component into its InferenceReplica: the
-// per-Component pod metadata, pod specs, replica count and gang topology key are
-// projected onto the IR, which becomes the single object describing what should
-// run. The rendered Runner templates carry the Component's merged labels and
-// annotations, so whatever the InferenceService (and this Component) declared is
-// visible on the IR and inherited by the pods rendered from it.
-//
-// Materializing those pods is the InferenceReplica controller's job. This build
-// does not include that controller, so the IR is created and kept up to date for
-// inspection and no workload is started from it.
-func (e *Engine) projectInferenceReplica(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec, workerSize int, workerPodSpec *v1.PodSpec) (ctrl.Result, error) {
-	ir, err := irprojector.EnsureInferenceReplica(context.TODO(), irprojector.Params{
-		ISVC:          isvc,
-		Component:     v1beta1.EngineComponent,
-		ComponentExt:  &e.engineSpec.ComponentExtensionSpec,
-		ObjectMeta:    objectMeta,
-		PodSpec:       podSpec,
-		WorkerPodSpec: workerPodSpec,
-		WorkerSize:    workerSize,
-		MultiPod:      e.engineSpec.Worker != nil,
-		TopologyKey:   e.engineSpec.TopologyKey,
-		// The Component's autoscaler is the effective one: ServingRuntime has no
-		// autoscaler surface, and MergeEngineSpec/MergeDecoderSpec have already
-		// folded the runtime's Component config in. Passing nil would clear
-		// ir.Spec.Autoscaler (whole-block replace) and make the projector treat
-		// replicas as its own to overwrite on every pass.
-		ResolvedAutoscaler: e.engineSpec.Autoscaler,
-		Client:             e.Client,
-	})
-	if err != nil {
-		// A racing create surfaces as Conflict, which the projector documents as
-		// a benign requeue. Returning it as an error would hot-loop on cache lag.
-		if apierrors.IsConflict(err) {
-			return ctrl.Result{Requeue: true}, nil
-		}
-		return ctrl.Result{}, err
-	}
-	e.Log.Info("Projected InferenceReplica; no pods are rendered from it in this build",
-		"inferenceservice", isvc.Namespace+"/"+isvc.Name,
-		"component", v1beta1.EngineComponent,
-		"inferencereplica", ir.Name)
-	return ctrl.Result{}, nil
 }
 
 // updateEngineStatus updates the status of the engine
@@ -212,110 +250,70 @@ func (e *Engine) updateEngineStatus(isvc *v1beta1.InferenceService, objectMeta m
 	return UpdateComponentStatus(&e.BaseComponentFields, isvc, v1beta1.EngineComponent, objectMeta)
 }
 
-// reconcileObjectMeta creates the object metadata for the engine component
-func (e *Engine) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.ObjectMeta, error) {
-	engineName, err := e.determineEngineName(isvc)
+// reconcileObjectMeta creates the object metadata for the engine
+// component. Delegates the annotation / label merge to the shared
+// ReconcileComponentObjectMeta helper in base.go; the per-component
+// name resolution stays here because the fallback rules still differ
+// across components (Decoder gates the Service-existence lookup on
+// non-MultiNode mode; engine / router don't — see section 4 of the
+// components-dispatch review).
+func (e *Engine) reconcileObjectMeta(ctx context.Context, isvc *v1beta1.InferenceService) (metav1.ObjectMeta, error) {
+	engineName, err := e.determineEngineName(ctx, isvc)
 	if err != nil {
 		return metav1.ObjectMeta{}, err
 	}
 
-	annotations, err := e.processAnnotations(isvc)
-	if err != nil {
-		return metav1.ObjectMeta{
-			Name:      engineName,
-			Namespace: isvc.Namespace,
-		}, err
-	}
-
-	labels, err := e.processLabels(isvc)
-	if err != nil {
-		return metav1.ObjectMeta{
-			Name:        engineName,
-			Namespace:   isvc.Namespace,
-			Annotations: annotations,
-		}, err
-	}
-
-	return metav1.ObjectMeta{
-		Name:        engineName,
-		Namespace:   isvc.Namespace,
-		Labels:      labels,
-		Annotations: annotations,
-	}, nil
-}
-
-// processAnnotations processes the annotations for the engine
-func (e *Engine) processAnnotations(isvc *v1beta1.InferenceService) (map[string]string, error) {
-	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
-		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
-	})
-
-	// Merge with engine annotations
-	mergedAnnotations := annotations
+	var engineAnnotations, engineLabels map[string]string
 	if e.engineSpec != nil {
-		engineAnnotations := e.engineSpec.Annotations
-		mergedAnnotations = utils.Union(annotations, engineAnnotations)
+		engineAnnotations = e.engineSpec.Annotations
+		engineLabels = e.engineSpec.Labels
 	}
 
-	// Use common function for base annotations processing
-	processedAnnotations, err := ProcessBaseAnnotations(&e.BaseComponentFields, isvc, mergedAnnotations)
-	if err != nil {
-		return nil, err
-	}
-
-	return processedAnnotations, nil
+	return ReconcileComponentObjectMeta(&e.BaseComponentFields, isvc, v1beta1.EngineComponent, engineName, engineAnnotations, engineLabels)
 }
 
-// processLabels processes the labels for the engine
-func (e *Engine) processLabels(isvc *v1beta1.InferenceService) (map[string]string, error) {
-	mergedLabels := isvc.Labels
-	if e.engineSpec != nil {
-		engineLabels := e.engineSpec.Labels
-		mergedLabels = utils.Union(isvc.Labels, engineLabels)
+// determineEngineName determines the name of the engine service.
+// The suffix is sourced from GetServiceSuffix so the engine / decoder /
+// router suffix lives in exactly one place (ComponentConfig).
+func (e *Engine) determineEngineName(ctx context.Context, isvc *v1beta1.InferenceService) (string, error) {
+	defaultEngineName := isvc.Name + e.GetServiceSuffix()
+
+	existing := &v1.Service{}
+	if err := e.Client.Get(ctx, types.NamespacedName{Name: defaultEngineName, Namespace: isvc.Namespace}, existing); err == nil {
+		return defaultEngineName, nil
 	}
 
-	// Use common function for base labels processing
-	return ProcessBaseLabels(&e.BaseComponentFields, isvc, v1beta1.EngineComponent, mergedLabels)
-}
-
-// determineEngineName determines the name of the engine service
-func (e *Engine) determineEngineName(isvc *v1beta1.InferenceService) (string, error) {
-	// Use the "<name>-engine" naming pattern for the engine service
-	defaultEngineName := isvc.Name + "-engine"
-	existingName := defaultEngineName
-
-	if e.DeploymentMode == constants.RawDeployment {
-		existing := &v1.Service{}
-		if err := e.Client.Get(context.TODO(), types.NamespacedName{Name: defaultEngineName, Namespace: isvc.Namespace}, existing); err == nil {
-			return existingName, nil
-		}
-	}
-
-	// If the default name doesn't exist, use it
 	return defaultEngineName, nil
+}
+
+// engineUsesLeaderTemplate reports whether the engine should source its
+// primary pod template from the Leader block (multi-pod shape — MultiNode
+// or multi-pod OMENative) rather than the top-level engine spec
+// (single-pod shape). It is a pure structural check on the spec; it
+// deliberately does NOT consult the deployment mode, so dispatch-mode
+// classification and template selection stay decoupled.
+func engineUsesLeaderTemplate(spec *v1beta1.EngineSpec) bool {
+	return spec != nil && spec.Leader != nil
 }
 
 // reconcilePodSpec creates the pod spec for the engine component
 func (e *Engine) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *metav1.ObjectMeta) (*v1.PodSpec, error) {
-	// Get the appropriate pod spec and runner based on deployment mode
-	deploymentMode := isvcutils.DetermineEngineDeploymentMode(e.engineSpec, isvc.Spec.DeploymentMode)
-
+	// Template selection is keyed on the presence of a Leader block, NOT on
+	// the deployment mode. e.DeploymentMode is set authoritatively at
+	// construction time; calling isvcutils.DetermineEngineDeploymentMode
+	// here would re-infer it from the spec and disagree with the dispatch
+	// for OMENative-mode engines that also set Leader/Worker (the helper
+	// returns MultiNode; the dispatch is OMENative).
 	var basePodSpec v1beta1.PodSpec
 	var runnerSpec *v1beta1.RunnerSpec
 
-	switch deploymentMode {
-	case constants.MultiNode:
-		// For multi-node, use leader spec
-		if e.engineSpec.Leader != nil {
-			basePodSpec = e.engineSpec.Leader.PodSpec
-			runnerSpec = e.engineSpec.Leader.Runner
-		} else {
-			// Fallback to engine spec if leader is not defined
-			basePodSpec = e.engineSpec.PodSpec
-			runnerSpec = e.engineSpec.Runner
-		}
-	default:
-		// For raw deployment, use engine spec
+	if engineUsesLeaderTemplate(e.engineSpec) {
+		basePodSpec = e.engineSpec.Leader.PodSpec
+		runnerSpec = e.engineSpec.Leader.Runner
+	} else {
+		// Fallback to the top-level engine spec — covers single-pod
+		// OMENative, RawDeployment, and the malformed-but-tolerated
+		// MultiNode-without-Leader shape.
 		basePodSpec = e.engineSpec.PodSpec
 		runnerSpec = e.engineSpec.Runner
 	}
@@ -324,7 +322,7 @@ func (e *Engine) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *me
 		UpdateVolumeMounts(&e.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
 		MergeEngineResources(&e.BaseComponentFields, isvc, &runnerSpec.Container)
 		MergeRuntimeArgumentsOverride(&e.BaseComponentFields, &runnerSpec.Container)
-		if e.AcceleratorClass == nil {
+		if !acceleratorProvidesParallelismOverride(&e.BaseComponentFields) {
 			e.setParallelismEnvVarForEngine(&runnerSpec.Container, e.getWorkerSize())
 		}
 	}
@@ -338,7 +336,7 @@ func (e *Engine) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *me
 	UpdatePodSpecNodeSelector(&e.BaseComponentFields, isvc, podSpec, v1beta1.EngineComponent)
 	UpdateEngineAffinity(&e.BaseComponentFields, isvc, podSpec)
 
-	e.Log.Info("Engine PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
+	e.Log.V(1).Info("Engine PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return podSpec, nil
 }
 
@@ -358,7 +356,7 @@ func (e *Engine) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectMe
 			UpdateEnvVariables(&e.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
 			MergeEngineResources(&e.BaseComponentFields, isvc, &workerRunner.Container)
 			MergeRuntimeArgumentsOverride(&e.BaseComponentFields, &workerRunner.Container)
-			if e.AcceleratorClass == nil {
+			if !acceleratorProvidesParallelismOverride(&e.BaseComponentFields) {
 				e.setParallelismEnvVarForEngine(&workerRunner.Container, e.getWorkerSize())
 			}
 		}
@@ -372,14 +370,14 @@ func (e *Engine) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectMe
 	UpdatePodSpecVolumes(&e.BaseComponentFields, isvc, workerPodSpec, objectMeta)
 	UpdatePodSpecNodeSelector(&e.BaseComponentFields, isvc, workerPodSpec, v1beta1.EngineComponent)
 	UpdateEngineAffinity(&e.BaseComponentFields, isvc, workerPodSpec)
-	e.Log.Info("Engine Worker PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
+	e.Log.V(1).Info("Engine Worker PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return workerPodSpec, nil
 }
 
 // setParallelismEnvVarForEngine calculates and sets the PARALLELISM_SIZE environment variable for the engine's container.
 func (e *Engine) setParallelismEnvVarForEngine(container *v1.Container, workerReplicas int) {
 	if container == nil || e.engineSpec == nil {
-		e.Log.Info("Cannot set parallelism: container or engineSpec is nil")
+		e.Log.V(2).Info("Cannot set parallelism: container or engineSpec is nil")
 		return
 	}
 
@@ -393,12 +391,12 @@ func (e *Engine) setParallelismEnvVarForEngine(container *v1.Container, workerRe
 		if parallelismSize > 0 {
 			envVar := v1.EnvVar{Name: constants.ParallelismSizeEnvVarKey, Value: strconv.FormatInt(parallelismSize, 10)}
 			isvcutils.UpdateEnvVars(container, &envVar)
-			e.Log.Info("Added parallelism env variable to engine container", "value", parallelismSize, "containerName", container.Name)
+			e.Log.V(2).Info("Added parallelism env variable to engine container", "value", parallelismSize, "containerName", container.Name)
 		} else {
-			e.Log.Info("Calculated parallelism is zero, not adding env var", "containerName", container.Name)
+			e.Log.V(2).Info("Calculated parallelism is zero, not adding env var", "containerName", container.Name)
 		}
 	} else {
-		e.Log.Info("Conditions not met for parallelism (no GPUs or no leaders/workers)", "containerName", container.Name, "gpus", numGPUsPerPod, "leaders", numLeaders, "workers", numWorkers)
+		e.Log.V(2).Info("Conditions not met for parallelism (no GPUs or no leaders/workers)", "containerName", container.Name, "gpus", numGPUsPerPod, "leaders", numLeaders, "workers", numWorkers)
 	}
 }
 
