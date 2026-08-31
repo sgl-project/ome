@@ -9,24 +9,132 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/types"
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 	"knative.dev/pkg/network"
 )
 
-// OMEAPIGroupName is the OME API group and the prefix of every ome.io
-// annotation key.
-const OMEAPIGroupName = "ome.io"
-
 // OME Constants
 var (
-	OMEName      = "ome"
-	OMENamespace = getEnvOrDefault("POD_NAMESPACE", "ome")
+	OMEName         = "ome"
+	OMEAPIGroupName = "ome.io"
+	OMENamespace    = getEnvOrDefault("POD_NAMESPACE", "ome")
 )
 
-// Runtime revision (ServingRuntime spec snapshot) constants. OME snapshots a
-// resolved ServingRuntimeSpec into a ControllerRevision in the OME namespace so
-// an InferenceService can pin to it (spec.runtime.autoSync=false) and detect
-// drift. See pkg/runtimerevision and pkg/controller/v1beta1/runtimerevision.
+// InferenceService Constants
 var (
+	InferenceServiceName          = "inferenceservice"
+	InferenceServiceAPIName       = "inferenceservices"
+	InferenceServicePodLabelKey   = OMEAPIGroupName + "/" + InferenceServiceName
+	InferenceServiceConfigMapName = "inferenceservice-config"
+	BaseModelFinalizer            = "basemodels.ome.io/finalizer"
+	ClusterBaseModelFinalizer     = "clusterbasemodels.ome.io/finalizer"
+	AcceleratorClassFinalizer     = "acceleratorclasses.ome.io/finalizer"
+	// AcceleratorClassAnnotationKey pins an InferenceService to a named
+	// AcceleratorClass; runtime auto-selection rejects runtimes that do not
+	// support the class.
+	AcceleratorClassAnnotationKey = OMEAPIGroupName + "/accelerator-class"
+)
+
+// OME Agent Constants
+var (
+	AgentName                         = "ome-agent"
+	AgentAppName                      = "OME_AGENT"
+	AgentModelNameEnvVarKey           = AgentAppName + "_" + "MODEL_NAME"
+	AgentModelStoreDirectoryEnvVarKey = AgentAppName + "_" + "MODEL_STORE_DIRECTORY"
+	AgentModelFrameworkEnvVarKey      = AgentAppName + "_" + "MODEL_FRAMEWORK"
+	AgentBaseModelTypeEnvVarKey       = AgentAppName + "_" + "MODEL_TYPE"
+
+	// General Configuration
+	AgentLocalPathEnvVarKey       = AgentAppName + "_" + "LOCAL_PATH"
+	AgentNumOfGPUEnvVarKey        = AgentAppName + "_" + "NUM_OF_GPU"
+	AgentModelBucketNameEnvVarKey = AgentAppName + "_" + "MODEL_BUCKET_NAME"
+	AgentModelNamespaceEnvVarKey  = AgentAppName + "_" + "MODEL_NAMESPACE"
+	AgentModelObjectName          = AgentAppName + "_" + "MODEL_OBJECT_NAME"
+
+	// OCI Authentication
+	AgentCompartmentIDEnvVarKey = AgentAppName + "_" + "COMPARTMENT_ID"
+	AgentAuthTypeEnvVarKey      = AgentAppName + "_" + "AUTH_TYPE"
+	AgentRegionEnvVarKey        = AgentAppName + "_" + "REGION"
+
+	// Serving Sidecar Configuration
+	AgentFineTunedWeightInfoFilePath      = AgentAppName + "_" + "FINE_TUNED_WEIGHT_INFO_FILE_PATH"
+	AgentUnzippedFineTunedWeightDirectory = AgentAppName + "_" + "UNZIPPED_FINE_TUNED_WEIGHT_DIRECTORY"
+	AgentZippedFineTunedWeightDirectory   = AgentAppName + "_" + "ZIPPED_FINE_TUNED_WEIGHT_DIRECTORY"
+)
+
+// InferenceService MultiModel Constants
+
+var (
+	ModelConfigFileName = "models.json"
+)
+
+// Model agent Constants
+const (
+	AgentConfigMapKeyName = "agent"
+	TensorRTLLM           = "tensorrtllm"
+)
+
+// InferenceService Annotations
+var (
+	DeploymentMode                          = OMEAPIGroupName + "/deploymentMode"
+	EnableRoutingTagAnnotationKey           = OMEAPIGroupName + "/enable-tag-routing"
+	AutoscalerClass                         = OMEAPIGroupName + "/autoscalerClass"
+	AutoscalerPropagatedMetadataKeys        = OMEAPIGroupName + "/autoscaler-propagated-metadata-keys"
+	AutoscalerMetrics                       = OMEAPIGroupName + "/metrics"
+	TargetUtilizationPercentage             = OMEAPIGroupName + "/targetUtilizationPercentage"
+	DeprecationWarning                      = OMEAPIGroupName + "/deprecation-warning"
+	EnableMetricAggregation                 = OMEAPIGroupName + "/enable-metric-aggregation"
+	SetPrometheusAnnotation                 = OMEAPIGroupName + "/enable-prometheus-scraping"
+	DedicatedAICluster                      = OMEAPIGroupName + "/dedicated-ai-cluster"
+	VolcanoQueue                            = OMEAPIGroupName + "/volcano-queue"
+	FineTunedAdapterInjectionKey            = OMEAPIGroupName + "/inject-fine-tuned-adapter"
+	ServingSidecarInjectionKey              = OMEAPIGroupName + "/inject-serving-sidecar"
+	FineTunedWeightFTStrategyKey            = OMEAPIGroupName + "/fine-tuned-weight-ft-strategy"
+	BaseModelName                           = OMEAPIGroupName + "/base-model-name"
+	BaseModelVendorAnnotationKey            = OMEAPIGroupName + "/base-model-vendor"
+	ServingRuntimeKeyName                   = OMEAPIGroupName + "/serving-runtime"
+	BaseModelFormat                         = OMEAPIGroupName + "/base-model-format"
+	BaseModelFormatVersion                  = OMEAPIGroupName + "/base-model-format-version"
+	FTServingWithMergedWeightsAnnotationKey = OMEAPIGroupName + "/fine-tuned-serving-with-merged-weights"
+	ServiceType                             = OMEAPIGroupName + "/service-type"
+	LoadBalancerIP                          = OMEAPIGroupName + "/load-balancer-ip"
+	EntrypointComponent                     = OMEAPIGroupName + "/entrypoint-component"
+	ContainerPrometheusPortKey              = "prometheus.ome.io/port"
+	ContainerPrometheusPathKey              = "prometheus.ome.io/path"
+	// ExtraPodMetricsEndpointsAnnotationKey declares ADDITIONAL PodMonitor
+	// scrape endpoints appended to the default /metrics endpoint. Value is a
+	// comma-separated list of "portName:path" (port name, not number), e.g.
+	// "http:/engine_metrics". Additive and backward-compatible; malformed
+	// entries are skipped.
+	ExtraPodMetricsEndpointsAnnotationKey = "prometheus.ome.io/extra-endpoints"
+	PrometheusPortAnnotationKey           = "prometheus.io/port"
+	PrometheusPathAnnotationKey           = "prometheus.io/path"
+	PrometheusScrapeAnnotationKey         = "prometheus.io/scrape"
+	RDMAAutoInjectAnnotationKey           = "rdma.ome.io/auto-inject"
+	RDMAProfileAnnotationKey              = "rdma.ome.io/profile"
+	RDMAContainerNameAnnotationKey        = "rdma.ome.io/container-name"
+
+	// Runtime profile injection — opt-in profiles that factor out
+	// repetitive ServingRuntime YAML (probes, /dev/shm, prometheus
+	// scrape annotations). Each is gated on its own profile annotation;
+	// the container-name annotation is shared across all of them.
+	RuntimeContainerNameAnnotationKey        = "runtime.ome.io/container-name"
+	RuntimeShmProfileAnnotationKey           = "runtime.ome.io/shm-profile"
+	RuntimeProbeProfileAnnotationKey         = "runtime.ome.io/probe-profile"
+	RuntimeProbePortAnnotationKey            = "runtime.ome.io/probe-port"
+	RuntimeObservabilityProfileAnnotationKey = "runtime.ome.io/observability-profile"
+	RuntimeObservabilityPortAnnotationKey    = "runtime.ome.io/observability-port"
+
+	// ServingRuntime inheritance + profile marker.
+	RuntimeProfileAnnotationKey     = OMEAPIGroupName + "/runtime-profile"
+	RuntimeInheritFromAnnotationKey = OMEAPIGroupName + "/inherit-from"
+	RuntimeInheritMaxDepth          = 5
+	InheritanceReadyConditionType   = "InheritanceReady"
+	// Engine-preset annotation. Value selects an
+	// OME-shipped preset (e.g. "sglang-pd") whose engine defaults a
+	// mutating webhook injects into the runtime spec at admission.
+	RuntimeEngineAnnotationKey = OMEAPIGroupName + "/engine"
+
 	// Bumping this annotation on an ISVC tells the controller to
 	// advance the pinned ControllerRevision to a fresh snapshot of
 	// the current runtime spec.
@@ -58,121 +166,11 @@ var (
 	// revision when (now - value) exceeds the configured grace period.
 	// Cleared if the revision becomes referenced again before then.
 	RuntimeRevisionGCEligibleSinceKey = OMEAPIGroupName + "/gc-eligible-since"
-)
 
-// Benchmark Constants
-var (
-	BenchmarjJobName          = "benchmarkjob"
-	BenchmarkJobConfigMapName = "benchmarkjob-config"
-)
-
-// InferenceService Constants
-var (
-	InferenceServiceName          = "inferenceservice"
-	InferenceServiceAPIName       = "inferenceservices"
-	InferenceServicePodLabelKey   = OMEAPIGroupName + "/" + InferenceServiceName
-	InferenceServiceConfigMapName = "inferenceservice-config"
-	BaseModelFinalizer            = "basemodels.ome.io/finalizer"
-	ClusterBaseModelFinalizer     = "clusterbasemodels.ome.io/finalizer"
-	AcceleratorClassFinalizer     = "acceleratorclasses.ome.io/finalizer"
-)
-
-// OME Agent Constants
-var (
-	AgentName                         = "ome-agent"
-	AgentAppName                      = "OME_AGENT"
-	AgentModelNameEnvVarKey           = AgentAppName + "_" + "MODEL_NAME"
-	AgentModelStoreDirectoryEnvVarKey = AgentAppName + "_" + "MODEL_STORE_DIRECTORY"
-	AgentModelFrameworkEnvVarKey      = AgentAppName + "_" + "MODEL_FRAMEWORK"
-	AgentTensorRTLLMVersionsEnvVarKey = AgentAppName + "_" + "TENSORRTLLM_VERSION"
-	AgentBaseModelTypeEnvVarKey       = AgentAppName + "_" + "MODEL_TYPE"
-
-	// General Configuration
-	AgentLocalPathEnvVarKey                  = AgentAppName + "_" + "LOCAL_PATH"
-	AgentNumOfGPUEnvVarKey                   = AgentAppName + "_" + "NUM_OF_GPU"
-	AgentDisableModelDecryptionEnvVarKey     = AgentAppName + "_" + "DISABLE_MODEL_DECRYPTION"
-	AgentModelBucketNameEnvVarKey            = AgentAppName + "_" + "MODEL_BUCKET_NAME"
-	AgentModelNamespaceEnvVarKey             = AgentAppName + "_" + "MODEL_NAMESPACE"
-	AgentModelObjectName                     = AgentAppName + "_" + "MODEL_OBJECT_NAME"
-	AgentTargetArtifactReuseAllowedEnvVarKey = AgentAppName + "_" + "TARGET_ARTIFACT_REUSE_ALLOWED"
-
-	// OCI Vault and Security
-	AgentCompartmentIDEnvVarKey = AgentAppName + "_" + "COMPARTMENT_ID"
-	AgentAuthTypeEnvVarKey      = AgentAppName + "_" + "AUTH_TYPE"
-	AgentRegionEnvVarKey        = AgentAppName + "_" + "REGION"
-	AgentVaultIDEnvVarKey       = AgentAppName + "_" + "VAULT_ID"
-	AgentKeyNameEnvVarKey       = AgentAppName + "_" + "KEY_NAME"
-	AgentSecretNameEnvVarKey    = AgentAppName + "_" + "SECRET_NAME"
-
-	// Serving Sidecar Configuration
-	AgentFineTunedWeightInfoFilePath      = AgentAppName + "_" + "FINE_TUNED_WEIGHT_INFO_FILE_PATH"
-	AgentUnzippedFineTunedWeightDirectory = AgentAppName + "_" + "UNZIPPED_FINE_TUNED_WEIGHT_DIRECTORY"
-	AgentZippedFineTunedWeightDirectory   = AgentAppName + "_" + "ZIPPED_FINE_TUNED_WEIGHT_DIRECTORY"
-)
-
-// InferenceService MultiModel Constants
-
-var (
-	ModelConfigFileName = "models.json"
-)
-
-// Model agent Constants
-const (
-	AgentConfigMapKeyName          = "agent"
-	TensorRTLLM                    = "tensorrtllm"
-	HfArtifactConfigMapKeyPrefix   = "artifact.huggingface."
-	ArtifactCompleteMarkerFileName = ".ome-artifact-complete"
-	ArtifactCompleteMarkerBody     = "complete\n"
-	ArtifactUploadLockFileName     = ".ome-artifact-upload.lock"
-	ArtifactUploadLockBody         = "uploading\n"
-)
-
-func IsArtifactCompleteMarkerObjectName(objectName string) bool {
-	return objectName == ArtifactCompleteMarkerFileName || strings.HasSuffix(objectName, "/"+ArtifactCompleteMarkerFileName)
-}
-
-func IsArtifactUploadLockObjectName(objectName string) bool {
-	return objectName == ArtifactUploadLockFileName || strings.HasSuffix(objectName, "/"+ArtifactUploadLockFileName)
-}
-
-func IsInternalArtifactObjectName(objectName string) bool {
-	return IsArtifactCompleteMarkerObjectName(objectName) || IsArtifactUploadLockObjectName(objectName)
-}
-
-// InferenceService Annotations
-var (
-	DeploymentMode                = OMEAPIGroupName + "/deploymentMode"
-	EnableRoutingTagAnnotationKey = OMEAPIGroupName + "/enable-tag-routing"
-	AutoscalerClass               = OMEAPIGroupName + "/autoscalerClass"
-	AutoscalerMetrics             = OMEAPIGroupName + "/metrics"
-	TargetUtilizationPercentage   = OMEAPIGroupName + "/targetUtilizationPercentage"
-	DeprecationWarning            = OMEAPIGroupName + "/deprecation-warning"
-	DedicatedAICluster            = OMEAPIGroupName + "/dedicated-ai-cluster"
-	VolcanoQueue                  = OMEAPIGroupName + "/volcano-queue"
-	ModelInitInjectionKey         = OMEAPIGroupName + "/inject-model-init"
-	FineTunedAdapterInjectionKey  = OMEAPIGroupName + "/inject-fine-tuned-adapter"
-	ServingSidecarInjectionKey    = OMEAPIGroupName + "/inject-serving-sidecar"
-	FineTunedWeightFTStrategyKey  = OMEAPIGroupName + "/fine-tuned-weight-ft-strategy"
-	BaseModelName                 = OMEAPIGroupName + "/base-model-name"
-	BaseModelVendorAnnotationKey  = OMEAPIGroupName + "/base-model-vendor"
-	ServingRuntimeKeyName         = OMEAPIGroupName + "/serving-runtime"
-	// ServingRuntime inheritance: a runtime may name a parent to inherit
-	// spec fields from; resolution walks the chain up to the max depth.
-	RuntimeInheritFromAnnotationKey         = OMEAPIGroupName + "/inherit-from"
-	RuntimeInheritMaxDepth                  = 5
-	BaseModelFormat                         = OMEAPIGroupName + "/base-model-format"
-	BaseModelFormatVersion                  = OMEAPIGroupName + "/base-model-format-version"
-	FTServingWithMergedWeightsAnnotationKey = OMEAPIGroupName + "/fine-tuned-serving-with-merged-weights"
-	ServiceType                             = OMEAPIGroupName + "/service-type"
-	LoadBalancerIP                          = OMEAPIGroupName + "/load-balancer-ip"
-	EntrypointComponent                     = OMEAPIGroupName + "/entrypoint-component"
-	PrometheusPortAnnotationKey             = "prometheus.io/port"
-	PrometheusPathAnnotationKey             = "prometheus.io/path"
-	PrometheusScrapeAnnotationKey           = "prometheus.io/scrape"
-	RDMAAutoInjectAnnotationKey             = "rdma.ome.io/auto-inject"
-	RDMAProfileAnnotationKey                = "rdma.ome.io/profile"
-	RDMAContainerNameAnnotationKey          = "rdma.ome.io/container-name"
-	ModelCategoryAnnotation                 = "models.ome.io/category"
+	DefaultPrometheusPath                    = "/metrics"
+	QueueProxyAggregatePrometheusMetricsPort = 9088
+	DefaultPodPrometheusPort                 = "9091"
+	ModelCategoryAnnotation                  = "models.ome.io/category"
 
 	// Ingress Configuration Overrides
 	IngressDomainTemplate          = OMEAPIGroupName + "/ingress-domain-template"
@@ -199,52 +197,30 @@ var (
 	// guard.
 	InferenceReplicaControllerWriteAnnotationKey = OMEAPIGroupName + "/controller-write"
 	InferenceReplicaControllerWriteAnnotationVal = "true"
-)
 
-// InferenceService Annotations for model encryption and decryption
-var (
-	BaseModelDecryptionKeyName    = OMEAPIGroupName + "/base-model-decryption-key-name"
-	BaseModelDecryptionSecretName = OMEAPIGroupName + "/base-model-decryption-secret-name"
-	DisableModelDecryption        = OMEAPIGroupName + "/disable-model-decryption"
-)
+	// ReleaseHeldRevisionAnnotationKey names a Held RetryBlock by full ControllerRevision
+	// name or bare hash. The controller consumes it after handling the release request.
+	ReleaseHeldRevisionAnnotationKey = OMEAPIGroupName + "/release-held-revision"
 
-// Migration-request contract and Alfred caretaker annotations (OEP-0008).
-const (
-	// MigrationRequestAnnotationPrefix prefixes the UUID-suffixed
-	// migration-request annotations (`ome.io/migration-request-v1-<uuid>`)
-	// written by Alfred's dispatcher onto an InferenceService. The
-	// controller that owns the addressed component consumes the request,
-	// executes the move, clears the annotation, and records the outcome in
-	// Status.MigrationHistory. Wire payload in pkg/migration.
-	MigrationRequestAnnotationPrefix = OMEAPIGroupName + "/migration-request-v1-"
+	// RevisionExcludedAnnotationKeysAnnotationKey lists inherited ISVC annotation keys
+	// omitted from the pod-template revision hash; component annotations remain hash inputs.
+	RevisionExcludedAnnotationKeysAnnotationKey = OMEAPIGroupName + "/revision-excluded-annotation-keys"
 
-	// AlfredAPIGroupName groups the per-workload caretaker annotations an
-	// operator sets on an InferenceService to gate Alfred's policies.
-	AlfredAPIGroupName = "alfred.ome.io"
-	// AlfredMovableAnnotationKey opts a workload out of ("false") or into
-	// ("true") every Alfred policy; wins over the cluster-wide default.
-	AlfredMovableAnnotationKey = AlfredAPIGroupName + "/movable"
-	// AlfredPriorityAnnotationKey is a float in [0, 1]; lower = more
-	// protected when Alfred orders candidates.
-	AlfredPriorityAnnotationKey = AlfredAPIGroupName + "/priority"
-	// AlfredCooldownMinutesAnnotationKey overrides the per-workload
-	// migration cooldown for this workload.
-	AlfredCooldownMinutesAnnotationKey = AlfredAPIGroupName + "/cooldown-minutes"
-	// AlfredOptOutReasonAnnotationKey is a free-text operator note
-	// explaining an opt-out; surfaced in events, never parsed.
-	AlfredOptOutReasonAnnotationKey = AlfredAPIGroupName + "/opt-out-reason"
-	// AlfredTenantGroupAnnotationKey opts same-group workloads across
-	// namespaces into cross-tenant optimization.
-	AlfredTenantGroupAnnotationKey = AlfredAPIGroupName + "/tenant-group"
-	// AlfredSpotPolicyAnnotationKey overrides the cluster spot policy for
-	// this workload: avoid | migrate | ignore.
-	AlfredSpotPolicyAnnotationKey = AlfredAPIGroupName + "/spot-policy"
+	// InferenceReplicaParentGenerationAnnotationKey records the parent
+	// ISVC's metadata.generation the projector most recently applied to
+	// this InferenceReplica. Coordination gates compare it against the
+	// live ISVC generation to tell "this Component's projection hasn't
+	// caught up with the operator's latest spec bump" apart from "this
+	// Component genuinely has nothing to roll" — the IR's own
+	// status.observedGeneration cannot answer that, because it tracks
+	// the IR's generation, which only moves when the projected spec
+	// itself changes.
+	InferenceReplicaParentGenerationAnnotationKey = OMEAPIGroupName + "/parent-generation"
 )
 
 // Label Constants
 var (
 	VolcanoQueueName                      = "volcano.sh/queue-name"
-	VolcanoScheduler                      = "volcano"
 	InferenceServiceBaseModelNameLabelKey = "base-model-name"
 	InferenceServiceBaseModelSizeLabelKey = "base-model-size"
 	BaseModelTypeLabelKey                 = "base-model-type"
@@ -257,15 +233,14 @@ var (
 
 // PrioriryClass
 var (
-	DedicatedAiClusterPreemptionPriorityClass = "volcano-scheduling-high-priority"
-
 	DedicatedAiClusterPreemptionWorkloadPriorityClass = "kueue-scheduling-high-priority"
 )
 
 // InferenceService Internal Annotations
 var (
-	InferenceServiceInternalAnnotationsPrefix        = "internal." + OMEAPIGroupName
-	StorageInitializerSourceUriInternalAnnotationKey = InferenceServiceInternalAnnotationsPrefix + "/storage-initializer-sourceuri"
+	InferenceServiceInternalAnnotationsPrefix           = "internal." + OMEAPIGroupName
+	StorageInitializerSourceUriInternalAnnotationKey    = InferenceServiceInternalAnnotationsPrefix + "/storage-initializer-sourceuri"
+	InferenceServiceInPlaceImageTransitionAnnotationKey = InferenceServiceInternalAnnotationsPrefix + "/in-place-image-transition"
 )
 
 // ome networking constants
@@ -276,9 +251,6 @@ const (
 	IsvcNameHeader         = "OMe-Isvc-Name"
 	IsvcNamespaceHeader    = "OME-Isvc-Namespace"
 )
-
-// StorageSpec Constants
-var ()
 
 // Controller Constants
 var (
@@ -301,15 +273,6 @@ var (
 	AutoscalerClassHPA      AutoscalerClassType = "hpa"
 	AutoscalerClassKEDA     AutoscalerClassType = "keda"
 	AutoscalerClassExternal AutoscalerClassType = "external"
-)
-
-// Keda Autoscaler Configs
-var (
-	KedaScalingThreshold        = "autoscaling.keda.sh/threshold"
-	KedaScalingOperator         = "autoscaling.keda.sh/operator"
-	KedaPrometheusServerAddress = "autoscaling.keda.sh/prometheus.serverAddress"
-	KedaPrometheusQuery         = "autoscaling.keda.sh/prometheus.query"
-	KedaDefaultMinReplicas      = 1
 )
 
 // Autoscaler Metrics
@@ -344,20 +307,28 @@ var (
 var (
 	PodMutatorWebhookName              = OMEName + "-pod-mutator-webhook"
 	ServingRuntimeValidatorWebhookName = OMEName + "-servingRuntime-validator-webhook"
-	BenchmarkJobValidatorWebhookName   = OMEName + "-benchmark-job-validator-webhook"
 )
 
 // GPU/CPU resource constants
 const (
 	NvidiaGPUResourceType = "nvidia.com/gpu"
+	GoogleTPUResourceType = "google.com/tpu"
 )
 
 // InferenceService Environment Variables
 const (
+	ContainerPrometheusMetricsPortEnvVarKey           = "CONTAINER_PROMETHEUS_METRICS_PORT"
+	ContainerPrometheusMetricsPathEnvVarKey           = "CONTAINER_PROMETHEUS_METRICS_PATH"
+	QueueProxyAggregatePrometheusMetricsPortEnvVarKey = "AGGREGATE_PROMETHEUS_METRICS_PORT"
+
 	TFewWeightPathEnvVarKey = "TFEW_PATH"
 
-	ModelPathEnvVarKey       = "MODEL_PATH"
-	ServedModelNameEnvVarKey = "SERVED_MODEL_NAME"
+	ModelPathEnvVarKey                   = "MODEL_PATH"
+	ServedModelNameEnvVarKey             = "SERVED_MODEL_NAME"
+	ModelCacheProviderEnvVarKey          = "MODEL_CACHE_PROVIDER"
+	ModelCacheEndpointEnvVarKey          = "MODEL_CACHE_ENDPOINT"
+	ModelCacheOptionsEnvVarKey           = "MODEL_CACHE_OPTIONS"
+	ClusterCacheHeadlessServiceEnvVarKey = "CLUSTER_CACHE_HEADLESS_SERVICE"
 
 	ParallelismSizeEnvVarKey = "PARALLELISM_SIZE"
 )
@@ -377,21 +348,19 @@ type InferenceServiceVerb string
 
 type InferenceServiceProtocol string
 
+// VisibilityLabel is the cluster-local visibility marker. Kept for
+// backward compatibility with manifests that still carry the Knative
+// idiom even though OME no longer serves Knative.
 const (
-	// VisibilityLabel marks an InferenceService as cluster-local. The key retains its
-	// historical networking.knative.dev prefix so existing resources keep working.
 	VisibilityLabel = "networking.knative.dev/visibility"
-)
-
-var (
-	IstioMeshGateway = "mesh"
 )
 
 // InferenceService Component enums
 const (
-	Router  InferenceServiceComponent = "router"
-	Engine  InferenceServiceComponent = "engine"
-	Decoder InferenceServiceComponent = "decoder"
+	Predictor InferenceServiceComponent = "predictor"
+	Router    InferenceServiceComponent = "router"
+	Engine    InferenceServiceComponent = "engine"
+	Decoder   InferenceServiceComponent = "decoder"
 )
 
 // InferenceService protocol enums
@@ -408,6 +377,7 @@ const (
 	InferenceServiceDefaultAgentPort    = 9081
 	CommonDefaultHttpPort               = 80
 	CommonISVCPort                      = 8080
+	AggregateMetricsPortName            = "aggr-metric"
 )
 
 // Labels to put on kservice
@@ -431,7 +401,6 @@ const (
 	MainContainerName               = "ome-container"
 	TrainingMainContainerName       = "trainer"
 	StorageInitializerContainerName = "storage-initializer"
-	ModelInitContainerName          = "model-init"
 	FineTunedAdapterContainerName   = "fine-tuned-adapter"
 	ServingSidecarContainerName     = "serving-sidecar"
 )
@@ -471,21 +440,19 @@ const (
 	LLamaVllmFTServingServedModelNamePrefix = "/data"
 )
 
-const (
-	// DefaultModelLocalMountPath is where models will be mounted by the storage-initializer.
-	DefaultModelLocalMountPath = "/mnt/models"
-	// ModelArtifactsDirectory contains node-local artifacts shared by model paths.
-	ModelArtifactsDirectory = "_artifacts"
-)
+// DefaultModelLocalMountPath is where models will be mounted by the storage-initializer
+const DefaultModelLocalMountPath = "/mnt/models"
 
 var (
 	ServiceAnnotationDisallowedList = []string{
-		// Legacy Knative autoscaler keys. Knative support was removed; these stay listed
-		// so stale annotations on existing InferenceServices keep being stripped.
-		"autoscaling.knative.dev/min-scale",
-		"autoscaling.knative.dev/max-scale",
 		StorageInitializerSourceUriInternalAnnotationKey,
 		"kubectl.kubernetes.io/last-applied-configuration",
+		// Rollout operator verbs are ISVC-level signals consumed by the
+		// controller off the InferenceService; they must not propagate to
+		// managed pods/Services. (The revision layer also strips them from
+		// the pod-template hash so toggling one never mints a revision.)
+		RolloutPromoteAnnotation,
+		RolloutRollbackAnnotation,
 	}
 
 	RevisionTemplateLabelDisallowedList = []string{
@@ -498,7 +465,7 @@ var (
 	//
 	// Entries can be either:
 	// - Prefix patterns ending with "/" (e.g., "k8s.grafana.com/") - matches all annotations with this prefix
-	// - Exact annotation keys (e.g., ModelInitInjectionKey) - matches only that specific annotation
+	// - Exact annotation keys (e.g., FineTunedAdapterInjectionKey) - matches only that specific annotation
 	//
 	// Both styles work correctly because IsPrefixSupported uses strings.HasPrefix for matching.
 	PodOnlyAnnotationPrefixes = []string{
@@ -507,6 +474,7 @@ var (
 		"prometheus.io/",             // Prometheus scraping annotations (prometheus.io/scrape, prometheus.io/port, prometheus.io/path)
 		"networking.gke.io/",         // GKE multi-NIC and RDMA network annotations (networking.gke.io/interfaces, etc.)
 		"rdma.ome.io/",               // OME RDMA injection annotations (RDMAAutoInjectAnnotationKey, RDMAProfileAnnotationKey, etc.)
+		"runtime.ome.io/",            // OME runtime profile annotations (shm/probe/observability profiles + container-name override)
 		ModelInitInjectionKey,        // ome.io/inject-model-init - triggers model init container injection via webhook
 		FineTunedAdapterInjectionKey, // ome.io/inject-fine-tuned-adapter - triggers fine-tuned adapter injection via webhook
 		ServingSidecarInjectionKey,   // ome.io/inject-serving-sidecar - triggers serving sidecar injection via webhook
@@ -545,11 +513,8 @@ func (d DeploymentModeType) IsValid() bool {
 	}
 }
 
-// revision label
+// app label
 const (
-	// RevisionLabel is the pod label used to look up pods for non-raw deployment modes.
-	// The key retains its historical serving.knative.dev prefix.
-	RevisionLabel         = "serving.knative.dev/revision"
 	RawDeploymentAppLabel = "app"
 )
 
@@ -563,13 +528,18 @@ const (
 
 // CRD Kinds
 const (
-	IstioVirtualServiceKind = "VirtualService"
-	VolcanoQueueKind        = "Queue"
-	KEDAScaledObjectKind    = "ScaledObject"
-	VolcanoJobKind          = "Job"
-	LWSKind                 = "LeaderWorkerSet"
-	GatewayKind             = "Gateway"
-	ServiceKind             = "Service"
+	VolcanoQueueKind     = "Queue"
+	KEDAScaledObjectKind = "ScaledObject"
+	VolcanoJobKind       = "Job"
+	LWSKind              = "LeaderWorkerSet"
+	GatewayKind          = "Gateway"
+	ServiceKind          = "Service"
+	PodMonitorKind       = "PodMonitor"
+	// PodGroupKind is the scheduler-plugins coscheduling PodGroup
+	// (`scheduling.x-k8s.io/v1alpha1`). Optional — OMENative degrades
+	// gracefully when the CRD is absent (sets the
+	// `GangSchedulingUnavailable=True` Component Condition).
+	PodGroupKind = "PodGroup"
 )
 
 // Volcano Job Labels
@@ -592,6 +562,19 @@ var (
 	TargetInstanceShapes             = "models.ome.io/target-instance-shapes"
 	ModelStatusConfigMapLabel        = "models.ome/basemodel-status"
 	ReserveModelArtifact             = "models.ome/reserve-model-artifact"
+
+	// PVCStorageConfigMapLabel marks a model status ConfigMap as belonging
+	// to a PVC-backed BaseModel (rather than to a node). The BaseModel
+	// controller skips its per-node existence check on these.
+	PVCStorageConfigMapLabel = "models.ome/pvc-status"
+	// PVCMetadataModelNameLabel records the BaseModel/ClusterBaseModel name
+	// the PVC ConfigMap belongs to (for human filtering).
+	PVCMetadataModelNameLabel = "models.ome/model-name"
+	// PVCMetadataScopeLabel is "namespaced" or "cluster".
+	PVCMetadataScopeLabel = "models.ome/model-scope"
+	// PVCMetadataLastErrorAnnotation captures the last extraction error
+	// message on the PVC ConfigMap, for operator debugging.
+	PVCMetadataLastErrorAnnotation = "models.ome/pvc-metadata-last-error"
 
 	ModelLabelDomain          = "models.ome.io"
 	ClusterBaseModelLabelType = "clusterbasemodel"
@@ -640,10 +623,6 @@ const (
 	OpenAI ModelVendor = "openai"
 )
 
-var (
-// JobCompletionIndexFieldPath is the field path for the Job completion index annotation.
-)
-
 // BaseModelType enum
 type BaseModelType string
 
@@ -681,9 +660,9 @@ func GetModelsLabelWithUid(uid types.UID) string {
 	return ModelsLabelPrefix + string(uid)
 }
 
-// GetRawServiceLabel generate native service label
+// GetRawServiceLabel returns the shared label value for Raw workload resources.
 func GetRawServiceLabel(service string) string {
-	return service
+	return TruncateNameWithMaxLength(service, k8svalidation.LabelValueMaxLength)
 }
 
 func (e InferenceServiceComponent) String() string {
@@ -731,8 +710,25 @@ func InferenceServiceHostName(name string, namespace string, domain string) stri
 	return builder.String()
 }
 
+func DefaultPredictorServiceName(name string) string {
+	var builder strings.Builder
+	predictorStr := string(Predictor)
+	// Pre-allocate capacity: name + "-" + predictorStr + "-" + InferenceServiceDefault
+	builder.Grow(len(name) + len(predictorStr) + len(InferenceServiceDefault) + 2)
+	builder.WriteString(name)
+	builder.WriteByte('-')
+	builder.WriteString(predictorStr)
+	builder.WriteByte('-')
+	builder.WriteString(InferenceServiceDefault)
+	return builder.String()
+}
+
 func DefaultRouterServiceName(name string) string {
 	return name + "-" + string(Router) + "-" + InferenceServiceDefault
+}
+
+func PredictorServiceName(name string) string {
+	return name
 }
 
 func RouterServiceName(name string) string {
@@ -854,16 +850,6 @@ func truncateWithHash(original string, maxLength int) string {
 	return fmt.Sprintf("%s-%s", hashPrefix, suffix)
 }
 
-// truncateModelName truncates a model name to fit within the given constraints
-func truncateModelName(modelName string, maxLength int) string {
-	return truncateWithHash(modelName, maxLength)
-}
-
-// truncateNamespace truncates a namespace name to fit within the given constraints
-func truncateNamespace(namespace string, maxLength int) string {
-	return truncateWithHash(namespace, maxLength)
-}
-
 // GetClusterBaseModelLabel returns the deterministic label key for ClusterBaseModel
 // Format: models.ome.io/clusterbasemodel.{model_name}
 // Handles long model names by truncating with hash for uniqueness
@@ -874,7 +860,7 @@ func GetClusterBaseModelLabel(modelName string) string {
 		// No truncation needed
 		return fmt.Sprintf("%s/%s.%s", ModelLabelDomain, ClusterBaseModelLabelType, modelName)
 	}
-	truncatedModelName := truncateModelName(modelName, maxModelNameLength)
+	truncatedModelName := truncateWithHash(modelName, maxModelNameLength)
 	return fmt.Sprintf("%s/%s.%s", ModelLabelDomain, ClusterBaseModelLabelType, truncatedModelName)
 }
 
@@ -915,8 +901,8 @@ func GetBaseModelLabel(namespace, modelName string) string {
 		}
 	}
 
-	truncatedNamespace := truncateNamespace(namespace, namespaceMaxLength)
-	truncatedModelName := truncateModelName(modelName, modelNameMaxLength)
+	truncatedNamespace := truncateWithHash(namespace, namespaceMaxLength)
+	truncatedModelName := truncateWithHash(modelName, modelNameMaxLength)
 
 	return fmt.Sprintf("%s/%s.%s.%s", ModelLabelDomain, truncatedNamespace, BaseModelLabelType, truncatedModelName)
 }
@@ -933,7 +919,7 @@ func GetModelConfigMapKey(namespace, modelName string, isClusterBaseModel bool) 
 			// No truncation needed
 			return fmt.Sprintf("%s.%s", ClusterBaseModelLabelType, modelName)
 		}
-		truncatedModelName := truncateModelName(modelName, maxModelNameLength)
+		truncatedModelName := truncateWithHash(modelName, maxModelNameLength)
 		return fmt.Sprintf("%s.%s", ClusterBaseModelLabelType, truncatedModelName)
 	}
 
@@ -969,28 +955,41 @@ func GetModelConfigMapKey(namespace, modelName string, isClusterBaseModel bool) 
 		}
 	}
 
-	truncatedNamespace := truncateNamespace(namespace, namespaceMaxLength)
-	truncatedModelName := truncateModelName(modelName, modelNameMaxLength)
+	truncatedNamespace := truncateWithHash(namespace, namespaceMaxLength)
+	truncatedModelName := truncateWithHash(modelName, modelNameMaxLength)
 
 	return fmt.Sprintf("%s.%s.%s", truncatedNamespace, BaseModelLabelType, truncatedModelName)
+}
+
+// pvcMetadataConfigMapPrefix and PVCMetadataNameHashLen together define the
+// shape of the per-PVC-model status ConfigMap name, shared between the
+// BaseModel controller (reads) and the metadata-extraction agent (writes).
+const (
+	pvcMetadataConfigMapPrefix = "pvc-metadata-"
+	PVCMetadataNameHashLen     = 8
+)
+
+// GetPVCMetadataConfigMapName returns the deterministic, ≤63-char name of
+// the per-PVC-model status ConfigMap. Unlike per-node ConfigMaps (which
+// are named after the node and host one entry per model), the PVC variant
+// is one ConfigMap per PVC-backed model — there is no node concept for
+// PVC storage.
+//
+// Both the controller and the agent compute this name independently so
+// the agent can write and the controller can read by exact name (no List
+// scan needed).
+func GetPVCMetadataConfigMapName(modelName, modelNamespace string, isClusterScoped bool) string {
+	keySource := modelName
+	if !isClusterScoped {
+		keySource = modelNamespace + "/" + modelName
+	}
+	sum := sha256.Sum256([]byte(keySource))
+	return pvcMetadataConfigMapPrefix + hex.EncodeToString(sum[:])[:PVCMetadataNameHashLen]
 }
 
 // TruncateNameWithMaxLength return a valid DNS name
 func TruncateNameWithMaxLength(name string, maxLength int) string {
 	return truncateWithHashTweaks(name, maxLength)
-}
-
-func TruncateNameWithPrefix(name, prefix string, maxLength int) string {
-	if maxLength <= 0 {
-		return ""
-	}
-
-	payloadMaxLength := maxLength - len(prefix)
-	if payloadMaxLength <= 0 {
-		return TruncateNameWithMaxLength(prefix, maxLength)
-	}
-
-	return prefix + TruncateNameWithMaxLength(name, payloadMaxLength)
 }
 
 // ParseModelInfoFromConfigMapKey attempts to parse model information from a ConfigMap key
@@ -1011,4 +1010,131 @@ func ParseModelInfoFromConfigMapKey(configMapKey string) (namespace, modelName s
 	}
 
 	return "", "", false, false
+}
+
+// Env keys the agent's model-decryption and artifact-reuse paths consume.
+var (
+	AgentKeyNameEnvVarKey                    = AgentAppName + "_" + "KEY_NAME"
+	AgentSecretNameEnvVarKey                 = AgentAppName + "_" + "SECRET_NAME"
+	AgentVaultIDEnvVarKey                    = AgentAppName + "_" + "VAULT_ID"
+	AgentDisableModelDecryptionEnvVarKey     = AgentAppName + "_" + "DISABLE_MODEL_DECRYPTION"
+	AgentTargetArtifactReuseAllowedEnvVarKey = AgentAppName + "_" + "TARGET_ARTIFACT_REUSE_ALLOWED"
+	AgentTensorRTLLMVersionsEnvVarKey        = AgentAppName + "_" + "TENSORRTLLM_VERSION"
+)
+
+// Model decryption and model-init injection annotation keys.
+var (
+	BaseModelDecryptionKeyName    = OMEAPIGroupName + "/base-model-decryption-key-name"
+	BaseModelDecryptionSecretName = OMEAPIGroupName + "/base-model-decryption-secret-name"
+	DisableModelDecryption        = OMEAPIGroupName + "/disable-model-decryption"
+	ModelInitInjectionKey         = OMEAPIGroupName + "/inject-model-init"
+	ModelInitContainerName        = "model-init"
+)
+
+// OCI-artifact reuse markers: sentinel objects written next to a model's
+// artifacts so concurrent downloaders can detect a complete or in-flight
+// upload.
+const (
+	ArtifactCompleteMarkerFileName = ".ome-artifact-complete"
+	ArtifactCompleteMarkerBody     = "complete\n"
+	ArtifactUploadLockFileName     = ".ome-artifact-upload.lock"
+	ArtifactUploadLockBody         = "uploading\n"
+	HfArtifactConfigMapKeyPrefix   = "artifact.huggingface."
+	// ModelArtifactsDirectory contains node-local artifacts shared by model paths.
+	ModelArtifactsDirectory = "_artifacts"
+)
+
+// IsArtifactCompleteMarkerObjectName reports whether objectName is (or ends
+// with) the artifact-complete sentinel.
+func IsArtifactCompleteMarkerObjectName(objectName string) bool {
+	return objectName == ArtifactCompleteMarkerFileName || strings.HasSuffix(objectName, "/"+ArtifactCompleteMarkerFileName)
+}
+
+// IsArtifactUploadLockObjectName reports whether objectName is (or ends with)
+// the artifact upload-lock sentinel.
+func IsArtifactUploadLockObjectName(objectName string) bool {
+	return objectName == ArtifactUploadLockFileName || strings.HasSuffix(objectName, "/"+ArtifactUploadLockFileName)
+}
+
+// IsInternalArtifactObjectName reports whether objectName is one of the
+// artifact bookkeeping sentinels rather than model content.
+func IsInternalArtifactObjectName(objectName string) bool {
+	return IsArtifactCompleteMarkerObjectName(objectName) || IsArtifactUploadLockObjectName(objectName)
+}
+
+// BenchmarkJob names.
+const (
+	BenchmarjJobName          = "benchmarkjob"
+	BenchmarkJobConfigMapName = "benchmarkjob-config"
+)
+
+// BenchmarkJobValidatorWebhookName is the BenchmarkJob validating-webhook name.
+var BenchmarkJobValidatorWebhookName = OMEName + "-benchmark-job-validator-webhook"
+
+// Alfred caretaker annotations: per-workload operator knobs gating the
+// Alfred optimization policies.
+var (
+	// AlfredAPIGroupName groups the per-workload caretaker annotations an
+	// operator sets on an InferenceService to gate Alfred's policies.
+	AlfredAPIGroupName = "alfred.ome.io"
+	// AlfredMovableAnnotationKey opts a workload out of ("false") or into
+	// ("true") every Alfred policy; wins over the cluster-wide default.
+	AlfredMovableAnnotationKey = AlfredAPIGroupName + "/movable"
+	// AlfredPriorityAnnotationKey is a float in [0, 1]; lower = more
+	// protected when Alfred orders candidates.
+	AlfredPriorityAnnotationKey = AlfredAPIGroupName + "/priority"
+	// AlfredSpotPolicyAnnotationKey overrides the cluster spot policy for
+	// this workload: avoid | migrate | ignore.
+	AlfredSpotPolicyAnnotationKey = AlfredAPIGroupName + "/spot-policy"
+	// AlfredCooldownMinutesAnnotationKey overrides the per-workload
+	// migration cooldown for this workload.
+	AlfredCooldownMinutesAnnotationKey = AlfredAPIGroupName + "/cooldown-minutes"
+	// AlfredTenantGroupAnnotationKey opts same-group workloads across
+	// namespaces into cross-tenant optimization.
+	AlfredTenantGroupAnnotationKey = AlfredAPIGroupName + "/tenant-group"
+	// AlfredOptOutReasonAnnotationKey is a free-text operator note
+	// explaining an opt-out; surfaced in events, never parsed.
+	AlfredOptOutReasonAnnotationKey = AlfredAPIGroupName + "/opt-out-reason"
+	// MigrationRequestAnnotationPrefix prefixes the UUID-suffixed
+	// migration-request annotations (`ome.io/migration-request-v1-<uuid>`)
+	// written onto an InferenceService. The workload audit package carries
+	// the same value for the controller-side consumer.
+	MigrationRequestAnnotationPrefix = OMEAPIGroupName + "/migration-request-v1-"
+)
+
+// Annotation-driven KEDA scaling keys and defaults.
+const (
+	KedaScalingOperator         = "autoscaling.keda.sh/operator"
+	KedaScalingThreshold        = "autoscaling.keda.sh/threshold"
+	KedaPrometheusQuery         = "autoscaling.keda.sh/prometheus.query"
+	KedaPrometheusServerAddress = "autoscaling.keda.sh/prometheus.serverAddress"
+	KedaDefaultMinReplicas      = 1
+)
+
+// Istio and scheduling names.
+const (
+	IstioMeshGateway        = "mesh"
+	IstioVirtualServiceKind = "VirtualService"
+	VolcanoScheduler        = "volcano"
+
+	DedicatedAiClusterPreemptionPriorityClass = "volcano-scheduling-high-priority"
+
+	// RevisionLabel is the pod label used to look up pods for non-raw deployment modes.
+	// The key retains its historical serving.knative.dev prefix.
+	RevisionLabel = "serving.knative.dev/revision"
+)
+
+// TruncateNameWithPrefix truncates name to fit maxLength together with the
+// given prefix, preserving the prefix whole when possible.
+func TruncateNameWithPrefix(name, prefix string, maxLength int) string {
+	if maxLength <= 0 {
+		return ""
+	}
+
+	payloadMaxLength := maxLength - len(prefix)
+	if payloadMaxLength <= 0 {
+		return TruncateNameWithMaxLength(prefix, maxLength)
+	}
+
+	return prefix + TruncateNameWithMaxLength(name, payloadMaxLength)
 }
