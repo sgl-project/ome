@@ -106,13 +106,13 @@ func CoordinationRatioToleranceWarning(spec *v1beta1.InferenceServiceSpec) strin
 	groups := spec.GetRolloutGroups()
 	for i := range groups {
 		mr := groups[i].MaintainRatio
-		if mr == nil {
+		if mr == nil || mr.Tolerance == nil {
 			continue
 		}
-		if mr.Tolerance > ratioToleranceWarningThreshold {
+		if *mr.Tolerance > ratioToleranceWarningThreshold {
 			return fmt.Sprintf(
 				"spec.rollout.groups[%d].maintainRatio.tolerance=%d effectively disables ratio enforcement (>%d) (%s)",
-				i, mr.Tolerance, ratioToleranceWarningThreshold, ReasonRatioToleranceTooHigh)
+				i, *mr.Tolerance, ratioToleranceWarningThreshold, ReasonRatioToleranceTooHigh)
 		}
 	}
 	return ""

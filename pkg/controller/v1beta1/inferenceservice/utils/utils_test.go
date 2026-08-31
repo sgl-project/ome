@@ -602,7 +602,6 @@ func TestMergeRouterSpec(t *testing.T) {
 
 func TestMergeEngineSpec(t *testing.T) {
 	intPtr := func(i int) *int { return &i }
-	strPtr := func(s string) *string { return &s }
 
 	tests := []struct {
 		name           string
@@ -945,8 +944,6 @@ func TestMergeEngineSpec(t *testing.T) {
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
 					MinReplicas: intPtr(1),
 					MaxReplicas: 5,
-					ScaleTarget: intPtr(50),
-					ScaleMetric: (*v1beta1.ScaleMetric)(strPtr("concurrency")),
 				},
 				PodSpec: v1beta1.PodSpec{
 					ServiceAccountName: "runtime-sa",
@@ -984,7 +981,6 @@ func TestMergeEngineSpec(t *testing.T) {
 			isvcEngine: &v1beta1.EngineSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
 					MaxReplicas: 10,
-					ScaleTarget: intPtr(80),
 				},
 				PodSpec: v1beta1.PodSpec{
 					Containers: []v1.Container{
@@ -1008,8 +1004,6 @@ func TestMergeEngineSpec(t *testing.T) {
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
 					MinReplicas: intPtr(1),
 					MaxReplicas: 10,
-					ScaleTarget: intPtr(80),
-					ScaleMetric: (*v1beta1.ScaleMetric)(strPtr("concurrency")),
 				},
 				PodSpec: v1beta1.PodSpec{
 					ServiceAccountName: "runtime-sa",
@@ -1129,7 +1123,6 @@ func TestMergeEngineSpec(t *testing.T) {
 
 func TestMergeDecoderSpec(t *testing.T) {
 	intPtr := func(i int) *int { return &i }
-	strPtr := func(s string) *string { return &s }
 
 	tests := []struct {
 		name            string
@@ -1283,8 +1276,6 @@ func TestMergeDecoderSpec(t *testing.T) {
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
 					MinReplicas: intPtr(2),
 					MaxReplicas: 8,
-					ScaleTarget: intPtr(80),
-					ScaleMetric: (*v1beta1.ScaleMetric)(strPtr("memory")),
 				},
 				PodSpec: v1beta1.PodSpec{
 					Containers: []v1.Container{
@@ -1339,8 +1330,6 @@ func TestMergeDecoderSpec(t *testing.T) {
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
 					MinReplicas: intPtr(2),
 					MaxReplicas: 16,
-					ScaleTarget: intPtr(80),
-					ScaleMetric: (*v1beta1.ScaleMetric)(strPtr("memory")),
 				},
 				PodSpec: v1beta1.PodSpec{
 					Containers: []v1.Container{

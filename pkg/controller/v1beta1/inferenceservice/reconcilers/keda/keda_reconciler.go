@@ -155,12 +155,8 @@ func getScalingThreshold(metadata metav1.ObjectMeta, kedaConfig *v1beta1.KedaCon
 
 // getScaleMetric retrieves the scaling metric name
 func getScaleMetric(componentExt *v1beta1.ComponentExtensionSpec) string {
-	// Use ScaleMetric from the component extension spec if available
-	if componentExt.ScaleMetric != nil && *componentExt.ScaleMetric != "" {
-		return string(*componentExt.ScaleMetric)
-	}
 	// Default metric
-	return string(v1beta1.MetricTPS)
+	return "tps"
 }
 
 // getScalingOperator retrieves the scaling operator

@@ -28,11 +28,6 @@ func (sr *StatusReconciler) PropagateRawStatus(
 
 	statusSpec := sr.initializeComponentStatus(status, component)
 
-	latestRevision := deployment.GetObjectMeta().GetAnnotations()["deployment.kubernetes.io/revision"]
-	statusSpec.LatestCreatedRevision = latestRevision
-	if latestRevision != "" && sr.isDeploymentRolloutComplete(deployment) {
-		statusSpec.LatestReadyRevision = latestRevision
-	}
 	condition := sr.getDeploymentCondition(deployment, appsv1.DeploymentAvailable)
 	if condition != nil && condition.Status == v1.ConditionTrue {
 		statusSpec.URL = url
@@ -52,7 +47,6 @@ func (sr *StatusReconciler) PropagateMultiNodeStatus(
 
 	statusSpec := sr.initializeComponentStatus(status, component)
 
-	statusSpec.LatestCreatedRevision = lws.GetObjectMeta().GetAnnotations()["resourceVersion"]
 	lwsCondition := sr.getLWSConditions(lws, lwsspec.LeaderWorkerSetAvailable)
 	if lwsCondition != nil && lwsCondition.Status == v1.ConditionTrue {
 		statusSpec.URL = url
@@ -77,64 +71,34 @@ func (sr *StatusReconciler) PropagateMultiNodeStatus(
 	status.ObservedGeneration = lws.Generation
 }
 
-// PropagateModelStatus propagates model status from pod information
+// PropagateModelStatus propagates model status from pod information.
 func (sr *StatusReconciler) PropagateModelStatus(
 	status *v1beta1.InferenceServiceStatus,
 	statusSpec v1beta1.ComponentStatusSpec,
 	podList *v1.PodList,
-	rawDeployment bool,
-	reportContainerStartupFailure bool) {
+	rawDeployment bool) {
 
-	// Check at least one pod is running for the latest revision of inferenceservice
+	_ = statusSpec
+	_ = rawDeployment
+
 	totalCopies := len(podList.Items)
 	if totalCopies == 0 {
 		sr.UpdateModelRevisionStates(status, v1beta1.Pending, totalCopies, nil)
 		return
 	}
 
-	// Use helper function to safely get the first pod
 	firstPod, err := sr.getFirstPod(podList)
 	if err != nil {
 		sr.UpdateModelRevisionStates(status, v1beta1.Pending, totalCopies, nil)
 		return
 	}
 
-	// Update model state to 'Loaded' when the current ready status still matches the latest rollout revision.
-	if status.IsReady() && statusSpec.LatestCreatedRevision == statusSpec.LatestReadyRevision {
+	if status.IsReady() {
 		sr.UpdateModelRevisionStates(status, v1beta1.Loaded, totalCopies, nil)
 		return
 	}
 
-	// Check container statuses
-	currentModelRevisionName := statusSpec.LatestCreatedRevision
-	reportContainerStartupFailure = reportContainerStartupFailure &&
-		sr.shouldReportContainerStartupFailure(status, statusSpec, rawDeployment)
-	sr.checkContainerStatuses(status, firstPod, totalCopies, currentModelRevisionName, reportContainerStartupFailure)
-}
-
-func (sr *StatusReconciler) shouldReportContainerStartupFailure(
-	status *v1beta1.InferenceServiceStatus,
-	statusSpec v1beta1.ComponentStatusSpec,
-	rawDeployment bool) bool {
-	if status.ModelStatus.ModelRevisionStates == nil ||
-		status.ModelStatus.ModelRevisionStates.ActiveModelState != v1beta1.Loaded {
-		return true
-	}
-
-	// Raw deployments do not expose a revision-level "latest revision became ready" signal.
-	// Once a raw deployment has previously loaded, a later crash during rollout could happen
-	// either before first ready or after the new pod was already serving. Keep the existing
-	// ModelLoadFailed classification in that case rather than guessing.
-	if rawDeployment {
-		return false
-	}
-
-	// After a model is already loaded, only treat crash loops as startup failures when the
-	// component status clearly shows a new rollout is in progress.
-	if statusSpec.LatestCreatedRevision == "" || statusSpec.LatestReadyRevision == "" {
-		return false
-	}
-	return statusSpec.LatestCreatedRevision != statusSpec.LatestReadyRevision
+	sr.checkContainerStatuses(status, firstPod, totalCopies)
 }
 
 // UpdateModelRevisionStates updates the model revision states

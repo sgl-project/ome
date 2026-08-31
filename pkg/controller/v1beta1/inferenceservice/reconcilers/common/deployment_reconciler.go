@@ -34,7 +34,7 @@ func (r *DeploymentReconciler) ReconcileRawDeployment(
 	componentSpec *v1beta1.ComponentExtensionSpec,
 	componentType v1beta1.ComponentType,
 ) (ctrl.Result, error) {
-	reconciler, err := raw.NewRawKubeReconciler(r.Client, r.Clientset, r.Scheme, objectMeta, componentSpec, isvc.Spec.KedaConfig, podSpec)
+	reconciler, err := raw.NewRawKubeReconciler(r.Client, r.Clientset, r.Scheme, objectMeta, componentSpec, nil, podSpec)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to create RawKubeReconciler for %s", componentType)
 	}

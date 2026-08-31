@@ -23,6 +23,11 @@ type InferenceServiceSpec struct {
 	//     handles multi-node serving when Leader/Worker are present)
 	//   - "RawDeployment" — Kubernetes Deployment/HPA-backed dispatch
 	//
+	// MultiNode (LeaderWorkerSet-backed multi-node serving) is selected
+	// via the ome.io/deploymentMode annotation or the operator-level
+	// default, never via this field. PDDisaggregated is a shape
+	// descriptor derived from engine+decoder pairing, and
+	// VirtualDeployment is legacy; neither is accepted here.
 	// +kubebuilder:validation:Enum=OMENative;RawDeployment
 	// +optional
 	DeploymentMode *constants.DeploymentModeType `json:"deploymentMode,omitempty"`

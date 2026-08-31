@@ -71,7 +71,8 @@ type SupportedModelFormat struct {
 type ModelCacheProvider string
 
 const (
-	// DragonFly is the m provider name used by the sharded model-cache integration.
+	// DragonFly is the provider name used by the sharded model-cache
+	// integration.
 	DragonFly ModelCacheProvider = "model_cache"
 )
 
