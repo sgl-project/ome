@@ -343,7 +343,7 @@ func runtimeEffectiveContent() v1alpha1.RuntimeEffectiveContent {
 			State: v1alpha1.ConfigurationStateAvailable, Origin: v1alpha1.ConfigurationOriginControllerRevision,
 			Source: &active,
 			Revision: &v1alpha1.RuntimeRevisionReference{
-				Namespace: "ome", Name: "revision-a", CreatedAt: time.Date(2026, time.August, 31, 11, 0, 0, 0, time.FixedZone("test", -7*60*60)),
+				Namespace: "ome", Name: "revision-a", CreatedAt: runtimeReportTime(time.Date(2026, time.August, 31, 11, 0, 0, 0, time.FixedZone("test", -7*60*60))),
 			},
 			Hash: "aabbccdd",
 			Components: []v1alpha1.RuntimeComponent{

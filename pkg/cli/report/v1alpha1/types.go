@@ -64,6 +64,9 @@ const (
 	UnavailableMalformedPayload UnavailableReason = "MalformedPayload"
 	UnavailableNotConfigured    UnavailableReason = "NotConfigured"
 	UnavailableUnreadable       UnavailableReason = "Unreadable"
+	UnavailableCycle            UnavailableReason = "Cycle"
+	UnavailableMaxDepthExceeded UnavailableReason = "MaxDepthExceeded"
+	UnavailableDisabled         UnavailableReason = "Disabled"
 )
 
 // SourceReference identifies one typed source used to build a report.

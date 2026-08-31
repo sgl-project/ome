@@ -58,7 +58,7 @@ func TestRuntimeHistoryCanonicalIsDeterministicForConflictingEntries(t *testing.
 	source := runtimeObject(v1alpha1.RuntimeKindServingRuntime, "prod", "vllm")
 	base := v1alpha1.RuntimeRevisionEntry{
 		Revision: v1alpha1.RuntimeRevisionReference{
-			Namespace: "ome", Name: "revision", UID: "uid", CreatedAt: createdAt,
+			Namespace: "ome", Name: "revision", UID: "uid", CreatedAt: runtimeReportTime(createdAt),
 		},
 		Source: &source, Hash: "aaaaaaaa",
 		Roles:          []v1alpha1.RuntimeRevisionRole{v1alpha1.RuntimeRevisionRoleHistory},
@@ -220,7 +220,7 @@ func TestRuntimeHistoryCanonicalOrdersEverySourceIdentityField(t *testing.T) {
 	}
 	baseEntry := v1alpha1.RuntimeRevisionEntry{
 		Revision: v1alpha1.RuntimeRevisionReference{
-			Namespace: "ome", Name: "revision", UID: "uid", CreatedAt: createdAt,
+			Namespace: "ome", Name: "revision", UID: "uid", CreatedAt: runtimeReportTime(createdAt),
 		},
 		Hash: "aaaaaaaa", Roles: []v1alpha1.RuntimeRevisionRole{}, Issues: []v1alpha1.RuntimeIssueCode{},
 	}
@@ -520,17 +520,17 @@ func runtimeHistoryContent() v1alpha1.RuntimeHistoryContent {
 		ObservedPages:  2,
 		Revisions: []v1alpha1.RuntimeRevisionEntry{
 			{
-				Revision:    v1alpha1.RuntimeRevisionReference{Namespace: "ome", Name: "revision-old", CreatedAt: older},
+				Revision:    v1alpha1.RuntimeRevisionReference{Namespace: "ome", Name: "revision-old", CreatedAt: runtimeReportTime(older)},
 				Consistency: v1alpha1.RevisionConsistencyUnknown, RelationToLive: v1alpha1.RevisionRelationUnknown,
 			},
 			{
-				Revision: v1alpha1.RuntimeRevisionReference{Namespace: "ome", Name: "revision-b", CreatedAt: newest},
+				Revision: v1alpha1.RuntimeRevisionReference{Namespace: "ome", Name: "revision-b", CreatedAt: runtimeReportTime(newest)},
 				Source:   &source, Hash: "bbbbbbbb", Roles: []v1alpha1.RuntimeRevisionRole{v1alpha1.RuntimeRevisionRoleHistory},
 				Consistency: v1alpha1.RevisionConsistencyInconsistent, RelationToLive: v1alpha1.RevisionRelationDiffersFromLive,
 				Issues: []v1alpha1.RuntimeIssueCode{v1alpha1.RuntimeIssueRevisionSourceMismatch},
 			},
 			{
-				Revision: v1alpha1.RuntimeRevisionReference{Namespace: "ome", Name: "revision-a", CreatedAt: newest},
+				Revision: v1alpha1.RuntimeRevisionReference{Namespace: "ome", Name: "revision-a", CreatedAt: runtimeReportTime(newest)},
 				Source:   &source, Hash: "aaaaaaaa",
 				Roles: []v1alpha1.RuntimeRevisionRole{
 					v1alpha1.RuntimeRevisionRoleHistory, v1alpha1.RuntimeRevisionRoleReported,
@@ -559,7 +559,7 @@ func runtimeHistoryMachineContent() v1alpha1.RuntimeHistoryContent {
 		ObservedPages:  2,
 		Revisions: []v1alpha1.RuntimeRevisionEntry{{
 			Revision: v1alpha1.RuntimeRevisionReference{
-				Namespace: "ome", Name: "revision-a", CreatedAt: time.Date(2026, time.August, 31, 18, 20, 0, 0, time.UTC),
+				Namespace: "ome", Name: "revision-a", CreatedAt: runtimeReportTime(time.Date(2026, time.August, 31, 18, 20, 0, 0, time.UTC)),
 			},
 			Source: &source, Hash: "aaaaaaaa",
 			Roles:          []v1alpha1.RuntimeRevisionRole{v1alpha1.RuntimeRevisionRoleHistory, v1alpha1.RuntimeRevisionRoleActive},
