@@ -18,8 +18,17 @@ import (
 // AddCommand line.
 func NewRootCmd(streams genericiooptions.IOStreams) *cobra.Command {
 	configFlags := genericclioptions.NewConfigFlags(true)
-	f := factory.New(configFlags)
+	return newRootCmd(factory.New(configFlags), configFlags, streams)
+}
 
+// NewRootCmdWithFactory builds the root command with an injected client
+// factory while preserving the production kubectl configuration flags.
+func NewRootCmdWithFactory(f factory.Factory, streams genericiooptions.IOStreams) *cobra.Command {
+	configFlags := genericclioptions.NewConfigFlags(true)
+	return newRootCmd(f, configFlags, streams)
+}
+
+func newRootCmd(f factory.Factory, configFlags *genericclioptions.ConfigFlags, streams genericiooptions.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ome",
 		Short: "Inspect OME models, runtimes and inference services",
@@ -33,6 +42,9 @@ component-aware log streaming.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
+	cmd.SetIn(streams.In)
+	cmd.SetOut(streams.Out)
+	cmd.SetErr(streams.ErrOut)
 	configFlags.AddFlags(cmd.PersistentFlags())
 
 	// Command families. Keep alphabetical.

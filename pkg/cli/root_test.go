@@ -1,0 +1,80 @@
+package cli
+
+import (
+	"bytes"
+	"reflect"
+	"sort"
+	"testing"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/cli-runtime/pkg/genericiooptions"
+
+	"sigs.k8s.io/ome/pkg/cli/factory"
+)
+
+func TestRootCommandTree(t *testing.T) {
+	t.Parallel()
+
+	root := NewRootCmdWithFactory(factory.Static{NS: "default"}, genericiooptions.IOStreams{
+		In:     &bytes.Buffer{},
+		Out:    &bytes.Buffer{},
+		ErrOut: &bytes.Buffer{},
+	})
+	got := commandPaths(root)
+	want := []string{
+		"ome get",
+		"ome logs",
+		"ome runtime",
+		"ome runtime explain",
+		"ome status",
+		"ome version",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("command tree = %v, want %v", got, want)
+	}
+	if !root.SilenceErrors || !root.SilenceUsage {
+		t.Fatalf("root error policy = (SilenceErrors=%t, SilenceUsage=%t), want both true", root.SilenceErrors, root.SilenceUsage)
+	}
+}
+
+func TestInjectedRootCarriesAllKubectlConfigFlags(t *testing.T) {
+	t.Parallel()
+
+	root := NewRootCmdWithFactory(factory.Static{NS: "default"}, genericiooptions.IOStreams{})
+	wantCmd := &cobra.Command{Use: "expected"}
+	genericclioptions.NewConfigFlags(true).AddFlags(wantCmd.PersistentFlags())
+
+	got := flagNames(root.PersistentFlags())
+	want := flagNames(wantCmd.PersistentFlags())
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("persistent kube flags = %v, want %v", got, want)
+	}
+	if flag := root.PersistentFlags().Lookup("namespace"); flag == nil || flag.Shorthand != "n" {
+		t.Fatalf("namespace flag = %#v, want -n shorthand", flag)
+	}
+}
+
+func commandPaths(root *cobra.Command) []string {
+	var paths []string
+	var walk func(*cobra.Command)
+	walk = func(parent *cobra.Command) {
+		for _, child := range parent.Commands() {
+			paths = append(paths, child.CommandPath())
+			walk(child)
+		}
+	}
+	walk(root)
+	sort.Strings(paths)
+	return paths
+}
+
+func flagNames(flags *pflag.FlagSet) []string {
+	var names []string
+	flags.VisitAll(func(flag *pflag.Flag) {
+		names = append(names, flag.Name)
+	})
+	sort.Strings(names)
+	return names
+}
