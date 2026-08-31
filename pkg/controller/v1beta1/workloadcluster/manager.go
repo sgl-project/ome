@@ -294,9 +294,13 @@ func (m *Manager) buildRemoteClient(ctx context.Context, raw []byte, scheme *run
 	// base ctx so the cache's informers are scoped to the manager lifetime, and
 	// return its cancel so Disconnect tears the cache down (no leaked watches).
 	cacheCtx, cancel := context.WithCancel(ctx)
+	// The initial cache sync is a watch establishment, so it takes the configured
+	// establish budget: a cache that cannot sync must fail the connection rather
+	// than count as connected.
 	cl, err := NewSelectivelyCachingClient(
 		cacheCtx, restConfig, wc, scheme,
 		cacheOpts.CachedKinds, cacheOpts.Indexes, cacheOpts.DefaultSelector,
+		m.ReconnectBackoff().establishInitial,
 	)
 	if err != nil {
 		cancel()

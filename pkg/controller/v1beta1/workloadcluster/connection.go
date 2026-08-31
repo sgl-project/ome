@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -33,10 +34,17 @@ type ExecCredentialPolicy struct {
 }
 
 func (p ExecCredentialPolicy) commandAllowed(cmd string) bool {
+	if cmd == "" {
+		return false
+	}
+	// A command carrying a path separator is only ever authorized by an entry
+	// that is that exact absolute path: a bare entry must never let an
+	// attacker-controlled path through because its basename matches, and a
+	// relative path resolves against an unknown working directory.
+	if strings.ContainsAny(cmd, `/\`) && !filepath.IsAbs(cmd) {
+		return false
+	}
 	for _, a := range p.AllowedCommands {
-		// Exact matching permits either a bare command resolved through PATH or
-		// an explicitly allowlisted absolute path. It must never let an
-		// attacker-controlled path through merely because its basename matches.
 		if a == cmd {
 			return true
 		}
@@ -66,8 +74,9 @@ func RESTConfigFromKubeConfig(raw []byte, exec ExecCredentialPolicy) (*rest.Conf
 
 // validateKubeConfigBytes inspects the raw kubeconfig at the API-config level
 // (across ALL clusters and users, not just the current context) and rejects:
-// per-user on-disk token files, per-cluster insecure TLS, CA file paths
-// (require inline certificate-authority-data), and a missing server URL.
+// per-user on-disk token and client certificate/key files, per-cluster insecure
+// TLS, CA file paths (require inline certificate-authority-data), and a missing
+// server URL.
 func validateKubeConfigBytes(raw []byte, exec ExecCredentialPolicy) error {
 	cfg, err := clientcmd.Load(raw)
 	if err != nil {
@@ -99,9 +108,11 @@ func validateKubeConfigBytes(raw []byte, exec ExecCredentialPolicy) error {
 }
 
 // validateRESTConfig rejects unsafe settings on the flattened rest.Config:
-// exec/auth-provider plugins, on-disk token files, basic auth, disabled TLS, a
-// CA file path, or an untrusted server endpoint. BearerToken (service-account
-// token) and inline CA data are allowed.
+// exec/auth-provider plugins, on-disk token or client certificate/key files,
+// basic auth, disabled TLS, a CA file path, or an untrusted server endpoint.
+// BearerToken (service-account token) and inline CA data are allowed. Every
+// check is independent: an accepted exec provider still has to clear the
+// transport and endpoint checks below.
 func validateRESTConfig(cfg *rest.Config, exec ExecCredentialPolicy) error {
 	if cfg.ExecProvider != nil {
 		if !exec.Allowed {
@@ -157,29 +168,27 @@ func isValidHostname(server string) bool {
 	return len(validation.IsDNS1123Subdomain(host)) == 0
 }
 
-// DefaultProbeTimeout bounds the reachability probe's single /version request
-// when no per-call timeout is configured. An unbounded probe would let one
-// black-holed endpoint hold a reconcile worker indefinitely.
-const DefaultProbeTimeout = 10 * time.Second
-
 // probeViaServerVersion is the default reachability probe: build a discovery
 // client and fetch the remote /version. Cheap and needs no extra RBAC. It is
 // assigned to Reconciler.Probe by SetupWithManager and overridden in tests.
-// A non-positive timeout falls back to DefaultProbeTimeout.
-func probeViaServerVersion(_ context.Context, raw []byte, exec ExecCredentialPolicy, timeout time.Duration) error {
+//
+// timeout bounds the request at the client level; a non-positive value leaves
+// the request bounded only by ctx, matching the perCallTimeout convention.
+func probeViaServerVersion(ctx context.Context, raw []byte, exec ExecCredentialPolicy, timeout time.Duration) error {
 	cfg, err := RESTConfigFromKubeConfig(raw, exec)
 	if err != nil {
 		return err
 	}
-	if timeout <= 0 {
-		timeout = DefaultProbeTimeout
+	if timeout > 0 {
+		cfg.Timeout = timeout
 	}
-	cfg.Timeout = timeout
 	dc, err := discovery.NewDiscoveryClientForConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("build discovery client: %w", err)
 	}
-	if _, err := dc.ServerVersion(); err != nil {
+	// Go through the REST client rather than ServerVersion() so the probe
+	// observes ctx cancellation instead of running to its own timeout.
+	if err := dc.RESTClient().Get().AbsPath("/version").Do(ctx).Error(); err != nil {
 		return fmt.Errorf("connect to cluster: %w", err)
 	}
 	return nil

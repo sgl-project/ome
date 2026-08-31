@@ -21,7 +21,6 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/shared"
-	"sigs.k8s.io/ome/pkg/modelagent"
 )
 
 func TestBaseModelReconcile(t *testing.T) {
@@ -31,6 +30,9 @@ func TestBaseModelReconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
 	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	// batchv1 needed for cleanupStalePVCArtifacts which lists Jobs on
+	// every non-PVC reconcile (idempotent no-op when none exist; the
+	// List itself still requires the scheme).
 	g.Expect(batchv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 
 	tests := []struct {
@@ -106,9 +108,9 @@ func TestBaseModelReconcile(t *testing.T) {
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 
 				// Create ConfigMap with Ready status
-				modelEntry := modelagent.ModelEntry{
-					Status: modelagent.ModelStatusReady,
-					Config: &modelagent.ModelConfig{
+				modelEntry := shared.ModelEntry{
+					Status: shared.ModelStatusReady,
+					Config: &shared.ModelConfig{
 						ModelType:         "gpt2",
 						ModelArchitecture: "GPT2LMHeadModel",
 						MaxTokens:         2048,
@@ -190,14 +192,14 @@ func TestBaseModelReconcile(t *testing.T) {
 				}
 
 				// Create ConfigMaps with different statuses
-				statuses := map[string]modelagent.ModelStatus{
-					"node-1": modelagent.ModelStatusReady,
-					"node-2": modelagent.ModelStatusFailed,
-					"node-3": modelagent.ModelStatusUpdating,
+				statuses := map[string]shared.ModelStatus{
+					"node-1": shared.ModelStatusReady,
+					"node-2": shared.ModelStatusFailed,
+					"node-3": shared.ModelStatusUpdating,
 				}
 
 				for nodeName, status := range statuses {
-					modelEntry := modelagent.ModelEntry{
+					modelEntry := shared.ModelEntry{
 						Status: status,
 					}
 					entryData, _ := json.Marshal(modelEntry)
@@ -314,8 +316,8 @@ func TestBaseModelReconcile(t *testing.T) {
 
 				// Create ConfigMaps with entries not yet deleted
 				for _, nodeName := range []string{"node-1", "node-2"} {
-					modelEntry := modelagent.ModelEntry{
-						Status: modelagent.ModelStatusReady, // Not marked for deletion
+					modelEntry := shared.ModelEntry{
+						Status: shared.ModelStatusReady, // Not marked for deletion
 					}
 					entryData, _ := json.Marshal(modelEntry)
 
@@ -388,8 +390,8 @@ func TestBaseModelReconcile(t *testing.T) {
 
 				// Create ConfigMaps with entries marked as deleted
 				for _, nodeName := range []string{"node-1", "node-2"} {
-					modelEntry := modelagent.ModelEntry{
-						Status: modelagent.ModelStatusDeleted, // Marked for deletion
+					modelEntry := shared.ModelEntry{
+						Status: shared.ModelStatusDeleted, // Marked for deletion
 					}
 					entryData, _ := json.Marshal(modelEntry)
 
@@ -461,14 +463,14 @@ func TestBaseModelReconcile(t *testing.T) {
 				}
 
 				// Create ConfigMaps with mixed deletion status
-				statuses := map[string]modelagent.ModelStatus{
-					"node-1": modelagent.ModelStatusDeleted, // Marked for deletion
-					"node-2": modelagent.ModelStatusReady,   // Not deleted
-					"node-3": modelagent.ModelStatusFailed,  // Not deleted
+				statuses := map[string]shared.ModelStatus{
+					"node-1": shared.ModelStatusDeleted, // Marked for deletion
+					"node-2": shared.ModelStatusReady,   // Not deleted
+					"node-3": shared.ModelStatusFailed,  // Not deleted
 				}
 
 				for nodeName, status := range statuses {
-					modelEntry := modelagent.ModelEntry{
+					modelEntry := shared.ModelEntry{
 						Status: status,
 					}
 					entryData, _ := json.Marshal(modelEntry)
@@ -517,8 +519,8 @@ func TestBaseModelReconcile(t *testing.T) {
 			},
 			setupMocks: func(c client.Client) {
 				// Create ConfigMap for non-existent node
-				modelEntry := modelagent.ModelEntry{
-					Status: modelagent.ModelStatusReady,
+				modelEntry := shared.ModelEntry{
+					Status: shared.ModelStatusReady,
 				}
 				entryData, _ := json.Marshal(modelEntry)
 
@@ -598,6 +600,9 @@ func TestClusterBaseModelReconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
 	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	// batchv1 needed for cleanupStalePVCArtifacts which lists Jobs on
+	// every non-PVC reconcile (idempotent no-op when none exist; the
+	// List itself still requires the scheme).
 	g.Expect(batchv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 
 	tests := []struct {
@@ -665,9 +670,9 @@ func TestClusterBaseModelReconcile(t *testing.T) {
 
 				// Create ConfigMaps - all ready
 				for i := 1; i <= 3; i++ {
-					modelEntry := modelagent.ModelEntry{
-						Status: modelagent.ModelStatusReady,
-						Config: &modelagent.ModelConfig{
+					modelEntry := shared.ModelEntry{
+						Status: shared.ModelStatusReady,
+						Config: &shared.ModelConfig{
 							ModelFramework: map[string]string{
 								"name":    "transformers",
 								"version": "4.21.0",
@@ -757,7 +762,7 @@ func TestUpdateSpecWithConfig(t *testing.T) {
 	tests := []struct {
 		name         string
 		initialSpec  *v1beta1.BaseModelSpec
-		config       *modelagent.ModelConfig
+		config       *shared.ModelConfig
 		expectUpdate bool
 		validateSpec func(*v1beta1.BaseModelSpec)
 	}{
@@ -768,9 +773,10 @@ func TestUpdateSpecWithConfig(t *testing.T) {
 					Name: "", // Empty so it can be updated
 				},
 			},
-			config: &modelagent.ModelConfig{
+			config: &shared.ModelConfig{
 				ModelType:          "llama",
 				ModelArchitecture:  "LlamaForCausalLM",
+				Quantization:       "nvfp4",
 				ModelParameterSize: "7B",
 				ModelCapabilities:  []string{"TEXT_GENERATION", "CHAT"},
 				ModelFramework: map[string]string{
@@ -789,6 +795,8 @@ func TestUpdateSpecWithConfig(t *testing.T) {
 				g.Expect(*spec.ModelType).To(gomega.Equal("llama"))
 				g.Expect(spec.ModelArchitecture).ToNot(gomega.BeNil())
 				g.Expect(*spec.ModelArchitecture).To(gomega.Equal("LlamaForCausalLM"))
+				g.Expect(spec.Quantization).ToNot(gomega.BeNil())
+				g.Expect(*spec.Quantization).To(gomega.Equal(v1beta1.ModelQuantization("nvfp4")))
 				g.Expect(spec.ModelParameterSize).ToNot(gomega.BeNil())
 				g.Expect(*spec.ModelParameterSize).To(gomega.Equal("7B"))
 				g.Expect(spec.ModelCapabilities).To(gomega.Equal([]string{"TEXT_GENERATION", "CHAT"}))
@@ -806,15 +814,17 @@ func TestUpdateSpecWithConfig(t *testing.T) {
 			initialSpec: &v1beta1.BaseModelSpec{
 				ModelType:         stringPtr("existing-type"),
 				ModelArchitecture: stringPtr("existing-arch"),
+				Quantization:      quantPtr("existing-quant"),
 				ModelFormat: v1beta1.ModelFormat{
 					Name:    "existing-format",
 					Version: stringPtr("1.0.0"),
 				},
 				MaxTokens: int32Ptr(2048),
 			},
-			config: &modelagent.ModelConfig{
+			config: &shared.ModelConfig{
 				ModelType:         "new-type",
 				ModelArchitecture: "new-arch",
+				Quantization:      "new-quant",
 				ModelFormat: map[string]string{
 					"name":    "new-format",
 					"version": "2.0.0",
@@ -826,6 +836,7 @@ func TestUpdateSpecWithConfig(t *testing.T) {
 				// Values should remain unchanged
 				g.Expect(*spec.ModelType).To(gomega.Equal("existing-type"))
 				g.Expect(*spec.ModelArchitecture).To(gomega.Equal("existing-arch"))
+				g.Expect(*spec.Quantization).To(gomega.Equal(v1beta1.ModelQuantization("existing-quant")))
 				g.Expect(spec.ModelFormat.Name).To(gomega.Equal("existing-format"))
 				g.Expect(*spec.ModelFormat.Version).To(gomega.Equal("1.0.0"))
 				g.Expect(*spec.MaxTokens).To(gomega.Equal(int32(2048)))
@@ -834,7 +845,7 @@ func TestUpdateSpecWithConfig(t *testing.T) {
 		{
 			name:         "Nil inputs return false",
 			initialSpec:  nil,
-			config:       &modelagent.ModelConfig{},
+			config:       &shared.ModelConfig{},
 			expectUpdate: false,
 		},
 		{
@@ -859,9 +870,12 @@ func TestUpdateSpecWithConfig(t *testing.T) {
 	}
 }
 
-// Helper functions
 func stringPtr(s string) *string {
 	return &s
+}
+
+func quantPtr(q v1beta1.ModelQuantization) *v1beta1.ModelQuantization {
+	return &q
 }
 
 func int32Ptr(i int32) *int32 {

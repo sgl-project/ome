@@ -120,7 +120,7 @@ func TestAcceleratorClass_Reconcile_MatchDiscovery(t *testing.T) {
 	g.Expect(curr.Status.Nodes).NotTo(ContainElement("node-b"))
 }
 
-func TestAcceleratorClass_Reconcile_MatchMemoryGB(t *testing.T) {
+func TestAcceleratorClass_Reconcile_MatchDeclaredResources(t *testing.T) {
 	g := NewWithT(t)
 
 	scheme := runtime.NewScheme()
@@ -128,15 +128,17 @@ func TestAcceleratorClass_Reconcile_MatchMemoryGB(t *testing.T) {
 	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
 
 	ac := &v1beta1.AcceleratorClass{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-ac-memory"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test-ac-resources"},
 		Spec: v1beta1.AcceleratorClassSpec{
 			Discovery: v1beta1.AcceleratorDiscovery{NodeSelector: map[string]string{"accel": "nvidia"}},
-			Capabilities: v1beta1.AcceleratorCapabilities{
-				MemoryGB: resource.NewQuantity(16*1024*1024*1024, resource.BinarySI), // 16Gi
+			Resources: []v1beta1.AcceleratorResource{
+				{Name: constants.NvidiaGPUResourceType, Quantity: resource.MustParse("1")},
 			},
 		},
 	}
 
+	// node-a exposes the declared GPU resource; node-b matches the discovery
+	// labels but exposes no GPU capacity (mislabeled or drained hardware).
 	nodeA := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: "node-a", Labels: map[string]string{"accel": "nvidia"}},
 		Status: corev1.NodeStatus{
@@ -150,8 +152,7 @@ func TestAcceleratorClass_Reconcile_MatchMemoryGB(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "node-b", Labels: map[string]string{"accel": "nvidia"}},
 		Status: corev1.NodeStatus{
 			Capacity: corev1.ResourceList{
-				corev1.ResourceName(constants.NvidiaGPUResourceType): resource.MustParse("1"),
-				corev1.ResourceMemory:                                resource.MustParse("8Gi"),
+				corev1.ResourceMemory: resource.MustParse("8Gi"),
 			},
 		},
 	}
@@ -220,27 +221,4 @@ func TestAcceleratorClass_Reconcile_DoesNotUpdateTimestampOnNoChange(t *testing.
 	post := &v1beta1.AcceleratorClass{}
 	g.Expect(c.Get(ctx, types.NamespacedName{Name: ac.Name}, post)).To(Succeed())
 	g.Expect(post.Status.LastUpdated.Time.Equal(firstUpdate.Time)).To(BeTrue())
-}
-
-func Test_getGPUCapacity_Helper(t *testing.T) {
-	g := NewWithT(t)
-
-	n := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "gpu-node"},
-		Status: corev1.NodeStatus{
-			Capacity: corev1.ResourceList{
-				corev1.ResourceName("nvidia.com/gpu"):         resource.MustParse("2"),
-				corev1.ResourceName("nvidia.com/mig-1g.10gb"): resource.MustParse("4"),
-				corev1.ResourceName("amd.com/gpu"):            resource.MustParse("1"),
-				corev1.ResourceName("gpu.intel.com/cards"):    resource.MustParse("3"),
-			},
-		},
-	}
-
-	total, byRes := getGPUCapacity(n)
-	g.Expect(total).To(Equal(int64(10))) // 2 + 4 + 1 + 3
-	g.Expect(byRes).To(HaveKeyWithValue("nvidia.com/gpu", int64(2)))
-	g.Expect(byRes).To(HaveKeyWithValue("nvidia.com/mig-1g.10gb", int64(4)))
-	g.Expect(byRes).To(HaveKeyWithValue("amd.com/gpu", int64(1)))
-	g.Expect(byRes).To(HaveKeyWithValue("gpu.intel.com/cards", int64(3)))
 }

@@ -77,8 +77,9 @@ type Reconciler struct {
 	ConnectionGracePeriod time.Duration
 	// ProbeTimeout bounds the default reachability probe's single request. It is
 	// the same budget as a remote per-call timeout, so the control-plane wiring
-	// feeds it the configured per-call value; zero defaults to
-	// DefaultProbeTimeout.
+	// feeds it the configured per-call value. Zero falls back to the health
+	// interval, which is always positive: the probe must never outlast the
+	// cadence that schedules the next one, and this controller runs one worker.
 	ProbeTimeout time.Duration
 
 	// mu guards firstFailure. The reconciler runs single-worker per key, but
@@ -191,6 +192,13 @@ func (r *Reconciler) finish(ctx context.Context, wc *v1beta1.WorkloadCluster, re
 	if err := r.Status().Update(ctx, wc); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
+		}
+		// wc was read through the cache, so a pass that runs before the cache
+		// caught up writes at a stale resourceVersion and loses the race. The
+		// next pass recomputes the same status from fresh state, so requeue
+		// rather than reporting a failure that did not happen.
+		if apierrors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("workloadcluster %s: update status: %w", wc.Name, err)
 	}
@@ -368,14 +376,20 @@ func (r *Reconciler) secretReader() client.Reader {
 	return r.Client
 }
 
+// probeTimeout is the client-level bound for one reachability probe. It comes
+// from config (workloadCluster.perCallTimeout); when that is unset the health
+// interval bounds it instead, so an unreachable endpoint can never hold the
+// single reconcile worker past the next scheduled probe.
 func (r *Reconciler) probeTimeout() time.Duration {
 	if r.cfg != nil {
-		return r.cfg.probeTimeout
+		if r.cfg.probeTimeout > 0 {
+			return r.cfg.probeTimeout
+		}
+		if r.cfg.healthInterval > 0 {
+			return r.cfg.healthInterval
+		}
 	}
-	if r.ProbeTimeout > 0 {
-		return r.ProbeTimeout
-	}
-	return DefaultProbeTimeout
+	return r.ProbeTimeout
 }
 
 // SetupWithManager wires the reconciler: watch WorkloadClusters, and re-enqueue

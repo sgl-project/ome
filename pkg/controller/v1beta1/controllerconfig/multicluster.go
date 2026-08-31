@@ -31,6 +31,9 @@ const MultiClusterConfigName = "multicluster"
 // each knob stays single-sourced in the package that owns it — never duplicated
 // as a literal here — and an absent "multicluster" block reproduces the
 // built-in behavior exactly.
+//
+// A knob that is stated but unusable is a startup error, not a silent fallback:
+// Validate gates the loaded config before any controller is wired.
 type MultiClusterConfig struct {
 	WorkloadCluster WorkloadClusterConfig `json:"workloadCluster,omitempty"`
 	Placement       PlacementConfig       `json:"placement,omitempty"`
@@ -113,7 +116,7 @@ type PlacementConfig struct {
 	// LocalQueue is the Kueue LocalQueue that a derived workload's pods join on
 	// the target cluster when the InferenceService carries no per-ISVC queue
 	// annotation. It names a resource the operator created, so it has no in-code
-	// default: empty leaves the placement package's own fallback in place.
+	// default: empty leaves the choice to the placement package.
 	LocalQueue string `json:"localQueue,omitempty"`
 }
 
@@ -294,7 +297,8 @@ func (c PlacementConfig) DispatcherRoundTimeoutDuration() time.Duration {
 // parseDurationOrZero parses s, returning 0 when it is empty, malformed, or
 // non-positive. Callers hand the zero to a workloadcluster/placement option,
 // which then applies its own in-package default — so the fallback stays
-// single-sourced in the consuming package, not duplicated here.
+// single-sourced in the consuming package, not duplicated here. Only the empty
+// case reaches a running manager; Validate rejects the rest at startup.
 func parseDurationOrZero(s string) time.Duration {
 	if d, err := time.ParseDuration(s); err == nil && d > 0 {
 		return d

@@ -14,28 +14,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"sigs.k8s.io/ome/pkg/constants"
-	"sigs.k8s.io/ome/pkg/modelagent"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/shared"
 )
 
-// CreateNodeDeletionPredicate creates a predicate that only triggers on Node deletions.
 func CreateNodeDeletionPredicate() predicate.Predicate {
 	return predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			return false // Don't trigger on node creation
-		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			return false // Don't trigger on node updates
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			return true // Only trigger on node deletion
-		},
+		CreateFunc: func(e event.CreateEvent) bool { return false },
+		UpdateFunc: func(e event.UpdateEvent) bool { return false },
+		DeleteFunc: func(e event.DeleteEvent) bool { return true },
 	}
 }
 
-// HandleNodeDeletion handles Node deletion events by cleaning up the
-// corresponding ConfigMap. If no ConfigMap exists for this node, it simply
-// skips without error (normal for nodes that never ran model-agent). Used
-// by both BaseModel and ClusterBaseModel controllers.
+// HandleNodeDeletion deletes the per-node model-status ConfigMap when
+// the Node it was tracking goes away. No-op if no ConfigMap exists
+// (nodes that never ran model-agent).
 func HandleNodeDeletion(ctx context.Context, kubeClient client.Client, log logr.Logger, obj client.Object) []reconcile.Request {
 	node, ok := obj.(*corev1.Node)
 	if !ok {
@@ -45,7 +37,6 @@ func HandleNodeDeletion(ctx context.Context, kubeClient client.Client, log logr.
 	nodeName := node.GetName()
 	log = log.WithValues("node", nodeName)
 
-	// Check if a ConfigMap exists for this node
 	configMap := &corev1.ConfigMap{}
 	configMapKey := types.NamespacedName{
 		Namespace: constants.OMENamespace,
@@ -54,19 +45,16 @@ func HandleNodeDeletion(ctx context.Context, kubeClient client.Client, log logr.
 
 	if err := kubeClient.Get(ctx, configMapKey, configMap); err != nil {
 		if errors.IsNotFound(err) {
-			// No ConfigMap for this node, nothing to clean up
 			return nil
 		}
 		log.Error(err, "Failed to check ConfigMap for deleted node")
 		return nil
 	}
 
-	// Verify this is a model status ConfigMap before deleting
 	if !IsModelStatusConfigMap(configMap) {
 		return nil
 	}
 
-	// Delete the stale ConfigMap
 	log.Info("Node deleted, cleaning up associated model status ConfigMap")
 	if err := kubeClient.Delete(ctx, configMap); err != nil {
 		if !errors.IsNotFound(err) {
@@ -79,8 +67,6 @@ func HandleNodeDeletion(ctx context.Context, kubeClient client.Client, log logr.
 	return nil
 }
 
-// CreateModelStatusConfigMapPredicate creates the shared predicate for
-// per-node model-status ConfigMap events.
 func CreateModelStatusConfigMapPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
@@ -95,7 +81,6 @@ func CreateModelStatusConfigMapPredicate() predicate.Predicate {
 	}
 }
 
-// IsModelStatusConfigMap checks if a ConfigMap is a per-node model status ConfigMap.
 func IsModelStatusConfigMap(obj client.Object) bool {
 	if obj.GetNamespace() != constants.OMENamespace {
 		return false
@@ -118,20 +103,16 @@ func MapConfigMapToModelRequests(obj client.Object, log logr.Logger, isNamespace
 		return requests
 	}
 
-	// Parse the ConfigMap data to find model references
 	for key, data := range configMap.Data {
-		// Parse using the centralized parsing function
 		namespace, modelName, isClusterBaseModel, success := constants.ParseModelInfoFromConfigMapKey(key)
 		if !success {
 			continue
 		}
-		// Skip keys that don't match the expected model type
 		if (isNamespaced && isClusterBaseModel) || (!isNamespaced && !isClusterBaseModel) {
 			continue
 		}
 
-		// Parse the model entry to validate it's a valid entry
-		var modelEntry modelagent.ModelEntry
+		var modelEntry shared.ModelEntry
 		if err := json.Unmarshal([]byte(data), &modelEntry); err != nil {
 			log.V(1).Info("Failed to parse model entry in ConfigMap", "configMap", configMap.Name, "key", key, "error", err)
 			continue
