@@ -14,6 +14,7 @@
 {{- $isPdMode := $model.pdMode | default false }}
 {{- $ibDevice := $model.runtime.ibDevice | default $.Values.defaults.ibDevice | default "mlx5_0" }}
 {{- $rdmaProfile := $model.runtime.rdmaProfile | default $.Values.defaults.rdmaProfile | default "oci-roce" }}
+{{- $modelCacheProviders := $model.runtime.modelCacheProviders }}
 ---
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
@@ -33,6 +34,10 @@ spec:
       modelArchitecture: {{ $modelInfo.architecture }}
       autoSelect: {{ $modelInfo.autoSelect }}
       priority: {{ $modelInfo.priority }}
+{{- with $modelCacheProviders }}
+      modelCacheProviders:
+{{ toYaml . | nindent 8 }}
+{{- end }}
   protocolVersions:
     - openAI
   modelSizeRange:

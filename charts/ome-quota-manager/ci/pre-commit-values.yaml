@@ -1,0 +1,11 @@
+# Values for the repo-wide pre-commit `helm template` sweep, which renders every
+# chart with defaults. This chart has no default mode on purpose — workload mode
+# writes Kueue objects on the local cluster and management mode projects shares
+# onto others, so guessing either would be a surprise — and the render fails
+# without one. That guard is deliberate; this file keeps it from failing the
+# sweep for every unrelated commit.
+#
+# The negative case (an unset or bogus mode MUST fail to render) is asserted in
+# tests/render_test.sh, so the guard itself stays covered.
+quotaManager:
+  mode: workload

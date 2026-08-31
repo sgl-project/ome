@@ -25,6 +25,11 @@ spec:
     control-plane: ome-controller-manager
     controller-tools.k8s.io: "1.0"
   ports:
-  - port: 8443
+  - name: https
+    port: 8443
     targetPort: https
+    protocol: TCP
+  - name: metrics
+    port: 8080
+    targetPort: metrics
     protocol: TCP

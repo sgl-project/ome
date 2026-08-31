@@ -1,0 +1,20 @@
+{{- if .Values.prometheus.enabled }}
+# Fronts the bundled Prometheus Deployment for in-cluster KEDA and canary
+# queries. The Service port may differ from the container's listen port.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ome-prometheus
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-prometheus.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.prometheus.service.type }}
+  ports:
+    - name: http-web
+      port: {{ .Values.prometheus.service.port }}
+      targetPort: http-web
+      protocol: TCP
+  selector:
+    {{- include "ome-prometheus.selectorLabels" . | nindent 4 }}
+{{- end }}

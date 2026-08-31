@@ -1,0 +1,235 @@
+# Hand-authored, not generated. controller-gen builds the ome-manager ClusterRole
+# from markers under ./pkg/controller/..., and merging these grants into that role
+# would defeat the point of a separate binary: the quota plane's permissions —
+# today AcceleratorQuota, later cluster-wide write on Kueue's ClusterQueue and
+# Cohort — must belong only to the process that uses them.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.quotaManager.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.quotaManager.name }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+rules:
+# The tree is assembled from every node on the cluster, so this is a list/watch
+# of the whole kind, not a get of one object.
+- apiGroups: ["ome.io"]
+  resources: ["acceleratorquotas"]
+  verbs: ["get", "list", "watch"]
+# Status only. The controller reports a node's position and condition; it never
+# edits a spec, which is the admin's (or, for a projection, the management
+# plane's) to write.
+- apiGroups: ["ome.io"]
+  resources: ["acceleratorquotas/status"]
+  verbs: ["get", "update", "patch"]
+{{- if eq (include "ome-quota-manager.mode" .) "management" }}
+# Reaching a member starts with the registry: the connector follows each
+# WorkloadCluster's Ready condition to decide what to connect to and what to
+# drop, and the projector reads the same set to know when part of the fleet is
+# missing -- a split computed without an absent member over-grants the fleet.
+#
+# Read-only, deliberately. WorkloadCluster status has exactly one writer, the
+# registry's own reconciler in ome-manager, whose grace and backoff state is
+# in-memory rather than behind a lease. A second writer would flap the condition
+# between two processes and lose the argument silently, since conflicts on that
+# path requeue unreported.
+- apiGroups: ["ome.io"]
+  resources: ["workloadclusters"]
+  verbs: ["get", "list", "watch"]
+# The kubeconfig behind each member. Cluster-wide because a WorkloadCluster's
+# secretRef carries its own namespace, so the Secret can live anywhere an
+# operator puts it.
+#
+# This is the widest grant the quota plane holds, and it is the price of a
+# second binary reaching the fleet: ome-manager already holds the equivalent for
+# placement. Scope it by moving every kubeconfig Secret into one namespace and
+# narrowing this to a Role there, if your layout allows it.
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch"]
+{{- if and .Values.quotaManager.projection.origin .Values.quotaManager.projection.fieldManager }}
+# The finalizer that gates a node's deletion until its projections are reaped
+# off every member. A projecting plane claims each node before it writes
+# anything, so without this every pass fails on a forbidden patch and no tree is
+# ever projected.
+#
+# patch on the resource itself, not update on acceleratorquotas/finalizers: a
+# finalizer lives in metadata, so adding one is an ordinary patch of the object.
+#
+# Conditioned on the same two values the projector itself requires, so a
+# management plane configured not to project does not carry a write it cannot
+# use.
+- apiGroups: ["ome.io"]
+  resources: ["acceleratorquotas"]
+  verbs: ["patch"]
+{{- end }}
+{{- end }}
+{{- if and (eq (include "ome-quota-manager.mode" .) "workload") (include "ome-quota-manager.acceleratorResources" .) }}
+# Deriving the reserved root's capacity means measuring the cluster's silicon,
+# which is a cluster-wide read of Nodes and of Kueue's ResourceFlavors — the
+# latter because a flavor names a hardware class by node labels and OME does not
+# own node labelling, so the mapping is read rather than authored.
+#
+# Read-only, and only in workload mode: a management-mode manager holds the
+# authored fleet tree and has no local silicon to measure.
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["kueue.x-k8s.io"]
+  resources: ["resourceflavors"]
+  verbs: ["get", "list", "watch"]
+# The one spec write this component makes, and only to bring the reserved root
+# into being. Capacity has to be reportable before any tree is authored, or a
+# management plane sizing a Proportional split has nothing to read from a member
+# that has no budget yet. The root is created bare — the budget on it stays the
+# admin's to write.
+- apiGroups: ["ome.io"]
+  resources: ["acceleratorquotas"]
+  verbs: ["create"]
+{{- end }}
+{{- if and (eq (include "ome-quota-manager.mode" .) "workload") (include "ome-quota-manager.coverResources" .) }}
+# Materializing the tree means writing Kueue's own objects: a Cohort per
+# internal node, a ClusterQueue per leaf, and a LocalQueue in every bound
+# namespace. This is the grant that made the quota plane a separate binary --
+# cluster-wide write on Kueue is not something the ServiceAccount running the
+# InferenceService reconcilers and the fail-closed pod mutator should also hold.
+#
+# delete is needed for the orphan sweep, which is bounded by the managed-by
+# label: objects this manager did not create are never touched. list and watch
+# are what the sweep selects with.
+- apiGroups: ["kueue.x-k8s.io"]
+  resources: ["cohorts", "clusterqueues", "localqueues"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# The finalizer that gates a node's deletion until its Kueue objects are reaped.
+# Without it, deleting the CR leaves a ClusterQueue behind still admitting
+# workloads against a budget nobody can see any more.
+#
+# patch on the resource itself, not update on acceleratorquotas/finalizers: a
+# finalizer lives in metadata, so adding one is an ordinary patch of the object.
+# The finalizers subresource governs something else entirely — setting
+# blockOwnerDeletion in an ownerReference — which this component never does.
+# Granting that instead leaves the controller unable to claim a node, and every
+# pass then fails on a forbidden patch before anything is materialized.
+- apiGroups: ["ome.io"]
+  resources: ["acceleratorquotas"]
+  verbs: ["patch"]
+{{- end }}
+# No events grant: nothing in this component holds an EventRecorder. It is
+# granted back alongside the first emitter rather than kept warm — an unused
+# write verb is indistinguishable from a used one at review time.
+{{- if and .Values.quotaManager.webhook.enabled .Values.quotaManager.webhook.internalCertManagement }}
+# Internal cert management injects the generated caBundle into this component's
+# own ValidatingWebhookConfiguration.
+#
+# update is scoped by name to that one object, so this grant cannot rewrite
+# ome-manager's fail-closed pod mutator or any other component's webhook — the
+# rotator only ever Gets and Updates the configurations it was told to manage.
+# Nothing is granted on mutatingwebhookconfigurations; this component has none.
+#
+# list and watch CANNOT be narrowed the same way: resourceNames does not apply
+# to them, and the rotator builds an unfiltered informer over the kind. Reading
+# webhook configurations is low-sensitivity — caBundles are public — but it is a
+# cluster-wide read and worth knowing about.
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["validatingwebhookconfigurations"]
+  verbs: ["list", "watch"]
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["validatingwebhookconfigurations"]
+  resourceNames: ["{{ .Values.quotaManager.name }}.ome.io"]
+  verbs: ["get", "update"]
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.quotaManager.name }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Values.quotaManager.name }}
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.quotaManager.name }}
+  namespace: {{ .Release.Namespace }}
+{{- if and .Values.quotaManager.webhook.enabled .Values.quotaManager.webhook.internalCertManagement }}
+---
+# The cert Secret is namespaced, so this is a Role rather than another
+# cluster-wide grant. list and watch are unavoidable — the rotator runs a
+# namespace-scoped informer over Secrets — so this does expose every Secret in
+# the release namespace to the component. Keep the namespace to OME's own.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Values.quotaManager.name }}-webhook-cert
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["{{ .Values.quotaManager.name }}-webhook-cert"]
+  verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.quotaManager.name }}-webhook-cert
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Values.quotaManager.name }}-webhook-cert
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.quotaManager.name }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- if .Values.quotaManager.leaderElect }}
+---
+# Leader election is namespaced: the lease lives beside the Deployment, so this
+# is a Role rather than another cluster-wide grant.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Values.quotaManager.name }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+rules:
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.quotaManager.name }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Values.quotaManager.name }}-leader-election
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.quotaManager.name }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}

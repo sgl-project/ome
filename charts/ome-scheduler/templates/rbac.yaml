@@ -1,0 +1,150 @@
+# Reuse the API server's auto-reconciled scheduler roles instead of copying
+# version-sensitive kube-scheduler permissions into this chart. This keeps core,
+# volume, and DRA permissions aligned with the Kubernetes minor installed in the
+# cluster. The chart-owned role below contains only ome-scheduler's distinct
+# leader lock and PodGroup read contract.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.scheduler.name }}-system-scheduler
+  labels:
+    {{- include "ome-scheduler.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:kube-scheduler
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.scheduler.name }}
+  namespace: {{ .Release.Namespace }}
+---
+# Kubernetes binds its in-tree scheduler to this separate role for dynamic
+# volume binding. A second scheduler needs the same version-managed permissions.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.scheduler.name }}-system-volume-scheduler
+  labels:
+    {{- include "ome-scheduler.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:volume-scheduler
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.scheduler.name }}
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.scheduler.name }}-extras
+  labels:
+    {{- include "ome-scheduler.labels" . | nindent 4 }}
+rules:
+# Leader election uses a scheduler-specific Lease rather than kube-scheduler's
+# built-in lock. RBAC cannot restrict create by resourceName, so create remains
+# lease-wide; reads and updates are restricted to this scheduler's lock.
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["create"]
+- apiGroups: ["coordination.k8s.io"]
+  resourceNames: ["{{ .Values.scheduler.name }}"]
+  resources: ["leases"]
+  verbs: ["get", "update"]
+# OMEGangPack reads gang size, timeout, and topology metadata from PodGroup.
+- apiGroups: ["scheduling.x-k8s.io"]
+  resources: ["podgroups"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.scheduler.name }}-extras
+  labels:
+    {{- include "ome-scheduler.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Values.scheduler.name }}-extras
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.scheduler.name }}
+  namespace: {{ .Release.Namespace }}
+---
+# The scheduler reads extension-apiserver-authentication in kube-system for its
+# delegated secure-serving authentication configuration.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.scheduler.name }}-extension-apiserver-authentication-reader
+  namespace: kube-system
+  labels:
+    {{- include "ome-scheduler.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.scheduler.name }}
+  namespace: {{ .Release.Namespace }}
+{{- if .Values.scheduler.metrics.authDelegation.enabled }}
+---
+# The metrics endpoint is served on a secure port with delegated authn/authz, so
+# the scheduler must be able to issue TokenReviews and SubjectAccessReviews to
+# decide whether a caller may scrape it. Without this binding every scrape of
+# /metrics is rejected 401/403 no matter how the scraper is configured — the
+# reader RoleBinding above only covers reading the client-CA config, not
+# authorizing callers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.scheduler.name }}-auth-delegator
+  labels:
+    {{- include "ome-scheduler.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.scheduler.name }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- if .Values.scheduler.metrics.reader.create }}
+---
+# Grants permission to read the scheduler's /metrics endpoint. `/metrics` is a
+# non-resource URL, so it cannot be expressed as a normal resource rule. Bind
+# this to whichever identity scrapes the scheduler.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.scheduler.name }}-metrics-reader
+  labels:
+    {{- include "ome-scheduler.labels" . | nindent 4 }}
+rules:
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+{{- with .Values.scheduler.metrics.reader.serviceAccounts }}
+---
+# Bind the reader role to the configured scraper identities. Left empty, the role
+# is created but bound to nothing — the chart does not guess who scrapes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $.Values.scheduler.name }}-metrics-reader
+  labels:
+    {{- include "ome-scheduler.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $.Values.scheduler.name }}-metrics-reader
+subjects:
+{{- range . }}
+- kind: ServiceAccount
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+{{- end }}
+{{- end }}
+{{- end }}

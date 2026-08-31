@@ -4,6 +4,9 @@ kind: DaemonSet
 metadata:
   name: ome-model-agent-daemonset
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome.labels" . | nindent 4 }}
+    app.kubernetes.io/component: "ome-model-agent-daemonset"
 spec:
   updateStrategy:
     type: RollingUpdate
@@ -19,6 +22,9 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.modelAgent.health.port }}"
         prometheus.io/path: "/metrics"
+        {{- with .Values.modelAgent.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       priorityClassName: {{ .Values.modelAgent.priorityClassName }}
       serviceAccountName: {{ .Values.modelAgent.serviceAccountName }}

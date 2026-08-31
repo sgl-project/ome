@@ -1,0 +1,51 @@
+ome-quota-manager is installed in namespace {{ .Release.Namespace }}, mode {{ include "ome-quota-manager.mode" . }}.
+
+{{- if not (contains "/" .Values.quotaManager.image.repository) }}
+{{- if not .Values.global.hub }}
+
+The image is {{ include "ome-quota-manager.image" (dict "values" .Values "repository" .Values.quotaManager.image.repository "tag" .Values.quotaManager.image.tag) }} — an unqualified name, which a kubelet resolves against Docker Hub. You are installing straight from the source tree; a chart published by CI has global.hub and the tag stamped to the registry it was built into, so it does not look like this. Side-load the image or set global.hub. If you do neither the pod sits in ImagePullBackOff, and `helm --wait` reports nothing at all until it times out after 5m.
+
+  On kind:  make ome-quota-manager-image QUOTA_MANAGER_IMG={{ .Values.quotaManager.image.repository }}:{{ .Values.quotaManager.image.tag }}
+            kind load docker-image {{ .Values.quotaManager.image.repository }}:{{ .Values.quotaManager.image.tag }} --name <cluster>
+
+  Elsewhere: --set global.hub=<registry>
+{{- end }}
+{{- end }}
+
+{{- if not .Values.quotaManager.crd.install }}
+
+The AcceleratorQuota CRD is not being installed by this release. Without it the manager cannot
+sync its cache and will crash-loop. Either install charts/ome-crd, which owns every OME CRD, or
+— if this chart is the only installer in the cluster — re-run with:
+
+  --set quotaManager.crd.install=true
+
+Do not do both: ome-crd owns the same cluster-scoped object and whichever release claims it
+second fails Helm's ownership check.
+{{- end }}
+
+Check it came up:
+
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ .Values.quotaManager.name }}
+{{- if .Values.quotaManager.webhook.enabled }}
+
+{{- if .Values.quotaManager.webhook.internalCertManagement }}
+
+The webhook serves its own certificate — no cert-manager needed. The pod stays unready until
+the CA is generated and injected, so a Ready pod means admission is live. Confirm the caBundle
+is real rather than the rendered placeholder:
+
+  kubectl get validatingwebhookconfiguration {{ .Values.quotaManager.name }}.ome.io \
+    -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | base64 -d | openssl x509 -noout -subject
+{{- else }}
+
+Internal cert management is off, so cert-manager must be installed and must have issued
+{{ .Values.quotaManager.name }}-serving-cert. Until its cainjector fills in the caBundle, every write to an
+AcceleratorQuota is rejected — the webhook is failurePolicy=Fail.
+{{- end }}
+
+Admission is failurePolicy=Fail and gates CREATE, UPDATE and DELETE of acceleratorquotas.
+Try it without dirtying the tree — sideEffects is None, so a server dry-run still runs the check:
+
+  kubectl apply --dry-run=server -f <a-quota-with-a-bad-parentRef>.yaml
+{{- end }}

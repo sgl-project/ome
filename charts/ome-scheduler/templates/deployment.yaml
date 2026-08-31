@@ -1,0 +1,100 @@
+{{- if and (gt (int .Values.scheduler.replicaCount) 1) (not .Values.scheduler.leaderElect) -}}
+{{- fail "scheduler.leaderElect must be true when scheduler.replicaCount is greater than 1" -}}
+{{- end }}
+{{- if and .Values.scheduler.omeControllerIntegration.enabled (ne .Values.scheduler.plugin.podGroupTopologyKeyAnnotation "ome.io/topology-key") -}}
+{{- fail "scheduler.plugin.podGroupTopologyKeyAnnotation must be ome.io/topology-key when scheduler.omeControllerIntegration.enabled is true; disable OME controller integration for generic producers" -}}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.scheduler.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-scheduler.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.scheduler.replicaCount }}
+  strategy:
+    {{- toYaml .Values.scheduler.deploymentStrategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "ome-scheduler.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ome-scheduler.labels" . | nindent 8 }}
+      annotations:
+        # Re-roll the pods when the scheduler config changes.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.scheduler.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ .Values.scheduler.name }}
+      {{- $pullSecrets := .Values.scheduler.imagePullSecrets | default .Values.global.imagePullSecrets }}
+      {{- with $pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduler.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduler.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduler.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduler.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: scheduler
+        image: {{ include "ome-scheduler.image" (dict "values" .Values "repository" .Values.scheduler.image.repository "tag" .Values.scheduler.image.tag) }}
+        imagePullPolicy: {{ .Values.scheduler.image.pullPolicy }}
+        command:
+        - /ome-scheduler
+        args:
+        - --config=/etc/kubernetes/ome-scheduler/config.yaml
+        - --v={{ .Values.scheduler.verbosity }}
+        - --bind-address={{ .Values.scheduler.metrics.bindAddress }}
+        - --secure-port={{ .Values.scheduler.metrics.securePort }}
+        ports:
+        - name: https-metrics
+          containerPort: {{ .Values.scheduler.metrics.securePort }}
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.scheduler.probes.liveness.path }}
+            port: https-metrics
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.scheduler.probes.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.scheduler.probes.liveness.periodSeconds }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.scheduler.probes.readiness.path }}
+            port: https-metrics
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.scheduler.probes.readiness.initialDelaySeconds }}
+        resources:
+          {{- toYaml .Values.scheduler.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: config
+          mountPath: /etc/kubernetes/ome-scheduler
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: {{ .Values.scheduler.name }}-config

@@ -90,6 +90,7 @@ models:
       # image: custom-image:tag
       # routerImage: custom-router:tag
       # memFrac: "0.85"
+      # modelCacheProviders: ["model_cache"]  # opt in only for capable images
       # extraArgs: ["--flag", "value"]
 ```
 

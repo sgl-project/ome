@@ -23,7 +23,9 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Model Registry - Maps model names to their supportedModelFormats configuration.
 This hides architecture details from users - they only need to specify model name.
-Extracted from 180 runtime files in config/runtimes/srt/
+The catalog below was historically extracted from the in-tree SGLang
+runtime YAMLs; those files now live in operators' own GitOps repos and
+this template is the canonical reference here.
 */}}
 {{- define "ome-serving.modelRegistry" -}}
 # Qwen3 models

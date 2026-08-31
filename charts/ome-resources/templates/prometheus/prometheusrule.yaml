@@ -1,0 +1,189 @@
+{{- if .Values.prometheusRule.enabled }}
+{{- $r := .Values.prometheusRule }}
+{{- $cp := $r.selectors.controlPlane }}
+{{- $router := $r.selectors.router }}
+{{- $book := $r.runbookUrlBase }}
+# OME P0 alerts — the page-immediately tier.
+#
+# Each rule states a symptom, names a runbook section, and takes every
+# threshold and duration from values.yaml. Nothing here is tuned in the
+# template: an operator changing a threshold should never have to edit a
+# rendered rule.
+#
+# Control-plane series are selected by pod name, not by `job`. The job label
+# depends on which scrape path is in use (ServiceMonitor vs the
+# prometheus.io/scrape annotation), so it is not portable across installs.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ome-p0-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome.labels" . | nindent 4 }}
+    {{- with $r.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: ome.p0
+      interval: {{ $r.interval }}
+      rules:
+        {{- if $r.rules.controllerDown.enabled }}
+        # Three distinct ways to have no reconciliation, deliberately in one
+        # alert because the response is the same and the on-call does not
+        # benefit from three pages for one outage.
+        #
+        # absent() is load-bearing: if every controller pod disappears, `up`
+        # stops being reported and a plain `up == 0` matches nothing, so the
+        # most severe case would be the one that never pages.
+        #
+        # The leader clause has no absent() guard on purpose. It degrades to
+        # "no series, no alert" if leader election is ever turned off, which
+        # is correct; an absent() there would page on a supported config.
+        - alert: OMEControllerDown
+          expr: >-
+            absent(up{ {{- $cp -}} }) == 1
+            or max(up{ {{- $cp -}} }) == 0
+            or max(leader_election_master_status{ {{- $cp -}} }) == 0
+          for: {{ $r.rules.controllerDown.duration }}
+          labels:
+            severity: {{ $r.severity }}
+            tier: p0
+            component: control-plane
+          annotations:
+            summary: "OME control plane is not reconciling"
+            description: >-
+              No OME controller-manager replica is both scraping and holding the
+              leader lease. Nothing in the cluster is being reconciled: no
+              InferenceService will converge, scale, or roll out until this
+              recovers.
+            runbook_url: "{{ $book }}#omecontrollerdown"
+        {{- end }}
+        {{- if $r.rules.webhookFailing.enabled }}
+        # Server errors only. An admission *rejection* is a 200 carrying
+        # allowed=false, so a spike in rejected specs is not this alert --
+        # that is the webhook doing its job.
+        - alert: OMEWebhookFailing
+          expr: >-
+            sum(rate(controller_runtime_webhook_requests_total{ {{- $cp }},code=~"5.." }[5m]))
+            /
+            sum(rate(controller_runtime_webhook_requests_total{ {{- $cp -}} }[5m]))
+            > {{ $r.rules.webhookFailing.ratioThreshold }}
+          for: {{ $r.rules.webhookFailing.duration }}
+          labels:
+            severity: {{ $r.severity }}
+            tier: p0
+            component: webhook
+          annotations:
+            summary: "OME admission webhook is returning server errors"
+            description: >-
+              {{ "{{" }} $value | humanizePercentage {{ "}}" }} of admission requests are
+              failing with 5xx. OME serves its webhooks from the
+              controller-manager, so this blocks every InferenceService create
+              and update in the cluster, including the ones that would fix it.
+            runbook_url: "{{ $book }}#omewebhookfailing"
+        {{- end }}
+        {{- if $r.rules.serviceUnavailable.enabled }}
+        # max() across router pods, not min(): the service is only down when
+        # NO router can see a healthy backend. One router with an empty pool
+        # while its peers are serving is a router problem, not an outage, and
+        # belongs in a lower tier.
+        #
+        # router_pool_total_count > 0 stands in for "desired > 0" because OME
+        # exports no desired-replica series today. It reads as "backends are
+        # registered but none of them are healthy", which is the condition
+        # worth paging on -- and it will not fire for a workload that is
+        # intentionally scaled to zero.
+        - alert: OMEServiceUnavailable
+          expr: >-
+            (max by (namespace, inferenceservice) (router_pool_healthy_count{ {{- $router -}} }) == 0)
+            and
+            (max by (namespace, inferenceservice) (router_pool_total_count{ {{- $router -}} }) > 0)
+          for: {{ $r.rules.serviceUnavailable.duration }}
+          labels:
+            severity: {{ $r.severity }}
+            tier: p0
+            component: router
+          annotations:
+            summary: "InferenceService {{ "{{" }} $labels.namespace {{ "}}" }}/{{ "{{" }} $labels.inferenceservice {{ "}}" }} has no healthy backend"
+            description: >-
+              Backends are registered for this InferenceService but no router
+              considers any of them healthy, so requests to it are failing.
+              Check the engine pods before the router: an ejected backend is
+              usually an engine that stopped passing its health check.
+            runbook_url: "{{ $book }}#omeserviceunavailable"
+        {{- end }}
+        {{- if $r.rules.massRolloutFailure.enabled }}
+        # Built on the transition counter, NOT on
+        # ome_omenative_rollout_group_failure_total: that one is incremented
+        # on every reconcile while a group sits in Failed, so a single stuck
+        # workload would drive any ratio built on it without bound. The
+        # transition counter only moves on an actual phase change.
+        #
+        # Both a rate and a spread are required. A ratio alone fires when one
+        # busy workload fails repeatedly; the InferenceService count is what
+        # makes this "the control plane broke rollouts" rather than "a
+        # workload is broken", which is a lower tier.
+        - alert: OMEMassRolloutFailure
+          expr: >-
+            (
+              sum(rate(ome_omenative_rollout_group_transition_total{ {{- $cp }},to="Failed" }[15m]))
+              /
+              sum(rate(ome_omenative_rollout_group_transition_total{ {{- $cp }},to=~"Idle|Staged|Failed" }[15m]))
+              > {{ $r.rules.massRolloutFailure.ratioThreshold }}
+            )
+            and
+            (
+              count(
+                sum by (namespace, isvc) (
+                  rate(ome_omenative_rollout_group_transition_total{ {{- $cp }},to="Failed" }[15m])
+                ) > 0
+              ) >= {{ $r.rules.massRolloutFailure.minInferenceServices }}
+            )
+          for: {{ $r.rules.massRolloutFailure.duration }}
+          labels:
+            severity: {{ $r.severity }}
+            tier: p0
+            component: coordination
+          annotations:
+            summary: "OME rollouts are failing across multiple InferenceServices"
+            description: >-
+              {{ "{{" }} $value | humanizePercentage {{ "}}" }} of coordination groups
+              reaching a terminal phase are landing in Failed, across at least
+              {{ $r.rules.massRolloutFailure.minInferenceServices }} InferenceServices.
+              A blast radius this wide points at the control plane or a shared
+              dependency rather than at any one workload.
+            runbook_url: "{{ $book }}#omemassrolloutfailure"
+        {{- end }}
+        {{- if $r.rules.reconcileStalled.enabled }}
+        # Wedged, not down: the process is healthy enough to be scraped, which
+        # is exactly why this needs its own alert -- every liveness signal
+        # looks fine.
+        #
+        # All three clauses are needed. Depth alone is a busy controller; a
+        # zero reconcile rate alone is an idle one; only a growing backlog
+        # that nothing is draining is a stall. deriv() over a subquery
+        # supplies the "rising" half.
+        - alert: OMEReconcileStalled
+          expr: >-
+            (sum(workqueue_depth{ {{- $cp -}} }) > {{ $r.rules.reconcileStalled.minQueueDepth }})
+            and
+            (sum(rate(controller_runtime_reconcile_total{ {{- $cp -}} }[10m])) <= {{ $r.rules.reconcileStalled.maxReconcileRate }})
+            and
+            (deriv(sum(workqueue_depth{ {{- $cp -}} })[10m:]) > 0)
+          for: {{ $r.rules.reconcileStalled.duration }}
+          labels:
+            severity: {{ $r.severity }}
+            tier: p0
+            component: control-plane
+          annotations:
+            summary: "OME controller is up but not draining its work queue"
+            description: >-
+              The controller-manager is being scraped and holds the lease, but
+              its work queue is growing while the reconcile rate is
+              effectively zero. Every liveness signal will look healthy; the
+              controller is stuck. Check for a blocked apiserver call or a
+              deadlocked reconcile before restarting.
+            runbook_url: "{{ $book }}#omereconcilestalled"
+        {{- end }}
+{{- end }}

@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.quotaManager.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.quotaManager.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "ome-quota-manager.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ome-quota-manager.labels" . | nindent 8 }}
+        {{- with .Values.quotaManager.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.quotaManager.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ .Values.quotaManager.name }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - name: quota-manager
+        image: {{ include "ome-quota-manager.image" (dict "values" .Values "repository" .Values.quotaManager.image.repository "tag" .Values.quotaManager.image.tag) }}
+        imagePullPolicy: {{ .Values.quotaManager.image.pullPolicy }}
+        args:
+        - "--mode={{ include "ome-quota-manager.mode" . }}"
+        - "--metrics-bind-address=:{{ .Values.quotaManager.metricsPort }}"
+        - "--health-probe-addr=:{{ .Values.quotaManager.probePort }}"
+        - "--leader-elect={{ .Values.quotaManager.leaderElect }}"
+        - "--zap-log-level={{ .Values.quotaManager.logLevel }}"
+        {{- if eq (include "ome-quota-manager.mode" .) "management" }}
+        {{- with .Values.quotaManager.projection.origin }}
+        - "--projection-origin={{ . }}"
+        {{- end }}
+        {{- with .Values.quotaManager.projection.fieldManager }}
+        - "--projection-field-manager={{ . }}"
+        {{- end }}
+        {{- with .Values.quotaManager.projection.defaultDistributionPolicy }}
+        - "--default-distribution-policy={{ . }}"
+        {{- end }}
+        {{- if .Values.quotaManager.projection.execCredentials.enabled }}
+        - "--allow-exec-credentials=true"
+        - "--exec-credential-allowed-commands={{ join "," .Values.quotaManager.projection.execCredentials.allowedCommands }}"
+        {{- end }}
+        {{- end }}
+        {{- if .Values.quotaManager.maxTreeDepth }}
+        - "--max-tree-depth={{ .Values.quotaManager.maxTreeDepth }}"
+        {{- end }}
+        {{- with .Values.quotaManager.resyncInterval }}
+        - "--resync-interval={{ . }}"
+        {{- end }}
+        {{- if eq (include "ome-quota-manager.mode" .) "workload" }}
+        {{- with (include "ome-quota-manager.acceleratorResources" .) }}
+        - "--accelerator-resources={{ . }}"
+        - "--capacity-hysteresis-percent={{ ($.Values.quotaManager.capacity | default dict).hysteresisPercent | default 0 }}"
+        {{- end }}
+        {{- with (include "ome-quota-manager.coverResources" .) }}
+        - "--cover-resources={{ . }}"
+        - "--field-manager={{ include "ome-quota-manager.fieldManager" $ }}"
+        {{- end }}
+        {{- end }}
+        - "--webhook={{ .Values.quotaManager.webhook.enabled }}"
+        {{- if .Values.quotaManager.webhook.enabled }}
+        - "--webhook-port={{ .Values.quotaManager.webhook.port }}"
+        - "--webhook-cert-dir={{ include "ome-quota-manager.certDir" . }}"
+        - "--internal-cert-management={{ .Values.quotaManager.webhook.internalCertManagement }}"
+        {{- if .Values.quotaManager.webhook.internalCertManagement }}
+        # Derived from quotaManager.name, so the binary carries no default that
+        # could disagree with what this chart rendered.
+        - "--cert-namespace={{ .Release.Namespace }}"
+        - "--cert-secret-name={{ .Values.quotaManager.name }}-webhook-cert"
+        - "--webhook-service-name={{ .Values.quotaManager.name }}-webhook"
+        - "--webhook-config-name={{ .Values.quotaManager.name }}.ome.io"
+        - "--ca-name={{ .Values.quotaManager.name }}-ca"
+        - "--ca-organization=ome"
+        {{- end }}
+        {{- end }}
+        ports:
+        - name: metrics
+          containerPort: {{ .Values.quotaManager.metricsPort }}
+        - name: probe
+          containerPort: {{ .Values.quotaManager.probePort }}
+        {{- if .Values.quotaManager.webhook.enabled }}
+        - name: webhook
+          containerPort: {{ .Values.quotaManager.webhook.port }}
+          protocol: TCP
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: probe
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: probe
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          {{- toYaml .Values.quotaManager.resources | nindent 10 }}
+        {{- if .Values.quotaManager.webhook.enabled }}
+        volumeMounts:
+        - name: webhook-cert
+          mountPath: {{ include "ome-quota-manager.certDir" . }}
+          readOnly: true
+        {{- end }}
+      {{- if .Values.quotaManager.webhook.enabled }}
+      volumes:
+      # Read-only in both cert modes. With internal management the component
+      # never writes this path: it writes the Secret, and the kubelet projects
+      # the Secret back down here — which is also why a fresh pod stays unready
+      # until that projection lands rather than becoming ready immediately.
+      - name: webhook-cert
+        secret:
+          defaultMode: 420
+          secretName: {{ .Values.quotaManager.name }}-webhook-cert
+      {{- end }}
+      {{- with .Values.quotaManager.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.quotaManager.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.quotaManager.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

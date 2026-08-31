@@ -9,6 +9,103 @@ global:
 
 ome:
   version: &defaultVersion v1.2.2
+  metricsaggregator:
+    enableMetricAggregation: "false"
+    enablePrometheusScraping: "false"
+  # podMonitor configures cluster-scope defaults for every PodMonitor OME
+  # generates per InferenceService Component. Omit (or leave empty) to keep the
+  # legacy behavior: PodMonitors carry only OME's own labels, so a
+  # label-selecting metrics collector will not scrape them and metrics flow only
+  # via the pod-annotation scrape path.
+  #
+  # Set `labels` to opt the generated PodMonitors into an external scrape
+  # pipeline that selects monitors by label — e.g. an OpenTelemetry target
+  # allocator whose podMonitorSelector requires {monitoring.example.com/scrape-tier: cluster}.
+  # These labels land on metadata.labels only (never spec.selector).
+  #
+  # Set `relabelings` to map Kubernetes SD meta labels onto the stable metric
+  # labels dashboards key on, so PodMonitor-scraped series match the legacy
+  # pod-annotation ("kubernetes-pods") label schema. Appended to every endpoint.
+  #
+  # podMonitor:
+  #   labels:
+  #     monitoring.example.com/scrape-tier: cluster
+  #   relabelings:
+  #     - sourceLabels: ["__meta_kubernetes_pod_label_ome_io_inferenceservice"]
+  #       targetLabel: inferenceservice
+  #     - sourceLabels: ["__meta_kubernetes_pod_label_component"]
+  #       targetLabel: component
+  #     - sourceLabels: ["__meta_kubernetes_pod_label_serving_runtime"]
+  #       targetLabel: serving_runtime
+  #     - sourceLabels: ["__meta_kubernetes_namespace"]
+  #       targetLabel: k8s_namespace_name
+  podMonitor: {}
+  # multiclusterAccess installs the long-lived ServiceAccount token used by
+  # InferenceDeploymentOperator to manage OME resources from a control-plane
+  # cluster.
+  multiclusterAccess:
+    enabled: true
+  # multicluster enables the OEP-0018 control-plane fan-out placement controllers.
+  # Alpha; default off. On the CONTROL-PLANE cluster set enabled: true and
+  # role: control-plane (this disables the local InferenceService->pods reconciler
+  # and runs the placement + WorkloadCluster controllers). Leave default on
+  # workload clusters.
+  multicluster:
+    enabled: false
+    role: ""
+    # execCredentials lets WorkloadCluster kubeconfigs authenticate with an exec
+    # credential plugin (short-lived cloud tokens, e.g. EKS/GKE). REQUIRES the
+    # plugin binary baked into the manager image (BYO image) AND pod identity
+    # (IRSA / Workload Identity). SECURITY: an exec block runs a command in the
+    # controller pod — keep WorkloadCluster kubeconfig Secrets admin-only.
+    execCredentials:
+      enabled: false
+      allowedCommands: "aws,gke-gcloud-auth-plugin,kubelogin"
+    # placementControlPlaneID: this control plane's identity, stamped on every
+    # derived InferenceService it creates so its GC only reaps its OWN deriveds.
+    # REQUIRED (set to a unique value per control plane) when multiple control
+    # planes share a workload cluster; otherwise one control plane's GC would
+    # delete another's deriveds. Leave empty for a single control plane.
+    placementControlPlaneID: ""
+    # config holds the multi-cluster TUNABLES, rendered into the
+    # inferenceservice-config ConfigMap's "multicluster" block (NOT manager
+    # flags, so an edit applies on the next config load, not a restart). Every
+    # field is optional: leave a duration "" or a number 0 to use the manager's
+    # built-in default. Durations are Go duration strings ("1m", "30s", "250ms").
+    config:
+      # workloadCluster: remote-cluster connection/transport + the status funnel.
+      workloadCluster:
+        clientQPS: 0             # steady-state QPS to each remote apiserver (0 => client-go default)
+        clientBurst: 0           # burst over clientQPS (0 => client-go default)
+        perCallTimeout: ""       # per-request timeout ("" => none)
+        cacheEnabled: false      # serve cross-cluster reads from an informer cache; prerequisite for the funnel
+        healthInterval: ""       # re-probe cadence for an otherwise-idle WorkloadCluster
+        connectionGrace: ""      # transient-failure grace before a reachable cluster is disconnected
+        eventsBatchPeriod: ""    # debounce for a rotated-kubeconfig Secret's key-update burst
+        establishInitial: ""     # initial remote watch-establish timeout
+        establishMax: ""         # cap on the watch-establish timeout
+        reconnectRetryMax: ""    # cap on the reconnect backoff for an unreachable cluster
+        funnelResyncInterval: "" # how fast a newly-connected cluster is noticed by the status funnel
+        funnelBufferSize: 0      # depth of the funnel's buffered event channel
+      # placement: the fan-out placement controller, its status convergence + GC.
+      placement:
+        requeueInterval: ""         # status-refresh poll cadence
+        gcInterval: ""              # orphan-sweep cadence
+        maxConcurrentReconciles: 0  # parallel placement reconciles (0 => single worker)
+        fanoutTimeout: ""           # per-cluster fan-out apply deadline
+        winnerLostGrace: ""         # grace before re-placing when the sticky winner's derived is missing
+        statusBatchPeriod: ""       # debounce for a burst of cross-cluster status events
+        statusSafetyRequeue: ""     # steady-state re-read backstop when the funnel is on
+        dispatcherMode: ""          # "AllAtOnce" (default) or "Incremental"
+        dispatcherStepSize: 0       # candidates Incremental adds per round (0 => one)
+        dispatcherRoundTimeout: ""  # Incremental round dwell ("" => no dwell)
+        localQueue: "default"       # Kueue LocalQueue for derived workloads ("" => no queue label, so Kueue does not gate them)
+      # endpoint: the global endpoint publisher (Gateway API HTTPRoute to the winner).
+      endpoint:
+        globalHostTemplate: ""  # text/template for the global host ("" => only annotated ISVCs publish)
+        globalGateway: ""       # "namespace/name" of the global Gateway ("" => publisher is a no-op)
+        routeNamespace: ""      # namespace for the published HTTPRoute + Service ("" => the ISVC's namespace)
+        backendPort: 0          # port on the winner's ingress the global host forwards to
   benchmarkJob:
     image: genai-bench
     tag: 0.1.113
@@ -16,16 +113,175 @@ ome:
     memoryRequest: "2Gi"
     cpuLimit: "2"
     memoryLimit: "2Gi"
+  kedaConfig:
+    enableKeda: true
+    promServerAddress: "http://prometheus-operated.monitoring.svc.cluster.local:9090"
+    customPromQuery: ""
+    scalingThreshold: "10"
+    scalingOperator: "GreaterThanOrEqual"
+
   controller:
     replicaCount: 3
+    # Additional annotations applied to the controller pod template.
+    # Merged after the chart's default annotations (prometheus.io/scrape, etc.).
+    # Typical use: metric-pipeline schema tagging, e.g.
+    #   podAnnotations:
+    #     metrics-schema: ome-controller
+    podAnnotations: {}
     deploymentMode: "RawDeployment"
+    # Admission-time component replica defaults stamped by the ISVC mutating
+    # webhook on unset minReplicas/maxReplicas. Source of truth for these
+    # values (the OME binary has NO built-in defaults; an omitted field means
+    # the defaulter leaves that field as authored). A filled maxReplicas is
+    # raised to an authored minReplicas so admission never manufactures a
+    # min>max conflict.
+    replicas:
+      defaultMinReplicas: 1
+      defaultMaxReplicas:
+        engine: 3
+        decoder: 3
+        router: 2
+    # Max reconciles each controller runs in parallel (distinct objects only —
+    # controller-runtime serializes per object key, so independent objects
+    # reconcile concurrently). Source of truth for these values (the OME binary
+    # has NO built-in default; 0/unset falls back to controller-runtime's
+    # single-worker default). Raise on large clusters (thousands of ISVCs) where
+    # a single worker can't keep up with the reconcile backlog.
+    inferenceServiceMaxConcurrentReconciles: 4
+    inferenceReplicaMaxConcurrentReconciles: 4
+    # Client-side rate limit toward the local apiserver, shared by the manager
+    # cache/client, the direct clientset, and the webhook handlers. Source of
+    # truth for these values (the OME binary has NO built-in default; 0/unset
+    # falls back to controller-runtime's 20 QPS / 30 burst). The floor scales
+    # with the concurrent-reconcile counts above: each worker issues several
+    # reads and writes per pass, so leaving the default in place throttles the
+    # reconcile loop long before the apiserver is the bottleneck. Client-side
+    # throttling surfaces as "Waited for ... due to client-side throttling" in
+    # the controller log.
+    kubeAPIQPS: 100
+    kubeAPIBurst: 200
+    # TTL for the in-memory cache of the inferenceservice-config ConfigMap on the
+    # InferenceService reconcile path. Collapses the per-reconcile config loads
+    # (deploy/inferenceservice/ingress/canaryAnalysis) onto one apiserver GET per
+    # window; kept short so ConfigMap edits apply without a restart. Set to "0" to
+    # disable caching (read the apiserver on every load).
+    configCacheTTL: "30s"
+    # canaryAnalysis tunes metric-gated canary promotion (spec.rollout.canary).
+    canaryAnalysis:
+      # Default Prometheus the analysis queries when a canary does not set its own
+      # spec.rollout.canary.prometheus.serverAddress. Empty -> the bundled
+      # ome-prometheus Service at prometheus.service.port. Set to your own
+      # Prometheus/Thanos for production.
+      bundledPrometheusAddress: ""
+      # Per-sample query timeout, max background query concurrency, and how long a
+      # sampled result stays usable in the controller's cache.
+      queryTimeout: "5s"
+      maxConcurrency: 8
+      cacheTTL: "2m"
+    # coordination tunes the OMENative cross-Component coordination layer.
+    coordination:
+      # Per-revision hysteresis band (percent) for the pod-proportional traffic
+      # writer. A recomputed weight set whose every per-revision percent moves by
+      # strictly less than this from what is already in status is treated as
+      # pod-count jitter (a pod momentarily Pending between reconciles) and the
+      # status write + HTTPRoute re-enqueue is suppressed. 0 disables the band
+      # (write on any diff — the prior behavior). A small value (e.g. 5) damps the
+      # continuous churn at large pod counts; a sustained ratio change still
+      # exceeds the band and converges.
+      trafficWeightDeadbandPercent: 0
+      # Default maintainRatio.tolerance (percent) applied when a rollout group
+      # sets maintainRatio but omits the tolerance. An explicit per-group value
+      # (including 0) always wins. Remove the key to leave the default
+      # unconfigured — a group that omits tolerance then rolls with no drift
+      # bound.
+      defaultRatioTolerancePercent: 5
+    # podDisruptionBudget configures pod-level availability policies by mode.
+    # Omitting rawDeployment keeps the chart default; set rawDeployment: null
+    # to disable it.
+    podDisruptionBudget:
+      rawDeployment:
+        maxUnavailable: 1
+    # lifecycle tunes the OMENative per-Instance lifecycle state machine.
+    lifecycle:
+      # Missing-Pod budget for one OMENative scale-up pass. Instance and
+      # leader/worker gang boundaries remain atomic: all missing Pods for a
+      # selected Instance are handled together. Creating intents are committed
+      # in one status update before the corresponding Pods are created. A first
+      # eligible Instance larger than this value proceeds alone. Omit only to
+      # preserve this field's unbounded compatibility behavior. The manager
+      # reads this once at startup and rejects non-positive values; Helm rolls
+      # the manager automatically when the rendered ConfigMap changes.
+      scaleUpPodBatchSize: 100
+      # Active scale-down budget in Pod-equivalent units: live and Terminating
+      # Pods, with a cost-1 floor for Podless status work. Instance and
+      # leader/worker gang boundaries remain atomic, and the first eligible
+      # Instance larger than this value proceeds alone. Existing Delete-owned
+      # work is resumed before newly extra Instances are admitted. Omit only to
+      # preserve this field's unbounded compatibility behavior. The manager
+      # reads this once at startup and rejects non-positive values; Helm rolls
+      # every manager replica when the rendered ConfigMap changes.
+      scaleDownPodBatchSize: 100
+      # Periodic wake-up cadence while scale-down drain, Pod deletion, or
+      # per-Instance cleanup remains in flight. Pod, EndpointSlice, PodGroup,
+      # and owner watches also drive progress. Omit to disable cadence polling;
+      # configured force-delete and teardown deadlines still wake exactly when
+      # due. Malformed or non-positive durations prevent manager startup. Helm
+      # rolls the manager when this value changes.
+      scaleDownRequeueInterval: 5s
+      # revisionHistoryLimit caps how many non-live ControllerRevisions the
+      # InferenceReplica controller retains per (InferenceService, Component)
+      # when the ISVC does not set the ome.io/revision-history-limit
+      # annotation (the annotation, a positive integer, always wins). Live
+      # revisions — current, target, and every per-Instance running/target
+      # revision — are never deleted regardless of the limit. The OME binary
+      # has NO built-in default: removing this field disables pruning
+      # entirely for ISVCs without the annotation (revisions accumulate).
+      revisionHistoryLimit: 10
+      # updateRetry bounds automatic same-target update retries (RetryBlock).
+      # A rollout that fails toward an UNCHANGED target revision backs off
+      # exponentially (initialDelay * multiplier^(attempt-1), capped at
+      # maxDelay) and Holds after maxAttempts; only a new target revision
+      # releases the hold. The OME binary has NO built-in defaults: removing
+      # this block fails safe (the first same-target failure Holds
+      # immediately with a RetryHeld warning event).
+      updateRetry:
+        maxAttempts: 3
+        initialDelay: 1m
+        maxDelay: 30m
+        multiplier: 2.0
+      # stuckPodGracePeriod is the wait window after pod creation before a
+      # terminal kubelet waiting state escalates to Phase=Failed. Removing
+      # this field disables fast escalation (the InstanceReadyTimeout backstop
+      # still fires).
+      stuckPodGracePeriod: 60s
+      # autoMigrate configures the deadline-disposition relocation budget.
+      # Removing this block disables the relocation branch.
+      autoMigrate:
+        maxAttempts: 3
+      # forceDelete enables automated force-deletion (grace 0) of pods stuck
+      # Terminating on unreachable/gone nodes — opt-in; leave commented out
+      # (the default) to disable the escalation entirely. Both fields are
+      # required when the block is present: overdueSlack is how long past a
+      # pod's own deletionTimestamp before it counts as wedged;
+      # nodeUnreachableThreshold is the minimum age of the node's
+      # unreachable evidence before acting.
+      # forceDelete:
+      #   overdueSlack: 2m
+      #   nodeUnreachableThreshold: 5m
+      # teardown bounds how long a deleting InferenceReplica may hold its
+      # finalizer while draining pods. Past the deadline, the controller
+      # warns and lifts the finalizer (degrading to plain GC). Absence (of
+      # the entire block) is the fully supported default: the finalizer
+      # holds strictly until clean, NO deadline.
+      teardown:
+        deadline: 30m
     ingressGateway:
+      disableIstioVirtualHost: false
       domain: svc.cluster.local
       domainTemplate: "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"
       urlScheme: http
-      disableIstioVirtualHost: false
       ingressGateway:
-        gateway: knative-serving/knative-ingress-gateway
+        gateway: istio-system/ingress-gateway
         gatewayService: istio-ingressgateway.istio-system.svc.cluster.local
         className: istio
       omeIngressGateway: ""
@@ -34,6 +290,11 @@ ome:
       # built-in default. Must be an RFC-1123 label (invalid values are rejected
       # at config-load). Empty => the primary endpoint carries no class.
       omeIngressGatewayClass: ""
+      # Request headers forming the consistent-hash key for generated backend
+      # traffic policies. Config-driven: the binary's built-in fallback is
+      # ["x-routing-key"] only; this chart value is the deployment's source
+      # of truth for any additional routing headers.
+      consistentHashHeaders: ["x-routing-key", "X-SMG-Routing-Key"]
       additionalIngressDomains: null
       pathTemplate: ""
       disableIngressCreation: true
@@ -43,9 +304,9 @@ ome:
       perISVCSubdomain: false
       # Shared-host scheme (perISVCSubdomain=false) host label:
       # "<sharedHostPrefix>.<domain>". The OME binary has NO built-in default —
-      # this chart value is the source of truth. Empty string => bare <domain>
-      # (no prefix).
-      sharedHostPrefix: ""
+      # this chart value is the source of truth. Override per-cluster (e.g. via
+      # GitOps) as needed; empty string => bare <domain> (no prefix).
+      sharedHostPrefix: "llm"
       # Attach each generated HTTPRoute to extra gateways beyond the primary one
       # (e.g. an external gateway alongside the internal). Each entry adds a
       # parentRef + a hostname rendered from its own domain. Empty => single gateway.
@@ -53,16 +314,37 @@ ome:
       #   additionalIngressGateways:
       #     - omeIngressGateway: "envoy-gateway-system/external-gateway"
       #       ingressDomain: "external.example.com"
-      #       class: "external"
       additionalIngressGateways: []
-      # Per-namespace gateway overrides: map an ISVC namespace to the gateway(s)
-      # its routes attach to, replacing the cluster-default primary/additional
-      # gateways for that namespace. Empty => cluster defaults everywhere.
+      # Per-namespace gateway override: map an ISVC namespace to the gateway(s) its
+      # HTTPRoutes attach to, replacing the primary (omeIngressGateway/domain) and
+      # additionalIngressGateways above for ISVCs in that namespace. The route host
+      # is unchanged — it is still "<isvc>.<namespace>.<domain>" from domainTemplate —
+      # so this lets one controller serve per-namespace Gateways that each own their
+      # namespace's TLS cert + DNS (e.g. a "prod" Gateway for *.prod.<domain>).
+      # Namespaces absent here fall back to the cluster defaults; a per-ISVC
+      # "ome.io/ingress-gateway" annotation still overrides this. Empty => disabled.
+      # Example:
+      #   namespaceIngressGateways:
+      #     prod:
+      #       primary:
+      #         omeIngressGateway: "envoy-gateway-system/prod-int-gw-https"
+      #         ingressDomain: "int-gw-https.example.com"
+      #       additional:
+      #         - omeIngressGateway: "envoy-gateway-system/prod-ext-gw-https"
+      #           ingressDomain: "ext-gw-https.example.com"
       namespaceIngressGateways: {}
-      # Cluster-default Gateway API request timeout (seconds) for generated
-      # routes; unset => no route timeout is imposed and the gateway's own
-      # default applies.
-      # defaultRouteTimeoutSeconds: 60
+      # Cluster-default Gateway API request timeout (seconds) applied to every
+      # generated HTTPRoute whose ISVC doesn't set spec.<component>.timeoutSeconds.
+      # The OME binary has NO built-in default — this chart value is the source of
+      # truth (override per-cluster via GitOps).
+      #   0    => emit "0s" = explicitly DISABLE the overall request timeout
+      #           (recommended for inference: generations/streams run long; the
+      #           gateway's idle timeout still reaps dead streams).
+      #   >0   => that many seconds.
+      #   null => field omitted, which falls back to Envoy's built-in 15s route
+      #           default (truncates long requests) — avoid; prefer 0 or a value.
+      # A per-ISVC spec.<component>.timeoutSeconds still overrides this.
+      defaultRouteTimeoutSeconds: 0
     nodeSelector: {}
     tolerations: []
     topologySpreadConstraints: []
@@ -95,9 +377,6 @@ ome:
       memoryLimit: 320Gi
       cpuRequest: 15
       cpuLimit: 15
-    # metadataJob configures the metadata-extraction Job the BaseModel
-    # controller spawns on demand for PVC-backed models. It runs
-    # `ome-agent model-metadata` against the PVC-mounted model directory.
     metadataJob:
       serviceAccount: ome-model-metadata
       memoryRequest: 256Mi
@@ -113,29 +392,7 @@ ome:
       tolerations: []
       affinity: {}
       priorityClassName: ""
-  kedaConfig:
-    enableKeda: true
-    promServerAddress: "http://prometheus-operated.monitoring.svc.cluster.local:9090"
-    customPromQuery: ""
-    scalingThreshold: "10"
-    scalingOperator: "GreaterThanOrEqual"
 modelAgent:
-  # Deploy the model-agent DaemonSet (node-local model download/cache).
-  # Required for BaseModel/ClusterBaseModel-backed model resolution.
-  # Installs whose runtimes fetch models themselves can leave this off.
-  enabled: false
-  hostPath: /mnt/data/models
-  priorityClassName: system-node-critical
-  serviceAccountName: ome-model-agent
-  image:
-    # Docker registry hub. If set, overrides global.hub for model-agent.
-    # If repository contains '/', hub is ignored.
-    # Leave empty to use global.hub
-    hub: ""
-    repository: model-agent
-    pullPolicy: Always
-    tag: *defaultVersion
-
   # Instance-type -> short-name mappings, by cloud provider. Single source of
   # truth: rendered into the model-agent ConfigMap (instance-type-map) and the
   # enigma init container's INSTANCE_TYPE_MAP env var via the
@@ -167,6 +424,24 @@ modelAgent:
     gpu-h200-sxm: H200
     gpu-b200-sxm: B200
     gpu-l40s: L40S
+  # Deploy the model-agent DaemonSet (node-local model download/cache).
+  # Required for BaseModel/ClusterBaseModel-backed model resolution.
+  # Installs whose runtimes fetch models themselves can leave this off.
+  enabled: true
+  # Additional annotations applied to the model-agent pod template.
+  # Same shape and intent as ome.controller.podAnnotations above.
+  podAnnotations: {}
+  hostPath: /mnt/data/models
+  priorityClassName: system-node-critical
+  serviceAccountName: ome-model-agent
+  image:
+    # Docker registry hub. If set, overrides global.hub for model-agent.
+    # If repository contains '/', hub is ignored.
+    # Leave empty to use global.hub
+    hub: ""
+    repository: model-agent
+    pullPolicy: Always
+    tag: *defaultVersion
 
   # When enabled, the model agent will only run on nodes with GPU
   gpuNodesOnly: false
@@ -224,3 +499,213 @@ modelAgent:
     requests:
       cpu: '10'
       memory: 100Gi
+
+# ServiceMonitor for the controller-manager metrics endpoint.
+# Requires prometheus-operator (monitoring.coreos.com/v1) installed
+# in the cluster. Leave disabled for clusters that use vanilla
+# Prometheus pod-annotation discovery (the prometheus.io/scrape
+# annotations on the controller pod continue to work).
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  # Extra labels merged onto the ServiceMonitor (e.g., to match the
+  # operator's ruleSelector / serviceMonitorSelector).
+  additionalLabels: {}
+  # Prometheus relabel rules applied before scraping.
+  relabelings: []
+  # Prometheus relabel rules applied after scraping (drop/keep series).
+  metricRelabelings: []
+
+# P0 alert rules — the tier that pages immediately. Every rule here is a
+# symptom a user can feel; causes belong in the lower tiers, because paging on
+# a cause that has not yet hurt anyone teaches the on-call to close pages
+# without reading them.
+#
+# Shipped as a prometheus-operator PrometheusRule, so it needs the
+# monitoring.coreos.com/v1 CRD and a Prometheus whose ruleSelector matches
+# (see additionalLabels). The Prometheus this chart bundles is a plain
+# Deployment reading a ConfigMap and does NOT consume PrometheusRule objects —
+# point these at the same Prometheus that backs your alerting.
+#
+# Disabled by default: an alert rule that fires into a routing tree nobody has
+# configured is worse than no rule at all.
+prometheusRule:
+  enabled: false
+  # Extra labels merged onto the PrometheusRule, to match the operator's
+  # ruleSelector.
+  additionalLabels: {}
+  # How often Prometheus evaluates this group.
+  interval: 30s
+  # Routing label stamped on every rule below.
+  severity: critical
+  # Runbook base URL. Each alert appends its own "#anchor", so a reader lands
+  # on the section for the alert that woke them. Empty emits the bare anchor —
+  # every alert still names its section, it just is not clickable.
+  runbookUrlBase: ""
+  # Series selectors, as PromQL label matchers without the enclosing braces.
+  #
+  # OME control-plane series are matched by pod name rather than by `job`: the
+  # job label differs between the ServiceMonitor scrape path and the
+  # prometheus.io/scrape annotation path, so it is not portable. Override if
+  # your store relabels differently, or to scope alerts to one cluster.
+  selectors:
+    controlPlane: pod=~"ome-controller-manager.*"
+    # Router series come from the router image, which is built outside this
+    # repo. Leave empty to match all routers the store knows about.
+    router: ""
+  rules:
+    # No reconciliation is happening at all: the pods are gone, every replica
+    # is failing its scrape, or the replicas are up but none holds the lease.
+    controllerDown:
+      enabled: true
+      duration: 5m
+    # The admission webhook is returning server errors, which blocks every
+    # InferenceService write cluster-wide. Counts 5xx only: a *rejected*
+    # admission is a 200 carrying allowed=false, and rejecting a bad spec is
+    # the webhook working.
+    webhookFailing:
+      enabled: true
+      duration: 5m
+      ratioThreshold: 0.1
+    # An InferenceService has registered backends but the routers see none of
+    # them as healthy — a customer-visible outage for that workload.
+    serviceUnavailable:
+      enabled: true
+      duration: 5m
+    # Rollouts are failing broadly enough to implicate the control plane
+    # rather than any one workload, so both a rate and a spread are required.
+    massRolloutFailure:
+      enabled: true
+      duration: 15m
+      ratioThreshold: 0.5
+      minInferenceServices: 3
+    # The controller is up and scraping, but wedged: work is queued, the
+    # backlog is growing, and nothing is being reconciled.
+    reconcileStalled:
+      enabled: true
+      duration: 10m
+      # Depth below this is normal churn, not a backlog.
+      minQueueDepth: 1
+      # Reconciles/sec at or below this counts as no progress.
+      maxReconcileRate: 0.01
+
+# PodMonitor for the model-agent DaemonSet. The DaemonSet has no
+# fronting Service (it's addressed via node-local hostPath, not
+# cluster DNS), so PodMonitor is the right scrape primitive.
+podMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  additionalLabels: {}
+  relabelings: []
+  metricRelabelings: []
+
+# Single-replica Prometheus bundled by this chart for KEDA autoscaling and
+# canary metric analysis. It is the default source for canary queries. Disable
+# it when your cluster already runs a Prometheus that scrapes OME pods, and
+# point analysis and KEDA at that instance instead. It is not intended for
+# long-term observability or alerting; retention is deliberately short and
+# storage defaults to emptyDir.
+prometheus:
+  enabled: true
+  # Retention window for persisted TSDB blocks. Short by design — this
+  # Prometheus exists for autoscaling input, not long-term observability.
+  # This does not bound the mutable head/WAL, which can span Prometheus's
+  # two-hour production block duration.
+  retention: 30m
+  # Size-based TSDB retention guard. Prometheus counts the head/WAL when
+  # evaluating this limit but can delete only persisted blocks. 6GB is about
+  # 70% of the default 8Gi emptyDir cap, leaving space for the mutable head,
+  # WAL checkpoints, and compaction. Set empty to disable; when overriding,
+  # keep this below 80-85% of the selected volume capacity.
+  retentionSize: 6GB
+  scrapeInterval: 15s
+  scrapeTimeout: 10s
+  # Internal Prometheus HTTP port. service.port remains the Service-facing
+  # port and may differ from this value.
+  listenPort: 9090
+  # Require an explicit scrape opt-in on InferenceService pods through either
+  # prometheus.io/scrape="true" or ome.io/enable-prometheus-scraping="true".
+  # The compatibility default keeps the existing opt-out behavior; enable this
+  # on large or shared clusters to bound the discovered scrape population.
+  requireScrapeAnnotation: false
+  # Prometheus metric_relabel_configs applied to the InferenceService scrape
+  # job. Use this to keep only the series needed by autoscaling and canary
+  # queries. Empty keeps every metric exposed by scraped pods.
+  metricRelabelConfigs: []
+  # Optional per-scrape guardrails. Set an individual value to 0 or empty to
+  # leave the corresponding Prometheus limit unset.
+  scrapeLimits:
+    sampleLimit: 0
+    targetLimit: 0
+    labelLimit: 0
+    labelNameLengthLimit: 0
+    labelValueLengthLimit: 0
+    bodySizeLimit: ""
+    keepDroppedTargets: 0
+  # Retain Prometheus's own process and TSDB metrics for capacity planning.
+  selfScrape:
+    enabled: true
+  externalLabels:
+    cluster: ome
+  # Optional query guards. Zero or empty values retain Prometheus's upstream
+  # defaults.
+  query:
+    maxConcurrency: 0
+    maxSamples: 0
+    timeout: ""
+  # Optional Go soft memory limit. Leave empty to use Prometheus's runtime
+  # behavior; set below the container limit to reserve non-heap headroom.
+  goMemLimit: ""
+  # Namespaces to discover InferenceService pods in. Empty = all namespaces
+  # (discovery is server-side filtered to ome.io/inferenceservice pods, which
+  # bounds the Kubernetes informer but not scrape cardinality). Set a list to
+  # hard-scope discovery on large multi-tenant clusters.
+  scrapeNamespaces: []
+  image:
+    repository: prom/prometheus
+    tag: "v3.0.1"
+    pullPolicy: IfNotPresent
+  # Memory scales with active series = (scrape targets) x (series per pod).
+  # LLM-serving pods expose high cardinality (per-request histograms, KV-cache,
+  # per-model labels), so a few hundred ISVC pods can push the head block past
+  # 1Gi and OOM-crashloop (the WAL replays the oversized head on every restart).
+  # 3Gi covers a moderate fleet (~500 ISVC pods). LARGER fleets: scope
+  # `scrapeNamespaces` to the namespaces you autoscale, and/or drop the metric
+  # firehose to the KEDA-needed series — this Prometheus is autoscaling input,
+  # not observability. Memory-by-count won't scale forever; cut cardinality.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 3Gi
+  service:
+    type: ClusterIP
+    port: 9090
+  storage:
+    # emptyDir size cap. Prometheus keeps the active head and WAL beyond the
+    # configured retention window, and compaction temporarily needs space for
+    # both source and output blocks. 8Gi covers a moderate high-cardinality
+    # inference fleet while still protecting the node from runaway disk use;
+    # retentionSize cannot delete the mutable head or WAL.
+    sizeLimit: 8Gi
+  # Optional durable TSDB storage. When disabled, the Deployment uses the
+  # emptyDir volume configured above. existingClaim takes precedence over a
+  # chart-managed claim when persistence is enabled.
+  persistence:
+    enabled: false
+    existingClaim: ""
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 16Gi
+    annotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  # Extra labels merged onto every Prometheus-related resource.
+  # Useful for fleet labels or cost-attribution tags.
+  additionalLabels: {}

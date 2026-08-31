@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["scheduler"],
+  "properties": {
+    "scheduler": {
+      "type": "object",
+      "required": ["name", "replicaCount", "leaderElect", "omeControllerIntegration", "deploymentStrategy", "plugin", "omeGangPack", "nodeResourcesFit", "metrics", "probes", "podDisruptionBudget"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 55,
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+        },
+        "replicaCount": {"type": "integer", "minimum": 1},
+        "leaderElect": {"type": "boolean"},
+        "omeControllerIntegration": {
+          "type": "object",
+          "required": ["enabled"],
+          "properties": {
+            "enabled": {"type": "boolean"}
+          }
+        },
+        "deploymentStrategy": {
+          "type": "object",
+          "required": ["type", "rollingUpdate"],
+          "properties": {
+            "type": {"type": "string", "enum": ["RollingUpdate"]},
+            "rollingUpdate": {
+              "type": "object",
+              "required": ["maxUnavailable", "maxSurge"],
+              "properties": {
+                "maxUnavailable": {"anyOf": [{"type": "integer", "minimum": 0}, {"type": "string"}]},
+                "maxSurge": {"anyOf": [{"type": "integer", "minimum": 0}, {"type": "string"}]}
+              }
+            }
+          }
+        },
+        "plugin": {
+          "type": "object",
+          "required": ["topologyKey", "podGroupTopologyKeyAnnotation", "unsupportedPlacementGroupLabel", "defaultPermitTimeoutSeconds", "podGroupSyncTimeoutSeconds", "gcIntervalSeconds", "standaloneDomainPacking"],
+          "properties": {
+            "topologyKey": {"type": "string"},
+            "podGroupTopologyKeyAnnotation": {"type": "string", "minLength": 1},
+            "unsupportedPlacementGroupLabel": {"type": "string"},
+            "defaultPermitTimeoutSeconds": {"type": "integer", "minimum": 1},
+            "podGroupSyncTimeoutSeconds": {"type": "integer", "minimum": 1},
+            "gcIntervalSeconds": {"type": "integer", "minimum": 1},
+            "standaloneDomainPacking": {"type": "boolean"}
+          }
+        },
+        "percentageOfNodesToScore": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 100
+        },
+        "omeGangPack": {
+          "type": "object",
+          "required": ["scoreWeight"],
+          "properties": {
+            "scoreWeight": {"type": "integer", "minimum": 1, "maximum": 1000000}
+          }
+        },
+        "nodeResourcesFit": {
+          "type": "object",
+          "required": ["scoreWeight", "resources"],
+          "properties": {
+            "scoreWeight": {"type": "integer", "minimum": 1, "maximum": 1000000},
+            "resources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name", "weight"],
+                "properties": {
+                  "name": {"type": "string", "minLength": 1},
+                  "weight": {"type": "integer", "minimum": 1}
+                }
+              }
+            }
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "required": ["bindAddress", "securePort", "service"],
+          "properties": {
+            "bindAddress": {"type": "string", "minLength": 1},
+            "securePort": {"type": "integer", "minimum": 1, "maximum": 65535},
+            "service": {
+              "type": "object",
+              "required": ["enabled", "type", "port"],
+              "properties": {
+                "enabled": {"type": "boolean"},
+                "type": {"type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"]},
+                "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+              }
+            }
+          }
+        },
+        "probes": {
+          "type": "object",
+          "required": ["liveness", "readiness"],
+          "properties": {
+            "liveness": {
+              "type": "object",
+              "required": ["path", "initialDelaySeconds", "periodSeconds"],
+              "properties": {
+                "path": {"type": "string", "pattern": "^/"},
+                "initialDelaySeconds": {"type": "integer", "minimum": 0},
+                "periodSeconds": {"type": "integer", "minimum": 1}
+              }
+            },
+            "readiness": {
+              "type": "object",
+              "required": ["path", "initialDelaySeconds"],
+              "properties": {
+                "path": {"type": "string", "pattern": "^/"},
+                "initialDelaySeconds": {"type": "integer", "minimum": 0}
+              }
+            }
+          }
+        },
+        "podDisruptionBudget": {
+          "type": "object",
+          "required": ["enabled", "minAvailable"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "minAvailable": {"type": "integer", "minimum": 0}
+          }
+        },
+        "affinity": {"type": "object"},
+        "topologySpreadConstraints": {
+          "type": "array",
+          "items": {"type": "object"}
+        }
+      }
+    }
+  }
+}

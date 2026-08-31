@@ -8,16 +8,17 @@ metadata:
 data:
   ingress: |-
     {
+        "disableIstioVirtualHost": {{ .Values.ome.controller.ingressGateway.disableIstioVirtualHost }},
         "ingressGateway" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.gateway }}",
         "ingressService" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.gatewayService }}",
         "omeIngressGateway" : "{{ .Values.ome.controller.ingressGateway.omeIngressGateway | default "" }}",
         "omeIngressGatewayClass" : "{{ .Values.ome.controller.ingressGateway.omeIngressGatewayClass | default "" }}",
+        "consistentHashHeaders": {{ .Values.ome.controller.ingressGateway.consistentHashHeaders | default list | toJson }},
         "ingressDomain"  : "{{ .Values.ome.controller.ingressGateway.domain }}",
         "ingressClassName" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.className }}",
         "additionalIngressDomains" : {{ .Values.ome.controller.ingressGateway.additionalIngressDomains | default "null" }},
         "domainTemplate": "{{ .Values.ome.controller.ingressGateway.domainTemplate }}",
         "urlScheme": "{{ .Values.ome.controller.ingressGateway.urlScheme }}",
-        "disableIstioVirtualHost": {{ .Values.ome.controller.ingressGateway.disableIstioVirtualHost }},
         "pathTemplate": "{{ .Values.ome.controller.ingressGateway.pathTemplate | default "" }}",
         "disableIngressCreation": {{ .Values.ome.controller.ingressGateway.disableIngressCreation | default false }},
         "enableGatewayAPI": {{ .Values.ome.controller.ingressGateway.enableGatewayAPI | default false }},
@@ -31,23 +32,113 @@ data:
     }
   deploy: |-
     {
-      "defaultDeploymentMode": "{{ .Values.ome.controller.deploymentMode }}"
+      "defaultDeploymentMode": "{{ .Values.ome.controller.deploymentMode }}"{{- with .Values.ome.controller.replicas }},
+      "replicas": {{ toJson . }}{{- end }}
+    }
+{{- with .Values.ome.controller.podDisruptionBudget }}
+  podDisruptionBudget: |-
+    {{- toJson . | nindent 4 }}
+{{- end }}
+
+  canaryAnalysis: |-
+    {
+      "bundledPrometheusAddress": "{{ .Values.ome.controller.canaryAnalysis.bundledPrometheusAddress | default (printf "http://ome-prometheus.%s.svc:%v" .Release.Namespace .Values.prometheus.service.port) }}",
+      "queryTimeout": "{{ .Values.ome.controller.canaryAnalysis.queryTimeout | default "5s" }}",
+      "maxConcurrency": {{ .Values.ome.controller.canaryAnalysis.maxConcurrency | default 8 }},
+      "cacheTTL": "{{ .Values.ome.controller.canaryAnalysis.cacheTTL | default "2m" }}"
     }
 
-  modelInit: |-
+  coordination: |-
     {
-        "image":  "{{ include "ome.imageWithHub" (dict "values" .Values "repository" .Values.ome.omeAgent.image "tag" .Values.ome.omeAgent.tag) }}",
-        "memoryRequest": "{{ .Values.ome.omeAgent.modelInit.memoryRequest }}",
-        "memoryLimit": "{{ .Values.ome.omeAgent.modelInit.memoryLimit }}",
-        "cpuRequest": "{{ .Values.ome.omeAgent.modelInit.cpuRequest }}",
-        "cpuLimit": "{{ .Values.ome.omeAgent.modelInit.cpuLimit }}",
-        "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
-        "authType" : "{{ .Values.ome.omeAgent.authType }}",
-        "vaultId": "{{ .Values.ome.omeAgent.vaultId }}",
-        "region": "{{ .Values.ome.omeAgent.region }}",
-        "extraEnvVars": {{ concat (.Values.ome.omeAgent.modelInit.extraEnvVars | default list) (list (dict "name" "INSTANCE_TYPE_MAP" "value" $instanceTypeMap)) | toJson }},
-        "extraVolumeMounts": {{ toJson .Values.ome.omeAgent.modelInit.extraVolumeMounts }}
+      "trafficWeightDeadbandPercent": {{ .Values.ome.controller.coordination.trafficWeightDeadbandPercent | default 0 }}{{- if hasKey .Values.ome.controller.coordination "defaultRatioTolerancePercent" }},
+      "defaultRatioTolerancePercent": {{ .Values.ome.controller.coordination.defaultRatioTolerancePercent }}{{- end }}
     }
+
+  {{- with .Values.ome.controller.lifecycle }}
+  {{- $fields := list }}
+  {{- if hasKey . "scaleUpPodBatchSize" }}
+  {{- $fields = append $fields (dict "scaleUpPodBatchSize" .scaleUpPodBatchSize) }}
+  {{- end }}
+  {{- if hasKey . "scaleDownPodBatchSize" }}
+  {{- $fields = append $fields (dict "scaleDownPodBatchSize" .scaleDownPodBatchSize) }}
+  {{- end }}
+  {{- if hasKey . "scaleDownRequeueInterval" }}
+  {{- $fields = append $fields (dict "scaleDownRequeueInterval" .scaleDownRequeueInterval) }}
+  {{- end }}
+  {{- if hasKey . "revisionHistoryLimit" }}
+  {{- $fields = append $fields (dict "revisionHistoryLimit" .revisionHistoryLimit) }}
+  {{- end }}
+  {{- with .updateRetry }}
+  {{- $fields = append $fields (dict "updateRetry" (dict "maxAttempts" .maxAttempts "initialDelay" .initialDelay "maxDelay" .maxDelay "multiplier" .multiplier)) }}
+  {{- end }}
+  {{- with .stuckPodGracePeriod }}
+  {{- $fields = append $fields (dict "stuckPodGracePeriod" .) }}
+  {{- end }}
+  {{- with .autoMigrate }}
+  {{- $fields = append $fields (dict "autoMigrate" (dict "maxAttempts" .maxAttempts)) }}
+  {{- end }}
+  {{- with .forceDelete }}
+  {{- $fields = append $fields (dict "forceDelete" (dict "overdueSlack" .overdueSlack "nodeUnreachableThreshold" .nodeUnreachableThreshold)) }}
+  {{- end }}
+  {{- with .teardown }}
+  {{- $fields = append $fields (dict "teardown" (dict "deadline" .deadline)) }}
+  {{- end }}
+  {{- if $fields }}
+  lifecycle: |-
+    {{- $merged := dict }}
+    {{- range $fields }}
+    {{- $merged = merge $merged . }}
+    {{- end }}
+    {{ $merged | toJson | nindent 4 }}
+  {{- end }}
+  {{- end }}
+
+  multicluster: |-
+    {
+      "workloadCluster": {
+        "clientQPS": {{ .Values.ome.multicluster.config.workloadCluster.clientQPS | default 0 }},
+        "clientBurst": {{ .Values.ome.multicluster.config.workloadCluster.clientBurst | default 0 }},
+        "perCallTimeout": "{{ .Values.ome.multicluster.config.workloadCluster.perCallTimeout | default "" }}",
+        "cacheEnabled": {{ .Values.ome.multicluster.config.workloadCluster.cacheEnabled | default false }},
+        "healthInterval": "{{ .Values.ome.multicluster.config.workloadCluster.healthInterval | default "" }}",
+        "connectionGrace": "{{ .Values.ome.multicluster.config.workloadCluster.connectionGrace | default "" }}",
+        "eventsBatchPeriod": "{{ .Values.ome.multicluster.config.workloadCluster.eventsBatchPeriod | default "" }}",
+        "establishInitial": "{{ .Values.ome.multicluster.config.workloadCluster.establishInitial | default "" }}",
+        "establishMax": "{{ .Values.ome.multicluster.config.workloadCluster.establishMax | default "" }}",
+        "reconnectRetryMax": "{{ .Values.ome.multicluster.config.workloadCluster.reconnectRetryMax | default "" }}",
+        "funnelResyncInterval": "{{ .Values.ome.multicluster.config.workloadCluster.funnelResyncInterval | default "" }}",
+        "funnelBufferSize": {{ .Values.ome.multicluster.config.workloadCluster.funnelBufferSize | default 0 }}
+      },
+      "placement": {
+        "requeueInterval": "{{ .Values.ome.multicluster.config.placement.requeueInterval | default "" }}",
+        "gcInterval": "{{ .Values.ome.multicluster.config.placement.gcInterval | default "" }}",
+        "maxConcurrentReconciles": {{ .Values.ome.multicluster.config.placement.maxConcurrentReconciles | default 0 }},
+        "fanoutTimeout": "{{ .Values.ome.multicluster.config.placement.fanoutTimeout | default "" }}",
+        "winnerLostGrace": "{{ .Values.ome.multicluster.config.placement.winnerLostGrace | default "" }}",
+        "statusBatchPeriod": "{{ .Values.ome.multicluster.config.placement.statusBatchPeriod | default "" }}",
+        "statusSafetyRequeue": "{{ .Values.ome.multicluster.config.placement.statusSafetyRequeue | default "" }}",
+        "dispatcherMode": "{{ .Values.ome.multicluster.config.placement.dispatcherMode | default "" }}",
+        "dispatcherStepSize": {{ .Values.ome.multicluster.config.placement.dispatcherStepSize | default 0 }},
+        "dispatcherRoundTimeout": "{{ .Values.ome.multicluster.config.placement.dispatcherRoundTimeout | default "" }}",
+        "localQueue": "{{ .Values.ome.multicluster.config.placement.localQueue | default "" }}"
+      },
+      "endpoint": {
+        "globalHostTemplate": "{{ .Values.ome.multicluster.config.endpoint.globalHostTemplate | default "" }}",
+        "globalGateway": "{{ .Values.ome.multicluster.config.endpoint.globalGateway | default "" }}",
+        "routeNamespace": "{{ .Values.ome.multicluster.config.endpoint.routeNamespace | default "" }}",
+        "backendPort": {{ .Values.ome.multicluster.config.endpoint.backendPort | default 0 }}
+      }
+    }
+
+  metricsAggregator: |-
+    {
+      "enableMetricAggregation": "{{ .Values.ome.metricsaggregator.enableMetricAggregation }}",
+      "enablePrometheusScraping" : "{{ .Values.ome.metricsaggregator.enablePrometheusScraping }}"
+    }
+{{- if .Values.ome.podMonitor }}
+  podMonitor: |-
+    {{- toJson .Values.ome.podMonitor | nindent 4 }}
+{{- end }}
   servingSidecar: |-
     {
         "image": "{{ include "ome.imageWithHub" (dict "values" .Values "repository" .Values.ome.omeAgent.image "tag" .Values.ome.omeAgent.tag) }}",
@@ -81,6 +172,46 @@ data:
       "customPromQuery": "{{ .Values.ome.kedaConfig.customPromQuery | default "" }}",
       "scalingThreshold": "{{ .Values.ome.kedaConfig.scalingThreshold | default "10" }}",
       "scalingOperator": "{{ .Values.ome.kedaConfig.scalingOperator | default "GreaterThanOrEqual" }}"
+    }
+  modelInit: |-
+    {
+        "image":  "{{ include "ome.imageWithHub" (dict "values" .Values "repository" .Values.ome.omeAgent.image "tag" .Values.ome.omeAgent.tag) }}",
+        "memoryRequest": "{{ .Values.ome.omeAgent.modelInit.memoryRequest }}",
+        "memoryLimit": "{{ .Values.ome.omeAgent.modelInit.memoryLimit }}",
+        "cpuRequest": "{{ .Values.ome.omeAgent.modelInit.cpuRequest }}",
+        "cpuLimit": "{{ .Values.ome.omeAgent.modelInit.cpuLimit }}",
+        "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
+        "authType" : "{{ .Values.ome.omeAgent.authType }}",
+        "vaultId": "{{ .Values.ome.omeAgent.vaultId }}",
+        "region": "{{ .Values.ome.omeAgent.region }}",
+        "extraEnvVars": {{ concat (.Values.ome.omeAgent.modelInit.extraEnvVars | default list) (list (dict "name" "INSTANCE_TYPE_MAP" "value" $instanceTypeMap)) | toJson }},
+        "extraVolumeMounts": {{ toJson .Values.ome.omeAgent.modelInit.extraVolumeMounts }}
+    }
+  omeAgent: |-
+    {
+        "image": "{{ include "ome.imageWithHub" (dict "values" .Values "repository" .Values.ome.omeAgent.image "tag" .Values.ome.omeAgent.tag) }}",
+        "serviceAccount": "{{ .Values.ome.omeAgent.metadataJob.serviceAccount }}",
+        "memoryRequest": "{{ .Values.ome.omeAgent.metadataJob.memoryRequest }}",
+        "memoryLimit": "{{ .Values.ome.omeAgent.metadataJob.memoryLimit }}",
+        "cpuRequest": "{{ .Values.ome.omeAgent.metadataJob.cpuRequest }}",
+        "cpuLimit": "{{ .Values.ome.omeAgent.metadataJob.cpuLimit }}",
+        "backoffLimit": {{ .Values.ome.omeAgent.metadataJob.backoffLimit | default 2 }},
+        "ttlSecondsAfterFinished": {{ .Values.ome.omeAgent.metadataJob.ttlSecondsAfterFinished | default 3600 }},
+        "nodeSelector": {{ .Values.ome.omeAgent.metadataJob.nodeSelector | default dict | toJson }},
+        "tolerations": {{ .Values.ome.omeAgent.metadataJob.tolerations | default list | toJson }},
+        "affinity": {{ .Values.ome.omeAgent.metadataJob.affinity | default dict | toJson }},
+        "priorityClassName": "{{ .Values.ome.omeAgent.metadataJob.priorityClassName | default "" }}"
+    }
+  servingSidecar: |-
+    {
+        "image": "{{ include "ome.imageWithHub" (dict "values" .Values "repository" .Values.ome.omeAgent.image "tag" .Values.ome.omeAgent.tag) }}",
+        "memoryRequest": "2Gi",
+        "memoryLimit": "4Gi",
+        "cpuRequest": "1",
+        "cpuLimit": "2",
+        "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
+        "authType" : "{{ .Values.ome.omeAgent.authType }}",
+        "region": "{{ .Values.ome.omeAgent.region }}"
     }
 ---
 apiVersion: v1

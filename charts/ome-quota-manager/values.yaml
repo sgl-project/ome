@@ -1,0 +1,295 @@
+# Default values for ome-quota-manager.
+
+global:
+  # Optional registry prefix applied to image repositories that don't already
+  # contain a '/'. Matches the ome-resources and ome-scheduler convention.
+  hub: ""
+  # Image pull secrets applied to the quota-manager pod.
+  imagePullSecrets: []
+
+quotaManager:
+  # Name every object this chart creates is derived from: the Deployment, the
+  # ServiceAccount, the webhook Service and configuration, the cert Secret, and
+  # the RBAC that scopes itself to those by name. Deliberately not the release
+  # name — a `helm install quota …` should not produce a Deployment called
+  # `quota`, and the ValidatingWebhookConfiguration is cluster-scoped, so a name
+  # that varies per release makes collisions between installs invisible.
+  #
+  # Must be a DNS label of at most 55 characters, so the derived Service and
+  # Secret names stay valid.
+  name: ome-quota-manager
+
+  crd:
+    # Install the AcceleratorQuota CRD from this chart, for a standalone install
+    # with no ome-crd — the manager cannot sync its cache without it, and a
+    # missing CRD shows up only as a crash-looping pod.
+    #
+    # Off by default, and it must stay that way for any cluster that also runs
+    # ome-crd: that chart owns the same cluster-scoped object, and the second
+    # release to claim it fails on Helm's ownership check. Turn this on only
+    # where this chart is the sole installer.
+    install: false
+
+  # Which half of the quota plane this install runs. REQUIRED — the chart fails
+  # to render without it, because there is no safe default: workload mode writes
+  # Kueue objects on this cluster, management mode projects shares onto others,
+  # and guessing either would be a surprise.
+  #   "workload"   - render the local AcceleratorQuota tree into Kueue here.
+  #   "management" - hold the authored fleet tree and project per-cluster shares.
+  # One mode per install: the two write different halves of the reserved root's
+  # status, so running both against one cluster is a last-writer-wins race.
+  mode: ""
+
+  image:
+    repository: ome-quota-manager
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  # Two replicas with leader election: exactly one reconciles and the other is a
+  # warm standby. Leader election must stay on whenever replicaCount > 1 — two
+  # active instances would race each other's status writes on every node.
+  replicaCount: 2
+  leaderElect: true
+
+  # maxTreeDepth bounds a node's distance from the root, in edges (the root is 0,
+  # a top-tier grouping is 1). 0 disables the check rather than assuming a bound;
+  # it is a guardrail against accidental sprawl, not a Kueue limit.
+  maxTreeDepth: 5
+
+  # resyncInterval re-runs the tree checks on an otherwise-idle plane, so a
+  # violation only a clock can clear is noticed without an edit. "" or 0 leaves
+  # reconciles purely event-driven.
+  resyncInterval: 10m
+
+  # The reserved root node is always named "root" and is deliberately not
+  # configurable: every AcceleratorQuota in the fleet writes
+  # parentRef: {name: root}, so a per-cluster name would make those CRs
+  # non-portable between planes.
+
+  # capacity measures this cluster's own silicon and records it on the reserved
+  # root's status, so a budget can be checked against hardware that exists
+  # rather than only against the rest of the tree. Workload mode only — a
+  # management-mode install holds the authored fleet tree and has no local
+  # nodes to measure.
+  capacity:
+    # resources are the extended resource names that count as accelerators,
+    # written in full. Exact names rather than a pattern, because this list
+    # decides what every budget is measured against and a pattern would quietly
+    # widen that.
+    #
+    # A vendor that is not listed contributes no capacity. That is not silent:
+    # a budget written against unmeasured hardware exceeds a capacity of zero
+    # and reports CapacityExceeded. Add the resource here when a new accelerator
+    # arrives in the fleet.
+    #
+    # Empty disables derivation entirely and drops the Node and ResourceFlavor
+    # RBAC with it. There is no default because there is no safe guess: without
+    # this list nothing distinguishes a node's accelerators from its cpu.
+    resources:
+    - google.com/tpu
+    - nvidia.com/gpu
+
+    # hysteresisPercent is how far observed capacity must fall below the
+    # recorded high-water mark before the mark follows it down.
+    #
+    # Budget checks read the mark, not the instantaneous value, because capacity
+    # dips for reasons that say nothing about entitlement — a drain, a rolling
+    # reboot, a device plugin restarting. Without a band those dips would mark
+    # budgets Degraded every time a rack was patched. Growth is always believed
+    # immediately; only shrinkage is damped.
+    #
+    # 0 disables damping, so the mark tracks every dip.
+    hysteresisPercent: 10
+
+  # materialize renders the tree into Kueue: a Cohort per internal node, a
+  # ClusterQueue per leaf, a LocalQueue in every bound namespace.
+  #
+  # Leaving coverResources empty disables it and drops the cluster-wide Kueue
+  # write RBAC with it, so a cluster can observe its quota tree long before it
+  # enforces one.
+  materialize:
+    # coverResources are the non-accelerator resources every rendered
+    # ClusterQueue funds alongside its budget.
+    #
+    # They exist because Kueue refuses to admit a workload whose request names a
+    # resource its queue does not cover, and every serving pod requests cpu and
+    # memory. A queue budgeted only for accelerators therefore admits nothing,
+    # and reports the reason nowhere: the queue exists, its LocalQueues resolve,
+    # and workloads simply stay pending.
+    #
+    # These are not a budget. They are a ceiling set high enough not to be one:
+    # the accelerator entry is what actually limits a tenant. Kueue has no
+    # "unlimited" value for a nominalQuota, and omitting a covered resource is
+    # precisely what makes a queue unable to admit, so a large finite number is
+    # the only idiom available.
+    #
+    # Sizing them is bounded on both sides, and neither bound fails loudly.
+    #
+    #   too low   a real limit on every tenant. Pods stay pending with nothing
+    #             in an error state to say why. Note that cpu suffixes bite:
+    #             9999m is ~10 cores, not 9999.
+    #   too high  Kueue holds these as int64 and a Cohort's subtree quota is the
+    #             SUM over its children, so N leaves each carrying the cover
+    #             must stay inside that. Overflow is not symmetric across
+    #             versions either: newer Kueue clamps, but the version this
+    #             repo compiles against wraps, and a wrapped ceiling means a
+    #             wrong admission decision rather than a failure.
+    #
+    # The units differ, which is easy to miss: cpu is held in MILLI-units, so
+    # its ceiling is a thousand times lower than memory's for the same digits.
+    #
+    # Scale to size against: one 4-chip TPU node is ~224 cpu and ~0.28Ti, so
+    #
+    #     32 nodes    7k cpu     0.01Pi
+    #   7500 nodes  1.68M cpu    2.07Pi
+    #
+    # The defaults are ~9x the 7500-node figure — unreachable in practice, and
+    # far enough from the ceiling that a Cohort can hold ~500 sibling leaves
+    # before the subtree sum is at risk.
+    #
+    # Override either key on its own; Helm merges the map, so setting cpu leaves
+    # memory at its default. Emptying the map disables materialization and drops
+    # the Kueue write RBAC with it.
+    coverResources:
+      cpu: 16M
+      memory: 16Pi
+
+    # fieldManager owns the applied Kueue objects and is the value of the
+    # managed-by label the orphan sweep selects by. Two quota managers pointed
+    # at one cluster MUST NOT share it, or each treats the other's objects as
+    # its own and they will fight. Empty uses the component name.
+    fieldManager: ""
+
+  # webhook serves admission validation for AcceleratorQuota, turning a
+  # tree-breaking write into a rejected kubectl apply instead of a Degraded
+  # condition minutes later.
+  #
+  # The ValidatingWebhookConfiguration is failurePolicy=Fail. That is safe here
+  # in a way it would not be for a pod webhook: it gates one cluster-scoped CRD
+  # that only capacity admins write, so an outage blocks quota edits, never
+  # serving pods.
+  webhook:
+    enabled: true
+    port: 9443
+    # internalCertManagement generates and rotates the serving cert in process
+    # and injects the caBundle itself, so the component works out of the box
+    # with NO cert-manager in the cluster — the same default Kueue ships.
+    #
+    # The cost, stated plainly: self-injection needs write access to this
+    # component's ValidatingWebhookConfiguration. The chart scopes update to
+    # that one object by name, and grants nothing on mutating webhooks, but
+    # list/watch on the kind cannot be narrowed — the rotator builds an
+    # unfiltered informer over it.
+    #
+    # Set false to have cert-manager supply the cert instead: the chart then
+    # renders an Issuer + Certificate and the inject-ca-from annotation, and
+    # drops the webhook-configuration RBAC entirely.
+    internalCertManagement: true
+    # A tree assembly is one uncached LIST plus in-memory work over a handful of
+    # nodes, so the default 10s is generous; it exists so a wedged apiserver
+    # rejects fast rather than hanging every quota write.
+    timeoutSeconds: 10
+
+  logLevel: info
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  podAnnotations: {}
+  podLabels: {}
+
+  # A single-replica install cannot satisfy a PDB, so it is off by default and
+  # only meaningful alongside replicaCount > 1.
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+
+  metricsPort: 8080
+  probePort: 8081
+
+  # Projecting the authored fleet tree onto workload clusters. Management mode
+  # only; a workload-mode manager holds no transport, which is what makes a
+  # projection unable to be re-projected.
+  #
+  # Off until origin and fieldManager are both set. Neither has a default, and
+  # deliberately so: an unmarked copy cannot be told from a node an admin
+  # authored on the member, so nothing could ever sweep it and the member's
+  # webhook would admit edits to it.
+  projection:
+    # Identity stamped on every copy this plane writes, and what its sweep
+    # selects on. Two planes projecting onto one member must not share it, or
+    # each will reap the other's work.
+    origin: ""
+
+    # Field manager owning what this plane applies on a member. Separate from
+    # the workload-mode fieldManager, which owns Kueue objects on a serving
+    # cluster: different objects, different clusters, and a shared name would
+    # make one plane's apply look like the other's.
+    fieldManager: ""
+
+    # Fallback split for a budget whose node declares no distribution:
+    # "Explicit" takes the admin's perCluster shares, "Proportional" divides by
+    # each member's reported capacity. Empty is not a policy -- such a budget is
+    # reported unresolved rather than split by a guess.
+    defaultDistributionPolicy: ""
+
+    # How a member's kubeconfig may authenticate. An exec plugin runs a binary
+    # from this process, so it is opt-in and the binary must be in this image;
+    # the alternative is a bearer token or client certificate inline in the
+    # kubeconfig. The allowlist is a second deliberate step, so enabling exec
+    # without naming a command still permits nothing.
+    execCredentials:
+      enabled: false
+      allowedCommands: []
+
+  # What a MANAGEMENT plane is allowed to do when it projects quota nodes onto
+  # this cluster. Install it on a workload cluster, alongside the workload-mode
+  # manager; a management plane has nothing to project onto itself, and a
+  # single-cluster install never needs it because the tree is authored locally.
+  #
+  # This grants PERMISSIONS. It does not decide how the management plane
+  # authenticates, which belongs to the platform: the transport accepts exec
+  # credential plugins (aws, gke-gcloud-auth-plugin and kubelogin are permitted
+  # by default), so a cloud workload identity needs no credential stored
+  # anywhere. Bind the role to whatever identity that produces via `subjects`.
+  #
+  # Separate from ome-multicluster-access on purpose. That is the placement
+  # plane's credential and can create workloads; this one can only write
+  # budgets. Neither should be able to do the other's job.
+  remoteAccess:
+    enabled: false
+    name: ome-quota-access
+
+    # Identities to bind the role to, beyond the ServiceAccount below. Use this
+    # for an identity your platform already issues and rotates — a cloud IAM
+    # principal, an OIDC subject, a client-certificate user:
+    #
+    #   subjects:
+    #   - kind: User
+    #     name: quota-projector@example.iam.gserviceaccount.com
+    #
+    # kind is User, Group or ServiceAccount; a ServiceAccount subject also needs
+    # a namespace.
+    subjects: []
+
+    serviceAccount:
+      # Create an in-cluster ServiceAccount of `name` and bind the role to it.
+      # Turn this off when `subjects` names an external identity instead.
+      create: true
+
+      # Also mint a ServiceAccount token Secret. It never expires, never
+      # rotates, and is readable by anyone who can read Secrets here, so it is
+      # off: it exists for simulators and for clusters predating TokenRequest.
+      #
+      # Without it, get a token with a lifetime when you need one:
+      #   kubectl -n <ns> create token ome-quota-access --duration=24h
+      staticToken: false

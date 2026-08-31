@@ -1,0 +1,104 @@
+{{- if .Values.quotaManager.webhook.enabled }}
+{{- if .Values.quotaManager.webhook.internalCertManagement }}
+# The component generates its own CA and serving cert and injects the caBundle
+# into the ValidatingWebhookConfiguration below, so admission works with no
+# cert-manager in the cluster.
+#
+# This Secret is created EMPTY on purpose. The rotator only ever updates it — it
+# does not create — so a missing Secret is a permanent startup failure rather
+# than something the component recovers from.
+#
+# helm.sh/resource-policy keeps it across an uninstall/reinstall of the chart:
+# without that, a reinstall would leave the ValidatingWebhookConfiguration
+# carrying a caBundle whose key no longer exists anywhere.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.quotaManager.name }}-webhook-cert
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+{{- else }}
+# cert-manager supplies the cert instead. Requires cert-manager and its
+# cainjector to be installed.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ .Values.quotaManager.name }}-selfsigned
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.quotaManager.name }}-serving-cert
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+spec:
+  commonName: {{ .Values.quotaManager.name }}-webhook.{{ .Release.Namespace }}.svc
+  dnsNames:
+  - {{ .Values.quotaManager.name }}-webhook.{{ .Release.Namespace }}.svc
+  - {{ .Values.quotaManager.name }}-webhook.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: {{ .Values.quotaManager.name }}-selfsigned
+  secretName: {{ .Values.quotaManager.name }}-webhook-cert
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.quotaManager.name }}-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+spec:
+  ports:
+  - port: 443
+    targetPort: webhook
+    protocol: TCP
+    name: https
+  selector:
+    {{- include "ome-quota-manager.selectorLabels" . | nindent 4 }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ .Values.quotaManager.name }}.ome.io
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+  {{- if not .Values.quotaManager.webhook.internalCertManagement }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ .Values.quotaManager.name }}-serving-cert
+  {{- end }}
+webhooks:
+- name: acceleratorquota.ome-quota-manager.validator
+  clientConfig:
+    # Placeholder. Whoever manages the cert replaces it: the rotator on startup,
+    # or cainjector via the annotation above.
+    caBundle: Cg==
+    service:
+      name: {{ .Values.quotaManager.name }}-webhook
+      namespace: {{ .Release.Namespace }}
+      path: /validate-ome-io-v1beta1-acceleratorquota
+  # Fail closed. A write that breaks the tree is exactly what this exists to
+  # stop, and the blast radius is bounded: it gates one cluster-scoped CRD that
+  # only capacity admins write, never a serving pod.
+  failurePolicy: Fail
+  sideEffects: None
+  admissionReviewVersions: ["v1"]
+  timeoutSeconds: {{ .Values.quotaManager.webhook.timeoutSeconds }}
+  # DELETE is included on purpose: removing a grouping orphans everything under
+  # it, and that damage is invisible from the deleted object alone.
+  rules:
+  - apiGroups: ["ome.io"]
+    apiVersions: ["v1beta1"]
+    operations: ["CREATE", "UPDATE", "DELETE"]
+    resources: ["acceleratorquotas"]
+{{- end }}
