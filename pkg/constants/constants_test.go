@@ -5,6 +5,41 @@ import (
 	"testing"
 )
 
+func TestIsArtifactCompleteMarkerObjectName(t *testing.T) {
+	tests := []struct {
+		name       string
+		objectName string
+		want       bool
+	}{
+		{
+			name:       "marker at root",
+			objectName: ArtifactCompleteMarkerFileName,
+			want:       true,
+		},
+		{
+			name:       "marker under model prefix",
+			objectName: "customer-imported-basemodels/deepseek-ai/DeepSeek-V4-Pro/abc123/" + ArtifactCompleteMarkerFileName,
+			want:       true,
+		},
+		{
+			name:       "regular model file",
+			objectName: "customer-imported-basemodels/deepseek-ai/DeepSeek-V4-Pro/abc123/config.json",
+		},
+		{
+			name:       "similar suffix without path separator",
+			objectName: "customer-imported-basemodels/deepseek-ai/DeepSeek-V4-Pro/abc123/not-" + ArtifactCompleteMarkerFileName,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsArtifactCompleteMarkerObjectName(tt.objectName); got != tt.want {
+				t.Fatalf("IsArtifactCompleteMarkerObjectName(%q) = %v, want %v", tt.objectName, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestLWSNameTruncates(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -58,41 +93,6 @@ func TestLWSNameTruncates(t *testing.T) {
 			}
 			if got != expected {
 				t.Fatalf("LWSName = %q, want %q", got, expected)
-			}
-		})
-	}
-}
-
-func TestIsArtifactCompleteMarkerObjectName(t *testing.T) {
-	tests := []struct {
-		name       string
-		objectName string
-		want       bool
-	}{
-		{
-			name:       "marker at root",
-			objectName: ArtifactCompleteMarkerFileName,
-			want:       true,
-		},
-		{
-			name:       "marker under model prefix",
-			objectName: "customer-imported-basemodels/deepseek-ai/DeepSeek-V4-Pro/abc123/" + ArtifactCompleteMarkerFileName,
-			want:       true,
-		},
-		{
-			name:       "regular model file",
-			objectName: "customer-imported-basemodels/deepseek-ai/DeepSeek-V4-Pro/abc123/config.json",
-		},
-		{
-			name:       "similar suffix without path separator",
-			objectName: "customer-imported-basemodels/deepseek-ai/DeepSeek-V4-Pro/abc123/not-" + ArtifactCompleteMarkerFileName,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := IsArtifactCompleteMarkerObjectName(tt.objectName); got != tt.want {
-				t.Fatalf("IsArtifactCompleteMarkerObjectName(%q) = %v, want %v", tt.objectName, got, tt.want)
 			}
 		})
 	}
