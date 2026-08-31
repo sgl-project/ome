@@ -165,14 +165,6 @@ data:
         "affinity": {{ .Values.ome.omeAgent.metadataJob.affinity | default dict | toJson }},
         "priorityClassName": "{{ .Values.ome.omeAgent.metadataJob.priorityClassName | default "" }}"
     }
-  kedaConfig: |-
-    {
-      "enableKeda" : {{ .Values.ome.kedaConfig.enableKeda | default true }},
-      "promServerAddress": "{{ .Values.ome.kedaConfig.promServerAddress | default "http://prometheus-operated.monitoring.svc.cluster.local:9090" }}",
-      "customPromQuery": "{{ .Values.ome.kedaConfig.customPromQuery | default "" }}",
-      "scalingThreshold": "{{ .Values.ome.kedaConfig.scalingThreshold | default "10" }}",
-      "scalingOperator": "{{ .Values.ome.kedaConfig.scalingOperator | default "GreaterThanOrEqual" }}"
-    }
   modelInit: |-
     {
         "image":  "{{ include "ome.imageWithHub" (dict "values" .Values "repository" .Values.ome.omeAgent.image "tag" .Values.ome.omeAgent.tag) }}",
