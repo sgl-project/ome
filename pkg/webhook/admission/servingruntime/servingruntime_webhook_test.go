@@ -13,11 +13,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/validation"
 )
 
 func TestValidateServingRuntimePriority(t *testing.T) {
@@ -1486,7 +1487,7 @@ func TestValidateModelFormatPrioritySame(t *testing.T) {
 					},
 				},
 			},
-			expected: gomega.Equal(fmt.Errorf(PriorityIsNotSameError, "vllm")),
+			expected: gomega.Equal(fmt.Errorf("different priorities assigned for the model format %s", "vllm")),
 		},
 		"When same priority assigned for the same model format in the runtime then it should return nil": {
 			newServingRuntime: &v1beta1.ServingRuntime{
@@ -1534,7 +1535,7 @@ func TestValidateModelFormatPrioritySame(t *testing.T) {
 	for name, scenario := range scenarios {
 		t.Run(name, func(t *testing.T) {
 			g := gomega.NewGomegaWithT(t)
-			err := validateModelFormatPrioritySame(&scenario.newServingRuntime.Spec)
+			err := validation.ValidateModelFormatPrioritySame(&scenario.newServingRuntime.Spec)
 			g.Expect(err).To(scenario.expected)
 		})
 	}
@@ -1709,7 +1710,7 @@ func TestContains(t *testing.T) {
 	}
 }
 
-// TestValidateServingRuntimeConfigurationComplete tests all edge cases of validateServingRuntimeConfiguration
+// TestValidateServingRuntimeAnnotationsComplete tests edge cases of validateServingRuntimeAnnotations
 func TestValidateServingRuntimeAnnotationsComplete(t *testing.T) {
 	testcases := []struct {
 		name        string
@@ -1812,6 +1813,304 @@ func stringPointer(s string) *string {
 	return &s
 }
 
+// mkCSRWithFormat builds a ClusterServingRuntime that auto-selects on
+// `formatName` at the given priority. The pod spec is the minimal valid
+// shape required to pass the webhook's structural checks.
+func mkCSRWithFormat(name, formatName string, priority int32) *v1beta1.ClusterServingRuntime {
+	return &v1beta1.ClusterServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{
+				{
+					Name:       formatName,
+					Version:    proto.String("1"),
+					AutoSelect: proto.Bool(true),
+					Priority:   proto.Int32(priority),
+				},
+			},
+			Disabled: proto.Bool(false),
+			ProtocolVersions: []constants.InferenceServiceProtocol{
+				constants.OpenAIProtocol,
+			},
+			ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+				Containers: []corev1.Container{
+					{
+						Name:  constants.MainContainerName,
+						Image: "ome/vllm:latest",
+						Args:  []string{"--model_name={{.Name}}"},
+					},
+				},
+			},
+		},
+	}
+}
+
+func newCSRDecoder(t *testing.T) admission.Decoder {
+	t.Helper()
+	s := runtime.NewScheme()
+	if err := v1beta1.AddToScheme(s); err != nil {
+		t.Fatalf("AddToScheme: %v", err)
+	}
+	return admission.NewDecoder(s)
+}
+
+func encodeCSR(t *testing.T, csr *v1beta1.ClusterServingRuntime) []byte {
+	t.Helper()
+	raw, err := json.Marshal(csr)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return raw
+}
+
+// TestClusterServingRuntimeValidator_PriorityConflictAcrossCSRs is the
+// regression test for the bug where the CSR validator passed the
+// admitted CSR's own name as BOTH `existingRuntimeName` and
+// `newRuntimeName` to validateServingRuntimePriority, causing the
+// self-skip early-exit to fire for every pairing in the loop and
+// silently allowing cross-CSR priority conflicts to slip through.
+//
+// Scenario: two existing CSRs both auto-select `safetensors` at
+// priorities 1 and 2. A third CSR is created auto-selecting
+// `safetensors` at priority 1 (CONFLICTS with the first existing CSR).
+// With the bug, the early-exit `clusterServingRuntime.Name ==
+// clusterServingRuntime.Name` is always true, so the conflict is
+// missed and the CSR is admitted. With the fix, the loop passes the
+// OTHER CSR's name, the equality check no longer short-circuits, and
+// the conflict is detected.
+func TestClusterServingRuntimeValidator_PriorityConflictAcrossCSRs(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	existing1 := mkCSRWithFormat("rt-a", "safetensors", 1)
+	existing2 := mkCSRWithFormat("rt-b", "safetensors", 2)
+
+	c := ctrlclientfake.NewClientBuilder().
+		WithScheme(newScheme(t)).
+		WithObjects(existing1, existing2).
+		Build()
+
+	validator := &ClusterServingRuntimeValidator{Client: c, Decoder: newCSRDecoder(t)}
+
+	// New CSR conflicts with rt-a (both priority 1 on `safetensors`).
+	newCSR := mkCSRWithFormat("rt-c", "safetensors", 1)
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: encodeCSR(t, newCSR)},
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+
+	g.Expect(resp.Allowed).To(gomega.BeFalse(),
+		"expected priority conflict with rt-a to be REJECTED, got allowed=true")
+	g.Expect(resp.Result).NotTo(gomega.BeNil())
+	g.Expect(resp.Result.Message).To(gomega.ContainSubstring("safetensors"),
+		"rejection should mention the conflicting model format")
+}
+
+// TestClusterServingRuntimeValidator_NoPriorityConflict confirms that
+// a CSR with a non-conflicting priority on the same format is
+// accepted, and (critically) that the fix does NOT over-reject by
+// turning legitimate cross-CSR pairings into false positives.
+func TestClusterServingRuntimeValidator_NoPriorityConflict(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	existing1 := mkCSRWithFormat("rt-a", "safetensors", 1)
+	existing2 := mkCSRWithFormat("rt-b", "safetensors", 2)
+
+	c := ctrlclientfake.NewClientBuilder().
+		WithScheme(newScheme(t)).
+		WithObjects(existing1, existing2).
+		Build()
+
+	validator := &ClusterServingRuntimeValidator{Client: c, Decoder: newCSRDecoder(t)}
+
+	// Priority 3 on `safetensors` — non-conflicting with either existing.
+	newCSR := mkCSRWithFormat("rt-c", "safetensors", 3)
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: encodeCSR(t, newCSR)},
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	g.Expect(resp.Allowed).To(gomega.BeTrue(),
+		"expected non-conflicting priority to be admitted, got rejection: %v", resp.Result)
+}
+
+// TestClusterServingRuntimeValidator_SelfUpdateNotFlagged confirms
+// the fix preserves self-update behavior: when an existing CSR is
+// updated, the loop iteration that hits the CSR's OWN current state
+// (same name) is still skipped by the `existingRuntimeName ==
+// newRuntimeName` early-exit, so a CSR can update its own spec
+// without being flagged as a self-conflict.
+func TestClusterServingRuntimeValidator_SelfUpdateNotFlagged(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	// `rt-a` already exists at priority 1; we are updating its spec
+	// (still priority 1 on the same format). With the fix, the loop
+	// iteration that hits `rt-a` itself should skip via the early-exit
+	// because `existing.Items[i].Name == clusterServingRuntime.Name`.
+	original := mkCSRWithFormat("rt-a", "safetensors", 1)
+	c := ctrlclientfake.NewClientBuilder().
+		WithScheme(newScheme(t)).
+		WithObjects(original).
+		Build()
+
+	validator := &ClusterServingRuntimeValidator{Client: c, Decoder: newCSRDecoder(t)}
+
+	// Same name, same format, same priority → self-update.
+	updated := mkCSRWithFormat("rt-a", "safetensors", 1)
+	// Tweak something benign so it's an actual update payload (the
+	// validator doesn't distinguish create vs update for priority, but
+	// this keeps the scenario realistic).
+	updated.Spec.ServingRuntimePodSpec.Containers[0].Image = "ome/vllm:newer"
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Update,
+			Object:    runtime.RawExtension{Raw: encodeCSR(t, updated)},
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	g.Expect(resp.Allowed).To(gomega.BeTrue(),
+		"self-update should not be flagged as a priority conflict; got rejection: %v", resp.Result)
+}
+
+// TestClusterServingRuntimeValidator_AutoscalerShape covers
+// per-Component Autoscaler block validation on the CSR webhook path.
+// Same shared validator.ValidateComponentAutoscaler that the ISVC
+// webhook calls is invoked here against EngineConfig / DecoderConfig /
+// RouterConfig so a malformed runtime-level default is rejected at
+// admission rather than silently inherited into an ISVC at runtime.
+func TestClusterServingRuntimeValidator_AutoscalerShape(t *testing.T) {
+	mkCSRWithEngineAutoscaler := func(name string, as *v1beta1.ComponentAutoscaler) *v1beta1.ClusterServingRuntime {
+		csr := mkCSRWithFormat(name, "safetensors", 1)
+		csr.Spec.EngineConfig = &v1beta1.EngineSpec{
+			ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{Autoscaler: as},
+		}
+		return csr
+	}
+
+	tests := []struct {
+		name        string
+		csr         *v1beta1.ClusterServingRuntime
+		wantAllowed bool
+		wantSubstr  string
+	}{
+		{
+			name:        "valid engineConfig.autoscaler hpa default",
+			csr:         mkCSRWithEngineAutoscaler("rt-hpa", &v1beta1.ComponentAutoscaler{Class: v1beta1.AutoscalerHPA}),
+			wantAllowed: true,
+		},
+		{
+			name: "engineConfig.autoscaler keda with empty Triggers → denied",
+			csr: mkCSRWithEngineAutoscaler("rt-bad-keda", &v1beta1.ComponentAutoscaler{
+				Class: v1beta1.AutoscalerKEDA,
+				Keda:  &v1beta1.KedaAutoscaler{},
+			}),
+			wantAllowed: false,
+			wantSubstr:  "engineConfig",
+		},
+		{
+			name: "engineConfig.autoscaler unknown class → denied",
+			csr: mkCSRWithEngineAutoscaler("rt-bad-class", &v1beta1.ComponentAutoscaler{
+				Class: v1beta1.AutoscalerClass("knative"),
+			}),
+			wantAllowed: false,
+			wantSubstr:  "is not one of HPA|KEDA|External|None",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			c := ctrlclientfake.NewClientBuilder().WithScheme(newScheme(t)).Build()
+			validator := &ClusterServingRuntimeValidator{Client: c, Decoder: newCSRDecoder(t)}
+
+			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+				Operation: admissionv1.Create,
+				Object:    runtime.RawExtension{Raw: encodeCSR(t, tc.csr)},
+			}}
+			resp := validator.Handle(context.Background(), req)
+
+			g.Expect(resp.Allowed).To(gomega.Equal(tc.wantAllowed),
+				"unexpected admission decision; resp=%v", resp.Result)
+			if tc.wantSubstr != "" {
+				g.Expect(resp.Result).NotTo(gomega.BeNil())
+				g.Expect(resp.Result.Message).To(gomega.ContainSubstring(tc.wantSubstr))
+			}
+		})
+	}
+}
+
+// TestValidator_SpecOnlyChecksRunWithNoExistingRuntimes verifies that
+// the spec-only model-format priority check is enforced even when no
+// other runtime exists (the check used to live inside the loop over
+// existing runtimes, so the first runtime admitted escaped it).
+func TestValidator_SpecOnlyChecksRunWithNoExistingRuntimes(t *testing.T) {
+	// Same auto-selected format name at two different priorities —
+	// invalid per ValidateModelFormatPrioritySame.
+	conflictingFormats := []v1beta1.SupportedModelFormat{
+		{
+			Name:       "safetensors",
+			AutoSelect: proto.Bool(true),
+			Priority:   proto.Int32(1),
+		},
+		{
+			Name:       "safetensors",
+			AutoSelect: proto.Bool(true),
+			Priority:   proto.Int32(2),
+		},
+	}
+
+	t.Run("clusterservingruntime", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		csr := mkCSRWithFormat("rt-solo", "safetensors", 1)
+		csr.Spec.SupportedModelFormats = conflictingFormats
+
+		c := ctrlclientfake.NewClientBuilder().WithScheme(newScheme(t)).Build()
+		validator := &ClusterServingRuntimeValidator{Client: c, Decoder: newCSRDecoder(t)}
+
+		req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: encodeCSR(t, csr)},
+		}}
+		resp := validator.Handle(context.Background(), req)
+
+		g.Expect(resp.Allowed).To(gomega.BeFalse(),
+			"conflicting per-format priorities must be rejected even with no existing CSRs")
+		g.Expect(resp.Result.Message).To(gomega.ContainSubstring("safetensors"))
+	})
+
+	t.Run("servingruntime", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		csr := mkCSRWithFormat("rt-solo", "safetensors", 1)
+		sr := &v1beta1.ServingRuntime{
+			ObjectMeta: metav1.ObjectMeta{Name: "rt-solo", Namespace: "test"},
+			Spec:       csr.Spec,
+		}
+		sr.Spec.SupportedModelFormats = conflictingFormats
+
+		c := ctrlclientfake.NewClientBuilder().WithScheme(newScheme(t)).Build()
+		validator := &ServingRuntimeValidator{Client: c, Decoder: newCSRDecoder(t)}
+
+		raw, err := json.Marshal(sr)
+		g.Expect(err).To(gomega.BeNil())
+		req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: raw},
+		}}
+		resp := validator.Handle(context.Background(), req)
+
+		g.Expect(resp.Allowed).To(gomega.BeFalse(),
+			"conflicting per-format priorities must be rejected even with no existing SRs in the namespace")
+		g.Expect(resp.Result.Message).To(gomega.ContainSubstring("safetensors"))
+	})
+}
+
 // TestValidateAcceleratorClasses tests the validateAcceleratorClasses function
 func TestValidateAcceleratorClasses(t *testing.T) {
 	// Create fake client with pre-populated AcceleratorClasses
@@ -1826,7 +2125,7 @@ func TestValidateAcceleratorClasses(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 	_ = v1beta1.AddToScheme(scheme)
-	fakeClient := fake.NewClientBuilder().
+	fakeClient := ctrlclientfake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(existingClasses...).
 		Build()
@@ -1916,76 +2215,4 @@ func TestValidateAcceleratorClasses(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestValidator_SpecOnlyChecksRunWithNoExistingRuntimes verifies that
-// the spec-only model-format priority check is enforced even when no
-// other runtime exists (the check used to live inside the loop over
-// existing runtimes, so the first runtime admitted escaped it).
-func TestValidator_SpecOnlyChecksRunWithNoExistingRuntimes(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add scheme: %v", err)
-	}
-	decoder := admission.NewDecoder(scheme)
-
-	// Same auto-selected format name at two different priorities —
-	// invalid per validateModelFormatPrioritySame.
-	spec := v1beta1.ServingRuntimeSpec{
-		SupportedModelFormats: []v1beta1.SupportedModelFormat{
-			{Name: "safetensors", AutoSelect: proto.Bool(true), Priority: proto.Int32(1)},
-			{Name: "safetensors", AutoSelect: proto.Bool(true), Priority: proto.Int32(2)},
-		},
-		ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
-			Containers: []corev1.Container{{Name: "ome-container"}},
-		},
-	}
-
-	t.Run("clusterservingruntime", func(t *testing.T) {
-		g := gomega.NewWithT(t)
-		csr := &v1beta1.ClusterServingRuntime{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "ome.io/v1beta1", Kind: "ClusterServingRuntime"},
-			ObjectMeta: metav1.ObjectMeta{Name: "rt-solo"},
-			Spec:       spec,
-		}
-		raw, err := json.Marshal(csr)
-		g.Expect(err).To(gomega.BeNil())
-
-		validator := &ClusterServingRuntimeValidator{
-			Client:  fake.NewClientBuilder().WithScheme(scheme).Build(),
-			Decoder: decoder,
-		}
-		resp := validator.Handle(context.Background(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
-			Operation: admissionv1.Create,
-			Object:    runtime.RawExtension{Raw: raw},
-		}})
-
-		g.Expect(resp.Allowed).To(gomega.BeFalse(),
-			"conflicting per-format priorities must be rejected even with no existing CSRs")
-		g.Expect(resp.Result.Message).To(gomega.ContainSubstring("safetensors"))
-	})
-
-	t.Run("servingruntime", func(t *testing.T) {
-		g := gomega.NewWithT(t)
-		sr := &v1beta1.ServingRuntime{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "ome.io/v1beta1", Kind: "ServingRuntime"},
-			ObjectMeta: metav1.ObjectMeta{Name: "rt-solo", Namespace: "test"},
-			Spec:       spec,
-		}
-		raw, err := json.Marshal(sr)
-		g.Expect(err).To(gomega.BeNil())
-
-		validator := &ServingRuntimeValidator{
-			Client:  fake.NewClientBuilder().WithScheme(scheme).Build(),
-			Decoder: decoder,
-		}
-		resp := validator.Handle(context.Background(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
-			Operation: admissionv1.Create,
-			Object:    runtime.RawExtension{Raw: raw},
-		}})
-
-		g.Expect(resp.Allowed).To(gomega.BeFalse(),
-			"conflicting per-format priorities must be rejected even with no existing SRs in the namespace")
-		g.Expect(resp.Result.Message).To(gomega.ContainSubstring("safetensors"))
-	})
 }

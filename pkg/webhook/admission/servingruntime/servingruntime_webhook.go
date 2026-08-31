@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"strings"
 
+	admissionv1 "k8s.io/api/admission/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/validation"
 )
 
 var log = logf.Log.WithName(constants.ServingRuntimeValidatorWebhookName)
@@ -20,7 +22,6 @@ const (
 	InvalidPriorityError                        = "same priority assigned for the model format %s"
 	InvalidPriorityServingRuntimeError          = "%s in the servingruntimes %s and %s in namespace %s"
 	InvalidPriorityClusterServingRuntimeError   = "%s in the clusterservingruntimes %s and %s"
-	PriorityIsNotSameError                      = "different priorities assigned for the model format %s"
 	PriorityIsNotSameServingRuntimeError        = "%s under the servingruntime %s"
 	PriorityIsNotSameClusterServingRuntimeError = "%s under the clusterservingruntime %s"
 	ChainsawInjectAnnotationNotAllowError       = "chainsaw inject annotation is not allowed"
@@ -30,14 +31,14 @@ const (
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-clusterservingruntime,mutating=false,failurePolicy=fail,groups=ome.io,resources=clusterservingruntimes,versions=v1beta1,name=clusterservingruntime.ome-webhook-server.validator
 
 type ClusterServingRuntimeValidator struct {
-	Client  client.Client
+	Client  client.Reader
 	Decoder admission.Decoder
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-servingruntime,mutating=false,failurePolicy=fail,groups=ome.io,resources=servingruntimes,versions=v1beta1,name=servingruntime.ome-webhook-server.validator
 
 type ServingRuntimeValidator struct {
-	Client  client.Client
+	Client  client.Reader
 	Decoder admission.Decoder
 }
 
@@ -48,15 +49,46 @@ func (sr *ServingRuntimeValidator) Handle(ctx context.Context, req admission.Req
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	ExistingRuntimes := &v1beta1.ServingRuntimeList{}
-	if err := sr.Client.List(context.TODO(), ExistingRuntimes, client.InNamespace(servingRuntime.Namespace)); err != nil {
+	// Profile validation runs before the disabled-shortcut
+	// below so a broken profile can't slip through "because it was
+	// disabled anyway".
+	if err := validateProfileMarker(servingRuntime.Annotations, servingRuntime.Spec.Disabled); err != nil {
+		return admission.Denied(err.Error())
+	}
+	if err := validateNamespacedRuntimeInheritance(ctx, sr.Client, servingRuntime); err != nil {
+		return admission.Denied(err.Error())
+	}
+
+	// Scaling-policy modes no controller applies are rejected before the
+	// disabled-shortcut so a disabled runtime cannot store a policy the
+	// update ratchet would then treat as pre-existing on re-enable.
+	oldSRPolicy := func() (*v1beta1.ScalingPolicy, error) {
+		old := &v1beta1.ServingRuntime{}
+		if err := sr.Decoder.DecodeRaw(req.OldObject, old); err != nil {
+			return nil, err
+		}
+		return old.Spec.ScalingPolicy, nil
+	}
+	if resp := validateRuntimeScalingPolicy(req, servingRuntime.Spec.ScalingPolicy, oldSRPolicy); resp != nil {
+		return *resp
+	}
+
+	existing := &v1beta1.ServingRuntimeList{}
+	if err := sr.Client.List(ctx, existing, client.InNamespace(servingRuntime.Namespace)); err != nil {
 		log.Error(err, "Failed to get serving runtime list", "namespace", servingRuntime.Namespace)
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
-	// Only validate for priority if the new serving runtime is not disabled
 	if servingRuntime.Spec.IsDisabled() {
 		return admission.Allowed("")
+	}
+
+	// Per-Component Autoscaler block validation. Same rules
+	// applied to the ISVC's blocks; ServingRuntime can declare
+	// autoscaler defaults that inherit to ISVCs, so the same shape
+	// constraints apply.
+	if err := validateRuntimeComponentAutoscalers(&servingRuntime.Spec); err != nil {
+		return admission.Denied(err.Error())
 	}
 
 	// Validate that all referenced accelerator classes exist
@@ -67,22 +99,21 @@ func (sr *ServingRuntimeValidator) Handle(ctx context.Context, req admission.Req
 
 	// Spec-only checks run outside the loop so they still apply when the
 	// namespace has no other runtimes.
-	if err := validateModelFormatPrioritySame(&servingRuntime.Spec); err != nil {
+	if err := validation.ValidateModelFormatPrioritySame(&servingRuntime.Spec); err != nil {
 		return admission.Denied(fmt.Sprintf(PriorityIsNotSameServingRuntimeError, err.Error(), servingRuntime.Name))
 	}
 	if err := validateServingRuntimeAnnotations(&servingRuntime.Spec); err != nil {
 		return admission.Denied(ChainsawInjectAnnotationNotAllowError)
 	}
 
-	for i := range ExistingRuntimes.Items {
-		if err := validateServingRuntimePriority(&servingRuntime.Spec, &ExistingRuntimes.Items[i].Spec, servingRuntime.Name, ExistingRuntimes.Items[i].Name); err != nil {
-			return admission.Denied(fmt.Sprintf(InvalidPriorityServingRuntimeError, err.Error(), ExistingRuntimes.Items[i].Name, servingRuntime.Name, servingRuntime.Namespace))
+	for i := range existing.Items {
+		if err := validateServingRuntimePriority(&servingRuntime.Spec, &existing.Items[i].Spec, servingRuntime.Name, existing.Items[i].Name); err != nil {
+			return admission.Denied(fmt.Sprintf(InvalidPriorityServingRuntimeError, err.Error(), existing.Items[i].Name, servingRuntime.Name, servingRuntime.Namespace))
 		}
 	}
 	return admission.Allowed("")
 }
 
-// Handle validates the incoming request
 func (csr *ClusterServingRuntimeValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	clusterServingRuntime := &v1beta1.ClusterServingRuntime{}
 	if err := csr.Decoder.Decode(req, clusterServingRuntime); err != nil {
@@ -90,15 +121,39 @@ func (csr *ClusterServingRuntimeValidator) Handle(ctx context.Context, req admis
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	ExistingRuntimes := &v1beta1.ClusterServingRuntimeList{}
-	if err := csr.Client.List(context.TODO(), ExistingRuntimes); err != nil {
+	if err := validateProfileMarker(clusterServingRuntime.Annotations, clusterServingRuntime.Spec.Disabled); err != nil {
+		return admission.Denied(err.Error())
+	}
+	if err := validateClusterRuntimeInheritance(ctx, csr.Client, clusterServingRuntime); err != nil {
+		return admission.Denied(err.Error())
+	}
+
+	// Scaling-policy check placement mirrors ServingRuntime.Handle: before
+	// the disabled-shortcut so the ratchet cannot be seeded while disabled.
+	oldCSRPolicy := func() (*v1beta1.ScalingPolicy, error) {
+		old := &v1beta1.ClusterServingRuntime{}
+		if err := csr.Decoder.DecodeRaw(req.OldObject, old); err != nil {
+			return nil, err
+		}
+		return old.Spec.ScalingPolicy, nil
+	}
+	if resp := validateRuntimeScalingPolicy(req, clusterServingRuntime.Spec.ScalingPolicy, oldCSRPolicy); resp != nil {
+		return *resp
+	}
+
+	existing := &v1beta1.ClusterServingRuntimeList{}
+	if err := csr.Client.List(ctx, existing); err != nil {
 		log.Error(err, "Failed to get cluster serving runtime list")
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
-	// Only validate for priority if the new cluster serving runtime is not disabled
 	if clusterServingRuntime.Spec.IsDisabled() {
 		return admission.Allowed("")
+	}
+
+	// Per-Component Autoscaler block validation; see ServingRuntime.Handle.
+	if err := validateRuntimeComponentAutoscalers(&clusterServingRuntime.Spec); err != nil {
+		return admission.Denied(err.Error())
 	}
 
 	// Validate that all referenced accelerator classes exist
@@ -109,112 +164,168 @@ func (csr *ClusterServingRuntimeValidator) Handle(ctx context.Context, req admis
 
 	// Spec-only checks run outside the loop so they still apply when no
 	// other ClusterServingRuntimes exist.
-	if err := validateModelFormatPrioritySame(&clusterServingRuntime.Spec); err != nil {
+	if err := validation.ValidateModelFormatPrioritySame(&clusterServingRuntime.Spec); err != nil {
 		return admission.Denied(fmt.Sprintf(PriorityIsNotSameClusterServingRuntimeError, err.Error(), clusterServingRuntime.Name))
 	}
 	if err := validateServingRuntimeAnnotations(&clusterServingRuntime.Spec); err != nil {
 		return admission.Denied(ChainsawInjectAnnotationNotAllowError)
 	}
 
-	for i := range ExistingRuntimes.Items {
-		if err := validateServingRuntimePriority(&clusterServingRuntime.Spec, &ExistingRuntimes.Items[i].Spec, clusterServingRuntime.Name, ExistingRuntimes.Items[i].Name); err != nil {
-			return admission.Denied(fmt.Sprintf(InvalidPriorityClusterServingRuntimeError, err.Error(), ExistingRuntimes.Items[i].Name, clusterServingRuntime.Name))
+	for i := range existing.Items {
+		// Pass the existing CSR's name from the loop as
+		// existingRuntimeName so the `existingRuntimeName ==
+		// newRuntimeName` early-exit in validateServingRuntimePriority
+		// only short-circuits self-update (the loop iteration that hits
+		// the same CSR we're admitting), not every cross-CSR pairing.
+		if err := validateServingRuntimePriority(&clusterServingRuntime.Spec, &existing.Items[i].Spec, existing.Items[i].Name, clusterServingRuntime.Name); err != nil {
+			return admission.Denied(fmt.Sprintf(InvalidPriorityClusterServingRuntimeError, err.Error(), existing.Items[i].Name, clusterServingRuntime.Name))
 		}
 	}
 	return admission.Allowed("")
 }
 
-func areSupportedModelFormatsEqual(m1 v1beta1.SupportedModelFormat, m2 v1beta1.SupportedModelFormat) bool {
-	if strings.EqualFold(m1.Name, m2.Name) &&
-		((m1.Version == nil && m2.Version == nil) || (m1.Version != nil && m2.Version != nil && *m1.Version == *m2.Version)) &&
-		((m1.Quantization == nil && m2.Quantization == nil) || (m1.Quantization != nil && m2.Quantization != nil && *m1.Quantization == *m2.Quantization)) &&
-		((m1.ModelFramework == nil && m2.ModelFramework == nil) || (m1.ModelFramework != nil && m2.ModelFramework != nil && *m1.ModelFramework == *m2.ModelFramework)) &&
-		((m1.ModelFormat == nil && m2.ModelFormat == nil) || (m1.ModelFormat != nil && m2.ModelFormat != nil && *m1.ModelFormat == *m2.ModelFormat)) &&
-		((m1.ModelArchitecture == nil && m2.ModelArchitecture == nil) || (m1.ModelArchitecture != nil && m2.ModelArchitecture != nil && *m1.ModelArchitecture == *m2.ModelArchitecture)) {
-		return true
-	}
-	return false
+func areSupportedModelFormatsEqual(m1, m2 v1beta1.SupportedModelFormat) bool {
+	return strings.EqualFold(m1.Name, m2.Name) &&
+		ptrDerefEqual(m1.Version, m2.Version) &&
+		ptrDerefEqual(m1.Quantization, m2.Quantization) &&
+		ptrDerefEqual(m1.ModelFramework, m2.ModelFramework) &&
+		ptrDerefEqual(m1.ModelFormat, m2.ModelFormat) &&
+		ptrDerefEqual(m1.ModelArchitecture, m2.ModelArchitecture)
 }
 
-func areModelSizeRangesEqual(range1 *v1beta1.ModelSizeRangeSpec, range2 *v1beta1.ModelSizeRangeSpec) bool {
+// ptrDerefEqual treats two nil pointers as equal and two non-nil
+// pointers as equal iff their dereferenced values match. Mixed nil /
+// non-nil ⇒ unequal. Avoids hand-rolling the same triple-clause check
+// at every comparison site.
+func ptrDerefEqual[T comparable](a, b *T) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func areModelSizeRangesEqual(range1, range2 *v1beta1.ModelSizeRangeSpec) bool {
 	if range1 == nil || range2 == nil {
 		return range1 == range2
 	}
-
-	// Compare Min values
-	if (range1.Min == nil) != (range2.Min == nil) {
-		return false
-	}
-	if range1.Min != nil && range2.Min != nil && *range1.Min != *range2.Min {
-		return false
-	}
-
-	// Compare Max values
-	if (range1.Max == nil) != (range2.Max == nil) {
-		return false
-	}
-	if range1.Max != nil && range2.Max != nil && *range1.Max != *range2.Max {
-		return false
-	}
-
-	return true
+	return ptrDerefEqual(range1.Min, range2.Min) && ptrDerefEqual(range1.Max, range2.Max)
 }
 
-func validateServingRuntimeAnnotations(servingRuntime *v1beta1.ServingRuntimeSpec) error {
-	if servingRuntime.ServingRuntimePodSpec.Annotations == nil {
-		return nil
-	}
+// validateServingRuntimeAnnotations is a placeholder for future
+// pod-template annotation validation. Today it accepts everything; the
+// caller still wraps the result so an enforcement path is available
+// without webhook rewiring.
+func validateServingRuntimeAnnotations(*v1beta1.ServingRuntimeSpec) error {
 	return nil
 }
 
-func validateModelFormatPrioritySame(newSpec *v1beta1.ServingRuntimeSpec) error {
-	nameToPriority := make(map[string]*int32)
-
-	// Validate when same model format has same priority under same runtime.
-	// If the same model format has different priority value then throws the error
-	for _, newModelFormat := range newSpec.SupportedModelFormats {
-		// Only validate priority if autoselect is true
-		if newModelFormat.IsAutoSelectEnabled() {
-			if existingPriority, ok := nameToPriority[newModelFormat.Name]; ok {
-				if existingPriority != nil && newModelFormat.Priority != nil && (*existingPriority != *newModelFormat.Priority) {
-					return fmt.Errorf(PriorityIsNotSameError, newModelFormat.Name)
-				}
-			} else {
-				nameToPriority[newModelFormat.Name] = newModelFormat.Priority
+// validateServingRuntimePriority rejects two runtimes that auto-select on
+// the same (model format, size range) at the same priority — the runtime
+// selector has no tiebreaker. Disabled runtimes and self-updates are
+// skipped (the latter relies on existingRuntimeName == newRuntimeName).
+func validateServingRuntimePriority(newSpec, existingSpec *v1beta1.ServingRuntimeSpec, existingRuntimeName, newRuntimeName string) error {
+	if existingSpec.IsDisabled() || existingRuntimeName == newRuntimeName {
+		return nil
+	}
+	if !anyProtocolOverlap(existingSpec.ProtocolVersions, newSpec.ProtocolVersions) {
+		return nil
+	}
+	for _, existingModelFormat := range existingSpec.SupportedModelFormats {
+		for _, newModelFormat := range newSpec.SupportedModelFormats {
+			if !existingModelFormat.IsAutoSelectEnabled() || !newModelFormat.IsAutoSelectEnabled() {
+				continue
+			}
+			if !areSupportedModelFormatsEqual(existingModelFormat, newModelFormat) {
+				continue
+			}
+			if !areModelSizeRangesEqual(existingSpec.ModelSizeRange, newSpec.ModelSizeRange) {
+				continue
+			}
+			if existingModelFormat.Priority != nil && newModelFormat.Priority != nil &&
+				*existingModelFormat.Priority == *newModelFormat.Priority {
+				return fmt.Errorf(InvalidPriorityError, newModelFormat.Name)
 			}
 		}
 	}
 	return nil
 }
 
-func validateServingRuntimePriority(newSpec *v1beta1.ServingRuntimeSpec, existingSpec *v1beta1.ServingRuntimeSpec, existingRuntimeName string, newRuntimeName string) error {
-	// Skip the runtime if it is disabled or both are not multi model runtime and in update scenario skip the existing runtime if it is same as the new runtime
-	if (existingSpec.IsDisabled()) || (existingRuntimeName == newRuntimeName) {
+// validateRuntimeScalingPolicy runs the shared not-implemented
+// scaling-mode rejection against a runtime's ScalingPolicy default with
+// ratchet semantics: CREATE validates the policy outright; UPDATE
+// validates only a newly-set or changed policy, so a stored runtime
+// carrying a rejected mode keeps accepting unrelated updates.
+// decodeOldPolicy extracts the prior policy from req.OldObject and is
+// invoked only on UPDATE with a non-empty old payload. Returns nil when
+// admitted, otherwise the response to send.
+func validateRuntimeScalingPolicy(req admission.Request, newPolicy *v1beta1.ScalingPolicy, decodeOldPolicy func() (*v1beta1.ScalingPolicy, error)) *admission.Response {
+	deny := func(err error) *admission.Response {
+		resp := admission.Denied(err.Error())
+		return &resp
+	}
+	if req.Operation == admissionv1.Update && len(req.OldObject.Raw) > 0 {
+		oldPolicy, err := decodeOldPolicy()
+		if err != nil {
+			log.Error(err, "Failed to decode prior runtime for scaling-policy validation", "name", req.Name, "namespace", req.Namespace)
+			resp := admission.Errored(http.StatusBadRequest, err)
+			return &resp
+		}
+		if err := validation.ValidateScalingPolicyUpdate(oldPolicy, newPolicy, "spec.scalingPolicy"); err != nil {
+			return deny(err)
+		}
 		return nil
 	}
-	// Only validate for priority if both servingruntimes supports the same protocol version
-	isTheProtocolSame := false
-	for _, protocolVersion := range existingSpec.ProtocolVersions {
-		if contains(newSpec.ProtocolVersions, protocolVersion) {
-			isTheProtocolSame = true
-			break
-		}
-	}
-	if isTheProtocolSame {
-		for _, existingModelFormat := range existingSpec.SupportedModelFormats {
-			for _, newModelFormat := range newSpec.SupportedModelFormats {
-				// Only validate priority if auto select is true and model formats and size ranges are equal
-				if existingModelFormat.IsAutoSelectEnabled() && newModelFormat.IsAutoSelectEnabled() &&
-					areSupportedModelFormatsEqual(existingModelFormat, newModelFormat) &&
-					areModelSizeRangesEqual(existingSpec.ModelSizeRange, newSpec.ModelSizeRange) {
-					if existingModelFormat.Priority != nil && newModelFormat.Priority != nil && *existingModelFormat.Priority == *newModelFormat.Priority {
-						return fmt.Errorf(InvalidPriorityError, newModelFormat.Name)
-					}
-				}
-			}
-		}
+	if err := validation.ValidateScalingPolicy(newPolicy, "spec.scalingPolicy"); err != nil {
+		return deny(err)
 	}
 	return nil
+}
+
+// validateRuntimeComponentAutoscalers runs the shared per-Component
+// Autoscaler shape check against each Component on a ServingRuntime
+// spec. The per-Component dispatch is shared with the InferenceService
+// and InferenceReplica webhooks via
+// validation.ValidateComponentsAutoscalers.
+// Mirrors the per-Component dispatch on the ISVC webhook so a
+// runtime-level Autoscaler block carrying a malformed shape is rejected
+// at admission rather than silently inherited into an ISVC at
+// controller time.
+func validateRuntimeComponentAutoscalers(spec *v1beta1.ServingRuntimeSpec) error {
+	if spec == nil {
+		return nil
+	}
+	var checks []validation.ComponentAutoscalerCheck
+	if spec.EngineConfig != nil {
+		checks = append(checks, validation.ComponentAutoscalerCheck{
+			Name:        "engineConfig",
+			Autoscaler:  spec.EngineConfig.Autoscaler,
+			MinReplicas: spec.EngineConfig.MinReplicas,
+		})
+	}
+	if spec.DecoderConfig != nil {
+		checks = append(checks, validation.ComponentAutoscalerCheck{
+			Name:        "decoderConfig",
+			Autoscaler:  spec.DecoderConfig.Autoscaler,
+			MinReplicas: spec.DecoderConfig.MinReplicas,
+		})
+	}
+	if spec.RouterConfig != nil {
+		checks = append(checks, validation.ComponentAutoscalerCheck{
+			Name:        "routerConfig",
+			Autoscaler:  spec.RouterConfig.Autoscaler,
+			MinReplicas: spec.RouterConfig.MinReplicas,
+		})
+	}
+	return validation.ValidateComponentsAutoscalers(checks)
+}
+
+func anyProtocolOverlap(a, b []constants.InferenceServiceProtocol) bool {
+	for _, p := range a {
+		if contains(b, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func contains[T comparable](slice []T, element T) bool {
@@ -231,7 +342,7 @@ func contains[T comparable](slice []T, element T) bool {
 // 1. Typos in accelerator class names are caught early
 // 2. Runtime scheduling won't fail due to missing accelerator definitions
 // 3. Cluster operators can safely create runtimes knowing their accelerator dependencies are met
-func validateAcceleratorClasses(ctx context.Context, c client.Client, spec *v1beta1.ServingRuntimeSpec) error {
+func validateAcceleratorClasses(ctx context.Context, c client.Reader, spec *v1beta1.ServingRuntimeSpec) error {
 	if spec.AcceleratorRequirements == nil || len(spec.AcceleratorRequirements.AcceleratorClasses) == 0 {
 		return nil
 	}

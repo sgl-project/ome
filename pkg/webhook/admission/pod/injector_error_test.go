@@ -97,8 +97,8 @@ func TestInjectorContainerBuildersReturnResourceErrors(t *testing.T) {
 }
 
 func TestFineTunedAdapterReturnsWeightLookupError(t *testing.T) {
-	injector := newTestFineTunedAdapterInjector(t, nil)
-	pod := newFineTunedAdapterPod("missing-weight")
+	injector := newErrPathFineTunedAdapterInjector(t, nil)
+	pod := newErrPathFineTunedAdapterPod("missing-weight")
 
 	err := injector.InjectFineTunedAdapter(pod)
 	if err == nil {
@@ -110,31 +110,31 @@ func TestFineTunedAdapterRequiresStorageURI(t *testing.T) {
 	tests := map[string]*v1beta1.StorageSpec{
 		"missing storage": nil,
 		"missing uri":     {},
-		"empty uri":       {StorageUri: stringPtr("")},
+		"empty uri":       {StorageUri: errPathStringPtr("")},
 	}
 
 	for name, storageSpec := range tests {
 		t.Run(name, func(t *testing.T) {
-			injector := newTestFineTunedAdapterInjector(t, &v1beta1.FineTunedWeight{
+			injector := newErrPathFineTunedAdapterInjector(t, &v1beta1.FineTunedWeight{
 				ObjectMeta: metav1.ObjectMeta{Name: "ft-weight"},
 				Spec: v1beta1.FineTunedWeightSpec{
 					Storage: storageSpec,
 				},
 			})
-			pod := newFineTunedAdapterPod("ft-weight")
+			pod := newErrPathFineTunedAdapterPod("ft-weight")
 
 			err := injector.InjectFineTunedAdapter(pod)
 			if err == nil {
 				t.Fatalf("expected storage URI validation error")
 			}
-			if !strings.Contains(err.Error(), "storage.storageUri is required") {
+			if !strings.Contains(err.Error(), "storage URI") {
 				t.Fatalf("expected storage URI validation error, got %v", err)
 			}
 		})
 	}
 }
 
-func newTestFineTunedAdapterInjector(t *testing.T, objects ...*v1beta1.FineTunedWeight) *FineTunedAdapterInjector {
+func newErrPathFineTunedAdapterInjector(t *testing.T, objects ...*v1beta1.FineTunedWeight) *FineTunedAdapterInjector {
 	t.Helper()
 
 	s := runtime.NewScheme()
@@ -157,7 +157,7 @@ func newTestFineTunedAdapterInjector(t *testing.T, objects ...*v1beta1.FineTuned
 	}
 }
 
-func newFineTunedAdapterPod(weightName string) *v1.Pod {
+func newErrPathFineTunedAdapterPod(weightName string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: map[string]string{
@@ -167,6 +167,6 @@ func newFineTunedAdapterPod(weightName string) *v1.Pod {
 	}
 }
 
-func stringPtr(value string) *string {
+func errPathStringPtr(value string) *string {
 	return &value
 }

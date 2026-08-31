@@ -222,7 +222,7 @@ func TestOMENativeProjectionConflictRequeuesInsteadOfErroring(t *testing.T) {
 				MinReplicas: ptr.To(1),
 			})
 			g.Expect(err).NotTo(gomega.HaveOccurred(), "a Conflict must not surface as a reconcile error")
-			g.Expect(res.Requeue).To(gomega.BeTrue(), "a Conflict must requeue")
+			g.Expect(res.IsZero()).To(gomega.BeFalse(), "a Conflict must requeue")
 		})
 	}
 }

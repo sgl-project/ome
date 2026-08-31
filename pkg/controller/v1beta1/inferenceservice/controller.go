@@ -462,7 +462,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				"inferenceService", isvc.Name)
 			return result, err
 		}
-		if result.Requeue || result.RequeueAfter > 0 {
+		if !result.IsZero() {
 			return result, nil
 		}
 	}

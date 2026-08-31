@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	admissionv1 "k8s.io/api/admission/v1"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -207,6 +208,14 @@ func TestMutator_Handle(t *testing.T) {
 				Patches: []jsonpatch.JsonPatchOperation{
 					{
 						Operation: "add",
+						Path:      "/metadata/annotations",
+						Value: map[string]interface{}{
+							"ome.io/enable-metric-aggregation":  "",
+							"ome.io/enable-prometheus-scraping": "",
+						},
+					},
+					{
+						Operation: "add",
 						Path:      "/metadata/namespace",
 						Value:     "default",
 					},
@@ -300,6 +309,14 @@ func TestMutator_Handle(t *testing.T) {
 				Patches: []jsonpatch.JsonPatchOperation{
 					{
 						Operation: "add",
+						Path:      "/metadata/annotations",
+						Value: map[string]interface{}{
+							"ome.io/enable-metric-aggregation":  "",
+							"ome.io/enable-prometheus-scraping": "",
+						},
+					},
+					{
+						Operation: "add",
 						Path:      "/metadata/namespace",
 						Value:     "default",
 					},
@@ -333,6 +350,69 @@ func TestMutator_Handle(t *testing.T) {
 			if err := c.Delete(context.TODO(), &tc.configMap); err != nil {
 				t.Errorf("failed to delete configmap %v", err)
 			}
+		})
+	}
+}
+
+// TestMutator_Handle_MalformedInjectorConfig verifies that a bad injector
+// block in inferenceservice-config surfaces as an admission error instead
+// of panicking the webhook handler.
+func TestMutator_Handle_MalformedInjectorConfig(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	omeNamespace := v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: constants.OMENamespace},
+	}
+	if err := c.Create(context.TODO(), &omeNamespace); err != nil && !apierrors.IsAlreadyExists(err) {
+		t.Fatalf("failed to create namespace: %v", err)
+	}
+	mutator := Mutator{Client: c, Clientset: clientset, Decoder: admission.NewDecoder(c.Scheme())}
+
+	for name, key := range map[string]string{
+		"servingSidecar":   servingSidecarConfigMapKeyName,
+		"fineTunedAdapter": fineTunedAdapterConfigMapKeyName,
+	} {
+		t.Run(name, func(t *testing.T) {
+			configMap := v1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      constants.InferenceServiceConfigMapName,
+					Namespace: constants.OMENamespace,
+				},
+				Data: map[string]string{key: `{"image": not-json`},
+			}
+			if err := c.Create(context.TODO(), &configMap); err != nil {
+				t.Fatalf("failed to create config map: %v", err)
+			}
+			defer func() {
+				if err := c.Delete(context.TODO(), &configMap); err != nil {
+					t.Errorf("failed to delete configmap: %v", err)
+				}
+			}()
+
+			pod := v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{constants.InferenceServicePodLabelKey: "isvc-pod"},
+				},
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{{Name: constants.MainContainerName}},
+				},
+			}
+			raw, err := json.Marshal(pod)
+			g.Expect(err).To(gomega.BeNil())
+
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					UID:       types.UID(uuid.NewString()),
+					Namespace: "default",
+					Operation: admissionv1.Create,
+					Object:    runtime.RawExtension{Raw: raw},
+				},
+			}
+
+			var res admission.Response
+			g.Expect(func() { res = mutator.Handle(context.TODO(), req) }).NotTo(gomega.Panic())
+			g.Expect(res.Allowed).To(gomega.BeFalse())
+			g.Expect(res.Result.Code).To(gomega.Equal(int32(500)))
 		})
 	}
 }

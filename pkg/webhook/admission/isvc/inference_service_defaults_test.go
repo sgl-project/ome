@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	inferenceserviceutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
 )
 
 // =============================================================================
@@ -49,8 +50,6 @@ func stringPtr(s string) *string {
 func intPtr(i int) *int {
 	return &i
 }
-
-// createBasicInferenceService creates a basic InferenceService for testing
 func createBasicInferenceService(name, namespace string) *v1beta1.InferenceService {
 	return &v1beta1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{
@@ -162,15 +161,14 @@ func TestDeploymentModeDetection(t *testing.T) {
 			expectedMode: string(constants.RawDeployment),
 		},
 		{
-			// A pre-existing annotation is preserved verbatim — even a
-			// legacy "MultiNode" value the defaulter itself never stamps.
-			// This pins the upgrade-safety contract: admission does not
-			// rewrite or reject persisted annotations.
+			// A pre-existing annotation is preserved verbatim. This pins
+			// the contract: admission does not rewrite or reject persisted
+			// deployment-mode annotations.
 			name: "existing deployment mode should not be overridden",
 			isvc: &v1beta1.InferenceService{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						constants.DeploymentMode: "MultiNode",
+						constants.DeploymentMode: string(constants.MultiNode),
 					},
 				},
 				Spec: v1beta1.InferenceServiceSpec{
@@ -179,7 +177,7 @@ func TestDeploymentModeDetection(t *testing.T) {
 				},
 			},
 			deployConfig: nil,
-			expectedMode: "MultiNode",
+			expectedMode: string(constants.MultiNode),
 		},
 	}
 
@@ -255,138 +253,63 @@ func TestDefaultInferenceService_OMENativeBudgetViaAnnotationAndHeuristic(t *tes
 	}
 }
 
-func TestDefaultComponents(t *testing.T) {
-	t.Run("defaultEngine", func(t *testing.T) {
-		tests := []struct {
-			name            string
-			engine          *v1beta1.EngineSpec
-			wantMinReplicas int
-			wantMaxReplicas int
-		}{
-			{
-				name:            "nil MinReplicas should be set to 1",
-				engine:          &v1beta1.EngineSpec{},
-				wantMinReplicas: 1,
-				wantMaxReplicas: 3,
-			},
-			{
-				name: "existing values should be preserved",
-				engine: &v1beta1.EngineSpec{
-					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-						MinReplicas: intPtr(2),
-						MaxReplicas: 5,
-					},
-				},
-				wantMinReplicas: 2,
-				wantMaxReplicas: 5,
-			},
-		}
+func int32Ptr(v int32) *int32 { return &v }
 
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				defaultEngine(tt.engine, nil)
-				require.NotNil(t, tt.engine.MinReplicas)
-				assert.Equal(t, tt.wantMinReplicas, *tt.engine.MinReplicas)
-				assert.Equal(t, tt.wantMaxReplicas, tt.engine.MaxReplicas)
-			})
-		}
-	})
-
-	t.Run("defaultDecoder", func(t *testing.T) {
-		tests := []struct {
-			name            string
-			decoder         *v1beta1.DecoderSpec
-			wantMinReplicas int
-			wantMaxReplicas int
-		}{
-			{
-				name:            "nil MinReplicas should be set to 1",
-				decoder:         &v1beta1.DecoderSpec{},
-				wantMinReplicas: 1,
-				wantMaxReplicas: 3,
-			},
-			{
-				name: "existing values should be preserved",
-				decoder: &v1beta1.DecoderSpec{
-					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-						MinReplicas: intPtr(2),
-						MaxReplicas: 5,
-					},
-				},
-				wantMinReplicas: 2,
-				wantMaxReplicas: 5,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				defaultDecoder(tt.decoder, nil)
-				require.NotNil(t, tt.decoder.MinReplicas)
-				assert.Equal(t, tt.wantMinReplicas, *tt.decoder.MinReplicas)
-				assert.Equal(t, tt.wantMaxReplicas, tt.decoder.MaxReplicas)
-			})
-		}
-	})
-
-	t.Run("defaultRouter", func(t *testing.T) {
-		tests := []struct {
-			name            string
-			router          *v1beta1.RouterSpec
-			wantMinReplicas int
-			wantMaxReplicas int
-		}{
-			{
-				name:            "nil MinReplicas should be set to 1",
-				router:          &v1beta1.RouterSpec{},
-				wantMinReplicas: 1,
-				wantMaxReplicas: 2,
-			},
-			{
-				name: "existing values should be preserved",
-				router: &v1beta1.RouterSpec{
-					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-						MinReplicas: intPtr(2),
-						MaxReplicas: 5,
-					},
-				},
-				wantMinReplicas: 2,
-				wantMaxReplicas: 5,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				defaultRouter(tt.router, nil)
-				require.NotNil(t, tt.router.MinReplicas)
-				assert.Equal(t, tt.wantMinReplicas, *tt.router.MinReplicas)
-				assert.Equal(t, tt.wantMaxReplicas, tt.router.MaxReplicas)
-			})
-		}
-	})
+func assertUnresolvedShapePolicies(t *testing.T, lifecycle *v1beta1.LifecycleSpec) {
+	t.Helper()
+	require.NotNil(t, lifecycle)
+	if lifecycle.RestartPolicy != nil {
+		t.Errorf("RestartPolicy: got %q, want nil while the runner shape is unresolved", *lifecycle.RestartPolicy)
+	}
+	if lifecycle.ReadyPolicy != nil {
+		t.Errorf("ReadyPolicy: got %q, want nil while the runner shape is unresolved", *lifecycle.ReadyPolicy)
+	}
+	require.NotNil(t, lifecycle.UpdateStrategy)
+	assert.Equal(t, v1beta1.UpdateStrategySurgeThenDrain, lifecycle.UpdateStrategy.Type)
+	require.NotNil(t, lifecycle.InstanceReadyTimeout)
+	assert.Equal(t, 30*time.Minute, lifecycle.InstanceReadyTimeout.Duration)
+	require.NotNil(t, lifecycle.MigrationPolicy)
+	assert.Equal(t, v1beta1.MigrationPolicyModeAuto, lifecycle.MigrationPolicy.Mode)
 }
 
-func int32Ptr(v int32) *int32 { return &v }
+func TestDefaultOMENativeEngineAndDecoder_DeferPoliciesWhenRunnerShapeIsUnresolved(t *testing.T) {
+	mode := constants.OMENative
+
+	t.Run("Engine", func(t *testing.T) {
+		engine := &v1beta1.EngineSpec{}
+		defaultEngine(engine, &mode)
+
+		assertUnresolvedShapePolicies(t, engine.Lifecycle)
+	})
+
+	t.Run("Decoder", func(t *testing.T) {
+		decoder := &v1beta1.DecoderSpec{}
+		defaultDecoder(decoder, &mode)
+
+		assertUnresolvedShapePolicies(t, decoder.Lifecycle)
+	})
+}
 
 func TestDefaultOMENativeComponent(t *testing.T) {
 	omenativeMode := map[string]string{constants.DeploymentMode: string(constants.OMENative)}
 
 	t.Run("not OMENative — omenative block untouched", func(t *testing.T) {
 		ext := &v1beta1.ComponentExtensionSpec{
-			Annotations: map[string]string{constants.DeploymentMode: string(constants.RawDeployment)},
+			Annotations: map[string]string{constants.DeploymentMode: string(constants.MultiNode)},
 		}
-		defaultOMENativeComponent(ext, true, nil)
+		defaultOMENativeComponent(ext, podShapeMulti, nil)
 		assert.Nil(t, ext.Lifecycle)
 	})
 
 	t.Run("no annotation — omenative block untouched", func(t *testing.T) {
 		ext := &v1beta1.ComponentExtensionSpec{}
-		defaultOMENativeComponent(ext, true, nil)
+		defaultOMENativeComponent(ext, podShapeMulti, nil)
 		assert.Nil(t, ext.Lifecycle)
 	})
 
 	t.Run("OMENative + multi-pod — full defaults applied", func(t *testing.T) {
 		ext := &v1beta1.ComponentExtensionSpec{Annotations: omenativeMode}
-		defaultOMENativeComponent(ext, true, nil)
+		defaultOMENativeComponent(ext, podShapeMulti, nil)
 
 		require.NotNil(t, ext.Lifecycle)
 		spec := ext.Lifecycle
@@ -423,7 +346,7 @@ func TestDefaultOMENativeComponent(t *testing.T) {
 
 	t.Run("OMENative + single-pod — restart/ready default to None", func(t *testing.T) {
 		ext := &v1beta1.ComponentExtensionSpec{Annotations: omenativeMode}
-		defaultOMENativeComponent(ext, false, nil)
+		defaultOMENativeComponent(ext, podShapeSingle, nil)
 
 		require.NotNil(t, ext.Lifecycle)
 		require.NotNil(t, ext.Lifecycle.RestartPolicy)
@@ -434,26 +357,28 @@ func TestDefaultOMENativeComponent(t *testing.T) {
 
 	t.Run("OMENative + existing values — preserved, nil siblings filled", func(t *testing.T) {
 		customRestart := v1beta1.InstanceRestartPolicyNone
+		customReady := v1beta1.InstanceReadyPolicyNone
 		customTimeout := metav1.Duration{Duration: 5 * time.Minute}
 		ext := &v1beta1.ComponentExtensionSpec{
 			Annotations: omenativeMode,
 			Lifecycle: &v1beta1.LifecycleSpec{
 				RestartPolicy:        &customRestart,
+				ReadyPolicy:          &customReady,
 				InstanceReadyTimeout: &customTimeout,
 			},
 		}
-		defaultOMENativeComponent(ext, true, nil)
+		defaultOMENativeComponent(ext, podShapeMulti, nil)
 
 		// preserved
 		require.NotNil(t, ext.Lifecycle.RestartPolicy)
 		assert.Equal(t, v1beta1.InstanceRestartPolicyNone, *ext.Lifecycle.RestartPolicy)
+		require.NotNil(t, ext.Lifecycle.ReadyPolicy)
+		assert.Equal(t, v1beta1.InstanceReadyPolicyNone, *ext.Lifecycle.ReadyPolicy)
 		assert.Equal(t, 5*time.Minute, ext.Lifecycle.InstanceReadyTimeout.Duration)
 
 		// filled
 		require.NotNil(t, ext.Lifecycle.UpdateStrategy)
 		assert.Equal(t, v1beta1.UpdateStrategySurgeThenDrain, ext.Lifecycle.UpdateStrategy.Type)
-		require.NotNil(t, ext.Lifecycle.ReadyPolicy)
-		assert.Equal(t, v1beta1.InstanceReadyPolicyAllPodReady, *ext.Lifecycle.ReadyPolicy)
 		require.NotNil(t, ext.Lifecycle.MigrationPolicy)
 		assert.Equal(t, v1beta1.MigrationPolicyModeAuto, ext.Lifecycle.MigrationPolicy.Mode)
 	})
@@ -472,7 +397,7 @@ func TestDefaultOMENativeComponent(t *testing.T) {
 				},
 			},
 		}
-		defaultOMENativeComponent(ext, true, nil)
+		defaultOMENativeComponent(ext, podShapeMulti, nil)
 
 		assert.Equal(t, v1beta1.UpdateStrategyRecreatePod, ext.Lifecycle.UpdateStrategy.Type)
 		assert.Equal(t, int32(60), *ext.Lifecycle.UpdateStrategy.InPlaceUpdateStrategy.GracePeriodSeconds)
@@ -501,7 +426,7 @@ func TestDefaultOMENativeComponent(t *testing.T) {
 				},
 			},
 		}
-		defaultOMENativeComponent(ext, true, nil)
+		defaultOMENativeComponent(ext, podShapeMulti, nil)
 
 		require.NotNil(t, ext.Lifecycle.UpdateStrategy.RollingUpdate.MaxSurge)
 		assert.Equal(t, intstr.FromInt(1), *ext.Lifecycle.UpdateStrategy.RollingUpdate.MaxSurge)
@@ -519,21 +444,29 @@ func TestEngineIsMultiPod(t *testing.T) {
 	}{
 		{name: "nil", spec: nil, want: false},
 		{name: "empty", spec: &v1beta1.EngineSpec{}, want: false},
-		{name: "leader only", spec: &v1beta1.EngineSpec{Leader: &v1beta1.LeaderSpec{}}, want: true},
+		{name: "leader only", spec: &v1beta1.EngineSpec{Leader: &v1beta1.LeaderSpec{}}, want: false},
 		{
 			name: "worker size 0",
 			spec: &v1beta1.EngineSpec{Worker: &v1beta1.WorkerSpec{Size: func() *int { v := 0; return &v }()}},
 			want: false,
 		},
 		{
-			name: "worker size 1",
+			name: "worker size 1 without leader",
 			spec: &v1beta1.EngineSpec{Worker: &v1beta1.WorkerSpec{Size: func() *int { v := 1; return &v }()}},
-			want: true,
+			want: false,
 		},
 		{
 			name: "worker size nil",
 			spec: &v1beta1.EngineSpec{Worker: &v1beta1.WorkerSpec{}},
 			want: false,
+		},
+		{
+			name: "leader and positive worker size",
+			spec: &v1beta1.EngineSpec{
+				Leader: &v1beta1.LeaderSpec{},
+				Worker: &v1beta1.WorkerSpec{Size: func() *int { v := 1; return &v }()},
+			},
+			want: true,
 		},
 	}
 	for _, tt := range tests {
@@ -543,11 +476,42 @@ func TestEngineIsMultiPod(t *testing.T) {
 	}
 }
 
+func TestDecoderIsMultiPod(t *testing.T) {
+	tests := []struct {
+		name string
+		spec *v1beta1.DecoderSpec
+		want bool
+	}{
+		{name: "nil", spec: nil, want: false},
+		{name: "empty", spec: &v1beta1.DecoderSpec{}, want: false},
+		{name: "leader only", spec: &v1beta1.DecoderSpec{Leader: &v1beta1.LeaderSpec{}}, want: false},
+		{
+			name: "positive worker size without leader",
+			spec: &v1beta1.DecoderSpec{Worker: &v1beta1.WorkerSpec{Size: intPtr(1)}},
+			want: false,
+		},
+		{
+			name: "leader and positive worker size",
+			spec: &v1beta1.DecoderSpec{
+				Leader: &v1beta1.LeaderSpec{},
+				Worker: &v1beta1.WorkerSpec{Size: intPtr(1)},
+			},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, decoderIsMultiPod(tt.spec))
+		})
+	}
+}
+
 func TestDefaultEngine_OMENativeAnnotationTriggersDefaults(t *testing.T) {
 	engine := &v1beta1.EngineSpec{
 		ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
 			Annotations: map[string]string{constants.DeploymentMode: string(constants.OMENative)},
 		},
+		Leader: &v1beta1.LeaderSpec{},
 		Worker: &v1beta1.WorkerSpec{Size: func() *int { v := 3; return &v }()},
 	}
 	defaultEngine(engine, nil)
@@ -566,6 +530,60 @@ func TestDefaultRouter_OMENativeAlwaysSinglePod(t *testing.T) {
 	require.NotNil(t, router.Lifecycle)
 	require.NotNil(t, router.Lifecycle.RestartPolicy)
 	assert.Equal(t, v1beta1.InstanceRestartPolicyNone, *router.Lifecycle.RestartPolicy)
+	require.NotNil(t, router.Lifecycle.ReadyPolicy)
+	assert.Equal(t, v1beta1.InstanceReadyPolicyNone, *router.Lifecycle.ReadyPolicy)
+}
+
+func TestDefaultInferenceService_UnresolvedRunnerShapePreservesRuntimeLifecyclePoliciesOnMerge(t *testing.T) {
+	mode := constants.OMENative
+	runtimeRestart := v1beta1.InstanceRestartPolicyRecreateInstance
+	runtimeReady := v1beta1.InstanceReadyPolicyAllPodReady
+	lifecycle := func() v1beta1.ComponentExtensionSpec {
+		return v1beta1.ComponentExtensionSpec{
+			Lifecycle: &v1beta1.LifecycleSpec{
+				RestartPolicy: &runtimeRestart,
+				ReadyPolicy:   &runtimeReady,
+			},
+		}
+	}
+
+	assertPolicies := func(t *testing.T, got *v1beta1.LifecycleSpec) {
+		t.Helper()
+		require.NotNil(t, got)
+		require.NotNil(t, got.RestartPolicy)
+		assert.Equal(t, runtimeRestart, *got.RestartPolicy)
+		require.NotNil(t, got.ReadyPolicy)
+		assert.Equal(t, runtimeReady, *got.ReadyPolicy)
+	}
+
+	t.Run("Engine", func(t *testing.T) {
+		isvc := &v1beta1.InferenceService{Spec: v1beta1.InferenceServiceSpec{
+			DeploymentMode: &mode,
+			Engine:         &v1beta1.EngineSpec{},
+		}}
+		require.NoError(t, DefaultInferenceService(context.Background(), createFakeClient(t), isvc, nil))
+		merged, err := inferenceserviceutils.MergeEngineSpec(
+			&v1beta1.EngineSpec{ComponentExtensionSpec: lifecycle()},
+			isvc.Spec.Engine,
+		)
+		require.NoError(t, err)
+		assertPolicies(t, merged.Lifecycle)
+	})
+
+	t.Run("Decoder", func(t *testing.T) {
+		isvc := &v1beta1.InferenceService{Spec: v1beta1.InferenceServiceSpec{
+			DeploymentMode: &mode,
+			Engine:         &v1beta1.EngineSpec{},
+			Decoder:        &v1beta1.DecoderSpec{},
+		}}
+		require.NoError(t, DefaultInferenceService(context.Background(), createFakeClient(t), isvc, nil))
+		merged, err := inferenceserviceutils.MergeDecoderSpec(
+			&v1beta1.DecoderSpec{ComponentExtensionSpec: lifecycle()},
+			isvc.Spec.Decoder,
+		)
+		require.NoError(t, err)
+		assertPolicies(t, merged.Lifecycle)
+	})
 }
 
 // TestDefaultWorkerSize_MultiPodWithoutSize covers the
@@ -649,6 +667,8 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 		require.NotNil(t, decoder.Lifecycle)
 		require.NotNil(t, decoder.Lifecycle.RestartPolicy)
 		assert.Equal(t, v1beta1.InstanceRestartPolicyRecreateInstance, *decoder.Lifecycle.RestartPolicy)
+		require.NotNil(t, decoder.Lifecycle.ReadyPolicy)
+		assert.Equal(t, v1beta1.InstanceReadyPolicyAllPodReady, *decoder.Lifecycle.ReadyPolicy)
 	})
 
 	t.Run("single-pod engine — Worker field unset, no panic", func(t *testing.T) {
@@ -677,7 +697,7 @@ func TestDefaultOMENativeComponent_MultiPodDefaults(t *testing.T) {
 	// before
 	assert.Nil(t, ext.Lifecycle)
 
-	defaultOMENativeComponent(ext, true /* multiPod */, nil)
+	defaultOMENativeComponent(ext, podShapeMulti, nil)
 
 	// after
 	require.NotNil(t, ext.Lifecycle)
@@ -700,7 +720,7 @@ func TestDefaultOMENativeComponent_SinglePodDefaults(t *testing.T) {
 	ext := &v1beta1.ComponentExtensionSpec{
 		Annotations: map[string]string{constants.DeploymentMode: string(constants.OMENative)},
 	}
-	defaultOMENativeComponent(ext, false /* singlePod */, nil)
+	defaultOMENativeComponent(ext, podShapeSingle, nil)
 
 	require.NotNil(t, ext.Lifecycle)
 	require.NotNil(t, ext.Lifecycle.RestartPolicy)
