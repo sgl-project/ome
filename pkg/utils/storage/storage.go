@@ -196,6 +196,14 @@ func ParsePVCStorageURI(uri string) (*PVCStorageComponents, error) {
 	if subPath == "" {
 		return nil, fmt.Errorf("invalid PVC storage URI format: missing subpath")
 	}
+	// Defense in depth: K8s already rejects `..` segments at admission for
+	// VolumeMount.SubPath, but reject here too so we never construct a
+	// pod spec that requires the API server to be the only safety net.
+	for _, segment := range strings.Split(subPath, "/") {
+		if segment == ".." {
+			return nil, fmt.Errorf("invalid PVC storage URI format: subpath must not contain '..' segments")
+		}
+	}
 
 	return &PVCStorageComponents{
 		Namespace: namespace, // Empty string if not specified

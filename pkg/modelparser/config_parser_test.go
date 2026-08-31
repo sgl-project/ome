@@ -380,55 +380,6 @@ func TestUpdateModelSpec(t *testing.T) {
 	assert.Equal(t, "7B", *existingSpec.ModelParameterSize)
 }
 
-// TestUpdateModelSpecPreservesModelConfiguration guards the preserve-if-unset
-// contract for the ModelConfiguration RawExtension. It is stored as a
-// preserve-unknown-fields field, so the apiserver serves it with sorted keys
-// while the parser emits struct-declaration order — byte-comparing the two would
-// never match and would rewrite the spec every reconcile. This locks in that an
-// already-set ModelConfiguration is NOT overwritten on a byte difference.
-func TestUpdateModelSpecPreservesModelConfiguration(t *testing.T) {
-	parser := &ModelConfigParser{logger: zap.NewNop().Sugar()}
-
-	// Same content, different byte order: sorted keys (apiserver) vs struct order (parser).
-	storedConfig := []byte(`{"architecture":"llama","model_type":"llama"}`)
-	parsedConfig := []byte(`{"model_type":"llama","architecture":"llama"}`)
-
-	// Fully-parsed spec: every field metadata provides is already set, so
-	// preserve-if-unset must leave everything untouched and report no change.
-	existingType := "llama"
-	existingArch := "LlamaForCausalLM"
-	existingSize := "7B"
-	existingMaxTokens := int32(4096)
-	spec := &v1beta1.BaseModelSpec{
-		ModelType:          &existingType,
-		ModelArchitecture:  &existingArch,
-		ModelParameterSize: &existingSize,
-		MaxTokens:          &existingMaxTokens,
-		ModelCapabilities:  []string{"CAP"},
-		ModelFramework:     &v1beta1.ModelFrameworkSpec{Name: "transformers"},
-		ModelFormat:        v1beta1.ModelFormat{Name: "safetensors"},
-		DiffusionPipeline:  &v1beta1.DiffusionPipelineSpec{},
-	}
-	spec.ModelConfiguration.Raw = storedConfig
-
-	// Metadata carries a byte-different ModelConfiguration (and other values that
-	// must be ignored because the corresponding spec fields are already set).
-	metadata := ModelMetadata{
-		ModelType:          "changed",
-		ModelArchitecture:  "changed",
-		ModelParameterSize: "13B",
-		MaxTokens:          8192,
-		ModelCapabilities:  []string{"OTHER"},
-		ModelConfiguration: parsedConfig,
-	}
-
-	updated := parser.updateModelSpec(spec, metadata)
-
-	assert.False(t, updated, "updateModelSpec must report no change when all fields are already set")
-	assert.Equal(t, storedConfig, spec.ModelConfiguration.Raw,
-		"ModelConfiguration must be preserved, not overwritten on a byte difference")
-}
-
 func TestParseDiffusionPipelineSpec(t *testing.T) {
 	data := []byte(`{
   "_class_name": "StableDiffusionPipeline",
@@ -580,7 +531,7 @@ func TestParseModelConfigFromFiles(t *testing.T) {
 		loadModelConfig: modelconfig.LoadModelConfig,
 	}
 
-	modelDir := filepath.Join("..", "modelconfig", "testdata", "tiny-random-PhiModel")
+	modelDir := filepath.Join("testdata", "tiny-random-PhiModel")
 	files := []ModelConfigFileInput{
 		{Path: DefaultConfigFileName, Data: mustReadTestFile(t, filepath.Join(modelDir, DefaultConfigFileName))},
 		{Path: "model-1-of-2.safetensors", Data: mustReadSafetensorsHeader(t, filepath.Join(modelDir, "model-1-of-2.safetensors"))},
@@ -646,7 +597,7 @@ func TestParseModelConfigFromFiles_QuantAwareSafetensorsCount(t *testing.T) {
 	})
 
 	files := []ModelConfigFileInput{
-		{Path: DefaultConfigFileName, Data: []byte(`{"model_type":"llama","architectures":["LlamaForCausalLM"]}`)},
+		{Path: DefaultConfigFileName, Data: []byte(`{"model_type":"examplemoe_text","architectures":["ExampleMoeForCausalLM"]}`)},
 		{Path: "model.safetensors", Data: safetensorsBytes},
 		{Path: modelconfig.HFQuantConfigFileName, Data: []byte(`{
 			"quant_method": "modelopt",
@@ -682,7 +633,7 @@ func TestParseModelConfigDir_HFQuantConfigFallbackFromDisk(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(
 		filepath.Join(tempDir, DefaultConfigFileName),
-		[]byte(`{"model_type":"llama","architectures":["LlamaForCausalLM"],"max_position_embeddings":131072}`),
+		[]byte(`{"model_type":"examplemoe_text","architectures":["ExampleMoeForCausalLM"],"max_position_embeddings":32768}`),
 		0o644,
 	))
 	require.NoError(t, os.WriteFile(
@@ -714,7 +665,7 @@ func TestParseModelConfigFromFiles_HFQuantConfigFallback(t *testing.T) {
 		loadModelConfig: modelconfig.LoadModelConfig,
 	}
 
-	configJSON := []byte(`{"model_type":"llama","architectures":["LlamaForCausalLM"],"max_position_embeddings":131072}`)
+	configJSON := []byte(`{"model_type":"examplemoe_text","architectures":["ExampleMoeForCausalLM"],"max_position_embeddings":32768}`)
 	hfQuantJSON := []byte(`{"quant_method":"modelopt","quantization":{"quant_algo":"NVFP4","group_size":16,"kv_cache_quant_algo":"FP8"}}`)
 
 	files := []ModelConfigFileInput{
@@ -733,12 +684,9 @@ func TestParseModelConfigFromFiles_HFQuantConfigFallback(t *testing.T) {
 func TestParseModelConfigFromFiles_StandaloneHFQuantConfigWinsOverEmbedded(t *testing.T) {
 	// Standalone hf_quant_config.json + embedded quantization_config:
 	// standalone is the higher-priority signal (richer schema —
-	// group_size, kv_cache_quant_algo, etc.) and unifying spec.Quantization
-	// with the safetensors counting source prevents the NVFP4-count +
-	// FP8-spec asymmetry the unification fix closes.
-	//
-	// Earlier this test asserted the OPPOSITE invariant (embedded wins)
-	// — that was a documented bug, not a feature. Renamed for clarity.
+	// group_size, kv_cache_quant_algo, etc.), and unifying spec.Quantization
+	// with the safetensors counting source prevents NVFP4-count +
+	// FP8-spec asymmetry on models that ship both.
 	logger := zap.NewNop().Sugar()
 	parser := &ModelConfigParser{
 		logger:          logger,
@@ -800,8 +748,8 @@ func TestParseModelConfigFromFiles_EmbeddedQuantConfigDrivesParameterCount(t *te
 			}
 		}`)},
 		{Path: "model.safetensors", Data: safetensorsBytes},
-		// NO hf_quant_config.json — proves the embedded fallback path
-		// closes the gap from PR #75.
+		// NO hf_quant_config.json — the embedded quantization_config
+		// alone must drive the quant-aware counting path.
 	}
 
 	metadata, err := parser.ParseModelConfigFromFiles(context.Background(), files, nil, nil)
@@ -942,4 +890,53 @@ func TestBuildArtifactAttribute_Basic(t *testing.T) {
 	assert.Equal(t, sha, artifact.Sha)
 	assert.Equal(t, map[string]string{parentName: parentPath}, artifact.ParentPath)
 	assert.Equal(t, childrenPaths, artifact.ChildrenPaths)
+}
+
+// TestUpdateModelSpecPreservesModelConfiguration guards the preserve-if-unset
+// contract for the ModelConfiguration RawExtension. It is stored as a
+// preserve-unknown-fields field, so the apiserver serves it with sorted keys
+// while the parser emits struct-declaration order — byte-comparing the two would
+// never match and would rewrite the spec every reconcile. This locks in that an
+// already-set ModelConfiguration is NOT overwritten on a byte difference.
+func TestUpdateModelSpecPreservesModelConfiguration(t *testing.T) {
+	parser := &ModelConfigParser{logger: zap.NewNop().Sugar()}
+
+	// Same content, different byte order: sorted keys (apiserver) vs struct order (parser).
+	storedConfig := []byte(`{"architecture":"llama","model_type":"llama"}`)
+	parsedConfig := []byte(`{"model_type":"llama","architecture":"llama"}`)
+
+	// Fully-parsed spec: every field metadata provides is already set, so
+	// preserve-if-unset must leave everything untouched and report no change.
+	existingType := "llama"
+	existingArch := "LlamaForCausalLM"
+	existingSize := "7B"
+	existingMaxTokens := int32(4096)
+	spec := &v1beta1.BaseModelSpec{
+		ModelType:          &existingType,
+		ModelArchitecture:  &existingArch,
+		ModelParameterSize: &existingSize,
+		MaxTokens:          &existingMaxTokens,
+		ModelCapabilities:  []string{"CAP"},
+		ModelFramework:     &v1beta1.ModelFrameworkSpec{Name: "transformers"},
+		ModelFormat:        v1beta1.ModelFormat{Name: "safetensors"},
+		DiffusionPipeline:  &v1beta1.DiffusionPipelineSpec{},
+	}
+	spec.ModelConfiguration.Raw = storedConfig
+
+	// Metadata carries a byte-different ModelConfiguration (and other values that
+	// must be ignored because the corresponding spec fields are already set).
+	metadata := ModelMetadata{
+		ModelType:          "changed",
+		ModelArchitecture:  "changed",
+		ModelParameterSize: "13B",
+		MaxTokens:          8192,
+		ModelCapabilities:  []string{"OTHER"},
+		ModelConfiguration: parsedConfig,
+	}
+
+	updated := parser.updateModelSpec(spec, metadata)
+
+	assert.False(t, updated, "updateModelSpec must report no change when all fields are already set")
+	assert.Equal(t, storedConfig, spec.ModelConfiguration.Raw,
+		"ModelConfiguration must be preserved, not overwritten on a byte difference")
 }

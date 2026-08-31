@@ -45,7 +45,7 @@ func (m *DefaultRuntimeMatcher) IsCompatible(runtime *v1beta1.ServingRuntimeSpec
 			Reason:      reason,
 		}
 	}
-
+	// Check if any supported format matches
 	for _, format := range runtime.SupportedModelFormats {
 		if !m.compareSupportedModelFormats(model, format) {
 			continue
@@ -85,6 +85,7 @@ func (m *DefaultRuntimeMatcher) GetCompatibilityDetails(runtime *v1beta1.Serving
 		return report, nil
 	}
 
+	// Check supported formats (mimics original RuntimeSupportsModel logic)
 	formatSupported := false
 	var formatMismatchReasons []string
 	for _, format := range runtime.SupportedModelFormats {
@@ -161,6 +162,13 @@ func (m *DefaultRuntimeMatcher) evaluateFormatMatch(model *v1beta1.BaseModelSpec
 		match.AutoSelectEnabled = *format.AutoSelect
 	}
 
+	if modelRequiresCacheProvider(model) {
+		match.ModelCacheProviderMatch = supportedFormatSupportsModelCacheProvider(format, m.config.ModelCacheProvider)
+		if !match.ModelCacheProviderMatch {
+			match.Reasons = append(match.Reasons, modelCacheProviderMismatchReason(m.config.ModelCacheProvider, format))
+		}
+	}
+
 	pipelineMatch, pipelineReason := m.compareDiffusionPipeline(model.DiffusionPipeline, format.DiffusionPipeline)
 	match.DiffusionPipelineMatch = pipelineMatch
 	if !pipelineMatch && pipelineReason != "" {
@@ -214,7 +222,53 @@ func (m *DefaultRuntimeMatcher) evaluateFormatMatch(model *v1beta1.BaseModelSpec
 	return match
 }
 
+// compareAcceleratorClass checks if the runtime supports the required accelerator class.
+func (m *DefaultRuntimeMatcher) compareAcceleratorClass(runtime *v1beta1.ServingRuntimeSpec, isvc *v1beta1.InferenceService) bool {
+	// if inferenceService is nil, we assume no accelerator requirement
+	if isvc == nil {
+		return true
+	}
+
+	// Collect all unique accelerator requirements from the InferenceService
+	requiredClasses := make(map[string]struct{})
+	if class, ok := isvc.Annotations[constants.AcceleratorClassAnnotationKey]; ok {
+		requiredClasses[class] = struct{}{}
+	}
+	if isvc.Spec.AcceleratorSelector != nil && isvc.Spec.AcceleratorSelector.AcceleratorClass != nil {
+		requiredClasses[*isvc.Spec.AcceleratorSelector.AcceleratorClass] = struct{}{}
+	}
+	if isvc.Spec.Engine != nil && isvc.Spec.Engine.AcceleratorOverride != nil && isvc.Spec.Engine.AcceleratorOverride.AcceleratorClass != nil {
+		requiredClasses[*isvc.Spec.Engine.AcceleratorOverride.AcceleratorClass] = struct{}{}
+	}
+	if isvc.Spec.Decoder != nil && isvc.Spec.Decoder.AcceleratorOverride != nil && isvc.Spec.Decoder.AcceleratorOverride.AcceleratorClass != nil {
+		requiredClasses[*isvc.Spec.Decoder.AcceleratorOverride.AcceleratorClass] = struct{}{}
+	}
+
+	// If ISVC has no accelerator requirements, it's compatible from this perspective.
+	if len(requiredClasses) == 0 {
+		return true
+	}
+
+	// If ISVC has requirements, the runtime must support them.
+	if runtime.AcceleratorRequirements == nil || len(runtime.AcceleratorRequirements.AcceleratorClasses) == 0 {
+		return false // Runtime supports no accelerators, but ISVC requires one.
+	}
+
+	supportedClasses := runtime.AcceleratorRequirements.AcceleratorClasses
+	for reqClass := range requiredClasses {
+		if !slices.Contains(supportedClasses, reqClass) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// compareSupportedModelFormats checks if a model matches a supported format.
 func (m *DefaultRuntimeMatcher) compareSupportedModelFormats(model *v1beta1.BaseModelSpec, format v1beta1.SupportedModelFormat) bool {
+	if modelRequiresCacheProvider(model) && !supportedFormatSupportsModelCacheProvider(format, m.config.ModelCacheProvider) {
+		return false
+	}
 
 	if ok, _ := m.compareDiffusionPipeline(model.DiffusionPipeline, format.DiffusionPipeline); !ok {
 		return false
@@ -257,6 +311,10 @@ func (m *DefaultRuntimeMatcher) compareSupportedModelFormats(model *v1beta1.Base
 // or a comma-joined chain when multiple attributes diverge.
 func (m *DefaultRuntimeMatcher) getFormatMismatchReason(model *v1beta1.BaseModelSpec, format v1beta1.SupportedModelFormat) string {
 	var reasons []string
+
+	if modelRequiresCacheProvider(model) && !supportedFormatSupportsModelCacheProvider(format, m.config.ModelCacheProvider) {
+		reasons = append(reasons, modelCacheProviderMismatchReason(m.config.ModelCacheProvider, format))
+	}
 
 	if ok, reason := m.compareDiffusionPipeline(model.DiffusionPipeline, format.DiffusionPipeline); !ok {
 		if reason != "" {
@@ -602,50 +660,9 @@ func getModelFormatLabel(model *v1beta1.BaseModelSpec) string {
 	return label
 }
 
-// compareAcceleratorClass checks if the runtime supports the required accelerator class.
-func (m *DefaultRuntimeMatcher) compareAcceleratorClass(runtime *v1beta1.ServingRuntimeSpec, isvc *v1beta1.InferenceService) bool {
-	// if inferenceService is nil, we assume no accelerator requirement
-	if isvc == nil {
-		return true
-	}
-
-	// Collect all unique accelerator requirements from the InferenceService
-	requiredClasses := make(map[string]struct{})
-	if class, ok := isvc.Annotations["ome.io/accelerator-class"]; ok {
-		requiredClasses[class] = struct{}{}
-	}
-	if isvc.Spec.AcceleratorSelector != nil && isvc.Spec.AcceleratorSelector.AcceleratorClass != nil {
-		requiredClasses[*isvc.Spec.AcceleratorSelector.AcceleratorClass] = struct{}{}
-	}
-	if isvc.Spec.Engine != nil && isvc.Spec.Engine.AcceleratorOverride != nil && isvc.Spec.Engine.AcceleratorOverride.AcceleratorClass != nil {
-		requiredClasses[*isvc.Spec.Engine.AcceleratorOverride.AcceleratorClass] = struct{}{}
-	}
-	if isvc.Spec.Decoder != nil && isvc.Spec.Decoder.AcceleratorOverride != nil && isvc.Spec.Decoder.AcceleratorOverride.AcceleratorClass != nil {
-		requiredClasses[*isvc.Spec.Decoder.AcceleratorOverride.AcceleratorClass] = struct{}{}
-	}
-
-	// If ISVC has no accelerator requirements, it's compatible from this perspective.
-	if len(requiredClasses) == 0 {
-		return true
-	}
-
-	// If ISVC has requirements, the runtime must support them.
-	if runtime.AcceleratorRequirements == nil || len(runtime.AcceleratorRequirements.AcceleratorClasses) == 0 {
-		return false // Runtime supports no accelerators, but ISVC requires one.
-	}
-
-	supportedClasses := runtime.AcceleratorRequirements.AcceleratorClasses
-	for reqClass := range requiredClasses {
-		if !slices.Contains(supportedClasses, reqClass) {
-			return false
-		}
-	}
-
-	return true
-}
-
 // compareDeploymentMode rejects a runtime only when both the InferenceService
-// component and the matching runtime component explicitly declare different deployment modes.
+// component and the matching runtime component explicitly declare different
+// deployment modes.
 func (m *DefaultRuntimeMatcher) compareDeploymentMode(runtime *v1beta1.ServingRuntimeSpec, isvc *v1beta1.InferenceService) (bool, string) {
 	isvcEngineDeploymentMode, hasIsvcEngineDeploymentMode := inferenceServiceEngineDeploymentMode(isvc)
 	runtimeEngineDeploymentMode, hasRuntimeEngineDeploymentMode := getRuntimeComponentDeploymentMode(runtime, v1beta1.EngineComponent)
@@ -689,20 +706,35 @@ func compareComponentDeploymentMode(
 		componentName, runtimeDeploymentMode, componentName, isvcDeploymentMode)
 }
 
+// inferenceServiceEngineDeploymentMode returns the deployment mode the
+// InferenceService explicitly declares for its engine: the per-component
+// ome.io/deploymentMode annotation when present, else the typed
+// spec.deploymentMode (which applies to every component). The engine always
+// renders, so the typed field counts even when spec.engine is absent.
 func inferenceServiceEngineDeploymentMode(isvc *v1beta1.InferenceService) (constants.DeploymentModeType, bool) {
-	if isvc == nil || isvc.Spec.Engine == nil {
+	if isvc == nil {
 		return "", false
 	}
-
-	return deploymentModeFromAnnotations(isvc.Spec.Engine.Annotations)
+	if isvc.Spec.Engine != nil {
+		if mode, found := deploymentModeFromAnnotations(isvc.Spec.Engine.Annotations); found {
+			return mode, true
+		}
+	}
+	return deploymentModeFromSpecField(isvc.Spec.DeploymentMode)
 }
 
+// inferenceServiceDecoderDeploymentMode mirrors the engine variant for the
+// decoder. It reports nothing when the InferenceService declares no decoder —
+// a runtime's decoderConfig mode must not filter services that will never
+// deploy one.
 func inferenceServiceDecoderDeploymentMode(isvc *v1beta1.InferenceService) (constants.DeploymentModeType, bool) {
 	if isvc == nil || isvc.Spec.Decoder == nil {
 		return "", false
 	}
-
-	return deploymentModeFromAnnotations(isvc.Spec.Decoder.Annotations)
+	if mode, found := deploymentModeFromAnnotations(isvc.Spec.Decoder.Annotations); found {
+		return mode, true
+	}
+	return deploymentModeFromSpecField(isvc.Spec.DeploymentMode)
 }
 
 func getRuntimeComponentDeploymentMode(runtime *v1beta1.ServingRuntimeSpec, componentType v1beta1.ComponentType) (constants.DeploymentModeType, bool) {
@@ -739,4 +771,9 @@ func deploymentModeFromAnnotations(annotations map[string]string) (constants.Dep
 	return "", false
 }
 
-// compareSupportedModelFormats checks if a model matches a supported format.
+func deploymentModeFromSpecField(mode *constants.DeploymentModeType) (constants.DeploymentModeType, bool) {
+	if mode != nil && mode.IsValid() {
+		return *mode, true
+	}
+	return "", false
+}

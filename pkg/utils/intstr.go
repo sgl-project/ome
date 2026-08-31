@@ -51,8 +51,8 @@ func ScaledCountFromIntOrString(v *intstr.IntOrString, total int32, roundUp bool
 	if err != nil || n < 0 {
 		return 0
 	}
-	// Compare in the wider type: n is an int, so narrowing first would let a
-	// value above math.MaxInt32 wrap negative and slip past the clamp.
+	// Compare at full width: narrowing first lets a value above MaxInt32
+	// wrap and slip past the clamp.
 	if total >= 0 && n > int(total) {
 		return total
 	}

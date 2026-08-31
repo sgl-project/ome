@@ -60,7 +60,7 @@ func FindOrCreate(
 			},
 		},
 		Data:     runtime.RawExtension{Raw: specBytes},
-		Revision: 1, // Unused: OME identifies revisions by content hash (name + revision-hashlabel) and orders GC by CreationTimestamp. Kept as a valid non-zero value the ControllerRevision API requires.
+		Revision: 1, // ordinal is unused: revisions are identified by content-hash label, not order.
 	}
 	if err := c.Create(ctx, rev); err != nil {
 		// A concurrent writer raced us; resolve to the existing name.

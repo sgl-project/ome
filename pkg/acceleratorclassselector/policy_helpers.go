@@ -138,7 +138,7 @@ func meetsRequirements(
 		}
 	}
 
-	// NOTE: MinComputePerformanceTFLOPS is now handled as a scoring factor in calculateComputeCapabilityScore(), not as a hard filter
+	// MinComputePerformanceTFLOPS is a scoring factor (calculateComputePerformanceTFLOPSScore), not a hard filter: a low value lowers a candidate's score but does not disqualify it.
 
 	// Check RequiredFeatures (ALL must be present - hard requirement)
 	if len(constraints.RequiredFeatures) > 0 {
@@ -174,7 +174,7 @@ func meetsRequirements(
 
 // calculateBestFitScore computes multi-criteria score for best fit
 // Note: RequiredFeatures are NOT scored - they are hard filters applied before scoring
-// Note: Precision matching is now integrated into compute scoring (via iterative precision fallback)
+// Note: Precision matching is folded into compute scoring via iterative precision fallback
 func calculateBestFitScore(
 	candidate v1beta1.AcceleratorClass,
 	constraints *v1beta1.AcceleratorConstraints,
@@ -249,7 +249,6 @@ func scoreFromTFLOPS(tflops int64, requiredTFLOPS int64) float64 {
 }
 
 // calculateComputePerformanceTFLOPSScore scores compute performance with iterative precision fallback
-// NOTE: This now uses MinComputePerformanceTFLOPS as a scoring factor (not a hard filter)
 // Iterative precision logic:
 // - If no PreferredPrecisions: use max TFLOPS across all precisions
 // - If PreferredPrecisions exist: iterate through them

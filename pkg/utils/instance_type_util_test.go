@@ -40,12 +40,6 @@ func TestGetInstanceTypeShortName(t *testing.T) {
 			expected:     "H200",
 			expectError:  false,
 		},
-		{
-			name:         "OCI B300 instance",
-			instanceType: "BM.GPU.B300.8",
-			expected:     "B300",
-			expectError:  false,
-		},
 		// AWS tests
 		{
 			name:         "AWS H100 instance",

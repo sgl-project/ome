@@ -281,7 +281,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 
 			// Get the runtime spec using selector
-			rtSpec, _, err := r.RuntimeSelector.GetRuntime(ctx, rtName, isvc.Namespace)
+			rtSpec, _, err := r.RuntimeSelector.GetRuntime(ctx, rtName, isvc.Namespace, runtimeselector.RefKind(isvc.Spec.Runtime))
 			if err != nil {
 				if runtimeselector.IsRuntimeNotFoundError(err) {
 					// A named-but-missing runtime is a permanent user-config error,

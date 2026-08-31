@@ -33,15 +33,16 @@ type AcceleratorSelection struct {
 
 // AcceleratorFetcher abstracts the fetching of accelerator class resources.
 type AcceleratorFetcher interface {
-	// FetchAcceleratorClasses returns both namespace and cluster scoped accelerator classes.
+	// FetchAcceleratorClasses returns all cluster-scoped accelerator classes.
 	FetchAcceleratorClasses(ctx context.Context) (*AcceleratorCollection, error)
 
-	// GetAcceleratorClass fetches a specific accelerator class by name.
-	// It first checks namespace-scoped accelerator classes, then cluster-scoped ones.
+	// GetAcceleratorClass fetches an accelerator class by name. A missing
+	// class is reported as found=false with a nil error; a non-nil error
+	// means the read itself failed.
 	GetAcceleratorClass(ctx context.Context, name string) (*v1beta1.AcceleratorClass, bool, error)
 }
 
-// AcceleratorCollection holds both namespace and cluster scoped accelerator classes.
+// AcceleratorCollection holds the cluster-scoped accelerator classes.
 type AcceleratorCollection struct {
 
 	// ClusterAcceleratorClasses contains cluster-scoped AcceleratorClasses

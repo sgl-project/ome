@@ -7,6 +7,7 @@ The `runtimeselector` package provides a comprehensive, modular solution for run
 The package provides:
 
 - **Automatic runtime selection** based on model requirements
+- **Accelerator-aware runtime selection** with GPU compatibility checking
 - **Runtime validation** for user-specified runtimes
 - **Detailed compatibility analysis** with clear error reporting
 - **Efficient caching** using controller-runtime's cache mechanism
@@ -100,6 +101,7 @@ type RuntimeScorer interface {
 
 2. **Filter Compatible Runtimes**
    - Skip disabled runtimes
+   - Check accelerator class compatibility (if required)
    - Check model format compatibility
    - Verify model size is within supported range
    - Ensure auto-select is enabled
@@ -122,21 +124,29 @@ type RuntimeScorer interface {
 
 The matcher evaluates compatibility across multiple dimensions:
 
-1. **Model Format and Framework**
+1. **Accelerator Class Requirements**
+   - Checks if runtime's required accelerator classes match InferenceService requirements
+   - Validates accelerator class from multiple sources:
+     - InferenceService annotations (`ome.io/accelerator-class`)
+     - InferenceService.Spec.AcceleratorSelector.AcceleratorClass
+     - Component-specific AcceleratorOverride (Engine/Decoder)
+   - If runtime requires accelerator but ISVC doesn't specify one, compatibility fails
+
+2. **Model Format and Framework**
    - Name must match exactly
    - Version comparison using semantic versioning
    - Special handling for unofficial versions (forces equality)
 
-2. **Diffusion Pipelines**
+3. **Diffusion Pipelines**
    - Pipeline class and components must match when specified (e.g., scheduler, transformer, VAE)
 
-3. **Model Architecture**
+4. **Model Architecture**
    - Must match if both specify architecture
 
-4. **Quantization**
+5. **Quantization**
    - Must match if both specify quantization
 
-5. **Model Size**
+6. **Model Size**
    - Must be within runtime's min/max range
 
 ### Scoring Formula
@@ -205,7 +215,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
         }
         rt = rtSpec
     } else {
-        // Auto-select runtime
+        // Auto-select runtime (considers accelerator requirements)
         selection, err := r.RuntimeSelector.SelectRuntime(ctx, baseModel, isvc)
         if err != nil {
             return reconcile.Result{}, fmt.Errorf("runtime selection failed: %w", err)
@@ -238,13 +248,13 @@ func (v *InferenceServiceValidator) ValidateCreate(ctx context.Context, obj runt
     // Fetch the BaseModel
     // ... code to get baseModel ...
 
-    // Check if runtime can be selected/validated
+    // Check if runtime can be selected/validated (with accelerator awareness)
     if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" {
         if err := v.RuntimeSelector.ValidateRuntime(ctx, isvc.Spec.Runtime.Name, baseModel, isvc); err != nil {
             return nil, fmt.Errorf("invalid runtime selection: %w", err)
         }
     } else {
-        // Verify auto-selection is possible
+        // Verify auto-selection is possible (considers accelerator requirements)
         if _, err := v.RuntimeSelector.SelectRuntime(ctx, baseModel, isvc); err != nil {
             return nil, fmt.Errorf("no compatible runtime available: %w", err)
         }
@@ -335,17 +345,123 @@ spec:
 
 The final score is calculated as: `(modelFormat.weight × priority) + (modelFramework.weight × priority)`
 
+## Accelerator-Aware Runtime Selection
+
+The runtime selector integrates with the accelerator class system to ensure runtimes are compatible with the requested GPU types.
+
+### How It Works
+
+1. **Runtime Requirements**: ServingRuntimes can specify accelerator requirements:
+   ```yaml
+   apiVersion: ome.io/v1beta1
+   kind: ServingRuntime
+   metadata:
+     name: sglang-gpu-optimized
+   spec:
+     supportedModelFormats:
+       - name: safetensors
+         autoSelect: true
+     acceleratorRequirements:
+       acceleratorClasses:
+         - nvidia-h100-80gb
+         - nvidia-a100-80gb
+   ```
+
+2. **InferenceService Selection**: InferenceServices can specify accelerator preferences:
+   ```yaml
+   apiVersion: ome.io/v1beta1
+   kind: InferenceService
+   metadata:
+     name: llama-deployment
+   spec:
+     model:
+       name: llama-7b
+     runtime:
+       name: sglang-gpu-optimized
+     acceleratorSelector:
+       acceleratorClass: nvidia-h100-80gb
+     # Or component-specific
+     engine:
+       acceleratorOverride:
+         acceleratorClass: nvidia-a100-80gb
+   ```
+
+3. **Compatibility Checking**: The matcher validates that:
+   - If the InferenceService requires accelerator classes, the runtime's supported list must contain all of them
+   - An InferenceService with no accelerator requirement is compatible with any runtime, including ones that declare accelerator requirements
+   - Multiple sources are checked in priority order:
+     - Component-specific `AcceleratorOverride.AcceleratorClass` (highest)
+     - InferenceService-level `AcceleratorSelector.AcceleratorClass`
+     - Annotation `ome.io/accelerator-class` (lowest)
+
+### Integration with AcceleratorClassSelector
+
+The runtime selector works alongside the `acceleratorclassselector` package:
+
+```go
+// 1. Select compatible runtime
+runtime, err := runtimeSelector.SelectRuntime(ctx, model, isvc)
+if err != nil {
+    return err
+}
+
+// 2. Select accelerator class for each component
+engineAcc, _, err := acceleratorSelector.GetAcceleratorClass(
+    ctx, isvc, runtime.Spec, v1beta1.EngineComponent)
+if err != nil {
+    return err
+}
+
+// 3. Get the best supported format
+supportedFormat := runtimeSelector.GetSupportedModelFormat(ctx, runtime.Spec, model)
+
+// 4. Use runtime, accelerator, and format to configure deployment
+```
+
+### Example: Multi-GPU Runtime
+
+```yaml
+apiVersion: ome.io/v1beta1
+kind: ServingRuntime
+metadata:
+  name: sglang-multi-gpu
+spec:
+  supportedModelFormats:
+    - modelFormat:
+        name: safetensors
+      autoSelect: true
+      priority: 1
+
+  # Runtime supports multiple GPU types
+  acceleratorRequirements:
+    acceleratorClasses:
+      - nvidia-h100-80gb    # Preferred for H100 features
+      - nvidia-a100-80gb    # Fallback to A100
+      - nvidia-a100-40gb    # Budget option
+```
+
+When this runtime is selected, the compatibility checker ensures the InferenceService's accelerator requirements can be satisfied by one of the supported accelerator classes.
+
 ## Future Enhancements
 
-1. **Runtime Affinity/Anti-affinity**: Support for preferred/excluded runtime lists at the InferenceService level
+1. **Enhanced Accelerator Matching**: Advanced GPU capability-based matching
+   - Automatic runtime scoring based on GPU performance characteristics
+   - Cost-aware runtime selection considering GPU pricing
+   - Dynamic runtime selection based on real-time GPU availability
 
-2. **Enhanced Version Matching**: Support for more complex version constraints and ranges (e.g., `>=2.0.0,<3.0.0`)
+2. **Runtime Affinity/Anti-affinity**: Support for preferred/excluded runtime lists at the InferenceService level
 
-3. **Runtime Capabilities API**: Expose runtime capabilities for advanced selection scenarios
+3. **Enhanced Version Matching**: Support for more complex version constraints and ranges (e.g., `>=2.0.0,<3.0.0`)
+
+4. **Runtime Capabilities API**: Expose runtime capabilities for advanced selection scenarios
    - Query supported features (FP8, speculative decoding, etc.)
    - Feature-based runtime filtering
 
 5. **Multi-Runtime Deployments**: Support for selecting different runtimes for Engine vs Decoder components
+
+## Related Components
+
+- **[acceleratorclassselector](../acceleratorclassselector/README.md)**: Selects accelerator classes (GPUs) for inference workloads
 
 ## Troubleshooting
 
@@ -374,6 +490,36 @@ If runtime selection fails with `NoRuntimeFoundError`:
    - Model format not supported
    - Model size outside supported range
    - AutoSelect is disabled
+   - Accelerator class mismatch
+
+### Accelerator Compatibility Issues
+
+If runtime validation fails due to accelerator requirements:
+
+1. **Verify accelerator class exists**:
+   ```bash
+   kubectl get acceleratorclasses
+   ```
+
+2. **Check runtime's accelerator requirements**:
+   ```bash
+   kubectl get servingruntime <name> -o jsonpath='{.spec.acceleratorRequirements}'
+   ```
+
+3. **Ensure InferenceService specifies compatible accelerator**:
+   ```yaml
+   spec:
+     acceleratorSelector:
+       acceleratorClass: nvidia-h100-80gb  # Must be in runtime's supported list
+   ```
+
+4. **Review component-specific overrides**: Check if Engine or Decoder has conflicting accelerator settings
+   ```yaml
+   spec:
+     engine:
+       acceleratorOverride:
+         acceleratorClass: nvidia-a100-80gb  # Must match runtime requirements
+   ```
 
 ### Runtime Validation Fails
 

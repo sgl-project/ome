@@ -240,7 +240,7 @@ func TestDefaultAcceleratorFetcher_GetAcceleratorClass(t *testing.T) {
 			},
 			expectFound:         false,
 			expectClusterScoped: false,
-			expectError:         true,
+			expectError:         false,
 			validateSpec: func(t *testing.T, ac *v1beta1.AcceleratorClass) {
 				g.Expect(ac).To(gomega.BeNil())
 			},
@@ -251,7 +251,7 @@ func TestDefaultAcceleratorFetcher_GetAcceleratorClass(t *testing.T) {
 			clusterAcceleratorClasses: []v1beta1.AcceleratorClass{},
 			expectFound:               false,
 			expectClusterScoped:       false,
-			expectError:               true,
+			expectError:               false,
 			validateSpec: func(t *testing.T, ac *v1beta1.AcceleratorClass) {
 				g.Expect(ac).To(gomega.BeNil())
 			},
@@ -331,9 +331,6 @@ func TestDefaultAcceleratorFetcher_GetAcceleratorClass(t *testing.T) {
 
 			if tt.expectError {
 				g.Expect(err).To(gomega.HaveOccurred())
-				// Verify error is AcceleratorNotFoundError
-				var notFoundErr *AcceleratorNotFoundError
-				g.Expect(err).To(gomega.BeAssignableToTypeOf(notFoundErr))
 			} else {
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 			}
@@ -353,7 +350,7 @@ func TestDefaultAcceleratorFetcher_GetAcceleratorClass(t *testing.T) {
 	}
 }
 
-func TestDefaultAcceleratorFetcher_GetAcceleratorClass_ErrorType(t *testing.T) {
+func TestDefaultAcceleratorFetcher_GetAcceleratorClass_NotFoundContract(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
 	// Create scheme
@@ -368,22 +365,13 @@ func TestDefaultAcceleratorFetcher_GetAcceleratorClass_ErrorType(t *testing.T) {
 	// Create fetcher
 	fetcher := NewDefaultAcceleratorFetcher(c)
 
-	// Try to get non-existent accelerator class
-	spec, isClusterScoped, err := fetcher.GetAcceleratorClass(context.TODO(), "non-existent")
+	// A missing class is found=false with a nil error — not-found is a valid
+	// outcome (policy candidates skip it), distinct from a failed read.
+	spec, found, err := fetcher.GetAcceleratorClass(context.TODO(), "non-existent")
 
-	// Verify error
-	g.Expect(err).To(gomega.HaveOccurred())
+	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(spec).To(gomega.BeNil())
-	g.Expect(isClusterScoped).To(gomega.BeFalse())
-
-	// Verify error type and message
-	var notFoundErr *AcceleratorNotFoundError
-	g.Expect(err).To(gomega.BeAssignableToTypeOf(notFoundErr))
-
-	acceleratorErr, ok := err.(*AcceleratorNotFoundError)
-	g.Expect(ok).To(gomega.BeTrue())
-	g.Expect(acceleratorErr.AcceleratorClassName).To(gomega.Equal("non-existent"))
-	g.Expect(acceleratorErr.Error()).To(gomega.ContainSubstring("accelerator class non-existent not found at cluster scope"))
+	g.Expect(found).To(gomega.BeFalse())
 }
 
 func TestAcceleratorCollection(t *testing.T) {

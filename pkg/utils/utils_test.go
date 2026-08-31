@@ -2,8 +2,10 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,6 +15,7 @@ import (
 	"github.com/onsi/gomega/types"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/ome/pkg/constants"
 )
@@ -569,7 +572,6 @@ func TestFilterPodOnlyAnnotations(t *testing.T) {
 		},
 		"FilterInjectionAnnotations": {
 			annotations: map[string]string{
-				constants.ModelInitInjectionKey:        "true",
 				constants.FineTunedAdapterInjectionKey: "weight-name",
 				constants.ServingSidecarInjectionKey:   "true",
 				"ome.io/base-model-name":               "test-model",
@@ -596,12 +598,12 @@ func TestFilterPodOnlyAnnotations(t *testing.T) {
 		},
 		"MixedAnnotations": {
 			annotations: map[string]string{
-				"k8s.grafana.com/scrape":        "true",
-				"networking.gke.io/interfaces":  "[...]",
-				constants.ModelInitInjectionKey: "true",
-				"ome.io/base-model-name":        "test-model",
-				"ome.io/service-type":           "ClusterIP",
-				"meta.helm.sh/release-name":     "test",
+				"k8s.grafana.com/scrape":               "true",
+				"networking.gke.io/interfaces":         "[...]",
+				constants.FineTunedAdapterInjectionKey: "weight-name",
+				"ome.io/base-model-name":               "test-model",
+				"ome.io/service-type":                  "ClusterIP",
+				"meta.helm.sh/release-name":            "test",
 			},
 			expected: map[string]string{
 				"ome.io/base-model-name":    "test-model",
@@ -1174,5 +1176,66 @@ func TestRemoveSymbolicLink(t *testing.T) {
 			_, statErr := os.Lstat(path)
 			assert.True(t, os.IsNotExist(statErr), "path should not exist after removal")
 		})
+	}
+}
+
+// TestGvResourcesCacheConcurrentAccess exercises the gvResourcesCache through its
+// exported accessors from many goroutines at once. Before the cache was guarded by
+// gvResourcesCacheMu this reliably produced a fatal "concurrent map writes" /
+// "concurrent map read and map write" crash; run with -race to also catch the
+// data race directly. The reads use the cache-hit branch of
+// GetAvailableResourcesForApi (config is never dereferenced on a hit) so the test
+// needs no live cluster.
+func TestGvResourcesCacheConcurrentAccess(t *testing.T) {
+	const (
+		seededKeys = 8
+		goroutines = 64
+		opsPerG    = 200
+	)
+
+	// Pre-seed a set of keys so concurrent readers stay on the cache-hit path.
+	seeded := make([]string, seededKeys)
+	for i := 0; i < seededKeys; i++ {
+		gv := fmt.Sprintf("seeded.ome.io/v%d", i)
+		seeded[i] = gv
+		SetAvailableResourcesForApi(gv, &metav1.APIResourceList{GroupVersion: gv})
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for g := 0; g < goroutines; g++ {
+		go func(id int) {
+			defer wg.Done()
+			for op := 0; op < opsPerG; op++ {
+				if id%2 == 0 {
+					// Writer: hit both fresh per-goroutine keys and the shared
+					// seeded keys to force overlapping writes.
+					gv := fmt.Sprintf("writer.ome.io/g%d-op%d", id, op)
+					SetAvailableResourcesForApi(gv, &metav1.APIResourceList{GroupVersion: gv})
+					SetAvailableResourcesForApi(seeded[op%seededKeys], &metav1.APIResourceList{GroupVersion: seeded[op%seededKeys]})
+				} else {
+					// Reader: cache-hit lookups (nil config is safe on a hit).
+					got, err := GetAvailableResourcesForApi(nil, seeded[op%seededKeys])
+					if err != nil {
+						t.Errorf("unexpected error reading seeded key: %v", err)
+						return
+					}
+					if got == nil || got.GroupVersion != seeded[op%seededKeys] {
+						t.Errorf("cache returned unexpected value for %s: %+v", seeded[op%seededKeys], got)
+						return
+					}
+				}
+			}
+		}(g)
+	}
+	wg.Wait()
+
+	// Sanity: every seeded key is still retrievable after the storm.
+	for _, gv := range seeded {
+		got, err := GetAvailableResourcesForApi(nil, gv)
+		assert.NoError(t, err)
+		if assert.NotNil(t, got) {
+			assert.Equal(t, gv, got.GroupVersion)
+		}
 	}
 }

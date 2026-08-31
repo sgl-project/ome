@@ -25,7 +25,7 @@ type stubRuntimeSelector struct {
 	err  error
 }
 
-func (s *stubRuntimeSelector) GetRuntime(_ context.Context, _, _ string) (*v1beta1.ServingRuntimeSpec, bool, error) {
+func (s *stubRuntimeSelector) GetRuntime(_ context.Context, _, _, _ string) (*v1beta1.ServingRuntimeSpec, bool, error) {
 	return s.spec, false, s.err
 }
 

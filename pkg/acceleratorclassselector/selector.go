@@ -47,12 +47,12 @@ func (s *defaultSelector) FetchAcceleratorClass(ctx context.Context, name string
 //     e. Otherwise, won't provide AcceleratorClass
 func (s *defaultSelector) GetAcceleratorClass(ctx context.Context, isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec, component v1beta1.ComponentType) (*v1beta1.AcceleratorClass, string, error) {
 	logger := log.FromContext(ctx)
-	logger.Info("Getting accelerator classes for inference service with runtime", "isvc", isvc.Name, "component", component, "runtime", runtime)
 	acName := ""
 	// 1. If runtime doesn't contain AcceleratorRequirements, return nil
 	if runtime == nil || runtime.AcceleratorRequirements == nil || runtime.AcceleratorRequirements.AcceleratorClasses == nil {
 		return nil, "", nil
 	}
+	logger.V(1).Info("Selecting accelerator class", "isvc", isvc.Name, "component", component)
 
 	if len(runtime.AcceleratorRequirements.AcceleratorClasses) > 0 {
 		// get accelerator class by name if specified.
@@ -62,13 +62,16 @@ func (s *defaultSelector) GetAcceleratorClass(ctx context.Context, isvc *v1beta1
 		// if accelerator class didn't have name specified, try to get accelerator class by policy
 		// if policy is not specified, will skip getting acceleratorClass by policy
 		if acName == "" {
-			logger.Info("No acceleratorClass name found for component", "component", component, "inferenceService", isvc.Name)
 			acceleratorPolicy := s.getAcceleratorPolicy(isvc, component)
 			if acceleratorPolicy == "" {
-				logger.Info("No acceleratorClass policy found for component", "component", component, "inferenceService", isvc.Name)
+				logger.V(1).Info("No acceleratorClass name or policy set for component", "component", component, "inferenceService", isvc.Name)
 				return nil, "", nil
 			}
-			if acceleratorClass := s.getAcceleratorClassByPolicy(ctx, isvc, runtime, acceleratorPolicy); acceleratorClass != nil {
+			acceleratorClass, err := s.getAcceleratorClassByPolicy(ctx, isvc, runtime, acceleratorPolicy)
+			if err != nil {
+				return nil, "", err
+			}
+			if acceleratorClass != nil {
 				acName = *acceleratorClass
 			}
 		}
@@ -76,10 +79,13 @@ func (s *defaultSelector) GetAcceleratorClass(ctx context.Context, isvc *v1beta1
 
 	// fetch and return the selected accelerator class
 	if acName != "" {
-		ac, _, err := s.fetcher.GetAcceleratorClass(ctx, acName)
+		ac, found, err := s.fetcher.GetAcceleratorClass(ctx, acName)
 		if err != nil {
 			logger.Error(err, "Failed to fetch accelerator class", "name", acName)
 			return nil, acName, err
+		}
+		if !found {
+			return nil, acName, &AcceleratorNotFoundError{AcceleratorClassName: acName}
 		}
 		return ac, acName, nil
 	}
@@ -104,24 +110,25 @@ func (s *defaultSelector) getAcceleratorClassByName(isvc *v1beta1.InferenceServi
 // getAcceleratorClassByPolicy selects an accelerator class based on the specified policy
 // It fetches candidates from runtime.AcceleratorClasses, filters by InferenceService constraints,
 // and applies the policy-specific selection logic
-func (s *defaultSelector) getAcceleratorClassByPolicy(ctx context.Context, isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec, acceleratorPolicy v1beta1.AcceleratorSelectionPolicy) *string {
+func (s *defaultSelector) getAcceleratorClassByPolicy(ctx context.Context, isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec, acceleratorPolicy v1beta1.AcceleratorSelectionPolicy) (*string, error) {
 	logger := log.FromContext(ctx)
 
 	// Return nil if policy is empty
 	if acceleratorPolicy == "" {
-		return nil
+		return nil, nil
 	}
 
-	// Fetch candidates from runtime.AcceleratorClasses (candidate pool)
+	// Fetch candidates from runtime.AcceleratorClasses (candidate pool).
+	// A read failure must fail the selection (and the reconcile) rather than
+	// silently render the component without its accelerator configuration.
 	candidates, err := s.getCandidateAccelerators(ctx, runtime)
 	if err != nil {
-		logger.Error(err, "Failed to fetch candidate accelerators")
-		return nil
+		return nil, err
 	}
 
 	if len(candidates) == 0 {
-		logger.Info("No accelerator candidates available")
-		return nil
+		logger.V(1).Info("No accelerator candidates available")
+		return nil, nil
 	}
 
 	// Get constraints from InferenceService
@@ -134,19 +141,19 @@ func (s *defaultSelector) getAcceleratorClassByPolicy(ctx context.Context, isvc 
 	validCandidates := filterCandidates(ctx, candidates, constraints)
 
 	if len(validCandidates) == 0 {
-		logger.Info("No candidates passed filtering", "policy", acceleratorPolicy)
-		return nil
+		logger.V(1).Info("No candidates passed filtering", "policy", acceleratorPolicy)
+		return nil, nil
 	}
 
-	logger.Info("Candidates after filtering", "count", len(validCandidates), "policy", acceleratorPolicy)
+	logger.V(1).Info("Candidates after filtering", "count", len(validCandidates), "policy", acceleratorPolicy)
 
 	// Select by policy
 	switch acceleratorPolicy {
 	case v1beta1.BestFitPolicy:
-		return s.selectBestFit(ctx, validCandidates, constraints)
+		return s.selectBestFit(ctx, validCandidates, constraints), nil
 
 	case v1beta1.CheapestPolicy:
-		return s.selectCheapest(ctx, validCandidates)
+		return s.selectCheapest(ctx, validCandidates), nil
 
 	case v1beta1.MostCapablePolicy:
 		// Get preferred precisions for capability scoring
@@ -154,18 +161,18 @@ func (s *defaultSelector) getAcceleratorClassByPolicy(ctx context.Context, isvc 
 		if constraints != nil && len(constraints.PreferredPrecisions) > 0 {
 			preferredPrecisions = constraints.PreferredPrecisions
 		}
-		return s.selectMostCapable(ctx, validCandidates, preferredPrecisions)
+		return s.selectMostCapable(ctx, validCandidates, preferredPrecisions), nil
 
 	case v1beta1.FirstAvailablePolicy:
 		// Return the first valid candidate. `validCandidates` preserves the order from the runtime list.
 		if len(validCandidates) > 0 {
 			selected := validCandidates[0].Name
-			logger.Info("FirstAvailable selected", "name", selected)
-			return &selected
+			logger.V(1).Info("FirstAvailable selected", "name", selected)
+			return &selected, nil
 		}
 	}
 
-	return nil
+	return nil, nil
 }
 
 // getComponentAcceleratorOverride checks if the specified component has an AcceleratorOverride with AcceleratorClass
@@ -256,7 +263,7 @@ func (s *defaultSelector) getCandidateAccelerators(ctx context.Context, runtime 
 		return nil, err
 	}
 
-	logger.Info("Fetched candidate accelerators", "count", len(candidates))
+	logger.V(1).Info("Fetched candidate accelerators", "count", len(candidates))
 	return candidates, nil
 }
 
@@ -265,13 +272,13 @@ func (s *defaultSelector) selectBestFit(ctx context.Context, validCandidates []v
 	logger := log.FromContext(ctx)
 
 	if len(validCandidates) == 0 {
-		logger.Info("No valid candidates for BestFit selection")
+		logger.V(1).Info("No valid candidates for BestFit selection")
 		return nil
 	}
 
 	// If only one candidate, return it immediately
 	if len(validCandidates) == 1 {
-		logger.Info("Single candidate after filtering", "name", validCandidates[0].Name)
+		logger.V(1).Info("Single candidate after filtering", "name", validCandidates[0].Name)
 		return &validCandidates[0].Name
 	}
 
@@ -293,7 +300,7 @@ func (s *defaultSelector) selectBestFit(ctx context.Context, validCandidates []v
 
 	// Return highest scoring candidate
 	selected := scored[0].Name
-	logger.Info("BestFit selected", "name", selected, "score", scored[0].Score)
+	logger.V(1).Info("BestFit selected", "name", selected, "score", scored[0].Score)
 	return &selected
 }
 
@@ -302,13 +309,13 @@ func (s *defaultSelector) selectCheapest(ctx context.Context, validCandidates []
 	logger := log.FromContext(ctx)
 
 	if len(validCandidates) == 0 {
-		logger.Info("No valid candidates for Cheapest selection")
+		logger.V(1).Info("No valid candidates for Cheapest selection")
 		return nil
 	}
 
 	// If only one candidate, return it immediately
 	if len(validCandidates) == 1 {
-		logger.Info("Single candidate after filtering", "name", validCandidates[0].Name)
+		logger.V(1).Info("Single candidate after filtering", "name", validCandidates[0].Name)
 		return &validCandidates[0].Name
 	}
 
@@ -333,7 +340,7 @@ func (s *defaultSelector) selectCheapest(ctx context.Context, validCandidates []
 	// Select cheapest from the highest-priority non-empty group
 	if len(hourlyCandidates) > 0 {
 		cheapest := findCheapestByCost(hourlyCandidates, getHourlyCost)
-		logger.Info("Cheapest selected", "name", cheapest.Name, "costType", "hourly")
+		logger.V(1).Info("Cheapest selected", "name", cheapest.Name, "costType", "hourly")
 		return &cheapest.Name
 	}
 
@@ -341,7 +348,7 @@ func (s *defaultSelector) selectCheapest(ctx context.Context, validCandidates []
 		cheapest := findCheapestByCost(tokenCandidates, func(c v1beta1.AcceleratorClass) *resource.Quantity {
 			return c.Spec.Cost.PerMillionTokens
 		})
-		logger.Info("Cheapest selected", "name", cheapest.Name, "costType", "per-million-tokens")
+		logger.V(1).Info("Cheapest selected", "name", cheapest.Name, "costType", "per-million-tokens")
 		return &cheapest.Name
 	}
 
@@ -355,7 +362,7 @@ func (s *defaultSelector) selectCheapest(ctx context.Context, validCandidates []
 				cheapestTier = tierVal
 			}
 		}
-		logger.Info("Cheapest selected", "name", cheapest.Name, "costType", "tier")
+		logger.V(1).Info("Cheapest selected", "name", cheapest.Name, "costType", "tier")
 		return &cheapest.Name
 	}
 
@@ -368,13 +375,13 @@ func (s *defaultSelector) selectMostCapable(ctx context.Context, validCandidates
 	logger := log.FromContext(ctx)
 
 	if len(validCandidates) == 0 {
-		logger.Info("No valid candidates for MostCapable selection")
+		logger.V(1).Info("No valid candidates for MostCapable selection")
 		return nil
 	}
 
 	// If only one candidate, return it immediately
 	if len(validCandidates) == 1 {
-		logger.Info("Single candidate after filtering", "name", validCandidates[0].Name)
+		logger.V(1).Info("Single candidate after filtering", "name", validCandidates[0].Name)
 		return &validCandidates[0].Name
 	}
 
@@ -399,6 +406,6 @@ func (s *defaultSelector) selectMostCapable(ctx context.Context, validCandidates
 
 	// Return highest scoring candidate
 	selected := scored[0].Name
-	logger.Info("MostCapable selected", "name", selected, "score", scored[0].Score)
+	logger.V(1).Info("MostCapable selected", "name", selected, "score", scored[0].Score)
 	return &selected
 }

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -24,7 +25,15 @@ import (
  * Please add functional style container operations sparingly and intentionally.
  */
 
-var gvResourcesCache map[string]*metav1.APIResourceList
+// gvResourcesCache caches API resource discovery results keyed by groupVersion.
+// It is read on every InferenceService reconcile (via IsCrdAvailable) while
+// several controllers concurrently probe CRD availability at startup, so all
+// access must go through gvResourcesCacheMu to avoid a fatal
+// "concurrent map writes".
+var (
+	gvResourcesCacheMu sync.RWMutex
+	gvResourcesCache   map[string]*metav1.APIResourceList
+)
 
 func Filter(origin map[string]string, predicate func(string) bool) map[string]string {
 	result := make(map[string]string)
@@ -212,10 +221,11 @@ func IsCrdAvailable(config *rest.Config, groupVersion, kind string) (bool, error
 // resources will be cached and returned to subsequent invocations to prevent additional
 // queries to the API server.
 func GetAvailableResourcesForApi(config *rest.Config, groupVersion string) (*metav1.APIResourceList, error) {
-	var gvResources *metav1.APIResourceList
-	var ok bool
+	gvResourcesCacheMu.RLock()
+	gvResources, ok := gvResourcesCache[groupVersion]
+	gvResourcesCacheMu.RUnlock()
 
-	if gvResources, ok = gvResourcesCache[groupVersion]; !ok {
+	if !ok {
 		discoveryClient, newClientErr := discovery.NewDiscoveryClientForConfig(config)
 		if newClientErr != nil {
 			return nil, newClientErr
@@ -237,6 +247,9 @@ func GetAvailableResourcesForApi(config *rest.Config, groupVersion string) (*met
 // of discovered API resources. This function should never be called directly. It is exported
 // for usage in tests.
 func SetAvailableResourcesForApi(groupVersion string, resources *metav1.APIResourceList) {
+	gvResourcesCacheMu.Lock()
+	defer gvResourcesCacheMu.Unlock()
+
 	if gvResourcesCache == nil {
 		gvResourcesCache = make(map[string]*metav1.APIResourceList)
 	}
@@ -244,14 +257,13 @@ func SetAvailableResourcesForApi(groupVersion string, resources *metav1.APIResou
 	gvResourcesCache[groupVersion] = resources
 }
 
-// IsStringEmptyOrWithWhitespaces checks if the string is empty or with whitespaces
 var blankRegex = regexp.MustCompile(`\s`)
 
+// IsStringEmptyOrWithWhitespaces reports whether input is empty or contains any
+// whitespace character (per the \s regex class). Name is misleading — kept for
+// backward compatibility with callers that grep for the symbol.
 func IsStringEmptyOrWithWhitespaces(input string) bool {
-	if blankRegex.MatchString(input) || input == "" {
-		return true
-	}
-	return false
+	return input == "" || blankRegex.MatchString(input)
 }
 
 func Retry(attempts int, sleep time.Duration, f func() error) (err error) {

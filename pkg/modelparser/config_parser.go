@@ -660,11 +660,11 @@ func updateField(current interface{}, new interface{}) bool {
 			return true
 		}
 	case *runtime.RawExtension:
-		// Preserve-if-unset, like every other field. ModelConfiguration is a
+		// Fill-only, like every other field here. ModelConfiguration is a
 		// preserve-unknown-fields RawExtension: the apiserver re-serializes it
 		// with sorted keys, so byte-comparing that against the parser's
-		// struct-order output never matches — which marked the field "changed"
-		// every reconcile and churned the spec. Write once.
+		// struct-order output never matches — which marks the field changed on
+		// every pass and rewrites the spec with no real difference.
 		if len(c.Raw) == 0 && new != nil && len(new.([]byte)) > 0 {
 			c.Raw = append(c.Raw[:0], new.([]byte)...)
 			return true

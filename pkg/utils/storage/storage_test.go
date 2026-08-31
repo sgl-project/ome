@@ -320,6 +320,23 @@ func TestParsePVCStorageURI(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "subpath with .. traversal rejected",
+			uri:     "pvc://my-pvc/../etc/passwd",
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "subpath with .. nested rejected",
+			uri:     "pvc://my-pvc/models/../../etc/passwd",
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "subpath containing 'foo..bar' allowed (only literal '..' segment is rejected)",
+			uri:  "pvc://my-pvc/foo..bar",
+			want: &PVCStorageComponents{PVCName: "my-pvc", SubPath: "foo..bar"},
+		},
+		{
 			name:    "only pvc name provided",
 			uri:     "pvc://my-pvc",
 			want:    nil,

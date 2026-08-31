@@ -635,7 +635,10 @@ func TestGetAcceleratorClassByPolicy_AllPolicies(t *testing.T) {
 			ctx := context.Background()
 
 			// Call getAcceleratorClassByPolicy
-			selected := selector.getAcceleratorClassByPolicy(ctx, isvc, runtime, tt.policy)
+			selected, err := selector.getAcceleratorClassByPolicy(ctx, isvc, runtime, tt.policy)
+			if err != nil {
+				t.Fatalf("%s: getAcceleratorClassByPolicy() error: %v", tt.description, err)
+			}
 
 			if selected == nil {
 				t.Errorf("%s: getAcceleratorClassByPolicy() returned nil", tt.description)
