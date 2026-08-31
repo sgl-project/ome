@@ -1,0 +1,399 @@
+package v1alpha1_test
+
+import (
+	"bytes"
+	"reflect"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"sigs.k8s.io/ome/pkg/cli/report"
+	"sigs.k8s.io/ome/pkg/cli/report/v1alpha1"
+)
+
+func TestRuntimeEffectiveCanonicalReturnsDeepOrderedCopy(t *testing.T) {
+	content := runtimeEffectiveContent()
+	wantOriginal := runtimeEffectiveContent()
+	originalSelectionRuntime := content.Selection.Runtime
+	originalLiveSource := content.Live.Source
+	originalActiveRevision := content.Active.Revision
+
+	got := content.Canonical()
+
+	assert.Equal(t, []v1alpha1.RuntimeObjectReference{
+		content.Inheritance.Sources[0], content.Inheritance.Sources[1],
+	}, got.Inheritance.Sources, "inheritance remains root-first")
+	assert.Equal(t, []v1alpha1.RuntimeComponentType{
+		v1alpha1.RuntimeComponentEngine, v1alpha1.RuntimeComponentDecoder, v1alpha1.RuntimeComponentRouter,
+	}, componentTypes(got.Live.Components))
+	assert.Equal(t, []v1alpha1.RuntimeIssue{
+		{Code: v1alpha1.RuntimeIssueRevisionHashMismatch, Revision: "revision-a"},
+		{Code: v1alpha1.RuntimeIssueStatusStale},
+	}, got.Issues)
+	assert.Equal(t, time.UTC, got.Active.Revision.CreatedAt.Location())
+
+	require.NotSame(t, originalLiveSource, got.Live.Source)
+	require.NotSame(t, originalSelectionRuntime, got.Selection.Runtime)
+	require.NotSame(t, originalActiveRevision, got.Active.Revision)
+	got.Inheritance.Sources[0].Name = "returned-inheritance-source"
+	got.Selection.Runtime.Name = "returned-selection-runtime"
+	got.Live.Source.Name = "returned-live-source"
+	got.Active.Revision.Name = "returned-active-revision"
+	got.Live.Components[0].DeploymentMode = v1alpha1.DeploymentMode("ReturnedLiveMode")
+	got.Active.Components[0].Type = v1alpha1.RuntimeComponentType("returned-active-component")
+	got.Issues[0].Revision = "returned-effective-issue"
+
+	assert.Equal(t, wantOriginal, content)
+}
+
+func TestRuntimeEffectiveCanonicalNormalizesNilSlices(t *testing.T) {
+	got := (v1alpha1.RuntimeEffectiveContent{}).Canonical()
+
+	assert.NotNil(t, got.Inheritance.Sources)
+	assert.NotNil(t, got.Live.Components)
+	assert.NotNil(t, got.Active.Components)
+	assert.NotNil(t, got.Issues)
+}
+
+func TestNewRuntimeEffectiveReportUsesFixedKindAndUTCClock(t *testing.T) {
+	now := time.Date(2026, time.August, 31, 11, 30, 0, 0, time.FixedZone("test", -7*60*60))
+
+	got := v1alpha1.NewRuntimeEffectiveReport(
+		v1alpha1.Metadata{Namespace: "prod", Name: "chat"},
+		v1alpha1.RuntimeEffectiveContent{},
+		fixedClock{now: now},
+	)
+
+	assert.Equal(t, v1alpha1.RuntimeEffectiveReportKind, got.Kind)
+	assert.Equal(t, "2026-08-31T18:30:00Z", got.CollectedAt.Format(time.RFC3339))
+	assert.NotNil(t, got.Content.Inheritance.Sources)
+	assert.NotNil(t, got.Content.Live.Components)
+	assert.NotNil(t, got.Content.Active.Components)
+	assert.NotNil(t, got.Content.Issues)
+}
+
+func TestRuntimeEffectiveTableContract(t *testing.T) {
+	reportValue := v1alpha1.NewRuntimeEffectiveReport(
+		v1alpha1.Metadata{Namespace: "prod", Name: "chat"},
+		runtimeEffectiveContent(),
+		fixedClock{now: time.Date(2026, time.August, 31, 18, 30, 0, 0, time.UTC)},
+	)
+
+	assert.Equal(t, report.Table{
+		Headers: []string{
+			"VIEW", "STATE", "REASON", "RUNTIME", "REVISION", "HASH", "COMPONENT", "MODE", "MODE-SOURCE",
+			"PIN", "PIN-STATE", "SYNC", "STATUS", "DRIFT", "LIVE-RELATION", "ISSUES",
+		},
+		Rows: [][]string{
+			{"Live", "Available", "-", "ServingRuntime/prod/vllm", "-", "11223344", "engine", "RawDeployment", "Default", "ManagedPin", "Resolved", "Pending", "Stale", "ReportedTrue/PinAdvanced", "Different", "RevisionHashMismatch(revision-a),StatusStale"},
+			{"Live", "Available", "-", "ServingRuntime/prod/vllm", "-", "11223344", "decoder", "MultiNode", "LeaderWorkerShape", "ManagedPin", "Resolved", "Pending", "Stale", "ReportedTrue/PinAdvanced", "Different", "RevisionHashMismatch(revision-a),StatusStale"},
+			{"Live", "Available", "-", "ServingRuntime/prod/vllm", "-", "11223344", "router", "VirtualDeployment", "ServiceSpec", "ManagedPin", "Resolved", "Pending", "Stale", "ReportedTrue/PinAdvanced", "Different", "RevisionHashMismatch(revision-a),StatusStale"},
+			{"Active", "Available", "-", "ClusterServingRuntime/cluster-vllm", "revision-a", "aabbccdd", "engine", "OMENative", "ComponentAnnotation", "ManagedPin", "Resolved", "Pending", "Stale", "ReportedTrue/PinAdvanced", "Different", "RevisionHashMismatch(revision-a),StatusStale"},
+		},
+	}, reportValue.Table())
+
+	var output bytes.Buffer
+	require.NoError(t, report.Write(&output, report.FormatTable, reportValue))
+	assert.Equal(t,
+		"VIEW     STATE       REASON   RUNTIME                              REVISION     HASH       COMPONENT   MODE                MODE-SOURCE           PIN          PIN-STATE   SYNC      STATUS   DRIFT                      LIVE-RELATION   ISSUES\n"+
+			"Live     Available   -        ServingRuntime/prod/vllm             -            11223344   engine      RawDeployment       Default               ManagedPin   Resolved    Pending   Stale    ReportedTrue/PinAdvanced   Different       RevisionHashMismatch(revision-a),StatusStale\n"+
+			"Live     Available   -        ServingRuntime/prod/vllm             -            11223344   decoder     MultiNode           LeaderWorkerShape     ManagedPin   Resolved    Pending   Stale    ReportedTrue/PinAdvanced   Different       RevisionHashMismatch(revision-a),StatusStale\n"+
+			"Live     Available   -        ServingRuntime/prod/vllm             -            11223344   router      VirtualDeployment   ServiceSpec           ManagedPin   Resolved    Pending   Stale    ReportedTrue/PinAdvanced   Different       RevisionHashMismatch(revision-a),StatusStale\n"+
+			"Active   Available   -        ClusterServingRuntime/cluster-vllm   revision-a   aabbccdd   engine      OMENative           ComponentAnnotation   ManagedPin   Resolved    Pending   Stale    ReportedTrue/PinAdvanced   Different       RevisionHashMismatch(revision-a),StatusStale\n",
+		output.String())
+}
+
+func TestRuntimeEffectiveTableUsesDashRowForConfigurationWithoutComponents(t *testing.T) {
+	content := v1alpha1.RuntimeEffectiveContent{
+		Pin: v1alpha1.RuntimePin{
+			Mode:      v1alpha1.RuntimePinModeAutoSync,
+			State:     v1alpha1.RuntimePinStateNotApplicable,
+			SyncState: v1alpha1.RuntimeSyncStateAbsent,
+			Status:    v1alpha1.RuntimeStatusObservation{Freshness: v1alpha1.StatusFreshnessUnobserved},
+		},
+		Live: v1alpha1.RuntimeConfiguration{State: v1alpha1.ConfigurationStateUnavailable},
+		Active: v1alpha1.RuntimeConfiguration{
+			State:             v1alpha1.ConfigurationStateUnavailable,
+			UnavailableReason: v1alpha1.UnavailableNotFound,
+		},
+	}
+
+	assert.Equal(t, [][]string{
+		{"Live", "Unavailable", "-", "-", "-", "-", "-", "-", "-", "AutoSync", "NotApplicable", "Absent", "Unobserved", "-", "-", "-"},
+		{"Active", "Unavailable", "NotFound", "-", "-", "-", "-", "-", "-", "AutoSync", "NotApplicable", "Absent", "Unobserved", "-", "-", "-"},
+	}, content.Table().Rows)
+}
+
+func TestRuntimeEffectiveSelectionAllowsMissingOrUnknownRuntimeIdentity(t *testing.T) {
+	missing := v1alpha1.NewRuntimeEffectiveReport(
+		v1alpha1.Metadata{Name: "chat"},
+		v1alpha1.RuntimeEffectiveContent{
+			Selection: v1alpha1.RuntimeSelection{Source: v1alpha1.RuntimeSelectionSourceSelected},
+		},
+		fixedClock{},
+	)
+	var output bytes.Buffer
+	require.NoError(t, report.Write(&output, report.FormatJSON, missing))
+	assert.Contains(t, output.String(), "\"selection\": {\n      \"source\": \"Selected\"\n    }")
+	assert.NotContains(t, output.String(), `"kind": ""`)
+
+	unknown := runtimeObject(v1alpha1.RuntimeKindUnknown, "", "unresolved")
+	content := v1alpha1.RuntimeEffectiveContent{
+		Selection: v1alpha1.RuntimeSelection{Source: v1alpha1.RuntimeSelectionSourceExplicit, Runtime: &unknown},
+	}
+	output.Reset()
+	require.NoError(t, report.Write(&output, report.FormatJSON, content))
+	assert.Contains(t, output.String(), `"kind": "Unknown"`)
+}
+
+func TestRuntimeEffectiveMachineOutputContract(t *testing.T) {
+	reportValue := v1alpha1.NewRuntimeEffectiveReport(
+		v1alpha1.Metadata{Namespace: "prod", Name: "chat"},
+		runtimeEffectiveMachineContent(),
+		fixedClock{now: time.Date(2026, time.August, 31, 18, 30, 0, 0, time.UTC)},
+	)
+	tests := []struct {
+		name   string
+		format report.Format
+		want   string
+	}{
+		{
+			name:   "json",
+			format: report.FormatJSON,
+			want: "{\n" +
+				`  "apiVersion": "cli.ome.io/v1alpha1",` + "\n" +
+				`  "kind": "RuntimeEffectiveReport",` + "\n" +
+				`  "metadata": {` + "\n" +
+				`    "namespace": "prod",` + "\n" +
+				`    "name": "chat"` + "\n" +
+				"  },\n" +
+				`  "collectedAt": "2026-08-31T18:30:00Z",` + "\n" +
+				`  "sources": [],` + "\n" +
+				`  "content": {` + "\n" +
+				`    "selection": {` + "\n" +
+				`      "source": "Explicit",` + "\n" +
+				`      "runtime": {` + "\n" +
+				`        "apiVersion": "ome.io/v1beta1",` + "\n" +
+				`        "kind": "ServingRuntime",` + "\n" +
+				`        "namespace": "prod",` + "\n" +
+				`        "name": "vllm"` + "\n" +
+				"      }\n" +
+				"    },\n" +
+				`    "inheritance": {` + "\n" +
+				`      "state": "Unavailable",` + "\n" +
+				`      "sources": [],` + "\n" +
+				`      "unavailableReason": "NotFound"` + "\n" +
+				"    },\n" +
+				`    "pin": {` + "\n" +
+				`      "mode": "ManagedPin",` + "\n" +
+				`      "state": "RevisionMissing",` + "\n" +
+				`      "reportedRevision": "revision-a",` + "\n" +
+				`      "status": {` + "\n" +
+				`        "generation": 7,` + "\n" +
+				`        "observedGeneration": 7,` + "\n" +
+				`        "freshness": "Current"` + "\n" +
+				"      },\n" +
+				`      "reportedDrift": {` + "\n" +
+				`        "state": "ReportedFalse"` + "\n" +
+				"      },\n" +
+				`      "syncState": "Acknowledged"` + "\n" +
+				"    },\n" +
+				`    "live": {` + "\n" +
+				`      "state": "Available",` + "\n" +
+				`      "origin": "LiveRuntime",` + "\n" +
+				`      "source": {` + "\n" +
+				`        "apiVersion": "ome.io/v1beta1",` + "\n" +
+				`        "kind": "ServingRuntime",` + "\n" +
+				`        "namespace": "prod",` + "\n" +
+				`        "name": "vllm"` + "\n" +
+				"      },\n" +
+				`      "hash": "11223344",` + "\n" +
+				`      "components": [` + "\n" +
+				"        {\n" +
+				`          "type": "engine",` + "\n" +
+				`          "deploymentMode": "RawDeployment",` + "\n" +
+				`          "deploymentModeSource": "Default"` + "\n" +
+				"        }\n" +
+				"      ]\n" +
+				"    },\n" +
+				`    "active": {` + "\n" +
+				`      "state": "Unavailable",` + "\n" +
+				`      "components": [],` + "\n" +
+				`      "unavailableReason": "NotFound"` + "\n" +
+				"    },\n" +
+				`    "liveToActive": "Unknown",` + "\n" +
+				`    "issues": [` + "\n" +
+				"      {\n" +
+				`        "code": "ActiveRevisionUnavailable",` + "\n" +
+				`        "revision": "revision-a"` + "\n" +
+				"      }\n" +
+				"    ]\n" +
+				"  },\n" +
+				`  "warnings": []` + "\n" +
+				"}\n",
+		},
+		{
+			name:   "yaml",
+			format: report.FormatYAML,
+			want: "apiVersion: cli.ome.io/v1alpha1\n" +
+				"collectedAt: \"2026-08-31T18:30:00Z\"\n" +
+				"content:\n" +
+				"  active:\n" +
+				"    components: []\n" +
+				"    state: Unavailable\n" +
+				"    unavailableReason: NotFound\n" +
+				"  inheritance:\n" +
+				"    sources: []\n" +
+				"    state: Unavailable\n" +
+				"    unavailableReason: NotFound\n" +
+				"  issues:\n" +
+				"  - code: ActiveRevisionUnavailable\n" +
+				"    revision: revision-a\n" +
+				"  live:\n" +
+				"    components:\n" +
+				"    - deploymentMode: RawDeployment\n" +
+				"      deploymentModeSource: Default\n" +
+				"      type: engine\n" +
+				"    hash: \"11223344\"\n" +
+				"    origin: LiveRuntime\n" +
+				"    source:\n" +
+				"      apiVersion: ome.io/v1beta1\n" +
+				"      kind: ServingRuntime\n" +
+				"      name: vllm\n" +
+				"      namespace: prod\n" +
+				"    state: Available\n" +
+				"  liveToActive: Unknown\n" +
+				"  pin:\n" +
+				"    mode: ManagedPin\n" +
+				"    reportedDrift:\n" +
+				"      state: ReportedFalse\n" +
+				"    reportedRevision: revision-a\n" +
+				"    state: RevisionMissing\n" +
+				"    status:\n" +
+				"      freshness: Current\n" +
+				"      generation: 7\n" +
+				"      observedGeneration: 7\n" +
+				"    syncState: Acknowledged\n" +
+				"  selection:\n" +
+				"    runtime:\n" +
+				"      apiVersion: ome.io/v1beta1\n" +
+				"      kind: ServingRuntime\n" +
+				"      name: vllm\n" +
+				"      namespace: prod\n" +
+				"    source: Explicit\n" +
+				"kind: RuntimeEffectiveReport\n" +
+				"metadata:\n" +
+				"  name: chat\n" +
+				"  namespace: prod\n" +
+				"sources: []\n" +
+				"warnings: []\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var output bytes.Buffer
+			require.NoError(t, report.Write(&output, tt.format, reportValue))
+			assert.Equal(t, tt.want, output.String())
+		})
+	}
+}
+
+func TestRuntimeEffectiveSchemaIsStrictlyAllowlisted(t *testing.T) {
+	assertRuntimeReportSchema(t, reflect.TypeOf(v1alpha1.RuntimeEnvelope[v1alpha1.RuntimeEffectiveContent]{}), map[reflect.Type]bool{})
+}
+
+func runtimeEffectiveContent() v1alpha1.RuntimeEffectiveContent {
+	live := runtimeObject(v1alpha1.RuntimeKindServingRuntime, "prod", "vllm")
+	active := runtimeObject(v1alpha1.RuntimeKindClusterServingRuntime, "", "cluster-vllm")
+	return v1alpha1.RuntimeEffectiveContent{
+		Selection: v1alpha1.RuntimeSelection{Source: v1alpha1.RuntimeSelectionSourceExplicit, Runtime: &live},
+		Inheritance: v1alpha1.RuntimeInheritance{
+			State: v1alpha1.InheritanceStateObserved,
+			Sources: []v1alpha1.RuntimeObjectReference{
+				runtimeObject(v1alpha1.RuntimeKindClusterServingRuntime, "", "cluster-base"),
+				live,
+			},
+		},
+		Pin: v1alpha1.RuntimePin{
+			Mode:              v1alpha1.RuntimePinModeManagedPin,
+			State:             v1alpha1.RuntimePinStateResolved,
+			RequestedRevision: "revision-b",
+			ReportedRevision:  "revision-a",
+			Status: v1alpha1.RuntimeStatusObservation{
+				Generation: 7, ObservedGeneration: 6, Freshness: v1alpha1.StatusFreshnessStale,
+			},
+			ReportedDrift: v1alpha1.RuntimeDriftObservation{
+				State: v1alpha1.DriftConditionStateReportedTrue, Cause: v1alpha1.RuntimeDriftCausePinAdvanced,
+			},
+			SyncState: v1alpha1.RuntimeSyncStatePending,
+		},
+		Live: v1alpha1.RuntimeConfiguration{
+			State: v1alpha1.ConfigurationStateAvailable, Origin: v1alpha1.ConfigurationOriginLiveRuntime,
+			Source: &live, Hash: "11223344",
+			Components: []v1alpha1.RuntimeComponent{
+				{Type: v1alpha1.RuntimeComponentRouter, DeploymentMode: v1alpha1.DeploymentModeVirtualDeployment, DeploymentModeSource: v1alpha1.DeploymentModeSourceServiceSpec},
+				{Type: v1alpha1.RuntimeComponentEngine, DeploymentMode: v1alpha1.DeploymentModeRawDeployment, DeploymentModeSource: v1alpha1.DeploymentModeSourceDefault},
+				{Type: v1alpha1.RuntimeComponentDecoder, DeploymentMode: v1alpha1.DeploymentModeMultiNode, DeploymentModeSource: v1alpha1.DeploymentModeSourceLeaderWorkerShape},
+			},
+		},
+		Active: v1alpha1.RuntimeConfiguration{
+			State: v1alpha1.ConfigurationStateAvailable, Origin: v1alpha1.ConfigurationOriginControllerRevision,
+			Source: &active,
+			Revision: &v1alpha1.RuntimeRevisionReference{
+				Namespace: "ome", Name: "revision-a", CreatedAt: time.Date(2026, time.August, 31, 11, 0, 0, 0, time.FixedZone("test", -7*60*60)),
+			},
+			Hash: "aabbccdd",
+			Components: []v1alpha1.RuntimeComponent{
+				{Type: v1alpha1.RuntimeComponentEngine, DeploymentMode: v1alpha1.DeploymentModeOMENative, DeploymentModeSource: v1alpha1.DeploymentModeSourceComponentAnnotation},
+			},
+		},
+		LiveToActive: v1alpha1.RuntimeHashRelationDifferent,
+		Issues: []v1alpha1.RuntimeIssue{
+			{Code: v1alpha1.RuntimeIssueStatusStale},
+			{Code: v1alpha1.RuntimeIssueRevisionHashMismatch, Revision: "revision-a"},
+		},
+	}
+}
+
+func runtimeEffectiveMachineContent() v1alpha1.RuntimeEffectiveContent {
+	live := runtimeObject(v1alpha1.RuntimeKindServingRuntime, "prod", "vllm")
+	return v1alpha1.RuntimeEffectiveContent{
+		Selection:   v1alpha1.RuntimeSelection{Source: v1alpha1.RuntimeSelectionSourceExplicit, Runtime: &live},
+		Inheritance: v1alpha1.RuntimeInheritance{State: v1alpha1.InheritanceStateUnavailable, UnavailableReason: v1alpha1.UnavailableNotFound},
+		Pin: v1alpha1.RuntimePin{
+			Mode: v1alpha1.RuntimePinModeManagedPin, State: v1alpha1.RuntimePinStateRevisionMissing, ReportedRevision: "revision-a",
+			Status:        v1alpha1.RuntimeStatusObservation{Generation: 7, ObservedGeneration: 7, Freshness: v1alpha1.StatusFreshnessCurrent},
+			ReportedDrift: v1alpha1.RuntimeDriftObservation{State: v1alpha1.DriftConditionStateReportedFalse},
+			SyncState:     v1alpha1.RuntimeSyncStateAcknowledged,
+		},
+		Live: v1alpha1.RuntimeConfiguration{
+			State: v1alpha1.ConfigurationStateAvailable, Origin: v1alpha1.ConfigurationOriginLiveRuntime,
+			Source: &live, Hash: "11223344",
+			Components: []v1alpha1.RuntimeComponent{{
+				Type: v1alpha1.RuntimeComponentEngine, DeploymentMode: v1alpha1.DeploymentModeRawDeployment, DeploymentModeSource: v1alpha1.DeploymentModeSourceDefault,
+			}},
+		},
+		Active:       v1alpha1.RuntimeConfiguration{State: v1alpha1.ConfigurationStateUnavailable, UnavailableReason: v1alpha1.UnavailableNotFound},
+		LiveToActive: v1alpha1.RuntimeHashRelationUnknown,
+		Issues: []v1alpha1.RuntimeIssue{{
+			Code: v1alpha1.RuntimeIssueActiveRevisionUnavailable, Revision: "revision-a",
+		}},
+	}
+}
+
+func runtimeObject(kind v1alpha1.RuntimeKind, namespace, name string) v1alpha1.RuntimeObjectReference {
+	return v1alpha1.RuntimeObjectReference{
+		APIVersion: "ome.io/v1beta1", Kind: kind, Namespace: namespace, Name: name,
+	}
+}
+
+func componentTypes(components []v1alpha1.RuntimeComponent) []v1alpha1.RuntimeComponentType {
+	result := make([]v1alpha1.RuntimeComponentType, 0, len(components))
+	for _, component := range components {
+		result = append(result, component.Type)
+	}
+	return result
+}
