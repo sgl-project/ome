@@ -10,16 +10,17 @@
   - [Non-Goals](#non-goals)
 - [Proposal](#proposal)
   - [What Alfred is](#what-alfred-is)
+  - [Implementation status and compatibility baseline](#implementation-status-and-compatibility-baseline)
   - [Architectural posture: observer, recommender, narrow actuator](#architectural-posture-observer-recommender-narrow-actuator)
-  - [The engine: snapshot → policies → arbiter → dispatcher + reporter](#the-engine-snapshot-policies-arbiter-dispatcher-reporter)
+  - [The engine: snapshot → policies → arbiter → dispatcher + reporter](#the-engine-snapshot--policies--arbiter--dispatcher--reporter)
   - [Core concepts](#core-concepts)
   - [User stories](#user-stories)
     - [Story 1: Operator observes fragmentation, then opts into action](#story-1-operator-observes-fragmentation-then-opts-into-action)
     - [Story 2: Alfred unblocks a pending large workload](#story-2-alfred-unblocks-a-pending-large-workload)
-    - [Story 3: A node goes GpuUnhealthy — Alfred evacuates and signals for repair](#story-3-a-node-goes-gpuunhealthy-alfred-evacuates-and-signals-for-repair)
+    - [Story 3: A node goes GpuUnhealthy — Alfred evacuates and signals for repair](#story-3-a-node-goes-gpuunhealthy--alfred-evacuates-and-signals-for-repair)
     - [Story 4: Maintenance-window honor](#story-4-maintenance-window-honor)
     - [Story 5: Opt-out for a critical workload](#story-5-opt-out-for-a-critical-workload)
-    - [Story 6: LWS legacy workload — recommendation only](#story-6-lws-legacy-workload-recommendation-only)
+    - [Story 6: LWS legacy workload — recommendation only](#story-6-lws-legacy-workload--recommendation-only)
     - [Story 7: Coexistence with cluster-autoscaler](#story-7-coexistence-with-cluster-autoscaler)
   - [Risks and mitigations](#risks-and-mitigations)
 - [Design details](#design-details)
@@ -34,7 +35,7 @@
     - [What must be true](#what-must-be-true)
     - [Approach (how)](#approach-how)
     - [The narrow-contracts property (no new RBAC, no cloud credentials)](#the-narrow-contracts-property-no-new-rbac-no-cloud-credentials)
-    - [Anticipated objections](#anticipated-objections)
+    - [Anticipated objection](#anticipated-objection)
   - [Policy #3: Descheduling (future)](#policy-3-descheduling-future)
   - [The arbiter (arbitration-lite)](#the-arbiter-arbitration-lite)
     - [Why an arbiter at all](#why-an-arbiter-at-all)
@@ -42,7 +43,7 @@
     - [Why lite, and what a heavier version would add](#why-lite-and-what-a-heavier-version-would-add)
   - [Coexisting with the autoscaler (OEP-0013)](#coexisting-with-the-autoscaler-oep-0013)
   - [Policy and configuration model](#policy-and-configuration-model)
-    - [Opt-in / opt-out semantics](#opt-in-opt-out-semantics)
+    - [Opt-in / opt-out semantics](#opt-in--opt-out-semantics)
   - [Safety bounds](#safety-bounds)
   - [Concurrent-operation awareness](#concurrent-operation-awareness)
   - [Human intervention and incident posture](#human-intervention-and-incident-posture)
@@ -57,7 +58,7 @@
 - [Test plan](#test-plan)
   - [Unit tests](#unit-tests)
   - [Integration tests](#integration-tests)
-  - [Chaos / robustness](#chaos-robustness)
+  - [Chaos / robustness](#chaos--robustness)
   - [Simulation](#simulation)
 - [Graduation criteria](#graduation-criteria)
   - [Alpha](#alpha)
@@ -77,11 +78,11 @@
 
 ## Summary
 
-**Tl;dr:** Alfred is the GPU **Cluster Caretaker** — a cluster-level control loop that watches the *physical* GPU layer (nodes, accelerators, workload placement) and, when it drifts into a bad state, arbitrates a safe corrective action and actuates it through the existing narrow write contracts. It does not schedule pods, scale replicas, or touch node lifecycle.
+**Tl;dr:** Alfred is designed as the GPU **Cluster Caretaker** — a cluster-level control loop that watches the *physical* GPU layer (nodes, accelerators, workload placement) and, when it drifts into a bad state, arbitrates a safe corrective action and actuates it through narrow write contracts. The current implementation stops after arbitration and reporting. Alfred does not schedule pods, scale replicas, or touch node lifecycle.
 
-The caretaker is a single observe → arbitrate → actuate engine, not a grab-bag of one-off scripts. One shared, read-only **ClusterSnapshot** (the physical GPU state for a reconcile pass) is fed to a set of **Policies**; each Policy is a pure function `Evaluate(snapshot) → []Candidate`, where a *Candidate* is a proposed action plus its justification. An **Arbiter** selects and sequences across all Policies' candidates under global safety bounds (rate limits, cooldowns, concurrency caps), a **Dispatcher** actuates the winners through one narrow contract — the OEP-0007 migration-request annotation, executed by the controller that owns each workload: OMENative for multi-pod Instances, the InferenceService controller for `RawDeployment` components (a surge-first Deployment rolling restart for single-replica components, a targeted PDB-honoring eviction for multi-replica ones) — and a **Reporter** is the only component that emits observability output (K8s Events, decision metrics, the optional recommendations `ConfigMap`), so a Policy holds no client and writes nothing at all.
+The target caretaker is a single observe → arbitrate → actuate engine, not a grab-bag of one-off scripts. One shared, read-only **ClusterSnapshot** (the physical GPU state for a reconcile pass) is fed to a set of **Policies**; each Policy is a pure function `Evaluate(snapshot) → []Candidate`, where a *Candidate* is a proposed action plus its justification. An **Arbiter** selects and sequences across all Policies' candidates under global safety bounds (rate limits, cooldowns, concurrency caps), a **Dispatcher** actuates the winners through one narrow contract — the OEP-0007 migration-request annotation — and the controller that owns each workload executes the request. OMENative is the only implemented consumer of that contract today. `RawDeployment` and legacy LWS candidates remain advisory-only until their lifecycle owner implements and validates an equivalent consumer. A **Reporter** is the only component that emits observability output (K8s Events, decision metrics, the optional recommendations `ConfigMap`), so a Policy holds no client and writes nothing at all.
 
-Three policies, staged: **Policy #1 — Defragmentation** is the existing logic from this OEP's first scope (detect GPU fragmentation, recommend/execute consolidating migrations). **Policy #2 — Node-Health Evacuation** is new: on a bad node condition, evacuate OME workloads off the node *and emit a remediation signal* — it does **not** cordon, drain, terminate, or reboot the node. **Policy #3 — Descheduling** (rebalance against drifted constraints) is future, and named here only to show the engine generalizes. Alfred introduces **no new CRDs**: configuration lives in a `ConfigMap`, per-workload gating in annotations, and output in Prometheus metrics, K8s Events, and an optional recommendations `ConfigMap`.
+Three policies, staged: **Policy #1 — Defragmentation** is implemented as observation, scoring, arbitration, and reporting; execution is not yet wired. **Policy #2 — Node-Health Evacuation** is the next policy: on a bad node condition, evacuate eligible OME workloads off the node *and emit a remediation signal* — it does **not** cordon, drain, terminate, or reboot the node. **Policy #3 — Descheduling** (rebalance against drifted constraints) is future, and named here only to show the engine generalizes. Alfred introduces **no new CRDs**: configuration lives in a `ConfigMap`, per-workload gating in annotations, and output in Prometheus metrics, K8s Events, and an optional recommendations `ConfigMap`.
 
 ## Motivation
 
@@ -105,7 +106,7 @@ For **multi-pod Instances** (OMENative's multi-node engine/decoder grouping — 
 - **LWS with `RecreateGroupOnPodRestart`** (OME's current default for LWS) tears down the *entire* group on any pod deletion. No surge, no rollback: if the scheduler can't place all `N` replacement pods simultaneously, the service stays down.
 - **OMENative Instances** have atomic group semantics too — evicting one pod triggers a per-Instance restart, cleaner than LWS's whole-group teardown but still not surge-protected. So pure eviction is unsafe for OMENative multi-pod Instances as well.
 
-The answer is **not** "smarter eviction." The answer is to narrow the action surface to a single verb: every migration is requested through the published annotation contract and executed by the controller that owns the workload's lifecycle — OMENative for its multi-pod Instances (first-class surge migration), the InferenceService controller for `RawDeployment` components (a surge-first Deployment rolling restart when the component has one replica; a targeted, PDB-honoring eviction when it has several). Alfred itself never evicts or deletes a pod. This narrow-actuation rule is load-bearing for every policy, not just defragmentation: it is the property that lets the Arbiter reason about safety uniformly (next section).
+The answer is **not** "smarter eviction." The answer is to narrow the action surface to a single verb: every executable migration is requested through the published annotation contract and executed by the controller that owns the workload's lifecycle. OMENative already consumes that contract for its Instances. `RawDeployment` has no equivalent consumer yet, so Raw candidates are advisory-only in this OEP's current implementation phase. Alfred itself never evicts or deletes a pod. This narrow-actuation rule is load-bearing for every policy, not just defragmentation: it is the property that lets the Arbiter reason about safety uniformly (next section).
 
 ### Why one caretaker, not N controllers
 
@@ -115,22 +116,22 @@ The reader's reasonable objection: "These are three unrelated jobs. Why not thre
 
 1. **One ClusterSnapshot.** Every policy reasons about the same physical GPU layer — node GPU inventory, per-pod GPU consumption, accelerator health, pending-pod pressure. Building that view *consistently* (so two policies don't act on disagreeing state in the same pass) is the same work whether the trigger is fragmentation or a `GpuUnhealthy` condition. Three controllers means three snapshots that can disagree, and three reconcile loops racing each other on the same pods.
 2. **One safety layer.** Rate limits, per-workload cooldowns, concurrency caps, and "reject high-uncertainty actions" (*primum non nocere*) are not policy-specific — they bound *actuation*, regardless of which policy proposed it. Centralizing them in the Arbiter means a defrag migration and a health evacuation can't both move the same workload, or together exceed the cluster's churn budget. N independent controllers cannot enforce a shared budget without inventing a coordination protocol between them — i.e., reinventing the Arbiter, badly.
-3. **One narrow actuation contract.** Both moving a fragmented workload and evacuating a workload off a bad node reduce to the *same* primitive: write the migration-request annotation and let the controller that owns the workload's lifecycle move it safely. The Dispatcher already encodes "how to request a move without breaking the workload." A second controller would either duplicate that contract or, worse, take a wider, more dangerous surface.
+3. **One narrow actuation contract.** Both moving a fragmented workload and evacuating a workload off a bad node reduce to the *same* primitive: write the migration-request annotation and let the controller that owns the workload's lifecycle move it safely. The planned Dispatcher centralizes "how to request a move without breaking the workload." A second actuator would either duplicate that contract or, worse, take a wider, more dangerous surface.
 
-The rescheduling and bin-packing logic never shipped; **Policy #1 (Defragmentation)** is the realization of that original, never-built vision. The old auto-repair is **partially** realized here as **Policy #2 (Node-Health Evacuation)** — but only the safe half. On a bad node condition, Policy #2 evacuates OME workloads off the node through the *same narrow Dispatcher contract every other policy uses*, and emits a remediation signal (a Prometheus metric, plus K8s Events at detection and at drain completion) for whatever system actually owns hardware remediation. It explicitly does **not** cordon, drain, terminate, or reboot the node, and it does **not** call any cloud Compute API. That is the line between the archived design and this one: we keep "react to a `GpuUnhealthy` node," we drop "patch/repair the hardware." (Refined non-goal below.)
+**Policy #1 (Defragmentation)** now implements the observation and recommendation part of the original vision. **Policy #2 (Node-Health Evacuation)** remains target design. On a bad node condition, Policy #2 will evacuate eligible OME workloads through the same narrow Dispatcher contract and emit a remediation signal (a Prometheus metric, plus K8s Events at detection and at drain completion) for whatever system actually owns hardware remediation. It explicitly does **not** cordon, drain, terminate, or reboot the node, and it does **not** call any cloud Compute API. That is the line between the archived design and this one: we keep "react to a `GpuUnhealthy` node," we drop "patch/repair the hardware." (Refined non-goal below.)
 
 Generalizing to a caretaker engine has a cost, and it is worth naming: a single process now carries three policies' blast radius, and a snapshot bug or a Dispatcher bug is a bug for *all* policies at once. The mitigation is the same property that makes the engine tractable — every policy actuates only through the narrow contract and only under the Arbiter's bounds — so a misbehaving policy is bounded to "proposes a bad Candidate," which the Arbiter can reject, not "directly does damage." This is a mitigation, not a full fix: a wrong *snapshot* fools the Arbiter too. TBD: the snapshot-consistency guarantees and how a policy declares a Candidate's confidence are Design Details, not settled here.
 
 ### Goals
 
 1. **Run one observe → arbitrate → actuate engine** over the physical GPU layer: a shared read-only ClusterSnapshot, a set of Policies (`Evaluate(snapshot) → []Candidate`), an Arbiter that selects and sequences under global safety bounds, a Dispatcher that actuates through the existing narrow contracts, and a Reporter that is the sole emitter of observability output (Events, decision metrics, the optional recommendations ConfigMap). The engine is the deliverable; policies are pluggable on top of it.
-2. **Ship Policy #1 — Defragmentation.** Continuously observe GPU utilization, workload placement, and pending-pod pressure; compute a fragmentation metric; produce candidates identifying which workloads, if relocated, would reduce fragmentation most; and (optionally, per opt-in) execute those migrations.
-3. **Ship Policy #2 — Node-Health Evacuation.** On a bad node condition (consumed from existing signals — node conditions — not newly detected by Alfred), produce candidates that evacuate OME workloads off the affected node through the narrow contract, **and** emit a remediation signal (metric + two Events: `NodeRepairNeeded` at detection, `NodeDrainedForRepair` at drain completion) for the system that owns remediation. Evacuate and signal; never cordon, drain, terminate, or reboot.
+2. **Ship Policy #1 — Defragmentation.** Continuously observe GPU utilization, workload placement, and pending-pod pressure; compute a fragmentation metric; produce candidates identifying which workloads, if relocated, would reduce fragmentation most; and execute only those candidates for which a lifecycle owner exposes the migration-request contract.
+3. **Ship Policy #2 — Node-Health Evacuation.** On a bad node condition (consumed from existing signals — node conditions — not newly detected by Alfred), produce candidates that evacuate eligible OME workloads off the affected node through the narrow contract, **and** emit a remediation signal (metric + two Events: `NodeRepairNeeded` at detection, `NodeDrainedForRepair` at drain completion) for the system that owns remediation. Evacuate and signal; never cordon, drain, terminate, or reboot.
 4. **Reserve Policy #3 — Descheduling** as a future policy on the same engine (rebalancing workloads whose placement has drifted from current constraints). Named here only to validate that the engine generalizes; **no** behavior is promised in this OEP.
-5. **Actuate only through one narrow contract.** The migration-request annotation (the published OEP-0007 contract) is the single verb for every executable path, consumed by the controller that owns the workload: OMENative for multi-pod Instances; the InferenceService controller for `RawDeployment` components, which executes a surge-first Deployment rolling restart (single ready replica) or a targeted, PDB-honoring eviction (multiple ready replicas). Alfred itself never evicts or deletes a pod. Never modify OME-owned reconciliation state by any other path.
+5. **Actuate only through one narrow contract.** The migration-request annotation (the published OEP-0007 contract) is the single verb for every executable path. OMENative consumes it for OMENative Instances. A deployment mode without a consumer is advisory-only; adding a `RawDeployment` consumer is separate implementation work and must preserve the same validation, idempotency, and status contract. Alfred itself never evicts or deletes a pod. Never modify OME-owned reconciliation state by any other path.
 6. **Operate safely by default.** Conservative rate limits, per-workload cooldowns, concurrency caps, and explicit rejection of high-uncertainty actions, enforced centrally in the Arbiter across all policies. First principle: *primum non nocere.*
 7. **Introduce no new CRDs.** Configuration via `ConfigMap`; per-workload gating via annotations on `InferenceService`; output via Prometheus metrics, K8s Events, and an optional recommendations `ConfigMap`.
-8. **Be useful without OMENative** for `RawDeployment` workloads (a non-trivial fraction of real clusters), which migrate through the core InferenceService controller — always present in an OME cluster — with no OMENative dependency.
+8. **Be useful without OMENative** as an observer and recommender for `RawDeployment` workloads. Automatic Raw migration is not an Alpha dependency; it becomes executable only after the InferenceService controller implements the same migration-request consumer contract.
 9. **Scale to large clusters** (tested design target: 1000 nodes, 10k pods, 100+ InferenceServices).
 
 ### Non-Goals
@@ -187,21 +188,25 @@ the observation loop keeps the snapshot gauges flowing, so an operator still
 Reporter keep publishing Recommendations; only the Dispatcher is off.)
 Observability is not coupled to actuation.
 
-**Tick advancement, not interruption.** The decision loop is time-driven, but a
-node-condition change may *advance the next tick*: if no pass is running, a
-pass starts immediately; if a pass is running, the next pass starts as soon as
-it completes. A pass is never interrupted, never resumed, and never concurrent
-with another — the event moves the schedule, not the execution model.
+**Supplemental early pass, not interruption.** The decision loop is
+time-driven, but a node-condition change may request an additional immediate
+pass. If no pass is running, the early pass starts immediately; if a pass is
+running, it starts as soon as that pass completes. A pass is never interrupted,
+resumed, or run concurrently with another, and the regular periodic deadline is
+left unchanged.
 *Rationale:* without this, a `GpuUnhealthy` condition a watch delivers in
 milliseconds can sit unnoticed for up to a full `decisionLoopInterval` while
 the loop sleeps; with it, health-reaction latency drops from minutes to
 seconds while defragmentation stays lazily periodic. (`earlyTickOn:
-[NodeConditionChange]`; an empty list disables advancement.)
+[NodeConditionChange]`; an empty list disables the supplemental pass.)
 
 Alfred reads:
 - Nodes (GPU capacity, allocation, conditions including `GpuUnhealthy`).
 - Pods (labeled by OME conventions).
 - InferenceServices.
+- InferenceReplicas (OMENative Instance lifecycle and migration status).
+- OMENative per-owner migration-audit ConfigMaps (durable UUID history).
+- The OMENative executor capability Lease (read-only liveness/capability proof).
 - BaseModels / ClusterBaseModels.
 - PersistentVolumeClaims / PersistentVolumes (PVC-backed model topology).
 - Alfred's own ConfigMap for policy configuration.
@@ -213,10 +218,31 @@ table](#the-engine-snapshot--policies--arbiter--dispatcher--reporter)):
   evacuation signals, skip reasons).
 - Optional `alfred-recommendations` ConfigMap in its own namespace.
 - Migration-request annotations on InferenceServices (only in execute mode; the
-  single migration verb, consumed by OMENative or the InferenceService
-  controller according to the component's deployment mode).
+  single migration verb, and only for a deployment mode with a confirmed
+  consumer).
 
 Everything else is read-only.
+
+### Implementation status and compatibility baseline
+
+This OEP is the target design, not a claim that every stage is implemented.
+At the 2026-08-31 baseline, the source tree has the following status:
+
+| Area | Status | Current boundary |
+|------|--------|------------------|
+| Observation and configuration | Implemented | Every replica builds snapshots and publishes gauges; configuration hot-reloads with last-known-good fallback. |
+| Defragmentation Policy #1 | Partially implemented | Scoring, candidate generation, arbitration, and reporting run; placement feasibility is not yet scheduler-complete. |
+| Arbiter and Reporter | Partially implemented | Core admission gates and outputs exist; positive-benefit/regression admission and dispatch/outcome-fed ledger state are not connected. |
+| Node-Health Policy #2 | Not implemented | Node conditions only exclude unhealthy nodes as defrag targets and enqueue a coalesced early decision request. That request currently reads the latest cached snapshot without first refreshing it; no evacuation candidates or remediation signals are produced. |
+| Dispatcher | Not implemented | Alfred does not patch migration-request annotations. Current `mode: execute` reporting says "will dispatch" despite performing no write; that mode is unsupported and must fail closed to recommend-only until the Dispatcher and its guards land. |
+| OMENative state | Requires refresh | Current code collapses every non-Raw Component into synthetic Instance 0 and reads legacy ISVC migration history. Alfred must normalize `InferenceReplica.Status` for stable Instance identity, lifecycle state, and migrations, then join live Pods by Instance index and incarnation for physical placement and readiness. |
+| OMENative executor readiness | Not implemented | CRD discovery and current status do not prove the controller is still running. Alpha execution requires a fresh OMENative capability Lease; until that signal exists and Alfred consumes it, OMENative candidates remain advisory. |
+| RawDeployment execution | Deferred | Current policy classifies Raw candidates as executable, but neither an Alfred Dispatcher nor a Raw request consumer exists. The revised design requires Raw candidates to be advisory-only until both are implemented and tested. |
+
+The remaining sections describe the target architecture unless they explicitly
+say "current implementation." The compatibility baseline for new work is the
+current OMENative API, not pod-name reconstruction or legacy aggregate migration
+history on `InferenceService`.
 
 ### Architectural posture: observer, recommender, narrow actuator
 
@@ -240,13 +266,10 @@ why eviction is unsafe for these groups and why their migration must be delegate
    role.
 3. **Narrow actuator.** When configured to act, Alfred executes a Recommendation
    only by *delegating*:
-   - Multi-pod workloads → **OMENative**, the controller that owns their
-     lifecycle, via the OEP-0007 migration-request annotation.
-   - `RawDeployment` components → the **InferenceService controller**, the
-     reconciler that owns their Deployments, via the *same* annotation; it
-     executes a surge-first Deployment rolling restart (single ready replica)
-     or a targeted, PDB-honoring eviction of the pod on `FromNode` (multiple
-     ready replicas).
+   - OMENative-managed workloads → **OMENative**, the controller that owns
+     their lifecycle, via the OEP-0007 migration-request annotation.
+   - `RawDeployment` and legacy LWS components → advisory-only until their
+     lifecycle owner implements the same request/acknowledgement contract.
 
 Why not let Alfred orchestrate lifecycle directly? Eviction races with other
 cluster activity, and for an atomic group it is *unsafe*: evicting one pod out
@@ -258,16 +281,14 @@ requires the controller that owns it. So that is where the work belongs.
 
 - A bad *recommendation* (e.g. the scorer proposes a counterproductive move) is
   rejected or simply not executed by OMENative: nothing happens to the workload.
-- A bad *RawDeployment migration request* is executed by the InferenceService
-  controller with the recovery properties K8s already provides: the
-  single-replica path is surge-first (no downtime window to make worse), and
-  the multi-replica path is a PDB-honoring eviction that recovers the same way
-  any node drain or preemption does.
+- A Candidate for a deployment mode without a confirmed consumer is
+  `Executable=false`; it can produce an operator-visible recommendation but no
+  migration-request write.
 
 Note the boundary condition explicitly: **this bound holds *because* Alfred never
 orchestrates pod lifecycle directly.** The worst Alfred can do through its write
 contracts is request a migration — which the owning controller (OMENative or
-the InferenceService controller) validates, rate-limits, and can refuse. The day Alfred starts
+another explicitly implemented consumer) validates, rate-limits, and can refuse. The day Alfred starts
 driving pod lifecycle itself — staging surge pods, deleting group members in
 sequence — the guarantee is gone and the blast radius becomes unbounded. The
 narrow surface is not an accident of the current implementation; it is the load-
@@ -288,7 +309,7 @@ an implementation detail:
 ClusterSnapshot ──▶ [ Policy₁ Defragmentation ]──┐
    (read-only)      [ Policy₂ Node-Health Evac ]──┼──▶ Arbiter ──▶ Dispatcher ──▶ actuation
                     [ Policy₃ Descheduling (fut)]──┘  (select+    (the only       contracts
-                                                  │    sequence)   actuator)    (migrate/evict)
+                                                  │    sequence)   actuator)    (migration request)
                                                   │       │
                         advisory candidates ──────┤       │ outcomes (admitted /
                         (Executable=false)        │       │ withheld / rejected + reason)
@@ -339,10 +360,11 @@ The contract is deliberately tiny, and the consequence is the point:
    scattered across nodes so that a large contiguous request cannot schedule) and
    proposes consolidating migrations. This is the original OEP-0008 workload.
 2. **Node-Health Evacuation (Policy #2).** Detects a node that has gone
-   `GpuUnhealthy` (node condition) and proposes evacuating the OME workloads off
-   it, plus *signalling* that the node needs repair (an Event on the node;
-   optionally a label). It **evacuates and signals — it does not repair.** The
-   actual hardware repair (cordon-and-reset via a cloud Compute API) is left to
+   `GpuUnhealthy` (node condition) and proposes evacuating eligible OMENative
+   Instances off it, plus *signalling* that the node needs repair (an Event on
+   the node and an Alfred-owned ConfigMap record). It **evacuates and signals —
+   it does not repair.** The actual hardware repair (cordon-and-reset via a
+   cloud Compute API) is left to
    whatever node-lifecycle controller the operator already runs. This is the key
    reframing of the old `ome-operator` auto-repair: the evacuation reuses the
    exact same delegated migration path as defragmentation, so Policy #2
@@ -376,7 +398,7 @@ K8s Event, every decision metric, and (if enabled) every
 from two directions. From the arbitrated path it receives the Arbiter's
 outcomes (admitted, withheld, rejected — each with its recorded reason) and the
 Dispatcher's actuation results. And **advisory Candidates** (`Executable=false`
-— an LWS defrag recommendation, a node remediation signal) are routed to it
+— a Raw/LWS defrag recommendation, a node remediation signal) are routed to it
 directly, bypassing arbitration entirely. The bypass is deliberate: an advisory
 carries no action to admit, so sending it through the Arbiter could only hurt —
 a benefit-cost admission threshold would silently drop it, or an inert
@@ -391,17 +413,16 @@ and therefore Alfred — write to the wider cluster):
 
 | Target | Resource | Write | Writer | Why | New RBAC for Policy #2? |
 |--------|----------|-------|--------|-----|-------------------------|
-| Alfred namespace | ConfigMap (`alfred-recommendations`) | Full read/write | Reporter | Alfred's own output | No |
+| Alfred namespace | ConfigMap (`alfred-recommendations`) | `get`, `update`, `patch`, `delete` | Reporter | Alfred's pre-created output | No |
 | Alfred namespace | Lease | Full read/write | engine (leader election) | Leader election | No |
 | Any namespace | Events (on ISVC **and** Node) | `create`, `patch` | Reporter | Surface recommendations, migrations, evacuation + repair signals | No — `events` already granted |
-| Any namespace | InferenceService annotations | `patch` (narrow to `ome.io/migration-request-v1-*`) | Dispatcher | OEP-0007 migration verb — the single executable contract for every workload type, defrag **and** evacuation | No — same annotation both policies |
+| Any namespace | InferenceService annotations | `patch` (narrow to `ome.io/migration-request-v1-*`) | Dispatcher | OEP-0007 migration verb — the single executable contract for supported workload owners, defrag **and** evacuation | No — same annotation both policies |
 
 The load-bearing property: **Policy #2 (Node-Health Evacuation) introduces no new
 write contract.** It evacuates by reusing the same migration annotation the
-Dispatcher already writes for defragmentation — the owning controllers
-(OMENative, and the InferenceService controller for RawDeployment) execute the
-actual moves — and it signals repair by writing an Event on the node — a verb
-Alfred already has. It
+Dispatcher writes for defragmentation — the owning controller (currently
+OMENative) executes the actual moves — and it signals repair by writing an
+Event on the node — a verb Alfred already has. It
 does **not** cordon nodes via the node-write API, and it does **not** call any
 cloud Compute API. Contrast the old `ome-operator` auto-repair, which cordoned
 nodes and triggered Compute resets and therefore needed both node-write RBAC
@@ -413,8 +434,8 @@ already justified for defragmentation alone.
 one Arbiter admission run, dispatch — is non-overlapping by construction: the
 loop is non-reentrant, so if a pass overruns `decisionLoopInterval`, the next
 tick is delayed until it completes, never started concurrently (cadence
-degrades under load; correctness does not). An early tick advances the timer
-feeding this loop; it cannot introduce concurrency. *Rationale:* every safety
+degrades under load; correctness does not). A coalesced early request adds one
+serialized pass without resetting the periodic timer. *Rationale:* every safety
 bound — the shared budget, the capacity check net of in-flight claims, the
 cooldown bookkeeping — assumes admissions are totally ordered. Two concurrent
 Arbiter passes are two admitting authorities racing one ledger: both read "2
@@ -428,20 +449,24 @@ and no Candidate survives the leader that computed it — Candidates are derived
 cache with the lifetime of one pass, not persisted state that could go stale.
 This imposes a standing requirement: **all arbitration bookkeeping must be
 reconstructible from the cluster**, because leader memory is defined to be
-losable. In-flight actions and both cooldowns reconstruct from request
-annotations and `Status.MigrationHistory`; the rolling per-hour ledger
-reconstructs from `MigrationHistory` timestamps plus the Reporter's audit
-ConfigMap entries, and where history is incomplete the new leader assumes the
-window is spent until an hour of observed history accumulates — degrading
-toward quiescence, never toward a storm.
+losable. Pending mailbox writes reconstruct from migration-request annotations;
+accepted and terminal OMENative work reconstructs from
+`InferenceReplica.Status.Migrations`; long-term rate and cooldown history
+reconstructs from the workload audit ledger. The same request UUID is
+deduplicated across all three surfaces. Where durable history is incomplete,
+the new leader assumes the relevant budget window is spent — degrading toward
+quiescence, never toward a storm.
 
 **The guarantee's honest boundary.** Lease-based election is advisory, not
 fenced: a paused old leader may dispatch briefly after losing the Lease.
 Inside that window, safety rests on the write contracts themselves —
-UUID-idempotent migration requests, and the owning controller's
-one-in-flight-per-component lock rejecting conflicting requests with
-`MigrationInProgress`. Budget may transiently overshoot and re-converges on
-the next pass from observed state. Dispatched migrations are otherwise
+UUID-idempotent migration requests, status-backed source/surge operation
+fencing, oldest-first selection of accepted Manual records, and the owning
+controller's execution-capacity gates. OMENative may queue distinct UUIDs
+rather than reject them merely because another request is active; it selects
+one record per pass and bounds allocated surge work. Alfred's own budget may
+transiently overshoot and re-converges on the next pass from observed state.
+Dispatched migrations are otherwise
 unaffected by any of this: executions from earlier passes proceed concurrently
 and are *observed* via the next snapshot, never awaited — decision latency
 stays seconds-long regardless of how long executions run.
@@ -458,6 +483,13 @@ Each term defined before use, with the consequence baked in.
   policy reasons over the **same** view — two policies can never disagree about
   what the cluster looked like, and a policy can never mutate state another policy
   is reading.
+- **Migration state.** One request UUID may appear in three places as it moves
+  through the system: the InferenceService annotation is the pending mailbox,
+  `InferenceReplica.Status.Migrations` is authoritative after OMENative accepts
+  it, and the workload audit ledger is durable history. *Consequence:* Alfred
+  joins and deduplicates these surfaces by UUID; annotation disappearance is
+  never interpreted as success, and the recommendations ConfigMap is never used
+  as execution truth.
 - **Policy.** A pluggable decision module implementing `Evaluate(snapshot) →
   []Candidate`. *Consequence:* a policy is a pure, side-effect-free function of
   the snapshot — independently unit-testable and structurally incapable of
@@ -469,7 +501,7 @@ Each term defined before use, with the consequence baked in.
   benefit and cost are explicit and comparable, so the Arbiter can rank across
   policies on a common axis instead of trusting each policy's self-assessment.
   A Candidate flagged `Executable=false` is *advisory* — a finding to surface
-  (an LWS defrag recommendation, a node remediation signal), not an action to
+  (a Raw/LWS defrag recommendation, a node remediation signal), not an action to
   dispatch; the engine routes it directly to the Reporter, so it never enters
   arbitration and never consumes budget.
 - **Recommendation.** A Candidate that has survived the Arbiter — passed
@@ -486,8 +518,9 @@ Each term defined before use, with the consequence baked in.
   thrashing prevention is not re-derived per policy.
 - **Dispatcher.** The single actuator: it executes Recommendations by writing
   the migration-request annotation; the controller that owns the workload
-  (OMENative for Instances, the InferenceService controller for RawDeployment
-  components) performs the actual move. *Consequence:* all
+  performs the actual move. In the current compatibility baseline, only
+  OMENative is such a consumer; RawDeployment and LWS remain advisory-only.
+  *Consequence:* all
   actuation writes funnel through one component, making the write surface
   exhaustively auditable alongside the Reporter's observability writes.
 - **Reporter.** The single observability emitter: it turns returned Candidates,
@@ -497,9 +530,12 @@ Each term defined before use, with the consequence baked in.
   the Arbiter stay pure decision logic — values in, values out — and every
   operator-visible surface is produced in exactly one place, so emission can be
   tested (and deduplicated) once, not per policy.
-- **Fragmentation Score.** A cluster-level number in [0, 1] summarizing GPU
-  fragmentation — 0 = perfectly packed, 1 = maximally fragmented — composed of
-  weighted signals (mechanism in Design Details). *Consequence:* it is the
+- **Fragmentation Score.** A cluster-level number in [0, 1] summarizing fixable
+  fragmentation opportunity plus eligible pending pressure. `0` means Alfred
+  models no executable relocation that would help — which includes perfectly
+  packed, fully utilized, and fragmented-but-immovable clusters — while values
+  toward `1` mean greater fixable opportunity or pressure (mechanism in Design
+  Details). *Consequence:* it is the
   scalar the Defragmentation policy thresholds on and the metric an operator
   watches; it is a *signal*, not an action, so a rising score in
   `recommend-only` mode produces visibility without disruption.
@@ -542,17 +578,17 @@ migration verb, consolidating Node1. Llama4 schedules on Node3 within minutes.
 
 Node7's node condition flips to `GpuUnhealthy` (a GPU has failed). The
 Node-Health Evacuation policy sees the condition in the snapshot and returns
-Candidates to evacuate every OME workload off Node7 — high benefit (workloads are
-running on degraded hardware), and the cost is bounded because the moves go
-through the same delegated path as defrag. The Arbiter prioritizes these over any
-routine defrag Candidates (a sick node should empty first) and emits ordered
-Recommendations. The Dispatcher evacuates by writing migration requests: OMENative
-Instances surge away via OEP-0007; RawDeployment components are moved by the
-InferenceService controller (rolling restart or targeted eviction). Alfred
+Candidates for every OME occupant on Node7. Eligible OMENative Instances can
+evacuate; RawDeployment, LWS, and ineligible OMENative findings stay advisory.
+The Arbiter prioritizes executable health Candidates over routine defrag
+Candidates and emits ordered Recommendations. The Dispatcher writes migration
+requests for the eligible OMENative Instances; OMENative surges them away via
+OEP-0007. Alfred
 *signals twice*: `NodeRepairNeeded` on Node7 at detection — before any drain,
 giving the repair pipeline its lead time while workloads still run — and
-`NodeDrainedForRepair` (optionally with a label) once the node is empty of OME
-workloads, the safe-to-act handoff — and stops there. **Alfred does not cordon the node and does not call any cloud Compute API
+`NodeDrainedForRepair` only once the node is empty of every OME workload. If an
+advisory-only occupant remains, Alfred withholds the completion Event and keeps
+reporting the blocker. **Alfred does not cordon the node and does not call any cloud Compute API
 to reset it.** Repair is delegated to whatever node-lifecycle controller the
 operator already runs. The whole story uses only the existing narrow write
 contracts: migration annotation, node Event. No new RBAC, no cloud
@@ -664,7 +700,7 @@ remediation signal") and Story 3 ("once the node is drained, Alfred signals")
 — each sentence is true of one of the two Events.
 
 **Risk: evacuation blocked by the very fragmentation defrag exists to fix.**
-Surge-shaped evacuations (OMENative Instances, single-replica components) need
+OMENative evacuations need
 their replacement footprint free on a healthy node *before* the source frees.
 On a fragmented cluster that footprint may exist only in scatter — 12 free
 GPUs as 2+3+2+3+2 cannot surge an 8-GPU Instance — so the candidate downgrades
@@ -680,14 +716,14 @@ then does the rest unmodified: demand weighting steers `Frag(c, s)` toward the
 needed size, pending pressure gives the blockage bounded age-based urgency,
 and the emergency boost lets the defrag move that opens the slot jump the
 queue — Arbiter priority hands the freed headroom to the evacuation on the
-following pass. Evictable occupants of the sick node drain in parallel
-throughout (free-then-place needs no headroom). The residual case — a packed
-cluster with nothing movable — ends in the advisory surface where it belongs,
+following pass. RawDeployment, LWS, and otherwise ineligible occupants remain
+advisory; there is no free-then-place executable path in Alpha. The residual
+case — a packed cluster with nothing movable — ends in the advisory surface where it belongs,
 and `alfred_surge_headroom_gpus == 0` is its dashboard signature. The feedback
 is re-derived, not remembered: scoring runs before simulation within a pass,
 so pass N's downgrades steer pass N+1 (a one-pass lag), the sick condition
-re-produces the blockage every pass while it lasts, and on failover the record
-reconstructs from the Reporter's audit trail like every other ledger.
+re-produces the blockage every pass while it lasts, and on failover migration
+state reconstructs from InferenceReplica status and the workload audit ledger.
 
 **Risk: broken GPU discovered only after migration.** Alfred migrates onto Node5,
 which has a broken NVLink; NCCL fails.
@@ -700,20 +736,21 @@ within a window, Alfred marks the node suspect and backs off from it. Mitigation
 not full fix: a fault that is invisible to the node condition can still bite.
 
 **Risk: conflict with HPA / scheduler / other controllers.**
-*Mitigation:* the Defragmentation policy checks for active HPA scaling on the
-target ISVC in the snapshot and the Arbiter defers while it is in progress.
-Alfred respects `scale-down-disabled` on nodes. The owning controllers enforce a
-migration-in-progress lock (per Instance for OMENative — OEP-0007 Q-004 — and
-per component for the InferenceService controller), so concurrent migration
-requests are serialized on the workload-owner side regardless of what Alfred
-sends.
+*Mitigation:* the snapshot records active HPA scaling and the Arbiter defers
+every policy's Candidate for that Component while scaling is in progress.
+Alfred respects `scale-down-disabled` on nodes. Alfred's per-workload exclusion
+prevents competing UUIDs from its own policies; OMENative then revalidates live
+source identity, fences source/surge operations in status, selects accepted
+Manual records oldest-first, and applies execution-capacity gates. A future
+consumer must provide equivalent validation and durable operation fencing before
+its deployment mode can become executable.
 
 **Risk: migration-request annotation write lost or delayed.**
-*Mitigation:* the OEP-0007 annotations are UUID-keyed and idempotent (Q-021). If
-the owning controller does not clear within 5 minutes, the Dispatcher retries
-with the same UUID. If still unacknowledged at 1 hour, the owning controller
-clears it as stale and emits `MigrationRequestStale`; Alfred restarts from
-observation on the next loop.
+*Mitigation:* the OEP-0007 annotations are UUID-keyed and idempotent (Q-021).
+Until the UUID appears in `InferenceReplica.Status.Migrations` or as a terminal
+workload-audit entry, the Dispatcher retries the same UUID after its
+acknowledgement timeout. Accepted work follows the InferenceReplica phase and
+deadline; annotation deletion alone never means completion.
 
 **Risk: Alfred / owning-controller version skew on the migration wire contract.**
 *Mitigation:* the Dispatcher writes only the OEP-0007 v1 request shape
@@ -752,14 +789,24 @@ The engine — shared `ClusterSnapshot` → `Policies` → `Arbiter` → `Dispat
 
 ### Policy #1: Defragmentation
 
-Tl;dr: Policy #1 implements `Evaluate(snapshot) → []Candidate`. It reads the shared `ClusterSnapshot`, scores how badly the cluster's GPUs are fragmented, and — only when that score crosses a threshold — returns a ranked slice of candidate migrations to the Arbiter. It does not move pods. Execution belongs to the shared Dispatcher, which delegates to whoever owns the workload's lifecycle.
+Tl;dr: Policy #1 implements `Evaluate(snapshot) → []Candidate`. It reads the
+shared `ClusterSnapshot`, scores fixable GPU fragmentation plus eligible pending
+pressure, and — only when that score crosses a threshold — returns a ranked
+slice of candidate migrations to the Arbiter. It does not move pods. Execution
+belongs to the shared Dispatcher, which delegates to whoever owns the workload's
+lifecycle.
 
-This is the first policy, and its scoring and selection logic is unchanged from the original defragmenter design: the only structural change is that it now returns `[]Candidate` to the Arbiter instead of dispatching directly. Keep that boundary in mind while reading — every "emit", "score", and "rank" below produces a `Candidate`, never a side effect.
+This is the first policy. Its demand-weighted scoring formula is retained, but
+selection and execution eligibility are refreshed for current OMENative, the
+advisory-only Raw/LWS boundary, and fail-closed placement checks. It now returns
+`[]Candidate` to the Arbiter instead of dispatching directly. Keep that boundary
+in mind while reading — every "emit", "score", and "rank" below produces a
+`Candidate`, never a side effect.
 
 **Definitions (used throughout this section).**
 
 - *Candidate*: a proposed move of one Component Instance — "Component X's Instance Y off Node Z" — carrying a *benefit score* (expected fragmentation improvement), a *cost score* (disruption risk), an `Executable` flag, and a ranked list of `HintTargetNodes`. A Candidate is a value, not an action; the Arbiter decides whether any Candidate is dispatched.
-- *Instance*: per the OEP-0007 hierarchy, a Component (router/engine/decoder) is a set of Instances; an Instance is the atomic unit Alfred reasons about and migrates. An OMENative Instance is multi-pod and must move together; a RawDeployment Instance is a single pod (one replica of the component).
+- *Instance*: per the OEP-0007 hierarchy, a Component (router/engine/decoder) is a set of Instances; an Instance is the atomic unit Alfred reasons about and migrates. An OMENative Instance may contain one pod or an atomic multi-pod group. Its stable index, incarnation, and lifecycle state come from the owning `InferenceReplica.Status`, while live placement and readiness come from Pods joined by the `ome.io/instance-index` and `ome.io/instance-incarnation` labels — never from pod-name order. A RawDeployment Instance is a single pod (one replica of the component) and is advisory-only until a Raw migration consumer exists.
 - *Movable*: a workload Alfred is permitted to migrate. Default true; set false by the `alfred.ome.io/movable: "false"` annotation. A non-movable workload is excluded from candidate enumeration entirely — Policy #1 never produces a Candidate for it.
 
 #### Observation layer
@@ -770,12 +817,19 @@ The snapshot the policy consumes:
 
 ```go
 type ClusterSnapshot struct {
-    Timestamp          time.Time
-    Nodes              map[string]*NodeState
-    Workloads          map[types.NamespacedName]*WorkloadState
-    Models             map[string]*ModelAvailability
-    PendingPods        []*PendingPodInfo
-    OMENativeAvailable bool                      // API discovery result
+    Timestamp         time.Time
+    Nodes             map[string]*NodeState
+    Workloads         map[types.NamespacedName]*WorkloadState
+    Models            map[string]*ModelAvailability
+    PendingPods       []*PendingPodInfo
+    OMENativeExecutor OMENativeExecutorState
+}
+
+type OMENativeExecutorState struct {
+    Available   bool                            // fresh Lease + compatible wire version
+    WireVersion string
+    RenewTime   time.Time
+    Reason      string                          // absent, stale, incompatible, or ready
 }
 
 type NodeState struct {
@@ -785,7 +839,7 @@ type NodeState struct {
     AllocatedGPUs         int
     FreeGPUs              int
     LargestContiguousFree int                    // topology-aware; optional — scoring Step 1 hook (Q-040)
-    Unhealthy             bool
+    Health                NodeHealthObservation
     Cordoned              bool
     ScaleDownDisabled     bool                   // CA annotation observed
     Preemptible           bool                   // spot / preemptible label observed
@@ -793,27 +847,49 @@ type NodeState struct {
     OtherOccupants        []OtherPodInfo         // non-OME GPU workloads
 }
 
+type NodeHealthObservation struct {
+    State              string                    // Clear | Suspect | Unknown | Unhealthy
+    Conditions         []NodeConditionObservation
+    SuspectUntil       *time.Time
+}
+
+type NodeConditionObservation struct {
+    Type               string
+    Status             string                    // True | False | Unknown
+    LastTransitionTime time.Time
+}
+
 type WorkloadState struct {
-    ISVC            *omev1beta1.InferenceService
-    Components      map[string]*ComponentState   // router, engine, decoder
-    Movable         bool                         // from annotation
-    Priority        float64                      // from annotation or default
-    LastMigration   time.Time                    // per-workload cooldown
-    ActiveMigration *MigrationInFlight
+    ISVC             *omev1beta1.InferenceService
+    Components       map[string]*ComponentState  // router, engine, decoder
+    Movable          bool                        // from annotation
+    Priority         float64                     // from annotation or default
+    LastMigration    time.Time                   // per-workload cooldown
+    ActiveMigrations []*MigrationInFlight        // deduped by request UUID
 }
 
 type ComponentState struct {
-    DeploymentMode string                        // OMENative, RawDeployment, MultiNode (LWS), etc.
-    Instances      []*InstanceState              // per OEP-0007 hierarchy
+    DeploymentMode   string                      // OMENative, RawDeployment, MultiNode (LWS), etc.
+    InferenceReplica *omev1beta1.InferenceReplica // OMENative source of truth
+    StatusFresh      bool                        // observedGeneration and encoding validated
+    Instances        []*InstanceState            // stable indexes from status
 }
 
 type InstanceState struct {
-    InstanceIndex int32
-    NodesSet      map[string]int                 // node -> pod count
-    TotalGPUs     int32
-    PodCount      int32
-    ReadyPods     int32
-    DesiredPods   int32
+    InstanceIndex    int32                       // stable index from normalized IR status
+    Incarnation      int64                       // status value; must match joined Pods
+    Phase            string                      // normalized IR status
+    RunningRevision  string                      // normalized IR status
+    Admitted         bool                        // normalized IR status
+    ActiveOrdinal    int32                       // normalized IR status
+    ServingPods      int32                       // normalized IR status
+    AvailablePods    int32                       // normalized IR status
+    OperationActive  bool                        // normalized IR status
+    DesiredPods      int32                       // derived from the runner templates
+    ObservedPods     int32                       // live Pods joined by index + incarnation
+    ReadyPods        int32                       // derived from current live Pod conditions
+    NodesSet         map[string]int               // live node -> pod count
+    TotalGPUs        int32                       // derived from the joined live Pods
 }
 
 type PendingPodInfo struct {
@@ -834,10 +910,42 @@ type ModelAvailability struct {
 }
 ```
 
-Three properties of the read surface are load-bearing for later sections:
+The following properties of the read surface are load-bearing for later sections:
 
 - **Non-OME GPU workloads count against capacity but are never candidates.** Kubeflow Notebook pods, generic Jobs, and any other non-OME GPU consumer appear in `NodeState.OtherOccupants` and are folded into `AllocatedGPUs` / `FreeGPUs` so the fragmentation score reflects reality. But Policy #1 enumerates candidates only from `WorkloadState` (i.e. OME InferenceServices). *Failure mode if we got this wrong:* if non-OME pods were invisible to scoring, Alfred would underestimate fragmentation and sit quiescent on a genuinely packed cluster; if they were eligible for migration, Alfred would try to evict a notebook it does not own. The snapshot threads the needle by counting them for scoring and excluding them from selection.
-- **`OMENativeAvailable` is an API-discovery result, not an assumption.** The execution path for multi-pod migration depends on the OMENative migration verb existing on the cluster. The snapshot records whether it does, so the policy can downgrade multi-pod candidates to non-executable rather than emit a Candidate the Dispatcher cannot honor.
+- **OMENative state is a checked join, not either API alone.** The snapshot
+  decodes either DenseV1
+  `InstanceStatuses` or ColumnarV2 `InstanceStatusColumns`, preserving stable and
+  sparse Instance indexes, incarnation, lifecycle phase, operation, serving and
+  available counts. It reads `Status.Migrations` for accepted and terminal
+  migration work. Current Pods are then joined through the stable Instance index
+  and incarnation labels to derive physical placement, GPU footprint, and live
+  readiness. For a single-pod Instance, normalized `ActiveOrdinal` selects the
+  canonical pod slot; for a multi-pod Instance, Alfred requires the complete
+  runner/ordinal set described by the templates. An ambiguous or extra surge set
+  is busy, not steady. `ReadyPodCount` and `NodesOccupied` in Instance status are
+  retained compatibility fields and are not treated as persisted truth. An
+  OMENative Candidate is executable only when both sides agree, status reflects the current
+  generation, the encoding is valid, migration policy permits the action, and
+  the selected Instance is admitted, fully ready, available, and serving with no
+  active lifecycle operation, rollout, scale transition, or migration. A
+  missing/stale status, label mismatch, incomplete Pod set, or readiness
+  mismatch fails closed to an advisory Candidate.
+- **Executor liveness needs a positive signal.** CRD discovery and a coherent
+  InferenceReplica snapshot prove API compatibility, not that the controller is
+  still running. The OMENative controller publishes a namespaced capability
+  Lease only while the InferenceReplica executor is enabled and cache-synced.
+  Alfred requires a supported wire-version marker and a fresh `renewTime` before
+  dispatch; an absent, stale, or incompatible Lease makes every Candidate
+  advisory. This Lease is a target Alpha dependency and is not implemented in
+  the current baseline.
+- **Placement feasibility fails closed.** GPU room, model locality, and storage
+  topology are necessary but not sufficient. Before a Candidate becomes
+  executable, Alfred evaluates the complete OMENative runner template: scalar
+  resources, node selectors, required affinity, taints and tolerations, PVC/PV
+  topology, evaluable required pod affinity/anti-affinity, and the atomic
+  multi-pod footprint. A required constraint Alfred cannot evaluate downgrades
+  the Candidate to advisory rather than producing a speculative target.
 - **`ModelAvailability` is storage-aware, because PVC-backed models have no per-node readiness.** Per-node models (model-agent downloads) report readiness through `Status.NodesReady` and the `models.ome.io/...=Ready` node label — and the ISVC controller stamps that label as a hard `nodeSelector` on the pods, so the scheduler enforces it independently of Alfred. PVC-backed models intentionally never populate `NodesReady` (there is no per-node copy to report, and the ISVC controller likewise skips the readiness selector for them). *Failure mode if we got this wrong:* filtering PVC-backed workloads' targets by `NodesReady` would yield zero feasible targets and silently mark every PVC-backed workload `NoFeasibleTarget` forever. So the snapshot records the storage backend and, for PVC, the access modes and CSI topology — and the target filter switches on it (mechanism in Placement-hint computation).
 
 #### Fragmentation scoring
@@ -868,14 +976,23 @@ F_observed(c) = sum over s: w(c, s) * Frag(c, s)
 
 `demandShare(c, s)` is the fraction of pool-c GPU demand at size `s`, counted from running plus pending OME instance footprints snapped up to the ladder. A **multi-node Instance decomposes into its per-pod, per-node footprints** — a 2×8 Instance is 16 GPUs of size-8 demand, a 2×4 Instance is 8 GPUs of size-4 demand. This is not an approximation of convenience: within-node fragmentation can only deny a multi-node workload one node-shape at a time — what it needs from the cluster is "a node with 8 free," twice — so per-pod footprint is the unit of blocking, and `Slots(8)` already counts the nodes that could host each pod. (Whether two such nodes share an RDMA fabric is cross-node adjacency, out of scope per Q-039.) An LWS-backed instance also counts here — it is real demand — even though Step 3 will refuse to move it. The **prior** is a static distribution over sizes — default `{1: 0.1, 2: 0.1, 4: 0.2, 8: 0.6}`, blended at `lambda = 0.3` (`demandBlendLambda`) — expressing what shapes this fleet exists to serve, independent of what happens to be running right now. *Why a prior must exist:* pure `demandShare` is blind to shapes not currently deployed — a cluster running only 1-GPU jobs would weight `Frag(8)` at zero and report "no fragmentation" right up until the first 8-GPU model arrives and pends. The prior keeps latent large-shape fragmentation visible; its mass sits on the largest within-node size because that is the only shape fragmentation can hurt. `lambda` dials between reactive-only (`0`) and static-weights-only (`1`). The prior need not stay hand-typed: registered `BaseModel`/`ClusterBaseModel` resources declare GPU footprints, so a catalog-derived prior ("what could be deployed here") is a natural refinement — deferred to implementation.
 
-**Step 3 — reclaimable vs. observed.** Hypothetically repack the *movable* instances — those candidate enumeration could ever emit as executable (OMENative and RawDeployment with `Movable=true`) — onto the pool's nodes with first-fit-decreasing, holding everything else fixed in place: non-OME occupants, `Movable=false` workloads, and LWS-backed instances. FFD is the same heuristic family candidate simulation already uses, and global optimality is explicitly not promised (see Non-Goals: not an optimization engine). Recompute Steps 1–2 on the repacked free distribution:
+**Step 3 — reclaimable vs. observed.** Hypothetically repack only Instances
+that could become executable under the current compatibility baseline:
+OMENative, `Movable=true`, a checked InferenceReplica-plus-Pod view, a fresh
+compatible executor Lease, steady lifecycle state, and a supported placement
+proof. Hold everything else fixed in
+place: non-OME occupants, `Movable=false` workloads, RawDeployment, and
+LWS-backed Instances. FFD is the same heuristic family candidate simulation
+already uses, and global optimality is explicitly not promised (see Non-Goals:
+not an optimization engine). Recompute Steps 1–2 on the repacked free
+distribution:
 
 ```text
 F_best(c)        = F_observed(c) recomputed on the repacked snapshot, over the same TotalFree(c)
 F_reclaimable(c) = max(0, F_observed(c) - F_best(c))
 ```
 
-`F_reclaimable` is what migration could actually fix, and it is what gates the policy. The remainder — `F_observed - F_reclaimable` — is fragmentation only an operator can fix (LWS-backed groups, non-OME occupancy) and flows to the Reporter's advisory surface instead of the gate. This split is what keeps Alfred from waking every tick on a cluster it cannot improve, while still telling the operator that manual action would help. Both sides normalize by the *observed* `TotalFree(c)`: a repack can consume free capacity (seating a pod off an excluded node), and letting the denominator shrink with it would fabricate reclaimable fragmentation out of a shrinking base with no slot improvement. `F_best` is a bound, not a plan: realizing it may take many moves, paced by the Arbiter's churn budget across ticks, each tick re-deriving candidates from a fresh snapshot.
+`F_reclaimable` is what migration could actually fix, and it is what gates the policy. The remainder — `F_observed - F_reclaimable` — is fragmentation only an operator can fix in Alpha (RawDeployment, LWS-backed groups, non-OME occupancy) and flows to the Reporter's advisory surface instead of the gate. This split is what keeps Alfred from waking every tick on a cluster it cannot improve, while still telling the operator that manual action would help. Both sides normalize by the *observed* `TotalFree(c)`: a repack can consume free capacity (seating a pod off an excluded node), and letting the denominator shrink with it would fabricate reclaimable fragmentation out of a shrinking base with no slot improvement. `F_best` is a bound, not a plan: realizing it may take many moves, paced by the Arbiter's churn budget across ticks, each tick re-deriving candidates from a fresh snapshot.
 
 **Step 4 — pending pressure.** A pending pod is *eligible* iff the repacked state of Step 3 could seat it (`Slots_best(c, s_p) >= 1`). Ineligible pendings are capacity shortage, not fragmentation — that is [OEP-0013](../0013-autoscaling/README.md)'s problem, and they must not wake Alfred, because no migration can seat them. (A pending multi-node gang arrives as several pending pods and is checked per-pod, so a gang can read eligible when the repack could seat only part of it. This optimism is a deliberate roughness in the gate: the score decides whether to wake, and the candidate simulator — not the score — verifies real placements.) Blocked evacuations are fed back as **virtual pending pods** of their footprint (see the risks section): a `NoSurgeHeadroom` downgrade in pass N enters pass N+1's `PendingPods` with age counted from first blockage, scored identically — steering both the demand weights and `P` toward exactly the hole the evacuation needs.
 
@@ -901,15 +1018,22 @@ Noisy-OR across the two terms: fixable shape damage or a starving fixable pod ea
 
 When the score is above threshold, the policy turns the snapshot into a ranked `[]Candidate`. The steps below run on each evaluation tick:
 
-1. **Enumerate.** For every movable workload (`Movable=true`, not in per-workload cooldown via `LastMigration`, no `ActiveMigration` in flight), enumerate each Component Instance as one prospective candidate. (The engine-level exclusions — placement cooldown and terminating pods — are enforced by the Arbiter on every policy's candidates; see [Safety bounds](#safety-bounds). Policies may pre-filter them as an optimization.)
+1. **Enumerate.** For every movable workload (`Movable=true`), enumerate each
+   Component Instance as one prospective Candidate and carry its migration,
+   placement, and termination state forward. The Arbiter applies the shared
+   busy/cooldown/terminating gates to every policy's Candidates; see
+   [Safety bounds](#safety-bounds). Keeping these Candidates visible lets the
+   Reporter explain a skip instead of turning it into silence.
 2. **Classify by deployment mode** — this sets the `Executable` flag, it does not drop the candidate:
-   - **OMENative**: executable. Migration via the OMENative migration verb.
-   - **RawDeployment** (any replica count): executable. Same migration-request annotation; the InferenceService controller executes it — a surge-first Deployment rolling restart when the component has a single ready replica, a targeted eviction of the pod on `FromNode` when it has several. The replica branch is the controller's call at execution time against live state; Alfred does not pre-commit it from the snapshot.
+   - **OMENative**: potentially executable via the OMENative migration verb,
+     subject to the checked InferenceReplica-plus-Pod view, a fresh compatible
+     executor Lease, and fail-closed placement checks.
+   - **RawDeployment** (any replica count): `Executable=false` until a Raw
+     migration-request consumer exists. Still emit the Candidate so operators
+     see the opportunity.
    - **LWS-backed multi-pod**: `Executable=false`, but *still emitted* as a Candidate so the recommendation surfaces to operators. *Why include something we won't execute:* LWS's `RecreateGroupOnPodRestart` tears down the whole group on eviction with no surge protection — migrating it automatically is unsafe — but an operator still needs to see that this workload is a defrag opportunity and that the safe fix is to move it to OMENative.
    - **Knative**: not managed by Alfred; not enumerated.
-3. **Simulate.** For each candidate, predict the post-migration cluster state and recompute `F_observed` on that hypothetical snapshot; this gives `F_observed_after`. (Per-candidate benefit deliberately uses the *observed* score, never the reclaimable one — `F_best` stays out of per-candidate math, so the repack heuristic cannot jitter rankings.) The simulation order is **mode-aware**, matching how each mechanism actually sequences capacity:
-   - **Surge-shaped mechanisms** (OMENative Instance surge; single-replica Deployment rolling restart): **place-then-free**. The replacement must fit on a target *while the source still holds its GPUs* — only after the replacement is virtually placed does the simulation free the source and re-score. A candidate with no surge-feasible target is not dispatched: it is downgraded to advisory with reason `NoSurgeHeadroom`, so the operator sees "wants to move, no room" instead of a migration stalling in `SurgePending` until timeout.
-   - **Free-then-place** applies only to the **multi-replica targeted-eviction** path, where the replacement pod may legitimately reuse the just-freed GPUs (worst case the move under-delivers; it cannot deadlock).
+3. **Simulate.** For each candidate, predict the post-migration cluster state and recompute `F_observed` on that hypothetical snapshot; this gives `F_observed_after`. (Per-candidate benefit deliberately uses the *observed* score, never the reclaimable one — `F_best` stays out of per-candidate math, so the repack heuristic cannot jitter rankings.) An executable OMENative migration is **place-then-free**: every replacement member must fit on valid targets while the source still holds its GPUs, and only then does simulation free the source and re-score. A candidate with no surge-feasible placement is downgraded to advisory with reason `NoSurgeHeadroom`. RawDeployment and LWS simulations may estimate operator-visible benefit, but they never create capacity claims or executable Recommendations.
 
    Getting this order wrong is a real failure mode: free-then-place simulation of a surge move overestimates feasibility exactly when defragmentation matters most — on a highly utilized cluster.
 4. **Score** each candidate with a benefit-minus-cost rule:
@@ -920,15 +1044,23 @@ When the score is above threshold, the policy turns the snapshot into a ranked `
    FinalScore   = BenefitScore - CostWeight * CostScore
    ```
 
-   Cost is keyed off how disruptive the migration mode is:
-   - **RawDeployment multi-replica (targeted eviction)**: low — capacity dips by one replica briefly; PDB-guarded; needs no headroom.
-   - **RawDeployment single-replica (rolling restart)**: low — surge-first, no downtime; needs one pod's worth of headroom while old and new overlap.
-   - **OMENative rolling** (multi-replica, Service preserved): low.
-   - **OMENative surge** (single-replica Instance): medium — needs a full Instance footprint of headroom while the source still runs; that requirement is enforced as *feasibility* in step 3, not merely priced as cost.
-   - **LWS-backed**: not cost-scored at all — the candidate is advisory (`Executable=false`), so it never competes with executable candidates: the engine routes it straight to the Reporter, outside arbitration and budget (see Execution).
+   Alpha has one executable mechanism: **OMENative surge**, for either a
+   single-pod or multi-pod Instance. It needs the complete replacement footprint
+   as headroom while the source still runs; step 3 enforces that as feasibility,
+   while the cost term prices the affected serving footprint. RawDeployment and
+   LWS are not cost-scored for admission — they are advisory
+   (`Executable=false`) and route straight to the Reporter, outside arbitration
+   and budget (see Execution).
+   A Candidate with `FinalScore <= 0` is never executable: moving it would buy
+   no modeled improvement after disruption cost. It remains reportable with an
+   explicit non-positive-benefit reason rather than entering arbitration.
 5. **Boost emergencies.** If a candidate's migration would unblock a pod — real, or a virtual pending from a blocked evacuation (see the risks section) — that has been Pending longer than `emergencyPendingAgeMinutes`, multiply its `FinalScore` by a boost factor. This is what lets Story 2 — a Llama4 stuck Pending despite 70 free GPUs — jump the queue ahead of routine consolidation. (Complementary to the scoring gate's pending-pressure term `P`: `P` decides whether the policy wakes at all; the boost decides what the woken policy does first.)
 6. **Rank** by `FinalScore` descending, breaking ties toward the smaller surge footprint — smaller moves fit more often, disrupt less, and each completion frees GPUs that make larger moves feasible later. High-utilization defragmentation is designed to converge across decision cycles, smallest-first, not in one pass.
-7. **Apply policy filters** before returning: drop cooldown violations, maintenance-window exclusions, rate-limited excess, and tenant-boundary violations (see the multi-tenancy section). These filters belong in the policy because they shape the candidate set; the Arbiter applies its own cross-policy arbitration on top.
+7. **Apply policy-local eligibility** before returning: deployment support,
+   steady lifecycle state, model/storage reachability, and placement certainty.
+   Shared cooldown, maintenance-window, tenant-boundary, and rate-limit gates
+   remain in the Arbiter so they are enforced once across policies and their
+   rejection reasons reach the Reporter.
 8. **Return** the surviving ranked slice as `[]Candidate`. That return value is the policy's entire output — Policy #1 itself emits no Event, no metric, and no ConfigMap entry (it holds no client; see the engine's purity contract). The engine then routes the slice: executable Candidates enter the Arbiter; advisory ones (`Executable=false`) go straight to the Reporter. The Reporter emits a `FragmentationRecommendationProduced` K8s Event on each target InferenceService, increments `alfred_recommendations_produced_total`, and (if enabled) writes the `alfred-recommendations` ConfigMap entry — for every Candidate outcome it sees: produced, admitted, withheld, or rejected, each with its reason. Whether a returned Candidate is acted on remains the Arbiter's call, and dispatch the Dispatcher's.
 
 #### Placement-hint computation
@@ -937,6 +1069,13 @@ Each Candidate carries `HintTargetNodes`: a ranked, *advisory* list of nodes the
 
 1. **Enumerate** nodes that can physically accommodate the Instance's footprint (GPU count and hardware pool).
 2. **Filter** out nodes that would make the migration pointless or unsafe:
+   - **Required scheduling constraints fail closed** — evaluate CPU, memory and
+     scalar requests; node selectors; required node affinity; taints and
+     tolerations; PVC/PV topology; evaluable required pod affinity and
+     anti-affinity; and the complete multi-pod/gang footprint from the
+     InferenceReplica runner templates. If a required constraint cannot be
+     evaluated soundly, the Candidate becomes advisory instead of receiving a
+     speculative target hint.
    - **Model not available** — storage-aware, switching on `ModelAvailability.Backend`. *Per-node models*: the target must have the model ready, per `BaseModel.Status.NodesReady` or the node label `models.ome.io/{ns}.basemodel.{name}=Ready` (OEP-0007 Q-017) — migrating to a node that must first pull a multi-hundred-GB model defeats the purpose, and the pod's own readiness `nodeSelector` would block the placement anyway. *PVC-backed models*: `NodesReady` is intentionally empty and must **not** be used as a filter; the target set is the nodes that can mount the volume — for RWX/ROX storage, any node satisfying the PVC's CSI topology, with no model pull ever needed. *RWO (and RWOP) PVCs pin the workload*: the volume attaches to one node at a time and the source pod still holds it while a surge replacement starts, so no surge-shaped mechanism can run — the candidate is downgraded to advisory with reason `VolumePinned`.
    - **Unhealthy or cordoned**: excluded. Excluding unhealthy nodes from placement is existing defragmentation behavior — and it is the seam Policy #2 builds on: a node Policy #1 already refuses as a *target* is exactly the kind of node Policy #2 will reason about as a *source* to drain. Nodes inside their post-evacuation **suspicion window** are excluded too, even after the condition clears (see Policy #2's "stay suspicious" rule). (Mechanism for Policy #2 in its own section.)
    - **CA scale-down in progress**: a node with `scale-down-disabled` being processed is excluded, so Alfred and the cluster-autoscaler do not fight over it.
@@ -959,7 +1098,7 @@ payload := MigrationRequest{
     Reason:          "fragmentation",
     FromNode:        "node1",
     HintTargetNodes: []string{"node3", "node7"},
-    RequestedAt:     time.Now(),
+    RequestedAt:     time.Now().UTC().Format(time.RFC3339Nano),
     RequestedBy:     "alfred-controller",
 }
 patch := fmt.Sprintf(`{
@@ -972,26 +1111,42 @@ patch := fmt.Sprintf(`{
 client.Patch(ctx, isvc, types.MergePatchType, []byte(patch))
 ```
 
-OMENative observes the annotation, validates it, accepts or rejects, and records the outcome in `Status.MigrationHistory`. Alfred watches that status to learn what happened — it does not assume success.
+The InferenceReplica controller observes the annotation, validates it, records a
+manual entry in `InferenceReplica.Status.Migrations`, persists the request in
+the workload audit ledger, and then deletes the mailbox annotation. Alfred
+follows the same request UUID across those surfaces to learn what happened; it
+does not infer success from annotation deletion.
 
 Retry semantics (OEP-0007 Q-021):
-- If the owning controller has not cleared the annotation within 5 minutes, the Dispatcher re-PATCHes the **same** UUID — the request is idempotent, so a retry is a no-op if the original is still being processed.
-- If after 1 hour no clear has happened, the owning controller auto-clears the request with `MigrationRequestStale`; Alfred abandons it and emits an event. *Failure mode this guards against:* a request that hangs forever would pin the workload in `ActiveMigration` and silently exclude it from future candidate sets.
+- Until the UUID appears in `InferenceReplica.Status.Migrations` or as a terminal
+  workload-audit entry, the request is unacknowledged. The Dispatcher may
+  re-PATCH the **same** UUID after its acknowledgement timeout; UUID idempotency
+  makes that safe across leader failover and cache lag.
+- Once accepted, the InferenceReplica migration `Deadline` and terminal phase
+  govern completion. Alfred never invents a separate completion timeout and
+  never treats a missing annotation as completion.
 
-**RawDeployment → the same annotation, executed by the InferenceService controller.** The Dispatcher writes the identical request; the InferenceService controller — the reconciler that already owns each component's Deployment — consumes it for RawDeployment-mode components and branches on the component's **live ready-replica count at execution time**, not on Alfred's snapshot:
-
-- **Multiple ready replicas → targeted eviction.** The controller evicts the component's pod on `FromNode` through the K8s Eviction API, so PodDisruptionBudgets are honored and the pod's own `terminationGracePeriodSeconds` applies. The ReplicaSet recreates the pod and the scheduler places it. Capacity dips by one replica briefly; the replacement may legitimately land back on the just-freed GPUs (the move can under-deliver, but it cannot deadlock).
-- **A single ready replica → surge-first rolling restart.** Evicting the only pod would be an outage, so the controller borrows the Deployment's native surge machinery instead: it includes a restart stamp — `ome.io/migration-restart: <request-uuid>` — plus soft anti-affinity against `FromNode` and soft affinity toward `HintTargetNodes` in the **desired pod template** for that one component's Deployment, and pins the rollout strategy to `maxSurge: 1, maxUnavailable: 0`. The Deployment controller creates the replacement first, waits for it to become Ready, then terminates the old pod — place-then-free, zero downtime, no Eviction call, and only the addressed component rolls (a request for the decoder never touches the engines). Two rules keep this correct: the stamp and affinity are *derived state*, computed from the active request annotation, so a routine reconcile cannot strip them mid-rollout; and they are **never removed, only replaced** by the next request's UUID — removing them would itself be a template change that triggers a second, pointless rollout.
-
-Either way the controller acks exactly like OMENative: it clears the request annotation and appends a `MigrationHistory` entry (`mode: RollingUpdate` or `mode: Evict` — additive values to the OEP-0007 `MigrationMode` enum), enforces one in-flight migration per component, and applies the same UUID-idempotency and stale-clear rules. Alfred's watch, retry, and cooldown logic is therefore identical across every execution path.
-
-Known limitation on both branches: the replacement pod's destination is the scheduler's choice. The soft anti-affinity keeps a mostly-empty source node from recapturing the pod, but placement quality still depends on the scheduler's scoring profile; Alfred verifies the outcome from the next snapshot and re-derives the candidate if the move under-delivered.
+**RawDeployment → advisory-only in the current phase.** No production
+InferenceService controller consumes the migration-request annotation for
+RawDeployment today. Alfred therefore marks Raw candidates
+`Executable=false`, emits the proposed source and target hints, and does not
+write an annotation. A future Raw executor may adopt the same contract, but it
+must land with live-state validation, UUID idempotency, PDB-safe disruption,
+durable status/audit reporting, and end-to-end tests before this OEP marks Raw
+execution supported.
 
 **Legacy LWS-backed → never dispatched, advisory only.** An LWS-backed Candidate arrives flagged `Executable=false`, and the engine routes it directly to the Reporter — it never enters the Arbiter and never reaches the Dispatcher, so it consumes no rate-limit budget and starts no cooldown. The Reporter emits the recommendation event with a message directing the operator to migrate the workload to OMENative, and increments `alfred_lws_recommendations_total{isvc, action: manual}` so a dashboard can alert that manual defragmentation is needed. *Why route around arbitration:* an advisory carries no action to admit, and pushing it through benefit-cost admission would either silently drop it or let an inert recommendation debit the budget real actions need. *Why refuse rather than try:* LWS's `RecreateGroupOnPodRestart` tears down the entire group on a single eviction with no surge protection — Alfred would cause the very outage it exists to prevent.
 
 **Failure handling at dispatch:**
-- **Request rejected by the owning controller** (`InsufficientCapacity`, `RateLimited`, `MigrationInProgress`, PDB-blocked eviction): log the reason, put the candidate in cooldown, and let the Arbiter try the next-ranked Candidate.
-- **Request accepted but `Status.MigrationHistory` reports `Failed`** (surge Instance never Ready, rollout stall, eviction error): increment the failure metric, emit an event, and put that workload in cooldown so Alfred does not immediately re-attempt a move that just failed.
+- **Request validation or execution gate fails** (policy disabled, invalid
+  Instance or source, unsupported shape, or OMENative capacity/rate limit): the
+  owning controller records the UUID as `Failed`. Alfred reports that terminal
+  reason and applies failure cooldown. Accepted records may queue oldest-first;
+  queuing is not reported as a `MigrationInProgress` rejection.
+- **Request accepted but `InferenceReplica.Status.Migrations` reports `Failed`**
+  (surge Instance never Ready, rollout stall, or deadline expiry): increment the
+  failure metric, emit an event, and put that workload in cooldown so Alfred
+  does not immediately re-attempt a move that just failed.
 
 ### Policy #2: Node-health evacuation
 
@@ -1033,21 +1188,34 @@ cloud provider, or the cluster autoscaler — see the anticipated objection belo
 
 1. The trigger is a node condition already present in the snapshot. *Rationale:*
    Non-Goal #6 stands — Alfred adds no new GPU-health telemetry. Policy #2
-   consumes `GpuUnhealthy` (and the equivalent `NodeState.Unhealthy` flag the
-   observation layer already computes); it does not probe GPUs itself.
+   consumes `GpuUnhealthy` through `NodeState.Health`; it does not probe GPUs
+   itself.
 2. Evacuation uses the same execution surface as defrag, unchanged: every
-   evacuation Candidate goes out as the OEP-0007 migration-request annotation,
-   executed by the owning controller — OMENative surge for its Instances, the
-   InferenceService controller (rolling restart or targeted eviction) for
-   `RawDeployment` components; an LWS-backed group is recommend-only (Alfred
-   never executes LWS). *Rationale:* the safety argument — workloads are moved
-   by their owning controller, never evicted out from under themselves by an
-   outsider — must hold identically for health-evacuation, because the
-   destructiveness of the action does not depend on what triggered it.
+   executable evacuation Candidate goes out as the OEP-0007 migration-request
+   annotation and is executed by the owning controller. OMENative surge is the
+   supported path in this phase; RawDeployment and LWS findings are
+   recommendation-only until their lifecycle owners expose a compatible
+   consumer. *Rationale:* the safety argument — workloads are moved by their
+   owning controller, never evicted out from under themselves by an outsider —
+   must hold identically for health evacuation, because the destructiveness of
+   the action does not depend on what triggered it.
 3. The remediation signal is observable by the operator/cloud/cluster-autoscaler
    without Alfred holding any node-write permission. *Rationale:* this is the
    property that keeps Non-Goal #3 ("Alfred does not cordon, drain, or terminate
    nodes") literally true while still making the bad node *actionable*.
+4. Node health is a small state machine, not a boolean. A configured condition
+   at `True` makes the node unhealthy and evacuation-eligible. `Unknown`
+   quarantines the node as a target and emits a remediation signal, but does not
+   authorize migration. A transition to `False` after an incident enters the
+   suspicion window; only an expired suspicion window is clear. Condition
+   transition time is retained so this state is reconstructible after restart.
+   *Rationale:* treating `Unknown` as healthy is unsafe, while treating it as
+   sufficient evidence for disruption is also unsafe.
+5. A condition-change early tick refreshes the snapshot before policy
+   evaluation. Refresh, publication, and evaluation are serialized; a failed
+   refresh skips the early decision. An early pass does not postpone the regular
+   decision cadence. *Rationale:* waking quickly but evaluating the pre-change
+   snapshot provides neither fast detection nor safe evacuation.
 
 #### Approach (how)
 
@@ -1055,9 +1223,16 @@ On a bad condition for node N, Alfred does two things, both within its existing
 contracts:
 
 a) **Evacuate.** Produce evacuation Candidates for every OME workload occupying
-   N, scored and dispatched through the identical Candidate pipeline Policy #1
+   N, scored and dispatched through the same Candidate pipeline Policy #1
    uses (eligibility check, simulation against the *healthy* remainder of the
    cluster, capacity check, dispatch via the migration-request annotation).
+   Ineligible Instances and deployment modes without a consumer remain visible
+   as advisory Candidates; they are never silently dropped or speculatively
+   dispatched. Source enumeration starts from the OME occupants physically on
+   N and resolves each pod to its stable InferenceReplica Instance. Every
+   resulting Candidate carries `FromNode=N`; Alfred never substitutes a
+   "primary" node guessed from where the rest of a multi-pod Instance happens
+   to consume the most GPUs.
    Health-evacuation Candidates carry a distinct reason (`NodeUnhealthy`, vs
    `Fragmentation`) so operators can tell defrag moves from forced evacuations in
    metrics and Events — but they flow through the same code path. Within the
@@ -1068,16 +1243,15 @@ a) **Evacuate.** Produce evacuation Candidates for every OME workload occupying
 
 b) **Signal.** Return, alongside the evacuation Candidates, one advisory
    Candidate per bad node (`Executable=false`, reason `RemediationSignal`). The
-   engine routes it directly to the Reporter, which emits the remediation
-   signal in two places: a Kubernetes **Event on the Node object** (reason
-   `GpuUnhealthyEvacuating`, type `Warning`), and an entry in Alfred's **own
-   `alfred-recommendations` ConfigMap** keyed by node name with the condition,
-   the evacuated workloads, and a timestamp. The policy itself writes neither —
-   the signal, like every policy output, is a returned value. *Rationale:* the
-   Event is what cluster-autoscaler / node-problem-detector / a cloud
-   remediation controller already watch for; the ConfigMap entry is the durable
-   record Alfred itself owns, and the Reporter dedups against it across
-   decision loops so a flapping condition doesn't spam fresh signals.
+   engine routes it directly to the Reporter. At first detection the Reporter
+   emits a `NodeRepairNeeded` Warning Event on the Node. When the refreshed
+   snapshot shows no OME workloads left on the node, it emits
+   `NodeDrainedForRepair`. It also maintains an entry in Alfred's own
+   `alfred-recommendations` ConfigMap keyed by node name with the health state,
+   affected workloads, suspicion deadline, and timestamps. The policy itself
+   writes none of these surfaces. Reporter reconciliation treats each policy
+   result as the complete desired signal set, so cleared nodes remove stale
+   records and repeated observations do not spam Events.
 
 c) **Stay suspicious.** An evacuated node stays excluded from every policy's
    *target* hints for `nodeSuspicionWindowMinutes` (default 30) — even after
@@ -1103,14 +1277,13 @@ Alfred already holds.** Those three, and nothing more:
 
 | Write surface | Used by | Node-level? | New for Policy #2? |
 |---|---|---|---|
-| OEP-0007 migration-request annotation on the ISVC | defrag + evacuation, every workload type (OMENative and RawDeployment) | no | no |
+| OEP-0007 migration-request annotation on the ISVC | defrag + evacuation for workload owners with a validated consumer (OMENative in Alpha) | no | no |
 | Kubernetes Events | recommendations + remediation signal | Event *targets* a Node; it is **not** a write to the Node's spec/status | the Node-targeted Event is new; the verb (`create events`) is not |
 | Alfred's own `alfred-recommendations` ConfigMap | recommendations + node remediation record | no | no |
 
 There is **no** `patch nodes`, **no** `update nodes/status`, **no** cordon (which
 is a node spec write), **no** drain, **no** cloud-API call, **no** pod-level
-write of any kind (even the eviction that executes a multi-replica RawDeployment
-move is performed by the InferenceService controller, not Alfred), and therefore
+write of any kind. RawDeployment and LWS remain advisory in Alpha, and therefore
 **no** cloud credential anywhere in Policy #2. Emitting an Event whose `involvedObject`
 is a Node requires only the `create events` permission Alfred already has for its
 recommendations — it does not require write access to the Node itself.
@@ -1130,11 +1303,12 @@ bad node sit forever with workloads refusing to land on it?
 A. The loop is closed by whoever already owns nodes, not by Alfred. The Node
 Event and ConfigMap record are the handoff; cluster-autoscaler replacing the node
 or an operator repairing it is the completion. If nobody acts, the node stays
-excluded from placement hints (defrag avoidance) and the evacuation already moved
-the live workloads off — so the cluster is *degraded by one node*, not broken.
-That is the deliberate trade: Policy #2 guarantees the workloads are safe, not
-that the hardware gets fixed. Fixing hardware is explicitly someone else's
-contract.
+excluded from placement hints. Eligible OMENative Instances may already have
+moved, but RawDeployment, LWS, or ineligible OMENative occupants can remain; in
+that case Alfred withholds `NodeDrainedForRepair` and keeps their advisory
+blockers visible. Policy #2 reduces exposure where a validated migration path
+exists. It does not guarantee that every workload is safe or that the hardware
+gets fixed; those residual actions belong to the operator and node owner.
 
 ### Policy #3: Descheduling (future)
 
@@ -1179,7 +1353,7 @@ while Policy #2 (health) is simultaneously evacuating node N because it just wen
 `GpuUnhealthy`. Without arbitration, Alfred migrates A directly into a node it is
 in the middle of evacuating: the worst possible move. Or: two policies each emit
 a Candidate for the same workload, and the workload gets two concurrent
-migration requests, violating the single-in-flight invariant. The arbiter exists
+migration requests, violating Alfred's one-action-per-workload invariant. The arbiter exists
 to make those impossible *before* dispatch, deterministically.
 
 #### The four rules
@@ -1201,9 +1375,10 @@ b) **Mutual exclusion — at most one in-flight action per workload, and per
    workload per cycle would stretch an 8-workload evacuation across 40 minutes
    for no safety benefit, because the risk this rule guards is target
    over-commit, not source outflow. *Rationale:* concurrent actions on one
-   workload race the OEP-0007 single-migration-in-flight lock and waste
-   rate-limit budget; serializing per workload and per target node keeps every
-   downstream contract's "one at a time" assumption intact.
+   workload create duplicate intent and competing capacity claims. OMENative can
+   queue distinct UUIDs, so Alfred must enforce its own per-workload exclusion
+   before dispatch; target-node serialization prevents simultaneous claims from
+   overcommitting the same destination.
 
 c) **Global safety bounds — the existing cooldown, rate-limit, and capacity-check
    apply across all policies, not per policy.** The cluster-wide caps
@@ -1314,7 +1489,7 @@ config.yaml: |
   # Loop cadence
   decisionLoopInterval: 5m
   observationLoopInterval: 30s
-  earlyTickOn: [NodeConditionChange]  # advances the next decision tick; never interrupts a pass ([] disables)
+  earlyTickOn: [NodeConditionChange]  # adds a serialized early pass; periodic cadence is unchanged ([] disables)
 
   # Per-policy enable + tuning
   policies:
@@ -1336,8 +1511,8 @@ config.yaml: |
       aggressiveness: balanced
       # which node conditions trigger evacuation; consumes existing signals,
       # does not detect health itself (see Non-Goals).
-      triggerConditions: [AcceleratorUnhealthy, NodeNotReady]
-      signalOnly: false            # true = signal the owning controller, never evict
+      triggerConditions: [GpuUnhealthy]
+      signalOnly: false            # true = signal only, never dispatch
       healthCooldownFloorMinutes: 5   # per-workload cooldown floor for NodeUnhealthy candidates
       nodeSuspicionWindowMinutes: 30  # evacuated nodes stay out of target hints, even after the condition clears
 
@@ -1346,8 +1521,11 @@ config.yaml: |
   recentPlacementCooldownMinutes: 10  # authorship-blind placement cooldown, Arbiter-enforced (see Human intervention)
 
   # Execution surfaces (all annotation-mediated; the owning controllers execute)
-  rawDeploymentMigrationEnabled: true  # InferenceService controller: rolling restart (single-replica) / targeted eviction (multi-replica)
+  rawDeploymentMigrationEnabled: false # reserved; Raw is advisory until a consumer exists
   omenativeMigrationEnabled: true      # OMENative controller: Instance surge
+  omenativeCapabilityLeaseName: ome-inferencereplica-executor
+  omenativeCapabilityLeaseNamespace: ome
+  omenativeCapabilityMaxStaleness: 30s # absent/stale/incompatible = recommend-only
   lwsRecommendationsEnabled: true      # produce recommendations for LWS (never execute)
 
   # Output
@@ -1410,8 +1588,8 @@ Policy unless one of these holds:
 - Annotation `alfred.ome.io/movable: "false"`.
 - The workload is in cooldown (per-workload or per-node).
 - The workload is in active migration.
-- Its strategy is unsupported for execution — LWS is recommendation-only,
-  Serverless is not managed.
+- Its strategy is unsupported for execution — RawDeployment and LWS are
+  recommendation-only; Serverless is not managed.
 - It is backed by an RWO (or RWOP) PVC — the volume can attach to one node at a
   time, so no surge-shaped mechanism can move it; advisory-only
   (`MigrationSkippedVolumePinned`). Moving it means downtime, which stays a
@@ -1446,8 +1624,8 @@ does not retry inside the loop.
 The gates, applied by the Arbiter to the merged candidate stream:
 
 - **In-flight cap (cluster-wide)**: default 3. The Arbiter tracks in-flight
-  actions across every execution surface (OMENative surge, Deployment rolling
-  restart, targeted eviction) and across all Policies, and refuses to admit
+  actions across OMENative and any future validated execution surface, across
+  all Policies, and refuses to admit
   more.
 - **Per-hour cap (cluster-wide)**: default 10 actions per rolling hour, summed
   over all Policies. Sizing note: the two caps are different dials — the
@@ -1499,13 +1677,13 @@ The gates, applied by the Arbiter to the merged candidate stream:
   emits a `StuckTerminating` advisory instead. Action never; silence never.
 - **Capacity check**: before admitting a candidate, the Arbiter re-checks the
   `ClusterSnapshot` for a feasible target with enough contiguous free GPUs and a
-  ready model copy — **mode-aware** (place-then-free for the surge-shaped
-  mechanisms, where the replacement must fit while the source still holds its
-  GPUs; free-then-place only for multi-replica eviction) and **net of in-flight
-  claims**: GPUs that a still-running migration's replacement will occupy count
-  as allocated, so two admitted candidates can never both "fit" into the same
-  free block. A candidate scored against a stale snapshot whose target has
-  since filled is rejected here, not dispatched into a guaranteed stall.
+  ready model copy. Every executable Alpha path is OMENative surge and therefore
+  **place-then-free**: the complete replacement must fit while the source still
+  holds its GPUs. The check is **net of in-flight claims**: GPUs that a
+  still-running migration's replacement will occupy count as allocated, so two
+  admitted candidates can never both "fit" into the same free block. A candidate
+  scored against a stale snapshot whose target has since filled is rejected
+  here, not dispatched into a guaranteed stall.
 - **Circuit breaker**: if the recent-10-actions failure rate exceeds 50%, the
   Arbiter pauses *all* execution for 60 minutes and emits a critical event.
   Failure mode: a systematically bad target (a node that looks free but rejects
@@ -1546,11 +1724,11 @@ rule, applied by the Arbiter regardless of which Policy proposed the candidate:
   from placement hints. Nodes in active CA scale-down (detected via CA's
   deletion-candidate label) are also excluded — placing a workload on a node the
   CA is about to drain guarantees a second move.
-- **In-flight migrations (all execution paths)**: if
-  `InferenceService.Status.MigrationHistory` has an entry with `phase:
-  InProgress`, the Arbiter defers new actions for that ISVC. Both owning
-  controllers append entries, so `MigrationHistory` is the authoritative record
-  of what is already moving — surges, rolling restarts, and evictions alike.
+- **In-flight migrations**: a pending request annotation, a non-terminal
+  `InferenceReplica.Status.Migrations` entry, or a non-terminal workload-audit
+  ledger row makes the affected workload busy. Alfred deduplicates these
+  surfaces by request UUID and defers new actions. For OMENative, the
+  InferenceReplica entry is authoritative after request acceptance.
 - **Node maintenance**: nodes carrying common maintenance taints
   (`node.kubernetes.io/unschedulable`, custom `ome.io/maintenance`) are excluded
   as targets.
@@ -1576,8 +1754,8 @@ is a dispatch from pass N executing after the human changed the world. Four
 independent mechanisms bound it: hints are advisory and the scheduler honors
 a cordon instantly, so Alfred cannot push a pod onto a node the operator
 just closed; the annotation contract re-validates at execution time, so a
-stale decision becomes a rejected request (`InsufficientCapacity`,
-`MigrationInProgress`), not a wrong action; a failed action puts its
+stale decision becomes a terminally failed request (for example,
+`MigrationFromNodeMismatch` or a capacity gate), not a wrong action; a failed action puts its
 workload in cooldown, backing Alfred off the exact objects under human
 surgery; and mass failures of in-flight actions trip the circuit breaker —
 Alfred pauses itself for an hour, a de facto auto-yield to whoever is
@@ -1722,27 +1900,43 @@ decision, performed manually outside Alfred.
 
 ### Degraded mode
 
-The caretaker executes multi-pod Instance migrations *only* through OMENative;
-RawDeployment migrations go through the core InferenceService controller, which
-is always present in an OME cluster. So degraded mode is narrower than it
-sounds: only multi-pod Instances lose their executor. At startup the caretaker
-queries API discovery for OMENative's registration — the
-`WorkloadStrategy` feature-gate status and the ability to read the
-`InferenceService.Status.MigrationHistory` field schema.
+The caretaker executes migrations only through a confirmed lifecycle-owner
+consumer. In this phase that consumer is OMENative. CRD discovery alone is not
+an availability proof: a cluster can retain the InferenceReplica CRD while the
+controller is disabled or unavailable, and a current status object can outlive
+the process that wrote it. Alfred establishes execution readiness from **both**:
 
-**If OMENative is not installed** (feature gate off or strategy not registered):
+1. a readable InferenceReplica whose observed generation is current and whose
+   status representation is valid; and
+2. a fresh `ome-inferencereplica-executor` capability Lease carrying a supported
+   migration wire version, renewed only while that controller is enabled and
+   cache-synced.
 
-- Multi-pod OMENative Instances run recommend-only, even those annotated
-  `movable: "true"` — there is no safe executor for them.
-- RawDeployment migration (rolling restart and targeted eviction via the
-  InferenceService controller) stays fully enabled — it involves no OMENative.
+A missing, stale, or incompatible input fails closed. The capability Lease is a
+target Alpha prerequisite; because the current baseline does not publish or
+consume it, current Alfred must remain recommendation-only even when the CRD and
+apparently current status are present.
+
+The target Lease is namespaced, defaults to
+`ome/ome-inferencereplica-executor`, and carries
+`ome.io/migration-request-schema: v1`. Its holder identity names the active OME
+manager replica. Alfred considers it fresh only when `renewTime` is present and
+no older than `omenativeCapabilityMaxStaleness`; it does not infer freshness
+from the Lease object's resource version. The OME manager stops renewing when
+the InferenceReplica controller is disabled, not cache-synced, or shutting down.
+
+**If OMENative execution readiness cannot be established:**
+
+- OMENative Instances run recommend-only, even those annotated `movable: "true"`.
+- RawDeployment and LWS remain recommend-only, as they do in the normal Alpha
+  configuration; neither is an execution fallback.
 - `alfred_omenative_unavailable` gauge is set to 1.
 - Event `OMENativeUnavailable` is emitted on the *transition* into degraded
   mode, not on every decision loop — otherwise the event stream becomes noise.
 - ConfigMap `omenativeMigrationEnabled: true` is a no-op while degraded.
 
-Both Policies degrade the same way: node-health evacuation of a multi-pod
-Instance also requires OMENative, so in degraded mode it falls back to
+Both Policies degrade the same way: node-health evacuation of an OMENative
+Instance also requires the executor, so in degraded mode it falls back to
 recommend-only and signals the operator rather than acting.
 
 ### Deployment model
@@ -1752,7 +1946,8 @@ Ships as:
 - Binary: `cmd/alfred/main.go` → `alfred` container image.
 - Helm chart: `charts/ome-alfred/` (or a sub-chart of `ome-resources`).
 - Deployment: 3 replicas, leader election enabled.
-- ServiceAccount + ClusterRole + ClusterRoleBinding per [RBAC](#rbac) below.
+- ServiceAccount, namespace Role/RoleBinding, and ClusterRole/ClusterRoleBinding
+  per [RBAC](#rbac) below.
 - ConfigMap `alfred-config` with default values.
 
 The caretaker installs alongside OME (same Helm release) or independently; it is
@@ -1761,7 +1956,10 @@ independent release cadence, failure domain, and resource footprint. Hard
 dependencies:
 
 - OME `InferenceService` CRD installed.
-- OMENative strategy registered (otherwise degraded mode — see above).
+- A fresh, valid InferenceReplica status surface for OMENative execution
+  (otherwise degraded mode — see above).
+- A fresh, compatible OMENative executor capability Lease for execution
+  (otherwise degraded mode — see above).
 
 ### Leader election
 
@@ -1777,10 +1975,10 @@ observation loop, so Prometheus can scrape any replica for snapshot-derived
 gauges. This mirrors cluster-autoscaler's pattern.
 
 On leader loss, in-flight action tracking is transient state; the new leader
-rebuilds it from `InferenceService.Status.MigrationHistory` (both owning
-controllers append entries for every execution path — surge, rolling restart,
-eviction — so it is the authoritative source) plus the `alfred-recommendations`
-ConfigMap. Failure mode
+rebuilds it from pending migration-request annotations,
+`InferenceReplica.Status.Migrations`, and the workload audit ledger, deduplicated
+by request UUID. The recommendations ConfigMap is an operator-facing record, not
+an authoritative migration ledger. Failure mode
 being mitigated: a leader handoff must not double-dispatch an in-flight
 migration, so the global in-flight cap is reconstructed from durable cluster
 state, not from the dead leader's memory.
@@ -1791,12 +1989,14 @@ Tl;dr: the caretaker re-scope adds *no* new write permissions — and the unifie
 annotation path *removes* one: `pods/eviction` is gone from the ClusterRole,
 because every pod-level action is executed by the owning controllers. Policy #2
 is **evacuate + signal** — it migrates via the existing migration-request
-annotation and otherwise only *signals* the owning controller. In particular:
+annotation and otherwise emits an Event and Alfred-owned record for the node
+remediation owner. In particular:
 **no node-write permission and no pod-write permission.** The caretaker never
 cordons, drains, patches a Node, or evicts a pod; it reads cluster state and
 requests moves on workloads.
 
-The full ClusterRole — the defragmenter scope minus the eviction verb:
+The effective namespace Role plus ClusterRole — the defragmenter scope minus
+the eviction verb:
 
 ```yaml
 # Nodes (read-only) — no write, no cordon, no drain
@@ -1804,9 +2004,14 @@ The full ClusterRole — the defragmenter scope minus the eviction verb:
   resources: [nodes]
   verbs: [get, list, watch]
 
-# Pods (read-only) — eviction is executed by the InferenceService controller
+# Pods (read-only) — Alfred performs no pod-level action
 - apiGroups: [""]
   resources: [pods]
+  verbs: [get, list, watch]
+
+# Model-volume topology (read-only)
+- apiGroups: [""]
+  resources: [persistentvolumeclaims, persistentvolumes]
   verbs: [get, list, watch]
 
 # ConfigMaps (read for policy loading, write only to pre-created Alfred-owned ConfigMaps)
@@ -1825,16 +2030,24 @@ The full ClusterRole — the defragmenter scope minus the eviction verb:
   resources: [events]
   verbs: [create, patch]
 
-# Leader election
+# Leader election (Alfred namespace Role)
 - apiGroups: [coordination.k8s.io]
   resources: [leases]
   verbs: [create, get, update]
+
+# OMENative executor capability (read-only, configured namespace)
+- apiGroups: [coordination.k8s.io]
+  resources: [leases]
+  resourceNames: [ome-inferencereplica-executor]
+  verbs: [get]
 
 # OME CRDs (read)
 - apiGroups: [ome.io]
   resources:
     - inferenceservices
     - inferenceservices/status
+    - inferencereplicas
+    - inferencereplicas/status
     - servingruntimes
     - clusterservingruntimes
     - basemodels
@@ -1853,8 +2066,11 @@ perform on that resource:
 | Resource | Verbs | What the write can do | Why no broader grant |
 |---|---|---|---|
 | `nodes` | get, list, watch | nothing — read-only | Policy #2 evacuates *workloads*, it never touches the Node object; node cordon/drain belongs to maintenance tooling, not the caretaker |
-| `pods` | get, list, watch | nothing — read-only | candidate selection reads pods; every pod-level action (eviction, rolling restart) is executed by the InferenceService controller, never by Alfred |
-| `inferenceservices` | patch | write/delete `ome.io/migration-request-v1-*` annotations only | a migration request is one annotation; the patch must not touch spec, status, labels, finalizers, or other annotations (enforced cluster-side, below) |
+| `pods` | get, list, watch | nothing — read-only | physical placement and current readiness; Alfred never performs pod-level lifecycle actions |
+| `persistentvolumeclaims`, `persistentvolumes` | get, list, watch | nothing — read-only | model-volume access modes and topology for placement feasibility |
+| `inferencereplicas` | get, list, watch | nothing — read-only | stable OMENative Instance identity, lifecycle state, and authoritative migration status |
+| OMENative capability `lease` | get | nothing — read-only | proves that a compatible InferenceReplica executor is currently enabled and renewing |
+| `inferenceservices` | patch | add/retry one `ome.io/migration-request-v1-*` annotation only | the consuming controller owns acknowledgement deletion; Alfred's patch must not touch spec, status, labels, finalizers, or other annotations (enforced cluster-side, below) |
 | `configmaps` (named) | update, patch, delete | mutate only `alfred-config` / `alfred-recommendations` | the caretaker does not create ConfigMaps at runtime; Helm pre-creates them |
 | `events` | create, patch | emit observability events | events are the audit trail; no other side effect |
 | `leases` | create, get, update | leader-election Lease | standard controller pattern |
@@ -1863,26 +2079,27 @@ perform on that resource:
 evacuation could, in a naive design, demand `nodes` write (to cordon the failing
 node) and `pods` delete (to force the workload off). It demands neither:
 evacuation writes the same `migration-request` annotation as defragmentation,
-and the owning controllers — OMENative, and the InferenceService controller for
-RawDeployment — perform the pod-level actions under authority they already hold
-as workload owners. (The InferenceService controller's ServiceAccount gains
-`pods/eviction` create if it does not already hold it — an additive grant to the
-principal that already owns the workloads, not a new principal.) With eviction
-moved there, Alfred holds **no pod-level write at all**. The narrow surface that
+and the owning controller performs the pod-level actions under authority it
+already holds as workload owner. RawDeployment and LWS remain advisory until
+such a consumer exists. Alfred holds **no pod-level write at all**. The narrow
+surface that
 bounded the defragmenter's blast radius bounds the caretaker's even more
 tightly. The RBAC table above is the security contract; adding node-write or
 pod-write to it would be the moment the caretaker stops being safe-by-design.
 
 **Authorization boundary.** The dedicated Alfred service account is the only
-principal allowed to trigger OMENative migration in v1. In production, no other
-principal should hold generic `patch` on `InferenceService`, and cluster-side
-admission must reject migration-annotation mutation by non-Alfred callers even
-if such RBAC exists.
+principal allowed to add or retry an OMENative migration request in v1. The
+configured OME manager service account must be allowed to delete a request after
+the InferenceReplica controller has persisted its acknowledgement. No other
+principal may add, change, or delete a migration annotation, even if generic
+InferenceService patch RBAC exists.
 
 **RBAC invariant.** The caretaker's only allowed `patch` effect on
-`InferenceService` is to write or delete `ome.io/migration-request-v1-*`
-annotations. An internal patch-gateway helper guards this at runtime, but it is
-*not* the primary security boundary.
+`InferenceService` is to add or retry one
+`ome.io/migration-request-v1-<uuid>` annotation. A retry may preserve or replace
+only that UUID's identical canonical payload; Alfred does not acknowledge its
+own request by deleting it. An internal patch-gateway helper guards this at
+runtime, but it is *not* the primary security boundary.
 
 **Mandatory cluster-side enforcement.** Execute mode requires a
 `ValidatingAdmissionPolicy` (K8s 1.30+) installed by the Helm chart. If the
@@ -1890,18 +2107,23 @@ policy or binding is absent, the caretaker must refuse to start in
 `mode: execute` and fall back to recommend-only. The reference policy object
 belongs in the Helm chart template
 (`charts/ome-alfred/templates/admission-policy.yaml`, or the equivalent subtree
-under `charts/ome-resources/` if packaged there). The policy must enforce two
+under `charts/ome-resources/` if packaged there). The policy must enforce three
 invariants:
 
-1. Only Alfred's service account may add, update, or delete
-   `ome.io/migration-request-v1-*` annotations.
-2. Even Alfred's service account may not change `spec`, `status`, labels,
-   finalizers, owner references, or non-migration annotations as part of that
-   patch.
+1. Only Alfred's service account may add or retry
+   `ome.io/migration-request-v1-*` annotations, and a retry must keep the same
+   UUID and canonical payload.
+2. Only the configured OME manager service account may delete a consumed
+   migration annotation; that acknowledgement update may not add or alter a
+   migration request.
+3. Neither service account may change `spec`, `status`, labels, finalizers,
+   owner references, or non-migration annotations as part of its permitted
+   mailbox write.
 
 The exact CEL expression is implementation detail and must be covered by
 negative integration tests; the design contract is the enforcement behavior
-above, not a sample snippet. PATCH-type caveat: the implementation must be
+above, not a sample snippet. The policy applies to both the OME manager's
+full-object acknowledgement `UPDATE` and Alfred's `PATCH`. The latter must be
 validated against both JSON merge patch and JSON Patch semantics. If the chosen
 admission checks cannot soundly prove the invariants above for a patch type the
 caretaker might send, execute mode must reject that patch type rather than rely
@@ -1919,7 +2141,7 @@ tell defragmentation churn from node-health churn at a glance; the fragmentation
 gauges are re-keyed by hardware pool and size (observed / reclaimable /
 pending pressure — see Fragmentation scoring); migration metrics are unchanged;
 two node-health counters are added. Events
-and the audit ConfigMap stay as the human-readable surfaces. Every
+and the recommendations ConfigMap stay as the human-readable surfaces. Every
 decision-side surface in this section is emitted by the engine's single
 Reporter stage — policies and the Arbiter produce values and recorded reasons;
 only the Reporter writes. The snapshot-derived gauges come from the observation
@@ -1952,7 +2174,7 @@ Recommendation / migration counters (now `policy`-labeled):
 - `alfred_recommendations_produced_total{policy,workload,component,reason,executable}` (counter)
 - `alfred_recommendations_accepted_total{policy,workload,component}` (counter)
 - `alfred_recommendations_rejected_total{policy,workload,component,reason}` (counter)
-- `alfred_migration_calls_total{policy,workload,mode,surface}` (counter; surface: omenative/rollingrestart/eviction — all annotation-mediated; the label records which executor mechanism ran)
+- `alfred_migration_calls_total{policy,workload,mode,surface}` (counter; `surface=omenative` in Alpha; future validated consumers add values without changing the annotation contract)
 - `alfred_migration_outcome_total{policy,workload,mode,outcome}` (counter; outcome: completed/failed/timeout)
 - `alfred_lws_recommendations_total{isvc,action}` (counter; action: manual)
 
@@ -1964,7 +2186,7 @@ Node-health counters (new):
 
 The split between `_evacuations_total` and `_signals_total` is the load-bearing
 distinction: an evacuation moved a workload; a signal punted to the owning
-controller. An operator watching `_signals_total` climb while
+remediation system. An operator watching `_signals_total` climb while
 `_evacuations_total` stays flat knows the caretaker *wants* to act but can't —
 no target, or degraded mode — which is exactly when a human should look.
 
@@ -1986,6 +2208,7 @@ Loop / operational metrics (unchanged):
 - `MigrationSkippedCooldown`
 - `MigrationSkippedRateLimit`
 - `MigrationSkippedVolumePinned` (RWO/RWOP PVC — no surge-shaped mechanism can move the workload; relocation is a manual, operator-only action)
+- `RawDeploymentMigrationUnsupported`
 - `LWSMigrationUnsupported`
 - `NoFeasibleTarget`
 - `NoSurgeHeadroom` (surge-shaped candidate downgraded to advisory — no target can hold the replacement while the source still runs)
@@ -2001,11 +2224,16 @@ Loop / operational metrics (unchanged):
 
 - `OMENativeUnavailable`
 
+**Events** on Nodes:
+
+- `NodeRepairNeeded`
+- `NodeDrainedForRepair`
+
 **Logs**: structured JSON. Every multi-step operation carries a correlation ID
 (recommendation UUID) so a single migration can be traced from Policy through
 Arbiter to Dispatcher.
 
-**Audit ConfigMap (optional)**: if `recommendationsConfigMapEnabled: true`, the
+**Recommendations ConfigMap (optional)**: if `recommendationsConfigMapEnabled: true`, the
 Reporter maintains the `alfred-recommendations` ConfigMap in Alfred's namespace —
 a single structured snapshot operators can read without scraping events. Each
 recommendation now records which Policy produced it:
@@ -2105,19 +2333,19 @@ New unit coverage for the engine refactor:
    policy's candidate against that workload is filtered before it reaches the
    Arbiter. *Failure mode if absent:* Alfred migrates a pod the autoscaler is
    simultaneously scaling — the two controllers thrash.
-5. **Node-health candidate selection.** Given a snapshot with one node
-   carrying a `GpuUnhealthy` condition (per the remediation-signal schema, TBD
-   — see Open Questions), verify Node-Health Evacuation selects exactly the OME
-   workloads on that node as candidates, and never selects workloads on healthy
-   nodes. Verify a node with a transient/cleared condition produces no
-   candidate.
+5. **Node-health candidate selection.** Given a snapshot with one node carrying
+   a `GpuUnhealthy=True` condition, verify Node-Health Evacuation identifies
+   every OME occupant on that node, marks only eligible OMENative Instances
+   executable, and never selects workloads on healthy nodes. Verify `Unknown`
+   quarantines and signals without evacuation, recent `False` remains suspect,
+   and only expired suspicion becomes clear.
 6. **Node-health returns evacuate + signal.** Verify the policy returns both an
    evacuation candidate **and** the advisory remediation-signal candidate that
    the Reporter turns into the Node Event (Phase 1; the pluggable cloud
    node-remediation provider is Phase 3). The two are coupled: evacuating
    without signalling leaves a bad node in service for new pods.
 7. **Advisory candidates bypass arbitration but are always reported.** A policy
-   returns an `Executable=false` Candidate (an LWS-backed defrag opportunity,
+   returns an `Executable=false` Candidate (a Raw/LWS-backed defrag opportunity,
    or a node remediation signal); verify it consumes no rate-limit budget,
    starts no cooldown, never reaches the Dispatcher — and the Reporter still
    emits its Event and metric. *Failure mode if absent:* benefit-cost admission
@@ -2125,11 +2353,11 @@ New unit coverage for the engine refactor:
    recommendation debits the migration budget real actions need.
 8. **Surge feasibility is place-then-free.** Given a snapshot where the target
    fits the Instance only if the source is freed first, verify a surge-shaped
-   candidate (OMENative surge or single-replica rolling restart) is downgraded
+   OMENative candidate is downgraded
    to advisory with `NoSurgeHeadroom` and never dispatched; given genuine
-   headroom, verify it is executable. Verify the multi-replica eviction path
-   still simulates free-then-place, and that in-flight surge claims are
-   subtracted from available capacity. *Failure mode if absent:* Alfred
+   headroom, verify it is executable. Verify Raw and LWS candidates remain
+   advisory regardless of apparent headroom, and that in-flight OMENative surge
+   claims are subtracted from available capacity. *Failure mode if absent:* Alfred
    dispatches migrations that stall in `SurgePending` on exactly the clusters
    that most need defragmentation.
 9. **Health cooldown floor.** A workload defrag-moved at T+0 receives a
@@ -2141,15 +2369,37 @@ New unit coverage for the engine refactor:
    window is excluded from every policy's target hints. *Failure mode if
    absent:* workloads sit on failing GPUs waiting out a routine-optimization
    cooldown, or a flapping node pumps evacuate/refill cycles.
+10. **InferenceReplica normalization and eligibility.** Decode equivalent
+    DenseV1 and ColumnarV2 status into the same stable, sparse Instance set.
+    Join live Pods by Instance index and incarnation, and derive current
+    placement/readiness from those Pods rather than compatibility-only status
+    fields. Verify single-pod `ActiveOrdinal` selection and complete multi-pod
+    runner membership. Reject stale generation, invalid encoding,
+    label/incarnation mismatch, incomplete Pods, paused or migration-disabled components,
+    partially ready/serving Instances, active operations, and rollout/scale
+    transitions as advisory-only.
+11. **Migration-state reconstruction.** Present the same UUID in the request
+    annotation, `InferenceReplica.Status.Migrations`, and the workload audit
+    ledger; verify it counts once, the InferenceReplica phase wins after
+    acceptance, and terminal audit history survives status pruning and leader
+    failover.
+12. **Fresh early health decision.** Verify a node-condition early tick performs
+    `refresh → publish → evaluate`, a refresh failure performs no decision,
+    concurrent refreshes serialize, and the early pass does not reset the
+    regular decision cadence.
+13. **Executor capability fails closed.** With a valid CRD and current
+    InferenceReplica status, verify an absent, stale, or wire-incompatible
+    OMENative capability Lease still produces advisory Candidates only; a fresh
+    compatible Lease enables otherwise eligible Candidates.
 
-The existing single-policy unit expectations (fragmentation scoring,
-threshold gating, placement-hint computation, cooldown, rate limiting) move
-under `policy/defrag` unchanged.
+The existing single-policy unit expectations (fragmentation scoring, threshold
+gating, placement-hint computation, cooldown, rate limiting) remain under
+`policy/defrag`, augmented by the compatibility cases above.
 
 ### Integration tests
 
-The existing 23 integration tests are preserved (deploy in a kind cluster,
-mock InferenceServices, verify behavior end-to-end):
+The target integration suite deploys Alfred in a kind cluster and verifies the
+following behavior end to end:
 
 1. **End-to-end observation**: deploy Alfred in a kind cluster, deploy mock
    InferenceServices (via test CRDs), verify
@@ -2158,18 +2408,14 @@ mock InferenceServices, verify behavior end-to-end):
    scenario. Verify Alfred (Defrag policy) produces 2 consolidation candidates.
 3. **Pending-pod prioritization**: create a Pending 8-GPU pod; verify Alfred
    boosts candidates that would unblock it.
-4. **RawDeployment migration — both branches**: `mode: execute`; verify Alfred
-   writes only the migration-request annotation, and the InferenceService
-   controller executes it. Multi-replica component: a targeted eviction of the
-   pod on `FromNode` (PDB honored). Single-replica component: a surge-first
-   rolling restart (`maxSurge: 1, maxUnavailable: 0` — new pod Ready before the
-   old terminates), with the restart stamp and `FromNode` anti-affinity present
-   in the desired template and only the addressed component's Deployment
-   rolling. Verify the controller acks: annotation cleared, `MigrationHistory`
-   entry appended (`RollingUpdate` / `Evict`).
+4. **RawDeployment recommendation-only**: in both `recommend-only` and
+   `execute` configuration, verify Alfred reports the candidate but writes no
+   migration-request annotation because no Raw consumer exists.
 5. **OMENative migration invocation**: OMENative workload; verify Alfred
    writes `ome.io/migration-request-v1-<uuid>` on the InferenceService. Mock
-   OMENative acks (clears annotation, emits status).
+   OMENative accepts it into `InferenceReplica.Status.Migrations`, persists the
+   workload audit row, and clears the annotation. Verify Alfred follows the UUID
+   to its terminal phase and applies cooldown once.
 6. **LWS recommendation-only**: LWS-backed workload; verify recommendation
    emitted but no migration request; event reflects `LWSMigrationUnsupported`.
 7. **Opt-out**: `alfred.ome.io/movable: "false"` excludes the workload from
@@ -2185,9 +2431,11 @@ mock InferenceServices, verify behavior end-to-end):
     fails within window; Alfred marks node suspect, backs off.
 14. **HPA coexistence**: HPA scaling the target ISVC; Alfred defers.
 15. **CA coexistence**: node marked `scale-down-disabled`; excluded from hints.
-16. **OMENative-unavailable degraded mode**: feature gate off; Alfred enters
-    degraded mode, only RawDeployment migrations (executed by the
-    InferenceService controller) occur.
+16. **OMENative-unavailable degraded mode**: stop the controller while leaving
+    the CRD and its last current-looking InferenceReplica status installed.
+    Once the capability Lease becomes stale, Alfred enters degraded mode and
+    all workload types remain recommendation-only. CRD or status presence alone
+    must not enable dispatch.
 17. **Circuit breaker**: simulate 6+ failed migrations; verify circuit opens,
     pauses execution.
 18. **Non-OME workload**: Kubeflow Notebook Pod on a node; Alfred observes but
@@ -2196,8 +2444,10 @@ mock InferenceServices, verify behavior end-to-end):
     benefit workload in namespace B without explicit tenant-group annotation.
 20. **Spot node avoidance**: preemptible-labeled node excluded from targets;
     preemptible source prioritized.
-21. **Admission hardening**: non-Alfred caller attempts to modify
-    `ome.io/migration-request-v1-*`; request rejected by mandatory admission policy.
+21. **Admission hardening and acknowledgement**: an unauthorized caller cannot
+    add, change, or delete `ome.io/migration-request-v1-*`. Alfred may add/retry
+    an identical UUID but may not delete it. The configured OME manager may
+    delete a consumed request but may not add or alter one.
 22. **Alfred narrow patch enforcement**: Alfred caller attempts to modify
     `spec` or non-migration annotations in the same patch; request rejected by
     admission policy.
@@ -2209,11 +2459,12 @@ New integration coverage for the multi-policy engine:
 
 24. **Node-health end-to-end (the headline Phase 1 test).** A node transitions
     to `GpuUnhealthy`. Verify, in order: (a) Alfred (Node-Health policy)
-    selects the OME workloads on that node, (b) they are evacuated via the same
-    actuation path as Defrag (the migration-request annotation — OMENative
-    surge for OMENative workloads, controller-executed rolling restart or
-    targeted eviction for RawDeployment), (c) a remediation Event is
-    emitted naming the node, and (d) the bad node receives **no re-placement** —
+    identifies every OME occupant, (b) eligible OMENative Instances are
+    evacuated through the migration-request annotation while Raw/LWS/ineligible
+    findings remain advisory, (c) a `NodeRepairNeeded` Event is emitted naming
+    the node, (d) `NodeDrainedForRepair` is emitted only after no OME occupant
+    remains and is withheld while an advisory blocker remains, and (e) the bad
+    node receives **no re-placement** —
     Alfred excludes it from every policy's target set for as long as the
     condition holds. *Failure mode if absent:* Alfred evacuates a node and then
     immediately migrates a different workload back onto it.
@@ -2292,14 +2543,22 @@ slip without blocking the one below it.
 
 Scope: the engine refactor (`Policy` interface + `Arbiter` + `Reporter`), Defrag ported to
 **Policy #1**, **Policy #2 Node-Health Evacuation** (evacuate + remediation
-signal), **arbitration-lite** (priority ordering + mutual exclusion, no
-forecasting), and the **OEP-0013 read-only seam**.
+signal), the checked InferenceReplica-plus-Pod snapshot, OMENative executor
+capability Lease, Dispatcher, **arbitration-lite** (priority ordering + mutual
+exclusion, no forecasting), and
+the **OEP-0013 read-only seam**.
 
 - Unit tests ≥ 80% coverage, including the new `engine/arbiter`,
   `engine/reporter`, `policy/defrag`, and `policy/nodehealth` packages.
-- The RawDeployment migration executor (surge-first rolling restart + targeted
-  eviction) implemented in the InferenceService controller, with `RollingUpdate`
-  and `Evict` added to the OEP-0007 `MigrationMode` contract.
+- DenseV1 and ColumnarV2 OMENative status normalize to the same stable Instance
+  model; Pods join by stable index and incarnation for live readiness and
+  placement; migration state and cooldowns reconstruct from
+  `InferenceReplica.Status.Migrations` and the workload audit ledger across
+  leader failover.
+- A fresh, wire-compatible OMENative capability Lease gates every executable
+  Candidate; CRD and status presence alone fail the execution-readiness test.
+- `RawDeployment` and LWS are advisory-only. A future Raw executor is additive
+  and is not an Alpha graduation dependency.
 - Integration tests 1–10 passing, plus the node-health end-to-end test (24),
   the cross-policy arbiter test (25), and the OEP-0013 seam test (26).
 - The two new chaos tests passing: flapping-node cooldown, and the
@@ -2310,7 +2569,7 @@ forecasting), and the **OEP-0013 read-only seam**.
   the Arbiter priority order.
 - `recommend-only` is the default mode; `execute` is opt-in. This applies to
   **every** policy, Node-Health included: an alpha operator can run Node-Health
-  in recommend-only and watch the Events before granting it the eviction verb.
+  in recommend-only and watch the Events before enabling the Dispatcher.
 
 ### Beta
 
@@ -2325,8 +2584,9 @@ Scope adds **Policy #3 Descheduling**.
   drop-reason counters.
 - RBAC policy review by a security reviewer.
 - OMENative at Beta maturity (execute path validated end-to-end).
-- The remediation-signal schema (see Open Questions) is settled at least for
-  the Event-based Phase 1 form; the pluggable-provider shape may still be TBD.
+- The Event-based remediation signal (`NodeRepairNeeded` followed by
+  `NodeDrainedForRepair`) is validated in production; the pluggable-provider
+  shape may still be TBD.
 
 ### GA
 
@@ -2363,12 +2623,10 @@ engine must not preclude them.
   guarantee literal; advisory (`Executable=false`) candidates — LWS
   recommendations, node remediation signals — bypass arbitration and route
   directly to the Reporter.
-- 2026-08-15: Actuation unified on the single migration-request annotation: the
-  InferenceService controller becomes the RawDeployment executor (surge-first
-  Deployment rolling restart for single-replica components via the
-  `ome.io/migration-restart` template stamp; targeted PDB-honoring eviction for
-  multi-replica), `pods/eviction` leaves Alfred's RBAC entirely, and candidate
-  simulation plus the Arbiter capacity check become surge-aware
+- 2026-08-15: Actuation design unified on the single migration-request
+  annotation. A RawDeployment consumer was proposed but not implemented;
+  `pods/eviction` remains outside Alfred's RBAC. Candidate simulation plus the
+  Arbiter capacity check become surge-aware
   (place-then-free ordering, in-flight claims, `NoSurgeHeadroom` downgrades,
   smallest-footprint tie-breaking).
 - 2026-08-15: Model-readiness target filtering made storage-aware: per-node
@@ -2398,7 +2656,18 @@ engine must not preclude them.
   `acceleratorclass` renamed to `pool`; the snapshot reads
   PersistentVolumeClaims/PersistentVolumes for model topology and no longer
   reads AcceleratorClasses.
-- TBD: Alpha implementation (engine refactor + Policies #1 and #2).
+- 2026-08-31: Compatibility baseline refreshed for current OMENative.
+  `InferenceReplica.Status` is authoritative for stable Instance identity,
+  lifecycle state, and migrations; live Pods joined by Instance index and
+  incarnation are authoritative for physical placement and current readiness.
+  Request annotations are a mailbox and the workload audit ledger retains
+  durable history. A fresh capability Lease, not CRD/status presence alone,
+  proves executor availability. RawDeployment and LWS are advisory-only until
+  their lifecycle owner implements the request contract. Current implementation
+  gaps (Node-Health and Dispatcher) are recorded explicitly.
+- TBD: Complete Alpha implementation (checked InferenceReplica-plus-Pod
+  snapshot, capability Lease, Policy #2, Dispatcher, and outcome-fed safety
+  ledger).
 - TBD: First Beta user.
 - TBD: Beta (Policy #3 Descheduling).
 - TBD: GA.
@@ -2410,9 +2679,10 @@ engine must not preclude them.
    to cluster-autoscaler. Multi-policy raises the stakes: the Arbiter is now a
    single point through which every policy's actions flow, so an Arbiter bug
    can mis-order or drop actions from **all** policies at once.
-2. **Requires OMENative for full value on multi-pod workloads.** Until users
-   adopt OMENative, Alfred is limited to RawDeployment + recommendations-only
-   for others — this is true for Node-Health evacuation too, not just Defrag.
+2. **Requires OMENative for execution in Alpha.** Without a fresh, compatible
+   executor Lease plus a valid InferenceReplica-and-Pod snapshot, Alfred remains
+   useful for observation and recommendations but performs no workload
+   migration. This is true for Node-Health evacuation too, not just Defrag.
 3. **Heuristic, not optimal.** Greedy candidate selection may miss non-obvious
    consolidations. Trade: simplicity and speed over global optimality. The
    predictive planner (Phase 3) is the proposed answer, but it is not yet
@@ -2429,8 +2699,8 @@ engine must not preclude them.
    interaction graph. Subtle bugs possible. Mitigated by conservative defaults,
    the OEP-0013 read-only seam, and extensive observability.
 7. **Narrow write contract is brittle.** The annotation contract with the owning
-   controllers (OMENative; the InferenceService controller for RawDeployment)
-   is the primary coupling point. Race conditions possible during annotation
+   controller (OMENative today; future consumers must implement the same rules)
+   is the primary coupling point. Race conditions are possible during annotation
    write/clear; mitigated by idempotent UUID semantics. Node-Health reuses this
    same contract, so it inherits both the safety property and the brittleness.
 
@@ -2537,13 +2807,13 @@ New, from the Caretaker reframing:
    forecasts as advisory Arbiter input, but whether we ever build the forecaster
    is genuinely undecided. GA does not depend on it.
 
-2. **The exact remediation-signal schema.** Node-Health Evacuation emits a
-   signal that "this node needs remediation". In Phase 1 that is a Kubernetes
-   Event. The open questions: what is the structured payload (node, condition,
-   evacuation outcome, suggested action)? Is it an Event, a node annotation, or
-   both? And what contract does the Phase 3 pluggable cloud node-remediation
-   provider consume — the same schema, or a richer one? Settle the Event form
-   for Beta; the provider form can lag.
+2. **The cloud-remediation consumer schema.** Phase 1 is settled: Alfred emits
+   `NodeRepairNeeded` at detection and `NodeDrainedForRepair` after the node has
+   no OME occupants, and mirrors structured health state in its recommendations
+   ConfigMap. Alfred does not annotate the Node. The remaining question is what
+   contract a Phase 3 pluggable cloud-remediation provider consumes — these
+   Events, the structured ConfigMap record, or a richer external interface. The
+   provider form can lag and does not reopen the Phase 1 write boundary.
 
 3. **DRA (Dynamic Resource Allocation) interaction.** K8s 1.31+
    `ResourceClaims` reshape GPU allocation, which affects **both** how Alfred
