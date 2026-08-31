@@ -68,9 +68,8 @@ func normalizeDense(source []v1beta1.OMENativeInstanceStatus, maxRows int) (Resu
 		}
 		seen[row.Index] = struct{}{}
 		if !validPhase(row.Phase) || row.Incarnation < 0 ||
-			row.PodCount < 0 || row.ReadyPodCount < 0 ||
-			row.ServingPodCount < 0 || row.AvailablePodCount < 0 ||
-			row.ScheduledPodCount < 0 ||
+			row.PodCount < 0 || row.ServingPodCount < 0 ||
+			row.AvailablePodCount < 0 ||
 			(row.ActiveOrdinal != 0 && row.ActiveOrdinal != 1) {
 			return Result{}, newDecodeError(ErrorReasonValueDomain)
 		}

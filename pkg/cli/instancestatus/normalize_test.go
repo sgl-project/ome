@@ -57,6 +57,27 @@ func TestNormalizeDenseV1(t *testing.T) {
 	}
 }
 
+func TestNormalizeDenseV1PreservesCompatibilityFields(t *testing.T) {
+	t.Parallel()
+
+	status := &v1beta1.InferenceReplicaStatus{
+		InstanceStatuses: []v1beta1.OMENativeInstanceStatus{{
+			Index:             0,
+			Phase:             v1beta1.OMENativeInstanceReady,
+			ReadyPodCount:     -1,
+			ScheduledPodCount: -2,
+		}},
+	}
+
+	got, err := Normalize(status)
+	if err != nil {
+		t.Fatalf("Normalize() error = %v", err)
+	}
+	if !reflect.DeepEqual(got.Rows, status.InstanceStatuses) {
+		t.Fatalf("Rows = %#v, want compatibility fields preserved from %#v", got.Rows, status.InstanceStatuses)
+	}
+}
+
 func TestNormalizeColumnarV2(t *testing.T) {
 	t.Parallel()
 
