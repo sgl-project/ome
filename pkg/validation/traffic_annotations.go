@@ -23,10 +23,11 @@ type trafficAnnotationKind int
 const (
 	kindUnknown trafficAnnotationKind = iota
 	kindInt
+	kindPositiveInt // int >= 1
 	kindDuration
 	kindBool
 	kindRetryOnList
-	kindPromoteTarget // int >= 0 or "full"
+	kindPromoteTarget // canary revision hash
 )
 
 // trafficAnnotationKinds is the authoritative classifier for every
@@ -56,7 +57,7 @@ var trafficAnnotationKinds = map[string]trafficAnnotationKind{
 	// Operational.
 	constants.ManagedByConflictAckedAnnotation: kindBool,
 	constants.RolloutReadyTimeoutAnnotation:    kindDuration,
-	constants.RevisionHistoryLimitAnnotation:   kindInt,
+	constants.RevisionHistoryLimitAnnotation:   kindPositiveInt,
 	constants.RolloutPromoteAnnotation:         kindPromoteTarget,
 	constants.RolloutRollbackAnnotation:        kindBool,
 }
@@ -148,6 +149,14 @@ func validateAnnotationValue(key, value string, kind trafficAnnotationKind) erro
 		if _, err := strconv.Atoi(value); err != nil {
 			return fmt.Errorf("annotation %q value %q is not a valid integer (InvalidIntValue): %w", key, value, err)
 		}
+	case kindPositiveInt:
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("annotation %q value %q is not a valid integer (InvalidIntValue): %w", key, value, err)
+		}
+		if n < 1 {
+			return fmt.Errorf("annotation %q value %q must be a positive integer (>= 1) (InvalidPositiveIntValue)", key, value)
+		}
 	case kindDuration:
 		if _, err := time.ParseDuration(value); err != nil {
 			return fmt.Errorf("annotation %q value %q is not a valid duration (InvalidDuration): %w", key, value, err)
@@ -172,14 +181,11 @@ func validateAnnotationValue(key, value string, kind trafficAnnotationKind) erro
 			}
 		}
 	case kindPromoteTarget:
-		// The canary manual-promote verb expects the canary revision hash (the
-		// value copied from status.canary.canaryRevisionHash); "full" is also
-		// accepted. See promotion.shouldAdvanceManual.
-		if value == "full" {
-			return nil
-		}
+		// The canary manual-promote verb only ever matches the exact canary
+		// revision hash (promotion.shouldAdvanceManual), so admission accepts
+		// nothing else — any other value would sit on the object doing nothing.
 		if !isRevisionHashToken(value) {
-			return fmt.Errorf("annotation %q value %q must be a canary revision hash (lowercase alphanumeric, from status.canary.canaryRevisionHash) or \"full\" (InvalidRolloutPromoteTarget)", key, value)
+			return fmt.Errorf("annotation %q value %q must be the canary revision hash to promote, copied from status.canary.canaryRevisionHash (lowercase alphanumeric, at least 6 chars); \"full\" is not a supported promotion target (InvalidRolloutPromoteTarget)", key, value)
 		}
 	}
 	return nil

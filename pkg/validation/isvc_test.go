@@ -147,24 +147,24 @@ func TestValidateEngineDecoderDeploymentMode(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "engine OMENative, decoder RawDeployment — mismatch",
+			name: "engine OMENative, decoder MultiNode — mismatch",
 			spec: &v1beta1.InferenceServiceSpec{
 				Engine:  engineWith(withMode(string(constants.OMENative))),
-				Decoder: decoderWith(withMode(string(constants.RawDeployment))),
+				Decoder: decoderWith(withMode(string(constants.MultiNode))),
 			},
 			wantErr: true,
 		},
 		{
-			name: "both RawDeployment (no OMENative) — rule does not apply",
+			name: "both MultiNode (no OMENative) — rule does not apply",
 			spec: &v1beta1.InferenceServiceSpec{
-				Engine:  engineWith(withMode(string(constants.RawDeployment))),
-				Decoder: decoderWith(withMode(string(constants.RawDeployment))),
+				Engine:  engineWith(withMode(string(constants.MultiNode))),
+				Decoder: decoderWith(withMode(string(constants.MultiNode))),
 			},
 		},
 		{
-			name: "engine RawDeployment, decoder RawDeployment (no OMENative) — rule does not apply",
+			name: "engine MultiNode, decoder RawDeployment (no OMENative) — rule does not apply",
 			spec: &v1beta1.InferenceServiceSpec{
-				Engine:  engineWith(withMode(string(constants.RawDeployment))),
+				Engine:  engineWith(withMode(string(constants.MultiNode))),
 				Decoder: decoderWith(withMode(string(constants.RawDeployment))),
 			},
 		},

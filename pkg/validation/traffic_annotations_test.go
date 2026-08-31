@@ -44,13 +44,6 @@ func TestValidateTrafficAnnotations_TypedValues(t *testing.T) {
 			wantOK: true,
 		},
 		{
-			name: "valid promote target full",
-			annotations: map[string]string{
-				constants.RolloutPromoteAnnotation: "full",
-			},
-			wantOK: true,
-		},
-		{
 			name: "valid promote target revision hash",
 			annotations: map[string]string{
 				constants.RolloutPromoteAnnotation: "e5d6f79d",
@@ -61,6 +54,13 @@ func TestValidateTrafficAnnotations_TypedValues(t *testing.T) {
 			name: "valid rollback bool",
 			annotations: map[string]string{
 				constants.RolloutRollbackAnnotation: "true",
+			},
+			wantOK: true,
+		},
+		{
+			name: "valid revision history limit",
+			annotations: map[string]string{
+				constants.RevisionHistoryLimitAnnotation: "1",
 			},
 			wantOK: true,
 		},
@@ -104,6 +104,27 @@ func TestValidateTrafficAnnotations_TypedValues(t *testing.T) {
 			wantContains: "InvalidRetryOn",
 		},
 		{
+			name: "revision history limit not an int",
+			annotations: map[string]string{
+				constants.RevisionHistoryLimitAnnotation: "many",
+			},
+			wantContains: "InvalidIntValue",
+		},
+		{
+			name: "revision history limit zero",
+			annotations: map[string]string{
+				constants.RevisionHistoryLimitAnnotation: "0",
+			},
+			wantContains: "InvalidPositiveIntValue",
+		},
+		{
+			name: "revision history limit negative",
+			annotations: map[string]string{
+				constants.RevisionHistoryLimitAnnotation: "-3",
+			},
+			wantContains: "InvalidPositiveIntValue",
+		},
+		{
 			name: "promote target negative",
 			annotations: map[string]string{
 				constants.RolloutPromoteAnnotation: "-1",
@@ -114,6 +135,16 @@ func TestValidateTrafficAnnotations_TypedValues(t *testing.T) {
 			name: "promote target garbage",
 			annotations: map[string]string{
 				constants.RolloutPromoteAnnotation: "next",
+			},
+			wantContains: "InvalidRolloutPromoteTarget",
+		},
+		{
+			// The executor only ever matches the exact canary revision hash, so a
+			// "full" promotion could never take effect — reject it at admission
+			// instead of accepting a command that silently does nothing.
+			name: "promote target full is rejected",
+			annotations: map[string]string{
+				constants.RolloutPromoteAnnotation: "full",
 			},
 			wantContains: "InvalidRolloutPromoteTarget",
 		},
@@ -408,7 +439,7 @@ func TestLevenshtein(t *testing.T) {
 		{"abc", "abc", 0},
 		{"abc", "", 3},
 		{"", "abc", 3},
-		{"abc", "abz", 1},  // substitution
+		{"abc", "abx", 1},  // substitution
 		{"abc", "ab", 1},   // deletion
 		{"abc", "abcd", 1}, // insertion
 		{"kitten", "sitting", 3},

@@ -46,6 +46,21 @@ func TestValidatePVCStorage(t *testing.T) {
 			spec:    &v1beta1.BaseModelSpec{Storage: &v1beta1.StorageSpec{StorageUri: ptr.To("pvc://")}},
 			wantErr: true,
 		},
+		{
+			name: "PVC + Sharded distribution is rejected",
+			spec: &v1beta1.BaseModelSpec{
+				Storage:      &v1beta1.StorageSpec{StorageUri: ptr.To("pvc://my-pvc/models/llama")},
+				Distribution: ptr.To(v1beta1.DistributionSharded),
+			},
+			wantErr: true,
+		},
+		{
+			name: "PVC + PerNode distribution is allowed",
+			spec: &v1beta1.BaseModelSpec{
+				Storage:      &v1beta1.StorageSpec{StorageUri: ptr.To("pvc://my-pvc/models/llama")},
+				Distribution: ptr.To(v1beta1.DistributionPerNode),
+			},
+		},
 	}
 
 	for _, tc := range tests {

@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
@@ -73,6 +74,157 @@ func TestValidateCoordination_OrphanGroup(t *testing.T) {
 	err := ValidateCoordination(spec)
 	if err == nil || !strings.Contains(err.Error(), ReasonOrphanCoordinationGroup) {
 		t.Errorf("orphan group: got %v want %s", err, ReasonOrphanCoordinationGroup)
+	}
+}
+
+func TestValidateCoordination_GroupMembership(t *testing.T) {
+	// Every component named by a group must be declared on the ISVC. The
+	// error names the group index and each missing member (quoted), so a
+	// partially-declared group cannot slip through on the strength of the
+	// members that do exist.
+	cases := []struct {
+		name        string
+		spec        *v1beta1.InferenceServiceSpec
+		components  []v1beta1.ComponentType
+		wantErr     bool
+		wantSubstrs []string
+		notSubstrs  []string
+	}{
+		{
+			name:        "fully undeclared group",
+			spec:        omeNativeEngineOnlySpec(),
+			components:  []v1beta1.ComponentType{v1beta1.DecoderComponent, v1beta1.RouterComponent},
+			wantErr:     true,
+			wantSubstrs: []string{"groups[0]", `"decoder"`, `"router"`, ReasonOrphanCoordinationGroup},
+		},
+		{
+			name:        "partially undeclared group",
+			spec:        omeNativeEngineOnlySpec(),
+			components:  []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			wantErr:     true,
+			wantSubstrs: []string{"groups[0]", `"decoder"`, ReasonOrphanCoordinationGroup},
+			notSubstrs:  []string{`"engine"`},
+		},
+		{
+			name:       "fully declared group",
+			spec:       omeNativePDSpec(),
+			components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			wantErr:    false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.spec.Rollout = &v1beta1.RolloutSpec{
+				Groups: []v1beta1.RolloutGroup{
+					{Components: tc.components, BlueGreen: &v1beta1.GroupBlueGreen{}},
+				},
+			}
+			err := ValidateCoordination(tc.spec)
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected rejection, got nil")
+			}
+			for _, s := range tc.wantSubstrs {
+				if !strings.Contains(err.Error(), s) {
+					t.Errorf("error %q missing %q", err.Error(), s)
+				}
+			}
+			for _, s := range tc.notSubstrs {
+				if strings.Contains(err.Error(), s) {
+					t.Errorf("error %q should not name declared member %q", err.Error(), s)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateCoordination_MembershipErrorNamesGroupIndex(t *testing.T) {
+	// With multiple groups the error must point at the offending group's
+	// index, not the first group.
+	spec := omeNativePDSpec()
+	spec.Rollout = &v1beta1.RolloutSpec{
+		Groups: []v1beta1.RolloutGroup{
+			{Components: []v1beta1.ComponentType{v1beta1.EngineComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}},
+			{Components: []v1beta1.ComponentType{v1beta1.DecoderComponent, v1beta1.RouterComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}},
+		},
+	}
+	err := ValidateCoordination(spec)
+	if err == nil || !strings.Contains(err.Error(), "groups[1]") || !strings.Contains(err.Error(), `"router"`) {
+		t.Errorf("got %v want error naming groups[1] and \"router\"", err)
+	}
+}
+
+func TestValidateCoordination_UndeclaredMemberFailsModeCheckToo(t *testing.T) {
+	// The OMENative-mode check does not skip undeclared members: an
+	// undeclared component resolves to an empty mode and fails the check.
+	// (Through the public entry point the orphan check fires first; this
+	// pins the mode check's own behavior for defense in depth.)
+	spec := omeNativeEngineOnlySpec()
+	groups := []v1beta1.RolloutGroup{
+		{Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}},
+	}
+	err := validateComponentsAreOMENative(spec, groups)
+	if err == nil || !strings.Contains(err.Error(), ReasonCoordinationRequiresOMENative) {
+		t.Errorf("undeclared member: got %v want %s", err, ReasonCoordinationRequiresOMENative)
+	}
+}
+
+func TestValidateCoordination_ToleranceRange(t *testing.T) {
+	// Value-level mirror of the CRD Minimum=0/Maximum=100 bounds. Omitted
+	// (nil) is valid — the operator-configured default applies at
+	// resolution — and explicit 0 stays a valid, distinct request.
+	cases := []struct {
+		name      string
+		tolerance *int32
+		wantErr   bool
+	}{
+		{name: "omitted", tolerance: nil, wantErr: false},
+		{name: "explicit zero", tolerance: ptr.To(int32(0)), wantErr: false},
+		{name: "normal", tolerance: ptr.To(int32(25)), wantErr: false},
+		{name: "upper bound", tolerance: ptr.To(int32(100)), wantErr: false},
+		{name: "negative", tolerance: ptr.To(int32(-1)), wantErr: true},
+		{name: "over 100", tolerance: ptr.To(int32(101)), wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := omeNativePDSpec()
+			spec.Rollout = &v1beta1.RolloutSpec{
+				Groups: []v1beta1.RolloutGroup{{
+					Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+					BlueGreen:     &v1beta1.GroupBlueGreen{},
+					MaintainRatio: &v1beta1.MaintainRatio{Tolerance: tc.tolerance},
+				}},
+			}
+			err := ValidateCoordination(spec)
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), ReasonRatioToleranceOutOfRange) {
+					t.Errorf("got %v want error with %s", err, ReasonRatioToleranceOutOfRange)
+				}
+			} else if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestCoordinationRatioToleranceWarning_OmittedToleranceEmpty(t *testing.T) {
+	// maintainRatio with no tolerance defers to the operator-configured
+	// default; the webhook cannot know that value, so it must not warn.
+	spec := omeNativePDSpec()
+	spec.Rollout = &v1beta1.RolloutSpec{
+		Groups: []v1beta1.RolloutGroup{{
+			Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			BlueGreen:     &v1beta1.GroupBlueGreen{},
+			MaintainRatio: &v1beta1.MaintainRatio{},
+		}},
+	}
+	if w := CoordinationRatioToleranceWarning(spec); w != "" {
+		t.Errorf("omitted tolerance: got %q want empty", w)
 	}
 }
 
@@ -148,7 +300,7 @@ func TestValidateCoordination_RatioBalancedWithBlueGreenAccepted(t *testing.T) {
 			{
 				Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
 				BlueGreen:     &v1beta1.GroupBlueGreen{},
-				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptrInt32(5)},
+				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptr.To(int32(5))},
 			},
 		},
 	}
@@ -239,6 +391,175 @@ func TestValidateCoordination_ZeroBudgetPacingRejectedStringForm(t *testing.T) {
 	err := ValidateCoordination(spec)
 	if err == nil || !strings.Contains(err.Error(), ReasonZeroBudgetPacingUnstartable) {
 		t.Errorf("zero-budget (str/int mix): got %v want error with %s", err, ReasonZeroBudgetPacingUnstartable)
+	}
+}
+
+// Semantic rejection matrix for group rollingUpdate budgets: negative
+// integers, non-percent strings, malformed percents, and percents outside
+// 0%-100% must all be rejected, and the error must carry the exact
+// spec.rollout.groups[i].rollingUpdate.* field path. Without this check the
+// runtime parser resolves every one of these to a zero budget.
+func TestValidateCoordination_GroupBudgetSemanticRejections(t *testing.T) {
+	cases := []struct {
+		name       string
+		surge      *intstr.IntOrString
+		unavail    *intstr.IntOrString
+		wantReason string
+		wantPath   string
+	}{
+		{"negative-int-surge", intstrPtr(intstr.FromInt(-1)), nil,
+			ReasonInvalidRollingUpdateInteger, "spec.rollout.groups[0].rollingUpdate.maxSurge"},
+		{"negative-int-unavailable", nil, intstrPtr(intstr.FromInt(-2)),
+			ReasonInvalidRollingUpdateInteger, "spec.rollout.groups[0].rollingUpdate.maxUnavailable"},
+		{"non-percent-string-surge", intstrPtr(intstr.FromString("abc")), nil,
+			ReasonInvalidRollingUpdatePercent, "spec.rollout.groups[0].rollingUpdate.maxSurge"},
+		{"plain-number-string-unavailable", nil, intstrPtr(intstr.FromString("25")),
+			ReasonInvalidRollingUpdatePercent, "spec.rollout.groups[0].rollingUpdate.maxUnavailable"},
+		{"malformed-percent-surge", intstrPtr(intstr.FromString("foo%")), nil,
+			ReasonInvalidRollingUpdatePercent, "spec.rollout.groups[0].rollingUpdate.maxSurge"},
+		{"negative-percent-unavailable", nil, intstrPtr(intstr.FromString("-25%")),
+			ReasonInvalidRollingUpdatePercent, "spec.rollout.groups[0].rollingUpdate.maxUnavailable"},
+		{"over-hundred-percent-surge", intstrPtr(intstr.FromString("150%")), nil,
+			ReasonInvalidRollingUpdatePercent, "spec.rollout.groups[0].rollingUpdate.maxSurge"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := omeNativePDSpec()
+			spec.Rollout = &v1beta1.RolloutSpec{
+				Groups: []v1beta1.RolloutGroup{
+					{
+						Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+						RollingUpdate: &v1beta1.GroupRollingUpdate{
+							MaxSurge:       tc.surge,
+							MaxUnavailable: tc.unavail,
+						},
+					},
+				},
+			}
+			err := ValidateCoordination(spec)
+			if err == nil {
+				t.Fatalf("expected rejection, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantReason) {
+				t.Errorf("got %v want reason %s", err, tc.wantReason)
+			}
+			if !strings.Contains(err.Error(), tc.wantPath) {
+				t.Errorf("got %v want exact path %s", err, tc.wantPath)
+			}
+		})
+	}
+}
+
+// A budget pair where BOTH values resolve to zero at runtime ("abc" parses to
+// zero, as does an explicit 0) must be rejected — otherwise the rollout has
+// neither surge nor drain headroom and stalls silently. The malformed half is
+// reported first with its exact path.
+func TestValidateCoordination_MalformedPairResolvingToZeroRejected(t *testing.T) {
+	abc := intstr.FromString("abc")
+	spec := omeNativePDSpec()
+	spec.Rollout = &v1beta1.RolloutSpec{
+		Groups: []v1beta1.RolloutGroup{
+			{
+				Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+				RollingUpdate: &v1beta1.GroupRollingUpdate{
+					MaxSurge:       &abc,
+					MaxUnavailable: &abc,
+				},
+			},
+		},
+	}
+	err := ValidateCoordination(spec)
+	if err == nil {
+		t.Fatal("malformed budget pair resolving to zero must be rejected, got nil")
+	}
+	if !strings.Contains(err.Error(), "spec.rollout.groups[0].rollingUpdate.maxSurge") {
+		t.Errorf("got %v want exact maxSurge path", err)
+	}
+}
+
+// The zero-budget pair rule uses runtime-RESOLVED values, not just literal
+// zeros: a malformed string and a negative integer both resolve to zero, so
+// the pair deadlocks even though neither is written as 0. Exercised directly
+// to pin the rule independent of the per-field checks that run before it.
+func TestValidatePacingNotZeroBudget_ResolvedZeroPairRejected(t *testing.T) {
+	abc := intstr.FromString("abc")
+	neg := intstr.FromInt(-1)
+	groups := []v1beta1.RolloutGroup{
+		{
+			Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			RollingUpdate: &v1beta1.GroupRollingUpdate{
+				MaxSurge:       &abc,
+				MaxUnavailable: &neg,
+			},
+		},
+	}
+	err := validatePacingNotZeroBudget(groups)
+	if err == nil || !strings.Contains(err.Error(), ReasonZeroBudgetPacingUnstartable) {
+		t.Errorf("resolved-zero pair: got %v want error with %s", err, ReasonZeroBudgetPacingUnstartable)
+	}
+	if !strings.Contains(err.Error(), "spec.rollout.groups[0].rollingUpdate") {
+		t.Errorf("got %v want exact rollingUpdate path", err)
+	}
+}
+
+// The field path in a budget error carries the index of the offending group,
+// not always [0].
+func TestValidateCoordination_GroupBudgetPathCarriesGroupIndex(t *testing.T) {
+	bad := intstr.FromString("150%")
+	mode := constants.OMENative
+	spec := &v1beta1.InferenceServiceSpec{
+		DeploymentMode: &mode,
+		Engine:         &v1beta1.EngineSpec{},
+		Decoder:        &v1beta1.DecoderSpec{},
+		Rollout: &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{
+			{Components: []v1beta1.ComponentType{v1beta1.EngineComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}},
+			{
+				Components:    []v1beta1.ComponentType{v1beta1.DecoderComponent},
+				RollingUpdate: &v1beta1.GroupRollingUpdate{MaxSurge: &bad},
+			},
+		}},
+	}
+	err := ValidateCoordination(spec)
+	if err == nil || !strings.Contains(err.Error(), "spec.rollout.groups[1].rollingUpdate.maxSurge") {
+		t.Errorf("got %v want path spec.rollout.groups[1].rollingUpdate.maxSurge", err)
+	}
+}
+
+// Valid budget shapes: positive integers, in-range percents, boundary
+// percents, zero on one knob only, and nil (defaulted) knobs are all accepted.
+func TestValidateCoordination_GroupBudgetValidShapesAccepted(t *testing.T) {
+	cases := []struct {
+		name    string
+		surge   *intstr.IntOrString
+		unavail *intstr.IntOrString
+	}{
+		{"positive-ints", intstrPtr(intstr.FromInt(2)), intstrPtr(intstr.FromInt(1))},
+		{"mid-percents", intstrPtr(intstr.FromString("25%")), intstrPtr(intstr.FromString("50%"))},
+		{"boundary-percents", intstrPtr(intstr.FromString("100%")), intstrPtr(intstr.FromString("100%"))},
+		{"zero-surge-percent-unavailable", intstrPtr(intstr.FromInt(0)), intstrPtr(intstr.FromString("25%"))},
+		{"zero-percent-surge-int-unavailable", intstrPtr(intstr.FromString("0%")), intstrPtr(intstr.FromInt(1))},
+		{"nil-surge-zero-unavailable", nil, intstrPtr(intstr.FromInt(0))},
+		{"zero-surge-nil-unavailable", intstrPtr(intstr.FromInt(0)), nil},
+		{"both-nil", nil, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := omeNativePDSpec()
+			spec.Rollout = &v1beta1.RolloutSpec{
+				Groups: []v1beta1.RolloutGroup{
+					{
+						Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+						RollingUpdate: &v1beta1.GroupRollingUpdate{
+							MaxSurge:       tc.surge,
+							MaxUnavailable: tc.unavail,
+						},
+					},
+				},
+			}
+			if err := ValidateCoordination(spec); err != nil {
+				t.Errorf("unexpected error %v", err)
+			}
+		})
 	}
 }
 
@@ -334,7 +655,7 @@ func TestValidateCoordination_RatioBalancedWithZeroBudgetNotRejected(t *testing.
 			{
 				Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
 				BlueGreen:     &v1beta1.GroupBlueGreen{},
-				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptrInt32(5)},
+				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptr.To(int32(5))},
 			},
 		},
 	}
@@ -390,7 +711,7 @@ func TestCoordinationRatioToleranceWarning_AboveThreshold(t *testing.T) {
 			{
 				Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
 				BlueGreen:     &v1beta1.GroupBlueGreen{},
-				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptrInt32(80)},
+				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptr.To(int32(80))},
 			},
 		},
 	}
@@ -407,12 +728,232 @@ func TestCoordinationRatioToleranceWarning_BelowThresholdEmpty(t *testing.T) {
 			{
 				Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
 				BlueGreen:     &v1beta1.GroupBlueGreen{},
-				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptrInt32(5)},
+				MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptr.To(int32(5))},
 			},
 		},
 	}
 	if w := CoordinationRatioToleranceWarning(spec); w != "" {
 		t.Errorf("safe tolerance: got %q want empty", w)
+	}
+}
+
+// --- Rollout-ordering enforceability ---
+
+func TestValidateRolloutOrderingEnforced_NilSpecAndNoGroupsOK(t *testing.T) {
+	if err := ValidateRolloutOrderingEnforced(nil); err != nil {
+		t.Errorf("nil spec: unexpected error %v", err)
+	}
+	if err := ValidateRolloutOrderingEnforced(&v1beta1.InferenceServiceSpec{}); err != nil {
+		t.Errorf("no rollout: unexpected error %v", err)
+	}
+	spec := omeNativePDSpec()
+	spec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{}}
+	if err := ValidateRolloutOrderingEnforced(spec); err != nil {
+		t.Errorf("empty groups: unexpected error %v", err)
+	}
+}
+
+// A pure run of single-Component blueGreen groups is the one multi-group shape
+// whose list order the engine enforces — it must stay accepted, in both the
+// explicit-blueGreen and the omitted-progression spelling.
+func TestValidateRolloutOrderingEnforced_SingleComponentBlueGreenRunAccepted(t *testing.T) {
+	spec := omeNativePDSpec()
+	spec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{
+		{Components: []v1beta1.ComponentType{v1beta1.DecoderComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}},
+		{Components: []v1beta1.ComponentType{v1beta1.EngineComponent}},
+	}}
+	if err := ValidateRolloutOrderingEnforced(spec); err != nil {
+		t.Errorf("two-group run: unexpected error %v", err)
+	}
+	spec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{
+		{Components: []v1beta1.ComponentType{v1beta1.RouterComponent}},
+		{Components: []v1beta1.ComponentType{v1beta1.DecoderComponent}},
+		{Components: []v1beta1.ComponentType{v1beta1.EngineComponent}},
+	}}
+	if err := ValidateRolloutOrderingEnforced(spec); err != nil {
+		t.Errorf("three-group run: unexpected error %v", err)
+	}
+}
+
+// A single group makes no cross-group ordering promise, so every progression
+// shape stays accepted as long as it carries no Order.
+func TestValidateRolloutOrderingEnforced_SingleGroupShapesAccepted(t *testing.T) {
+	cases := map[string]v1beta1.RolloutGroup{
+		"multi-Component blueGreen": {
+			Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			BlueGreen:  &v1beta1.GroupBlueGreen{},
+		},
+		"multi-Component rollingUpdate": {
+			Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			RollingUpdate: &v1beta1.GroupRollingUpdate{},
+		},
+		"single-Component rollingUpdate": {
+			Components:    []v1beta1.ComponentType{v1beta1.EngineComponent},
+			RollingUpdate: &v1beta1.GroupRollingUpdate{},
+		},
+		"canary": {
+			Components: []v1beta1.ComponentType{v1beta1.EngineComponent},
+			Canary:     &v1beta1.GroupCanary{},
+		},
+	}
+	for name, g := range cases {
+		spec := omeNativePDSpec()
+		spec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{g}}
+		if err := ValidateRolloutOrderingEnforced(spec); err != nil {
+			t.Errorf("%s (single group): unexpected error %v", name, err)
+		}
+	}
+}
+
+// Mixed-progression lists promise an order that runs concurrently: blueGreen
+// followed by rollingUpdate, and rollingUpdate followed by canary.
+func TestValidateRolloutOrderingEnforced_MixedProgressionListRejected(t *testing.T) {
+	spec := omeNativePDSpec()
+	spec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{
+		{Components: []v1beta1.ComponentType{v1beta1.DecoderComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}},
+		{Components: []v1beta1.ComponentType{v1beta1.EngineComponent}, RollingUpdate: &v1beta1.GroupRollingUpdate{}},
+	}}
+	err := ValidateRolloutOrderingEnforced(spec)
+	if err == nil || !strings.Contains(err.Error(), ReasonGroupOrderingNotHonored) {
+		t.Errorf("blueGreen then rollingUpdate: got %v want %s", err, ReasonGroupOrderingNotHonored)
+	}
+
+	spec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{
+		{Components: []v1beta1.ComponentType{v1beta1.DecoderComponent}, RollingUpdate: &v1beta1.GroupRollingUpdate{}},
+		{Components: []v1beta1.ComponentType{v1beta1.EngineComponent}, Canary: &v1beta1.GroupCanary{}},
+	}}
+	err = ValidateRolloutOrderingEnforced(spec)
+	if err == nil || !strings.Contains(err.Error(), ReasonGroupOrderingNotHonored) {
+		t.Errorf("rollingUpdate then canary: got %v want %s", err, ReasonGroupOrderingNotHonored)
+	}
+}
+
+func TestValidateRolloutOrderingEnforced_MultiComponentGroupInListRejected(t *testing.T) {
+	spec := omeNativePDSpec()
+	spec.Router = &v1beta1.RouterSpec{}
+	spec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{
+		{Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}},
+		{Components: []v1beta1.ComponentType{v1beta1.RouterComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}},
+	}}
+	err := ValidateRolloutOrderingEnforced(spec)
+	if err == nil || !strings.Contains(err.Error(), ReasonGroupOrderingNotHonored) {
+		t.Errorf("multi-Component group in ordered list: got %v want %s", err, ReasonGroupOrderingNotHonored)
+	}
+	if err != nil && !strings.Contains(err.Error(), "groups[0]") {
+		t.Errorf("error should name the offending group: got %q", err.Error())
+	}
+}
+
+// A canary group can never be part of the collapsed run (the canary engine
+// drives it independently), so mixing one into a multi-group list breaks the
+// promised order.
+func TestValidateRolloutOrderingEnforced_CanaryInListRejected(t *testing.T) {
+	spec := omeNativePDSpec()
+	spec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{
+		{Components: []v1beta1.ComponentType{v1beta1.EngineComponent}, Canary: &v1beta1.GroupCanary{}},
+		{Components: []v1beta1.ComponentType{v1beta1.DecoderComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}},
+	}}
+	err := ValidateRolloutOrderingEnforced(spec)
+	if err == nil || !strings.Contains(err.Error(), ReasonGroupOrderingNotHonored) {
+		t.Errorf("canary in ordered list: got %v want %s", err, ReasonGroupOrderingNotHonored)
+	}
+}
+
+// Order is rejected on every shape it could be written on — no progression
+// applies it.
+func TestValidateRolloutOrderingEnforced_OrderRejected(t *testing.T) {
+	cases := map[string]v1beta1.RolloutGroup{
+		"multi-Component blueGreen": {
+			Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			BlueGreen:  &v1beta1.GroupBlueGreen{},
+			Order:      []v1beta1.ComponentType{v1beta1.DecoderComponent, v1beta1.EngineComponent},
+		},
+		"multi-Component rollingUpdate": {
+			Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			RollingUpdate: &v1beta1.GroupRollingUpdate{},
+			Order:         []v1beta1.ComponentType{v1beta1.DecoderComponent, v1beta1.EngineComponent},
+		},
+		"canary": {
+			Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			Canary:     &v1beta1.GroupCanary{},
+			Order:      []v1beta1.ComponentType{v1beta1.DecoderComponent, v1beta1.EngineComponent},
+		},
+		"single-Component (trivial order)": {
+			Components: []v1beta1.ComponentType{v1beta1.EngineComponent},
+			BlueGreen:  &v1beta1.GroupBlueGreen{},
+			Order:      []v1beta1.ComponentType{v1beta1.EngineComponent},
+		},
+	}
+	for name, g := range cases {
+		spec := omeNativePDSpec()
+		spec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{g}}
+		err := ValidateRolloutOrderingEnforced(spec)
+		if err == nil || !strings.Contains(err.Error(), ReasonOrderNotHonored) {
+			t.Errorf("%s with order: got %v want %s", name, err, ReasonOrderNotHonored)
+		}
+	}
+}
+
+// Ratchet: an update that does not touch spec.rollout is admitted even when
+// the stored rollout carries an unenforced shape, so existing objects keep
+// reconciling.
+func TestValidateRolloutOrderingEnforcedUpdate_UntouchedRolloutAdmitted(t *testing.T) {
+	unenforced := &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{
+		{Components: []v1beta1.ComponentType{v1beta1.DecoderComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}},
+		{Components: []v1beta1.ComponentType{v1beta1.EngineComponent}, RollingUpdate: &v1beta1.GroupRollingUpdate{}},
+	}}
+	oldSpec := omeNativePDSpecWithImages("v1", "v1")
+	oldSpec.Rollout = unenforced
+	newSpec := omeNativePDSpecWithImages("v2", "v2") // image bump, rollout untouched
+	newSpec.Rollout = unenforced.DeepCopy()
+	if err := ValidateRolloutOrderingEnforcedUpdate(oldSpec, newSpec); err != nil {
+		t.Errorf("untouched rollout: unexpected error %v", err)
+	}
+}
+
+// Ratchet: any update that changes spec.rollout must land on an enforced
+// shape — including an edit that swaps one unenforced shape for another.
+func TestValidateRolloutOrderingEnforcedUpdate_ChangedRolloutRejected(t *testing.T) {
+	oldSpec := omeNativePDSpec()
+	newSpec := omeNativePDSpec()
+	newSpec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{
+		{Components: []v1beta1.ComponentType{v1beta1.DecoderComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}},
+		{Components: []v1beta1.ComponentType{v1beta1.EngineComponent}, RollingUpdate: &v1beta1.GroupRollingUpdate{}},
+	}}
+	err := ValidateRolloutOrderingEnforcedUpdate(oldSpec, newSpec)
+	if err == nil || !strings.Contains(err.Error(), ReasonGroupOrderingNotHonored) {
+		t.Errorf("added unenforced rollout: got %v want %s", err, ReasonGroupOrderingNotHonored)
+	}
+
+	oldSpec = omeNativePDSpec()
+	oldSpec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{
+		{Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}, Order: []v1beta1.ComponentType{v1beta1.DecoderComponent, v1beta1.EngineComponent}},
+	}}
+	newSpec = omeNativePDSpec()
+	newSpec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{
+		{Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}, Order: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent}},
+	}}
+	err = ValidateRolloutOrderingEnforcedUpdate(oldSpec, newSpec)
+	if err == nil || !strings.Contains(err.Error(), ReasonOrderNotHonored) {
+		t.Errorf("edited order: got %v want %s", err, ReasonOrderNotHonored)
+	}
+}
+
+// Ratchet: an update that changes the rollout INTO an enforced shape passes —
+// the ratchet only blocks writes that keep or introduce unenforced ordering.
+func TestValidateRolloutOrderingEnforcedUpdate_ChangedToEnforcedAccepted(t *testing.T) {
+	oldSpec := omeNativePDSpec()
+	oldSpec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{
+		{Components: []v1beta1.ComponentType{v1beta1.DecoderComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}},
+		{Components: []v1beta1.ComponentType{v1beta1.EngineComponent}, RollingUpdate: &v1beta1.GroupRollingUpdate{}},
+	}}
+	newSpec := omeNativePDSpec()
+	newSpec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{
+		{Components: []v1beta1.ComponentType{v1beta1.DecoderComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}},
+		{Components: []v1beta1.ComponentType{v1beta1.EngineComponent}, BlueGreen: &v1beta1.GroupBlueGreen{}},
+	}}
+	if err := ValidateRolloutOrderingEnforcedUpdate(oldSpec, newSpec); err != nil {
+		t.Errorf("corrected rollout: unexpected error %v", err)
 	}
 }
 
@@ -445,5 +986,3 @@ func omeNativeEngineOnlySpec() *v1beta1.InferenceServiceSpec {
 		},
 	}
 }
-
-func ptrInt32(v int32) *int32 { return &v }
