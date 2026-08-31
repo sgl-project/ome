@@ -47,6 +47,18 @@ type InferenceServiceValidator struct {
 	// SupportedPassthroughPrefixes(); test wiring may leave it empty
 	// unless explicitly exercising the rejection path.
 	KnownPassthroughPrefixes []string
+
+	// SupportedTrafficFields lists the typed spec.traffic capability
+	// tokens (pkg/constants TrafficCapability*) the active
+	// Gateway-implementation translator implements. Feeds
+	// validation.ValidateTrafficCapabilities: the reserved
+	// endpointOverride.type=Metadata is rejected while no translator
+	// declares it, and multi-header consistent hashing is rejected
+	// when the set is non-empty and lacks the capability. Empty
+	// disables the provider-specific gate (the reserved-value
+	// rejection still applies); production populates this from the
+	// active translator's SupportedTrafficFields().
+	SupportedTrafficFields []string
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-inferenceservice,mutating=false,failurePolicy=fail,groups=ome.io,resources=inferenceservices,versions=v1beta1,name=inferenceservice.ome-webhook-server.validator
@@ -58,8 +70,34 @@ func (v *InferenceServiceValidator) ValidateCreate(ctx context.Context, obj runt
 		validatorLogger.Error(err, "Unable to convert object to InferenceService")
 		return nil, err
 	}
-	return v.validateInferenceService(ctx, isvc)
+	if err := validateLegacyAutoscalerFieldsFromCtx(ctx); err != nil {
+		return nil, err
+	}
+	// CREATE validates the policy outright; the update-time ratchet lives
+	// in ValidateUpdate, which has the prior object.
+	if err := validation.ValidateScalingPolicy(isvc.Spec.ScalingPolicy, "spec.scalingPolicy"); err != nil {
+		return nil, err
+	}
+	// old=nil: every migration-request annotation present at CREATE is
+	// an add and gets validated (parity with the update path).
+	// old=nil: CREATE rejects every multi-pod OMENative Component that
+	// sets lifecycle.readyPolicy=None.
+	if err := validateMultiPodReadyPolicyNone(nil, isvc); err != nil {
+		return nil, err
+	}
+	warnings, err := v.validateInferenceService(ctx, isvc)
+	if err != nil {
+		return warnings, err
+	}
+	// Rollout-ordering enforceability runs after the structural rules so
+	// the more specific rejections (duplicate order entry, foreign order
+	// Component, ...) keep precedence over the blanket ordering rejection.
+	if err := validation.ValidateRolloutOrderingEnforced(&isvc.Spec); err != nil {
+		return warnings, err
+	}
+	return warnings, nil
 }
+
 func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	isvc, err := convertToInferenceService(newObj)
 	if err != nil {
@@ -71,10 +109,41 @@ func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldObj, 
 		validatorLogger.Error(err, "Unable to convert prior object to InferenceService")
 		return nil, err
 	}
+	if err := validateLegacyAutoscalerFieldsFromCtx(ctx); err != nil {
+		return nil, err
+	}
 	if err := validation.ValidateCoordinationUpdate(&oldIsvc.Spec, &isvc.Spec); err != nil {
 		return nil, err
 	}
-	return v.validateInferenceService(ctx, isvc)
+	// Ratchet: only a newly-set or changed scaling policy is validated,
+	// so a stored object carrying a rejected mode keeps accepting
+	// unrelated spec updates.
+	if err := validation.ValidateScalingPolicyUpdate(oldIsvc.Spec.ScalingPolicy, isvc.Spec.ScalingPolicy, "spec.scalingPolicy"); err != nil {
+		return nil, err
+	}
+	if err := validateMultiPodReadyPolicyNone(oldIsvc, isvc); err != nil {
+		return nil, err
+	}
+	warnings, err := v.validateInferenceService(ctx, isvc)
+	if err != nil {
+		return warnings, err
+	}
+	// Ratcheted rollout-ordering enforceability: applied only when this
+	// update changes spec.rollout, so stored objects keep reconciling.
+	// Runs after the structural rules so the more specific rejections keep
+	// precedence (parity with the CREATE path).
+	if err := validation.ValidateRolloutOrderingEnforcedUpdate(&oldIsvc.Spec, &isvc.Spec); err != nil {
+		return warnings, err
+	}
+	return warnings, nil
+}
+
+func validateLegacyAutoscalerFieldsFromCtx(ctx context.Context) error {
+	req, err := admission.RequestFromContext(ctx)
+	if err != nil {
+		return nil
+	}
+	return validation.ValidateLegacyAutoscalerFieldsRaw(req.AdmissionRequest.Object.Raw)
 }
 
 func (v *InferenceServiceValidator) ValidateDelete(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
@@ -125,6 +194,7 @@ func deploymentStrategyWarnings(isvc *v1beta1.InferenceService) admission.Warnin
 	}
 	return warnings
 }
+
 func (v *InferenceServiceValidator) validateInferenceService(ctx context.Context, isvc *v1beta1.InferenceService) (admission.Warnings, error) {
 	var allWarnings admission.Warnings
 
@@ -177,12 +247,28 @@ func (v *InferenceServiceValidator) validateInferenceService(ctx context.Context
 	if err := validation.ValidateScaleToZero(isvc); err != nil {
 		return allWarnings, err
 	}
+	// Per-Component replica bounds: negative minReplicas, explicit
+	// maxReplicas < 1, and minReplicas > maxReplicas are rejected with
+	// the exact spec field path.
+	if err := validateComponentReplicaBounds(isvc); err != nil {
+		return allWarnings, err
+	}
+	// Per-Component disruption budget shape: minAvailable and
+	// maxUnavailable are mutually exclusive on a Kubernetes
+	// PodDisruptionBudget, so the pair is rejected before the controller
+	// ever builds an invalid child PDB.
+	if err := validateComponentPodDisruptionBudgets(isvc); err != nil {
+		return allWarnings, err
+	}
 	if err := validation.ValidatePlacement(&isvc.Spec); err != nil {
 		return allWarnings, err
 	}
 
 	// Traffic block: typed core load-balancing config + ome.io/* annotations.
 	if err := validation.ValidateTrafficSpec(isvc.Spec.Traffic); err != nil {
+		return allWarnings, err
+	}
+	if err := validation.ValidateTrafficCapabilities(isvc.Spec.Traffic, v.SupportedTrafficFields); err != nil {
 		return allWarnings, err
 	}
 	trafficWarnings, err := validation.ValidateTrafficAnnotations(isvc.Annotations, isvc.Spec.Traffic, v.KnownPassthroughPrefixes...)
@@ -248,6 +334,7 @@ func (v *InferenceServiceValidator) validateInferenceService(ctx context.Context
 	}
 	return allWarnings, nil
 }
+
 func convertToInferenceService(obj runtime.Object) (*v1beta1.InferenceService, error) {
 	isvc, ok := obj.(*v1beta1.InferenceService)
 	if !ok {
@@ -351,8 +438,8 @@ func (v *InferenceServiceValidator) validateOverlays(isvc *v1beta1.InferenceServ
 }
 
 // validateRuntimeAndModelResolution gates runtime/model resolution on
-// the Engine-architecture path. Lean specs (full runner config + no
-// model) short-circuit; everything else needs the runtime selector.
+// the Engine-architecture path. Runtime-only specs check live-synced
+// source availability without running model compatibility validation.
 func (v *InferenceServiceValidator) validateRuntimeAndModelResolution(ctx context.Context, isvc *v1beta1.InferenceService) (admission.Warnings, error) {
 	var warnings admission.Warnings
 
@@ -363,7 +450,7 @@ func (v *InferenceServiceValidator) validateRuntimeAndModelResolution(ctx contex
 		if isvc.Spec.Runtime == nil && !hasFullRunnerConfig(isvc.Spec.Engine) {
 			return warnings, fmt.Errorf("model reference is required when runtime is not specified and engine does not have complete runner configuration")
 		}
-		return warnings, nil
+		return warnings, v.validateRuntimeOnlyAvailability(ctx, isvc)
 	}
 	if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" {
 		return v.resolveModelAndRuntime(ctx, isvc, warnings)
@@ -373,6 +460,32 @@ func (v *InferenceServiceValidator) validateRuntimeAndModelResolution(ctx contex
 	}
 	return warnings, nil
 }
+
+func (v *InferenceServiceValidator) validateRuntimeOnlyAvailability(ctx context.Context, isvc *v1beta1.InferenceService) error {
+	runtimeRef := isvc.Spec.Runtime
+	if runtimeRef == nil || runtimeRef.Name == "" {
+		return nil
+	}
+	if runtimeRef.AutoSync != nil && !*runtimeRef.AutoSync {
+		return nil
+	}
+
+	runtimeSpec, isCluster, err := v.RuntimeSelector.GetRuntime(ctx, runtimeRef.Name, isvc.Namespace, runtimeselector.RefKind(runtimeRef))
+	if err != nil {
+		if runtimeselector.IsRuntimeNotFoundError(err) {
+			return nil
+		}
+		return err
+	}
+	if runtimeSpec.IsDisabled() {
+		return &runtimeselector.RuntimeDisabledError{
+			RuntimeName: runtimeRef.Name,
+			IsCluster:   isCluster,
+		}
+	}
+	return nil
+}
+
 func (v *InferenceServiceValidator) resolveModelAndRuntime(ctx context.Context, isvc *v1beta1.InferenceService, warnings admission.Warnings) (admission.Warnings, error) {
 	baseModel, _, err := isvcutils.GetBaseModel(v.Client, isvc.Spec.Model.Name, isvc.Namespace)
 	if err != nil {
@@ -391,10 +504,16 @@ func (v *InferenceServiceValidator) resolveModelAndRuntime(ctx context.Context, 
 			// (format / architecture / framework) to an advisory warning
 			// and admit — the deliberate choice wins over the declaration.
 			//
-			// Everything else stays a hard error: runtime not found /
-			// disabled / malformed model means the runtime genuinely
-			// cannot run, so admitting would only produce a broken ISVC.
-			if runtimeselector.IsRuntimeCompatibilityError(err) {
+			// Everything else stays a hard error:
+			//   - runtime not found / disabled / malformed model: the
+			//     runtime genuinely cannot run, so admitting would only
+			//     produce a broken ISVC.
+			//   - a sharded (Distribution=Sharded) model with no configured
+			//     cache provider: this surfaces as a RuntimeCompatibilityError
+			//     too, but it is a real cluster-config blocker — a sharded
+			//     model physically cannot load without a cache provider — not
+			//     an over-conservative declared-format check. Keep it gating.
+			if runtimeselector.IsRuntimeCompatibilityError(err) && !modelRequiresCacheProvider(baseModel) {
 				warnings = append(warnings, fmt.Sprintf(
 					"runtime %q does not declare support for model %q (%v); proceeding because the runtime was named explicitly",
 					isvc.Spec.Runtime.Name, isvc.Spec.Model.Name, err))
@@ -452,6 +571,7 @@ func validateRuntimePin(isvc *v1beta1.InferenceService) error {
 	}
 	return nil
 }
+
 func expectedPinPattern(kind runtimerevision.SourceKind, sourceNS, runtimeName string) string {
 	switch kind {
 	case runtimerevision.KindClusterServingRuntime:
@@ -493,6 +613,84 @@ func isvcAutoscalerChecks(isvc *v1beta1.InferenceService) []validation.Component
 	return checks
 }
 
+// componentExtensionCheck names one declared Component's
+// ComponentExtensionSpec so per-Component field checks can report the
+// exact spec path (e.g. "spec.engine").
+type componentExtensionCheck struct {
+	name string
+	ext  *v1beta1.ComponentExtensionSpec
+}
+
+// isvcComponentExtensions projects each declared Component (Engine,
+// Decoder, Router) into the per-Component slice consumed by the
+// replica-bounds and disruption-budget checks. Nil Components are
+// skipped so an absent Component never produces a spurious error.
+func isvcComponentExtensions(isvc *v1beta1.InferenceService) []componentExtensionCheck {
+	var checks []componentExtensionCheck
+	if isvc.Spec.Engine != nil {
+		checks = append(checks, componentExtensionCheck{"engine", &isvc.Spec.Engine.ComponentExtensionSpec})
+	}
+	if isvc.Spec.Decoder != nil {
+		checks = append(checks, componentExtensionCheck{"decoder", &isvc.Spec.Decoder.ComponentExtensionSpec})
+	}
+	if isvc.Spec.Router != nil {
+		checks = append(checks, componentExtensionCheck{"router", &isvc.Spec.Router.ComponentExtensionSpec})
+	}
+	return checks
+}
+
+// validateComponentReplicaBounds checks MinReplicas / MaxReplicas
+// sanity for every declared Component. MaxReplicas is a non-pointer
+// int with no explicit "unset" marker — the zero value means the
+// operator omitted it — so 0 skips the max-side checks instead of
+// being rejected as < 1. MinReplicas=0 stays legal here; the
+// scale-to-zero gate is a separate validator.
+func validateComponentReplicaBounds(isvc *v1beta1.InferenceService) error {
+	for _, c := range isvcComponentExtensions(isvc) {
+		var max *int
+		if c.ext.MaxReplicas != 0 {
+			max = &c.ext.MaxReplicas
+		}
+		if err := validation.ValidateReplicaBounds(c.ext.MinReplicas, max); err != nil {
+			// ValidateReplicaBounds messages begin with the offending
+			// field name, so prefixing the Component path yields the
+			// exact field path (e.g. "spec.engine.minReplicas must be >= 0").
+			return fmt.Errorf("spec.%s.%w", c.name, err)
+		}
+	}
+	return nil
+}
+
+// validateComponentPodDisruptionBudgets validates each declared
+// Component's disruption budget: minAvailable and maxUnavailable are
+// mutually exclusive (a Kubernetes PodDisruptionBudget accepts at most
+// one) and each value must be a non-negative integer or a 0-100%
+// percentage. Errors name the exact spec field path.
+func validateComponentPodDisruptionBudgets(isvc *v1beta1.InferenceService) error {
+	for _, c := range isvcComponentExtensions(isvc) {
+		if err := validation.ValidatePodDisruptionBudget("spec."+c.name, c.ext.MinAvailable, c.ext.MaxUnavailable); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// modelRequiresCacheProvider reports whether the model is sharded
+// (Distribution=Sharded) and therefore needs a configured cluster cache
+// provider to load. A sharded model that names a runtime explicitly must
+// still hard-fail when no provider is configured — it physically cannot
+// load — so resolveModelAndRuntime keeps gating that case instead of
+// downgrading it to an advisory warning. Mirrors the (unexported)
+// runtimeselector helper of the same name.
+func modelRequiresCacheProvider(model *v1beta1.BaseModelSpec) bool {
+	return model != nil &&
+		model.Distribution != nil &&
+		*model.Distribution == v1beta1.DistributionSharded
+}
+
+// hasFullRunnerConfig reports whether the engine has enough runner
+// configuration to skip runtime selection: either a top-level Runner
+// with image, or matching Leader.Runner + Worker.Runner images (multi-node).
 func hasFullRunnerConfig(engine *v1beta1.EngineSpec) bool {
 	if engine == nil {
 		return false
@@ -507,5 +705,3 @@ func hasFullRunnerConfig(engine *v1beta1.EngineSpec) bool {
 	}
 	return false
 }
-
-// Validate of autoscaler targetUtilizationPercentage

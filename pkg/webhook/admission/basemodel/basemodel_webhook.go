@@ -16,9 +16,8 @@ var log = logf.Log.WithName("basemodel-validation-webhook")
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-basemodel,mutating=false,failurePolicy=fail,groups=ome.io,resources=basemodels,versions=v1beta1,name=basemodel.ome-webhook-server.validator
 // +kubebuilder:object:generate=false
 
-// BaseModelValidator denies BaseModels whose pvc:// URI violates the
-// storage-URI shape rules. Pure schema check — no API server reads, hence
-// no Client.
+// BaseModelValidator denies BaseModels whose PVC URI violates the PVC
+// URI shape rules. Pure schema check — no API server reads, hence no Client.
 type BaseModelValidator struct {
 	Decoder admission.Decoder
 }

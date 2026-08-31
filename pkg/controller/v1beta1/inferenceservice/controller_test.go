@@ -579,7 +579,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 			} else {
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 				if tt.wantRequeue {
-					g.Expect(result.Requeue).To(gomega.BeTrue(), "Expected requeue for test: %s", tt.name)
+					g.Expect(result.IsZero()).To(gomega.BeFalse(), "Expected requeue for test: %s", tt.name)
 				} else {
 					g.Expect(result).To(gomega.Equal(ctrl.Result{}))
 				}

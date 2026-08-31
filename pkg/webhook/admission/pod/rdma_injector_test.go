@@ -828,12 +828,82 @@ func getExpectedEnvVars() []v1.EnvVar {
 	return envVars
 }
 
+func TestRDMAInjector_injectNetworks(t *testing.T) {
+	tests := []struct {
+		name              string
+		existingAnno      string
+		profileNetworks   []NetworkAttachment
+		expectErr         bool
+		expectAnnoPresent bool
+		expectAnnoValue   string
+	}{
+		{
+			name:              "no_profile_networks_keeps_pod_untouched",
+			existingAnno:      "",
+			profileNetworks:   nil,
+			expectAnnoPresent: false,
+		},
+		{
+			name:              "writes_fresh_annotation",
+			existingAnno:      "",
+			profileNetworks:   []NetworkAttachment{{Name: "ibs0p0-macvlan", Namespace: "cw-multus"}},
+			expectAnnoPresent: true,
+			expectAnnoValue:   `[{"name":"ibs0p0-macvlan","namespace":"cw-multus"}]`,
+		},
+		{
+			name:              "merges_with_existing_dedup_by_name_and_namespace",
+			existingAnno:      `[{"name":"ibs0p0-macvlan","namespace":"cw-multus"}]`,
+			profileNetworks:   []NetworkAttachment{{Name: "ibs0p0-macvlan", Namespace: "cw-multus"}, {Name: "ibs0p1-macvlan", Namespace: "cw-multus"}},
+			expectAnnoPresent: true,
+			expectAnnoValue:   `[{"name":"ibs0p0-macvlan","namespace":"cw-multus"},{"name":"ibs0p1-macvlan","namespace":"cw-multus"}]`,
+		},
+		{
+			name:            "malformed_existing_annotation_returns_error",
+			existingAnno:    "not-json",
+			profileNetworks: []NetworkAttachment{{Name: "ibs0p0-macvlan", Namespace: "cw-multus"}},
+			expectErr:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{}}
+			if tt.existingAnno != "" {
+				pod.Annotations = map[string]string{MultusNetworksAnnotation: tt.existingAnno}
+			}
+			err := (&RDMAInjector{}).injectNetworks(pod, tt.profileNetworks)
+			if tt.expectErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			val, ok := pod.Annotations[MultusNetworksAnnotation]
+			assert.Equal(t, tt.expectAnnoPresent, ok)
+			if tt.expectAnnoPresent {
+				assert.Equal(t, tt.expectAnnoValue, val)
+			}
+		})
+	}
+}
+
+func TestRDMAProfiles_cksGbRdmaHasAll16Macvlans(t *testing.T) {
+	profile, ok := RDMAProfiles["cks-gb-rdma"]
+	assert.True(t, ok, "cks-gb-rdma profile should be registered")
+	assert.Len(t, profile.Networks, 16, "cks-gb-rdma should have 4 HCAs × 4 ports")
+	// First and last entries should match the (hca, port) generation order.
+	assert.Equal(t, NetworkAttachment{Name: "ibs0p0-macvlan", Namespace: "cw-multus"}, profile.Networks[0])
+	assert.Equal(t, NetworkAttachment{Name: "ibs3p3-macvlan", Namespace: "cw-multus"}, profile.Networks[15])
+	// Profile is networks-only — workload knobs stay in the runtime YAML.
+	assert.Empty(t, profile.EnvVars)
+	assert.Empty(t, profile.Volumes)
+	assert.Nil(t, profile.SecurityContext)
+}
+
 // TestRDMAInjector_injectContainerConfig_NilProfileSecurityContext verifies
-// that a profile without a securityContext does not panic or alter the
-// container's existing security context.
+// that a networks-only profile (no securityContext, e.g. cks-gb-rdma)
+// does not panic or alter the container's existing security context.
 func TestRDMAInjector_injectContainerConfig_NilProfileSecurityContext(t *testing.T) {
 	injector := NewRDMAInjector()
-	profile := RDMAProfile{EnvVars: map[string]string{"NCCL_DEBUG": "INFO"}}
 
 	tests := []struct {
 		name            string
@@ -856,10 +926,10 @@ func TestRDMAInjector_injectContainerConfig_NilProfileSecurityContext(t *testing
 				SecurityContext: tt.securityContext.DeepCopy(),
 			}
 			assert.NotPanics(t, func() {
-				injector.injectContainerConfig(container, profile)
+				injector.injectContainerConfig(container, RDMAProfiles["cks-gb-rdma"])
 			})
 			assert.Equal(t, tt.securityContext, container.SecurityContext,
-				"a profile without a securityContext must not change the container's")
+				"networks-only profile must not change the security context")
 		})
 	}
 }
