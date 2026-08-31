@@ -133,6 +133,10 @@ func (o *Options) Run(ctx context.Context, f factory.Factory) error {
 		table.Headers = append(table.Headers, c.Name)
 	}
 	for _, obj := range objs {
+		if o.entry.TableRows != nil {
+			table.Rows = append(table.Rows, o.entry.TableRows(obj, o.Output == "wide")...)
+			continue
+		}
 		var row []string
 		for _, c := range o.entry.Columns {
 			if c.Wide && o.Output != "wide" {

@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"knative.dev/pkg/apis"
@@ -125,6 +127,8 @@ func TestModelAndRuntimeColumnsWrongType(t *testing.T) {
 func TestLongTailColumns(t *testing.T) {
 	mt := "LoRA"
 	base := "llama-3-3-70b"
+	desired := int32(4)
+	encoding := v1beta1.InstanceStatusEncodingColumnarV2
 	cases := []struct {
 		resource string
 		obj      runtime.Object
@@ -145,20 +149,66 @@ func TestLongTailColumns(t *testing.T) {
 				BaseModelRef: v1beta1.ObjectReference{Name: &base},
 			},
 		}, map[string]string{"NAME": "ftw", "TYPE": "LoRA", "BASEMODEL": "llama-3-3-70b"}},
+		{"acceleratorquotas", &v1beta1.AcceleratorQuota{
+			ObjectMeta: metav1.ObjectMeta{Name: "team-a", Generation: 7},
+			Spec: v1beta1.AcceleratorQuotaSpec{
+				Role:      v1beta1.AcceleratorQuotaRoleClusterQueue,
+				ParentRef: &v1beta1.AcceleratorQuotaParentRef{Name: "root"},
+			},
+			Status: v1beta1.AcceleratorQuotaStatus{
+				Path:               "/root/team-a",
+				ObservedGeneration: 7,
+				Budgets: []v1beta1.AcceleratorBudgetStatus{{
+					ResourceName: "nvidia.com/gpu", ResourceFlavor: "h100",
+					Nominal: resource.MustParse("8"), Admitted: resource.MustParse("3"),
+				}},
+				Conditions: []metav1.Condition{{Type: v1beta1.AcceleratorQuotaReady, Status: metav1.ConditionTrue}},
+			},
+		}, map[string]string{
+			"NAME": "team-a", "ROLE": "ClusterQueue", "PARENT": "root",
+			"RESOURCE": "nvidia.com/gpu", "FLAVOR": "h100", "NOMINAL": "8",
+			"ADMITTED": "3", "SOURCE": "Reported", "READY": "True", "PATH": "/root/team-a",
+		}},
 		{"inferencereplicas", &v1beta1.InferenceReplica{
 			ObjectMeta: metav1.ObjectMeta{Name: "rep"},
 			Spec: v1beta1.InferenceReplicaSpec{
 				Component: v1beta1.EngineComponent,
 				ParentRef: v1beta1.ParentReference{Name: "llama-70b"},
+				Replicas:  &desired,
+				Paused:    true,
 			},
-			Status: v1beta1.InferenceReplicaStatus{Replicas: 3},
-		}, map[string]string{"NAME": "rep", "COMPONENT": "engine", "PARENT": "llama-70b", "REPLICAS": "3"}},
+			Status: v1beta1.InferenceReplicaStatus{
+				Replicas: 3, ReadyReplicas: 2, AvailableReplicas: 2, ServingReplicas: 1,
+				UpdatedReplicas: 2, CurrentRevision: "rep-a", UpdateRevision: "rep-b",
+				InstanceStatusEncoding: &encoding,
+				Migrations:             []v1beta1.MigrationStatus{{}, {}},
+				Conditions: []metav1.Condition{{
+					Type: "RolloutStalled", Status: metav1.ConditionTrue, Reason: "InstancesFailing",
+				}},
+			},
+		}, map[string]string{
+			"NAME": "rep", "COMPONENT": "engine", "PARENT": "llama-70b",
+			"DESIRED": "4", "CURRENT": "3", "READY": "2", "AVAILABLE": "2",
+			"SERVING": "1", "UPDATED": "2", "CURRENT-REVISION": "rep-a",
+			"UPDATE-REVISION": "rep-b", "MIGRATIONS": "2", "ENCODING": "ColumnarV2",
+			"PAUSED": "true", "LIFECYCLE": "RolloutStalled=True", "REASON": "InstancesFailing",
+			"LIFECYCLE-FRESHNESS": "Current",
+		}},
 		{"workloadclusters", &v1beta1.WorkloadCluster{
-			ObjectMeta: metav1.ObjectMeta{Name: "wc"},
+			ObjectMeta: metav1.ObjectMeta{Name: "wc", Generation: 5},
+			Spec: v1beta1.WorkloadClusterSpec{ClusterSource: v1beta1.ClusterConnectionSource{
+				KubeConfig: &v1beta1.KubeConfigSource{
+					SecretRef: corev1.SecretReference{Namespace: "ome", Name: "wc-kubeconfig"},
+					Key:       "west.yaml",
+				},
+			}},
 			Status: v1beta1.WorkloadClusterStatus{Conditions: []metav1.Condition{{
-				Type: "Ready", Status: metav1.ConditionTrue,
+				Type: "Ready", Status: metav1.ConditionTrue, ObservedGeneration: 4, Reason: "Connected",
 			}}},
-		}, map[string]string{"NAME": "wc", "READY": "True"}},
+		}, map[string]string{
+			"NAME": "wc", "CONNECTION": "KubeConfig", "REFERENCE": "ome/wc-kubeconfig",
+			"KEY": "west.yaml", "READY": "True", "GENERATION": "5", "OBSERVED-GENERATION": "4", "REASON": "Connected",
+		}},
 	}
 	for _, tc := range cases {
 		e, err := resolve(tc.resource)
@@ -183,7 +233,7 @@ func TestLongTailColumns(t *testing.T) {
 func TestLongTailColumnsWrongType(t *testing.T) {
 	wrong := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "not-a-long-tail-resource"}}
 	for _, resource := range []string{
-		"acceleratorclasses", "benchmarkjobs", "finetunedweights",
+		"acceleratorclasses", "acceleratorquotas", "benchmarkjobs", "finetunedweights",
 		"inferencereplicas", "workloadclusters",
 	} {
 		e, err := resolve(resource)
@@ -193,6 +243,107 @@ func TestLongTailColumnsWrongType(t *testing.T) {
 			assert.NotPanics(t, func() { got = c.Extract(wrong) }, "%s/%s", resource, c.Name)
 			assert.Equal(t, "?", got, "%s/%s", resource, c.Name)
 		}
+	}
+}
+
+func TestInferenceReplicaInventoryFallbacks(t *testing.T) {
+	entry, err := resolve("ir")
+	require.NoError(t, err)
+	replica := &v1beta1.InferenceReplica{}
+	got := map[string]string{}
+	for _, column := range entry.Columns {
+		got[column.Name] = column.Extract(replica)
+	}
+	assert.Equal(t, "-", got["DESIRED"])
+	assert.Equal(t, "DenseV1", got["ENCODING"])
+	assert.Equal(t, "-", got["CURRENT-REVISION"])
+	assert.Equal(t, "-", got["UPDATE-REVISION"])
+	assert.Equal(t, "-", got["COORDINATION"])
+	assert.Equal(t, "Unavailable", got["LIFECYCLE"])
+	assert.Equal(t, "-", got["REASON"])
+}
+
+func TestInferenceReplicaLifecycleConditionPriorityAndFreshness(t *testing.T) {
+	replica := &v1beta1.InferenceReplica{
+		ObjectMeta: metav1.ObjectMeta{Generation: 2},
+		Status: v1beta1.InferenceReplicaStatus{Conditions: []metav1.Condition{
+			{Type: "Ready", Status: metav1.ConditionTrue, Reason: "MinimumAvailable", ObservedGeneration: 2},
+			{Type: "RolloutStalled", Status: metav1.ConditionTrue, Reason: "InstancesFailing", ObservedGeneration: 1},
+		}},
+	}
+
+	got := inferenceReplicaLifecycle(replica)
+	assert.Equal(t, "RolloutStalled=True", got.state, "an active stall must not be hidden by Ready=True")
+	assert.Equal(t, "InstancesFailing", got.reason)
+	assert.Equal(t, "Stale", got.freshness)
+
+	replica.Status.Conditions[1].Status = metav1.ConditionFalse
+	got = inferenceReplicaLifecycle(replica)
+	assert.Equal(t, "Ready=True", got.state)
+	assert.Equal(t, "MinimumAvailable", got.reason)
+	assert.Equal(t, "Current", got.freshness)
+}
+
+func TestWorkloadClusterConnectionModes(t *testing.T) {
+	tests := []struct {
+		name      string
+		source    v1beta1.ClusterConnectionSource
+		wantKind  string
+		wantValue string
+		wantKey   string
+	}{
+		{
+			name: "cluster profile",
+			source: v1beta1.ClusterConnectionSource{
+				ClusterProfileRef: &v1beta1.ClusterProfileRef{Name: "gpu-west"},
+			},
+			wantKind: "ClusterProfile", wantValue: "gpu-west", wantKey: "-",
+		},
+		{
+			name: "kubeconfig default key",
+			source: v1beta1.ClusterConnectionSource{
+				KubeConfig: &v1beta1.KubeConfigSource{SecretRef: corev1.SecretReference{Name: "config"}},
+			},
+			wantKind: "KubeConfig", wantValue: "config", wantKey: "kubeconfig",
+		},
+		{
+			name: "kubeconfig custom key",
+			source: v1beta1.ClusterConnectionSource{
+				KubeConfig: &v1beta1.KubeConfigSource{
+					SecretRef: corev1.SecretReference{Name: "config"}, Key: "west.yaml",
+				},
+			},
+			wantKind: "KubeConfig", wantValue: "config", wantKey: "west.yaml",
+		},
+		{
+			name: "kubeconfig missing secret name",
+			source: v1beta1.ClusterConnectionSource{
+				KubeConfig: &v1beta1.KubeConfigSource{SecretRef: corev1.SecretReference{Namespace: "ome"}},
+			},
+			wantKind: "KubeConfig", wantValue: "-", wantKey: "kubeconfig",
+		},
+		{
+			name:     "invalid empty source",
+			wantKind: "Invalid", wantValue: "-", wantKey: "-",
+		},
+		{
+			name: "invalid ambiguous source",
+			source: v1beta1.ClusterConnectionSource{
+				KubeConfig:        &v1beta1.KubeConfigSource{SecretRef: corev1.SecretReference{Name: "config"}},
+				ClusterProfileRef: &v1beta1.ClusterProfileRef{Name: "profile"},
+			},
+			wantKind: "Invalid", wantValue: "-", wantKey: "-",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := workloadClusterConnection(&v1beta1.WorkloadCluster{
+				Spec: v1beta1.WorkloadClusterSpec{ClusterSource: test.source},
+			})
+			assert.Equal(t, test.wantKind, got.kind)
+			assert.Equal(t, test.wantValue, got.reference)
+			assert.Equal(t, test.wantKey, got.key)
+		})
 	}
 }
 
