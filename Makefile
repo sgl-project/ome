@@ -381,6 +381,13 @@ ome-image: fmt vet ## Build ome-manager image.
 		. -f dockerfiles/manager.Dockerfile -t $(MANAGER_IMG)
 	@echo "✅ Image built"
 
+.PHONY: ome-scheduler-image
+ome-scheduler-image: ## Build ome-scheduler image.
+	@echo "🚀 Building ome-scheduler image..."
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
+		. -f dockerfiles/ome-scheduler.Dockerfile -t $(REGISTRY)/ome-scheduler:$(TAG)
+	@echo "✅ Image built"
+
 .PHONY: model-agent-image
 model-agent-image: fmt vet ## Build model-agent image.
 	@echo "🚀 Building model-agent image..."
