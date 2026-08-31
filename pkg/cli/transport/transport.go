@@ -1,0 +1,144 @@
+// Package transport provides the CLI's narrow REST seam for OME API requests
+// whose wire contracts are not represented by the generated clients.
+package transport
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/rest"
+
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+)
+
+var (
+	transportScheme         = runtime.NewScheme()
+	transportCodecs         = serializer.NewCodecFactory(transportScheme)
+	transportParameterCodec = runtime.NewParameterCodec(transportScheme)
+)
+
+func init() {
+	metav1.AddToGroupVersion(transportScheme, schema.GroupVersion{Version: "v1"})
+	utilruntime.Must(v1beta1.AddToScheme(transportScheme))
+	utilruntime.Must(autoscalingv1.AddToScheme(transportScheme))
+}
+
+// Resource identifies one OME API object.
+type Resource struct {
+	Namespace string
+	Resource  string
+	Name      string
+}
+
+// Collection identifies one OME API resource collection.
+type Collection struct {
+	Namespace string
+	Resource  string
+}
+
+// JSONPatchOptions controls optional JSON Patch request behavior.
+type JSONPatchOptions struct {
+	DryRun bool
+}
+
+// Client sends OME-specific REST requests.
+type Client struct {
+	rest rest.Interface
+}
+
+// New constructs a Client without modifying config.
+func New(config *rest.Config) (*Client, error) {
+	if config == nil {
+		return nil, errors.New("transport: REST config is nil")
+	}
+
+	cfg := rest.CopyConfig(config)
+	groupVersion := v1beta1.SchemeGroupVersion
+	cfg.GroupVersion = &groupVersion
+	cfg.APIPath = "/apis"
+	cfg.ContentType = runtime.ContentTypeJSON
+	cfg.AcceptContentTypes = runtime.ContentTypeJSON
+	cfg.NegotiatedSerializer = rest.CodecFactoryForGeneratedClient(transportScheme, transportCodecs).WithoutConversion()
+	if cfg.UserAgent == "" {
+		cfg.UserAgent = rest.DefaultKubernetesUserAgent()
+	}
+
+	restClient, err := rest.RESTClientFor(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{rest: restClient}, nil
+}
+
+// JSONPatch applies patch exactly as supplied and returns the raw response.
+func (c *Client) JSONPatch(ctx context.Context, resource Resource, patch []byte, options JSONPatchOptions) ([]byte, error) {
+	patchOptions := metav1.PatchOptions{}
+	if options.DryRun {
+		patchOptions.DryRun = []string{metav1.DryRunAll}
+	}
+
+	result := c.rest.Patch(types.JSONPatchType).
+		Namespace(resource.Namespace).
+		Resource(resource.Resource).
+		Name(resource.Name).
+		VersionedParams(&patchOptions, transportParameterCodec).
+		Body(patch).
+		Do(ctx)
+	if err := result.Error(); err != nil {
+		return nil, err
+	}
+	return result.Raw()
+}
+
+// Watch opens a streaming watch for an OME API resource collection.
+func (c *Client) Watch(ctx context.Context, collection Collection, options metav1.ListOptions) (watch.Interface, error) {
+	var timeout time.Duration
+	if options.TimeoutSeconds != nil {
+		timeout = time.Duration(*options.TimeoutSeconds) * time.Second
+	}
+	options.Watch = true
+	return c.rest.Get().
+		NamespaceIfScoped(collection.Namespace, collection.Namespace != "").
+		Resource(collection.Resource).
+		VersionedParams(&options, transportParameterCodec).
+		Timeout(timeout).
+		Watch(ctx)
+}
+
+// GetInferenceReplicaScale returns an InferenceReplica's scale subresource.
+func (c *Client) GetInferenceReplicaScale(ctx context.Context, namespace, name string, options metav1.GetOptions) (*autoscalingv1.Scale, error) {
+	result := &autoscalingv1.Scale{}
+	err := c.rest.Get().
+		Namespace(namespace).
+		Resource("inferencereplicas").
+		Name(name).
+		SubResource("scale").
+		VersionedParams(&options, transportParameterCodec).
+		Do(ctx).
+		Into(result)
+	return result, err
+}
+
+// UpdateInferenceReplicaScale updates an InferenceReplica's scale subresource.
+func (c *Client) UpdateInferenceReplicaScale(ctx context.Context, namespace, name string, scale *autoscalingv1.Scale, options metav1.UpdateOptions) (*autoscalingv1.Scale, error) {
+	result := &autoscalingv1.Scale{}
+	err := c.rest.Put().
+		Namespace(namespace).
+		Resource("inferencereplicas").
+		Name(name).
+		SubResource("scale").
+		VersionedParams(&options, transportParameterCodec).
+		Body(scale).
+		Do(ctx).
+		Into(result)
+	return result, err
+}
