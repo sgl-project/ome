@@ -56,7 +56,6 @@ func TestRemovableObservationFieldsHaveNoUnauditedDirectProductionAccess(t *test
 	approve("pkg/controller/v1beta1/workload/ops/update_status.go", "cloneTerminalStatusValue", readWrite, "isolated status copy", "NodesOccupied")
 	approve("pkg/controller/v1beta1/workload/ops/create.go", "sameCreateTransitionOwnerState", removableFieldAccessCounts{writes: 2}, "rollback comparison normalization", allFields...)
 	approve("pkg/controller/v1beta1/workload/ops/create.go", "restoreCreateTransitionState", readWrite, "transient rollback observation preservation", "ReadyPodCount", "ScheduledPodCount")
-	approve("pkg/cli/instancestatus/normalize.go", "normalizeDense", read, "CLI rendering of published counts", "ReadyPodCount", "ScheduledPodCount")
 	approve("pkg/controller/v1beta1/workload/ops/create.go", "restoreCreateTransitionState", removableFieldAccessCounts{reads: 2, writes: 2}, "transient rollback observation preservation", "NodesOccupied")
 
 	repoRoot := removableFieldAuditRepositoryRoot(t)
