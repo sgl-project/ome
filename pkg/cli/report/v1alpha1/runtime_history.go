@@ -66,11 +66,8 @@ func (c RuntimeHistoryContent) Canonical() RuntimeHistoryContent {
 }
 
 func compareRuntimeRevisionEntries(a, b RuntimeRevisionEntry) int {
-	if !a.Revision.CreatedAt.Equal(b.Revision.CreatedAt) {
-		if a.Revision.CreatedAt.After(b.Revision.CreatedAt) {
-			return -1
-		}
-		return 1
+	if result := compareOptionalTimesNewestFirst(a.Revision.CreatedAt, b.Revision.CreatedAt); result != 0 {
+		return result
 	}
 	for _, result := range []int{
 		cmp.Compare(a.Revision.Namespace, b.Revision.Namespace),
@@ -155,7 +152,7 @@ func (c RuntimeHistoryContent) Table() report.Table {
 
 func (entry RuntimeRevisionEntry) canonical() RuntimeRevisionEntry {
 	result := entry
-	result.Revision.CreatedAt = entry.Revision.CreatedAt.UTC()
+	result.Revision.CreatedAt = canonicalTimePointer(entry.Revision.CreatedAt)
 	result.Source = copyRuntimeObjectReference(entry.Source)
 	result.Roles = append([]RuntimeRevisionRole{}, entry.Roles...)
 	sort.Slice(result.Roles, func(i, j int) bool {
@@ -186,11 +183,30 @@ func revisionRoleOrder(role RuntimeRevisionRole) int {
 	}
 }
 
-func formatRevisionTime(createdAt time.Time) string {
-	if createdAt.IsZero() {
+func formatRevisionTime(createdAt *time.Time) string {
+	if createdAt == nil || createdAt.IsZero() {
 		return "-"
 	}
 	return createdAt.UTC().Format(time.RFC3339)
+}
+
+func compareOptionalTimesNewestFirst(a, b *time.Time) int {
+	if a == nil {
+		if b == nil {
+			return 0
+		}
+		return 1
+	}
+	if b == nil {
+		return -1
+	}
+	if a.Equal(*b) {
+		return 0
+	}
+	if a.After(*b) {
+		return -1
+	}
+	return 1
 }
 
 func joinRevisionRoles(roles []RuntimeRevisionRole) string {

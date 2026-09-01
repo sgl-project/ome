@@ -2,6 +2,7 @@ package v1alpha1_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"os/exec"
 	"reflect"
 	"strings"
@@ -97,6 +98,13 @@ func TestRuntimeReportEnumValuesAreStable(t *testing.T) {
 		{"completeness not requested", string(v1alpha1.HistoryCompletenessNotRequested), "NotRequested"},
 		{"completeness retention", string(v1alpha1.HistoryCompletenessRetentionBounded), "RetentionBounded"},
 		{"completeness incomplete", string(v1alpha1.HistoryCompletenessIncomplete), "Incomplete"},
+		{"unavailable cycle", string(v1alpha1.UnavailableCycle), "Cycle"},
+		{"unavailable max depth", string(v1alpha1.UnavailableMaxDepthExceeded), "MaxDepthExceeded"},
+		{"unavailable disabled", string(v1alpha1.UnavailableDisabled), "Disabled"},
+		{"issue revision not found", string(v1alpha1.RuntimeIssueRevisionNotFound), "RevisionNotFound"},
+		{"issue revision unavailable", string(v1alpha1.RuntimeIssueRevisionUnavailable), "RevisionUnavailable"},
+		{"issue conflicting revision", string(v1alpha1.RuntimeIssueConflictingRevision), "ConflictingRevision"},
+		{"issue duplicate revision content", string(v1alpha1.RuntimeIssueDuplicateRevisionContent), "DuplicateRevisionContent"},
 	}
 
 	for _, tt := range tests {
@@ -341,7 +349,8 @@ func TestRuntimeIssueCodesUseBoundedIdentifiers(t *testing.T) {
 		"RevisionSourceMismatch", "RevisionHashInvalid", "RevisionPayloadMalformed",
 		"RevisionHashMismatch", "RevisionNameMismatch", "RevisionOrdinalUnexpected",
 		"RevisionPayloadNonCanonical", "RevisionDataObjectPresent", "RevisionIdentityMismatch",
-		"RevisionDisabled", "DuplicateRevision", "RevisionHashCollision", "ReportedDriftConflict",
+		"RevisionDisabled", "DuplicateRevision", "ConflictingRevision", "DuplicateRevisionContent",
+		"RevisionHashCollision", "RevisionNotFound", "RevisionUnavailable", "ReportedDriftConflict",
 		"HistoryUnavailable", "HistoryTruncated",
 	}
 	got := []string{
@@ -355,11 +364,31 @@ func TestRuntimeIssueCodesUseBoundedIdentifiers(t *testing.T) {
 		string(v1alpha1.RuntimeIssueRevisionNameMismatch), string(v1alpha1.RuntimeIssueRevisionOrdinalUnexpected),
 		string(v1alpha1.RuntimeIssueRevisionPayloadNonCanonical), string(v1alpha1.RuntimeIssueRevisionDataObjectPresent),
 		string(v1alpha1.RuntimeIssueRevisionIdentityMismatch), string(v1alpha1.RuntimeIssueRevisionDisabled),
-		string(v1alpha1.RuntimeIssueDuplicateRevision), string(v1alpha1.RuntimeIssueRevisionHashCollision),
+		string(v1alpha1.RuntimeIssueDuplicateRevision), string(v1alpha1.RuntimeIssueConflictingRevision),
+		string(v1alpha1.RuntimeIssueDuplicateRevisionContent), string(v1alpha1.RuntimeIssueRevisionHashCollision),
+		string(v1alpha1.RuntimeIssueRevisionNotFound), string(v1alpha1.RuntimeIssueRevisionUnavailable),
 		string(v1alpha1.RuntimeIssueReportedDriftConflict), string(v1alpha1.RuntimeIssueHistoryUnavailable),
 		string(v1alpha1.RuntimeIssueHistoryTruncated),
 	}
 	assert.Equal(t, want, got)
+}
+
+func TestRuntimeRevisionReferenceOmitsUnknownCreationTime(t *testing.T) {
+	encoded, err := json.Marshal(v1alpha1.RuntimeRevisionReference{
+		Namespace: "ome-system",
+		Name:      "expected-revision",
+	})
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{"namespace":"ome-system","name":"expected-revision"}`, string(encoded))
+	typeOfReference := reflect.TypeOf(v1alpha1.RuntimeRevisionReference{})
+	createdAt, found := typeOfReference.FieldByName("CreatedAt")
+	require.True(t, found)
+	assert.Equal(t, reflect.Pointer, createdAt.Type.Kind())
+}
+
+func runtimeReportTime(value time.Time) *time.Time {
+	return &value
 }
 
 func assertRuntimeReportSchema(t *testing.T, typ reflect.Type, seen map[reflect.Type]bool) {

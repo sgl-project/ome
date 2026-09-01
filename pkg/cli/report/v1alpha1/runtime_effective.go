@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"sort"
 	"strings"
+	"time"
 
 	"sigs.k8s.io/ome/pkg/cli/report"
 )
@@ -119,7 +120,7 @@ func (c RuntimeConfiguration) canonical() RuntimeConfiguration {
 	result.Source = copyRuntimeObjectReference(c.Source)
 	if c.Revision != nil {
 		revision := *c.Revision
-		revision.CreatedAt = revision.CreatedAt.UTC()
+		revision.CreatedAt = canonicalTimePointer(revision.CreatedAt)
 		result.Revision = &revision
 	}
 	result.Components = append([]RuntimeComponent{}, c.Components...)
@@ -137,6 +138,14 @@ func (c RuntimeConfiguration) canonical() RuntimeConfiguration {
 		return a.DeploymentModeSource < b.DeploymentModeSource
 	})
 	return result
+}
+
+func canonicalTimePointer(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	utc := value.UTC()
+	return &utc
 }
 
 func copyRuntimeObjectReference(source *RuntimeObjectReference) *RuntimeObjectReference {

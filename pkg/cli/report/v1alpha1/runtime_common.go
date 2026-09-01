@@ -230,7 +230,11 @@ const (
 	RuntimeIssueRevisionIdentityMismatch      RuntimeIssueCode = "RevisionIdentityMismatch"
 	RuntimeIssueRevisionDisabled              RuntimeIssueCode = "RevisionDisabled"
 	RuntimeIssueDuplicateRevision             RuntimeIssueCode = "DuplicateRevision"
+	RuntimeIssueConflictingRevision           RuntimeIssueCode = "ConflictingRevision"
+	RuntimeIssueDuplicateRevisionContent      RuntimeIssueCode = "DuplicateRevisionContent"
 	RuntimeIssueRevisionHashCollision         RuntimeIssueCode = "RevisionHashCollision"
+	RuntimeIssueRevisionNotFound              RuntimeIssueCode = "RevisionNotFound"
+	RuntimeIssueRevisionUnavailable           RuntimeIssueCode = "RevisionUnavailable"
 	RuntimeIssueReportedDriftConflict         RuntimeIssueCode = "ReportedDriftConflict"
 	RuntimeIssueHistoryUnavailable            RuntimeIssueCode = "HistoryUnavailable"
 	RuntimeIssueHistoryTruncated              RuntimeIssueCode = "HistoryTruncated"
@@ -358,10 +362,10 @@ type RuntimeObjectReference struct {
 
 // RuntimeRevisionReference is an allowlisted ControllerRevision identity.
 type RuntimeRevisionReference struct {
-	Namespace string    `json:"namespace"`
-	Name      string    `json:"name"`
-	UID       string    `json:"uid,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
+	Namespace string     `json:"namespace"`
+	Name      string     `json:"name"`
+	UID       string     `json:"uid,omitempty"`
+	CreatedAt *time.Time `json:"createdAt,omitempty"`
 }
 
 // RuntimeComponent summarizes one runtime component's deployment mode.
