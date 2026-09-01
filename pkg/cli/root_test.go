@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -28,6 +29,8 @@ func TestRootCommandTree(t *testing.T) {
 		"ome autoscale status",
 		"ome get",
 		"ome logs",
+		"ome rollout",
+		"ome rollout status",
 		"ome runtime",
 		"ome runtime effective",
 		"ome runtime explain",
@@ -80,6 +83,26 @@ func TestInjectedRootCarriesAllKubectlConfigFlags(t *testing.T) {
 	}
 	if flag := root.PersistentFlags().Lookup("namespace"); flag == nil || flag.Shorthand != "n" {
 		t.Fatalf("namespace flag = %#v, want -n shorthand", flag)
+	}
+}
+
+func TestRootHelpListsRolloutInspection(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	root := NewRootCmdWithFactory(factory.Static{NS: "default"}, genericiooptions.IOStreams{
+		In: &bytes.Buffer{}, Out: &output, ErrOut: &output,
+	})
+	root.SetArgs([]string{"--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	help := output.String()
+	for _, text := range []string{"rollout", "Inspect InferenceService rollouts", "-n, --namespace"} {
+		if !strings.Contains(help, text) {
+			t.Fatalf("root help missing %q:\n%s", text, help)
+		}
 	}
 }
 
