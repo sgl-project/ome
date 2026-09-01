@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -124,6 +125,27 @@ func TestProjectEffectiveRejectsMismatchedStateGeneration(t *testing.T) {
 	assert.Equal(t, ErrInvalidEvidence.Error(), err.Error())
 }
 
+func TestProjectEffectiveRejectsEvidenceCapturedWithoutStablePrimaryIdentity(t *testing.T) {
+	tests := []struct {
+		name            string
+		uid             string
+		resourceVersion string
+	}{
+		{name: "missing uid", resourceVersion: "resource-version"},
+		{name: "missing resource version", uid: "isvc-uid"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			isvc, state := resolveLiveProjectionFixtureWithIdentity(t, test.uid, test.resourceVersion)
+
+			_, err := ProjectEffective(isvc, state, projectionTestClock)
+			require.ErrorIs(t, err, ErrInvalidEvidence)
+			assert.Equal(t, ErrInvalidEvidence.Error(), err.Error())
+		})
+	}
+}
+
 func TestProjectEffectiveRejectsCrossAssociatedOrHostileEvidence(t *testing.T) {
 	baseISVC, baseState := resolveLiveProjectionFixture(t)
 	tests := []struct {
@@ -143,9 +165,57 @@ func TestProjectEffectiveRejectsCrossAssociatedOrHostileEvidence(t *testing.T) {
 			},
 		},
 		{
+			name: "different service name",
+			mutate: func(isvc *v1beta1.InferenceService, _ *effective.RuntimeState) {
+				isvc.Name = "other-chat"
+			},
+		},
+		{
+			name: "different service namespace",
+			mutate: func(isvc *v1beta1.InferenceService, _ *effective.RuntimeState) {
+				isvc.Namespace = "other-workloads"
+			},
+		},
+		{
+			name: "different service uid",
+			mutate: func(isvc *v1beta1.InferenceService, _ *effective.RuntimeState) {
+				isvc.UID = "other-uid"
+			},
+		},
+		{
+			name: "different service resource version",
+			mutate: func(isvc *v1beta1.InferenceService, _ *effective.RuntimeState) {
+				isvc.ResourceVersion = "secret-other-resource-version"
+			},
+		},
+		{
 			name: "observed generation mismatch",
 			mutate: func(isvc *v1beta1.InferenceService, _ *effective.RuntimeState) {
 				isvc.Status.ObservedGeneration++
+			},
+		},
+		{
+			name: "freshness contradicts generations",
+			mutate: func(isvc *v1beta1.InferenceService, state *effective.RuntimeState) {
+				isvc.Status.ObservedGeneration = 6
+				state.ObservedGeneration = 6
+				state.StatusFreshness = effective.StatusFreshnessCurrent
+			},
+		},
+		{
+			name: "sync state contradicts service snapshot",
+			mutate: func(isvc *v1beta1.InferenceService, _ *effective.RuntimeState) {
+				if isvc.Annotations == nil {
+					isvc.Annotations = map[string]string{}
+				}
+				isvc.Annotations[constants.RuntimeSyncAnnotationKey] = "secret-sync-token"
+			},
+		},
+		{
+			name: "drift state contradicts service snapshot",
+			mutate: func(_ *v1beta1.InferenceService, state *effective.RuntimeState) {
+				state.DriftState = effective.RuntimeDriftStateReportedTrue
+				state.DriftReason = effective.RuntimeDriftReasonRevisionMismatch
 			},
 		},
 		{
@@ -191,6 +261,19 @@ func TestProjectEffectiveRejectsCrossAssociatedOrHostileEvidence(t *testing.T) {
 			},
 		},
 		{
+			name: "known but mismatched pin intent",
+			mutate: func(_ *v1beta1.InferenceService, state *effective.RuntimeState) {
+				state.PinMode = effective.RuntimePinModeManagedPin
+				state.PinState = effective.RuntimePinStateAwaitingPin
+			},
+		},
+		{
+			name: "known but impossible pin state",
+			mutate: func(_ *v1beta1.InferenceService, state *effective.RuntimeState) {
+				state.PinState = effective.RuntimePinStateUnavailable
+			},
+		},
+		{
 			name: "unknown freshness",
 			mutate: func(_ *v1beta1.InferenceService, state *effective.RuntimeState) {
 				state.StatusFreshness = effective.StatusFreshness("secret-freshness")
@@ -227,6 +310,12 @@ func TestProjectEffectiveRejectsCrossAssociatedOrHostileEvidence(t *testing.T) {
 			},
 		},
 		{
+			name: "live active relation contradicts auto sync",
+			mutate: func(_ *v1beta1.InferenceService, state *effective.RuntimeState) {
+				state.LiveToActive = effective.RuntimeHashRelationDifferent
+			},
+		},
+		{
 			name: "unverified live hash",
 			mutate: func(_ *v1beta1.InferenceService, state *effective.RuntimeState) {
 				state.LiveShortHash = "secret-unverified-hash"
@@ -248,11 +337,75 @@ func TestProjectEffectiveRejectsCrossAssociatedOrHostileEvidence(t *testing.T) {
 	}
 }
 
+func TestProjectionRejectsActiveRevisionNameContradictions(t *testing.T) {
+	tests := []struct {
+		name       string
+		resolve    func(*testing.T) (*v1beta1.InferenceService, *effective.RuntimeState)
+		activeName string
+	}{
+		{
+			name: "live active claims revision",
+			resolve: func(t *testing.T) (*v1beta1.InferenceService, *effective.RuntimeState) {
+				return resolveLiveProjectionFixture(t)
+			},
+			activeName: "secret-fabricated-active-revision",
+		},
+		{
+			name: "unavailable active claims revision",
+			resolve: func(t *testing.T) (*v1beta1.InferenceService, *effective.RuntimeState) {
+				return resolveUnavailableLiveFixture(t, nil)
+			},
+			activeName: "secret-fabricated-active-revision",
+		},
+		{
+			name:    "controller revision active omits revision",
+			resolve: resolveControllerRevisionActiveProjectionFixture,
+		},
+		{
+			name:       "controller revision active names another revision",
+			resolve:    resolveControllerRevisionActiveProjectionFixture,
+			activeName: "secret-other-active-revision",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			isvc, state := test.resolve(t)
+			state.ActiveRevisionName = test.activeName
+
+			_, err := ProjectEffective(isvc, state, projectionTestClock)
+			require.ErrorIs(t, err, ErrInvalidEvidence)
+			assert.Equal(t, ErrInvalidEvidence.Error(), err.Error())
+			_, err = ProjectHistory(isvc, state, projectionTestClock)
+			require.ErrorIs(t, err, ErrInvalidEvidence)
+			assert.Equal(t, ErrInvalidEvidence.Error(), err.Error())
+		})
+	}
+}
+
+func resolveControllerRevisionActiveProjectionFixture(
+	t *testing.T,
+) (*v1beta1.InferenceService, *effective.RuntimeState) {
+	t.Helper()
+	liveSpec := projectionRuntimeSpec("private.registry/live:secret")
+	revision := projectionRevision(t, "revision-uid", "gpu-runtime", liveSpec)
+	return resolveProjectionWithRevisionClient(
+		t, k8sfake.NewSimpleClientset(revision.DeepCopy()), liveSpec, revision.Name, nil,
+	)
+}
+
 func pointerTo[T any](value T) *T {
 	return &value
 }
 
 func resolveLiveProjectionFixture(t *testing.T) (*v1beta1.InferenceService, *effective.RuntimeState) {
+	return resolveLiveProjectionFixtureWithIdentity(t, "isvc-uid", "secret-isvc-resource-version")
+}
+
+func resolveLiveProjectionFixtureWithIdentity(
+	t *testing.T,
+	uid, resourceVersion string,
+) (*v1beta1.InferenceService, *effective.RuntimeState) {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	require.NoError(t, v1beta1.AddToScheme(scheme))
@@ -272,7 +425,8 @@ func resolveLiveProjectionFixture(t *testing.T) (*v1beta1.InferenceService, *eff
 	mode := constants.OMENative
 	isvc := &v1beta1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "chat", Namespace: "workloads", UID: "isvc-uid", Generation: 7,
+			Name: "chat", Namespace: "workloads", UID: types.UID(uid), Generation: 7,
+			ResourceVersion: resourceVersion,
 		},
 		Spec: v1beta1.InferenceServiceSpec{
 			DeploymentMode: &mode,

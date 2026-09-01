@@ -27,8 +27,16 @@ func ProjectHistory(
 	if !validStateEvidence(state, live) {
 		return reportv1alpha1.RuntimeEnvelope[reportv1alpha1.RuntimeHistoryContent]{}, ErrInvalidEvidence
 	}
-	_, runtimeIdentity, ok := projectInheritance(state, live)
+	notConfigured := noRuntimeConfigurationDeclared(isvc)
+	_, runtimeIdentity, ok := projectInheritance(state, live, notConfigured)
 	if !ok {
+		return reportv1alpha1.RuntimeEnvelope[reportv1alpha1.RuntimeHistoryContent]{}, ErrInvalidEvidence
+	}
+	if _, valid := projectLiveConfiguration(state, live, runtimeIdentity, notConfigured); !valid {
+		return reportv1alpha1.RuntimeEnvelope[reportv1alpha1.RuntimeHistoryContent]{}, ErrInvalidEvidence
+	}
+	activeConfiguration, valid := projectActiveConfiguration(state, runtimeIdentity, notConfigured)
+	if !valid || !validPinConfiguration(state, activeConfiguration) {
 		return reportv1alpha1.RuntimeEnvelope[reportv1alpha1.RuntimeHistoryContent]{}, ErrInvalidEvidence
 	}
 	observation, completeness, ok := projectHistoryCollectionState(state)
@@ -49,7 +57,7 @@ func ProjectHistory(
 		entries = append(entries, entry)
 	}
 
-	issues, sources, warnings, ok := projectHistoryDiagnostics(isvc, state, live, revisions)
+	issues, sources, warnings, ok := projectHistoryDiagnostics(isvc, state, live, revisions, notConfigured)
 	if !ok {
 		return reportv1alpha1.RuntimeEnvelope[reportv1alpha1.RuntimeHistoryContent]{}, ErrInvalidEvidence
 	}
@@ -73,22 +81,14 @@ func ProjectHistory(
 func projectHistoryCollectionState(
 	state *effective.RuntimeState,
 ) (reportv1alpha1.HistoryObservationState, reportv1alpha1.HistoryCompleteness, bool) {
-	if state.HistoryRequestedPages < 0 || state.HistoryObservedPages < 0 ||
-		state.HistoryObservedPages > state.HistoryRequestedPages {
+	if !validHistoryCollectionEvidence(state) {
 		return "", "", false
 	}
 	if !state.HistoryRequested {
-		if state.HistoryComplete || state.HistoryTruncated ||
-			state.HistoryRequestedPages != 0 || state.HistoryObservedPages != 0 {
-			return "", "", false
-		}
 		return reportv1alpha1.HistoryObservationStateNotRequested,
 			reportv1alpha1.HistoryCompletenessNotRequested, true
 	}
 	if state.HistoryComplete {
-		if state.HistoryTruncated {
-			return "", "", false
-		}
 		return reportv1alpha1.HistoryObservationStateComplete,
 			reportv1alpha1.HistoryCompletenessRetentionBounded, true
 	}
@@ -100,9 +100,61 @@ func projectHistoryCollectionState(
 		reportv1alpha1.HistoryCompletenessIncomplete, true
 }
 
+func validHistoryCollectionEvidence(state *effective.RuntimeState) bool {
+	if state == nil || state.HistoryPageLimit <= 0 || state.HistoryPages < 0 ||
+		state.HistoryRequestedPages < 0 || state.HistoryObservedPages < 0 ||
+		state.HistoryPages != state.HistoryRequestedPages ||
+		state.HistoryRequestedPages > state.HistoryPageLimit ||
+		state.HistoryObservedPages > state.HistoryRequestedPages {
+		return false
+	}
+
+	listFailures := 0
+	for _, issue := range state.SourceIssues() {
+		if issue.Code != effective.RuntimeSourceIssueRevisionListFailed {
+			continue
+		}
+		if issue.RevisionName != "" {
+			return false
+		}
+		listFailures++
+	}
+	if listFailures > 1 {
+		return false
+	}
+
+	if !state.HistoryRequested {
+		return !state.HistoryComplete && !state.HistoryTruncated &&
+			state.HistoryPages == 0 && state.HistoryNamespace() == "" && listFailures == 0
+	}
+	if state.RuntimeName == "" {
+		return !state.HistoryComplete && !state.HistoryTruncated &&
+			state.HistoryPages == 0 && state.HistoryNamespace() == "" && listFailures == 0
+	}
+	if state.HistoryNamespace() == "" || state.HistoryRequestedPages == 0 {
+		return false
+	}
+	if state.HistoryComplete {
+		return !state.HistoryTruncated &&
+			state.HistoryObservedPages == state.HistoryRequestedPages && listFailures == 0
+	}
+	if state.HistoryTruncated {
+		return state.HistoryObservedPages == state.HistoryRequestedPages && listFailures == 0
+	}
+	if listFailures != 1 {
+		return false
+	}
+	failedBeforeObservation := state.HistoryRequestedPages-state.HistoryObservedPages == 1
+	failedAfterObservation := state.HistoryRequestedPages == state.HistoryObservedPages
+	return failedBeforeObservation || failedAfterObservation
+}
+
 func projectRevisionEntry(
 	observation effective.RuntimeRevisionObservation,
 ) (reportv1alpha1.RuntimeRevisionEntry, bool) {
+	if !observation.ObjectReturned() || !validReturnedRevisionIdentity(observation) {
+		return reportv1alpha1.RuntimeRevisionEntry{}, false
+	}
 	if !validVerifiedShortHash(observation.ShortHash) {
 		return reportv1alpha1.RuntimeRevisionEntry{}, false
 	}
@@ -159,6 +211,10 @@ func projectRevisionEntry(
 		RelationToLive: relation,
 		Issues:         issues,
 	}, true
+}
+
+func validReturnedRevisionIdentity(observation effective.RuntimeRevisionObservation) bool {
+	return observation.ReturnedName() != "" && observation.ReturnedNamespace() != ""
 }
 
 func mapRevisionRole(value effective.RuntimeRevisionRole) (reportv1alpha1.RuntimeRevisionRole, bool) {
@@ -266,10 +322,61 @@ func projectHistoryDiagnostics(
 	state *effective.RuntimeState,
 	live *effective.LiveConfiguration,
 	observations []effective.RuntimeRevisionObservation,
+	notConfigured bool,
 ) ([]reportv1alpha1.RuntimeIssue, []reportv1alpha1.RuntimeSourceReference, []reportv1alpha1.RuntimeWarning, bool) {
 	issues := []reportv1alpha1.RuntimeIssue{}
 	sources := projectBaseSources(isvc, live)
 	warnings := []reportv1alpha1.RuntimeWarning{}
+	invalidDeclaredKind := invalidDeclaredRuntimeKind(isvc)
+	if invalidDeclaredKind {
+		issues = append(issues, reportv1alpha1.RuntimeIssue{Code: reportv1alpha1.RuntimeIssueInvalidDeclaredKind})
+	}
+	switch state.StatusFreshness {
+	case effective.StatusFreshnessCurrent:
+	case effective.StatusFreshnessUnknown:
+		issues = append(issues, reportv1alpha1.RuntimeIssue{Code: reportv1alpha1.RuntimeIssueStatusUnobserved})
+		warnings = append(warnings, reportv1alpha1.RuntimeWarning{Code: reportv1alpha1.WarningPartialData})
+	case effective.StatusFreshnessStale:
+		issues = append(issues, reportv1alpha1.RuntimeIssue{Code: reportv1alpha1.RuntimeIssueStatusStale})
+		warnings = append(warnings,
+			reportv1alpha1.RuntimeWarning{Code: reportv1alpha1.WarningPartialData},
+			reportv1alpha1.RuntimeWarning{Code: reportv1alpha1.WarningStaleEvidence},
+		)
+	case effective.StatusFreshnessInconsistent:
+		issues = append(issues, reportv1alpha1.RuntimeIssue{Code: reportv1alpha1.RuntimeIssueStatusInvalid})
+		warnings = append(warnings,
+			reportv1alpha1.RuntimeWarning{Code: reportv1alpha1.WarningPartialData},
+			reportv1alpha1.RuntimeWarning{Code: reportv1alpha1.WarningStaleEvidence},
+		)
+	default:
+		return nil, nil, nil, false
+	}
+	if state.DriftState == effective.RuntimeDriftStateMalformed {
+		issues = append(issues, reportv1alpha1.RuntimeIssue{Code: reportv1alpha1.RuntimeIssueReportedDriftConflict})
+	}
+	if live == nil || live.Runtime.DeclaredInheritance.State() == effective.InheritanceUnavailable {
+		issues = append(issues, reportv1alpha1.RuntimeIssue{Code: reportv1alpha1.RuntimeIssueInheritanceUnavailable})
+		if live != nil {
+			warnings = append(warnings,
+				reportv1alpha1.RuntimeWarning{Code: reportv1alpha1.WarningPartialData},
+				reportv1alpha1.RuntimeWarning{Code: reportv1alpha1.WarningSourceUnavailable},
+			)
+		}
+	}
+	if live != nil {
+		for _, advisory := range live.Advisories {
+			switch advisory.Code {
+			case effective.RuntimeAdvisoryDeclaredCompatibilityMismatch:
+				issues = append(issues, reportv1alpha1.RuntimeIssue{Code: reportv1alpha1.RuntimeIssueDeclaredCompatibilityMismatch})
+			case effective.RuntimeAdvisoryInvalidDeclaredKind:
+				if !invalidDeclaredKind {
+					return nil, nil, nil, false
+				}
+			default:
+				return nil, nil, nil, false
+			}
+		}
+	}
 
 	for _, observation := range observations {
 		if observation.ObjectReturned() {
@@ -289,6 +396,9 @@ func projectHistoryDiagnostics(
 	}
 
 	for _, sourceIssue := range state.SourceIssues() {
+		if notConfigured && liveSourceIssue(sourceIssue.Code) {
+			continue
+		}
 		issue, reason, valid := projectSourceIssue(sourceIssue)
 		if !valid {
 			return nil, nil, nil, false
@@ -300,17 +410,24 @@ func projectHistoryDiagnostics(
 		)
 		if sourceIssue.Code == effective.RuntimeSourceIssueRevisionListFailed {
 			sources = append(sources, reportv1alpha1.RuntimeSourceReference{
-				Kind: "ControllerRevisionList", Name: state.RuntimeName,
+				Kind: "ControllerRevisionList", Namespace: state.HistoryNamespace(), Name: state.RuntimeName,
 				Evidence: reportv1alpha1.EvidenceUnavailable, UnavailableReason: reason,
 			})
 		}
 	}
+	if live == nil && state.RuntimeName != "" {
+		source, valid := unavailableLiveSource(state)
+		if !valid {
+			if !invalidDeclaredKind {
+				return nil, nil, nil, false
+			}
+		} else {
+			sources = append(sources, source)
+		}
+	}
 	if state.HistoryRequested && !state.HistoryComplete && !state.HistoryTruncated {
 		issues = append(issues, reportv1alpha1.RuntimeIssue{Code: reportv1alpha1.RuntimeIssueHistoryUnavailable})
-		warnings = append(warnings,
-			reportv1alpha1.RuntimeWarning{Code: reportv1alpha1.WarningPartialData},
-			reportv1alpha1.RuntimeWarning{Code: reportv1alpha1.WarningSourceUnavailable},
-		)
+		warnings = append(warnings, reportv1alpha1.RuntimeWarning{Code: reportv1alpha1.WarningPartialData})
 	}
 	if state.HistoryTruncated {
 		issues = append(issues, reportv1alpha1.RuntimeIssue{Code: reportv1alpha1.RuntimeIssueHistoryTruncated})

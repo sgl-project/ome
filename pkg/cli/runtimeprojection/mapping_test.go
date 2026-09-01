@@ -1,9 +1,13 @@
 package runtimeprojection
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/cli/effective"
@@ -182,6 +186,197 @@ func TestRevisionEvidenceMappingsAreExhaustive(t *testing.T) {
 		got, ok := mapConsistencyIssue(test.input)
 		assert.Equal(t, test.valid, ok)
 		assert.Equal(t, test.want, got)
+	}
+}
+
+func TestProjectConsistencyIssuesDeduplicatesCollapsedCodes(t *testing.T) {
+	issues, ok := projectConsistencyIssues([]effective.RevisionConsistencyCode{
+		effective.RevisionConsistencySourceNamespace,
+		effective.RevisionConsistencySourceName,
+		effective.RevisionConsistencySourceKind,
+		effective.RevisionConsistencySourceName,
+	}, true)
+
+	assert.True(t, ok)
+	assert.Equal(t, []reportv1alpha1.RuntimeIssueCode{
+		reportv1alpha1.RuntimeIssueRevisionDisabled,
+		reportv1alpha1.RuntimeIssueRevisionSourceMismatch,
+	}, issues)
+}
+
+func TestLiveEvidenceShapeRequiresSnapshotAvailabilityAgreement(t *testing.T) {
+	tests := []struct {
+		name         string
+		availability effective.LiveRuntimeAvailability
+		livePresent  bool
+		want         bool
+	}{
+		{name: "available snapshot", availability: effective.LiveRuntimeAvailable, livePresent: true, want: true},
+		{name: "missing snapshot", availability: effective.LiveRuntimeNotFound, want: true},
+		{name: "disabled snapshot", availability: effective.LiveRuntimeDisabled, want: true},
+		{name: "unreadable snapshot", availability: effective.LiveRuntimeUnavailable, want: true},
+		{name: "available without snapshot", availability: effective.LiveRuntimeAvailable},
+		{name: "missing with snapshot", availability: effective.LiveRuntimeNotFound, livePresent: true},
+		{name: "disabled with snapshot", availability: effective.LiveRuntimeDisabled, livePresent: true},
+		{name: "unreadable with snapshot", availability: effective.LiveRuntimeUnavailable, livePresent: true},
+		{name: "unknown availability", availability: effective.LiveRuntimeAvailability("hostile")},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, validLiveEvidenceShape(test.availability, test.livePresent))
+		})
+	}
+}
+
+func TestOperationalErrorClassificationUsesOnlyBoundedReasons(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want reportv1alpha1.UnavailableReason
+	}{
+		{
+			name: "not found",
+			err:  apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "controllerrevisions"}, "secret-name"),
+			want: reportv1alpha1.UnavailableNotFound,
+		},
+		{
+			name: "forbidden",
+			err: apierrors.NewForbidden(
+				schema.GroupResource{Group: "apps", Resource: "controllerrevisions"},
+				"secret-name", errors.New("secret-cause"),
+			),
+			want: reportv1alpha1.UnavailableForbidden,
+		},
+		{name: "unauthorized", err: apierrors.NewUnauthorized("secret-cause"), want: reportv1alpha1.UnavailableForbidden},
+		{
+			name: "unsupported api",
+			err: &meta.NoKindMatchError{
+				GroupKind: schema.GroupKind{Group: "secret-group", Kind: "secret-kind"},
+			},
+			want: reportv1alpha1.UnavailableUnsupportedAPI,
+		},
+		{name: "unreadable", err: errors.New("secret-cause"), want: reportv1alpha1.UnavailableUnreadable},
+		{name: "empty error", want: reportv1alpha1.UnavailableUnreadable},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, classifySourceError(test.err))
+		})
+	}
+}
+
+func TestLiveUnavailableReasonMappingIsBounded(t *testing.T) {
+	tests := []struct {
+		input effective.LiveRuntimeAvailability
+		want  reportv1alpha1.UnavailableReason
+	}{
+		{effective.LiveRuntimeNotFound, reportv1alpha1.UnavailableNotFound},
+		{effective.LiveRuntimeDisabled, reportv1alpha1.UnavailableDisabled},
+		{effective.LiveRuntimeUnavailable, reportv1alpha1.UnavailableUnreadable},
+		{effective.LiveRuntimeAvailable, reportv1alpha1.UnavailableUnreadable},
+		{effective.LiveRuntimeAvailability("hostile"), reportv1alpha1.UnavailableUnreadable},
+	}
+
+	for _, test := range tests {
+		assert.Equal(t, test.want, mapLiveUnavailableReason(test.input))
+	}
+	issue, reason, ok := projectSourceIssue(effective.RuntimeSourceIssue{
+		Code: effective.RuntimeSourceIssueCode("hostile"), RevisionName: "secret-revision",
+	})
+	assert.False(t, ok)
+	assert.Empty(t, issue)
+	assert.Empty(t, reason)
+}
+
+func TestProjectionInvariantHelpersFailClosed(t *testing.T) {
+	for _, value := range []effective.RuntimePinState{
+		effective.RuntimePinStateRevisionMissing,
+		effective.RuntimePinStateRevisionInvalid,
+		effective.RuntimePinStateRevisionDisabled,
+		effective.RuntimePinStateUnavailable,
+	} {
+		assert.True(t, failedRevisionPinState(value))
+	}
+	assert.False(t, failedRevisionPinState(effective.RuntimePinStateResolved))
+	assert.False(t, failedRevisionPinState(effective.RuntimePinState("hostile")))
+
+	for _, value := range []effective.RuntimeSourceIssueCode{
+		effective.RuntimeSourceIssueLiveNotFound,
+		effective.RuntimeSourceIssueLiveDisabled,
+		effective.RuntimeSourceIssueLiveUnavailable,
+	} {
+		assert.True(t, liveSourceIssue(value))
+	}
+	assert.False(t, liveSourceIssue(effective.RuntimeSourceIssueRevisionNotFound))
+	assert.False(t, liveSourceIssue(effective.RuntimeSourceIssueCode("hostile")))
+
+	assert.True(t, validVerifiedShortHash(""))
+	assert.True(t, validVerifiedShortHash("0123abcd"))
+	assert.False(t, validVerifiedShortHash("0123abc"))
+	assert.False(t, validVerifiedShortHash("0123abcD"))
+	assert.False(t, validVerifiedShortHash("0123abcg"))
+
+	validSource, ok := unavailableLiveSource(&effective.RuntimeState{
+		RuntimeName: "runtime", DeclaredSourceKind: runtimeselector.KindServingRuntime,
+		DeclaredSourceNamespace: "workloads",
+	})
+	assert.True(t, ok)
+	assert.Equal(t, "runtime", validSource.Name)
+	assert.Equal(t, "workloads", validSource.Namespace)
+	assert.Equal(t, reportv1alpha1.UnavailableUnreadable, validSource.UnavailableReason)
+	fallbackSource, ok := unavailableLiveSource(&effective.RuntimeState{
+		RuntimeName: "runtime", RuntimeKind: runtimeselector.KindClusterServingRuntime,
+	})
+	assert.True(t, ok)
+	assert.Equal(t, runtimeselector.KindClusterServingRuntime, fallbackSource.Kind)
+	_, ok = unavailableLiveSource(&effective.RuntimeState{RuntimeName: "runtime", RuntimeKind: "hostile"})
+	assert.False(t, ok)
+	_, ok = unavailableLiveSource(&effective.RuntimeState{RuntimeKind: runtimeselector.KindClusterServingRuntime})
+	assert.False(t, ok)
+
+	left := &reportv1alpha1.RuntimeObjectReference{
+		APIVersion: v1beta1.SchemeGroupVersion.String(), Kind: reportv1alpha1.RuntimeKindServingRuntime,
+		Namespace: "workloads", Name: "runtime",
+	}
+	right := *left
+	assert.True(t, sameRuntimeReference(nil, nil))
+	assert.False(t, sameRuntimeReference(left, nil))
+	assert.False(t, sameRuntimeReference(nil, left))
+	assert.True(t, sameRuntimeReference(left, &right))
+	right.Name = "other"
+	assert.False(t, sameRuntimeReference(left, &right))
+}
+
+func TestProjectComponentsRejectsUnknownFieldsWithoutPartialOutput(t *testing.T) {
+	valid := effective.EffectiveComponent{
+		Type: v1beta1.EngineComponent, DeploymentMode: constants.OMENative,
+		DeploymentModeSource: effective.DeploymentModeServiceSpec,
+	}
+	components, ok := projectComponents([]effective.EffectiveComponent{
+		valid,
+		{
+			Type: v1beta1.DecoderComponent, DeploymentMode: constants.MultiNode,
+			DeploymentModeSource: effective.DeploymentModeLeaderWorkerShape,
+		},
+		{
+			Type: v1beta1.RouterComponent, DeploymentMode: constants.RawDeployment,
+			DeploymentModeSource: effective.DeploymentModeComponentAnnotation,
+		},
+	})
+	assert.True(t, ok)
+	assert.Len(t, components, 3)
+
+	tests := []effective.EffectiveComponent{
+		{Type: v1beta1.ComponentType("hostile"), DeploymentMode: constants.OMENative, DeploymentModeSource: effective.DeploymentModeDefault},
+		{Type: v1beta1.EngineComponent, DeploymentMode: constants.DeploymentModeType("hostile"), DeploymentModeSource: effective.DeploymentModeDefault},
+		{Type: v1beta1.EngineComponent, DeploymentMode: constants.OMENative, DeploymentModeSource: effective.ComponentDeploymentModeSource("hostile")},
+	}
+	for _, test := range tests {
+		components, ok := projectComponents([]effective.EffectiveComponent{valid, test})
+		assert.False(t, ok)
+		assert.Nil(t, components)
 	}
 }
 

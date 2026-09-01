@@ -26,6 +26,9 @@ func ProjectEffective(
 	if !validInputs(isvc, state) {
 		return reportv1alpha1.RuntimeEnvelope[reportv1alpha1.RuntimeEffectiveContent]{}, ErrInvalidEvidence
 	}
+	if !validHistoryCollectionEvidence(state) {
+		return reportv1alpha1.RuntimeEnvelope[reportv1alpha1.RuntimeEffectiveContent]{}, ErrInvalidEvidence
+	}
 
 	selectionSource, ok := mapSelectionSource(state.SelectionSource)
 	if !ok {
@@ -64,7 +67,8 @@ func ProjectEffective(
 	if !validStateEvidence(state, live) {
 		return reportv1alpha1.RuntimeEnvelope[reportv1alpha1.RuntimeEffectiveContent]{}, ErrInvalidEvidence
 	}
-	inheritance, runtimeIdentity, ok := projectInheritance(state, live)
+	notConfigured := noRuntimeConfigurationDeclared(isvc)
+	inheritance, runtimeIdentity, ok := projectInheritance(state, live, notConfigured)
 	if !ok {
 		return reportv1alpha1.RuntimeEnvelope[reportv1alpha1.RuntimeEffectiveContent]{}, ErrInvalidEvidence
 	}
@@ -73,16 +77,21 @@ func ProjectEffective(
 		selectionRuntime = nil
 	}
 
-	liveConfiguration, ok := projectLiveConfiguration(state, live, runtimeIdentity)
+	liveConfiguration, ok := projectLiveConfiguration(state, live, runtimeIdentity, notConfigured)
 	if !ok {
 		return reportv1alpha1.RuntimeEnvelope[reportv1alpha1.RuntimeEffectiveContent]{}, ErrInvalidEvidence
 	}
-	activeConfiguration, ok := projectActiveConfiguration(state, runtimeIdentity)
+	activeConfiguration, ok := projectActiveConfiguration(state, runtimeIdentity, notConfigured)
 	if !ok {
+		return reportv1alpha1.RuntimeEnvelope[reportv1alpha1.RuntimeEffectiveContent]{}, ErrInvalidEvidence
+	}
+	if !validPinConfiguration(state, activeConfiguration) {
 		return reportv1alpha1.RuntimeEnvelope[reportv1alpha1.RuntimeEffectiveContent]{}, ErrInvalidEvidence
 	}
 
-	issues, sources, warnings, ok := projectEffectiveDiagnostics(isvc, state, live, inheritance, activeConfiguration)
+	issues, sources, warnings, ok := projectEffectiveDiagnostics(
+		isvc, state, live, inheritance, activeConfiguration, notConfigured,
+	)
 	if !ok {
 		return reportv1alpha1.RuntimeEnvelope[reportv1alpha1.RuntimeEffectiveContent]{}, ErrInvalidEvidence
 	}
@@ -115,11 +124,133 @@ func ProjectEffective(
 	return reportValue.Canonical(), nil
 }
 
+func noRuntimeConfigurationDeclared(isvc *v1beta1.InferenceService) bool {
+	if isvc == nil {
+		return false
+	}
+	runtimeAbsent := isvc.Spec.Runtime == nil || isvc.Spec.Runtime.Name == ""
+	modelAbsent := isvc.Spec.Model == nil || isvc.Spec.Model.Name == ""
+	return runtimeAbsent && modelAbsent
+}
+
+func invalidDeclaredRuntimeKind(isvc *v1beta1.InferenceService) bool {
+	if isvc == nil || isvc.Spec.Runtime == nil || isvc.Spec.Runtime.Name == "" ||
+		isvc.Spec.Runtime.Kind == nil {
+		return false
+	}
+	kind := *isvc.Spec.Runtime.Kind
+	return kind != runtimeselector.KindServingRuntime && kind != runtimeselector.KindClusterServingRuntime
+}
+
+func validPinConfiguration(
+	state *effective.RuntimeState,
+	active reportv1alpha1.RuntimeConfiguration,
+) bool {
+	available := active.State == reportv1alpha1.ConfigurationStateAvailable
+	if !validConfigurationRelation(state, active, available) {
+		return false
+	}
+	if state.LiveAvailability() == effective.LiveRuntimeDisabled ||
+		state.LiveAvailability() == effective.LiveRuntimeUnavailable {
+		return state.PinState == effective.RuntimePinStateUnavailable && !available
+	}
+	switch state.PinMode {
+	case effective.RuntimePinModeAutoSync:
+		if state.LiveAvailability() == effective.LiveRuntimeAvailable {
+			return state.PinState == effective.RuntimePinStateNotApplicable && available &&
+				active.Origin == reportv1alpha1.ConfigurationOriginLiveRuntime
+		}
+		return state.PinState == effective.RuntimePinStateUnavailable && !available
+	case effective.RuntimePinModeInvalidPin:
+		return state.PinState == effective.RuntimePinStateInvalidIntent && !available
+	case effective.RuntimePinModeManagedPin:
+		if state.ReportedRevisionName == "" {
+			if state.LiveAvailability() == effective.LiveRuntimeAvailable {
+				return state.PinState == effective.RuntimePinStateAwaitingPin && available &&
+					active.Origin == reportv1alpha1.ConfigurationOriginLiveRuntime
+			}
+			return state.PinState == effective.RuntimePinStateUnavailable && !available
+		}
+		if state.PinState == effective.RuntimePinStateResolved {
+			return available && active.Origin == reportv1alpha1.ConfigurationOriginControllerRevision
+		}
+		return !available && failedRevisionPinState(state.PinState)
+	case effective.RuntimePinModeExplicitPin:
+		if state.RequestedRevisionName == "" {
+			return false
+		}
+		if state.PinState == effective.RuntimePinStateResolved ||
+			state.PinState == effective.RuntimePinStateDesiredReportedMismatch {
+			if !available || active.Origin != reportv1alpha1.ConfigurationOriginControllerRevision {
+				return false
+			}
+			mismatch := state.ReportedRevisionName != "" &&
+				state.ReportedRevisionName != state.RequestedRevisionName
+			return mismatch == (state.PinState == effective.RuntimePinStateDesiredReportedMismatch)
+		}
+		return !available && failedRevisionPinState(state.PinState)
+	default:
+		return false
+	}
+}
+
+func validConfigurationRelation(
+	state *effective.RuntimeState,
+	active reportv1alpha1.RuntimeConfiguration,
+	available bool,
+) bool {
+	if !available {
+		return state.LiveToActive == effective.RuntimeHashRelationUnknown
+	}
+	switch active.Origin {
+	case reportv1alpha1.ConfigurationOriginLiveRuntime:
+		return state.LiveAvailability() == effective.LiveRuntimeAvailable &&
+			state.LiveToActive == effective.RuntimeHashRelationEqual
+	case reportv1alpha1.ConfigurationOriginControllerRevision:
+		if state.LiveAvailability() != effective.LiveRuntimeAvailable {
+			return state.LiveToActive == effective.RuntimeHashRelationUnknown
+		}
+		if state.LiveShortHash == "" || active.Hash == "" {
+			return true
+		}
+		if state.LiveShortHash != active.Hash {
+			return state.LiveToActive == effective.RuntimeHashRelationDifferent
+		}
+		return state.LiveToActive == effective.RuntimeHashRelationEqual ||
+			state.LiveToActive == effective.RuntimeHashRelationAmbiguous
+	default:
+		return false
+	}
+}
+
+func failedRevisionPinState(state effective.RuntimePinState) bool {
+	switch state {
+	case effective.RuntimePinStateRevisionMissing,
+		effective.RuntimePinStateRevisionInvalid,
+		effective.RuntimePinStateRevisionDisabled,
+		effective.RuntimePinStateUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 func validInputs(isvc *v1beta1.InferenceService, state *effective.RuntimeState) bool {
 	if isvc == nil || state == nil || isvc.Name == "" || isvc.Namespace == "" {
 		return false
 	}
+	if !state.MatchesInferenceService(isvc) {
+		return false
+	}
 	if isvc.Generation != state.Generation || isvc.Status.ObservedGeneration != state.ObservedGeneration {
+		return false
+	}
+	if state.StatusFreshness != expectedStatusFreshness(state.Generation, state.ObservedGeneration) ||
+		state.SyncTokenState != expectedSyncTokenState(isvc) {
+		return false
+	}
+	expectedDriftState, expectedDriftReason := expectedDriftObservation(isvc)
+	if state.DriftState != expectedDriftState || state.DriftReason != expectedDriftReason {
 		return false
 	}
 	requestedRevision := ""
@@ -127,6 +258,11 @@ func validInputs(isvc *v1beta1.InferenceService, state *effective.RuntimeState) 
 		requestedRevision = *isvc.Spec.Runtime.Revision
 	}
 	if requestedRevision != state.RequestedRevisionName || isvc.Status.PinnedRevisionName != state.ReportedRevisionName {
+		return false
+	}
+	expectedMode, expectedDeclaredKind, expectedDeclaredNamespace := expectedPinIntent(isvc)
+	if state.PinMode != expectedMode || state.DeclaredSourceKind != expectedDeclaredKind ||
+		state.DeclaredSourceNamespace != expectedDeclaredNamespace {
 		return false
 	}
 	explicitRuntimeName := ""
@@ -142,7 +278,116 @@ func validInputs(isvc *v1beta1.InferenceService, state *effective.RuntimeState) 
 	return true
 }
 
+func expectedStatusFreshness(generation, observedGeneration int64) effective.StatusFreshness {
+	switch {
+	case observedGeneration == 0:
+		return effective.StatusFreshnessUnknown
+	case observedGeneration == generation:
+		return effective.StatusFreshnessCurrent
+	case observedGeneration < generation:
+		return effective.StatusFreshnessStale
+	default:
+		return effective.StatusFreshnessInconsistent
+	}
+}
+
+func expectedSyncTokenState(isvc *v1beta1.InferenceService) effective.SyncTokenState {
+	annotation := isvc.Annotations[constants.RuntimeSyncAnnotationKey]
+	status := isvc.Status.LastRuntimeSyncToken
+	switch {
+	case annotation == "" && status == "":
+		return effective.SyncTokenStateAbsent
+	case annotation == "":
+		return effective.SyncTokenStateStatusOnly
+	case annotation == status:
+		return effective.SyncTokenStateAcknowledged
+	default:
+		return effective.SyncTokenStatePending
+	}
+}
+
+func expectedDriftObservation(
+	isvc *v1beta1.InferenceService,
+) (effective.RuntimeDriftState, effective.RuntimeDriftReason) {
+	found := false
+	status := ""
+	reason := ""
+	for _, condition := range isvc.Status.Conditions {
+		if string(condition.Type) != constants.RuntimeDriftedConditionType {
+			continue
+		}
+		if found {
+			return effective.RuntimeDriftStateMalformed, ""
+		}
+		found = true
+		status = string(condition.Status)
+		reason = condition.Reason
+	}
+	if !found {
+		return effective.RuntimeDriftStateNotReported, ""
+	}
+	classifiedReason := classifyExpectedDriftReason(reason)
+	switch status {
+	case "True":
+		return effective.RuntimeDriftStateReportedTrue, classifiedReason
+	case "False":
+		return effective.RuntimeDriftStateReportedFalse, classifiedReason
+	case "Unknown":
+		return effective.RuntimeDriftStateReportedUnknown, classifiedReason
+	default:
+		return effective.RuntimeDriftStateMalformed, classifiedReason
+	}
+}
+
+func classifyExpectedDriftReason(reason string) effective.RuntimeDriftReason {
+	switch effective.RuntimeDriftReason(reason) {
+	case effective.RuntimeDriftReasonRevisionMismatch,
+		effective.RuntimeDriftReasonRevisionMissing,
+		effective.RuntimeDriftReasonSourceRuntimeMissing,
+		effective.RuntimeDriftReasonRuntimeMismatch,
+		effective.RuntimeDriftReasonPinAdvanced:
+		return effective.RuntimeDriftReason(reason)
+	default:
+		return effective.RuntimeDriftReasonOther
+	}
+}
+
+func expectedPinIntent(isvc *v1beta1.InferenceService) (effective.RuntimePinMode, string, string) {
+	if isvc.Spec.Runtime == nil || isvc.Spec.Runtime.Name == "" {
+		return effective.RuntimePinModeAutoSync, "", ""
+	}
+	reference := isvc.Spec.Runtime
+	kindValid := reference.Kind == nil || *reference.Kind == runtimeselector.KindClusterServingRuntime ||
+		*reference.Kind == runtimeselector.KindServingRuntime
+	autoSync := reference.AutoSync == nil || *reference.AutoSync
+	if !kindValid {
+		if autoSync {
+			return effective.RuntimePinModeAutoSync, "", ""
+		}
+		return effective.RuntimePinModeInvalidPin, "", ""
+	}
+	kind := runtimeselector.KindClusterServingRuntime
+	namespace := ""
+	if reference.Kind != nil && *reference.Kind == runtimeselector.KindServingRuntime {
+		kind = runtimeselector.KindServingRuntime
+		namespace = isvc.Namespace
+	}
+	if autoSync {
+		return effective.RuntimePinModeAutoSync, kind, namespace
+	}
+	if reference.Revision != nil && *reference.Revision != "" {
+		return effective.RuntimePinModeExplicitPin, kind, namespace
+	}
+	return effective.RuntimePinModeManagedPin, kind, namespace
+}
+
 func validStateEvidence(state *effective.RuntimeState, live *effective.LiveConfiguration) bool {
+	if !validClosedStateEnums(state) || !validActiveRevisionNameEvidence(state) {
+		return false
+	}
+	if !validLiveEvidenceShape(state.LiveAvailability(), live != nil) {
+		return false
+	}
 	if state.RuntimeKind != "" {
 		if _, ok := mapRuntimeKind(state.RuntimeKind); !ok {
 			return false
@@ -155,13 +400,78 @@ func validStateEvidence(state *effective.RuntimeState, live *effective.LiveConfi
 		return false
 	}
 	if live == nil {
-		return state.LiveAvailability() != effective.LiveRuntimeAvailable
+		return state.RuntimeKind == "" && state.RuntimeNamespace == "" && state.LiveShortHash == ""
 	}
 	if live.Runtime.Name != state.RuntimeName || live.Runtime.Kind != state.RuntimeKind ||
 		live.Runtime.Namespace != state.RuntimeNamespace || live.Runtime.SelectionSource != state.SelectionSource {
 		return false
 	}
 	return true
+}
+
+func validActiveRevisionNameEvidence(state *effective.RuntimeState) bool {
+	active, err := state.RequireActive()
+	if err != nil {
+		return state.ActiveRevisionName == ""
+	}
+	switch active.Origin {
+	case effective.ConfigurationOriginLiveRuntime:
+		return state.ActiveRevisionName == "" && active.RevisionName == ""
+	case effective.ConfigurationOriginControllerRevision:
+		return active.RevisionName != "" && state.ActiveRevisionName == active.RevisionName
+	default:
+		return false
+	}
+}
+
+func validLiveEvidenceShape(availability effective.LiveRuntimeAvailability, livePresent bool) bool {
+	switch availability {
+	case effective.LiveRuntimeAvailable:
+		return livePresent
+	case effective.LiveRuntimeNotFound, effective.LiveRuntimeDisabled, effective.LiveRuntimeUnavailable:
+		return !livePresent
+	default:
+		return false
+	}
+}
+
+func validClosedStateEnums(state *effective.RuntimeState) bool {
+	if _, ok := mapSelectionSource(state.SelectionSource); !ok {
+		return false
+	}
+	if _, ok := mapPinMode(state.PinMode); !ok {
+		return false
+	}
+	if _, ok := mapPinState(state.PinState); !ok {
+		return false
+	}
+	if _, ok := mapFreshness(state.StatusFreshness); !ok {
+		return false
+	}
+	if _, ok := mapSyncState(state.SyncTokenState); !ok {
+		return false
+	}
+	if _, ok := mapDriftState(state.DriftState); !ok {
+		return false
+	}
+	if _, ok := mapDriftCause(state.DriftReason); !ok {
+		return false
+	}
+	if _, ok := mapHashRelation(state.LiveToActive); !ok {
+		return false
+	}
+	switch state.DriftState {
+	case effective.RuntimeDriftStateNotReported:
+		return state.DriftReason == ""
+	case effective.RuntimeDriftStateReportedTrue,
+		effective.RuntimeDriftStateReportedFalse,
+		effective.RuntimeDriftStateReportedUnknown:
+		return state.DriftReason != ""
+	case effective.RuntimeDriftStateMalformed:
+		return true
+	default:
+		return false
+	}
 }
 
 func validVerifiedShortHash(value string) bool {
@@ -329,6 +639,7 @@ func mapHashRelation(value effective.RuntimeHashRelation) (reportv1alpha1.Runtim
 func projectInheritance(
 	state *effective.RuntimeState,
 	live *effective.LiveConfiguration,
+	notConfigured bool,
 ) (reportv1alpha1.RuntimeInheritance, *reportv1alpha1.RuntimeObjectReference, bool) {
 	runtimeKind := state.RuntimeKind
 	runtimeNamespace := state.RuntimeNamespace
@@ -342,7 +653,7 @@ func projectInheritance(
 	}
 	if live == nil {
 		reason := liveUnavailableReason(state)
-		if state.RuntimeName == "" {
+		if notConfigured {
 			reason = reportv1alpha1.UnavailableNotConfigured
 		}
 		return reportv1alpha1.RuntimeInheritance{
@@ -432,13 +743,18 @@ func projectLiveConfiguration(
 	state *effective.RuntimeState,
 	live *effective.LiveConfiguration,
 	runtimeIdentity *reportv1alpha1.RuntimeObjectReference,
+	notConfigured bool,
 ) (reportv1alpha1.RuntimeConfiguration, bool) {
 	if live == nil || state.LiveAvailability() != effective.LiveRuntimeAvailable {
+		reason := liveUnavailableReason(state)
+		if notConfigured {
+			reason = reportv1alpha1.UnavailableNotConfigured
+		}
 		return reportv1alpha1.RuntimeConfiguration{
 			State:             reportv1alpha1.ConfigurationStateUnavailable,
-			Source:            copyRuntimeReference(runtimeIdentity),
+			Source:            configurationRuntimeSource(runtimeIdentity),
 			Components:        []reportv1alpha1.RuntimeComponent{},
-			UnavailableReason: liveUnavailableReason(state),
+			UnavailableReason: reason,
 		}, true
 	}
 	components, ok := projectComponents(live.Components)
@@ -457,14 +773,27 @@ func projectLiveConfiguration(
 func projectActiveConfiguration(
 	state *effective.RuntimeState,
 	runtimeIdentity *reportv1alpha1.RuntimeObjectReference,
+	notConfigured bool,
 ) (reportv1alpha1.RuntimeConfiguration, bool) {
 	active, err := state.RequireActive()
 	if err != nil {
+		reason := activeUnavailableReason(state)
+		revision, revisionReason, valid := projectUnavailableActiveRevision(state)
+		if !valid {
+			return reportv1alpha1.RuntimeConfiguration{}, false
+		}
+		if revisionReason != "" {
+			reason = revisionReason
+		}
+		if notConfigured {
+			reason = reportv1alpha1.UnavailableNotConfigured
+		}
 		return reportv1alpha1.RuntimeConfiguration{
 			State:             reportv1alpha1.ConfigurationStateUnavailable,
-			Source:            copyRuntimeReference(runtimeIdentity),
+			Source:            configurationRuntimeSource(runtimeIdentity),
+			Revision:          revision,
 			Components:        []reportv1alpha1.RuntimeComponent{},
-			UnavailableReason: activeUnavailableReason(state),
+			UnavailableReason: reason,
 		}, true
 	}
 	origin, ok := mapConfigurationOrigin(active.Origin)
@@ -608,9 +937,6 @@ func liveUnavailableReason(state *effective.RuntimeState) reportv1alpha1.Unavail
 }
 
 func activeUnavailableReason(state *effective.RuntimeState) reportv1alpha1.UnavailableReason {
-	if state.RuntimeName == "" {
-		return reportv1alpha1.UnavailableNotConfigured
-	}
 	switch state.PinState {
 	case effective.RuntimePinStateRevisionMissing:
 		return reportv1alpha1.UnavailableNotFound
@@ -618,6 +944,15 @@ func activeUnavailableReason(state *effective.RuntimeState) reportv1alpha1.Unava
 		return reportv1alpha1.UnavailableDisabled
 	case effective.RuntimePinStateInvalidIntent, effective.RuntimePinStateRevisionInvalid:
 		return reportv1alpha1.UnavailableMalformedPayload
+	case effective.RuntimePinStateUnavailable:
+		if state.PinMode == effective.RuntimePinModeAutoSync {
+			return liveUnavailableReason(state)
+		}
+		if state.LiveAvailability() != effective.LiveRuntimeAvailable &&
+			state.LiveAvailability() != effective.LiveRuntimeNotFound {
+			return liveUnavailableReason(state)
+		}
+		return reportv1alpha1.UnavailableUnreadable
 	default:
 		if state.PinMode == effective.RuntimePinModeAutoSync {
 			return liveUnavailableReason(state)
@@ -640,10 +975,22 @@ func projectBaseSources(isvc *v1beta1.InferenceService, live *effective.LiveConf
 			UID: string(live.Model.UID), Generation: live.Model.Generation, Evidence: reportv1alpha1.EvidenceObserved,
 		})
 	}
-	for _, source := range live.Runtime.DeclaredInheritance.Chain() {
+	inheritance := live.Runtime.DeclaredInheritance.Chain()
+	runtimeObserved := false
+	for _, source := range inheritance {
+		if source.Kind == live.Runtime.Kind && source.Namespace == live.Runtime.Namespace &&
+			source.Name == live.Runtime.Name {
+			runtimeObserved = true
+		}
 		sources = append(sources, reportv1alpha1.RuntimeSourceReference{
 			Kind: source.Kind, Namespace: source.Namespace, Name: source.Name,
 			UID: string(source.UID), Generation: source.Generation, Evidence: reportv1alpha1.EvidenceObserved,
+		})
+	}
+	if !runtimeObserved && live.Runtime.Name != "" {
+		sources = append(sources, reportv1alpha1.RuntimeSourceReference{
+			Kind: live.Runtime.Kind, Namespace: live.Runtime.Namespace, Name: live.Runtime.Name,
+			Evidence: reportv1alpha1.EvidenceObserved,
 		})
 	}
 	return deduplicateSources(sources)
@@ -670,19 +1017,62 @@ func projectActiveRevision(
 	if matched == nil {
 		return nil, false
 	}
-	revision := &reportv1alpha1.RuntimeRevisionReference{
-		Namespace: matched.ExpectedNamespace(),
-		Name:      active.RevisionName,
+	revision := expectedRevisionReference(*matched, active.RevisionName)
+	return revision, true
+}
+
+func projectUnavailableActiveRevision(
+	state *effective.RuntimeState,
+) (*reportv1alpha1.RuntimeRevisionReference, reportv1alpha1.UnavailableReason, bool) {
+	expectedName := ""
+	switch state.PinMode {
+	case effective.RuntimePinModeManagedPin:
+		expectedName = state.ReportedRevisionName
+	case effective.RuntimePinModeExplicitPin:
+		expectedName = state.RequestedRevisionName
+	case effective.RuntimePinModeAutoSync, effective.RuntimePinModeInvalidPin:
+		return nil, "", true
+	default:
+		return nil, "", false
 	}
-	if matched.ObjectReturned() && matched.ReturnedName() == matched.ExpectedName() &&
-		matched.ReturnedNamespace() == matched.ExpectedNamespace() {
-		revision.UID = matched.UID
-		if !matched.CreationTimestamp.IsZero() {
-			createdAt := matched.CreationTimestamp.Time.UTC()
+	if expectedName == "" {
+		return nil, "", true
+	}
+	var matched *effective.RuntimeRevisionObservation
+	for _, observation := range state.RevisionObservations() {
+		if observation.ExpectedName() != expectedName {
+			continue
+		}
+		if matched != nil {
+			return nil, "", false
+		}
+		copy := observation
+		matched = &copy
+	}
+	if matched == nil {
+		return nil, "", false
+	}
+	reason, _ := failedRevisionReason(state.SourceIssues(), expectedName)
+	return expectedRevisionReference(*matched, expectedName), reason, true
+}
+
+func expectedRevisionReference(
+	observation effective.RuntimeRevisionObservation,
+	expectedName string,
+) *reportv1alpha1.RuntimeRevisionReference {
+	revision := &reportv1alpha1.RuntimeRevisionReference{
+		Namespace: observation.ExpectedNamespace(),
+		Name:      expectedName,
+	}
+	if observation.ObjectReturned() && observation.ReturnedName() == observation.ExpectedName() &&
+		observation.ReturnedNamespace() == observation.ExpectedNamespace() {
+		revision.UID = observation.UID
+		if !observation.CreationTimestamp.IsZero() {
+			createdAt := observation.CreationTimestamp.Time.UTC()
 			revision.CreatedAt = &createdAt
 		}
 	}
-	return revision, true
+	return revision
 }
 
 func hasRevisionRole(values []effective.RuntimeRevisionRole, target effective.RuntimeRevisionRole) bool {
@@ -713,6 +1103,15 @@ func copyRuntimeReference(value *reportv1alpha1.RuntimeObjectReference) *reportv
 	}
 	copy := *value
 	return &copy
+}
+
+func configurationRuntimeSource(
+	value *reportv1alpha1.RuntimeObjectReference,
+) *reportv1alpha1.RuntimeObjectReference {
+	if value == nil || value.Kind == reportv1alpha1.RuntimeKindUnknown {
+		return nil
+	}
+	return copyRuntimeReference(value)
 }
 
 func sameRuntimeReference(left, right *reportv1alpha1.RuntimeObjectReference) bool {
