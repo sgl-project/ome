@@ -29,6 +29,7 @@ func TestRootCommandTree(t *testing.T) {
 		"ome get",
 		"ome logs",
 		"ome runtime",
+		"ome runtime effective",
 		"ome runtime explain",
 		"ome status",
 		"ome version",
@@ -38,6 +39,13 @@ func TestRootCommandTree(t *testing.T) {
 	}
 	if !root.SilenceErrors || !root.SilenceUsage {
 		t.Fatalf("root error policy = (SilenceErrors=%t, SilenceUsage=%t), want both true", root.SilenceErrors, root.SilenceUsage)
+	}
+	explain, _, err := root.Find([]string{"runtime", "explain"})
+	if err != nil {
+		t.Fatalf("find runtime explain: %v", err)
+	}
+	if explain.Use != "explain (--model NAME | --isvc NAME)" || explain.Short != "Explain which serving runtimes match a model and why" {
+		t.Fatalf("runtime explain contract changed: Use=%q Short=%q", explain.Use, explain.Short)
 	}
 }
 
