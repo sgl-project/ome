@@ -3,7 +3,6 @@ package runtimeprojection
 import (
 	"bytes"
 	"errors"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -71,7 +70,7 @@ func TestRuntimeProjectionDoesNotLeakOrMutatePrivateEvidence(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, isvcBefore, isvc)
-	require.True(t, reflect.DeepEqual(stateBefore, snapshotProjectionState(state)), "projection mutated collector evidence")
+	require.Equal(t, stateBefore, snapshotProjectionState(state), "projection mutated collector evidence")
 	require.NotEmpty(t, historyReport.Content.Revisions)
 	require.Contains(t, historyReport.Content.Issues, reportv1alpha1.RuntimeIssue{
 		Code: reportv1alpha1.RuntimeIssueHistoryUnavailable,

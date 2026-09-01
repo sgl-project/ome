@@ -16,13 +16,15 @@ import (
 	"sigs.k8s.io/ome/pkg/runtimeselector"
 )
 
+type enumMappingCase struct {
+	name string
+	got  string
+	ok   bool
+	want string
+}
+
 func TestClosedRuntimeEnumMappings(t *testing.T) {
-	tests := []struct {
-		name string
-		got  string
-		ok   bool
-		want string
-	}{
+	tests := []enumMappingCase{
 		selectionMapping("selection explicit", effective.RuntimeExplicit, reportv1alpha1.RuntimeSelectionSourceExplicit),
 		selectionMapping("selection selected", effective.RuntimeSelected, reportv1alpha1.RuntimeSelectionSourceSelected),
 		selectionMapping("selection unknown", effective.RuntimeSelectionSource("hostile"), ""),
@@ -380,87 +382,46 @@ func TestProjectComponentsRejectsUnknownFieldsWithoutPartialOutput(t *testing.T)
 	}
 }
 
-func selectionMapping(name string, input effective.RuntimeSelectionSource, want reportv1alpha1.RuntimeSelectionSource) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func selectionMapping(
+	name string,
+	input effective.RuntimeSelectionSource,
+	want reportv1alpha1.RuntimeSelectionSource,
+) enumMappingCase {
 	got, ok := mapSelectionSource(input)
-	return struct {
-		name string
-		got  string
-		ok   bool
-		want string
-	}{name, string(got), ok, string(want)}
+	return enumMapping(name, string(got), ok, string(want))
 }
 
-func runtimeKindMapping(name, input string, want reportv1alpha1.RuntimeKind) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func runtimeKindMapping(name, input string, want reportv1alpha1.RuntimeKind) enumMappingCase {
 	got, ok := mapRuntimeKind(input)
 	return enumMapping(name, string(got), ok, string(want))
 }
 
-func pinModeMapping(name string, input effective.RuntimePinMode, want reportv1alpha1.RuntimePinMode) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func pinModeMapping(name string, input effective.RuntimePinMode, want reportv1alpha1.RuntimePinMode) enumMappingCase {
 	got, ok := mapPinMode(input)
 	return enumMapping(name, string(got), ok, string(want))
 }
 
-func pinStateMapping(name string, input effective.RuntimePinState, want reportv1alpha1.RuntimePinState) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func pinStateMapping(name string, input effective.RuntimePinState, want reportv1alpha1.RuntimePinState) enumMappingCase {
 	got, ok := mapPinState(input)
 	return enumMapping(name, string(got), ok, string(want))
 }
 
-func freshnessMapping(name string, input effective.StatusFreshness, want reportv1alpha1.StatusFreshness) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func freshnessMapping(name string, input effective.StatusFreshness, want reportv1alpha1.StatusFreshness) enumMappingCase {
 	got, ok := mapFreshness(input)
 	return enumMapping(name, string(got), ok, string(want))
 }
 
-func syncMapping(name string, input effective.SyncTokenState, want reportv1alpha1.RuntimeSyncState) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func syncMapping(name string, input effective.SyncTokenState, want reportv1alpha1.RuntimeSyncState) enumMappingCase {
 	got, ok := mapSyncState(input)
 	return enumMapping(name, string(got), ok, string(want))
 }
 
-func driftStateMapping(name string, input effective.RuntimeDriftState, want reportv1alpha1.DriftConditionState) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func driftStateMapping(name string, input effective.RuntimeDriftState, want reportv1alpha1.DriftConditionState) enumMappingCase {
 	got, ok := mapDriftState(input)
 	return enumMapping(name, string(got), ok, string(want))
 }
 
-func driftCauseMapping(name string, input effective.RuntimeDriftReason, want reportv1alpha1.RuntimeDriftCause) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func driftCauseMapping(name string, input effective.RuntimeDriftReason, want reportv1alpha1.RuntimeDriftCause) enumMappingCase {
 	got, ok := mapDriftCause(input)
 	if input == "" && want == "" {
 		return enumMappingAllowEmpty(name, string(got), ok, string(want))
@@ -468,86 +429,41 @@ func driftCauseMapping(name string, input effective.RuntimeDriftReason, want rep
 	return enumMapping(name, string(got), ok, string(want))
 }
 
-func hashMapping(name string, input effective.RuntimeHashRelation, want reportv1alpha1.RuntimeHashRelation) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func hashMapping(name string, input effective.RuntimeHashRelation, want reportv1alpha1.RuntimeHashRelation) enumMappingCase {
 	got, ok := mapHashRelation(input)
 	return enumMapping(name, string(got), ok, string(want))
 }
 
-func originMapping(name string, input effective.ConfigurationOrigin, want reportv1alpha1.ConfigurationOrigin) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func originMapping(name string, input effective.ConfigurationOrigin, want reportv1alpha1.ConfigurationOrigin) enumMappingCase {
 	got, ok := mapConfigurationOrigin(input)
 	return enumMapping(name, string(got), ok, string(want))
 }
 
-func componentMapping(name string, input v1beta1.ComponentType, want reportv1alpha1.RuntimeComponentType) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func componentMapping(name string, input v1beta1.ComponentType, want reportv1alpha1.RuntimeComponentType) enumMappingCase {
 	got, ok := mapComponentType(input)
 	return enumMapping(name, string(got), ok, string(want))
 }
 
-func modeMapping(name string, input constants.DeploymentModeType, want reportv1alpha1.DeploymentMode) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func modeMapping(name string, input constants.DeploymentModeType, want reportv1alpha1.DeploymentMode) enumMappingCase {
 	got, ok := mapDeploymentMode(input)
 	return enumMapping(name, string(got), ok, string(want))
 }
 
-func modeSourceMapping(name string, input effective.ComponentDeploymentModeSource, want reportv1alpha1.DeploymentModeSource) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func modeSourceMapping(name string, input effective.ComponentDeploymentModeSource, want reportv1alpha1.DeploymentModeSource) enumMappingCase {
 	got, ok := mapDeploymentModeSource(input)
 	return enumMapping(name, string(got), ok, string(want))
 }
 
-func inheritanceReasonMapping(name string, input effective.InheritanceUnavailableReason, want reportv1alpha1.UnavailableReason) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func inheritanceReasonMapping(name string, input effective.InheritanceUnavailableReason, want reportv1alpha1.UnavailableReason) enumMappingCase {
 	got, ok := mapInheritanceUnavailableReason(input)
 	return enumMapping(name, string(got), ok, string(want))
 }
 
-func enumMapping(name, got string, ok bool, want string) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
-	return struct {
-		name string
-		got  string
-		ok   bool
-		want string
-	}{name, got, ok, want}
+func enumMapping(name, got string, ok bool, want string) enumMappingCase {
+	return enumMappingCase{name, got, ok, want}
 }
 
-func enumMappingAllowEmpty(name, got string, ok bool, want string) struct {
-	name string
-	got  string
-	ok   bool
-	want string
-} {
+func enumMappingAllowEmpty(name, got string, ok bool, want string) enumMappingCase {
 	result := enumMapping(name, got, ok, want)
 	if ok {
 		result.want = "<valid-empty>"
