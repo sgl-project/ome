@@ -1,6 +1,6 @@
-# Alfred's cluster-scoped permissions are read-only plus two narrow writes
-# (OEP-0008 §RBAC): no node writes, no pod writes, no pods/eviction. Every
-# pod-level action is executed by the controller that owns the workload.
+# Alfred's cluster-scoped permissions are read-only except for Events
+# (OEP-0008 §RBAC): no node writes, no pod writes, no pods/eviction, and no
+# InferenceService writes until the Dispatcher and admission guard land.
 # Anything confined to Alfred's own namespace — its ConfigMaps, its
 # leader-election Lease — lives in role.yaml instead.
 apiVersion: rbac.authorization.k8s.io/v1
@@ -44,9 +44,3 @@ rules:
       - basemodels
       - clusterbasemodels
     verbs: [ "get", "list", "watch" ]
-
-  # The single executable contract: migration-request annotations on
-  # InferenceServices, written only in execute mode.
-  - apiGroups: [ "ome.io" ]
-    resources: [ "inferenceservices" ]
-    verbs: [ "patch" ]

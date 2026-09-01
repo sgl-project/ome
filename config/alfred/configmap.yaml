@@ -12,14 +12,15 @@ data:
   config.yaml: |
     schemaVersion: 1
 
-    # recommend-only | execute. recommend-only never dispatches a migration:
-    # policies, arbitration and reporting all run, only the dispatcher is off.
+    # recommend-only | execute. Both modes currently run policies, arbitration,
+    # and reporting only. Admitted candidates remain withheld until the
+    # Dispatcher and its admission guard land together.
     mode: recommend-only
 
     # Loop cadence.
     decisionLoopInterval: 5m
     observationLoopInterval: 30s
-    # Advances the next decision tick; never interrupts a pass ([] disables).
+    # Requests a supplemental pass; never interrupts or resets cadence ([] disables).
     earlyTickOn: [NodeConditionChange]
 
     policies:
@@ -53,7 +54,7 @@ data:
 
     # Reserved compatibility field; RawDeployment remains advisory-only.
     rawDeploymentMigrationEnabled: false
-    # Future execution surfaces; owning controllers execute annotations.
+    # Future execution surfaces; these flags do not enable dispatch today.
     omenativeMigrationEnabled: true
     lwsRecommendationsEnabled: true
 
@@ -66,7 +67,7 @@ data:
     maxMigrationsPerHour: 10
     emergencyPendingAgeMinutes: 10
 
-    # Weekly UTC windows gating defrag dispatch; empty means no window applies.
+    # Weekly UTC windows reserved for future defrag dispatch.
     # Node-health evacuation deliberately overrides them.
     maintenanceWindows: []
     # maintenanceWindows:

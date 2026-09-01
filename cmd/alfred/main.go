@@ -1,12 +1,13 @@
 // Alfred is the OME GPU cluster caretaker (OEP-0008): a leader-elected
 // controller that observes the physical GPU layer, recommends corrective
-// migrations, and — only in execute mode — actuates them through the
-// migration-request annotation executed by the workload-owning controllers.
+// migrations, and reports every current candidate without actuating it.
+// Both modes remain reporting-only until the Dispatcher and its admission
+// guard land together.
 //
 // This binary wires two loops onto a controller-runtime manager:
 //   - the observation loop (every replica): snapshot + gauges, read-only;
-//   - the decision loop (leader only): policies → arbiter → reporter →
-//     dispatcher (added by later change sets).
+//   - the decision loop (leader only): policies → arbiter → reporter;
+//     the Dispatcher is a future stage.
 package main
 
 import (
@@ -175,8 +176,8 @@ func main() {
 	}
 
 	// Decision side: leader-only loop over policies → arbiter → reporter.
-	// The dispatcher joins in the execute path; until then admitted
-	// candidates are withheld and reported as such.
+	// Both configured modes withhold admitted candidates until the Dispatcher
+	// and its admission guard land together.
 	earlyTicker := &engine.EarlyTicker{
 		Cache: mgr.GetCache(),
 		Store: store,
