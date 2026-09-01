@@ -11,8 +11,9 @@ import (
 func NewCmd(f factory.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "runtime",
-		Short: "Inspect OME runtime selection",
+		Short: "Inspect OME runtime selection and configuration",
 	}
 	cmd.AddCommand(newExplainCmd(f, streams))
+	cmd.AddCommand(newEffectiveCmd(f, streams))
 	return cmd
 }
