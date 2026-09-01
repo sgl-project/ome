@@ -24,6 +24,8 @@ func TestRootCommandTree(t *testing.T) {
 	})
 	got := commandPaths(root)
 	want := []string{
+		"ome autoscale",
+		"ome autoscale status",
 		"ome get",
 		"ome logs",
 		"ome runtime",
@@ -36,6 +38,23 @@ func TestRootCommandTree(t *testing.T) {
 	}
 	if !root.SilenceErrors || !root.SilenceUsage {
 		t.Fatalf("root error policy = (SilenceErrors=%t, SilenceUsage=%t), want both true", root.SilenceErrors, root.SilenceUsage)
+	}
+}
+
+func TestRootHelpListsAutoscaleEvidenceCommand(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	root := NewRootCmdWithFactory(factory.Static{NS: "default"}, genericiooptions.IOStreams{
+		In: &bytes.Buffer{}, Out: &output, ErrOut: &output,
+	})
+	root.SetArgs([]string{"--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !bytes.Contains(output.Bytes(), []byte("  autoscale   Inspect controller-reported autoscaling evidence\n")) {
+		t.Fatalf("root help does not list autoscale command:\n%s", output.String())
 	}
 }
 

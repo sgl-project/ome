@@ -1,0 +1,119 @@
+package autoscale
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/spf13/cobra"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/cli-runtime/pkg/genericiooptions"
+
+	omev1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/cli/apierror"
+	"sigs.k8s.io/ome/pkg/cli/autoscaleprojection"
+	"sigs.k8s.io/ome/pkg/cli/factory"
+	"sigs.k8s.io/ome/pkg/cli/report"
+	reportv1alpha1 "sigs.k8s.io/ome/pkg/cli/report/v1alpha1"
+)
+
+var (
+	// ErrReturnedInferenceServiceNameMismatch rejects a response that is not
+	// bound to the requested resource name.
+	ErrReturnedInferenceServiceNameMismatch = errors.New("returned inference service name does not match request")
+	// ErrReturnedInferenceServiceNamespaceMismatch rejects a response that is
+	// not bound to the resolved request namespace.
+	ErrReturnedInferenceServiceNamespaceMismatch = errors.New("returned inference service namespace does not match request")
+	// ErrReturnedInferenceServiceUIDMissing rejects a response that cannot be
+	// durably bound to the requested Kubernetes object.
+	ErrReturnedInferenceServiceUIDMissing = errors.New("returned inference service has no UID")
+)
+
+type statusProjector func(
+	*omev1beta1.InferenceService,
+	reportv1alpha1.Clock,
+) (reportv1alpha1.AutoscaleStatusReport, error)
+
+type statusDependencies struct {
+	clock   reportv1alpha1.Clock
+	project statusProjector
+}
+
+type statusOptions struct {
+	genericiooptions.IOStreams
+	output string
+	deps   statusDependencies
+}
+
+func newStatusCmd(
+	f factory.Factory,
+	streams genericiooptions.IOStreams,
+	deps statusDependencies,
+) *cobra.Command {
+	o := &statusOptions{IOStreams: streams, deps: deps}
+	cmd := &cobra.Command{
+		Use:   "status INFERENCESERVICE",
+		Short: "Show controller-reported autoscaling status",
+		Long: `Show autoscaling evidence already reported on the InferenceService parent.
+It does not query HPA, KEDA ScaledObject, Deployment, or InferenceReplica
+objects, so "Reported" describes controller-reported evidence, not freshness.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return o.run(cmd.Context(), f, args[0])
+		},
+	}
+	cmd.Flags().StringVarP(&o.output, "output", "o", "table", "Output format: table, json or yaml")
+	return cmd
+}
+
+func (o *statusOptions) run(ctx context.Context, f factory.Factory, name string) error {
+	format, err := report.ParseFormat(o.output)
+	if err != nil {
+		return err
+	}
+	if problems := utilvalidation.IsDNS1123Subdomain(name); len(problems) > 0 {
+		return fmt.Errorf("invalid InferenceService name %q: %s", name, strings.Join(problems, "; "))
+	}
+
+	namespace, _, err := f.Namespace()
+	if err != nil {
+		return fmt.Errorf("resolve namespace: %w", err)
+	}
+	if namespace == "" {
+		return fmt.Errorf("resolved namespace must not be empty")
+	}
+	if problems := utilvalidation.IsDNS1123Label(namespace); len(problems) > 0 {
+		return fmt.Errorf("invalid resolved namespace: %s", strings.Join(problems, "; "))
+	}
+	client, err := f.OMEClient()
+	if err != nil {
+		return fmt.Errorf("create OME client: %w", err)
+	}
+	isvc, err := client.OmeV1beta1().InferenceServices(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get InferenceService %q: %w", namespace+"/"+name, apierror.Friendly(err))
+	}
+	if isvc == nil {
+		return autoscaleprojection.ErrInferenceServiceRequired
+	}
+	if isvc.Name != name {
+		return ErrReturnedInferenceServiceNameMismatch
+	}
+	if isvc.Namespace != namespace {
+		return ErrReturnedInferenceServiceNamespaceMismatch
+	}
+	if isvc.UID == "" {
+		return ErrReturnedInferenceServiceUIDMissing
+	}
+
+	reportValue, err := o.deps.project(isvc, o.deps.clock)
+	if err != nil {
+		return fmt.Errorf("project autoscale status for InferenceService %q: %w", namespace+"/"+name, err)
+	}
+	if err := report.Write(o.Out, format, reportValue); err != nil {
+		return fmt.Errorf("write autoscale status: %w", err)
+	}
+	return nil
+}
