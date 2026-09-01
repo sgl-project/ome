@@ -5,6 +5,16 @@ name: Dev Images
 # images are unaffected (release.yaml builds on tags).
 on:
   workflow_dispatch:
+    inputs:
+      express:
+        description: 'amd64-only fast build (skips the QEMU-emulated arm64 half; does not move the floating :dev tag)'
+        type: boolean
+        default: false
+
+# An express run never queues behind (or cancels) a comprehensive build.
+concurrency:
+  group: dev-images-${{ inputs.express && 'express' || 'full' }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -33,6 +43,9 @@ jobs:
           - name: ome-agent
             dockerfile: dockerfiles/ome-agent.Dockerfile
             image: ome-agent
+          - name: ome-scheduler
+            dockerfile: dockerfiles/ome-scheduler.Dockerfile
+            image: ome-scheduler
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -44,6 +57,7 @@ jobs:
           cache: true
 
       - name: Set up QEMU
+        if: ${{ !inputs.express }}
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
@@ -68,6 +82,18 @@ jobs:
           DEV_VERSION="dev-${TIMESTAMP}-${SHORT_SHA}"
           echo "version=${DEV_VERSION}" >> $GITHUB_OUTPUT
           echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}"
+          if [ "${{ inputs.express }}" = "true" ]; then
+            # Express pins only the SHA tag; :dev stays multi-arch.
+            echo "tags=${IMAGE}:dev-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          else
+            {
+              echo "tags<<EOF"
+              echo "${IMAGE}:dev"
+              echo "${IMAGE}:dev-${SHORT_SHA}"
+              echo "EOF"
+            } >> $GITHUB_OUTPUT
+          fi
           echo "📦 Building dev version: ${DEV_VERSION}"
 
       - name: Build and push ${{ matrix.component.name }}
@@ -76,11 +102,9 @@ jobs:
         with:
           context: .
           file: ${{ matrix.component.dockerfile }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ inputs.express && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}:dev
-            ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}:dev-${{ steps.version.outputs.short_sha }}
+          tags: ${{ steps.version.outputs.tags }}
           cache-from: type=gha,scope=${{ matrix.component.image }}
           cache-to: type=gha,scope=${{ matrix.component.image }},mode=max,ignore-error=true
           build-args: |
