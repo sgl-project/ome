@@ -5,6 +5,7 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 
+	"sigs.k8s.io/ome/pkg/cli/cmd/autoscale"
 	"sigs.k8s.io/ome/pkg/cli/cmd/get"
 	"sigs.k8s.io/ome/pkg/cli/cmd/logs"
 	runtimecmd "sigs.k8s.io/ome/pkg/cli/cmd/runtime"
@@ -37,8 +38,8 @@ func newRootCmd(f factory.Factory, configFlags *genericclioptions.ConfigFlags, s
   kubectl ome <command>
 
 It provides model-centric visibility into OME resources: rich listings,
-InferenceService readiness diagnosis, runtime-selection explanations and
-component-aware log streaming.`,
+controller-reported autoscaling evidence, InferenceService readiness diagnosis,
+runtime-selection explanations and component-aware log streaming.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -48,6 +49,7 @@ component-aware log streaming.`,
 	configFlags.AddFlags(cmd.PersistentFlags())
 
 	// Command families. Keep alphabetical.
+	cmd.AddCommand(autoscale.NewCmd(f, streams))
 	cmd.AddCommand(get.NewCmd(f, streams))
 	cmd.AddCommand(logs.NewCmd(f, streams))
 	cmd.AddCommand(runtimecmd.NewCmd(f, streams))
