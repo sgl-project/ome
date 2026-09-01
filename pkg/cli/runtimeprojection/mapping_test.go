@@ -17,10 +17,11 @@ import (
 )
 
 type enumMappingCase struct {
-	name string
-	got  string
-	ok   bool
-	want string
+	name  string
+	got   string
+	ok    bool
+	want  string
+	valid bool
 }
 
 func TestClosedRuntimeEnumMappings(t *testing.T) {
@@ -104,7 +105,7 @@ func TestClosedRuntimeEnumMappings(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			assert.Equal(t, test.want != "", test.ok)
+			assert.Equal(t, test.valid, test.ok)
 			assert.Equal(t, test.want, test.got)
 		})
 	}
@@ -460,14 +461,11 @@ func inheritanceReasonMapping(name string, input effective.InheritanceUnavailabl
 }
 
 func enumMapping(name, got string, ok bool, want string) enumMappingCase {
-	return enumMappingCase{name, got, ok, want}
+	return enumMappingCase{name: name, got: got, ok: ok, want: want, valid: want != ""}
 }
 
 func enumMappingAllowEmpty(name, got string, ok bool, want string) enumMappingCase {
 	result := enumMapping(name, got, ok, want)
-	if ok {
-		result.want = "<valid-empty>"
-		result.got = "<valid-empty>"
-	}
+	result.valid = true
 	return result
 }
