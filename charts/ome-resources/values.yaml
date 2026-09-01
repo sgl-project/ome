@@ -658,7 +658,7 @@ prometheus:
   # hard-scope discovery on large multi-tenant clusters.
   scrapeNamespaces: []
   image:
-    repository: prom/prometheus
+    repository: docker.io/prom/prometheus
     tag: "v3.0.1"
     pullPolicy: IfNotPresent
   # Memory scales with active series = (scrape targets) x (series per pod).
