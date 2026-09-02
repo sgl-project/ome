@@ -100,6 +100,9 @@ spec:
                 fieldPath: metadata.namespace
           - name: SECRET_NAME
             value: ome-webhook-server-cert
+          {{- with .Values.ome.controller.extraEnv }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
         livenessProbe:
           failureThreshold: 5
           initialDelaySeconds: 10
@@ -130,9 +133,15 @@ spec:
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: cert
           readOnly: true
+        {{- with .Values.ome.controller.extraVolumeMounts }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       terminationGracePeriodSeconds: 10
       volumes:
       - name: cert
         secret:
           defaultMode: 420
           secretName: ome-webhook-server-cert
+      {{- with .Values.ome.controller.extraVolumes }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
