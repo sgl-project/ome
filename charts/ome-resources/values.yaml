@@ -115,6 +115,12 @@ ome:
     memoryLimit: "2Gi"
 
   controller:
+    # Extension points for injecting deployment-specific configuration into the
+    # controller pod (mirrors the modelAgent extension points). All default to
+    # empty, so the rendered output is unchanged when unset.
+    extraEnv: []
+    extraVolumes: []
+    extraVolumeMounts: []
     replicaCount: 3
     # Additional annotations applied to the controller pod template.
     # Merged after the chart's default annotations (prometheus.io/scrape, etc.).
