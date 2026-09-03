@@ -869,6 +869,17 @@ func NewConfigCache(ttl time.Duration) *ConfigCache {
 	return &ConfigCache{ttl: ttl, now: time.Now}
 }
 
+// TTL reports the cache's refresh interval — the upper bound on how stale a
+// config-derived decision can be, which controllers use to size periodic
+// re-checks of config-driven state. Non-positive (including a nil cache)
+// means caching is disabled and every read is live.
+func (c *ConfigCache) TTL() time.Duration {
+	if c == nil {
+		return 0
+	}
+	return c.ttl
+}
+
 // get returns the cached ConfigMap when the entry is fresh, otherwise fetches
 // it from the apiserver and refreshes the entry. A non-positive TTL never
 // caches. The returned ConfigMap is shared (read-only): the config constructors

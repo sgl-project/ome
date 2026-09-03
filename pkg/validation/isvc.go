@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 
@@ -848,4 +849,106 @@ func legacyAutoscalerReplacement(field string) string {
 	default:
 		return "<see Autoscaler block>"
 	}
+}
+
+// AutoscalerPolicy ref validation reason constants. Operators and the
+// envtest suite reference these by name, so they're exported and stable.
+const (
+	// ReasonAutoscalerPolicyRefKindReserved rejects a per-Component
+	// autoscalerPolicyRef whose Kind is anything other than
+	// "AutoscalerPolicy". "ClusterAutoscalerPolicy" is a reserved shape:
+	// rejecting it outright means no stored ISVC can carry a kind an
+	// older controller would misread as a namespaced policy.
+	ReasonAutoscalerPolicyRefKindReserved = "AutoscalerPolicyRefKindReserved"
+
+	// ReasonAutoscalerPolicyFeatureDisabled rejects any per-Component
+	// autoscalerPolicyRef on a cluster where the AutoscalerPolicy feature
+	// is not enabled. Admitting the ref would leave the component
+	// permanently held fail-closed with no actor able to render it, so
+	// the honest answer is a rejection at write time.
+	ReasonAutoscalerPolicyFeatureDisabled = "AutoscalerPolicyFeatureDisabled"
+)
+
+// autoscalerPolicyRefCheck names one declared Component's policy ref so
+// the ref validators can report the exact spec field path.
+type autoscalerPolicyRefCheck struct {
+	name string
+	ref  *v1beta1.AutoscalerPolicyRef
+}
+
+// isvcAutoscalerPolicyRefChecks projects each declared Component (Engine,
+// Decoder, Router) into the per-Component ref slice. Nil Components and
+// nil refs are skipped so an absent ref never produces a spurious error.
+func isvcAutoscalerPolicyRefChecks(isvc *v1beta1.InferenceService) []autoscalerPolicyRefCheck {
+	if isvc == nil {
+		return nil
+	}
+	var checks []autoscalerPolicyRefCheck
+	if isvc.Spec.Engine != nil && isvc.Spec.Engine.AutoscalerPolicyRef != nil {
+		checks = append(checks, autoscalerPolicyRefCheck{"engine", isvc.Spec.Engine.AutoscalerPolicyRef})
+	}
+	if isvc.Spec.Decoder != nil && isvc.Spec.Decoder.AutoscalerPolicyRef != nil {
+		checks = append(checks, autoscalerPolicyRefCheck{"decoder", isvc.Spec.Decoder.AutoscalerPolicyRef})
+	}
+	if isvc.Spec.Router != nil && isvc.Spec.Router.AutoscalerPolicyRef != nil {
+		checks = append(checks, autoscalerPolicyRefCheck{"router", isvc.Spec.Router.AutoscalerPolicyRef})
+	}
+	return checks
+}
+
+// ValidateAutoscalerPolicyRefs validates every per-Component
+// autoscalerPolicyRef on the InferenceService:
+//
+//  1. Any ref is rejected while the AutoscalerPolicy feature is disabled
+//     (featureEnabled=false) — the resolver would hold the component
+//     fail-closed forever, so admission refuses the write honestly.
+//  2. Kind must be "AutoscalerPolicy" (or empty, which defaults to it).
+//     "ClusterAutoscalerPolicy" is a reserved shape with no consumer.
+//
+// Returns nil when no Component carries a ref.
+func ValidateAutoscalerPolicyRefs(isvc *v1beta1.InferenceService, featureEnabled bool) error {
+	for _, c := range isvcAutoscalerPolicyRefChecks(isvc) {
+		if !featureEnabled {
+			return fmt.Errorf(
+				"%s: spec.%s.autoscalerPolicyRef references %q but the AutoscalerPolicy feature is not enabled on this cluster; remove the ref or enable the feature",
+				ReasonAutoscalerPolicyFeatureDisabled, c.name, c.ref.Name,
+			)
+		}
+		if c.ref.Kind != "" && c.ref.Kind != constants.AutoscalerPolicyKind {
+			return fmt.Errorf(
+				"%s: spec.%s.autoscalerPolicyRef.kind %q is not supported (ClusterAutoscalerPolicy is a reserved shape); use %s",
+				ReasonAutoscalerPolicyRefKindReserved, c.name, c.ref.Kind, constants.AutoscalerPolicyKind,
+			)
+		}
+	}
+	return nil
+}
+
+// AutoscalerPolicySplitCeilingWarning returns a webhook warning (never a
+// rejection) when spec.placement.mode=Split, at least one Component
+// references an AutoscalerPolicy, and
+// spec.placement.split.maxReplicasPerCluster is unset or zero. Policy
+// templates render against each home's derived replica bounds; without a
+// per-cluster cap that ceiling is unbounded, so a fail-to-max fallback on
+// one home can fabricate the whole fleet's count. Empty string when the
+// combination is absent.
+func AutoscalerPolicySplitCeilingWarning(isvc *v1beta1.InferenceService) string {
+	if isvc == nil || isvc.Spec.Placement == nil || isvc.Spec.Placement.Mode != v1beta1.PlacementModeSplit {
+		return ""
+	}
+	if s := isvc.Spec.Placement.Split; s != nil && s.MaxReplicasPerCluster > 0 {
+		return ""
+	}
+	var referencing []string
+	for _, c := range isvcAutoscalerPolicyRefChecks(isvc) {
+		referencing = append(referencing, c.name)
+	}
+	if len(referencing) == 0 {
+		return ""
+	}
+	return fmt.Sprintf(
+		"spec.placement.mode=Split with autoscalerPolicyRef on %s but spec.placement.split.maxReplicasPerCluster is unset; "+
+			"policy templates render against each home's derived bounds, and without a per-cluster cap that ceiling is unbounded (%s)",
+		strings.Join(referencing, ", "), v1beta1.PlacementPolicyPreflightReasonUnboundedSplitCeiling,
+	)
 }

@@ -1097,6 +1097,18 @@ spec:
                             - triggers
                           type: object
                       type: object
+                    autoscalerPolicyRef:
+                      properties:
+                        kind:
+                          default: AutoscalerPolicy
+                          enum:
+                            - AutoscalerPolicy
+                            - ClusterAutoscalerPolicy
+                          type: string
+                        name:
+                          minLength: 1
+                          type: string
+                      type: object
                     containers:
                       items:
                         properties:
@@ -14404,6 +14416,18 @@ spec:
                           required:
                             - triggers
                           type: object
+                      type: object
+                    autoscalerPolicyRef:
+                      properties:
+                        kind:
+                          default: AutoscalerPolicy
+                          enum:
+                            - AutoscalerPolicy
+                            - ClusterAutoscalerPolicy
+                          type: string
+                        name:
+                          minLength: 1
+                          type: string
                       type: object
                     containers:
                       items:
@@ -27886,6 +27910,18 @@ spec:
                             - triggers
                           type: object
                       type: object
+                    autoscalerPolicyRef:
+                      properties:
+                        kind:
+                          default: AutoscalerPolicy
+                          enum:
+                            - AutoscalerPolicy
+                            - ClusterAutoscalerPolicy
+                          type: string
+                        name:
+                          minLength: 1
+                          type: string
+                      type: object
                     config:
                       additionalProperties:
                         type: string
@@ -31547,6 +31583,31 @@ spec:
                                   - external
                                   - none
                             type: string
+                          policy:
+                            properties:
+                              name:
+                                type: string
+                              observedGeneration:
+                                format: int64
+                                type: integer
+                              portableDigest:
+                                type: string
+                              resolvedDigest:
+                                type: string
+                            required:
+                              - name
+                            type: object
+                          shadowedPolicyRef:
+                            properties:
+                              name:
+                                type: string
+                              portableDigest:
+                                type: string
+                              wouldRenderDigest:
+                                type: string
+                            required:
+                              - name
+                            type: object
                           specSource:
                             type: string
                         type: object
@@ -31917,6 +31978,34 @@ spec:
                           admittedReplicas:
                             format: int32
                             type: integer
+                          autoscaling:
+                            properties:
+                              components:
+                                additionalProperties:
+                                  properties:
+                                    ready:
+                                      type: boolean
+                                    resolvedDigest:
+                                      type: string
+                                  type: object
+                                type: object
+                              policies:
+                                items:
+                                  properties:
+                                    name:
+                                      type: string
+                                    portableDigest:
+                                      type: string
+                                  required:
+                                    - name
+                                  type: object
+                                type: array
+                                x-kubernetes-list-map-keys:
+                                  - name
+                                x-kubernetes-list-type: map
+                              ready:
+                                type: boolean
+                            type: object
                           cluster:
                             type: string
                           endpoint:

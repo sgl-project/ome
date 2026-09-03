@@ -6,11 +6,13 @@ import (
 	"maps"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -76,6 +78,12 @@ type BaseComponentFields struct {
 	// none declared. Consumed by UpdateVolumeMounts / UpdateEnvVariables
 	// / UpdatePodSpecVolumes.
 	Overlays []isvcutils.ResolvedOverlay
+
+	// PolicyResolver renders per-component autoscalerPolicyRef attachments;
+	// threaded from ComponentInputs (per reconcile). May be nil only in
+	// tests; the shared helpers treat nil as feature-disabled and fail refs
+	// closed.
+	PolicyResolver *autoscaler.PolicyResolver
 }
 
 // newBaseComponentFields is the ONE place BaseComponentFields is
@@ -105,10 +113,158 @@ func newBaseComponentFields(deps *ComponentDeps, in ComponentInputs, loggerName 
 		AcceleratorClass:        in.AcceleratorClass,
 		AcceleratorClassName:    in.AcceleratorClassName,
 		Overlays:                in.Overlays,
+		PolicyResolver:          in.PolicyResolver,
 	}
 }
 
 // Common methods as functions that operate on BaseComponentFields
+
+// ComponentAutoscaling is one component's autoscaler resolution for a single
+// reconcile pass: the policy outcome (nil without a ref), the chain result,
+// and the fail-closed hold flag.
+type ComponentAutoscaling struct {
+	Outcome  *autoscaler.PolicyOutcome
+	Resolved *v1beta1.ComponentAutoscaler
+	Source   autoscaler.SpecSource
+	Hold     bool
+
+	// RequeueAfter is the config-driven periodic retry for a hold: some hold
+	// causes (an unbound provider binding) heal via operator-config edits
+	// that emit no watch event toward the ISVC, so the component result asks
+	// its caller to requeue. Zero when resolution succeeded or the periodic
+	// requeue is disabled.
+	RequeueAfter time.Duration
+}
+
+// resolveComponentAutoscaling runs the policy layer + the shared resolution
+// chain for an IR-managed component. The error return is transient only; a
+// policy hold comes back as Hold=true with a Warning event already emitted —
+// the reconcile must keep succeeding (degraded, not an error), or one missing
+// shared policy object would stall every other concern on every consumer.
+func resolveComponentAutoscaling(ctx context.Context, b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, componentExt *v1beta1.ComponentExtensionSpec) (ComponentAutoscaling, error) {
+	bounds := autoscaler.EffectiveComponentBounds(componentExt)
+	outcome, err := b.PolicyResolver.Resolve(ctx, isvc, componentType, bounds)
+	if err != nil {
+		return ComponentAutoscaling{}, err
+	}
+	resolved, source, hold := autoscaler.ResolveComponentAutoscalerWithPolicy(b.Runtime, isvc, componentType, outcome)
+	res := ComponentAutoscaling{Outcome: outcome, Resolved: resolved, Source: source, Hold: hold}
+	if hold {
+		emitHoldEvent(b, isvc, componentType, outcome)
+		res.RequeueAfter = policyHoldRequeueAfter(b)
+	}
+	return res, nil
+}
+
+// emitHoldEvent raises the AutoscalerPolicyHold warning only on transition:
+// when the component's status already reports AutoscalerResolved=False with
+// the same reason, the operator has been told and re-firing every reconcile
+// would drown the event stream.
+func emitHoldEvent(b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, outcome *autoscaler.PolicyOutcome) {
+	if b.Recorder == nil || holdAlreadyReported(isvc, componentType, outcome.HoldReason) {
+		return
+	}
+	b.Recorder.Eventf(isvc, corev1.EventTypeWarning, "AutoscalerPolicyHold",
+		"%s autoscaler is holding last-known-good (%s): %s", componentType, outcome.HoldReason, outcome.HoldDetail)
+}
+
+// holdAlreadyReported reports whether the component's status already carries
+// AutoscalerResolved=False with the given reason — i.e. an earlier pass
+// observed this same hold and emitted its event.
+func holdAlreadyReported(isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, reason string) bool {
+	if isvc == nil {
+		return false
+	}
+	comp, ok := isvc.Status.Components[componentType]
+	if !ok || comp.Autoscaler == nil {
+		return false
+	}
+	cond := apimeta.FindStatusCondition(comp.Autoscaler.Conditions, v1beta1.AutoscalerResolvedCondition)
+	return cond != nil && cond.Status == metav1.ConditionFalse && cond.Reason == reason
+}
+
+// policyHoldRequeueAfter dereferences the resolver's hold requeue interval;
+// zero (no periodic requeue) when no resolver is wired.
+func policyHoldRequeueAfter(b *BaseComponentFields) time.Duration {
+	if b.PolicyResolver == nil {
+		return 0
+	}
+	return b.PolicyResolver.HoldRequeueAfter
+}
+
+// mergeRequeueAfter folds a hold-driven periodic requeue into a deployment
+// result, keeping the sooner of two nonzero RequeueAfters so a rollout poll
+// is never delayed by the (typically longer) config-TTL requeue.
+func mergeRequeueAfter(result ctrl.Result, after time.Duration) ctrl.Result {
+	if after <= 0 {
+		return result
+	}
+	if result.RequeueAfter <= 0 || after < result.RequeueAfter {
+		result.RequeueAfter = after
+	}
+	return result
+}
+
+// dispatchIRAutoscaler is the post-projection dispatch step shared by
+// engine / decoder / router. On a hold it re-dispatches the IR's stored
+// last-known-good block — bounds keep flowing to the live scaler while the
+// trigger content stays frozen — or dispatches nothing at all when no record
+// exists: a policy failure never tears a scaler down and never substitutes a
+// default HPA.
+func dispatchIRAutoscaler(ctx context.Context, b *BaseComponentFields, isvc *v1beta1.InferenceService, ir *v1beta1.InferenceReplica, componentExt *v1beta1.ComponentExtensionSpec, res ComponentAutoscaling) error {
+	dispatchBlock := res.Resolved
+	if res.Hold {
+		if ir.Spec.Autoscaler == nil {
+			return nil
+		}
+		dispatchBlock = ir.Spec.Autoscaler.DeepCopy()
+	} else if res.Source == autoscaler.SpecSourcePolicy {
+		if err := b.PolicyResolver.EnsureTriggerAuthentications(ctx, isvc.Namespace, res.Resolved); err != nil {
+			return err
+		}
+	}
+	return autoscaler.DispatchForIRComponent(ctx, autoscaler.IRDispatchInput{
+		Client:             b.Client,
+		Scheme:             b.Scheme,
+		IR:                 ir,
+		ResolvedAutoscaler: dispatchBlock,
+		ComponentExt:       componentExt,
+	})
+}
+
+// resolveRawComponentAutoscaling is the RawDeployment counterpart: policy
+// layer + shared chain + the legacy annotation branch, with the hold event
+// and TriggerAuthentication materialization handled in place. The returned
+// RawResolved feeds ReconcileRawDeployment, whose dispatch owns the
+// last-known-good annotation on the Deployment.
+func resolveRawComponentAutoscaling(ctx context.Context, b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, componentExt *v1beta1.ComponentExtensionSpec, annotations map[string]string) (autoscaler.RawResolved, error) {
+	// Raw-specific bounds: a declared min of 0 stays 0 (legal with typed
+	// KEDA on Raw dispatch), so rendered {{ .MinReplicas }} literals match
+	// the bounds rawMinMaxReplicas will stamp on the scaler.
+	bounds := autoscaler.RawEffectiveComponentBounds(componentExt)
+	outcome, err := b.PolicyResolver.Resolve(ctx, isvc, componentType, bounds)
+	if err != nil {
+		return autoscaler.RawResolved{}, err
+	}
+	resolved, source, hold, err := autoscaler.ResolveRawComponentAutoscalerWithPolicy(b.Runtime, isvc, componentType, annotations, outcome)
+	if err != nil {
+		return autoscaler.RawResolved{}, err
+	}
+	res := autoscaler.RawResolved{
+		Autoscaler: resolved,
+		FromPolicy: source == autoscaler.SpecSourcePolicy && !hold,
+		Hold:       hold,
+	}
+	if hold {
+		emitHoldEvent(b, isvc, componentType, outcome)
+		res.RequeueAfter = policyHoldRequeueAfter(b)
+	} else if source == autoscaler.SpecSourcePolicy {
+		if err := b.PolicyResolver.EnsureTriggerAuthentications(ctx, isvc.Namespace, resolved); err != nil {
+			return autoscaler.RawResolved{}, err
+		}
+	}
+	return res, nil
+}
 
 // ReconcileFineTunedWeights reconciles fine-tuned weights for any component
 func ReconcileFineTunedWeights(b *BaseComponentFields, isvc *v1beta1.InferenceService) error {
@@ -645,7 +801,7 @@ func ProcessBaseLabels(b *BaseComponentFields, isvc *v1beta1.InferenceService, c
 // emit pods carrying the raw-deployment app label — the engine / decoder
 // / router previously routed the same constant pair through a per-component
 // getPodLabelInfo callback; that indirection was dead and is inlined here.
-func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, objectMeta metav1.ObjectMeta) error {
+func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, objectMeta metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec) error {
 	// Always initialize the component ready condition to ensure it's visible from the start
 	// The deployment reconciler will update the condition based on the actual deployment status:
 	// - MultiNode: Updates when LWS becomes available
@@ -662,7 +818,7 @@ func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceServic
 	// gracefully on NotFound (Component without a scaler yet), keeping
 	// ManagedBy correct for default class=hpa ISVCs and "none" for the
 	// AutoscalerNone / unknown branches.
-	if err := writeComponentAutoscalerStatus(b, isvc, componentType, objectMeta); err != nil {
+	if err := writeComponentAutoscalerStatus(b, isvc, componentType, objectMeta, componentExt); err != nil {
 		return errors.Wrapf(err, "failed to write %s autoscaler status", componentType)
 	}
 
@@ -699,19 +855,41 @@ func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceServic
 //
 // See pkg/.../reconcilers/autoscaler/status.go for the underlying mapping
 // + live-mirror semantics.
-func writeComponentAutoscalerStatus(b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, objectMeta metav1.ObjectMeta) error {
+func writeComponentAutoscalerStatus(b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, objectMeta metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec) error {
 	var (
 		resolved *v1beta1.ComponentAutoscaler
 		source   autoscaler.SpecSource
+		hold     bool
+		outcome  *autoscaler.PolicyOutcome
 		err      error
 	)
+
+	// The status writer re-resolves the full chain — policy layer included —
+	// independently of dispatch, so status and dispatch cannot disagree
+	// about which layer won. MultiNode has no autoscaler dispatch at all, so
+	// a ref there is inert and only surfaces as a condition below.
+	ref := autoscaler.ComponentPolicyRef(isvc, componentType)
+	policySupported := b.DeploymentMode != constants.MultiNode
+	if ref != nil && policySupported {
+		// Same bounds arithmetic as the dispatch path per mode, so the
+		// status-side resolved digest always matches the dispatched render.
+		bounds := autoscaler.EffectiveComponentBounds(componentExt)
+		if b.DeploymentMode == constants.RawDeployment {
+			bounds = autoscaler.RawEffectiveComponentBounds(componentExt)
+		}
+		outcome, err = b.PolicyResolver.Resolve(context.Background(), isvc, componentType, bounds)
+		if err != nil {
+			return err
+		}
+	}
+
 	if b.DeploymentMode == constants.RawDeployment {
-		resolved, source, err = autoscaler.ResolveRawComponentAutoscaler(b.Runtime, isvc, componentType, objectMeta.Annotations)
+		resolved, source, hold, err = autoscaler.ResolveRawComponentAutoscalerWithPolicy(b.Runtime, isvc, componentType, objectMeta.Annotations, outcome)
 		if err != nil {
 			return err
 		}
 	} else {
-		resolved, source = autoscaler.ResolveComponentAutoscaler(b.Runtime, isvc, componentType)
+		resolved, source, hold = autoscaler.ResolveComponentAutoscalerWithPolicy(b.Runtime, isvc, componentType, outcome)
 	}
 
 	scaleTargetRef := canonicalScaleTargetRef(b.DeploymentMode, isvc.Name, objectMeta.Name, componentType)
@@ -729,25 +907,107 @@ func writeComponentAutoscalerStatus(b *BaseComponentFields, isvc *v1beta1.Infere
 		isvc.Status.Components = map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{}
 	}
 	existing := isvc.Status.Components[componentType]
+	prev := existing.Autoscaler
+
+	// On a hold there is no freshly resolved block, but the live scaler (the
+	// last-known-good) is still running — mirror it through the previously
+	// reported class so counters and scaler conditions stay truthful during
+	// the freeze instead of collapsing to ManagedBy=none.
+	statusResolved := resolved
+	statusSource := source
+	if hold {
+		lastClass := v1beta1.AutoscalerNone
+		if prev != nil && prev.Class != "" {
+			lastClass = prev.Class
+		}
+		statusResolved = &v1beta1.ComponentAutoscaler{Class: lastClass}
+		statusSource = autoscaler.SpecSourcePolicy
+	}
 
 	asStatus, stRef, err := autoscaler.WriteAutoscalerStatus(
 		context.Background(),
 		b.Client,
 		isvc.Namespace,
 		objectName,
-		resolved,
-		source,
+		statusResolved,
+		statusSource,
 		scaleTargetRef,
-		existing.Autoscaler,
+		prev,
 	)
 	if err != nil {
 		return err
 	}
 
+	applyPolicyProvenance(asStatus, prev, isvc, b.DeploymentMode, ref, outcome, source, hold)
+
 	existing.Autoscaler = asStatus
 	existing.ScaleTargetRef = stRef
 	isvc.Status.Components[componentType] = existing
 	return nil
+}
+
+// applyPolicyProvenance stamps the policy provenance fields and the
+// AutoscalerResolved condition onto a freshly mirrored autoscaler status.
+// Written only for components that carry a ref: policy-less components keep
+// their status surface unchanged.
+func applyPolicyProvenance(asStatus *v1beta1.ComponentAutoscalerStatus, prev *v1beta1.ComponentAutoscalerStatus, isvc *v1beta1.InferenceService, mode constants.DeploymentModeType, ref *v1beta1.AutoscalerPolicyRef, outcome *autoscaler.PolicyOutcome, source autoscaler.SpecSource, hold bool) {
+	if ref == nil {
+		return
+	}
+
+	condition := metav1.Condition{
+		Type:               v1beta1.AutoscalerResolvedCondition,
+		ObservedGeneration: isvc.Generation,
+	}
+	switch {
+	case mode == constants.MultiNode:
+		condition.Status = metav1.ConditionFalse
+		condition.Reason = v1beta1.AutoscalerResolvedReasonUnsupportedMode
+		condition.Message = "MultiNode components have no autoscaler dispatch; the policy ref is inert"
+	case hold:
+		condition.Status = metav1.ConditionFalse
+		condition.Reason = outcome.HoldReason
+		condition.Message = "holding last-known-good scaler: " + outcome.HoldDetail
+		// Trigger content is frozen; the last successful provenance stays
+		// visible so operators can see WHICH render is standing.
+		if prev != nil {
+			asStatus.Policy = prev.Policy.DeepCopy()
+		}
+	case source == autoscaler.SpecSourcePolicy:
+		condition.Status = metav1.ConditionTrue
+		condition.Reason = v1beta1.AutoscalerResolvedReasonRenderedFromPolicy
+		asStatus.Policy = outcome.Provenance.DeepCopy()
+	case source == autoscaler.SpecSourceISVC:
+		// The inline block outranks the ref — deterministic resolution, so
+		// the condition stays True; the shadow fields are the preview
+		// surface (what the policy WOULD render if the inline block were
+		// removed). A broken shadowed policy carries no digests.
+		condition.Status = metav1.ConditionTrue
+		condition.Reason = v1beta1.AutoscalerResolvedReasonInlinePrecedence
+		condition.Message = "inline autoscaler block outranks the policy ref"
+		shadow := &v1beta1.ShadowedAutoscalerPolicy{Name: ref.Name}
+		if outcome != nil && outcome.Provenance != nil {
+			shadow.PortableDigest = outcome.Provenance.PortableDigest
+			shadow.WouldRenderDigest = outcome.Provenance.ResolvedDigest
+		}
+		asStatus.ShadowedPolicyRef = shadow
+	default:
+		// The policy layer sits directly below inline; with a ref present the
+		// chain cannot land on runtime/legacy/default. Defensive only.
+		condition.Status = metav1.ConditionUnknown
+		condition.Reason = v1beta1.AutoscalerResolvedReasonPolicyInvalid
+		condition.Message = "unexpected resolution source " + string(source)
+	}
+
+	// Seed the previous condition first so an unchanged status keeps its
+	// LastTransitionTime — a fresh timestamp every pass would make the
+	// mirrored status differ every reconcile and storm status updates.
+	if prev != nil {
+		if previous := apimeta.FindStatusCondition(prev.Conditions, v1beta1.AutoscalerResolvedCondition); previous != nil {
+			apimeta.SetStatusCondition(&asStatus.Conditions, *previous)
+		}
+	}
+	apimeta.SetStatusCondition(&asStatus.Conditions, condition)
 }
 
 // canonicalScaleTargetRef returns the scale target an external scaler should

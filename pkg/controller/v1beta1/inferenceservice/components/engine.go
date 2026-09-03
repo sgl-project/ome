@@ -13,7 +13,6 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/common"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/pdb"
@@ -170,11 +169,18 @@ func (e *Engine) getWorkerSize() int {
 func (e *Engine) reconcileDeployment(ctx context.Context, isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec, workerSize int, workerPodSpec *v1.PodSpec, pdbRequest pdb.Request) (ctrl.Result, error) {
 	switch e.DeploymentMode {
 	case constants.RawDeployment:
-		resolvedAS, _, err := autoscaler.ResolveRawComponentAutoscaler(e.Runtime, isvc, v1beta1.EngineComponent, objectMeta.Annotations)
+		rawResolved, err := resolveRawComponentAutoscaling(ctx, &e.BaseComponentFields, isvc, v1beta1.EngineComponent, &e.engineSpec.ComponentExtensionSpec, objectMeta.Annotations)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to resolve autoscaler for raw engine")
 		}
-		return e.deploymentReconciler.ReconcileRawDeployment(ctx, isvc, objectMeta, podSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent, resolvedAS, pdbRequest)
+		result, err := e.deploymentReconciler.ReconcileRawDeployment(ctx, isvc, objectMeta, podSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent, rawResolved, pdbRequest)
+		if err != nil {
+			return result, err
+		}
+		// A policy hold recovers via config edits that emit no event, so the
+		// hold carries its own periodic requeue. Smaller-nonzero merge: never
+		// delay a dispatcher poll already scheduled on this result.
+		return mergeRequeueAfter(result, rawResolved.RequeueAfter), nil
 	case constants.MultiNode:
 		return e.deploymentReconciler.ReconcileMultiNodeDeployment(isvc, objectMeta, podSpec, workerSize, workerPodSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
 	case constants.OMENative:
@@ -187,11 +193,15 @@ func (e *Engine) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferenc
 		// per-Instance lifecycle from there.
 		//
 		// Resolve the authoritative ComponentAutoscaler from the
-		// ISVC → runtime → default chain. The resolved block is
+		// ISVC → policy → runtime → default chain. The resolved block is
 		// projected onto ir.Spec.Autoscaler by the projector and
 		// dispatched as HPA / KEDA / external / none against the
 		// committed IR (autoscaler dispatch is always-on per Component).
-		resolvedAS, _ := autoscaler.ResolveComponentAutoscaler(e.Runtime, isvc, v1beta1.EngineComponent)
+		// A policy hold preserves the IR's stored block as last-known-good.
+		res, err := resolveComponentAutoscaling(ctx, &e.BaseComponentFields, isvc, v1beta1.EngineComponent, &e.engineSpec.ComponentExtensionSpec)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to resolve autoscaler for engine")
+		}
 		ir, err := irprojector.EnsureInferenceReplica(ctx, irprojector.Params{
 			ISVC:               isvc,
 			Component:          v1beta1.EngineComponent,
@@ -204,7 +214,8 @@ func (e *Engine) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferenc
 			TopologyKey:        e.engineSpec.TopologyKey,
 			TopologySpread:     e.engineSpec.TopologySpread,
 			TopologySpreadKey:  e.engineSpec.TopologySpreadKey,
-			ResolvedAutoscaler: resolvedAS,
+			ResolvedAutoscaler: res.Resolved,
+			PreserveAutoscaler: res.Hold,
 			Client:             e.Client,
 			Reader:             e.APIReader,
 		})
@@ -232,16 +243,12 @@ func (e *Engine) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferenc
 		// /scale subresource. external + none are status-field twins —
 		// both fall through to the dispatch's "delete both" branch
 		// with no separate code path.
-		if err := autoscaler.DispatchForIRComponent(ctx, autoscaler.IRDispatchInput{
-			Client:             e.Client,
-			Scheme:             e.Scheme,
-			IR:                 ir,
-			ResolvedAutoscaler: resolvedAS,
-			ComponentExt:       &e.engineSpec.ComponentExtensionSpec,
-		}); err != nil {
+		if err := dispatchIRAutoscaler(ctx, &e.BaseComponentFields, isvc, ir, &e.engineSpec.ComponentExtensionSpec, res); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to dispatch autoscaler for engine")
 		}
-		return ctrl.Result{}, nil
+		// A policy hold recovers via config edits that emit no event; carry
+		// its periodic requeue on the result (smaller-nonzero merge).
+		return mergeRequeueAfter(ctrl.Result{}, res.RequeueAfter), nil
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for engine")
 	}
@@ -249,7 +256,7 @@ func (e *Engine) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferenc
 
 // updateEngineStatus updates the status of the engine
 func (e *Engine) updateEngineStatus(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta) error {
-	return UpdateComponentStatus(&e.BaseComponentFields, isvc, v1beta1.EngineComponent, objectMeta)
+	return UpdateComponentStatus(&e.BaseComponentFields, isvc, v1beta1.EngineComponent, objectMeta, &e.engineSpec.ComponentExtensionSpec)
 }
 
 // reconcileObjectMeta creates the object metadata for the engine

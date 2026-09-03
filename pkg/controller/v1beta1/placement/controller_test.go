@@ -892,7 +892,7 @@ func TestPlaceOn_PreservesWorkerMetadata(t *testing.T) {
 	}}
 	r, _ := newPlacer(s, clusters, srcISVC(""))
 
-	require.NoError(t, r.placeOn(context.Background(), w, srcISVC("")))
+	require.NoError(t, r.placeOn(context.Background(), "a", w, srcISVC("")))
 
 	got := &v1beta1.InferenceService{}
 	require.NoError(t, w.Get(context.Background(), types.NamespacedName{Namespace: "prod", Name: "svc"}, got))
@@ -925,7 +925,7 @@ func TestPlaceOn_RefusesToClobberForeignISVC(t *testing.T) {
 	}}
 	r, _ := newPlacer(s, clusters, srcISVC(""))
 
-	err := r.placeOn(context.Background(), w, srcISVC(""))
+	err := r.placeOn(context.Background(), "a", w, srcISVC(""))
 	require.Error(t, err, "placeOn must refuse to clobber a foreign same-named ISVC")
 
 	got := &v1beta1.InferenceService{}
@@ -953,7 +953,7 @@ func TestPlaceOn_UpdatesOwnDerived(t *testing.T) {
 	}}
 	r, _ := newPlacer(s, clusters, srcISVC(""))
 
-	require.NoError(t, r.placeOn(context.Background(), w, srcISVC("")), "re-apply of our own derived must succeed")
+	require.NoError(t, r.placeOn(context.Background(), "a", w, srcISVC("")), "re-apply of our own derived must succeed")
 
 	got := &v1beta1.InferenceService{}
 	require.NoError(t, w.Get(context.Background(), types.NamespacedName{Namespace: "prod", Name: "svc"}, got))
@@ -970,7 +970,7 @@ func TestPlaceOn_CreatesWhenAbsent(t *testing.T) {
 	}}
 	r, _ := newPlacer(s, clusters, srcISVC(""))
 
-	require.NoError(t, r.placeOn(context.Background(), w, srcISVC("")), "first-time create must succeed")
+	require.NoError(t, r.placeOn(context.Background(), "a", w, srcISVC("")), "first-time create must succeed")
 
 	got := &v1beta1.InferenceService{}
 	require.NoError(t, w.Get(context.Background(), types.NamespacedName{Namespace: "prod", Name: "svc"}, got))

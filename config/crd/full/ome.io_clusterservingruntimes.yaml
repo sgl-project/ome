@@ -2259,6 +2259,20 @@ spec:
                       required:
                         - class
                       type: object
+                    autoscalerPolicyRef:
+                      properties:
+                        kind:
+                          default: AutoscalerPolicy
+                          enum:
+                            - AutoscalerPolicy
+                            - ClusterAutoscalerPolicy
+                          type: string
+                        name:
+                          minLength: 1
+                          type: string
+                      required:
+                        - name
+                      type: object
                     containers:
                       items:
                         properties:
@@ -16311,6 +16325,20 @@ spec:
                       required:
                         - class
                       type: object
+                    autoscalerPolicyRef:
+                      properties:
+                        kind:
+                          default: AutoscalerPolicy
+                          enum:
+                            - AutoscalerPolicy
+                            - ClusterAutoscalerPolicy
+                          type: string
+                        name:
+                          minLength: 1
+                          type: string
+                      required:
+                        - name
+                      type: object
                     containers:
                       items:
                         properties:
@@ -30348,6 +30376,20 @@ spec:
                           type: object
                       required:
                         - class
+                      type: object
+                    autoscalerPolicyRef:
+                      properties:
+                        kind:
+                          default: AutoscalerPolicy
+                          enum:
+                            - AutoscalerPolicy
+                            - ClusterAutoscalerPolicy
+                          type: string
+                        name:
+                          minLength: 1
+                          type: string
+                      required:
+                        - name
                       type: object
                     config:
                       additionalProperties:

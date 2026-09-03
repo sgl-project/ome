@@ -20,6 +20,10 @@ func (c *FakeOmeV1beta1) AcceleratorQuotas() v1beta1.AcceleratorQuotaInterface {
 	return newFakeAcceleratorQuotas(c)
 }
 
+func (c *FakeOmeV1beta1) AutoscalerPolicies(namespace string) v1beta1.AutoscalerPolicyInterface {
+	return newFakeAutoscalerPolicies(c, namespace)
+}
+
 func (c *FakeOmeV1beta1) BaseModels(namespace string) v1beta1.BaseModelInterface {
 	return newFakeBaseModels(c, namespace)
 }

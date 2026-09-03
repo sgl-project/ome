@@ -10,6 +10,14 @@ type AcceleratorClassListerExpansion interface{}
 // AcceleratorQuotaLister.
 type AcceleratorQuotaListerExpansion interface{}
 
+// AutoscalerPolicyListerExpansion allows custom methods to be added to
+// AutoscalerPolicyLister.
+type AutoscalerPolicyListerExpansion interface{}
+
+// AutoscalerPolicyNamespaceListerExpansion allows custom methods to be added to
+// AutoscalerPolicyNamespaceLister.
+type AutoscalerPolicyNamespaceListerExpansion interface{}
+
 // BaseModelListerExpansion allows custom methods to be added to
 // BaseModelLister.
 type BaseModelListerExpansion interface{}

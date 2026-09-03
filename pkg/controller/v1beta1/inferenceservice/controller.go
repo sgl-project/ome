@@ -48,6 +48,7 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/components"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/external_service"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
@@ -97,6 +98,8 @@ import (
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=keda.sh,resources=scaledobjects,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=keda.sh,resources=scaledobjects/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keda.sh,resources=triggerauthentications,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups=ome.io,resources=autoscalerpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=leaderworkerset.x-k8s.io,resources=leaderworkersets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=leaderworkerset.x-k8s.io,resources=leaderworkersets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=leaderworkerset.x-k8s.io,resources=leaderworkersets/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -156,6 +159,17 @@ type InferenceServiceReconciler struct {
 	// the controller stamps a `GangSchedulingUnavailable=True`
 	// Component condition.
 	GangSchedulingAvailable bool
+	// KedaAvailable is the cluster-discovery boolean for the KEDA CRDs,
+	// probed once in SetupWithManager. The policy layer consults it so a
+	// rendered class=KEDA block on a KEDA-less cluster fails closed
+	// (ClassUnavailable) instead of erroring dispatch on every pass.
+	KedaAvailable bool
+	// AutoscalerPolicyEnabled is the cluster-discovery boolean for the
+	// AutoscalerPolicy CRD. The chart installs CRD + controller wiring +
+	// webhook together; when the CRD is absent no watch or index is
+	// registered and any spec.<component>.autoscalerPolicyRef fails closed
+	// at reconcile (admission additionally rejects refs on such clusters).
+	AutoscalerPolicyEnabled bool
 	// CanarySampler runs canary analysis Prometheus queries off the reconcile
 	// goroutine: reconcile reads cached results non-blocking, and a completion
 	// event re-reconciles the ISVC. Built once in SetupWithManager from the
@@ -294,6 +308,31 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	cdeps := r.buildComponentDeps(isvcConfig)
+
+	// The policy resolver is rebuilt per reconcile from the cached operator
+	// config so provider-binding edits apply within one config TTL. With the
+	// feature absent, Enabled=false fails any ref closed instead of silently
+	// ignoring it.
+	policyResolver := &autoscaler.PolicyResolver{Enabled: false}
+	if r.AutoscalerPolicyEnabled {
+		policyConfig, err := controllerconfig.NewAutoscalerPolicyConfigCached(r.ConfigCache, r.Clientset)
+		if err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "fails to load autoscalerPolicy config")
+		}
+		providers, providerAuth := autoscaler.ProviderBindingsFromConfig(policyConfig)
+		policyResolver = &autoscaler.PolicyResolver{
+			Client:        r.Client,
+			Providers:     providers,
+			ProviderAuth:  providerAuth,
+			Enabled:       true,
+			KedaAvailable: r.KedaAvailable,
+			// Holds caused by operator-config state (unbound provider) heal
+			// on config edits, which emit no ISVC event — requeue once per
+			// config cache TTL so consumers recover unattended. TTL<=0 means
+			// live config reads; no periodic requeue is wired then.
+			HoldRequeueAfter: r.ConfigCacheTTL,
+		}
+	}
 
 	// Determine which components to reconcile based on the spec
 	var reconcilers []components.Component
@@ -545,6 +584,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			AcceleratorClass:     engineAC,
 			AcceleratorClassName: engineAcName,
 			Overlays:             resolvedOverlays,
+			PolicyResolver:       policyResolver,
 		}, mergedEngine)
 		reconcilers = append(reconcilers, engineReconciler)
 	}
@@ -575,6 +615,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			AcceleratorClass:     decoderAC,
 			AcceleratorClassName: decoderAcName,
 			Overlays:             resolvedOverlays,
+			PolicyResolver:       policyResolver,
 		}, mergedDecoder)
 		reconcilers = append(reconcilers, decoderReconciler)
 	}
@@ -592,6 +633,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			Runtime:        rt,
 			RuntimeName:    rtName,
 			Overlays:       resolvedOverlays,
+			PolicyResolver: policyResolver,
 		}, mergedRouter) // merged router spec, not isvc.Spec.Router
 		reconcilers = append(reconcilers, routerReconciler)
 	}
@@ -1188,6 +1230,17 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
+	r.KedaAvailable = kedaFound
+
+	// AutoscalerPolicy is chart-gated together with its controller wiring and
+	// webhook (never install-but-dormant): probe the CRD so a cluster without
+	// the feature registers no watch or index, and refs fail closed at
+	// reconcile instead of silently no-oping.
+	autoscalerPolicyFound, err := utils.IsCrdAvailable(r.ClientConfig, v1beta1.SchemeGroupVersion.String(), constants.AutoscalerPolicyKind)
+	if err != nil {
+		return err
+	}
+	r.AutoscalerPolicyEnabled = autoscalerPolicyFound
 
 	podMonitorFound, err := utils.IsCrdAvailable(r.ClientConfig, monitoringv1.SchemeGroupVersion.String(), constants.PodMonitorKind)
 	if err != nil {
@@ -1266,6 +1319,17 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		ctrlBuilder = ctrlBuilder.Owns(&kedav1.ScaledObject{}, builder.WithPredicates(ownedStatusIgnoringPredicate()))
 	} else {
 		r.Log.Info("The InferenceService controller won't watch keda.sh/v1alpha1/ScaledObject resources because the CRD is not available; InferenceServices requesting KEDA autoscaling will fail on reconcile until KEDA is installed.")
+	}
+
+	if r.AutoscalerPolicyEnabled {
+		// One field index carries every distinct per-component ref name, so a
+		// policy event fans out to exactly its same-namespace consumers.
+		if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &v1beta1.InferenceService{}, autoscalerPolicyRefIndexField, autoscalerPolicyRefIndexer); err != nil {
+			return err
+		}
+		ctrlBuilder = ctrlBuilder.Watches(&v1beta1.AutoscalerPolicy{}, handler.EnqueueRequestsFromMapFunc(r.mapAutoscalerPolicyToInferenceServices))
+	} else {
+		r.Log.Info("The InferenceService controller won't watch ome.io/v1beta1/AutoscalerPolicy resources because the CRD is not available; autoscalerPolicyRef attachments fail closed until the feature is installed.")
 	}
 
 	if podMonitorFound {
@@ -1608,4 +1672,44 @@ func (r *InferenceServiceReconciler) validateWiring() error {
 		return fmt.Errorf("inferenceservice: APIReader (AuthoritativeReader) must be wired")
 	}
 	return nil
+}
+
+// autoscalerPolicyRefIndexField indexes InferenceServices by the distinct
+// AutoscalerPolicy names their components reference, powering the
+// policy-to-consumers watch fan-out and the attached-component accounting.
+const autoscalerPolicyRefIndexField = "spec.autoscalerPolicyRefs"
+
+func autoscalerPolicyRefIndexer(obj client.Object) []string {
+	isvc, ok := obj.(*v1beta1.InferenceService)
+	if !ok {
+		return nil
+	}
+	seen := map[string]bool{}
+	var names []string
+	for _, componentType := range []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent, v1beta1.RouterComponent} {
+		ref := autoscaler.ComponentPolicyRef(isvc, componentType)
+		if ref == nil || ref.Name == "" || seen[ref.Name] {
+			continue
+		}
+		seen[ref.Name] = true
+		names = append(names, ref.Name)
+	}
+	return names
+}
+
+// mapAutoscalerPolicyToInferenceServices enqueues every same-namespace
+// consumer of a changed policy. Fan-out is bounded by consumers-per-namespace;
+// each enqueued reconcile is an ordinary pass that re-renders and updates the
+// ScaledObject in place.
+func (r *InferenceServiceReconciler) mapAutoscalerPolicyToInferenceServices(ctx context.Context, obj client.Object) []reconcile.Request {
+	consumers := &v1beta1.InferenceServiceList{}
+	if err := r.Client.List(ctx, consumers, client.InNamespace(obj.GetNamespace()), client.MatchingFields{autoscalerPolicyRefIndexField: obj.GetName()}); err != nil {
+		r.Log.Error(err, "failed to map AutoscalerPolicy to consumers", "policy", client.ObjectKeyFromObject(obj))
+		return nil
+	}
+	requests := make([]reconcile.Request, 0, len(consumers.Items))
+	for i := range consumers.Items {
+		requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&consumers.Items[i])})
+	}
+	return requests
 }

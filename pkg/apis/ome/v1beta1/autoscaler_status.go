@@ -72,12 +72,25 @@ type ComponentAutoscalerStatus struct {
 	// +optional
 	ManagedBy AutoscalerManagedBy `json:"managedBy,omitempty"`
 
-	// SpecSource reports which layer of the ISVC -> runtime -> legacy -> default
-	// inheritance chain produced the resolved Autoscaler block. One of
-	// "isvc" | "runtime" | "legacy" | "default". Mirrors autoscaler.SpecSource so
-	// the operator can debug which layer is contributing the live config.
+	// SpecSource reports which layer of the ISVC -> policy -> runtime ->
+	// legacy -> default inheritance chain produced the resolved Autoscaler
+	// block. One of "isvc" | "policy" | "runtime" | "legacy" | "default".
+	// Mirrors autoscaler.SpecSource so the operator can debug which layer is
+	// contributing the live config.
 	// +optional
 	SpecSource string `json:"specSource,omitempty"`
+
+	// Policy identifies the AutoscalerPolicy that rendered the live block.
+	// Set only when SpecSource is "policy".
+	// +optional
+	Policy *AutoscalerPolicyProvenance `json:"policy,omitempty"`
+
+	// ShadowedPolicyRef reports a policy ref outranked by an inline block
+	// (SpecSource "isvc" with spec.<component>.autoscalerPolicyRef set). Its
+	// wouldRenderDigest is the in-cluster preview of what the policy would
+	// produce if the inline block were removed.
+	// +optional
+	ShadowedPolicyRef *ShadowedAutoscalerPolicy `json:"shadowedPolicyRef,omitempty"`
 
 	// CurrentReplicas is mirrored from the HPA / ScaledObject status.
 	// Zero when ManagedBy != "ome" or when the scaler has not yet

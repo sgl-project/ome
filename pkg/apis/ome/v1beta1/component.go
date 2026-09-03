@@ -55,4 +55,12 @@ type ComponentExtensionSpec struct {
 	// above. Alpha. The API may change without notice.
 	// +optional
 	Autoscaler *ComponentAutoscaler `json:"autoscaler,omitempty"`
+
+	// AutoscalerPolicyRef names a same-namespace AutoscalerPolicy whose
+	// template renders this Component's autoscaler. An inline Autoscaler
+	// block above always outranks the ref; the two may coexist, which is the
+	// documented preview/rollback mechanism. Alpha. The API may change
+	// without notice.
+	// +optional
+	AutoscalerPolicyRef *AutoscalerPolicyRef `json:"autoscalerPolicyRef,omitempty"`
 }

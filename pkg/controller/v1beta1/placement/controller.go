@@ -164,6 +164,15 @@ type Reconciler struct {
 	// back to the Requeue struct field + package defaults so a Reconciler built
 	// directly (unit tests) keeps working without Setup.
 	converge *convergeConfig
+
+	// policy is the AutoscalerPolicy preflight/skew state: the config-driven
+	// preflight tunables plus the in-memory per-(source,home) bookkeeping the
+	// multi-cluster policy detectors need (the API carries no such state).
+	// SetupWithManager resolves it from the autoscalerPolicy config block; a
+	// Reconciler built directly (unit tests) gets the package defaults lazily
+	// via policyState. Inert for sources without a policy ref.
+	policy     *policyPreflight
+	policyOnce sync.Once
 }
 
 // +kubebuilder:rbac:groups=ome.io,resources=inferenceservices,verbs=get;list;watch;update;patch
@@ -233,22 +242,51 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		return r.writePlacement(ctx, isvc, placementResult{phase: v1beta1.PlacementPhasePending})
 	}
 
-	// Branch on placement mode. Each mode owns its own reconcile: Single keeps one
-	// winner (sticky race + loser sweep); All keeps every home that admits. Split
-	// is not yet implemented — hold Pending rather than silently run it as Single,
-	// so an operator never mistakes an un-split placement for a split one.
-	switch mode := placementMode(isvc); mode {
-	case v1beta1.PlacementModeSingle:
-		return r.reconcileSingle(ctx, isvc, candidates)
-	case v1beta1.PlacementModeAll:
-		return r.reconcileAll(ctx, isvc, candidates)
-	case v1beta1.PlacementModeSplit:
-		return r.reconcileSplit(ctx, isvc, candidates)
-	default:
-		r.Log.Info("placement mode not supported by this build; holding Pending",
-			"mode", mode, "isvc", isvc.Namespace+"/"+isvc.Name)
-		return r.writePlacement(ctx, isvc, placementResult{phase: v1beta1.PlacementPhasePending})
+	// AutoscalerPolicy preflight: for a source that references policies, gate
+	// the candidate set on member capability, policy presence, and digest
+	// equality against the control-plane anchor, and hold Split entirely while
+	// its per-cluster ceiling is unbounded. Nil (candidates untouched) for the
+	// common no-ref ISVC.
+	pf := r.preflightPolicies(ctx, isvc, candidates, clusters.Items)
+	if pf != nil && pf.holdAsIs {
+		// The standing winner failed preflight, or a Placed source's anchor
+		// read failed transiently: keep the last-written placement untouched
+		// (no Pending write, no re-race) and re-check at the poll cadence,
+		// mirroring the winner-disconnected handling.
+		return ctrl.Result{RequeueAfter: r.requeue()}, nil
 	}
+
+	var res ctrl.Result
+	if pf != nil && pf.hold {
+		res, err = r.writePlacement(ctx, isvc, placementResult{phase: v1beta1.PlacementPhasePending})
+	} else {
+		if pf != nil {
+			candidates = pf.eligible
+		}
+		// Branch on placement mode. Each mode owns its own reconcile: Single keeps one
+		// winner (sticky race + loser sweep); All keeps every home that admits. Split
+		// is not yet implemented — hold Pending rather than silently run it as Single,
+		// so an operator never mistakes an un-split placement for a split one.
+		switch mode := placementMode(isvc); mode {
+		case v1beta1.PlacementModeSingle:
+			res, err = r.reconcileSingle(ctx, isvc, candidates)
+		case v1beta1.PlacementModeAll:
+			res, err = r.reconcileAll(ctx, isvc, candidates)
+		case v1beta1.PlacementModeSplit:
+			res, err = r.reconcileSplit(ctx, isvc, candidates)
+		default:
+			r.Log.Info("placement mode not supported by this build; holding Pending",
+				"mode", mode, "isvc", isvc.Namespace+"/"+isvc.Name)
+			res, err = r.writePlacement(ctx, isvc, placementResult{phase: v1beta1.PlacementPhasePending})
+		}
+	}
+	if err == nil && pf != nil && pf.transient && res.RequeueAfter > r.requeue() {
+		// A preflight verdict this pass rests on a transient member or anchor
+		// read error: re-verify at the poll cadence rather than waiting out
+		// the long steady-state backstop.
+		res.RequeueAfter = r.requeue()
+	}
+	return res, err
 }
 
 // reconcileSingle implements PlacementModeSingle: fan out to the candidates, race
@@ -330,7 +368,7 @@ func (r *Reconciler) reconcileSingle(ctx context.Context, isvc *v1beta1.Inferenc
 			// on the winner, and sweep any stray derived on the other candidates
 			// (origin-guarded, so a same-named user ISVC is safe).
 			r.clearGrace(isvc.UID)
-			if err := r.placeOnBounded(ctx, cl, isvc); err != nil {
+			if err := r.placeOnBounded(ctx, winner, cl, isvc); err != nil {
 				return ctrl.Result{}, err
 			}
 			r.deleteLosers(ctx, isvc, candidates, winner)
@@ -667,7 +705,7 @@ func (r *Reconciler) reconcileSplit(ctx context.Context, isvc *v1beta1.Inference
 		if !ok {
 			continue // disconnected; retry next poll
 		}
-		if err := r.placeOnReplicasBounded(ctx, cl, isvc, targets[c], maxPer); err != nil {
+		if err := r.placeOnReplicasBounded(ctx, c, cl, isvc, targets[c], maxPer); err != nil {
 			r.Log.Error(err, "split: place failed on cluster", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
 			continue // per-cluster tolerated, like fanOut
 		}
@@ -873,7 +911,7 @@ func (r *Reconciler) fanOut(ctx context.Context, isvc *v1beta1.InferenceService,
 		if !ok {
 			continue // disconnected between snapshot and lookup; skip
 		}
-		if err := r.placeOnBounded(ctx, cl, isvc); err != nil {
+		if err := r.placeOnBounded(ctx, c, cl, isvc); err != nil {
 			r.Log.Error(err, "fan out failed on cluster", "cluster", c, "isvc", isvc.Namespace+"/"+isvc.Name)
 			errs = append(errs, fmt.Errorf("%q: %w", c, err))
 			continue
@@ -890,18 +928,18 @@ func (r *Reconciler) fanOut(ctx context.Context, isvc *v1beta1.InferenceService,
 // cannot block the fan-out to the healthy candidates. A deadline overrun surfaces
 // as a (wrapped) context.DeadlineExceeded error the caller records per-cluster
 // and retries next poll.
-func (r *Reconciler) placeOnBounded(ctx context.Context, cl client.Client, isvc *v1beta1.InferenceService) error {
+func (r *Reconciler) placeOnBounded(ctx context.Context, cluster string, cl client.Client, isvc *v1beta1.InferenceService) error {
 	cctx, cancel := context.WithTimeout(ctx, r.placeTimeout())
 	defer cancel()
-	return r.placeOn(cctx, cl, isvc)
+	return r.placeOn(cctx, cluster, cl, isvc)
 }
 
 // placeOnReplicasBounded runs placeOnReplicas under the per-cluster deadline
 // (Split's per-cluster apportioned apply).
-func (r *Reconciler) placeOnReplicasBounded(ctx context.Context, cl client.Client, isvc *v1beta1.InferenceService, replicas, maxPer int32) error {
+func (r *Reconciler) placeOnReplicasBounded(ctx context.Context, cluster string, cl client.Client, isvc *v1beta1.InferenceService, replicas, maxPer int32) error {
 	cctx, cancel := context.WithTimeout(ctx, r.placeTimeout())
 	defer cancel()
-	return r.placeOnReplicas(cctx, cl, isvc, replicas, maxPer)
+	return r.placeOnReplicas(cctx, cluster, cl, isvc, replicas, maxPer)
 }
 
 // connectedSet snapshots the currently-connected cluster names as a set for O(1)
@@ -987,6 +1025,7 @@ func (r *Reconciler) getDerived(ctx context.Context, cluster string, isvc *v1bet
 		}
 		return nil, false, err
 	}
+	r.observeDerivedPolicyStatus(isvc, cluster, derived)
 	return derived, true, nil
 }
 
@@ -1026,6 +1065,7 @@ func (r *Reconciler) getWinnerDerived(ctx context.Context, cluster string, isvc 
 		}
 		return winnerDisconnected, nil, err
 	}
+	r.observeDerivedPolicyStatus(isvc, cluster, derived)
 	return winnerDerivedPresent, derived, nil
 }
 
@@ -1037,22 +1077,22 @@ func (r *Reconciler) getWinnerDerived(ctx context.Context, cluster string, isvc 
 // merges the control-plane-owned keys into the existing maps rather than
 // replacing them wholesale — preserving worker-side reconciler state across the
 // poll-driven re-apply.
-func (r *Reconciler) placeOn(ctx context.Context, cl client.Client, src *v1beta1.InferenceService) error {
-	return r.applyDerived(ctx, cl, src, DeriveISVC(src, r.ControlPlaneID, r.LocalQueue))
+func (r *Reconciler) placeOn(ctx context.Context, cluster string, cl client.Client, src *v1beta1.InferenceService) error {
+	return r.applyDerived(ctx, cluster, cl, src, DeriveISVC(src, r.ControlPlaneID, r.LocalQueue))
 }
 
 // placeOnReplicas is placeOn with a Split per-cluster apportioned replica band
 // pinned onto the derived's scalable components before the apply: replicas is
 // this home's share (the floor), maxPer the per-cluster ceiling (0 = uncapped).
-func (r *Reconciler) placeOnReplicas(ctx context.Context, cl client.Client, src *v1beta1.InferenceService, replicas, maxPer int32) error {
+func (r *Reconciler) placeOnReplicas(ctx context.Context, cluster string, cl client.Client, src *v1beta1.InferenceService, replicas, maxPer int32) error {
 	d := DeriveISVC(src, r.ControlPlaneID, r.LocalQueue)
 	setDerivedReplicas(d, replicas, maxPer)
-	return r.applyDerived(ctx, cl, src, d)
+	return r.applyDerived(ctx, cluster, cl, src, d)
 }
 
 // applyDerived create-or-updates the derived ISVC `desired` on the target
 // cluster.
-func (r *Reconciler) applyDerived(ctx context.Context, cl client.Client, src, desired *v1beta1.InferenceService) error {
+func (r *Reconciler) applyDerived(ctx context.Context, cluster string, cl client.Client, src, desired *v1beta1.InferenceService) error {
 	target := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: desired.Name, Namespace: desired.Namespace}}
 	_, err := controllerutil.CreateOrUpdate(ctx, cl, target, func() error {
 		// Origin-guard the apply, mirroring the origin guard on the delete path
@@ -1069,6 +1109,10 @@ func (r *Reconciler) applyDerived(ctx context.Context, cl client.Client, src, de
 			return fmt.Errorf("refusing to overwrite non-derived InferenceService %s/%s on candidate cluster: not a placement derived of control plane %q",
 				target.Namespace, target.Name, r.ControlPlaneID)
 		}
+		// Before the wholesale re-stamp below overwrites it, the live remote
+		// spec is the evidence for the FieldPruned detector: a member apiserver
+		// that pruned a stamped autoscalerPolicyRef reverts it here every pass.
+		r.observePolicyRefStamp(src, cluster, target, desired)
 		target.Labels = mergeOwnedKeys(target.Labels, desired.Labels)
 		target.Annotations = mergeOwnedKeys(target.Annotations, desired.Annotations)
 		target.Spec = desired.Spec
@@ -1169,6 +1213,9 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, isvc *v1beta1.Inferenc
 	// Teardown complete: drop any winner-lost grace marker so the in-memory map
 	// does not retain an entry for a now-deleted source ISVC.
 	r.clearGrace(isvc.UID)
+	// Likewise drop the AutoscalerPolicy preflight/skew bookkeeping for this
+	// source (staged condition, home observations, prune counters).
+	r.policyState().forget(isvc.UID)
 	// Likewise drop any incremental-dispatcher round state for this source so its
 	// in-memory map does not retain an entry for a now-deleted ISVC.
 	if f, ok := r.nominate().(forgetRoundState); ok {
@@ -1201,6 +1248,10 @@ func (r *Reconciler) derivedRemainingOnConnected(ctx context.Context, isvc *v1be
 // this source when a derived's status changes), so this is only the backstop
 // re-read for a missed event, not the former fixed status poll.
 func (r *Reconciler) writePlacement(ctx context.Context, isvc *v1beta1.InferenceService, res placementResult) (ctrl.Result, error) {
+	// For a policy-referencing source, attach the lifted per-home autoscaling
+	// state to the candidates and collect the policy conditions to write in the
+	// same status update. Nil (result untouched) for the common no-ref ISVC.
+	policyConds := r.policyStatusForWrite(isvc, &res)
 	key := client.ObjectKeyFromObject(isvc)
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		cur := &v1beta1.InferenceService{}
@@ -1215,6 +1266,7 @@ func (r *Reconciler) writePlacement(ctx context.Context, isvc *v1beta1.Inference
 		cur.Status.Placement.Candidates = res.candidates
 		cur.Status.Placement.Endpoint = res.url
 		cur.Status.URL = res.url
+		applyPolicyConditions(&cur.Status, policyConds)
 		return r.Status().Update(ctx, cur)
 	})
 	if err != nil {
@@ -1325,6 +1377,9 @@ func (r *Reconciler) clearGrace(uid types.UID) {
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, opts ...ConvergeOption) error {
 	cfg := resolveConvergeConfig(opts...)
 	r.converge = &cfg
+	if r.policy == nil {
+		r.policy = newPolicyPreflight(loadPolicyPreflightConfig(mgr, r.Log))
+	}
 
 	if r.APIReader == nil {
 		r.APIReader = mgr.GetAPIReader()

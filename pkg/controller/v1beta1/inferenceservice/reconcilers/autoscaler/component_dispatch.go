@@ -6,12 +6,15 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 // defaultDispatchMinReplicas is the compatibility default for omitted bounds.
@@ -64,6 +67,20 @@ type RawDispatchInput struct {
 
 	ResolvedAutoscaler *v1beta1.ComponentAutoscaler
 	ComponentExt       *v1beta1.ComponentExtensionSpec
+
+	// PolicySourced marks ResolvedAutoscaler as a policy render: dispatch
+	// stamps it into the Deployment's last-rendered annotation afterwards,
+	// so a later policy outage has a last-known-good block to stand on
+	// (RawDeployment has no InferenceReplica to carry one).
+	PolicySourced bool
+
+	// PolicyHold is the fail-closed state: ResolvedAutoscaler is nil and
+	// dispatch must NOT run the delete-both branch (that would tear down a
+	// working scaler because a *policy object* went missing). Instead it
+	// re-dispatches the annotation's last-known-good block — bounds keep
+	// flowing to the live scaler — or, with no record, does nothing at all:
+	// no scaler is ever replaced by a default HPA on a policy failure.
+	PolicyHold bool
 }
 
 // DispatchForRawComponent targets the Component's Deployment and owner-refs
@@ -91,6 +108,20 @@ func DispatchForRawComponent(ctx context.Context, input RawDispatchInput) error 
 		return fmt.Errorf("DispatchForRawComponent: namespace mismatch: component %q, ISVC %q", input.ComponentMeta.Namespace, input.ISVC.Namespace)
 	}
 
+	if input.PolicyHold {
+		lkg, err := rawLastRendered(ctx, input.Client, input.ComponentMeta.Namespace, input.ComponentMeta.Name)
+		if err != nil {
+			return err
+		}
+		if lkg == nil {
+			// No record: first reconcile under a broken ref. Dispatch nothing —
+			// the Deployment keeps its own replica count and no default HPA
+			// appears.
+			return nil
+		}
+		input.ResolvedAutoscaler = lkg
+	}
+
 	minR, maxR, err := rawMinMaxReplicas(input.ComponentExt, input.ResolvedAutoscaler)
 	if err != nil {
 		return fmt.Errorf("DispatchForRawComponent: invalid replica bounds: %w", err)
@@ -102,7 +133,7 @@ func DispatchForRawComponent(ctx context.Context, input RawDispatchInput) error 
 		Name:       input.ComponentMeta.Name,
 	}
 
-	return DispatchAutoscaler(ctx, DispatchParams{
+	if err := DispatchAutoscaler(ctx, DispatchParams{
 		Client:         input.Client,
 		Scheme:         input.Scheme,
 		Owner:          owner,
@@ -114,7 +145,62 @@ func DispatchForRawComponent(ctx context.Context, input RawDispatchInput) error 
 		Autoscaler:     input.ResolvedAutoscaler,
 		MinReplicas:    minR,
 		MaxReplicas:    maxR,
-	})
+	}); err != nil {
+		return err
+	}
+
+	if input.PolicySourced && !input.PolicyHold {
+		return stampRawLastRendered(ctx, input.Client, input.ComponentMeta.Namespace, input.ComponentMeta.Name, input.ResolvedAutoscaler)
+	}
+	return nil
+}
+
+// rawLastRendered reads the last-known-good policy render off the
+// Deployment's annotation. A missing Deployment reads as "no record".
+func rawLastRendered(ctx context.Context, c client.Client, namespace, name string) (*v1beta1.ComponentAutoscaler, error) {
+	deployment := &appsv1.Deployment{}
+	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, deployment); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read last-rendered autoscaler for %s/%s: %w", namespace, name, err)
+	}
+	block, err := UnmarshalLastRendered(deployment.Annotations[constants.AutoscalerPolicyLastRendered])
+	if err != nil {
+		// A corrupt record is unusable; treat as no record rather than
+		// blocking the reconcile forever on undecodable state.
+		return nil, nil
+	}
+	return block, nil
+}
+
+// stampRawLastRendered persists the rendered block onto the Deployment so a
+// later policy outage fails closed onto it. Patch-only and skipped when
+// unchanged, so steady state adds no writes.
+func stampRawLastRendered(ctx context.Context, c client.Client, namespace, name string, block *v1beta1.ComponentAutoscaler) error {
+	encoded, err := MarshalLastRendered(block)
+	if err != nil {
+		return err
+	}
+	deployment := &appsv1.Deployment{}
+	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, deployment); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("stamp last-rendered autoscaler for %s/%s: %w", namespace, name, err)
+	}
+	if deployment.Annotations[constants.AutoscalerPolicyLastRendered] == encoded {
+		return nil
+	}
+	patched := deployment.DeepCopy()
+	if patched.Annotations == nil {
+		patched.Annotations = map[string]string{}
+	}
+	patched.Annotations[constants.AutoscalerPolicyLastRendered] = encoded
+	if err := c.Patch(ctx, patched, client.MergeFrom(deployment)); err != nil {
+		return fmt.Errorf("stamp last-rendered autoscaler for %s/%s: %w", namespace, name, err)
+	}
+	return nil
 }
 
 func rawMinMaxReplicas(c *v1beta1.ComponentExtensionSpec, autoscaler *v1beta1.ComponentAutoscaler) (int32, int32, error) {

@@ -14,6 +14,7 @@ type OmeV1beta1Interface interface {
 	RESTClient() rest.Interface
 	AcceleratorClassesGetter
 	AcceleratorQuotasGetter
+	AutoscalerPoliciesGetter
 	BaseModelsGetter
 	BenchmarkJobsGetter
 	ClusterBaseModelsGetter
@@ -36,6 +37,10 @@ func (c *OmeV1beta1Client) AcceleratorClasses() AcceleratorClassInterface {
 
 func (c *OmeV1beta1Client) AcceleratorQuotas() AcceleratorQuotaInterface {
 	return newAcceleratorQuotas(c)
+}
+
+func (c *OmeV1beta1Client) AutoscalerPolicies(namespace string) AutoscalerPolicyInterface {
+	return newAutoscalerPolicies(c, namespace)
 }
 
 func (c *OmeV1beta1Client) BaseModels(namespace string) BaseModelInterface {

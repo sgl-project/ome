@@ -61,6 +61,13 @@ type InferenceServiceValidator struct {
 	// rejection still applies); production populates this from the
 	// active translator's SupportedTrafficFields().
 	SupportedTrafficFields []string
+
+	// AutoscalerPolicyEnabled reports whether the AutoscalerPolicy CRD is
+	// installed and the feature is on. When false, any per-Component
+	// autoscalerPolicyRef is rejected outright — the resolver would hold
+	// the component fail-closed forever with no actor able to render it.
+	// Production wiring sets this from CRD discovery.
+	AutoscalerPolicyEnabled bool
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-inferenceservice,mutating=false,failurePolicy=fail,groups=ome.io,resources=inferenceservices,versions=v1beta1,name=inferenceservice.ome-webhook-server.validator
@@ -292,6 +299,18 @@ func (v *InferenceServiceValidator) validateInferenceService(ctx context.Context
 	}
 	if err := validation.ValidateAutoscalerAnnotationConflict(isvc); err != nil {
 		return allWarnings, err
+	}
+
+	// Per-Component AutoscalerPolicy refs: the reserved
+	// ClusterAutoscalerPolicy kind is rejected, and any ref is rejected
+	// while the feature is disabled on this cluster.
+	if err := validation.ValidateAutoscalerPolicyRefs(isvc, v.AutoscalerPolicyEnabled); err != nil {
+		return allWarnings, err
+	}
+	// Split placement with a policy ref and no per-cluster replica cap
+	// renders each home against an unbounded ceiling — warn, don't reject.
+	if warning := validation.AutoscalerPolicySplitCeilingWarning(isvc); warning != "" {
+		allWarnings = append(allWarnings, warning)
 	}
 
 	if err := validation.ValidateAutoscalerTargetUtilizationPercentage(isvc); err != nil {

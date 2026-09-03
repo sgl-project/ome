@@ -125,6 +125,17 @@ func (r *DeploymentReconciler) checkDeploymentExist() (constants.CheckResultType
 		return constants.CheckResultUnknown, nil, err
 	}
 
+	// The policy layer's last-known-good record lives on the live
+	// Deployment; the rebuilt desired object must carry it forward or any
+	// spec-drift update would erase the freeze/recovery state exactly when
+	// a broken policy needs it.
+	if lkg, ok := existingDeployment.Annotations[constants.AutoscalerPolicyLastRendered]; ok {
+		if r.Deployment.Annotations == nil {
+			r.Deployment.Annotations = map[string]string{}
+		}
+		r.Deployment.Annotations[constants.AutoscalerPolicyLastRendered] = lkg
+	}
+
 	// Perform a dry-run update to populate default values
 	if err := r.client.Update(context.TODO(), r.Deployment, kclient.DryRunAll); err != nil {
 		log.Error(err, "Failed to perform dry-run update of deployment", "namespace", r.Deployment.Namespace, "name", r.Deployment.Name)

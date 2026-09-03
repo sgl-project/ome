@@ -45,6 +45,12 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AnalysisMetric":                   schema_pkg_apis_ome_v1beta1_AnalysisMetric(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AnalysisMetricResult":             schema_pkg_apis_ome_v1beta1_AnalysisMetricResult(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AnalysisPrometheus":               schema_pkg_apis_ome_v1beta1_AnalysisPrometheus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicy":                 schema_pkg_apis_ome_v1beta1_AutoscalerPolicy(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyList":             schema_pkg_apis_ome_v1beta1_AutoscalerPolicyList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyProvenance":       schema_pkg_apis_ome_v1beta1_AutoscalerPolicyProvenance(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyRef":              schema_pkg_apis_ome_v1beta1_AutoscalerPolicyRef(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicySpec":             schema_pkg_apis_ome_v1beta1_AutoscalerPolicySpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyStatus":           schema_pkg_apis_ome_v1beta1_AutoscalerPolicyStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BackendPolicyRef":                 schema_pkg_apis_ome_v1beta1_BackendPolicyRef(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BaseModel":                        schema_pkg_apis_ome_v1beta1_BaseModel(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BaseModelList":                    schema_pkg_apis_ome_v1beta1_BaseModelList(ref),
@@ -54,7 +60,10 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BenchmarkJobSpec":                 schema_pkg_apis_ome_v1beta1_BenchmarkJobSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.BenchmarkJobStatus":               schema_pkg_apis_ome_v1beta1_BenchmarkJobStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CanaryStatus":                     schema_pkg_apis_ome_v1beta1_CanaryStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAutoscalingStatus":       schema_pkg_apis_ome_v1beta1_CandidateAutoscalingStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateComponentAutoscaling":    schema_pkg_apis_ome_v1beta1_CandidateComponentAutoscaling(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidatePlacement":               schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidatePolicyDigest":            schema_pkg_apis_ome_v1beta1_CandidatePolicyDigest(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModel":                 schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":             schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterConnectionSource":          schema_pkg_apis_ome_v1beta1_ClusterConnectionSource(ref),
@@ -76,6 +85,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.EndpointSpec":                     schema_pkg_apis_ome_v1beta1_EndpointSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.EngineSpec":                       schema_pkg_apis_ome_v1beta1_EngineSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FailureInfo":                      schema_pkg_apis_ome_v1beta1_FailureInfo(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FallbackTemplate":                 schema_pkg_apis_ome_v1beta1_FallbackTemplate(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeight":                  schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeightList":              schema_pkg_apis_ome_v1beta1_FineTunedWeightList(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeightSpec":              schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref),
@@ -101,11 +111,14 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceTermination":              schema_pkg_apis_ome_v1beta1_InstanceTermination(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaAutoscaler":                   schema_pkg_apis_ome_v1beta1_KedaAutoscaler(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaConfig":                       schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaPolicyTemplate":               schema_pkg_apis_ome_v1beta1_KedaPolicyTemplate(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaTriggerTemplate":              schema_pkg_apis_ome_v1beta1_KedaTriggerTemplate(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KubeConfigSource":                 schema_pkg_apis_ome_v1beta1_KubeConfigSource(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LeaderSpec":                       schema_pkg_apis_ome_v1beta1_LeaderSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec":                    schema_pkg_apis_ome_v1beta1_LifecycleSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleStatus":                  schema_pkg_apis_ome_v1beta1_LifecycleStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MaintainRatio":                    schema_pkg_apis_ome_v1beta1_MaintainRatio(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MetricProviderRef":                schema_pkg_apis_ome_v1beta1_MetricProviderRef(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationEvent":                   schema_pkg_apis_ome_v1beta1_MigrationEvent(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationHistoryEntry":            schema_pkg_apis_ome_v1beta1_MigrationHistoryEntry(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationPolicy":                  schema_pkg_apis_ome_v1beta1_MigrationPolicy(ref),
@@ -130,6 +143,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PodOverride":                      schema_pkg_apis_ome_v1beta1_PodOverride(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PodSpec":                          schema_pkg_apis_ome_v1beta1_PodSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ProportionalPolicy":               schema_pkg_apis_ome_v1beta1_ProportionalPolicy(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ReplicaValueSource":               schema_pkg_apis_ome_v1beta1_ReplicaValueSource(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RetryBlock":                       schema_pkg_apis_ome_v1beta1_RetryBlock(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RollingUpdate":                    schema_pkg_apis_ome_v1beta1_RollingUpdate(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutAnalysis":                  schema_pkg_apis_ome_v1beta1_RolloutAnalysis(ref),
@@ -156,6 +170,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeRef":                schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeSpec":               schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeStatus":             schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ShadowedAutoscalerPolicy":         schema_pkg_apis_ome_v1beta1_ShadowedAutoscalerPolicy(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SplitSpec":                        schema_pkg_apis_ome_v1beta1_SplitSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.StorageSpec":                      schema_pkg_apis_ome_v1beta1_StorageSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SupportedModelFormat":             schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref),
@@ -2087,6 +2102,272 @@ func schema_pkg_apis_ome_v1beta1_AnalysisPrometheus(ref common.ReferenceCallback
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_AutoscalerPolicy(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AutoscalerPolicy is a reusable, parameterized autoscaler template. Components attach individually via spec.<component>.autoscalerPolicyRef on the InferenceService; the referenced template is rendered per component at reconcile time into a verbatim ComponentAutoscaler and fed to the existing autoscaler dispatch. Creating a policy actuates nothing by itself: the per-component ref is the only attachment mechanism. Alpha. The API may change without notice.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicySpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicySpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyStatus"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AutoscalerPolicyList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AutoscalerPolicyList contains a list of AutoscalerPolicy.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicy"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicy"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AutoscalerPolicyProvenance(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AutoscalerPolicyProvenance reports, on the consuming InferenceService, which policy produced a component's live autoscaler.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the AutoscalerPolicy in the InferenceService's namespace.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedGeneration is the policy generation the rendered block came from.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"portableDigest": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PortableDigest is the policy's canonical spec digest — equal across clusters iff the policy specs match.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"resolvedDigest": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ResolvedDigest is a digest of the rendered ComponentAutoscaler plus the effective bounds and bound provider endpoint. It differs per cluster by design; its job is per-home provenance (\"did my policy edit land here?\").",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AutoscalerPolicyRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AutoscalerPolicyRef names a same-namespace AutoscalerPolicy that renders this component's autoscaler. Deliberately a sibling of the inline Autoscaler block, not a field inside it: ref and inline block may coexist — the inline block wins — and that coexistence is the preview/rollback mechanism.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of an AutoscalerPolicy in the InferenceService's namespace.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind of the referenced policy. \"ClusterAutoscalerPolicy\" is a reserved shape: admission rejects it until the cluster-scoped twin ships.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AutoscalerPolicySpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AutoscalerPolicySpec carries exactly one parameterized autoscaler template. A policy that needs different behavior for different components is two policies; components compose by each choosing a ref.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"enforcement": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Enforcement tier. v1 admits only \"Default\"; \"Required\" is a reserved shape rejected at admission.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"class": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Class selects the template. External and None are inline-only: \"someone else scales this component\" is a per-service statement, not a reusable behavior.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"keda": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Keda holds the parameterized KEDA template. Required when Class=KEDA.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaPolicyTemplate"),
+						},
+					},
+					"hpa": {
+						SchemaProps: spec.SchemaProps{
+							Description: "HPA holds HorizontalPodAutoscaler configuration, verbatim (no templating). Optional when Class=HPA; if absent the rendered block gets the default CPU=80% metric downstream, exactly like an inline block with a nil HPA field.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HPAAutoscaler"),
+						},
+					},
+				},
+				Required: []string{"class"},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.HPAAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaPolicyTemplate"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AutoscalerPolicyStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AutoscalerPolicyStatus is bounded: counts and digests, never consumer name lists — per-consumer truth lives on each InferenceService's own status.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedGeneration is the spec generation this status reflects.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"portableDigest": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PortableDigest is a digest of the spec after API defaulting, in a canonical encoding. Equal across clusters iff the specs are semantically identical; the multi-cluster preflight compares it against the control plane's copy.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"attachedComponents": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AttachedComponents counts the components in this namespace that currently reference the policy.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_BackendPolicyRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -2816,6 +3097,90 @@ func schema_pkg_apis_ome_v1beta1_CanaryStatus(ref common.ReferenceCallback) comm
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_CandidateAutoscalingStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CandidateAutoscalingStatus is the per-home AutoscalerPolicy digest state the watch-funnel lifts off a derived InferenceService.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"policies": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Policies reports the portable digest of each policy as observed on this home. Every entry must match the control plane's copy; a mismatch is distribution skew.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidatePolicyDigest"),
+									},
+								},
+							},
+						},
+					},
+					"components": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Components maps each policy-consuming component to its per-home resolved digest (\"did my policy edit land here?\").",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateComponentAutoscaling"),
+									},
+								},
+							},
+						},
+					},
+					"ready": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Ready is true when every policy-consuming component on this home reports specSource=policy with a resolved digest.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateComponentAutoscaling", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidatePolicyDigest"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_CandidateComponentAutoscaling(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CandidateComponentAutoscaling is one component's rendered-autoscaler state on one home.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"resolvedDigest": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"ready": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"boolean"},
+							Format: "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -2858,12 +3223,44 @@ func schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref common.ReferenceCallback
 							Format:      "int32",
 						},
 					},
+					"autoscaling": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Autoscaling mirrors this home's AutoscalerPolicy state so digest skew between homes is visible from the source InferenceService. Set only when the source references at least one policy.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAutoscalingStatus"),
+						},
+					},
 				},
 				Required: []string{"cluster"},
 			},
 		},
 		Dependencies: []string{
-			"knative.dev/pkg/apis.URL"},
+			"knative.dev/pkg/apis.URL", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAutoscalingStatus"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_CandidatePolicyDigest(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CandidatePolicyDigest pairs a policy name with the portable digest this home observed for it.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"portableDigest": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -3163,9 +3560,21 @@ func schema_pkg_apis_ome_v1beta1_ComponentAutoscalerStatus(ref common.ReferenceC
 					},
 					"specSource": {
 						SchemaProps: spec.SchemaProps{
-							Description: "SpecSource reports which layer of the ISVC -> runtime -> legacy -> default inheritance chain produced the resolved Autoscaler block. One of \"isvc\" | \"runtime\" | \"legacy\" | \"default\". Mirrors autoscaler.SpecSource so the operator can debug which layer is contributing the live config.",
+							Description: "SpecSource reports which layer of the ISVC -> policy -> runtime -> legacy -> default inheritance chain produced the resolved Autoscaler block. One of \"isvc\" | \"policy\" | \"runtime\" | \"legacy\" | \"default\". Mirrors autoscaler.SpecSource so the operator can debug which layer is contributing the live config.",
 							Type:        []string{"string"},
 							Format:      "",
+						},
+					},
+					"policy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Policy identifies the AutoscalerPolicy that rendered the live block. Set only when SpecSource is \"policy\".",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyProvenance"),
+						},
+					},
+					"shadowedPolicyRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ShadowedPolicyRef reports a policy ref outranked by an inline block (SpecSource \"isvc\" with spec.<component>.autoscalerPolicyRef set). Its wouldRenderDigest is the in-cluster preview of what the policy would produce if the inline block were removed.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ShadowedAutoscalerPolicy"),
 						},
 					},
 					"currentReplicas": {
@@ -3214,7 +3623,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentAutoscalerStatus(ref common.ReferenceC
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "k8s.io/apimachinery/pkg/apis/meta/v1.Time", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyProvenance", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ShadowedAutoscalerPolicy"},
 	}
 }
 
@@ -3324,11 +3733,17 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler"),
 						},
 					},
+					"autoscalerPolicyRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AutoscalerPolicyRef names a same-namespace AutoscalerPolicy whose template renders this Component's autoscaler. An inline Autoscaler block above always outranks the ref; the two may coexist, which is the documented preview/rollback mechanism. Alpha. The API may change without notice.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyRef"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec"},
+			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec"},
 	}
 }
 
@@ -4154,6 +4569,12 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler"),
 						},
 					},
+					"autoscalerPolicyRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AutoscalerPolicyRef names a same-namespace AutoscalerPolicy whose template renders this Component's autoscaler. An inline Autoscaler block above always outranks the ref; the two may coexist, which is the documented preview/rollback mechanism. Alpha. The API may change without notice.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyRef"),
+						},
+					},
 					"runner": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Runner container override for customizing the main container This is essentially a container spec that can override the default container Defines the main decoder container configuration, including image, resource requests/limits, environment variables, and command.",
@@ -4203,7 +4624,7 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LeaderSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerSpec"},
+			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LeaderSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerSpec"},
 	}
 }
 
@@ -4987,6 +5408,12 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler"),
 						},
 					},
+					"autoscalerPolicyRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AutoscalerPolicyRef names a same-namespace AutoscalerPolicy whose template renders this Component's autoscaler. An inline Autoscaler block above always outranks the ref; the two may coexist, which is the documented preview/rollback mechanism. Alpha. The API may change without notice.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyRef"),
+						},
+					},
 					"runner": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Runner container override for customizing the engine container This is essentially a container spec that can override the default container Defines the main model runner container configuration, including image, resource requests/limits, environment variables, and command.",
@@ -5036,7 +5463,7 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LeaderSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerSpec"},
+			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LeaderSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.WorkerSpec"},
 	}
 }
 
@@ -5092,6 +5519,37 @@ func schema_pkg_apis_ome_v1beta1_FailureInfo(ref common.ReferenceCallback) commo
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_FallbackTemplate(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "FallbackTemplate renders a kedav1.Fallback with the replica count derived per consuming component instead of authored as a literal.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"failureThreshold": {
+						SchemaProps: spec.SchemaProps{
+							Description: "FailureThreshold is the number of consecutive failed metric evaluations after which KEDA serves the fallback (it trips on the threshold+1-th consecutive failure).",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"replicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Replicas is the fallback replica count.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ReplicaValueSource"),
+						},
+					},
+				},
+				Required: []string{"failureThreshold", "replicas"},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ReplicaValueSource"},
 	}
 }
 
@@ -6691,6 +7149,129 @@ func schema_pkg_apis_ome_v1beta1_KedaConfig(ref common.ReferenceCallback) common
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_KedaPolicyTemplate(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KedaPolicyTemplate is the parameterized counterpart of KedaAutoscaler. Everything except trigger metadata templates and the typed fallback replicas is passed through verbatim to the rendered block.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"triggers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaTriggerTemplate"),
+									},
+								},
+							},
+						},
+					},
+					"advanced": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Advanced ScaledObject configuration, verbatim.",
+							Ref:         ref("github.com/kedacore/keda/v2/apis/keda/v1alpha1.AdvancedConfig"),
+						},
+					},
+					"pollingInterval": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int32",
+						},
+					},
+					"cooldownPeriod": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int32",
+						},
+					},
+					"idleReplicaCount": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int32",
+						},
+					},
+					"fallback": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FallbackTemplate"),
+						},
+					},
+				},
+				Required: []string{"triggers"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kedacore/keda/v2/apis/keda/v1alpha1.AdvancedConfig", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FallbackTemplate", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.KedaTriggerTemplate"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_KedaTriggerTemplate(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KedaTriggerTemplate is a parameterized KEDA trigger. Metadata string values may contain {{ .Var }} templates over a closed, controller-derived variable set (Namespace, ISVCName, Component, MinReplicas, MaxReplicas, TargetName).",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type is the KEDA trigger type (\"prometheus\" in v1). Admission requires ProviderRef for network-endpoint trigger types.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"providerRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ProviderRef binds the trigger's endpoint by logical provider name.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MetricProviderRef"),
+						},
+					},
+					"metricType": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MetricType is forwarded to the rendered trigger.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"queryReturnsDesiredReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "QueryReturnsDesiredReplicas declares that the trigger's query already computes the desired replica count. When true, admission requires MetricType=AverageValue: the HPA's Value math is ceil((metric/threshold) x readyPods), which breaks desired-count queries.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Metadata is the KEDA trigger metadata. Admission rejects the keys \"serverAddress\" and \"authModes\" (the provider binding owns them), and requires \"ignoreNullValues\" to be explicit on prometheus triggers.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"type", "metadata"},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MetricProviderRef"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_KubeConfigSource(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -7389,6 +7970,26 @@ func schema_pkg_apis_ome_v1beta1_MaintainRatio(ref common.ReferenceCallback) com
 							Description: "Tolerance is the maximum percentage drift from the starting ratio. A roll step that would exceed it is paused until the pools rebalance. An explicit 0 means zero drift. When omitted, the operator-configured default (the coordination block of the operator's ConfigMap) applies; if the operator configures no default either, the group rolls with no drift bound.",
 							Type:        []string{"integer"},
 							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MetricProviderRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MetricProviderRef names a logical metric provider. The name is bound to a cluster-local endpoint (and optional credentials) by the operator's autoscalerPolicy configuration block; endpoints are not representable in the policy itself, so one policy object serves every cluster and a policy author can never point a scaler at an arbitrary endpoint.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
 						},
 					},
 				},
@@ -9227,6 +9828,33 @@ func schema_pkg_apis_ome_v1beta1_ProportionalPolicy(ref common.ReferenceCallback
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_ReplicaValueSource(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ReplicaValueSource derives an int32 replica count for a rendered scaler field. Exactly one of Value / FromComponent is set. kedav1.Fallback.Replicas is an int32; a typed source avoids round-tripping numbers through string templates, which would add a parse failure mode for no expressiveness.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"value": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Value is a fixed replica count.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"fromComponent": {
+						SchemaProps: spec.SchemaProps{
+							Description: "FromComponent resolves against the consuming component's effective replica bounds — after defaulting and, on a placement-derived InferenceService, after the per-home bounds rewrite.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_RetryBlock(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -10528,6 +11156,12 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler"),
 						},
 					},
+					"autoscalerPolicyRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AutoscalerPolicyRef names a same-namespace AutoscalerPolicy whose template renders this Component's autoscaler. An inline Autoscaler block above always outranks the ref; the two may coexist, which is the documented preview/rollback mechanism. Alpha. The API may change without notice.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyRef"),
+						},
+					},
 					"runner": {
 						SchemaProps: spec.SchemaProps{
 							Description: "This is essentially a container spec that can override the default container",
@@ -10554,7 +11188,7 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec"},
+			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec"},
 	}
 }
 
@@ -11711,6 +12345,40 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref common.ReferenceCallba
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ShadowedAutoscalerPolicy(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ShadowedAutoscalerPolicy reports a policy ref that is currently shadowed by an inline autoscaler block (inline outranks policy). The shadow render is the in-cluster preview surface: it shows what the policy would produce without changing behavior.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the shadowed AutoscalerPolicy.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"portableDigest": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"wouldRenderDigest": {
+						SchemaProps: spec.SchemaProps{
+							Description: "WouldRenderDigest is the resolved digest the policy would produce for this component if the inline block were removed.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
