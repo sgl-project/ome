@@ -13,7 +13,6 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/common"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/pdb"
@@ -146,21 +145,31 @@ func (r *Router) reconcileOMENativeSubresources(ctx context.Context, isvc *v1bet
 func (r *Router) reconcileDeployment(ctx context.Context, isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec, pdbRequest pdb.Request) (ctrl.Result, error) {
 	switch r.DeploymentMode {
 	case constants.RawDeployment:
-		resolvedAS, _, err := autoscaler.ResolveRawComponentAutoscaler(r.Runtime, isvc, v1beta1.RouterComponent, objectMeta.Annotations)
+		rawResolved, err := resolveRawComponentAutoscaling(ctx, &r.BaseComponentFields, isvc, v1beta1.RouterComponent, &r.routerSpec.ComponentExtensionSpec, objectMeta.Annotations)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to resolve autoscaler for raw router")
 		}
-		return r.deploymentReconciler.ReconcileRawDeployment(ctx, isvc, objectMeta, podSpec, &r.routerSpec.ComponentExtensionSpec, v1beta1.RouterComponent, resolvedAS, pdbRequest)
+		result, err := r.deploymentReconciler.ReconcileRawDeployment(ctx, isvc, objectMeta, podSpec, &r.routerSpec.ComponentExtensionSpec, v1beta1.RouterComponent, rawResolved, pdbRequest)
+		if err != nil {
+			return result, err
+		}
+		// A policy hold recovers via config edits that emit no event, so the
+		// hold carries its own periodic requeue. Smaller-nonzero merge: never
+		// delay a dispatcher poll already scheduled on this result.
+		return mergeRequeueAfter(result, rawResolved.RequeueAfter), nil
 	case constants.OMENative:
 		// OMENative-mode Components dispatch through the InferenceReplica
 		// path. Router is always single-pod (MultiPod=false; no Worker
 		// block) so the projector receives a nil WorkerPodSpec.
 		//
 		// Resolve the authoritative ComponentAutoscaler from the
-		// ISVC → runtime → default chain. See engine dispatch for the
-		// full design — dispatches HPA / KEDA / external / none against
+		// ISVC → policy → runtime → default chain. See engine dispatch for
+		// the full design — dispatches HPA / KEDA / external / none against
 		// the committed IR (autoscaler dispatch is always-on per Component).
-		resolvedAS, _ := autoscaler.ResolveComponentAutoscaler(r.Runtime, isvc, v1beta1.RouterComponent)
+		res, err := resolveComponentAutoscaling(ctx, &r.BaseComponentFields, isvc, v1beta1.RouterComponent, &r.routerSpec.ComponentExtensionSpec)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to resolve autoscaler for router")
+		}
 		ir, err := irprojector.EnsureInferenceReplica(ctx, irprojector.Params{
 			ISVC:               isvc,
 			Component:          v1beta1.RouterComponent,
@@ -168,7 +177,8 @@ func (r *Router) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferenc
 			ObjectMeta:         objectMeta,
 			PodSpec:            podSpec,
 			MultiPod:           false,
-			ResolvedAutoscaler: resolvedAS,
+			ResolvedAutoscaler: res.Resolved,
+			PreserveAutoscaler: res.Hold,
 			Client:             r.Client,
 			Reader:             r.APIReader,
 		})
@@ -193,16 +203,12 @@ func (r *Router) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferenc
 		// Autoscaler dispatch is always-on per InferenceReplica.
 		// See engine dispatch for the full owner-ref + scaleTargetRef
 		// rationale.
-		if err := autoscaler.DispatchForIRComponent(ctx, autoscaler.IRDispatchInput{
-			Client:             r.Client,
-			Scheme:             r.Scheme,
-			IR:                 ir,
-			ResolvedAutoscaler: resolvedAS,
-			ComponentExt:       &r.routerSpec.ComponentExtensionSpec,
-		}); err != nil {
+		if err := dispatchIRAutoscaler(ctx, &r.BaseComponentFields, isvc, ir, &r.routerSpec.ComponentExtensionSpec, res); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to dispatch autoscaler for router")
 		}
-		return ctrl.Result{}, nil
+		// A policy hold recovers via config edits that emit no event; carry
+		// its periodic requeue on the result (smaller-nonzero merge).
+		return mergeRequeueAfter(ctrl.Result{}, res.RequeueAfter), nil
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for router")
 	}
@@ -210,7 +216,7 @@ func (r *Router) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferenc
 
 // updateRouterStatus updates the status of the router component
 func (r *Router) updateRouterStatus(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta) error {
-	return UpdateComponentStatus(&r.BaseComponentFields, isvc, v1beta1.RouterComponent, objectMeta)
+	return UpdateComponentStatus(&r.BaseComponentFields, isvc, v1beta1.RouterComponent, objectMeta, &r.routerSpec.ComponentExtensionSpec)
 }
 
 // reconcileObjectMeta creates the object metadata for the router

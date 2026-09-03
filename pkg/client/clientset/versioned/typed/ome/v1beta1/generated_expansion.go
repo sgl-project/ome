@@ -6,6 +6,8 @@ type AcceleratorClassExpansion interface{}
 
 type AcceleratorQuotaExpansion interface{}
 
+type AutoscalerPolicyExpansion interface{}
+
 type BaseModelExpansion interface{}
 
 type BenchmarkJobExpansion interface{}

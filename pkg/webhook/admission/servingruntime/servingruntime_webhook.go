@@ -73,6 +73,13 @@ func (sr *ServingRuntimeValidator) Handle(ctx context.Context, req admission.Req
 		return *resp
 	}
 
+	// Policy refs attach on the InferenceService only; a ref stored on a
+	// runtime component config would be silently inert. Checked before the
+	// disabled-shortcut so a disabled runtime cannot store one either.
+	if err := validation.ValidateRuntimeAutoscalerPolicyRefs(&servingRuntime.Spec); err != nil {
+		return admission.Denied(err.Error())
+	}
+
 	existing := &v1beta1.ServingRuntimeList{}
 	if err := sr.Client.List(ctx, existing, client.InNamespace(servingRuntime.Namespace)); err != nil {
 		log.Error(err, "Failed to get serving runtime list", "namespace", servingRuntime.Namespace)
@@ -139,6 +146,11 @@ func (csr *ClusterServingRuntimeValidator) Handle(ctx context.Context, req admis
 	}
 	if resp := validateRuntimeScalingPolicy(req, clusterServingRuntime.Spec.ScalingPolicy, oldCSRPolicy); resp != nil {
 		return *resp
+	}
+
+	// Policy refs attach on the InferenceService only; see ServingRuntime.Handle.
+	if err := validation.ValidateRuntimeAutoscalerPolicyRefs(&clusterServingRuntime.Spec); err != nil {
+		return admission.Denied(err.Error())
 	}
 
 	existing := &v1beta1.ClusterServingRuntimeList{}

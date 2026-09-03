@@ -1085,6 +1085,156 @@
         }
       }
     },
+    "v1beta1.AutoscalerPolicy": {
+      "description": "AutoscalerPolicy is a reusable, parameterized autoscaler template. Components attach individually via spec.\u003ccomponent\u003e.autoscalerPolicyRef on the InferenceService; the referenced template is rendered per component at reconcile time into a verbatim ComponentAutoscaler and fed to the existing autoscaler dispatch. Creating a policy actuates nothing by itself: the per-component ref is the only attachment mechanism. Alpha. The API may change without notice.",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.AutoscalerPolicySpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.AutoscalerPolicyStatus"
+        }
+      }
+    },
+    "v1beta1.AutoscalerPolicyList": {
+      "description": "AutoscalerPolicyList contains a list of AutoscalerPolicy.",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.AutoscalerPolicy"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.AutoscalerPolicyProvenance": {
+      "description": "AutoscalerPolicyProvenance reports, on the consuming InferenceService, which policy produced a component's live autoscaler.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Name of the AutoscalerPolicy in the InferenceService's namespace.",
+          "type": "string",
+          "default": ""
+        },
+        "observedGeneration": {
+          "description": "ObservedGeneration is the policy generation the rendered block came from.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "portableDigest": {
+          "description": "PortableDigest is the policy's canonical spec digest — equal across clusters iff the policy specs match.",
+          "type": "string"
+        },
+        "resolvedDigest": {
+          "description": "ResolvedDigest is a digest of the rendered ComponentAutoscaler plus the effective bounds and bound provider endpoint. It differs per cluster by design; its job is per-home provenance (\"did my policy edit land here?\").",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.AutoscalerPolicyRef": {
+      "description": "AutoscalerPolicyRef names a same-namespace AutoscalerPolicy that renders this component's autoscaler. Deliberately a sibling of the inline Autoscaler block, not a field inside it: ref and inline block may coexist — the inline block wins — and that coexistence is the preview/rollback mechanism.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "Kind of the referenced policy. \"ClusterAutoscalerPolicy\" is a reserved shape: admission rejects it until the cluster-scoped twin ships.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of an AutoscalerPolicy in the InferenceService's namespace.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.AutoscalerPolicySpec": {
+      "description": "AutoscalerPolicySpec carries exactly one parameterized autoscaler template. A policy that needs different behavior for different components is two policies; components compose by each choosing a ref.",
+      "type": "object",
+      "required": [
+        "class"
+      ],
+      "properties": {
+        "class": {
+          "description": "Class selects the template. External and None are inline-only: \"someone else scales this component\" is a per-service statement, not a reusable behavior.",
+          "type": "string",
+          "default": ""
+        },
+        "enforcement": {
+          "description": "Enforcement tier. v1 admits only \"Default\"; \"Required\" is a reserved shape rejected at admission.",
+          "type": "string"
+        },
+        "hpa": {
+          "description": "HPA holds HorizontalPodAutoscaler configuration, verbatim (no templating). Optional when Class=HPA; if absent the rendered block gets the default CPU=80% metric downstream, exactly like an inline block with a nil HPA field.",
+          "$ref": "#/definitions/v1beta1.HPAAutoscaler"
+        },
+        "keda": {
+          "description": "Keda holds the parameterized KEDA template. Required when Class=KEDA.",
+          "$ref": "#/definitions/v1beta1.KedaPolicyTemplate"
+        }
+      }
+    },
+    "v1beta1.AutoscalerPolicyStatus": {
+      "description": "AutoscalerPolicyStatus is bounded: counts and digests, never consumer name lists — per-consumer truth lives on each InferenceService's own status.",
+      "type": "object",
+      "properties": {
+        "attachedComponents": {
+          "description": "AttachedComponents counts the components in this namespace that currently reference the policy.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-map-keys": [
+            "type"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "observedGeneration": {
+          "description": "ObservedGeneration is the spec generation this status reflects.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "portableDigest": {
+          "description": "PortableDigest is a digest of the spec after API defaulting, in a canonical encoding. Equal across clusters iff the specs are semantically identical; the multi-cluster preflight compares it against the control plane's copy.",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.BackendPolicyRef": {
       "description": "BackendPolicyRef identifies the OME-emitted backend policy resource sibling to the InferenceService.",
       "type": "object",
@@ -1512,6 +1662,48 @@
         }
       }
     },
+    "v1beta1.CandidateAutoscalingStatus": {
+      "description": "CandidateAutoscalingStatus is the per-home AutoscalerPolicy digest state the watch-funnel lifts off a derived InferenceService.",
+      "type": "object",
+      "properties": {
+        "components": {
+          "description": "Components maps each policy-consuming component to its per-home resolved digest (\"did my policy edit land here?\").",
+          "type": "object",
+          "additionalProperties": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.CandidateComponentAutoscaling"
+          }
+        },
+        "policies": {
+          "description": "Policies reports the portable digest of each policy as observed on this home. Every entry must match the control plane's copy; a mismatch is distribution skew.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.CandidatePolicyDigest"
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "ready": {
+          "description": "Ready is true when every policy-consuming component on this home reports specSource=policy with a resolved digest.",
+          "type": "boolean"
+        }
+      }
+    },
+    "v1beta1.CandidateComponentAutoscaling": {
+      "description": "CandidateComponentAutoscaling is one component's rendered-autoscaler state on one home.",
+      "type": "object",
+      "properties": {
+        "ready": {
+          "type": "boolean"
+        },
+        "resolvedDigest": {
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.CandidatePlacement": {
       "description": "CandidatePlacement is the per-cluster state of a fan-out candidate in the placement race.",
       "type": "object",
@@ -1523,6 +1715,10 @@
           "description": "AdmittedReplicas is how many replicas this home's Kueue has admitted (only meaningful in Split, where a home serves a fraction of the desired count). It drives global accounting — the control plane sums it across homes to decide whether the desired count is met. Zero/unset outside Split.",
           "type": "integer",
           "format": "int32"
+        },
+        "autoscaling": {
+          "description": "Autoscaling mirrors this home's AutoscalerPolicy state so digest skew between homes is visible from the source InferenceService. Set only when the source references at least one policy.",
+          "$ref": "#/definitions/v1beta1.CandidateAutoscalingStatus"
         },
         "cluster": {
           "description": "Cluster is the WorkloadCluster name.",
@@ -1541,6 +1737,19 @@
           "description": "ReadyReplicas is how many of this home's replicas are serving traffic. In Split it is the weight an external LB uses to split traffic across homes (traffic follows where the replicas actually landed). Zero/unset outside Split.",
           "type": "integer",
           "format": "int32"
+        }
+      }
+    },
+    "v1beta1.CandidatePolicyDigest": {
+      "description": "CandidatePolicyDigest pairs a policy name with the portable digest this home observed for it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": ""
+        },
+        "portableDigest": {
+          "type": "string"
         }
       }
     },
@@ -1734,8 +1943,16 @@
           "description": "ManagedBy reports who owns the underlying scaler object. Distinguished from Class because none and external are dispatch-equivalent (both =\u003e delete any OME-managed HPA / SO); the surface-level distinction lives here.\n  - \"ome\": OME emitted the HPA / ScaledObject; conditions and\n    replica counters below mirror its live status.\n  - \"external\": operator-owned scaler; OME publishes\n    scaleTargetRef and stays out. Conditions empty.\n  - \"none\": no OME-managed scaler is active. Conditions empty;\n    counters zero.",
           "type": "string"
         },
+        "policy": {
+          "description": "Policy identifies the AutoscalerPolicy that rendered the live block. Set only when SpecSource is \"policy\".",
+          "$ref": "#/definitions/v1beta1.AutoscalerPolicyProvenance"
+        },
+        "shadowedPolicyRef": {
+          "description": "ShadowedPolicyRef reports a policy ref outranked by an inline block (SpecSource \"isvc\" with spec.\u003ccomponent\u003e.autoscalerPolicyRef set). Its wouldRenderDigest is the in-cluster preview of what the policy would produce if the inline block were removed.",
+          "$ref": "#/definitions/v1beta1.ShadowedAutoscalerPolicy"
+        },
         "specSource": {
-          "description": "SpecSource reports which layer of the ISVC -\u003e runtime -\u003e legacy -\u003e default inheritance chain produced the resolved Autoscaler block. One of \"isvc\" | \"runtime\" | \"legacy\" | \"default\". Mirrors autoscaler.SpecSource so the operator can debug which layer is contributing the live config.",
+          "description": "SpecSource reports which layer of the ISVC -\u003e policy -\u003e runtime -\u003e legacy -\u003e default inheritance chain produced the resolved Autoscaler block. One of \"isvc\" | \"policy\" | \"runtime\" | \"legacy\" | \"default\". Mirrors autoscaler.SpecSource so the operator can debug which layer is contributing the live config.",
           "type": "string"
         }
       }
@@ -1755,6 +1972,10 @@
         "autoscaler": {
           "description": "Autoscaler configures the per-Component autoscaler dispatch and the underlying KEDA / HPA configuration. Takes priority over the legacy ome.io/autoscalerClass annotation for this Component, and is the only way to configure per-Component autoscaling: scale metrics live here (Autoscaler.HPA.Metrics), alongside MinReplicas / MaxReplicas above. Alpha. The API may change without notice.",
           "$ref": "#/definitions/v1beta1.ComponentAutoscaler"
+        },
+        "autoscalerPolicyRef": {
+          "description": "AutoscalerPolicyRef names a same-namespace AutoscalerPolicy whose template renders this Component's autoscaler. An inline Autoscaler block above always outranks the ref; the two may coexist, which is the documented preview/rollback mechanism. Alpha. The API may change without notice.",
+          "$ref": "#/definitions/v1beta1.AutoscalerPolicyRef"
         },
         "deploymentStrategy": {
           "description": "The deployment strategy to use to replace existing pods with new ones. Only applicable for raw deployment mode.",
@@ -1982,6 +2203,10 @@
         "autoscaler": {
           "description": "Autoscaler configures the per-Component autoscaler dispatch and the underlying KEDA / HPA configuration. Takes priority over the legacy ome.io/autoscalerClass annotation for this Component, and is the only way to configure per-Component autoscaling: scale metrics live here (Autoscaler.HPA.Metrics), alongside MinReplicas / MaxReplicas above. Alpha. The API may change without notice.",
           "$ref": "#/definitions/v1beta1.ComponentAutoscaler"
+        },
+        "autoscalerPolicyRef": {
+          "description": "AutoscalerPolicyRef names a same-namespace AutoscalerPolicy whose template renders this Component's autoscaler. An inline Autoscaler block above always outranks the ref; the two may coexist, which is the documented preview/rollback mechanism. Alpha. The API may change without notice.",
+          "$ref": "#/definitions/v1beta1.AutoscalerPolicyRef"
         },
         "containers": {
           "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
@@ -2458,6 +2683,10 @@
           "description": "Autoscaler configures the per-Component autoscaler dispatch and the underlying KEDA / HPA configuration. Takes priority over the legacy ome.io/autoscalerClass annotation for this Component, and is the only way to configure per-Component autoscaling: scale metrics live here (Autoscaler.HPA.Metrics), alongside MinReplicas / MaxReplicas above. Alpha. The API may change without notice.",
           "$ref": "#/definitions/v1beta1.ComponentAutoscaler"
         },
+        "autoscalerPolicyRef": {
+          "description": "AutoscalerPolicyRef names a same-namespace AutoscalerPolicy whose template renders this Component's autoscaler. An inline Autoscaler block above always outranks the ref; the two may coexist, which is the documented preview/rollback mechanism. Alpha. The API may change without notice.",
+          "$ref": "#/definitions/v1beta1.AutoscalerPolicyRef"
+        },
         "containers": {
           "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
           "type": "array",
@@ -2813,6 +3042,27 @@
         "time": {
           "description": "Time failure occurred or was discovered",
           "$ref": "#/definitions/v1.Time"
+        }
+      }
+    },
+    "v1beta1.FallbackTemplate": {
+      "description": "FallbackTemplate renders a kedav1.Fallback with the replica count derived per consuming component instead of authored as a literal.",
+      "type": "object",
+      "required": [
+        "failureThreshold",
+        "replicas"
+      ],
+      "properties": {
+        "failureThreshold": {
+          "description": "FailureThreshold is the number of consecutive failed metric evaluations after which KEDA serves the fallback (it trips on the threshold+1-th consecutive failure).",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "replicas": {
+          "description": "Replicas is the fallback replica count.",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.ReplicaValueSource"
         }
       }
     },
@@ -3739,6 +3989,77 @@
         }
       }
     },
+    "v1beta1.KedaPolicyTemplate": {
+      "description": "KedaPolicyTemplate is the parameterized counterpart of KedaAutoscaler. Everything except trigger metadata templates and the typed fallback replicas is passed through verbatim to the rendered block.",
+      "type": "object",
+      "required": [
+        "triggers"
+      ],
+      "properties": {
+        "advanced": {
+          "description": "Advanced ScaledObject configuration, verbatim.",
+          "$ref": "#/definitions/github.com.kedacore.keda.v2.apis.keda.v1alpha1.AdvancedConfig"
+        },
+        "cooldownPeriod": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "fallback": {
+          "$ref": "#/definitions/v1beta1.FallbackTemplate"
+        },
+        "idleReplicaCount": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "pollingInterval": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "triggers": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.KedaTriggerTemplate"
+          },
+          "x-kubernetes-list-type": "atomic"
+        }
+      }
+    },
+    "v1beta1.KedaTriggerTemplate": {
+      "description": "KedaTriggerTemplate is a parameterized KEDA trigger. Metadata string values may contain {{ .Var }} templates over a closed, controller-derived variable set (Namespace, ISVCName, Component, MinReplicas, MaxReplicas, TargetName).",
+      "type": "object",
+      "required": [
+        "type",
+        "metadata"
+      ],
+      "properties": {
+        "metadata": {
+          "description": "Metadata is the KEDA trigger metadata. Admission rejects the keys \"serverAddress\" and \"authModes\" (the provider binding owns them), and requires \"ignoreNullValues\" to be explicit on prometheus triggers.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "metricType": {
+          "description": "MetricType is forwarded to the rendered trigger.",
+          "type": "string"
+        },
+        "providerRef": {
+          "description": "ProviderRef binds the trigger's endpoint by logical provider name.",
+          "$ref": "#/definitions/v1beta1.MetricProviderRef"
+        },
+        "queryReturnsDesiredReplicas": {
+          "description": "QueryReturnsDesiredReplicas declares that the trigger's query already computes the desired replica count. When true, admission requires MetricType=AverageValue: the HPA's Value math is ceil((metric/threshold) x readyPods), which breaks desired-count queries.",
+          "type": "boolean"
+        },
+        "type": {
+          "description": "Type is the KEDA trigger type (\"prometheus\" in v1). Admission requires ProviderRef for network-endpoint trigger types.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
     "v1beta1.KubeConfigSource": {
       "description": "KubeConfigSource points at a Secret holding a kubeconfig for the cluster.",
       "type": "object",
@@ -4143,6 +4464,16 @@
           "description": "Tolerance is the maximum percentage drift from the starting ratio. A roll step that would exceed it is paused until the pools rebalance. An explicit 0 means zero drift. When omitted, the operator-configured default (the coordination block of the operator's ConfigMap) applies; if the operator configures no default either, the group rolls with no drift bound.",
           "type": "integer",
           "format": "int32"
+        }
+      }
+    },
+    "v1beta1.MetricProviderRef": {
+      "description": "MetricProviderRef names a logical metric provider. The name is bound to a cluster-local endpoint (and optional credentials) by the operator's autoscalerPolicy configuration block; endpoints are not representable in the policy itself, so one policy object serves every cluster and a policy author can never point a scaler at an arbitrary endpoint.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": ""
         }
       }
     },
@@ -5186,6 +5517,21 @@
         }
       }
     },
+    "v1beta1.ReplicaValueSource": {
+      "description": "ReplicaValueSource derives an int32 replica count for a rendered scaler field. Exactly one of Value / FromComponent is set. kedav1.Fallback.Replicas is an int32; a typed source avoids round-tripping numbers through string templates, which would add a parse failure mode for no expressiveness.",
+      "type": "object",
+      "properties": {
+        "fromComponent": {
+          "description": "FromComponent resolves against the consuming component's effective replica bounds — after defaulting and, on a placement-derived InferenceService, after the per-home bounds rewrite.",
+          "type": "string"
+        },
+        "value": {
+          "description": "Value is a fixed replica count.",
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
     "v1beta1.RetryBlock": {
       "description": "RetryBlock is the persisted per-revision retry authority. The subject is the owning IR plus TargetRevision.",
       "type": "object",
@@ -5619,6 +5965,10 @@
         "autoscaler": {
           "description": "Autoscaler configures the per-Component autoscaler dispatch and the underlying KEDA / HPA configuration. Takes priority over the legacy ome.io/autoscalerClass annotation for this Component, and is the only way to configure per-Component autoscaling: scale metrics live here (Autoscaler.HPA.Metrics), alongside MinReplicas / MaxReplicas above. Alpha. The API may change without notice.",
           "$ref": "#/definitions/v1beta1.ComponentAutoscaler"
+        },
+        "autoscalerPolicyRef": {
+          "description": "AutoscalerPolicyRef names a same-namespace AutoscalerPolicy whose template renders this Component's autoscaler. An inline Autoscaler block above always outranks the ref; the two may coexist, which is the documented preview/rollback mechanism. Alpha. The API may change without notice.",
+          "$ref": "#/definitions/v1beta1.AutoscalerPolicyRef"
         },
         "config": {
           "description": "Additional configuration parameters for the runner This can include framework-specific settings",
@@ -6580,6 +6930,24 @@
             "default": ""
           },
           "x-kubernetes-list-type": "atomic"
+        }
+      }
+    },
+    "v1beta1.ShadowedAutoscalerPolicy": {
+      "description": "ShadowedAutoscalerPolicy reports a policy ref that is currently shadowed by an inline autoscaler block (inline outranks policy). The shadow render is the in-cluster preview surface: it shows what the policy would produce without changing behavior.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Name of the shadowed AutoscalerPolicy.",
+          "type": "string",
+          "default": ""
+        },
+        "portableDigest": {
+          "type": "string"
+        },
+        "wouldRenderDigest": {
+          "description": "WouldRenderDigest is the resolved digest the policy would produce for this component if the inline block were removed.",
+          "type": "string"
         }
       }
     },

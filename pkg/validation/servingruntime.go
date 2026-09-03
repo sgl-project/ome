@@ -22,6 +22,37 @@ func ValidateSupportedModelFormats(formats []v1beta1.SupportedModelFormat) error
 	return nil
 }
 
+// ValidateRuntimeAutoscalerPolicyRefs rejects an AutoscalerPolicyRef on any
+// runtime component config. The embedded ComponentExtensionSpec admits the
+// field structurally, but no controller reads it off a runtime — policy refs
+// attach on the InferenceService only — so admitting one here would store
+// dead configuration an operator reasonably expects to act.
+func ValidateRuntimeAutoscalerPolicyRefs(spec *v1beta1.ServingRuntimeSpec) error {
+	if spec == nil {
+		return nil
+	}
+	type componentRef struct {
+		name string
+		ref  *v1beta1.AutoscalerPolicyRef
+	}
+	var refs []componentRef
+	if spec.EngineConfig != nil {
+		refs = append(refs, componentRef{"engineConfig", spec.EngineConfig.AutoscalerPolicyRef})
+	}
+	if spec.DecoderConfig != nil {
+		refs = append(refs, componentRef{"decoderConfig", spec.DecoderConfig.AutoscalerPolicyRef})
+	}
+	if spec.RouterConfig != nil {
+		refs = append(refs, componentRef{"routerConfig", spec.RouterConfig.AutoscalerPolicyRef})
+	}
+	for _, c := range refs {
+		if c.ref != nil {
+			return fmt.Errorf("%s: autoscalerPolicyRef is not supported on serving runtimes; policy refs attach on the InferenceService only", c.name)
+		}
+	}
+	return nil
+}
+
 func ValidateModelFormatPrioritySame(spec *v1beta1.ServingRuntimeSpec) error {
 	nameToPriority := make(map[string]*int32)
 

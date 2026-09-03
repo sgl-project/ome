@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"strings"
 	"testing"
 
 	"k8s.io/utils/ptr"
@@ -114,6 +115,74 @@ func TestValidateModelFormatPrioritySame(t *testing.T) {
 			}
 			if !tc.wantErr && err != nil {
 				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateRuntimeAutoscalerPolicyRefs(t *testing.T) {
+	ref := &v1beta1.AutoscalerPolicyRef{Name: "request-activity-v1"}
+	tests := []struct {
+		name      string
+		spec      *v1beta1.ServingRuntimeSpec
+		wantField string
+	}{
+		{name: "nil spec", spec: nil},
+		{name: "no component configs", spec: &v1beta1.ServingRuntimeSpec{}},
+		{
+			name: "component configs without refs",
+			spec: &v1beta1.ServingRuntimeSpec{
+				EngineConfig:  &v1beta1.EngineSpec{},
+				DecoderConfig: &v1beta1.DecoderSpec{},
+				RouterConfig:  &v1beta1.RouterSpec{},
+			},
+		},
+		{
+			name: "engine config ref rejected",
+			spec: &v1beta1.ServingRuntimeSpec{
+				EngineConfig: &v1beta1.EngineSpec{
+					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{AutoscalerPolicyRef: ref},
+				},
+			},
+			wantField: "engineConfig",
+		},
+		{
+			name: "decoder config ref rejected",
+			spec: &v1beta1.ServingRuntimeSpec{
+				DecoderConfig: &v1beta1.DecoderSpec{
+					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{AutoscalerPolicyRef: ref},
+				},
+			},
+			wantField: "decoderConfig",
+		},
+		{
+			name: "router config ref rejected",
+			spec: &v1beta1.ServingRuntimeSpec{
+				RouterConfig: &v1beta1.RouterSpec{
+					ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{AutoscalerPolicyRef: ref},
+				},
+			},
+			wantField: "routerConfig",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateRuntimeAutoscalerPolicyRefs(tc.spec)
+			if tc.wantField == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantField) {
+				t.Fatalf("error %q does not name field %q", err.Error(), tc.wantField)
+			}
+			if !strings.Contains(err.Error(), "policy refs attach on the InferenceService only") {
+				t.Fatalf("error %q lacks the operator guidance", err.Error())
 			}
 		})
 	}

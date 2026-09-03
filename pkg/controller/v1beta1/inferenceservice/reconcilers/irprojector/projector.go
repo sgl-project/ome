@@ -150,6 +150,16 @@ type Params struct {
 	// non-nil return value.
 	ResolvedAutoscaler *v1beta1.ComponentAutoscaler
 
+	// PreserveAutoscaler is the fail-closed hold for the policy layer: the
+	// component's autoscalerPolicyRef could not render this pass, and
+	// ir.Spec.Autoscaler is the last-known-good store. When true the
+	// projector skips the whole-block replace — without the skip, the
+	// resolver's fallthrough would overwrite the stored block and the
+	// freeze would lose the very state it exists to keep. On IR create
+	// there is no stored block, so a held first reconcile projects nil
+	// (no scaler, never a default HPA).
+	PreserveAutoscaler bool
+
 	// Client is the controller-runtime client used to CreateOrUpdate
 	// the IR. The ISVC controller already holds this.
 	Client client.Client
@@ -421,8 +431,11 @@ func applyDesiredSpec(ir *v1beta1.InferenceReplica, p Params, name string) {
 	// caller mutating the IR cannot corrupt the next reconcile's resolution.
 	// nil ResolvedAutoscaler clears ir.Spec.Autoscaler — defensive against a
 	// dispatch site that doesn't run the resolver (no spurious empty block
-	// lands on the IR).
-	ir.Spec.Autoscaler = p.ResolvedAutoscaler.DeepCopy()
+	// lands on the IR) — unless PreserveAutoscaler holds the stored block as
+	// the policy layer's last-known-good.
+	if !p.PreserveAutoscaler {
+		ir.Spec.Autoscaler = p.ResolvedAutoscaler.DeepCopy()
+	}
 }
 
 // projectionUnchanged reports whether applyDesiredSpec left the fields the
@@ -473,7 +486,16 @@ func projectionUnchanged(old, updated *v1beta1.InferenceReplica) bool {
 // object with an empty ResourceVersion.
 func desiredReplicas(ir *v1beta1.InferenceReplica, p Params) *int32 {
 	creating := ir.ResourceVersion == ""
-	if creating || !isAutoscalerManaged(p.ResolvedAutoscaler) {
+	// On a policy hold the pass parameter is nil while the IR's stored
+	// last-known-good block still drives /scale. Ownership must follow the
+	// block that is actually scaling — deciding from the nil parameter would
+	// stamp MinReplicas every pass and fight the frozen scaler at HPA
+	// cadence, scaling a loaded fleet to min during a policy outage.
+	effective := p.ResolvedAutoscaler
+	if p.PreserveAutoscaler && !creating {
+		effective = ir.Spec.Autoscaler
+	}
+	if creating || !isAutoscalerManaged(effective) {
 		return replicasFromComponentExt(p.ComponentExt)
 	}
 	// Update + autoscaler-managed: preserve the live (autoscaler-written)

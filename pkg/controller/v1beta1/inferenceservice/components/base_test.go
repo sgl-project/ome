@@ -517,7 +517,7 @@ func TestUpdateComponentStatusLeanModel(t *testing.T) {
 				Log:            logr.Discard(),
 			}
 
-			err := UpdateComponentStatus(b, tt.isvc, v1beta1.EngineComponent, metav1.ObjectMeta{})
+			err := UpdateComponentStatus(b, tt.isvc, v1beta1.EngineComponent, metav1.ObjectMeta{}, &v1beta1.ComponentExtensionSpec{})
 			g.Expect(err).NotTo(gomega.HaveOccurred())
 
 			if tt.wantModelStatusUntouched {

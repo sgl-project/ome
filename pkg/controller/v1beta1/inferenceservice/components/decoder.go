@@ -13,7 +13,6 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/common"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/pdb"
@@ -161,11 +160,18 @@ func (d *Decoder) getWorkerSize() int {
 func (d *Decoder) reconcileDeployment(ctx context.Context, isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec, workerSize int, workerPodSpec *v1.PodSpec, pdbRequest pdb.Request) (ctrl.Result, error) {
 	switch d.DeploymentMode {
 	case constants.RawDeployment:
-		resolvedAS, _, err := autoscaler.ResolveRawComponentAutoscaler(d.Runtime, isvc, v1beta1.DecoderComponent, objectMeta.Annotations)
+		rawResolved, err := resolveRawComponentAutoscaling(ctx, &d.BaseComponentFields, isvc, v1beta1.DecoderComponent, &d.decoderSpec.ComponentExtensionSpec, objectMeta.Annotations)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to resolve autoscaler for raw decoder")
 		}
-		return d.deploymentReconciler.ReconcileRawDeployment(ctx, isvc, objectMeta, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent, resolvedAS, pdbRequest)
+		result, err := d.deploymentReconciler.ReconcileRawDeployment(ctx, isvc, objectMeta, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent, rawResolved, pdbRequest)
+		if err != nil {
+			return result, err
+		}
+		// A policy hold recovers via config edits that emit no event, so the
+		// hold carries its own periodic requeue. Smaller-nonzero merge: never
+		// delay a dispatcher poll already scheduled on this result.
+		return mergeRequeueAfter(result, rawResolved.RequeueAfter), nil
 	case constants.MultiNode:
 		return d.deploymentReconciler.ReconcileMultiNodeDeployment(isvc, objectMeta, podSpec, workerSize, workerPodSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	case constants.OMENative:
@@ -176,10 +182,13 @@ func (d *Decoder) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferen
 		// path. See the comment on the engine dispatch for the full design.
 		//
 		// Resolve the authoritative ComponentAutoscaler from the
-		// ISVC → runtime → default chain. See engine dispatch for the
-		// full design — dispatches HPA / KEDA / external / none against
+		// ISVC → policy → runtime → default chain. See engine dispatch for
+		// the full design — dispatches HPA / KEDA / external / none against
 		// the committed IR (autoscaler dispatch is always-on per Component).
-		resolvedAS, _ := autoscaler.ResolveComponentAutoscaler(d.Runtime, isvc, v1beta1.DecoderComponent)
+		res, err := resolveComponentAutoscaling(ctx, &d.BaseComponentFields, isvc, v1beta1.DecoderComponent, &d.decoderSpec.ComponentExtensionSpec)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to resolve autoscaler for decoder")
+		}
 		ir, err := irprojector.EnsureInferenceReplica(ctx, irprojector.Params{
 			ISVC:               isvc,
 			Component:          v1beta1.DecoderComponent,
@@ -192,7 +201,8 @@ func (d *Decoder) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferen
 			TopologyKey:        d.decoderSpec.TopologyKey,
 			TopologySpread:     d.decoderSpec.TopologySpread,
 			TopologySpreadKey:  d.decoderSpec.TopologySpreadKey,
-			ResolvedAutoscaler: resolvedAS,
+			ResolvedAutoscaler: res.Resolved,
+			PreserveAutoscaler: res.Hold,
 			Client:             d.Client,
 			Reader:             d.APIReader,
 		})
@@ -217,16 +227,12 @@ func (d *Decoder) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferen
 		// Autoscaler dispatch is always-on per InferenceReplica.
 		// See engine dispatch for the full owner-ref + scaleTargetRef
 		// rationale.
-		if err := autoscaler.DispatchForIRComponent(ctx, autoscaler.IRDispatchInput{
-			Client:             d.Client,
-			Scheme:             d.Scheme,
-			IR:                 ir,
-			ResolvedAutoscaler: resolvedAS,
-			ComponentExt:       &d.decoderSpec.ComponentExtensionSpec,
-		}); err != nil {
+		if err := dispatchIRAutoscaler(ctx, &d.BaseComponentFields, isvc, ir, &d.decoderSpec.ComponentExtensionSpec, res); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to dispatch autoscaler for decoder")
 		}
-		return ctrl.Result{}, nil
+		// A policy hold recovers via config edits that emit no event; carry
+		// its periodic requeue on the result (smaller-nonzero merge).
+		return mergeRequeueAfter(ctrl.Result{}, res.RequeueAfter), nil
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for decoder")
 	}
@@ -234,7 +240,7 @@ func (d *Decoder) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferen
 
 // updateDecoderStatus updates the status of the decoder
 func (d *Decoder) updateDecoderStatus(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta) error {
-	return UpdateComponentStatus(&d.BaseComponentFields, isvc, v1beta1.DecoderComponent, objectMeta)
+	return UpdateComponentStatus(&d.BaseComponentFields, isvc, v1beta1.DecoderComponent, objectMeta, &d.decoderSpec.ComponentExtensionSpec)
 }
 
 // reconcileObjectMeta creates the object metadata for the decoder

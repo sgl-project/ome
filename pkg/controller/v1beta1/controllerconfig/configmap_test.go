@@ -1015,6 +1015,14 @@ func TestConfigCache(t *testing.T) {
 	})
 }
 
+func TestConfigCacheTTLAccessor(t *testing.T) {
+	assert.Equal(t, 30*time.Second, NewConfigCache(30*time.Second).TTL())
+	assert.Equal(t, time.Duration(0), NewConfigCache(0).TTL())
+
+	var nilCache *ConfigCache
+	assert.Equal(t, time.Duration(0), nilCache.TTL(), "nil cache reads as caching disabled")
+}
+
 // TestConfigCacheSingleflight proves that when many reconciles race into the
 // same TTL expiry, the cache issues exactly ONE apiserver GET (and never holds
 // its lock across that GET). The reactor blocks all in-flight GETs on a gate so

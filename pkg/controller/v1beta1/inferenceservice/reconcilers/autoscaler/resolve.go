@@ -28,6 +28,14 @@ const (
 	// taken from isvc.Spec.<component>.ComponentExtensionSpec.Autoscaler.
 	SpecSourceISVC SpecSource = "isvc"
 
+	// SpecSourcePolicy indicates the resolved ComponentAutoscaler was
+	// rendered from the AutoscalerPolicy referenced by
+	// spec.<component>.autoscalerPolicyRef. Sits below the inline ISVC block
+	// (inline wins — restoring an inline block is an atomic, policy-free
+	// rollback) and above the runtime block (a runtime autoscaler is a
+	// vendor-family default; the policy is a deliberate fleet decision).
+	SpecSourcePolicy SpecSource = "policy"
+
 	// SpecSourceRuntime indicates the resolved ComponentAutoscaler was
 	// taken from runtime.Spec.<componentConfig>.ComponentExtensionSpec.Autoscaler.
 	SpecSourceRuntime SpecSource = "runtime"
@@ -78,13 +86,44 @@ func ResolveComponentAutoscaler(
 	isvc *v1beta1.InferenceService,
 	component v1beta1.ComponentType,
 ) (*v1beta1.ComponentAutoscaler, SpecSource) {
+	resolved, source, _ := ResolveComponentAutoscalerWithPolicy(runtime, isvc, component, nil)
+	return resolved, source
+}
+
+// ResolveComponentAutoscalerWithPolicy extends the chain with the policy
+// layer: inline > policy > runtime > default. policy is the outcome of
+// PolicyResolver.Resolve for this component; nil means no ref.
+//
+// The third return value is the fail-closed hold: the component's ref is set
+// but the policy could not produce a block (missing, invalid, provider
+// unbound). A hold means "keep the last-known-good scaler and raise a
+// condition" — the caller must NOT dispatch the returned nil block, and must
+// NOT let resolution fall through to runtime/default, which would silently
+// swap the scaler class (for a GPU fleet pinned at max by a fail-to-max
+// policy, a default CPU HPA is a scale-to-min during a policy outage).
+// An inline block outranks the ref entirely, hold included: the escape hatch
+// must work precisely when the policy machinery is broken.
+func ResolveComponentAutoscalerWithPolicy(
+	runtime *v1beta1.ServingRuntimeSpec,
+	isvc *v1beta1.InferenceService,
+	component v1beta1.ComponentType,
+	policy *PolicyOutcome,
+) (*v1beta1.ComponentAutoscaler, SpecSource, bool) {
 	if a := isvcAutoscaler(isvc, component); a != nil {
-		return a.DeepCopy(), SpecSourceISVC
+		return a.DeepCopy(), SpecSourceISVC, false
+	}
+	if policy != nil {
+		if policy.Hold {
+			return nil, SpecSourcePolicy, true
+		}
+		if policy.Rendered != nil {
+			return policy.Rendered.DeepCopy(), SpecSourcePolicy, false
+		}
 	}
 	if a := runtimeAutoscaler(runtime, component); a != nil {
-		return a.DeepCopy(), SpecSourceRuntime
+		return a.DeepCopy(), SpecSourceRuntime, false
 	}
-	return defaultAutoscaler(), SpecSourceDefault
+	return defaultAutoscaler(), SpecSourceDefault, false
 }
 
 // ResolveRawComponentAutoscaler applies RawDeployment's compatibility layer
@@ -99,19 +138,36 @@ func ResolveRawComponentAutoscaler(
 	component v1beta1.ComponentType,
 	annotations map[string]string,
 ) (*v1beta1.ComponentAutoscaler, SpecSource, error) {
-	resolved, source := ResolveComponentAutoscaler(runtime, isvc, component)
-	if source != SpecSourceDefault {
-		return resolved, source, nil
-	}
+	resolved, source, _, err := ResolveRawComponentAutoscalerWithPolicy(runtime, isvc, component, annotations, nil)
+	return resolved, source, err
+}
 
+// ResolveRawComponentAutoscalerWithPolicy is the RawDeployment counterpart of
+// ResolveComponentAutoscalerWithPolicy: the shared typed chain (with the
+// policy layer) runs first, and the legacy annotation still substitutes only
+// the default branch — a policy ref outranks the deprecated whole-ISVC hint.
+func ResolveRawComponentAutoscalerWithPolicy(
+	runtime *v1beta1.ServingRuntimeSpec,
+	isvc *v1beta1.InferenceService,
+	component v1beta1.ComponentType,
+	annotations map[string]string,
+	policy *PolicyOutcome,
+) (*v1beta1.ComponentAutoscaler, SpecSource, bool, error) {
+	resolved, source, hold := ResolveComponentAutoscalerWithPolicy(runtime, isvc, component, policy)
+	if hold {
+		return nil, source, true, nil
+	}
+	if source != SpecSourceDefault {
+		return resolved, source, false, nil
+	}
 	legacy, present, err := legacyRawAutoscaler(annotations)
 	if err != nil {
-		return nil, SpecSourceLegacy, err
+		return nil, SpecSourceLegacy, false, err
 	}
 	if !present {
-		return resolved, source, nil
+		return resolved, source, false, nil
 	}
-	return legacy, SpecSourceLegacy, nil
+	return legacy, SpecSourceLegacy, false, nil
 }
 
 // legacyRawAutoscaler translates the supported legacy RawDeployment class

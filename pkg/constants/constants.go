@@ -80,6 +80,9 @@ var (
 	EnableRoutingTagAnnotationKey           = OMEAPIGroupName + "/enable-tag-routing"
 	AutoscalerClass                         = OMEAPIGroupName + "/autoscalerClass"
 	AutoscalerPropagatedMetadataKeys        = OMEAPIGroupName + "/autoscaler-propagated-metadata-keys"
+	AutoscalerPolicyLastRendered            = OMEAPIGroupName + "/last-rendered-autoscaler"
+	AutoscalerPolicyAllowInUseDelete        = OMEAPIGroupName + "/allow-in-use-delete"
+	WorkloadClusterAutoscalerPolicyLabel    = OMEAPIGroupName + "/autoscaler-policy"
 	AutoscalerMetrics                       = OMEAPIGroupName + "/metrics"
 	TargetUtilizationPercentage             = OMEAPIGroupName + "/targetUtilizationPercentage"
 	DeprecationWarning                      = OMEAPIGroupName + "/deprecation-warning"
@@ -530,6 +533,8 @@ const (
 const (
 	VolcanoQueueKind     = "Queue"
 	KEDAScaledObjectKind = "ScaledObject"
+
+	AutoscalerPolicyKind = "AutoscalerPolicy"
 	VolcanoJobKind       = "Job"
 	LWSKind              = "LeaderWorkerSet"
 	GatewayKind          = "Gateway"

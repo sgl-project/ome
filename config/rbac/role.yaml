@@ -160,6 +160,16 @@ rules:
   - patch
   - update
 - apiGroups:
+  - keda.sh
+  resources:
+  - triggerauthentications
+  verbs:
+  - create
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
   - leaderworkerset.x-k8s.io
   resources:
   - leaderworkersets
@@ -254,6 +264,7 @@ rules:
   - ome.io
   resources:
   - acceleratorclasses/status
+  - autoscalerpolicies/status
   - basemodels/status
   - benchmarkjobs/finalizers
   - benchmarkjobs/status
@@ -269,6 +280,14 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - ome.io
+  resources:
+  - autoscalerpolicies
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - policy
   resources:

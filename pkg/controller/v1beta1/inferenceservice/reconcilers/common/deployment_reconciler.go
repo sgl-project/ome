@@ -39,7 +39,7 @@ func (r *DeploymentReconciler) ReconcileRawDeployment(
 	podSpec *v1.PodSpec,
 	componentSpec *v1beta1.ComponentExtensionSpec,
 	componentType v1beta1.ComponentType,
-	resolvedAutoscaler *v1beta1.ComponentAutoscaler,
+	resolved autoscaler.RawResolved,
 	pdbRequest pdb.Request,
 ) (ctrl.Result, error) {
 	// The synthetic Engine spec carries component settings to the Raw
@@ -50,7 +50,17 @@ func (r *DeploymentReconciler) ReconcileRawDeployment(
 		},
 	}
 
-	reconciler, err := raw.NewRawKubeReconciler(r.Client, r.APIReader, r.Clientset, r.Scheme, pdbRequest, objectMeta, inferenceServiceSpec, podSpec, resolvedAutoscaler)
+	// On a policy hold the pass block is nil while the last-known-good
+	// scaler may still be live and writing spec.replicas. The Deployment
+	// builder treats nil as class None (controller-owned count, pinned to
+	// the declared floor), which would fight the frozen scaler — so a hold
+	// hands the builder an External-class marker: an external writer owns
+	// the count, preserve the live value.
+	builderAutoscaler := resolved.Autoscaler
+	if resolved.Hold {
+		builderAutoscaler = &v1beta1.ComponentAutoscaler{Class: v1beta1.AutoscalerExternal}
+	}
+	reconciler, err := raw.NewRawKubeReconciler(r.Client, r.APIReader, r.Clientset, r.Scheme, pdbRequest, objectMeta, inferenceServiceSpec, podSpec, builderAutoscaler)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to create RawKubeReconciler for %s", componentType)
 	}
@@ -68,8 +78,10 @@ func (r *DeploymentReconciler) ReconcileRawDeployment(
 		Scheme:             r.Scheme,
 		ISVC:               isvc,
 		ComponentMeta:      objectMeta,
-		ResolvedAutoscaler: resolvedAutoscaler,
+		ResolvedAutoscaler: resolved.Autoscaler,
 		ComponentExt:       componentSpec,
+		PolicySourced:      resolved.FromPolicy,
+		PolicyHold:         resolved.Hold,
 	}); err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to dispatch autoscaler for raw %s", componentType)
 	}

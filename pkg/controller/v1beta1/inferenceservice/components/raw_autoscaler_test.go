@@ -150,7 +150,7 @@ func TestWriteComponentAutoscalerStatus_RawCompatibilityResolution(t *testing.T)
 			base := &BaseComponentFields{Client: cl, DeploymentMode: constants.RawDeployment}
 			objectMeta := metav1.ObjectMeta{Name: "status-raw-engine", Namespace: "default", Annotations: tt.annotations}
 
-			err := writeComponentAutoscalerStatus(base, isvc, v1beta1.EngineComponent, objectMeta)
+			err := writeComponentAutoscalerStatus(base, isvc, v1beta1.EngineComponent, objectMeta, &v1beta1.ComponentExtensionSpec{})
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
 				return

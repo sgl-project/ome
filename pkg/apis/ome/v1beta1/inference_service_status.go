@@ -555,4 +555,49 @@ type CandidatePlacement struct {
 	// Split.
 	// +optional
 	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+
+	// Autoscaling mirrors this home's AutoscalerPolicy state so digest skew
+	// between homes is visible from the source InferenceService. Set only when
+	// the source references at least one policy.
+	// +optional
+	Autoscaling *CandidateAutoscalingStatus `json:"autoscaling,omitempty"`
+}
+
+// CandidateAutoscalingStatus is the per-home AutoscalerPolicy digest state
+// the watch-funnel lifts off a derived InferenceService.
+type CandidateAutoscalingStatus struct {
+	// Policies reports the portable digest of each policy as observed on this
+	// home. Every entry must match the control plane's copy; a mismatch is
+	// distribution skew.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	Policies []CandidatePolicyDigest `json:"policies,omitempty"`
+
+	// Components maps each policy-consuming component to its per-home
+	// resolved digest ("did my policy edit land here?").
+	// +optional
+	Components map[ComponentType]CandidateComponentAutoscaling `json:"components,omitempty"`
+
+	// Ready is true when every policy-consuming component on this home
+	// reports specSource=policy with a resolved digest.
+	// +optional
+	Ready bool `json:"ready,omitempty"`
+}
+
+// CandidatePolicyDigest pairs a policy name with the portable digest this
+// home observed for it.
+type CandidatePolicyDigest struct {
+	Name string `json:"name"`
+	// +optional
+	PortableDigest string `json:"portableDigest,omitempty"`
+}
+
+// CandidateComponentAutoscaling is one component's rendered-autoscaler state
+// on one home.
+type CandidateComponentAutoscaling struct {
+	// +optional
+	ResolvedDigest string `json:"resolvedDigest,omitempty"`
+	// +optional
+	Ready bool `json:"ready,omitempty"`
 }
