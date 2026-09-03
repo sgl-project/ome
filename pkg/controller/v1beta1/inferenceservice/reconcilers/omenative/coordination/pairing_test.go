@@ -92,7 +92,7 @@ func pairingISVC(protocol string) *v1beta1.InferenceService {
 	if protocol != "" {
 		isvc.Spec.Rollout.PairingProtocol = ptr.To(protocol)
 	}
-	return isvc
+	return pinActiveRun(isvc)
 }
 
 func pairingGate(t *testing.T, isvc *v1beta1.InferenceService, component v1beta1.ComponentType, objs ...client.Object) GateContext {
@@ -111,6 +111,7 @@ func TestCheckPairing_InactivePaths(t *testing.T) {
 	// Engine-only group never pairs.
 	soloISVC := pairingISVC("nixl-v2")
 	soloISVC.Spec.Rollout.Groups[0].Components = []v1beta1.ComponentType{v1beta1.EngineComponent}
+	pinActiveRun(soloISVC) // re-pin: the membership edit must be part of the pinned plan
 	gate = pairingGate(t, soloISVC, v1beta1.EngineComponent)
 	if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
 		t.Errorf("engine-only group: denied (%s)", reason)
@@ -125,6 +126,7 @@ func TestCheckPairing_InactivePaths(t *testing.T) {
 	// Router in a pairing group never constrains the pair.
 	routerISVC := pairingISVC("nixl-v2")
 	routerISVC.Spec.Rollout.Groups[0].Components = append(routerISVC.Spec.Rollout.Groups[0].Components, v1beta1.RouterComponent)
+	pinActiveRun(routerISVC) // re-pin: the membership edit must be part of the pinned plan
 	gate = pairingGate(t, routerISVC, v1beta1.RouterComponent)
 	if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
 		t.Errorf("router step: denied (%s)", reason)

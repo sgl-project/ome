@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 
@@ -259,5 +260,44 @@ func TestRecordDispatch_Completion(t *testing.T) {
 		}
 	default:
 		t.Fatal("expected a completed event")
+	}
+}
+
+// A retargeted-then-rolled-back canary can leave stragglers on an
+// INTERMEDIATE revision (A -> partial B -> retarget C -> rollback): the
+// revert-complete phase must wait for every non-stable revision to drain,
+// because the run closes on RolledBack and the plan gate then holds any
+// remaining reverts with no run left to open.
+func TestReconcileRollback_HoldsForIntermediateStragglers(t *testing.T) {
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "llm-a", Namespace: "ns"},
+		Status: v1beta1.InferenceServiceStatus{
+			Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{},
+		},
+	}
+	cs := &v1beta1.CanaryStatus{
+		StableRevisionHash:     "aaaaaaaa",
+		CanaryRevisionHash:     "cccccccc",
+		RolledBackRevisionHash: "cccccccc",
+	}
+	in := ReconcileInputs{
+		ISVC:      isvc,
+		Component: v1beta1.EngineComponent,
+		// Rejected revision C fully drained, but a straggler from the
+		// partially-rolled intermediate B still serves.
+		PerRevisionPods: map[string]int32{"aaaaaaaa": 2, "bbbbbbbb": 1, "cccccccc": 0},
+	}
+	res := reconcileRollback(in, cs)
+	if !res.RolledBack || isvc.Status.Components[v1beta1.EngineComponent].RolloutPhase != v1beta1.RolloutPhaseRollingBack {
+		t.Fatalf("intermediate straggler must hold RollingBack, got phase %q",
+			isvc.Status.Components[v1beta1.EngineComponent].RolloutPhase)
+	}
+
+	// Straggler reverted: only the stable revision serves — now RolledBack.
+	in.PerRevisionPods = map[string]int32{"aaaaaaaa": 3, "bbbbbbbb": 0, "cccccccc": 0}
+	res = reconcileRollback(in, cs)
+	if !res.RolledBack || isvc.Status.Components[v1beta1.EngineComponent].RolloutPhase != v1beta1.RolloutPhaseRolledBack {
+		t.Fatalf("stable-only pods must complete the rollback, got phase %q",
+			isvc.Status.Components[v1beta1.EngineComponent].RolloutPhase)
 	}
 }

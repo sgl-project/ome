@@ -43,6 +43,15 @@ type CanaryStatus struct {
 	// +optional
 	PromotedThrough string `json:"promotedThrough,omitempty"`
 
+	// PreStepHold holds the canary's traffic at its currently-programmed
+	// weight after a repin whose clamped step would raise exposure: a repin
+	// may only hold or tighten, so the raise waits for an explicit
+	// ome.io/rollout-promote (value = the canary revision hash). Capacity may
+	// still converge to the clamped step — capacity ahead of traffic is the
+	// supported warm-up pattern; only traffic and step advance hold.
+	// +optional
+	PreStepHold bool `json:"preStepHold,omitempty"`
+
 	// RolledBackRevisionHash is set when a rollback (ome.io/rollout-rollback)
 	// abandons a canary: it records the rejected revision hash. While set, the
 	// component is held on the stable revision and the rejected revision is NOT

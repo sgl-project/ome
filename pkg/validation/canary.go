@@ -37,11 +37,14 @@ const ReasonMultipleCanaryGroups = "MultipleCanaryGroups"
 // resolved controller-side, not checked here.
 const ReasonAnalysisInvalid = "AnalysisInvalid"
 
-// ValidateCanary checks the canary progression on every spec.rollout.groups[]
-// entry that has one. Returns nil when no group canaries (nil-safe). The CRD CEL
-// rule enforces the one-of progression (canary may span multiple Components,
-// primary-driven); these are the value-level rules CEL can't express. Each
-// guards a concrete
+// ValidateCanary checks every spec.rollout.groups[] entry whose progression
+// KIND is canary — an inline canary block or a policyRef declaring canary
+// (inline wins when both are set). Returns nil when none (nil-safe). The CRD
+// CEL rule enforces the one-of progression (canary may span multiple
+// Components, primary-driven); these are the value-level rules CEL can't
+// express. The shape rules below apply to every canary-kind group; the plan
+// body is checked only when inline — a referenced body is validated at
+// policy admission and again at run open. Each rule guards a concrete
 // failure:
 //   - Steps non-empty — an empty plan has nothing to execute.
 //   - Every Component in the group is OMENative — other modes wedge at Pending.
@@ -59,7 +62,7 @@ func ValidateCanary(spec *v1beta1.InferenceServiceSpec) error {
 	declared := declaredComponents(spec)
 	canaryGroups := 0
 	for gi := range groups {
-		if groups[gi].Canary != nil {
+		if rolloutGroupKind(&groups[gi]) == v1beta1.RolloutProgressionCanary {
 			canaryGroups++
 		}
 	}
@@ -69,15 +72,13 @@ func ValidateCanary(spec *v1beta1.InferenceServiceSpec) error {
 	}
 	for gi := range groups {
 		g := &groups[gi]
-		if g.Canary == nil {
+		if rolloutGroupKind(g) != v1beta1.RolloutProgressionCanary {
 			continue
 		}
-		c := g.Canary
-		if len(c.Steps) == 0 {
-			return fmt.Errorf("spec.rollout.groups[%d].canary.steps must not be empty (%s)", gi, ReasonCanaryInvalid)
-		}
-		if err := validateCanaryAnalysis(gi, c); err != nil {
-			return err
+		if g.Canary != nil {
+			if err := ValidateCanaryPlan(fmt.Sprintf("spec.rollout.groups[%d].canary", gi), g.Canary); err != nil {
+				return err
+			}
 		}
 		for _, comp := range g.Components {
 			// A canary group's Components must be valid and declared on the ISVC:
@@ -121,38 +122,57 @@ func ValidateCanary(spec *v1beta1.InferenceServiceSpec) error {
 			return fmt.Errorf("spec.rollout.groups[%d]: maintainRatio is not honored on a canary group (the canary engine does not enforce it) — remove it, or use a blueGreen/rollingUpdate group for ratio-guarded rollout (%s)",
 				gi, ReasonCanaryInvalid)
 		}
-		last := c.Steps[len(c.Steps)-1]
-		if last.Traffic != 100 {
-			return fmt.Errorf("spec.rollout.groups[%d].canary final step traffic must be 100, got %d (%s)", gi, last.Traffic, ReasonCanaryInvalid)
+	}
+	return nil
+}
+
+// ValidateCanaryPlan enforces the plan-body rules of one canary progression —
+// the rules that hold independent of the consumer's component shape, so the
+// same function validates an inline group's canary, a RolloutPolicy body, and
+// the composed effective plan at run open. where names the body's field path
+// in errors (e.g. "spec.rollout.groups[2].canary" or, for a policy,
+// "spec.canary").
+func ValidateCanaryPlan(where string, c *v1beta1.GroupCanary) error {
+	if len(c.Steps) == 0 {
+		return fmt.Errorf("%s.steps must not be empty (%s)", where, ReasonCanaryInvalid)
+	}
+	if err := validateCanaryAnalysis(where, c); err != nil {
+		return err
+	}
+	if c.ReadyTimeout != nil && c.ReadyTimeout.Duration <= 0 {
+		return fmt.Errorf("%s.readyTimeout must be > 0 when set (%s)", where, ReasonCanaryInvalid)
+	}
+	last := c.Steps[len(c.Steps)-1]
+	if last.Traffic != 100 {
+		return fmt.Errorf("%s final step traffic must be 100, got %d (%s)", where, last.Traffic, ReasonCanaryInvalid)
+	}
+	var prevWeight int32
+	for i, s := range c.Steps {
+		// Strict capacity parsing: the runtime resolver maps anything it cannot
+		// parse to zero new capacity, so admission must reject every such form
+		// instead of letting a step silently stage nothing.
+		val, isPercent, perr := parseCanaryCapacity(s.Capacity)
+		if perr != nil {
+			return fmt.Errorf("%s.steps[%d].capacity: %v (%s)", where, i, perr, ReasonCanaryInvalid)
 		}
-		var prevWeight int32
-		for i, s := range c.Steps {
-			// Strict capacity parsing: the runtime resolver maps anything it cannot
-			// parse to zero new capacity, so admission must reject every such form
-			// instead of letting a step silently stage nothing.
-			val, isPercent, perr := parseCanaryCapacity(s.Capacity)
-			if perr != nil {
-				return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d].capacity: %v (%s)", gi, i, perr, ReasonCanaryInvalid)
-			}
-			if s.Traffic < 0 || s.Traffic > 100 {
-				return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d].traffic: traffic %d must be in [0,100] (%s)", gi, i, s.Traffic, ReasonCanaryInvalid)
-			}
-			if s.Traffic < prevWeight {
-				return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d].traffic: traffic %d must be >= the previous step's %d (canary weights are non-decreasing) (%s)",
-					gi, i, s.Traffic, prevWeight, ReasonCanaryInvalid)
-			}
-			prevWeight = s.Traffic
-			if s.Traffic > 0 && val == 0 {
-				return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d].capacity: capacity %q resolves to zero new capacity but traffic is %d — a step cannot send traffic to zero capacity (%s)",
-					gi, i, s.Capacity.String(), s.Traffic, ReasonCanaryInvalid)
-			}
-			// Only the percentage form of the final capacity is checkable at
-			// admission (absolute counts need the desired replica count); the done
-			// sentinel also forces partition 0.
-			if i == len(c.Steps)-1 && isPercent && val != 100 {
-				return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d].capacity: final step capacity must be 100%% (rollout completes at full capacity), got %q (%s)",
-					gi, i, s.Capacity.String(), ReasonCanaryInvalid)
-			}
+		if s.Traffic < 0 || s.Traffic > 100 {
+			return fmt.Errorf("%s.steps[%d].traffic: traffic %d must be in [0,100] (%s)", where, i, s.Traffic, ReasonCanaryInvalid)
+		}
+		if s.Traffic < prevWeight {
+			return fmt.Errorf("%s.steps[%d].traffic: traffic %d must be >= the previous step's %d (canary weights are non-decreasing) (%s)",
+				where, i, s.Traffic, prevWeight, ReasonCanaryInvalid)
+		}
+		prevWeight = s.Traffic
+		if s.Traffic > 0 && val == 0 {
+			return fmt.Errorf("%s.steps[%d].capacity: capacity %q resolves to zero new capacity but traffic is %d — a step cannot send traffic to zero capacity (%s)",
+				where, i, s.Capacity.String(), s.Traffic, ReasonCanaryInvalid)
+		}
+		// Only the percentage form of the final capacity is checkable at
+		// admission (absolute counts need the desired replica count); the done
+		// sentinel also forces partition 0.
+		if i == len(c.Steps)-1 && isPercent && val != 100 {
+			return fmt.Errorf("%s.steps[%d].capacity: final step capacity must be 100%% (rollout completes at full capacity), got %q (%s)",
+				where, i, s.Capacity.String(), ReasonCanaryInvalid)
 		}
 	}
 	return nil
@@ -163,25 +183,25 @@ func ValidateCanary(spec *v1beta1.InferenceServiceSpec) error {
 // well-formed metric. The metrics source (GroupCanary.Prometheus) is not checked
 // here — an unreachable source is surfaced controller-side as an inconclusive
 // sample, not an admission error.
-func validateCanaryAnalysis(gi int, c *v1beta1.GroupCanary) error {
+func validateCanaryAnalysis(where string, c *v1beta1.GroupCanary) error {
 	for si := range c.Steps {
 		a := c.Steps[si].Analysis
 		if a == nil {
 			continue
 		}
 		if a.Interval.Duration <= 0 {
-			return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d].analysis: interval must be > 0 (%s)",
-				gi, si, ReasonAnalysisInvalid)
+			return fmt.Errorf("%s.steps[%d].analysis: interval must be > 0 (%s)",
+				where, si, ReasonAnalysisInvalid)
 		}
 		if a.FailureLimit < 1 {
-			return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d].analysis: failureLimit must be >= 1 (%s)",
-				gi, si, ReasonAnalysisInvalid)
+			return fmt.Errorf("%s.steps[%d].analysis: failureLimit must be >= 1 (%s)",
+				where, si, ReasonAnalysisInvalid)
 		}
 		if len(a.Metrics) == 0 {
-			return fmt.Errorf("spec.rollout.groups[%d].canary.steps[%d].analysis: at least one metric is required (%s)",
-				gi, si, ReasonAnalysisInvalid)
+			return fmt.Errorf("%s.steps[%d].analysis: at least one metric is required (%s)",
+				where, si, ReasonAnalysisInvalid)
 		}
-		if err := validateAnalysisMetrics(gi, si, a.Metrics); err != nil {
+		if err := validateAnalysisMetrics(fmt.Sprintf("%s.steps[%d].analysis", where, si), a.Metrics); err != nil {
 			return err
 		}
 	}
@@ -189,10 +209,9 @@ func validateCanaryAnalysis(gi int, c *v1beta1.GroupCanary) error {
 }
 
 // validateAnalysisMetrics checks each metric is well-formed: unique non-empty
-// name, non-empty query, numeric threshold, valid operator. si < 0 addresses the
-// canary-level defaults; si >= 0 a step's effective metrics.
-func validateAnalysisMetrics(gi, si int, metrics []v1beta1.AnalysisMetric) error {
-	where := fmt.Sprintf("spec.rollout.groups[%d].canary.steps[%d].analysis", gi, si)
+// name, non-empty query, numeric threshold, valid operator. where names the
+// enclosing analysis block's field path.
+func validateAnalysisMetrics(where string, metrics []v1beta1.AnalysisMetric) error {
 	seen := make(map[string]struct{}, len(metrics))
 	for mi := range metrics {
 		m := &metrics[mi]

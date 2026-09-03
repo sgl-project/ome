@@ -29,6 +29,14 @@ spec:
         - jsonPath: .spec.runtime.name
           name: Runtime
           type: string
+        - jsonPath: .status.rollout.activeRun.plan.groups[0].source
+          name: Plan-Source
+          priority: 1
+          type: string
+        - jsonPath: .status.conditions[?(@.type=='RolloutPlanDrift')].status
+          name: Plan-Drift
+          priority: 1
+          type: string
         - jsonPath: .metadata.creationTimestamp
           name: Age
           type: date
@@ -26831,9 +26839,22 @@ spec:
                                     additionalProperties:
                                       type: string
                                     type: object
+                                  providerRef:
+                                    properties:
+                                      name:
+                                        minLength: 1
+                                        type: string
+                                    required:
+                                      - name
+                                    type: object
                                   serverAddress:
                                     type: string
                                 type: object
+                                x-kubernetes-validations:
+                                  - message: at most one of providerRef and serverAddress may be set
+                                    rule: '!(has(self.providerRef) && has(self.serverAddress))'
+                              readyTimeout:
+                                type: string
                               scaleDownDelaySeconds:
                                 format: int32
                                 type: integer
@@ -26932,6 +26953,24 @@ spec:
                             maxItems: 3
                             type: array
                             x-kubernetes-list-type: atomic
+                          policyRef:
+                            properties:
+                              kind:
+                                default: RolloutPolicy
+                                type: string
+                              name:
+                                minLength: 1
+                                type: string
+                              progression:
+                                enum:
+                                  - canary
+                                  - blueGreen
+                                  - rollingUpdate
+                                type: string
+                            required:
+                              - name
+                              - progression
+                            type: object
                           rollingUpdate:
                             properties:
                               maxSurge:
@@ -31509,6 +31548,8 @@ spec:
                     observedTrafficWeight:
                       format: int32
                       type: integer
+                    preStepHold:
+                      type: boolean
                     promotedThrough:
                       type: string
                     rolledBackRevisionHash:
@@ -31706,6 +31747,7 @@ spec:
                                   - Budget
                                   - RetryBlock
                                   - Held
+                                  - Plan
                                 type: string
                               reason:
                                 type: string
@@ -32039,6 +32081,41 @@ spec:
                           readyReplicas:
                             format: int32
                             type: integer
+                          rollout:
+                            properties:
+                              activeGroups:
+                                items:
+                                  properties:
+                                    policyName:
+                                      type: string
+                                    portableDigest:
+                                      type: string
+                                    source:
+                                      enum:
+                                        - Inline
+                                        - Policy
+                                      type: string
+                                  required:
+                                    - source
+                                  type: object
+                                type: array
+                                x-kubernetes-list-type: atomic
+                              activeRunID:
+                                type: string
+                              lastRun:
+                                properties:
+                                  digest:
+                                    type: string
+                                  outcome:
+                                    enum:
+                                      - Completed
+                                      - RolledBack
+                                      - Superseded
+                                    type: string
+                                required:
+                                  - outcome
+                                type: object
+                            type: object
                         required:
                           - cluster
                         type: object
@@ -32057,6 +32134,355 @@ spec:
                         - Placed
                         - Failed
                       type: string
+                  type: object
+                rollout:
+                  properties:
+                    activeRun:
+                      properties:
+                        openedAt:
+                          format: date-time
+                          type: string
+                        pinnedAt:
+                          format: date-time
+                          type: string
+                        plan:
+                          properties:
+                            groups:
+                              items:
+                                properties:
+                                  group:
+                                    properties:
+                                      blueGreen:
+                                        type: object
+                                      canary:
+                                        properties:
+                                          prometheus:
+                                            properties:
+                                              authRef:
+                                                properties:
+                                                  key:
+                                                    type: string
+                                                  name:
+                                                    default: ""
+                                                    type: string
+                                                  optional:
+                                                    type: boolean
+                                                required:
+                                                  - key
+                                                type: object
+                                                x-kubernetes-map-type: atomic
+                                              headers:
+                                                additionalProperties:
+                                                  type: string
+                                                type: object
+                                              providerRef:
+                                                properties:
+                                                  name:
+                                                    minLength: 1
+                                                    type: string
+                                                required:
+                                                  - name
+                                                type: object
+                                              serverAddress:
+                                                type: string
+                                            type: object
+                                            x-kubernetes-validations:
+                                              - message: at most one of providerRef and serverAddress may be set
+                                                rule: '!(has(self.providerRef) && has(self.serverAddress))'
+                                          readyTimeout:
+                                            type: string
+                                          scaleDownDelaySeconds:
+                                            format: int32
+                                            type: integer
+                                          steps:
+                                            items:
+                                              properties:
+                                                analysis:
+                                                  properties:
+                                                    failureLimit:
+                                                      format: int32
+                                                      minimum: 1
+                                                      type: integer
+                                                    initialDelay:
+                                                      type: string
+                                                    interval:
+                                                      type: string
+                                                    metrics:
+                                                      items:
+                                                        properties:
+                                                          name:
+                                                            type: string
+                                                          operator:
+                                                            enum:
+                                                              - LT
+                                                              - LTE
+                                                              - GT
+                                                              - GTE
+                                                            type: string
+                                                          query:
+                                                            type: string
+                                                          threshold:
+                                                            type: string
+                                                        required:
+                                                          - name
+                                                          - operator
+                                                          - query
+                                                          - threshold
+                                                        type: object
+                                                      maxItems: 10
+                                                      minItems: 1
+                                                      type: array
+                                                      x-kubernetes-list-map-keys:
+                                                        - name
+                                                      x-kubernetes-list-type: map
+                                                    onInconclusive:
+                                                      enum:
+                                                        - Hold
+                                                        - Rollback
+                                                      type: string
+                                                  required:
+                                                    - failureLimit
+                                                    - interval
+                                                    - metrics
+                                                  type: object
+                                                capacity:
+                                                  anyOf:
+                                                    - type: integer
+                                                    - type: string
+                                                  x-kubernetes-int-or-string: true
+                                                pause:
+                                                  properties:
+                                                    duration:
+                                                      type: string
+                                                  type: object
+                                                traffic:
+                                                  format: int32
+                                                  maximum: 100
+                                                  minimum: 0
+                                                  type: integer
+                                              required:
+                                                - capacity
+                                                - traffic
+                                              type: object
+                                            maxItems: 20
+                                            type: array
+                                            x-kubernetes-list-type: atomic
+                                        type: object
+                                      components:
+                                        items:
+                                          type: string
+                                        maxItems: 3
+                                        minItems: 1
+                                        type: array
+                                        x-kubernetes-list-type: atomic
+                                      maintainRatio:
+                                        properties:
+                                          tolerance:
+                                            format: int32
+                                            maximum: 100
+                                            minimum: 0
+                                            type: integer
+                                        type: object
+                                      order:
+                                        items:
+                                          type: string
+                                        maxItems: 3
+                                        type: array
+                                        x-kubernetes-list-type: atomic
+                                      policyRef:
+                                        properties:
+                                          kind:
+                                            default: RolloutPolicy
+                                            type: string
+                                          name:
+                                            minLength: 1
+                                            type: string
+                                          progression:
+                                            enum:
+                                              - canary
+                                              - blueGreen
+                                              - rollingUpdate
+                                            type: string
+                                        required:
+                                          - name
+                                          - progression
+                                        type: object
+                                      rollingUpdate:
+                                        properties:
+                                          maxSurge:
+                                            anyOf:
+                                              - type: integer
+                                              - type: string
+                                            x-kubernetes-int-or-string: true
+                                          maxUnavailable:
+                                            anyOf:
+                                              - type: integer
+                                              - type: string
+                                            x-kubernetes-int-or-string: true
+                                        type: object
+                                      soak:
+                                        type: string
+                                    required:
+                                      - components
+                                    type: object
+                                    x-kubernetes-validations:
+                                      - message: at most one of canary, blueGreen, or rollingUpdate may be set on a rollout group
+                                        rule: (has(self.canary)?1:0) + (has(self.blueGreen)?1:0) + (has(self.rollingUpdate)?1:0) <= 1
+                                      - message: order must reference only Components listed in this group
+                                        rule: '!has(self.order) || self.order.all(c, c in self.components)'
+                                  policyGeneration:
+                                    format: int64
+                                    type: integer
+                                  policyRef:
+                                    properties:
+                                      kind:
+                                        default: RolloutPolicy
+                                        type: string
+                                      name:
+                                        minLength: 1
+                                        type: string
+                                      progression:
+                                        enum:
+                                          - canary
+                                          - blueGreen
+                                          - rollingUpdate
+                                        type: string
+                                    required:
+                                      - name
+                                      - progression
+                                    type: object
+                                  portableDigest:
+                                    type: string
+                                  source:
+                                    enum:
+                                      - Inline
+                                      - Policy
+                                    type: string
+                                required:
+                                  - group
+                                  - source
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          type: object
+                        runID:
+                          type: string
+                        targetRevisions:
+                          items:
+                            properties:
+                              component:
+                                type: string
+                              revision:
+                                type: string
+                            required:
+                              - component
+                            type: object
+                          type: array
+                          x-kubernetes-list-map-keys:
+                            - component
+                          x-kubernetes-list-type: map
+                      required:
+                        - openedAt
+                        - pinnedAt
+                        - plan
+                        - runID
+                      type: object
+                    groups:
+                      items:
+                        properties:
+                          index:
+                            format: int32
+                            type: integer
+                          observedDigest:
+                            type: string
+                          policyRef:
+                            properties:
+                              kind:
+                                default: RolloutPolicy
+                                type: string
+                              name:
+                                minLength: 1
+                                type: string
+                              progression:
+                                enum:
+                                  - canary
+                                  - blueGreen
+                                  - rollingUpdate
+                                type: string
+                            required:
+                              - name
+                              - progression
+                            type: object
+                          shadowedPolicyRef:
+                            properties:
+                              name:
+                                type: string
+                              wouldPinDigest:
+                                type: string
+                            required:
+                              - name
+                            type: object
+                          source:
+                            enum:
+                              - Inline
+                              - Policy
+                            type: string
+                        required:
+                          - index
+                          - source
+                        type: object
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    lastRun:
+                      properties:
+                        closedAt:
+                          format: date-time
+                          type: string
+                        groups:
+                          items:
+                            properties:
+                              policyRef:
+                                properties:
+                                  kind:
+                                    default: RolloutPolicy
+                                    type: string
+                                  name:
+                                    minLength: 1
+                                    type: string
+                                  progression:
+                                    enum:
+                                      - canary
+                                      - blueGreen
+                                      - rollingUpdate
+                                    type: string
+                                required:
+                                  - name
+                                  - progression
+                                type: object
+                              portableDigest:
+                                type: string
+                              source:
+                                enum:
+                                  - Inline
+                                  - Policy
+                                type: string
+                            required:
+                              - source
+                            type: object
+                          type: array
+                          x-kubernetes-list-type: atomic
+                        openedAt:
+                          format: date-time
+                          type: string
+                        outcome:
+                          enum:
+                            - Completed
+                            - RolledBack
+                            - Superseded
+                          type: string
+                      required:
+                        - outcome
+                      type: object
                   type: object
                 rolloutCoordination:
                   properties:

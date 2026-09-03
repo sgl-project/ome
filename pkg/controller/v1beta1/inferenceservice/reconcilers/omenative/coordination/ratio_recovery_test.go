@@ -254,6 +254,7 @@ func mkZeroServingRatioFixture() *v1beta1.InferenceService {
 	isvc := mkSymmetricRatioFixture(25)
 	maxSurge := intstr.FromInt32(4)
 	isvc.Spec.Rollout.Groups[0].RollingUpdate.MaxSurge = &maxSurge
+	pinActiveRun(isvc) // re-pin: the surge-budget edit must be part of the pinned plan
 	isvc.Status.RolloutCoordination.Groups[0].ObservedRatio.Original = map[v1beta1.ComponentType]int32{
 		v1beta1.EngineComponent:  8,
 		v1beta1.DecoderComponent: 8,
@@ -330,6 +331,7 @@ func TestCheckRatio_CapacityRecoveryRequiresCompletePositiveObservation(t *testi
 	t.Run("missing member IR preserves nil-tolerance pass-through", func(t *testing.T) {
 		isvc := mkZeroServingRatioFixture()
 		isvc.Spec.Rollout.Groups[0].MaintainRatio.Tolerance = nil
+		pinActiveRun(isvc) // re-pin: the tolerance edit must be part of the pinned plan
 		delete(isvc.Status.Components, v1beta1.DecoderComponent)
 		ctx := ResolveGateContext(context.Background(), fakeClientForISVC(isvc), isvc, v1beta1.EngineComponent)
 		if allowed, reason := ctx.CheckRatio(0, 0, +1); !allowed || !strings.Contains(reason, "no ratio tolerance") {

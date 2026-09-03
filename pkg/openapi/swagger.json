@@ -1079,8 +1079,12 @@
             "default": ""
           }
         },
+        "providerRef": {
+          "description": "ProviderRef names a logical metric provider bound per cluster in the operator's metricProviders configuration (shared with AutoscalerPolicy triggers), which supplies the server address, auth secret, and default headers. In a RolloutPolicy body this is the ONLY admitted spelling — a raw cluster-local URL inside a fleet-portable object defeats portability and is an SSRF surface. An unbound name is a deterministic config error: the rollout parks at run open rather than starting a roll whose gate cannot sample.",
+          "$ref": "#/definitions/v1beta1.MetricProviderRef"
+        },
         "serverAddress": {
-          "description": "ServerAddress is the base URL of the Prometheus HTTP API (e.g. http://prometheus.monitoring.svc:9090). Optional: when empty, the operator-configured default source (canaryAnalysis.bundledPrometheusAddress) is used; if that is also unset the analysis has no source and its samples read inconclusive. Admission does not check the source — an unreachable or missing source surfaces controller-side as an inconclusive sample, not a rejection.",
+          "description": "ServerAddress is the base URL of the Prometheus HTTP API (e.g. http://prometheus.monitoring.svc:9090). Optional: when empty (and no ProviderRef is set), the operator-configured default source (canaryAnalysis.bundledPrometheusAddress) is used; if that is also unset the analysis has no source and its samples read inconclusive. Admission does not check the source — an unreachable or missing source surfaces controller-side as an inconclusive sample, not a rejection.",
           "type": "string"
         }
       }
@@ -1644,6 +1648,10 @@
           "format": "int32",
           "default": 0
         },
+        "preStepHold": {
+          "description": "PreStepHold holds the canary's traffic at its currently-programmed weight after a repin whose clamped step would raise exposure: a repin may only hold or tighten, so the raise waits for an explicit ome.io/rollout-promote (value = the canary revision hash). Capacity may still converge to the clamped step — capacity ahead of traffic is the supported warm-up pattern; only traffic and step advance hold.",
+          "type": "boolean"
+        },
         "promotedThrough": {
           "description": "PromotedThrough is the ome.io/rollout-promote value the most recent step advance applied. It is stamped in the same status write as the advance — the durable record of the promotion, since metadata (the annotation) and status cannot be written atomically. While set, a lingering annotation with this value is inert (already applied; removal is retried best-effort). While the rollout is in progress it clears once the annotation is observed removed, re-arming manual promotion for later steps.",
           "type": "string"
@@ -1737,6 +1745,10 @@
           "description": "ReadyReplicas is how many of this home's replicas are serving traffic. In Split it is the weight an external LB uses to split traffic across homes (traffic follows where the replicas actually landed). Zero/unset outside Split.",
           "type": "integer",
           "format": "int32"
+        },
+        "rollout": {
+          "description": "Rollout mirrors this home's rollout-run provenance (run identity plus per-group plan digests, never the plan bodies) so plan drift between homes is visible from the source InferenceService. Set only when the source's rollout groups reference a RolloutPolicy.",
+          "$ref": "#/definitions/v1beta1.CandidateRolloutStatus"
         }
       }
     },
@@ -1750,6 +1762,69 @@
         },
         "portableDigest": {
           "type": "string"
+        }
+      }
+    },
+    "v1beta1.CandidateRolloutGroup": {
+      "description": "CandidateRolloutGroup is one pinned group's provenance as observed on a home.",
+      "type": "object",
+      "required": [
+        "source"
+      ],
+      "properties": {
+        "policyName": {
+          "description": "PolicyName names the RolloutPolicy when Source is Policy.",
+          "type": "string"
+        },
+        "portableDigest": {
+          "description": "PortableDigest is the pinned progression body's portable digest.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Source is where the group's progression came from (Inline or Policy).",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.CandidateRolloutLastRun": {
+      "description": "CandidateRolloutLastRun is the bounded outcome of a home's last closed run.",
+      "type": "object",
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "digest": {
+          "description": "Digest folds the closed run's per-group portable digests into one order-sensitive comparable value.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "Outcome is how the run ended.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.CandidateRolloutStatus": {
+      "description": "CandidateRolloutStatus is the bounded per-home rollout-run state the watch funnel lifts off a derived InferenceService: run identity and per-group provenance digests, never the pinned plan bodies (fleet-drift dashboards compare digests; plan content lives in the policy's git history).",
+      "type": "object",
+      "properties": {
+        "activeGroups": {
+          "description": "ActiveGroups is the active run's per-group provenance in pinned-plan order: which source each group pinned and under which digest.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.CandidateRolloutGroup"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "activeRunID": {
+          "description": "ActiveRunID is the home's open rollout run, empty when none is open.",
+          "type": "string"
+        },
+        "lastRun": {
+          "description": "LastRun is the bounded record of the home's most recently closed run.",
+          "$ref": "#/definitions/v1beta1.CandidateRolloutLastRun"
         }
       }
     },
@@ -3189,6 +3264,10 @@
           "description": "Prometheus is the metrics source (connection) shared by every analysis step in this canary: where to query and how to authenticate. When omitted (or when its serverAddress is empty), the operator-configured default source (canaryAnalysis.bundledPrometheusAddress) is used; if that is also unset the analysis has no source and its samples read inconclusive. It is only the source — WHAT to check is each step's analysis — and it gates nothing by itself.",
           "$ref": "#/definitions/v1beta1.AnalysisPrometheus"
         },
+        "readyTimeout": {
+          "description": "ReadyTimeout bounds how long a step's capacity gate may stay unsatisfied before the canary is marked Failed (stable keeps serving — no traffic has shifted). Unset falls back to the operator-configured default (the rollout block of the operator's ConfigMap); the ome.io/rollout-ready-timeout annotation still overrides both.",
+          "$ref": "#/definitions/v1.Duration"
+        },
         "scaleDownDelaySeconds": {
           "description": "ScaleDownDelaySeconds is the wait between shifting traffic off the old revision and scaling its pods down, to drain in-flight requests.",
           "type": "integer",
@@ -3789,6 +3868,10 @@
         "placement": {
           "description": "Placement reports multi-cluster placement of this ISVC, set by the control-plane fan-out controller. Empty on workload clusters and on single-cluster deployments.",
           "$ref": "#/definitions/v1beta1.PlacementStatus"
+        },
+        "rollout": {
+          "description": "Rollout is the run-model surface: the pinned active-run plan the executors consume, the previous run's bounded record, and the always-current per-group source resolution (including shadowed-policy previews). See rollout_run_types.go.",
+          "$ref": "#/definitions/v1beta1.RolloutStatus"
         },
         "rolloutCoordination": {
           "description": "RolloutCoordination reports per-group cross-Component coordination state for the InferenceService. Populated only when spec.rollout declares blueGreen/rollingUpdate groups (canary groups report under status.canary instead).",
@@ -5841,6 +5924,10 @@
           },
           "x-kubernetes-list-type": "atomic"
         },
+        "policyRef": {
+          "description": "PolicyRef names a same-namespace RolloutPolicy that supplies this group's progression. A sibling of the progression one-of, not an arm of it: the ref may coexist with one inline progression, and the inline block wins (the preview/rollback mechanism) — the shadowed policy's would-pin digest is published in status.rollout.groups[]. A group whose only progression is an unresolvable ref PARKS at run open (fail-closed); it never falls back to the default blueGreen, because silently removing a declared gate is the failure this API exists to prevent.",
+          "$ref": "#/definitions/v1beta1.RolloutPolicyRef"
+        },
         "rollingUpdate": {
           "description": "RollingUpdate replaces pods gradually within the surge/unavailable budget, tolerating mixed revisions during the window. One-of progression.",
           "$ref": "#/definitions/v1beta1.GroupRollingUpdate"
@@ -5848,6 +5935,38 @@
         "soak": {
           "description": "Soak is the wait AFTER this group completes, before the next group begins. It is honored only when the rollout is a sequence of single-Component blueGreen groups (the run that collapses to the internal Sequential state machine); ignored on the last group. Admission rejects a soak the engine would silently drop — on a canary, multi-Component, or rollingUpdate group, or on a rollout that does not collapse to that sequence.",
           "$ref": "#/definitions/v1.Duration"
+        }
+      }
+    },
+    "v1beta1.RolloutGroupResolution": {
+      "description": "RolloutGroupResolution is the always-current resolution view for one spec group: which source would pin now, and the shadowed-policy preview when an inline progression outranks a ref.",
+      "type": "object",
+      "required": [
+        "index",
+        "source"
+      ],
+      "properties": {
+        "index": {
+          "description": "Index is the group's position in spec.rollout.groups[].",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "observedDigest": {
+          "description": "ObservedDigest is the portable digest of the progression body Source resolves to right now (live render — compare against the active run's pinned digest to see drift).",
+          "type": "string"
+        },
+        "policyRef": {
+          "$ref": "#/definitions/v1beta1.RolloutPolicyRef"
+        },
+        "shadowedPolicyRef": {
+          "description": "ShadowedPolicyRef is set when an inline progression outranks a ref: the preview surface an operator diffs before deleting the inline block.",
+          "$ref": "#/definitions/v1beta1.ShadowedRolloutPolicyRef"
+        },
+        "source": {
+          "description": "Source is the source a run opened now would pin for this group.",
+          "type": "string",
+          "default": ""
         }
       }
     },
@@ -5918,6 +6037,286 @@
         }
       }
     },
+    "v1beta1.RolloutPolicy": {
+      "description": "RolloutPolicy is a namespaced, reusable rollout progression consumed by InferenceService rollout groups via RolloutGroup.PolicyRef.",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.RolloutPolicySpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.RolloutPolicyStatus"
+        }
+      }
+    },
+    "v1beta1.RolloutPolicyList": {
+      "description": "RolloutPolicyList contains a list of RolloutPolicy.",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.RolloutPolicy"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.RolloutPolicyRef": {
+      "description": "RolloutPolicyRef names a same-namespace RolloutPolicy that supplies a rollout group's progression. Deliberately a sibling of the inline progression one-of, not an arm of it: a ref and one inline progression may coexist, and the inline block wins — the preview/rollback mechanism.",
+      "type": "object",
+      "required": [
+        "name",
+        "progression"
+      ],
+      "properties": {
+        "kind": {
+          "description": "Kind is reserved: v1 admission accepts only \"RolloutPolicy\"; \"ClusterRolloutPolicy\" is the reserved cluster-scoped twin.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the RolloutPolicy in the InferenceService's namespace.",
+          "type": "string",
+          "default": ""
+        },
+        "progression": {
+          "description": "Progression declares the referenced policy's kind so shape-dependent admission rules evaluate without dereferencing the policy. A mismatch with the policy's actual body parks the rollout at run open (ProgressionMismatch); it cannot mis-execute.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.RolloutPolicySpec": {
+      "description": "RolloutPolicySpec carries exactly one progression body, reusing the spec.rollout group progression types verbatim so a composed plan is a literal RolloutGroup fragment and run-open re-validation can run the same checks ISVC admission runs. Policy-only restrictions (percent-only capacities, providerRef-only metrics source) are admission rules on this kind, not type differences.",
+      "type": "object",
+      "properties": {
+        "blueGreen": {
+          "description": "BlueGreen surges the full new set, then flips traffic atomically. One-of.",
+          "$ref": "#/definitions/v1beta1.GroupBlueGreen"
+        },
+        "canary": {
+          "description": "Canary is a stepped capacity+traffic progression with optional analysis gates. One-of.",
+          "$ref": "#/definitions/v1beta1.GroupCanary"
+        },
+        "rollingUpdate": {
+          "description": "RollingUpdate replaces pods gradually within the surge/unavailable budget. One-of.",
+          "$ref": "#/definitions/v1beta1.GroupRollingUpdate"
+        }
+      }
+    },
+    "v1beta1.RolloutPolicyStatus": {
+      "description": "RolloutPolicyStatus is deliberately bounded: counts and digests, never consumer name lists (a popular policy would otherwise grow status with its fleet).",
+      "type": "object",
+      "properties": {
+        "attachedGroups": {
+          "description": "AttachedGroups counts rollout groups currently referencing this policy across the namespace.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-map-keys": [
+            "type"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "observedGeneration": {
+          "description": "ObservedGeneration is the spec generation this status reflects.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "portableDigest": {
+          "description": "PortableDigest is the hash of the defaulted, canonicalized spec (\"rp1:...\"): equal across clusters iff the specs match, so fleet drift is one field-compare away.",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.RolloutRun": {
+      "description": "RolloutRun is one open rollout run: identity, targets, and the pinned plan.",
+      "type": "object",
+      "required": [
+        "runID",
+        "openedAt",
+        "pinnedAt",
+        "plan"
+      ],
+      "properties": {
+        "openedAt": {
+          "description": "OpenedAt is when the run was pinned.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "pinnedAt": {
+          "description": "PinnedAt advances on every plan pin — the open, and each applied repin. It is the run state's monotonic clock: concurrent status writers keep whichever side is newer, so a reconcile working from a stale cache can never roll a pinned plan back to a predecessor (a repin is one-shot — its verb is consumed — so a rolled-back pin would be unrecoverable, unlike every self-healing status field).",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "plan": {
+          "description": "Plan is the effective groups list, frozen for this run. Executors index it — never the live spec — while the run is open.",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.RolloutRunPlan"
+        },
+        "runID": {
+          "description": "RunID uniquely names this run (stable for its lifetime; a retarget closes the run and opens a new one with a new ID).",
+          "type": "string",
+          "default": ""
+        },
+        "targetRevisions": {
+          "description": "TargetRevisions records, per grouped Component, the revision hash this run is rolling toward. A Component's target changing mid-run is a retarget: the run closes (Superseded) and a fresh run opens with a fresh render.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.RolloutRunTarget"
+          },
+          "x-kubernetes-list-map-keys": [
+            "component"
+          ],
+          "x-kubernetes-list-type": "map"
+        }
+      }
+    },
+    "v1beta1.RolloutRunGroup": {
+      "description": "RolloutRunGroup is one pinned group: the resolved RolloutGroup the executors consume, plus the provenance of where its progression came from.",
+      "type": "object",
+      "required": [
+        "source",
+        "group"
+      ],
+      "properties": {
+        "group": {
+          "description": "Group is the resolved group: components plus exactly one inline progression (a pinned group never carries a PolicyRef — the ref was resolved at pin time).",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.RolloutGroup"
+        },
+        "policyGeneration": {
+          "description": "PolicyGeneration is the referenced policy's generation at pin time.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "policyRef": {
+          "description": "PolicyRef identifies the policy when Source is Policy. On derived ISVCs (multi-cluster inflation) it is recovered from the derive-time provenance annotation so members report the same identity a locally-resolved ref would.",
+          "$ref": "#/definitions/v1beta1.RolloutPolicyRef"
+        },
+        "portableDigest": {
+          "description": "PortableDigest is the pinned policy body's portable digest (\"rp1:...\"), or — for inline groups — the digest of the inline progression body, so drift detection works for both sources.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Source is where this group's progression came from.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.RolloutRunPlan": {
+      "description": "RolloutRunPlan is the frozen effective plan: the resolved groups in their pinned order. Group list-index identity (which keys the coordination engine's sticky state) indexes THIS list for the whole run, so mid-run group reorders in the spec cannot re-key ratio anchors or soak clocks.",
+      "type": "object",
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.RolloutRunGroup"
+          },
+          "x-kubernetes-list-type": "atomic"
+        }
+      }
+    },
+    "v1beta1.RolloutRunProvenance": {
+      "description": "RolloutRunProvenance is the provenance subset of a pinned group, kept after the run closes.",
+      "type": "object",
+      "required": [
+        "source"
+      ],
+      "properties": {
+        "policyRef": {
+          "$ref": "#/definitions/v1beta1.RolloutPolicyRef"
+        },
+        "portableDigest": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.RolloutRunRecord": {
+      "description": "RolloutRunRecord is the bounded record of a closed run.",
+      "type": "object",
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "closedAt": {
+          "$ref": "#/definitions/v1.Time"
+        },
+        "groups": {
+          "description": "Groups carries per-group provenance (groups may reference different policies, so one digest per run would be lossy).",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.RolloutRunProvenance"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "openedAt": {
+          "$ref": "#/definitions/v1.Time"
+        },
+        "outcome": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.RolloutRunTarget": {
+      "description": "RolloutRunTarget is one grouped Component's pinned target revision.",
+      "type": "object",
+      "required": [
+        "component"
+      ],
+      "properties": {
+        "component": {
+          "type": "string",
+          "default": ""
+        },
+        "revision": {
+          "description": "Revision is the Component's target revision hash at run open.",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.RolloutSpec": {
       "description": "RolloutSpec is the single rollout surface for an InferenceService: an ordered list of rollout groups. There is no coordination-vs-canary fork — sequencing is the list order, and canary is one progression a group may choose.",
       "type": "object",
@@ -5934,6 +6333,29 @@
         "pairingProtocol": {
           "description": "PairingProtocol declares the engine↔decoder wire-compatibility contract for prefill-decode pairing (e.g. a KV-transfer protocol generation, such as \"nixl-v2\"). It is an opaque, operator-owned token compared only for equality; bump it ONLY when the engine↔decoder wire contract breaks. The value rides each engine and decoder revision: changing it mints new revisions for both Components (a rollout), stamps ome.io/pairing-protocol on their pods and per-revision Services, and is published on each traffic target so routing pairs only engine and decoder revisions whose values are equal. Empty or unset pairs with anything, so setting or clearing the token is upgrade-neutral. Changing it between two non-empty values requires engine and decoder to roll as one blueGreen or canary group.",
           "type": "string"
+        }
+      }
+    },
+    "v1beta1.RolloutStatus": {
+      "description": "RolloutStatus is the run-model surface under status.rollout: the pinned active run, a bounded record of the previous run, and the always-current per-group resolution view (what WOULD pin now — the preview surface).",
+      "type": "object",
+      "properties": {
+        "activeRun": {
+          "description": "ActiveRun is the pinned plan the executors are consuming. Present iff a run is open.",
+          "$ref": "#/definitions/v1beta1.RolloutRun"
+        },
+        "groups": {
+          "description": "Groups is the always-current resolution view, written every reconcile independent of runs: per group, which source would pin now and — when an inline progression shadows a ref — what the shadowed policy would pin.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.RolloutGroupResolution"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "lastRun": {
+          "description": "LastRun is the bounded record of the most recently closed run (digests and outcome, never the full plan — post-close plan history is the policy's git history).",
+          "$ref": "#/definitions/v1beta1.RolloutRunRecord"
         }
       }
     },
@@ -6947,6 +7369,20 @@
         },
         "wouldRenderDigest": {
           "description": "WouldRenderDigest is the resolved digest the policy would produce for this component if the inline block were removed.",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.ShadowedRolloutPolicyRef": {
+      "description": "ShadowedRolloutPolicyRef reports what an outranked policy ref would pin.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": ""
+        },
+        "wouldPinDigest": {
+          "description": "WouldPinDigest is the portable digest of the policy body that a run would pin if the inline progression were removed.",
           "type": "string"
         }
       }

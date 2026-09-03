@@ -111,7 +111,9 @@ func ValidateCoordinationUpdate(oldSpec, newSpec *v1beta1.InferenceServiceSpec) 
 	groups := newSpec.GetRolloutGroups()
 	for i := range groups {
 		g := &groups[i]
-		if g.RollingUpdate == nil {
+		// Kind-resolved so a group whose rollingUpdate comes from a declared
+		// policyRef obeys the same all-together contract as an inline one.
+		if rolloutGroupKind(g) != v1beta1.RolloutProgressionRollingUpdate {
 			continue
 		}
 		if err := validateRollingUpdateLockstep(oldSpec, newSpec, g.Components); err != nil {
@@ -140,7 +142,9 @@ func ValidatePairingProtocolUpdate(oldSpec, newSpec *v1beta1.InferenceServiceSpe
 		return nil
 	}
 	for _, g := range newSpec.GetRolloutGroups() {
-		if g.RollingUpdate != nil {
+		// Kind-resolved: a declared blueGreen/canary policyRef keeps the pair
+		// atomic exactly like the inline arm would.
+		if kind := rolloutGroupKind(&g); kind != v1beta1.RolloutProgressionBlueGreen && kind != v1beta1.RolloutProgressionCanary {
 			continue
 		}
 		hasEngine, hasDecoder := false, false
@@ -180,11 +184,12 @@ func CoordinationRatioToleranceWarning(spec *v1beta1.InferenceServiceSpec) strin
 
 // validateGroupComponents checks that every coordination-style group references
 // only valid Components and that its surge Order is a duplicate-free subset of
-// its Components. Canary groups are validated by ValidateCanary.
+// its Components. Groups whose kind is canary (inline or ref-declared) are
+// validated by ValidateCanary.
 func validateGroupComponents(groups []v1beta1.RolloutGroup) error {
 	for i := range groups {
 		g := &groups[i]
-		if g.Canary != nil {
+		if rolloutGroupKind(g) == v1beta1.RolloutProgressionCanary {
 			continue
 		}
 		for _, c := range g.Components {
@@ -265,14 +270,15 @@ func validateOrphanGroups(spec *v1beta1.InferenceServiceSpec, groups []v1beta1.R
 }
 
 // validateComponentsAreOMENative requires every Component in a coordination-style
-// group to declare OMENative. Canary groups are checked in ValidateCanary. An
-// undeclared member resolves to an empty mode and fails here too — the orphan
-// check runs first, so its more specific error normally wins.
+// group to declare OMENative. Canary-kind groups (inline or ref-declared) are
+// checked in ValidateCanary. An undeclared member resolves to an empty mode and
+// fails here too — the orphan check runs first, so its more specific error
+// normally wins.
 func validateComponentsAreOMENative(spec *v1beta1.InferenceServiceSpec, groups []v1beta1.RolloutGroup) error {
 	modeFor := omenativeDeploymentModeMap(spec)
 	for i := range groups {
 		g := &groups[i]
-		if g.Canary != nil {
+		if rolloutGroupKind(g) == v1beta1.RolloutProgressionCanary {
 			continue
 		}
 		for _, c := range g.Components {
@@ -415,16 +421,19 @@ func omenativeDeploymentModeMap(spec *v1beta1.InferenceServiceSpec) map[v1beta1.
 // — the only path that honors Soak — exactly when there are 2+ of them and every
 // one is a single-Component blueGreen group (no rollingUpdate). Anything else (a
 // multi-Component group, a rollingUpdate group, or fewer than 2) runs the groups
-// concurrently, where Soak is dropped.
+// concurrently, where Soak is dropped. Kinds are resolved through
+// rolloutGroupKind, so a declared policyRef progression shapes the collapse
+// exactly like its inline equivalent.
 func rolloutCollapsesToSequential(groups []v1beta1.RolloutGroup) bool {
 	n := 0
 	for i := range groups {
 		g := &groups[i]
-		if g.Canary != nil {
+		kind := rolloutGroupKind(g)
+		if kind == v1beta1.RolloutProgressionCanary {
 			continue // canary groups are excluded from the coordination collapse
 		}
 		n++
-		if len(g.Components) != 1 || g.RollingUpdate != nil {
+		if len(g.Components) != 1 || kind != v1beta1.RolloutProgressionBlueGreen {
 			return false
 		}
 	}
@@ -444,7 +453,7 @@ func validateSoakOnlyWhenSequenced(groups []v1beta1.RolloutGroup) error {
 		if g.Soak == nil {
 			continue
 		}
-		if g.Canary != nil {
+		if rolloutGroupKind(g) == v1beta1.RolloutProgressionCanary {
 			return fmt.Errorf("spec.rollout.groups[%d]: soak is not honored on a canary group (the canary engine does not gate on it) (%s)",
 				i, ReasonSoakNotHonored)
 		}
@@ -486,11 +495,12 @@ func ValidateRolloutOrderingEnforced(spec *v1beta1.InferenceServiceSpec) error {
 	}
 	for i := range groups {
 		g := &groups[i]
+		kind := rolloutGroupKind(g)
 		var shape string
 		switch {
-		case g.Canary != nil:
+		case kind == v1beta1.RolloutProgressionCanary:
 			shape = "a canary group"
-		case g.RollingUpdate != nil:
+		case kind == v1beta1.RolloutProgressionRollingUpdate:
 			shape = "a rollingUpdate group"
 		case len(g.Components) != 1:
 			shape = "a multi-Component group"

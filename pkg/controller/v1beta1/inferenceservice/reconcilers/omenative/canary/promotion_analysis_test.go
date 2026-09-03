@@ -167,6 +167,9 @@ func TestEvaluateAnalysisStep(t *testing.T) {
 				CanaryRevisionHash: canaryHash,
 				Now:                now,
 				Sampler:            cnt,
+				// The stall bound is operator-configured; the stall case's 20m
+				// timestamps are written against this value.
+				DefaultReadyTimeout: 15 * time.Minute,
 			}
 			got := evaluateAnalysisStep(context.Background(), in, a, tt.cs, tt.step)
 			if got != tt.wantDec {

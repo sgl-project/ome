@@ -68,6 +68,12 @@ func EvaluateUpdateGate(
 	// four times -- see the coordination.GateContext docs.
 	gateCtx := ResolveGateContextWithDefaults(ctx, reads, isvc, component, defaults)
 
+	// The plan gate precedes every content gate: with no pinned run there is
+	// no validated plan to evaluate the other gates against.
+	if gateCtx.Hold {
+		return false, v1beta1.RolloutHoldGatePlan, gateCtx.HoldReason
+	}
+
 	// Pairing runs first, for EVERY strategy: an in-place update keeps net
 	// capacity flat (which is why CheckRatio bypasses it below) but still
 	// moves the instance across pairing cohorts — the exact transition the

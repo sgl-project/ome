@@ -57,6 +57,19 @@ type InferenceServiceValidator struct {
 	// active translator's SupportedTrafficFields().
 	SupportedTrafficFields []string
 
+	// RolloutPolicyEnabled reports whether the RolloutPolicy CRD is
+	// installed; with it false, any groups[].policyRef is rejected outright —
+	// a ref on a non-feature cluster would otherwise park every rollout with
+	// nothing installed to ever resolve it.
+	RolloutPolicyEnabled bool
+
+	// RolloutMaxPlanBytes caps the serialized size of each inline rollout
+	// progression body (0 = uncapped; the operator config supplies the
+	// value). Inline plans get pinned into status at run open, so both
+	// authoring paths — policy bodies at policy admission, inline bodies
+	// here — are bounded by the same knob.
+	RolloutMaxPlanBytes int
+
 	// AutoscalerPolicyEnabled reports whether the AutoscalerPolicy CRD is
 	// installed and the feature is on. When false, any per-Component
 	// autoscalerPolicyRef is rejected outright — the resolver would hold
@@ -347,6 +360,12 @@ func (v *InferenceServiceValidator) validateInferenceService(ctx context.Context
 	allWarnings = append(allWarnings, trafficWarnings...)
 
 	// spec.rollout.canary: validate the progressive-traffic rollout plan.
+	if err := validation.ValidateRolloutPolicyRefs(&isvc.Spec, v.RolloutPolicyEnabled); err != nil {
+		return allWarnings, err
+	}
+	if err := validation.ValidateInlineRolloutPlanSize(&isvc.Spec, v.RolloutMaxPlanBytes); err != nil {
+		return allWarnings, err
+	}
 	if err := validation.ValidateCanary(&isvc.Spec); err != nil {
 		return allWarnings, err
 	}

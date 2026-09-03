@@ -274,6 +274,7 @@ rules:
   - inferencereplicas/scale
   - inferencereplicas/status
   - inferenceservices/status
+  - rolloutpolicies/status
   - servingruntimes/status
   - workloadclusters/status
   verbs:
@@ -284,6 +285,7 @@ rules:
   - ome.io
   resources:
   - autoscalerpolicies
+  - rolloutpolicies
   verbs:
   - get
   - list

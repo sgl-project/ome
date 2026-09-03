@@ -82,6 +82,13 @@ type InferenceServiceStatus struct {
 	// +optional
 	LastRuntimeSyncToken string `json:"lastRuntimeSyncToken,omitempty"`
 
+	// Rollout is the run-model surface: the pinned active-run plan the
+	// executors consume, the previous run's bounded record, and the
+	// always-current per-group source resolution (including shadowed-policy
+	// previews). See rollout_run_types.go.
+	// +optional
+	Rollout *RolloutStatus `json:"rollout,omitempty"`
+
 	// RolloutCoordination reports per-group cross-Component
 	// coordination state for the InferenceService. Populated only
 	// when spec.rollout declares blueGreen/rollingUpdate groups
@@ -561,6 +568,13 @@ type CandidatePlacement struct {
 	// the source references at least one policy.
 	// +optional
 	Autoscaling *CandidateAutoscalingStatus `json:"autoscaling,omitempty"`
+
+	// Rollout mirrors this home's rollout-run provenance (run identity plus
+	// per-group plan digests, never the plan bodies) so plan drift between
+	// homes is visible from the source InferenceService. Set only when the
+	// source's rollout groups reference a RolloutPolicy.
+	// +optional
+	Rollout *CandidateRolloutStatus `json:"rollout,omitempty"`
 }
 
 // CandidateAutoscalingStatus is the per-home AutoscalerPolicy digest state
@@ -600,4 +614,49 @@ type CandidateComponentAutoscaling struct {
 	ResolvedDigest string `json:"resolvedDigest,omitempty"`
 	// +optional
 	Ready bool `json:"ready,omitempty"`
+}
+
+// CandidateRolloutStatus is the bounded per-home rollout-run state the watch
+// funnel lifts off a derived InferenceService: run identity and per-group
+// provenance digests, never the pinned plan bodies (fleet-drift dashboards
+// compare digests; plan content lives in the policy's git history).
+type CandidateRolloutStatus struct {
+	// ActiveRunID is the home's open rollout run, empty when none is open.
+	// +optional
+	ActiveRunID string `json:"activeRunID,omitempty"`
+
+	// ActiveGroups is the active run's per-group provenance in pinned-plan
+	// order: which source each group pinned and under which digest.
+	// +optional
+	// +listType=atomic
+	ActiveGroups []CandidateRolloutGroup `json:"activeGroups,omitempty"`
+
+	// LastRun is the bounded record of the home's most recently closed run.
+	// +optional
+	LastRun *CandidateRolloutLastRun `json:"lastRun,omitempty"`
+}
+
+// CandidateRolloutGroup is one pinned group's provenance as observed on a home.
+type CandidateRolloutGroup struct {
+	// Source is where the group's progression came from (Inline or Policy).
+	Source RolloutPlanSource `json:"source"`
+
+	// PolicyName names the RolloutPolicy when Source is Policy.
+	// +optional
+	PolicyName string `json:"policyName,omitempty"`
+
+	// PortableDigest is the pinned progression body's portable digest.
+	// +optional
+	PortableDigest string `json:"portableDigest,omitempty"`
+}
+
+// CandidateRolloutLastRun is the bounded outcome of a home's last closed run.
+type CandidateRolloutLastRun struct {
+	// Outcome is how the run ended.
+	Outcome RolloutRunOutcome `json:"outcome"`
+
+	// Digest folds the closed run's per-group portable digests into one
+	// order-sensitive comparable value.
+	// +optional
+	Digest string `json:"digest,omitempty"`
 }

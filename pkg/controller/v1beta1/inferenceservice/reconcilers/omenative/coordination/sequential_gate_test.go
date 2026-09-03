@@ -157,7 +157,7 @@ func mkSequentialFixture(name string, soak time.Duration) *v1beta1.InferenceServ
 		isvc.Spec.Rollout.Groups[0].Soak = &metav1.Duration{Duration: soak}
 	}
 	isvc.Name = name
-	return isvc
+	return pinActiveRun(isvc)
 }
 
 // setComponentRevisions stamps Status.Components[c].Lifecycle with
@@ -255,6 +255,7 @@ func TestCheckSequentialGate_NonSequentialGroupBypasses(t *testing.T) {
 			},
 		},
 	}
+	pinActiveRun(isvc)
 	client := fakeClientForSeqISVC(isvc)
 	allowed, reason := CheckSequentialGate(context.Background(), client, isvc, v1beta1.EngineComponent)
 	if !allowed {
@@ -874,7 +875,7 @@ func mkSequentialFixtureEngineFirst(name string) *v1beta1.InferenceService {
 		},
 	}
 	isvc.Name = name
-	return isvc
+	return pinActiveRun(isvc)
 }
 
 // seqIR builds an InferenceReplica carrying the instance-level status
@@ -1256,6 +1257,7 @@ func TestResolveGateContext_ResolvesGroup(t *testing.T) {
 			},
 		},
 	}
+	pinActiveRun(isvc)
 	ctx := ResolveGateContext(context.Background(), nil, isvc, v1beta1.EngineComponent)
 	if ctx.ShortCircuit {
 		t.Fatalf("resolved group: want ShortCircuit=false, got %+v", ctx)

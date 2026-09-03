@@ -83,6 +83,7 @@ var (
 	AutoscalerPolicyLastRendered            = OMEAPIGroupName + "/last-rendered-autoscaler"
 	AutoscalerPolicyAllowInUseDelete        = OMEAPIGroupName + "/allow-in-use-delete"
 	WorkloadClusterAutoscalerPolicyLabel    = OMEAPIGroupName + "/autoscaler-policy"
+	WorkloadClusterRolloutPolicyLabel       = OMEAPIGroupName + "/rollout-policy"
 	AutoscalerMetrics                       = OMEAPIGroupName + "/metrics"
 	TargetUtilizationPercentage             = OMEAPIGroupName + "/targetUtilizationPercentage"
 	DeprecationWarning                      = OMEAPIGroupName + "/deprecation-warning"
@@ -535,6 +536,7 @@ const (
 	KEDAScaledObjectKind = "ScaledObject"
 
 	AutoscalerPolicyKind = "AutoscalerPolicy"
+	RolloutPolicyKind    = "RolloutPolicy"
 	VolcanoJobKind       = "Job"
 	LWSKind              = "LeaderWorkerSet"
 	GatewayKind          = "Gateway"
