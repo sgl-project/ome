@@ -15,6 +15,28 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload"
 )
 
+// pinRun pins the ISVC's current spec.rollout as its active run: the update
+// gates fail closed for grouped Components without one, so every gate fixture
+// models the production state where the run layer has already pinned.
+func pinRun(isvc *v1beta1.InferenceService) *v1beta1.InferenceService {
+	if isvc.Spec.Rollout == nil {
+		return isvc
+	}
+	groups := make([]v1beta1.RolloutRunGroup, 0, len(isvc.Spec.Rollout.Groups))
+	for i := range isvc.Spec.Rollout.Groups {
+		groups = append(groups, v1beta1.RolloutRunGroup{
+			Source: v1beta1.RolloutPlanSourceInline,
+			Group:  *isvc.Spec.Rollout.Groups[i].DeepCopy(),
+		})
+	}
+	isvc.Status.Rollout = &v1beta1.RolloutStatus{ActiveRun: &v1beta1.RolloutRun{
+		RunID:    "test",
+		OpenedAt: metav1.Now(),
+		Plan:     v1beta1.RolloutRunPlan{Groups: groups},
+	}}
+	return isvc
+}
+
 // mkSequentialParent returns an ISVC named "llama" (the parent every
 // baselineIR points at) declaring a Sequential rollout over [decoder,
 // engine] in that order. In the v2 rollout API Sequential is spelled as a run
@@ -25,7 +47,7 @@ import (
 // vs converged (stamp ≠ 2 ⇒ projection lag, the moment-of-bump signal
 // observeSequentialComponentsForGate keys on).
 func mkSequentialParent() *v1beta1.InferenceService {
-	return &v1beta1.InferenceService{
+	return pinRun(&v1beta1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{Name: "llama", Namespace: "default", Generation: 2},
 		Spec: v1beta1.InferenceServiceSpec{
 			Rollout: &v1beta1.RolloutSpec{
@@ -41,7 +63,7 @@ func mkSequentialParent() *v1beta1.InferenceService {
 				},
 			},
 		},
-	}
+	})
 }
 
 // mkIR creates an InferenceReplica for the given component of parent "llama".
@@ -198,7 +220,7 @@ func TestBuildReconcileInput_WiresMigrationWhenParentSet(t *testing.T) {
 // whatever the caller stamps — modeling the lagged irprojector rollup the
 // gate reads for PEER Components.
 func mkRatioParent(tol int32, engServing, decServing int32) *v1beta1.InferenceService {
-	return &v1beta1.InferenceService{
+	return pinRun(&v1beta1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{Name: "llama", Namespace: "default", Generation: 1},
 		Spec: v1beta1.InferenceServiceSpec{
 			Rollout: &v1beta1.RolloutSpec{
@@ -228,7 +250,7 @@ func mkRatioParent(tol int32, engServing, decServing int32) *v1beta1.InferenceSe
 				v1beta1.DecoderComponent: {Lifecycle: &v1beta1.LifecycleStatus{Replicas: 4, ServingReplicas: decServing}},
 			},
 		},
-	}
+	})
 }
 
 // peerIR returns a sibling IR (e.g. the decoder) with the given fresh
@@ -546,6 +568,7 @@ func TestBuildReconcileInput_GateUsesFreshIRStatus(t *testing.T) {
 			},
 		},
 	}
+	pinRun(parent)
 
 	input := r.buildReconcileInput(context.Background(), engineIR, parent, nil, nil, 0, 0, coordination.GroupDefaults{})
 	g.Expect(input.UpdateGate).NotTo(gomega.BeNil())

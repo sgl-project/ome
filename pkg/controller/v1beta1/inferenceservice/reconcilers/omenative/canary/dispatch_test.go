@@ -490,6 +490,7 @@ func TestDispatch_HoldsUntilIRIdentifiesCanaryTarget(t *testing.T) {
 	isvc.Namespace = ns
 	isvc.Name = "target-lag"
 	isvc.Spec.Engine = &v1beta1.EngineSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: &n4}}
+	pinActiveRun(isvc)
 
 	engineIR := &v1beta1.InferenceReplica{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "target-lag-engine", Generation: 2}}
 	engineIR.Spec.Runners = []v1beta1.Runner{{Name: v1beta1.RunnerNameDefault, Size: 1}}
@@ -577,6 +578,7 @@ func TestDispatch_StalePrimaryRetargetDoesNotResetCanary(t *testing.T) {
 	isvc.Status.Components = map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
 		v1beta1.EngineComponent: {RolloutPhase: v1beta1.RolloutPhasePaused},
 	}
+	pinActiveRun(isvc)
 	engineIR := ir(ns, isvc.Name, v1beta1.EngineComponent, "middle")
 	engineIR.Generation = 2
 	engineIR.Status.ObservedGeneration = 1
@@ -876,6 +878,7 @@ func TestDispatch_ReadyTargetHashResyncsBeforePromotion(t *testing.T) {
 	isvc.Status.Components = map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
 		v1beta1.EngineComponent: {RolloutPhase: v1beta1.RolloutPhasePending},
 	}
+	pinActiveRun(isvc)
 
 	ir := &v1beta1.InferenceReplica{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "ready-target-engine"}}
 	ir.Spec.Runners = []v1beta1.Runner{{Name: v1beta1.RunnerNameDefault, Size: 1}}
@@ -1022,6 +1025,7 @@ func TestDispatch_ServicesHashAndRollbackWarning(t *testing.T) {
 			},
 		},
 	}}}
+	pinActiveRun(isvc)
 	// IR names the canary target (its UpdateRevision) — Dispatch must source the
 	// hash from here, not the (stale) ISVC aggregate.
 	ir := &v1beta1.InferenceReplica{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "d1-engine"}}

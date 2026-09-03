@@ -179,7 +179,7 @@ func consumeSample(in ReconcileInputs, cs *v1beta1.CanaryStatus, step v1beta1.Ro
 	default: // analysis.Inconclusive
 		if a.OnInconclusive != nil && *a.OnInconclusive == v1beta1.OnInconclusiveRollback {
 			dec = decRollback
-		} else if analysisStalled(cs, readyTimeoutOrDefault(in.ISVC), in.Now) {
+		} else if analysisStalled(cs, resolveReadyTimeout(in, effectiveCanaryPlan(in.ISVC)), in.Now) {
 			dec = decFailed
 		}
 	}

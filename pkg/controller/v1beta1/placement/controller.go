@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/client-go/util/workqueue"
 	"knative.dev/pkg/apis"
@@ -173,12 +174,26 @@ type Reconciler struct {
 	// via policyState. Inert for sources without a policy ref.
 	policy     *policyPreflight
 	policyOnce sync.Once
+
+	// Recorder emits placement preflight warnings (e.g. a placed plan whose
+	// manual gate cannot be advanced from the control plane) as Kubernetes
+	// events on the source ISVC. SetupWithManager defaults it from the
+	// manager; nil (a bare-struct Reconciler) skips event emission.
+	Recorder record.EventRecorder
+
+	// rollout is the RolloutPolicy preflight state: the staged condition, the
+	// per-source resolved policies the derive-time inflation consumes, and the
+	// per-(source,home) lifted run provenance. Built lazily via rolloutState;
+	// inert for sources without rollout policy refs.
+	rollout     *rolloutPreflight
+	rolloutOnce sync.Once
 }
 
 // +kubebuilder:rbac:groups=ome.io,resources=inferenceservices,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=ome.io,resources=inferenceservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ome.io,resources=inferenceservices/finalizers,verbs=update
 // +kubebuilder:rbac:groups=ome.io,resources=workloadclusters,verbs=get;list;watch
+// +kubebuilder:rbac:groups=ome.io,resources=rolloutpolicies,verbs=get;list;watch
 
 // Reconcile maps an apiserver optimistic-lock conflict to a clean requeue. The
 // control plane runs several controllers that write the same source
@@ -255,14 +270,31 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		// mirroring the winner-disconnected handling.
 		return ctrl.Result{RequeueAfter: r.requeue()}, nil
 	}
+	if pf != nil && !pf.hold {
+		candidates = pf.eligible
+	}
+
+	// RolloutPolicy preflight: resolve ref-only rollout groups against the
+	// control-plane policy copies (the bodies fan-out inflates into the
+	// derived spec) and gate candidates on the rollout capability label. Runs
+	// on the autoscaler-narrowed candidate set; skipped while the autoscaler
+	// preflight already holds (nothing fans out either way). Nil for the
+	// common rollout-less ISVC.
+	var rf *policyPreflightOutcome
+	if pf == nil || !pf.hold {
+		rf = r.preflightRolloutPolicies(ctx, isvc, candidates, clusters.Items)
+		if rf != nil && rf.holdAsIs {
+			return ctrl.Result{RequeueAfter: r.requeue()}, nil
+		}
+		if rf != nil && !rf.hold {
+			candidates = rf.eligible
+		}
+	}
 
 	var res ctrl.Result
-	if pf != nil && pf.hold {
+	if (pf != nil && pf.hold) || (rf != nil && rf.hold) {
 		res, err = r.writePlacement(ctx, isvc, placementResult{phase: v1beta1.PlacementPhasePending})
 	} else {
-		if pf != nil {
-			candidates = pf.eligible
-		}
 		// Branch on placement mode. Each mode owns its own reconcile: Single keeps one
 		// winner (sticky race + loser sweep); All keeps every home that admits. Split
 		// is not yet implemented — hold Pending rather than silently run it as Single,
@@ -280,7 +312,8 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 			res, err = r.writePlacement(ctx, isvc, placementResult{phase: v1beta1.PlacementPhasePending})
 		}
 	}
-	if err == nil && pf != nil && pf.transient && res.RequeueAfter > r.requeue() {
+	transient := (pf != nil && pf.transient) || (rf != nil && rf.transient)
+	if err == nil && transient && res.RequeueAfter > r.requeue() {
 		// A preflight verdict this pass rests on a transient member or anchor
 		// read error: re-verify at the poll cadence rather than waiting out
 		// the long steady-state backstop.
@@ -1026,6 +1059,7 @@ func (r *Reconciler) getDerived(ctx context.Context, cluster string, isvc *v1bet
 		return nil, false, err
 	}
 	r.observeDerivedPolicyStatus(isvc, cluster, derived)
+	r.observeDerivedRolloutStatus(isvc, cluster, derived)
 	return derived, true, nil
 }
 
@@ -1066,6 +1100,7 @@ func (r *Reconciler) getWinnerDerived(ctx context.Context, cluster string, isvc 
 		return winnerDisconnected, nil, err
 	}
 	r.observeDerivedPolicyStatus(isvc, cluster, derived)
+	r.observeDerivedRolloutStatus(isvc, cluster, derived)
 	return winnerDerivedPresent, derived, nil
 }
 
@@ -1078,16 +1113,35 @@ func (r *Reconciler) getWinnerDerived(ctx context.Context, cluster string, isvc 
 // replacing them wholesale — preserving worker-side reconciler state across the
 // poll-driven re-apply.
 func (r *Reconciler) placeOn(ctx context.Context, cluster string, cl client.Client, src *v1beta1.InferenceService) error {
-	return r.applyDerived(ctx, cluster, cl, src, DeriveISVC(src, r.ControlPlaneID, r.LocalQueue))
+	d, err := r.derivedFor(src)
+	if err != nil {
+		return err
+	}
+	return r.applyDerived(ctx, cluster, cl, src, d)
 }
 
 // placeOnReplicas is placeOn with a Split per-cluster apportioned replica band
 // pinned onto the derived's scalable components before the apply: replicas is
 // this home's share (the floor), maxPer the per-cluster ceiling (0 = uncapped).
 func (r *Reconciler) placeOnReplicas(ctx context.Context, cluster string, cl client.Client, src *v1beta1.InferenceService, replicas, maxPer int32) error {
-	d := DeriveISVC(src, r.ControlPlaneID, r.LocalQueue)
+	d, err := r.derivedFor(src)
+	if err != nil {
+		return err
+	}
 	setDerivedReplicas(d, replicas, maxPer)
 	return r.applyDerived(ctx, cluster, cl, src, d)
+}
+
+// derivedFor builds the derived ISVC for src, inflating ref-only rollout
+// groups from the policies the rollout preflight resolved this pass. A ref
+// with no staged resolution fails the per-cluster apply outright — a derived
+// spec is placed fully inflated or not at all.
+func (r *Reconciler) derivedFor(src *v1beta1.InferenceService) (*v1beta1.InferenceService, error) {
+	d := DeriveISVC(src, r.ControlPlaneID, r.LocalQueue)
+	if err := inflateRolloutGroups(d, r.rolloutState().plansFor(src.UID)); err != nil {
+		return nil, fmt.Errorf("derive %s/%s: %w", src.Namespace, src.Name, err)
+	}
+	return d, nil
 }
 
 // applyDerived create-or-updates the derived ISVC `desired` on the target
@@ -1216,6 +1270,9 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, isvc *v1beta1.Inferenc
 	// Likewise drop the AutoscalerPolicy preflight/skew bookkeeping for this
 	// source (staged condition, home observations, prune counters).
 	r.policyState().forget(isvc.UID)
+	// Likewise the RolloutPolicy preflight bookkeeping (staged condition,
+	// resolved plans, lifted run provenance).
+	r.rolloutState().forget(isvc.UID)
 	// Likewise drop any incremental-dispatcher round state for this source so its
 	// in-memory map does not retain an entry for a now-deleted ISVC.
 	if f, ok := r.nominate().(forgetRoundState); ok {
@@ -1249,9 +1306,13 @@ func (r *Reconciler) derivedRemainingOnConnected(ctx context.Context, isvc *v1be
 // re-read for a missed event, not the former fixed status poll.
 func (r *Reconciler) writePlacement(ctx context.Context, isvc *v1beta1.InferenceService, res placementResult) (ctrl.Result, error) {
 	// For a policy-referencing source, attach the lifted per-home autoscaling
-	// state to the candidates and collect the policy conditions to write in the
-	// same status update. Nil (result untouched) for the common no-ref ISVC.
-	policyConds := r.policyStatusForWrite(isvc, &res)
+	// and rollout state to the candidates and collect the policy conditions to
+	// write in the same status update. Both preflights stage the shared
+	// PlacementPolicyPreflight type; the merge keeps the operative verdict.
+	// Nil (result untouched) for the common no-ref ISVC.
+	policyConds := mergePolicyConditions(
+		r.policyStatusForWrite(isvc, &res),
+		r.rolloutStatusForWrite(isvc, &res))
 	key := client.ObjectKeyFromObject(isvc)
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		cur := &v1beta1.InferenceService{}
@@ -1379,6 +1440,9 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, opts ...ConvergeOption) 
 	r.converge = &cfg
 	if r.policy == nil {
 		r.policy = newPolicyPreflight(loadPolicyPreflightConfig(mgr, r.Log))
+	}
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorderFor(PlacementControllerName)
 	}
 
 	if r.APIReader == nil {

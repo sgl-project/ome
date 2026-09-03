@@ -20,12 +20,6 @@ const reconcileRequeue = 10 * time.Second
 // is no need to tight-poll.
 const failedRequeue = 5 * time.Minute
 
-// defaultReadyTimeout is how long a step's capacity gate may stay unsatisfied
-// before the canary is marked Failed, when the operator hasn't overridden it via
-// constants.RolloutReadyTimeoutAnnotation. Matches that annotation's documented
-// default.
-const defaultReadyTimeout = 15 * time.Minute
-
 // ReconcileInputs is the subset of state the canary executor needs. It mirrors
 // coordination.ReconcileInputs. DesiredReplicas and ReadyCanaryInstances are
 // Instance counts; PerRevisionPods supplies ready serving Pod counts and the
@@ -74,6 +68,17 @@ type ReconcileInputs struct {
 	BundledPrometheusAddress string
 	// QueryTimeout bounds one background sampling pass (controllerconfig canaryAnalysis).
 	QueryTimeout time.Duration
+	// RunActive is whether a rollout run is pinned for this ISVC. Without one
+	// the executor is maintenance-only: it services the terminal holds (done
+	// sentinel, rolled-back, failed) but never initializes a new canary or
+	// re-arms toward a new target — opening a run is the run layer's job, and
+	// starting a canary outside a pinned run would execute an unpinned plan.
+	RunActive bool
+	// DefaultReadyTimeout is the operator-configured capacity-gate bound used
+	// when neither the ready-timeout annotation nor the plan's readyTimeout
+	// sets one. Zero means no configured default: the gate never escalates to
+	// Failed on capacity wait alone.
+	DefaultReadyTimeout time.Duration
 }
 
 // The ready Pod count bounds the exact ready Instance count and remains the
@@ -120,7 +125,7 @@ type Result struct {
 // performs capacity → traffic → pause, advancing on promotion; the final step
 // (TrafficWeight 100) drains and scales the stable revision down.
 func Reconcile(ctx context.Context, in ReconcileInputs) (*Result, error) {
-	g := in.ISVC.Spec.GetCanaryGroup()
+	g := v1beta1.EffectiveCanaryGroup(in.ISVC)
 	if g == nil || g.Canary == nil || len(g.Canary.Steps) == 0 {
 		return &Result{Active: false}, nil
 	}
@@ -158,7 +163,11 @@ func Reconcile(ctx context.Context, in ReconcileInputs) (*Result, error) {
 		if cs.StableRevisionHash == "" && in.StableRevisionHash != "" {
 			cs.StableRevisionHash = in.StableRevisionHash
 		}
-		if in.CanaryRevisionHash != "" && in.CanaryRevisionHash != cs.CanaryRevisionHash {
+		// Retargets re-arm only under a pinned run: the run layer closes and
+		// reopens the run on a target change in the same pass, so RunActive
+		// here means the fresh run is already pinned. Without one, hold state
+		// as-is rather than start a fresh canary on an unpinned plan.
+		if in.RunActive && in.CanaryRevisionHash != "" && in.CanaryRevisionHash != cs.CanaryRevisionHash {
 			resetCanaryStatus(cs, in.CanaryRevisionHash, in.Now)
 		}
 	}
@@ -178,7 +187,7 @@ func Reconcile(ctx context.Context, in ReconcileInputs) (*Result, error) {
 			// revision we're holding on, not a new target. Exclude both the stable
 			// revision and the rejected revision itself.
 			stableHash := stableHashFor(cs, in.PerRevisionPods, cs.RolledBackRevisionHash)
-			if in.CanaryRevisionHash != "" && in.CanaryRevisionHash != cs.RolledBackRevisionHash && in.CanaryRevisionHash != stableHash {
+			if in.RunActive && in.CanaryRevisionHash != "" && in.CanaryRevisionHash != cs.RolledBackRevisionHash && in.CanaryRevisionHash != stableHash {
 				if err := consumeAnnotation(ctx, in.Client, in.ISVC, constants.RolloutRollbackAnnotation); err != nil {
 					return nil, err
 				}
@@ -206,7 +215,7 @@ func Reconcile(ctx context.Context, in ReconcileInputs) (*Result, error) {
 	// (the observed target reports stable while no canary pods remain).
 	if cs != nil && in.ISVC.Status.Components[in.Component].RolloutPhase == v1beta1.RolloutPhaseFailed {
 		stableHash := stableHashFor(cs, in.PerRevisionPods, cs.CanaryRevisionHash)
-		if in.CanaryRevisionHash != "" && in.CanaryRevisionHash != cs.CanaryRevisionHash && in.CanaryRevisionHash != stableHash {
+		if in.RunActive && in.CanaryRevisionHash != "" && in.CanaryRevisionHash != cs.CanaryRevisionHash && in.CanaryRevisionHash != stableHash {
 			resetCanaryStatus(cs, in.CanaryRevisionHash, in.Now)
 			// fall through: start a fresh canary toward the new target.
 		} else {
@@ -221,7 +230,7 @@ func Reconcile(ctx context.Context, in ReconcileInputs) (*Result, error) {
 	// back on the old revision after completion. No-op unless a new target
 	// appears, in which case start a fresh canary.
 	if cs != nil && int(cs.CurrentStep) >= len(plan.Steps) {
-		if in.CanaryRevisionHash != "" && in.CanaryRevisionHash != cs.CanaryRevisionHash {
+		if in.RunActive && in.CanaryRevisionHash != "" && in.CanaryRevisionHash != cs.CanaryRevisionHash {
 			resetCanaryStatus(cs, in.CanaryRevisionHash, in.Now)
 		} else {
 			// This return skips the main-path syncPromotedThrough, so converge any
@@ -243,6 +252,13 @@ func Reconcile(ctx context.Context, in ReconcileInputs) (*Result, error) {
 			if in.CanaryRevisionHash != "" && in.DesiredReplicas > 0 {
 				setPhase(in.ISVC, in.Component, v1beta1.RolloutPhaseStable)
 			}
+			return &Result{Active: false}, nil
+		}
+		// A diverged target with no pinned run: hold as-is. The run layer
+		// opens (or parks) the run; starting the step machine here would
+		// execute an unpinned plan, and the update gates are already holding
+		// the forward roll fail-closed.
+		if !in.RunActive {
 			return &Result{Active: false}, nil
 		}
 		in.ISVC.Status.Canary = &v1beta1.CanaryStatus{
@@ -287,12 +303,29 @@ func Reconcile(ctx context.Context, in ReconcileInputs) (*Result, error) {
 		if in.ISVC.Status.Components[in.Component].RolloutPhase != v1beta1.RolloutPhasePending {
 			cs.StepEnteredTime = &metav1.Time{Time: in.Now}
 		}
-		if capacityGateExpired(cs, readyTimeoutOrDefault(in.ISVC), in.Now) {
+		if capacityGateExpired(cs, resolveReadyTimeout(in, plan), in.Now) {
 			setPhase(in.ISVC, in.Component, v1beta1.RolloutPhaseFailed)
 			return &Result{Active: true, Partition: partition, RequeueAfter: failedRequeue}, nil
 		}
 		setPhase(in.ISVC, in.Component, v1beta1.RolloutPhasePending)
 		return &Result{Active: true, Partition: partition, RequeueAfter: reconcileRequeue}, nil
+	}
+
+	// Pre-step hold (repin clamp): the pinned plan was replaced mid-run and
+	// the clamped step would raise exposure, so the traffic raise waits for
+	// an explicit promote (value = canary hash). Capacity above already
+	// converged toward the clamped step — capacity ahead of traffic is the
+	// supported warm-up pattern; exposure is the traffic write below.
+	if cs.PreStepHold {
+		if in.ISVC.Annotations[constants.RolloutPromoteAnnotation] == cs.CanaryRevisionHash {
+			if err := consumeAnnotation(ctx, in.Client, in.ISVC, constants.RolloutPromoteAnnotation); err != nil {
+				return nil, err
+			}
+			cs.PreStepHold = false
+		} else {
+			setPhase(in.ISVC, in.Component, v1beta1.RolloutPhasePaused)
+			return &Result{Active: true, Partition: partition, RequeueAfter: reconcileRequeue}, nil
+		}
 	}
 
 	// Capacity satisfied: program this step's external traffic weight.
@@ -449,7 +482,24 @@ func reconcileRollback(in ReconcileInputs, cs *v1beta1.CanaryStatus) *Result {
 		stableProtocol = in.StablePairingProtocol
 	}
 	applyTraffic(in.ISVC, in.Component, cs.RolledBackRevisionHash, stableHash, "", stableProtocol, 0)
-	if in.PerRevisionPods[cs.RolledBackRevisionHash] > 0 {
+	// RolledBack is the revert-COMPLETE phase, so it must wait out every
+	// non-stable revision — not just the rejected one. A retargeted canary
+	// (A -> partial B -> retarget C -> rollback) leaves stragglers on the
+	// intermediate revision B; declaring RolledBack while they serve would
+	// end the run under them, and the plan gate then holds their reverts
+	// with no run to open (the rejected target is excluded from run-open
+	// divergence by design). With no stable identity to compare against,
+	// degrade to the rejected-revision check rather than never completing.
+	rollingBack := in.PerRevisionPods[cs.RolledBackRevisionHash] > 0
+	if stableHash != "" {
+		for h, n := range in.PerRevisionPods {
+			if h != "" && h != stableHash && n > 0 {
+				rollingBack = true
+				break
+			}
+		}
+	}
+	if rollingBack {
 		setPhase(in.ISVC, in.Component, v1beta1.RolloutPhaseRollingBack)
 		return &Result{Active: true, RolledBack: true, RequeueAfter: reconcileRequeue}
 	}
@@ -470,17 +520,31 @@ func drainElapsed(cs *v1beta1.CanaryStatus, plan *v1beta1.GroupCanary, now time.
 	return !now.Before(deadline)
 }
 
-// readyTimeoutOrDefault is how long a step's capacity gate may stay unsatisfied
-// before the canary is marked Failed. Operators override via
-// constants.RolloutReadyTimeoutAnnotation; a missing/malformed value falls back
-// to defaultReadyTimeout (admission already rejects malformed values).
-func readyTimeoutOrDefault(isvc *v1beta1.InferenceService) time.Duration {
-	if v, ok := isvc.Annotations[constants.RolloutReadyTimeoutAnnotation]; ok {
+// resolveReadyTimeout is how long a step's capacity gate may stay unsatisfied
+// before the canary is marked Failed: the ready-timeout annotation wins, then
+// the plan's readyTimeout, then the operator-configured default. Zero (nothing
+// configured anywhere) disables the escalation — the value is deliberately
+// config-driven with no in-code literal.
+func resolveReadyTimeout(in ReconcileInputs, plan *v1beta1.GroupCanary) time.Duration {
+	if v, ok := in.ISVC.Annotations[constants.RolloutReadyTimeoutAnnotation]; ok {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			return d
 		}
 	}
-	return defaultReadyTimeout
+	if plan != nil && plan.ReadyTimeout != nil && plan.ReadyTimeout.Duration > 0 {
+		return plan.ReadyTimeout.Duration
+	}
+	return in.DefaultReadyTimeout
+}
+
+// effectiveCanaryPlan is the effective canary body for callers that hold only
+// ReconcileInputs (the plan indexing itself stays in Reconcile).
+func effectiveCanaryPlan(isvc *v1beta1.InferenceService) *v1beta1.GroupCanary {
+	g := v1beta1.EffectiveCanaryGroup(isvc)
+	if g == nil {
+		return nil
+	}
+	return g.Canary
 }
 
 // capacityGateExpired reports whether the current step has waited on capacity

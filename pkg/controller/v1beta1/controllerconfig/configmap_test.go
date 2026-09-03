@@ -872,6 +872,33 @@ func TestCanaryAnalysisDurationAccessors(t *testing.T) {
 	}
 }
 
+// TestCanaryAnalysisDefaultProvider verifies defaultProvider parses from the
+// canaryAnalysis block and has no in-code default: empty keeps the
+// BundledPrometheusAddress fallback behavior, and setting it does not disturb
+// the sampler-tunable fallbacks.
+func TestCanaryAnalysisDefaultProvider(t *testing.T) {
+	t.Run("absent stays empty", func(t *testing.T) {
+		cfg, err := parseCanaryAnalysisConfig(&v1.ConfigMap{Data: map[string]string{
+			CanaryAnalysisConfigName: `{"bundledPrometheusAddress": "http://prometheus.monitoring.svc:9090"}`,
+		}})
+		require.NoError(t, err)
+		assert.Empty(t, cfg.DefaultProvider)
+		assert.Equal(t, "http://prometheus.monitoring.svc:9090", cfg.BundledPrometheusAddress)
+	})
+
+	t.Run("set names a provider binding", func(t *testing.T) {
+		cfg, err := parseCanaryAnalysisConfig(&v1.ConfigMap{Data: map[string]string{
+			CanaryAnalysisConfigName: `{"defaultProvider": "cluster-prometheus"}`,
+		}})
+		require.NoError(t, err)
+		assert.Equal(t, "cluster-prometheus", cfg.DefaultProvider)
+		// Sampler-tunable fallbacks are unaffected.
+		assert.Equal(t, DefaultAnalysisQueryTimeout, cfg.QueryTimeout)
+		assert.Equal(t, DefaultAnalysisCacheTTL, cfg.CacheTTL)
+		assert.Equal(t, int32(DefaultAnalysisMaxConcurrency), cfg.MaxConcurrency)
+	})
+}
+
 // countingClientset returns a fake clientset plus an atomic counter that is
 // incremented on every GET against the inferenceservice-config ConfigMap, so a
 // test can assert exactly how many apiserver round-trips a ConfigCache issues.

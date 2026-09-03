@@ -42,9 +42,11 @@ var (
 	// manually-authored resource.
 	ManagedByConflictAckedAnnotation = OMEAPIGroupName + "/managed-by-conflict-acked"
 
-	// RolloutReadyTimeoutAnnotation overrides the default timeout for
-	// new-revision pods to reach Ready before the rollout is marked
-	// Failed. Duration string (e.g. "15m"). Default: 15m.
+	// RolloutReadyTimeoutAnnotation overrides the timeout for new-revision
+	// pods to reach Ready before the rollout is marked Failed. Duration
+	// string (e.g. "15m"). Wins over the plan's readyTimeout and the
+	// operator-configured default (rollout.defaultReadyTimeout); when none of
+	// the three is set the gate never escalates on capacity wait alone.
 	RolloutReadyTimeoutAnnotation = OMEAPIGroupName + "/rollout-ready-timeout"
 
 	// RevisionHistoryLimitAnnotation caps the number of non-live
@@ -91,6 +93,27 @@ var (
 	// PausedRolloutFreezeValue is the PausedRolloutAnnotation value that
 	// additionally suspends Instance repair.
 	PausedRolloutFreezeValue = "freeze"
+
+	// RolloutRepinAnnotation is the one-shot operator verb that replaces an
+	// active run's pinned plan with a fresh render of the current effective
+	// source, preserving run identity and progress. Value: the expected
+	// render digest (CAS — the repin is rejected when the current render no
+	// longer matches, guarding against a racing edit); the literal "now"
+	// skips the digest check. A repin may only hold or tighten: the step
+	// index clamps into the new ladder, and a clamped step that would raise
+	// exposure is not applied — the run holds at the currently-programmed
+	// capacity/traffic pending an explicit promote. The controller clears
+	// the annotation after consuming it.
+	RolloutRepinAnnotation = OMEAPIGroupName + "/rollout-repin"
+
+	// RolloutPlanSourceAnnotation carries per-group policy provenance on a
+	// DERIVED InferenceService whose rollout groups were inflated from
+	// RolloutPolicy refs at derive time. Members copy it into the pinned
+	// run's group provenance at run open, so member status reports the same
+	// identity a locally-resolved ref would. Value: semicolon-separated
+	// "<groupIndex>=<policyName>@<portableDigest>" entries. System-authored
+	// (derived objects only) — never set by users.
+	RolloutPlanSourceAnnotation = OMEAPIGroupName + "/rollout-plan-source"
 )
 
 // RolloutPauseState interprets PausedRolloutAnnotation on the given

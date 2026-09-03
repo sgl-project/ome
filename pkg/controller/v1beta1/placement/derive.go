@@ -1,11 +1,15 @@
 package placement
 
 import (
+	"fmt"
+	"strings"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/rolloutpolicy"
 )
 
 // DeriveISVC builds a derived InferenceService from a control-plane source
@@ -78,6 +82,72 @@ func DeriveISVC(src *v1beta1.InferenceService, controlPlaneID, localQueue string
 	}
 
 	return d
+}
+
+// inflateRolloutGroups rewrites every ref-carrying rollout group on a derived
+// ISVC into its rendered inline form, so members receive plain inline groups
+// and need no RolloutPolicy objects, informers, or sync pipeline:
+//   - a ref-only group gets the referenced policy's progression body written
+//     inline (rolloutpolicy.ComposeGroup), the ref cleared, and a provenance
+//     entry recorded in the plan-source annotation
+//     ("<groupIndex>=<policyName>@<portableDigest>", semicolon-separated) so
+//     the member's run open reports the same identity a locally-resolved ref
+//     would;
+//   - a group with an inline arm keeps its inline body verbatim (inline
+//     outranks the ref) with the ref cleared, and gets NO provenance entry;
+//   - a group with no ref is left completely untouched.
+//
+// policies maps policy name to the body+digest the preflight resolved. A
+// ref-only group whose policy is not staged is an error, never a partial
+// write: the caller must fail the derive rather than place a half-inflated
+// spec (a member would silently execute the default progression where a gate
+// was declared). d is the already-deep-copied derived object; the plan-source
+// annotation was stripped by DeriveISVC, so what this writes is the only value.
+func inflateRolloutGroups(d *v1beta1.InferenceService, policies map[string]resolvedRolloutPolicy) error {
+	if d.Spec.Rollout == nil {
+		return nil
+	}
+	var provenance []string
+	for i := range d.Spec.Rollout.Groups {
+		g := &d.Spec.Rollout.Groups[i]
+		if g.PolicyRef == nil {
+			continue
+		}
+		if hasInlineProgression(g) {
+			// Inline outranks the ref: the body derives verbatim and only the
+			// (member-unresolvable) ref is dropped.
+			composed, err := rolloutpolicy.ComposeGroup(g, nil)
+			if err != nil {
+				return fmt.Errorf("rollout group %d: %w", i, err)
+			}
+			d.Spec.Rollout.Groups[i] = composed
+			continue
+		}
+		name := g.PolicyRef.Name
+		pol, ok := policies[name]
+		if !ok || pol.spec == nil {
+			return fmt.Errorf("rollout group %d references RolloutPolicy %q with no resolved body staged; refusing to derive a half-inflated spec", i, name)
+		}
+		composed, err := rolloutpolicy.ComposeGroup(g, pol.spec)
+		if err != nil {
+			return fmt.Errorf("rollout group %d: %w", i, err)
+		}
+		d.Spec.Rollout.Groups[i] = composed
+		provenance = append(provenance, fmt.Sprintf("%d=%s@%s", i, name, pol.digest))
+	}
+	if len(provenance) > 0 {
+		if d.Annotations == nil {
+			d.Annotations = make(map[string]string, 1)
+		}
+		d.Annotations[constants.RolloutPlanSourceAnnotation] = strings.Join(provenance, ";")
+	}
+	return nil
+}
+
+// hasInlineProgression reports whether the group carries an inline progression
+// arm (which then outranks a coexisting PolicyRef).
+func hasInlineProgression(g *v1beta1.RolloutGroup) bool {
+	return g.Canary != nil || g.BlueGreen != nil || g.RollingUpdate != nil
 }
 
 // setDerivedReplicas pins Split's apportioned replica band on a derived ISVC's

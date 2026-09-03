@@ -28,6 +28,14 @@ spec:
     - jsonPath: .spec.runtime.name
       name: Runtime
       type: string
+    - jsonPath: .status.rollout.activeRun.plan.groups[0].source
+      name: Plan-Source
+      priority: 1
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='RolloutPlanDrift')].status
+      name: Plan-Drift
+      priority: 1
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date

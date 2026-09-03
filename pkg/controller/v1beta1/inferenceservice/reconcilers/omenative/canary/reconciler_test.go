@@ -44,6 +44,30 @@ func twoStep() []v1beta1.RolloutGroupStep {
 	}
 }
 
+// pinActiveRun pins the ISVC's current spec.rollout as its active rollout run
+// (the state the run layer produces at run open), so Dispatch derives
+// RunActive=true and EffectiveCanaryGroup reads the pinned plan. A pinned plan
+// is inert to later spec edits — re-pin after mutating spec.rollout when the
+// edit should take effect.
+func pinActiveRun(isvc *v1beta1.InferenceService) *v1beta1.InferenceService {
+	if isvc == nil || isvc.Spec.Rollout == nil {
+		return isvc
+	}
+	groups := make([]v1beta1.RolloutRunGroup, 0, len(isvc.Spec.Rollout.Groups))
+	for i := range isvc.Spec.Rollout.Groups {
+		groups = append(groups, v1beta1.RolloutRunGroup{
+			Source: v1beta1.RolloutPlanSourceInline,
+			Group:  *isvc.Spec.Rollout.Groups[i].DeepCopy(),
+		})
+	}
+	isvc.Status.Rollout = &v1beta1.RolloutStatus{ActiveRun: &v1beta1.RolloutRun{
+		RunID:    "test",
+		OpenedAt: metav1.Now(),
+		Plan:     v1beta1.RolloutRunPlan{Groups: groups},
+	}}
+	return isvc
+}
+
 func phaseOf(isvc *v1beta1.InferenceService) v1beta1.RolloutPhase {
 	return isvc.Status.Components[v1beta1.EngineComponent].RolloutPhase
 }
@@ -58,6 +82,12 @@ func baseInputs(isvc *v1beta1.InferenceService, pods map[string]int32) Reconcile
 		PerRevisionPods:        pods,
 		SecondaryCapacityReady: true, // single-component tests have no secondaries
 		Now:                    time.Unix(1000, 0),
+		// A pinned run licenses initialization / re-arm; these tests exercise
+		// the step machine, not the run layer.
+		RunActive: true,
+		// The capacity-gate escalation bound is operator-configured; tests pick
+		// the value the assertions are written against.
+		DefaultReadyTimeout: 15 * time.Minute,
 	}
 }
 
@@ -683,9 +713,9 @@ func TestReconcile_PromoteSurvivesLostStatusWrite(t *testing.T) {
 	replay := canaryISVC(threeStep(), nil)
 	replay.Namespace = "ns"
 	replay.Annotations = stored.Annotations
-	replayIn := baseInputs(replay, map[string]int32{"new": 2, "old": 2})
-	replayIn.Client = c
-	if _, err := Reconcile(context.Background(), replayIn); err != nil {
+	runIn := baseInputs(replay, map[string]int32{"new": 2, "old": 2})
+	runIn.Client = c
+	if _, err := Reconcile(context.Background(), runIn); err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	if replay.Status.Canary == nil || replay.Status.Canary.CurrentStep != 1 {
@@ -1501,5 +1531,151 @@ func TestReconcile_CapacityGateFailedIsSticky(t *testing.T) {
 	}
 	if !isvc.Status.Canary.StepEnteredTime.Time.Equal(enteredAtFailure) {
 		t.Fatalf("StepEnteredTime must not be re-stamped while held Failed: was %v, now %v", enteredAtFailure, isvc.Status.Canary.StepEnteredTime.Time)
+	}
+}
+
+// TestReconcile_NoRunNoStart pins the run license: a diverged target with no
+// pinned rollout run must not initialize the step machine — opening a run is
+// the run layer's job, and starting here would execute an unpinned plan.
+func TestReconcile_NoRunNoStart(t *testing.T) {
+	isvc := canaryISVC(twoStep(), nil)
+	in := baseInputs(isvc, map[string]int32{"new": 2, "old": 2}) // target diverged, not converged
+	in.RunActive = false
+	res, err := Reconcile(context.Background(), in)
+	if err != nil || res == nil || res.Active {
+		t.Fatalf("no active run must hold inactive: res=%+v err=%v", res, err)
+	}
+	if isvc.Status.Canary != nil {
+		t.Fatalf("no active run must not initialize CanaryStatus, got %+v", isvc.Status.Canary)
+	}
+}
+
+// TestReconcile_RetargetRequiresRun pins the re-arm license: a new target hash
+// resets the state machine only under a pinned run (the run layer closes and
+// reopens the run on a retarget in the same pass); without one the persisted
+// state holds as-is.
+func TestReconcile_RetargetRequiresRun(t *testing.T) {
+	mk := func() *v1beta1.InferenceService {
+		isvc := canaryISVC(twoStep(), nil)
+		isvc.Status.Canary = &v1beta1.CanaryStatus{
+			CanaryRevisionHash: "new",
+			StableRevisionHash: "old",
+			CurrentStep:        1,
+			StepEnteredTime:    &metav1.Time{Time: time.Unix(900, 0)},
+		}
+		return isvc
+	}
+
+	held := mk()
+	in := baseInputs(held, map[string]int32{"v3": 0, "new": 2, "old": 2})
+	in.CanaryRevisionHash = "v3"
+	in.RunActive = false
+	if _, err := Reconcile(context.Background(), in); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if cs := held.Status.Canary; cs.CanaryRevisionHash != "new" || cs.CurrentStep != 1 {
+		t.Fatalf("retarget without a run must not reset the canary, got %+v", cs)
+	}
+
+	reset := mk()
+	in = baseInputs(reset, map[string]int32{"v3": 0, "new": 2, "old": 2})
+	in.CanaryRevisionHash = "v3"
+	if _, err := Reconcile(context.Background(), in); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if cs := reset.Status.Canary; cs.CanaryRevisionHash != "v3" || cs.CurrentStep != 0 {
+		t.Fatalf("retarget under a run must re-arm at step 0 toward v3, got %+v", cs)
+	}
+}
+
+// TestReconcile_PreStepHoldBlocksTrafficUntilPromote pins the pre-step hold: a
+// repin-clamped step keeps capacity converging but does not raise traffic until
+// an explicit promote (value = the canary revision hash) releases it.
+func TestReconcile_PreStepHoldBlocksTrafficUntilPromote(t *testing.T) {
+	isvc := canaryISVC(twoStep(), nil)
+	isvc.Status.Canary = &v1beta1.CanaryStatus{
+		CanaryRevisionHash: "new",
+		StableRevisionHash: "old",
+		CurrentStep:        0,
+		PreStepHold:        true,
+		StepEnteredTime:    &metav1.Time{Time: time.Unix(1000, 0)},
+	}
+	in := baseInputs(isvc, map[string]int32{"new": 2, "old": 2}) // step-0 capacity satisfied
+
+	res, err := Reconcile(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if phaseOf(isvc) != v1beta1.RolloutPhasePaused {
+		t.Fatalf("pre-step hold must pause, got %q", phaseOf(isvc))
+	}
+	if tr := isvc.Status.Components[v1beta1.EngineComponent].Traffic; len(tr) != 0 {
+		t.Fatalf("pre-step hold must not apply traffic, got %+v", tr)
+	}
+	if !res.Active || !isvc.Status.Canary.PreStepHold {
+		t.Fatalf("hold must stay armed until promoted, got res=%+v cs=%+v", res, isvc.Status.Canary)
+	}
+
+	// A promote naming a different revision does not release the hold.
+	isvc.Annotations = map[string]string{constants.RolloutPromoteAnnotation: "someotherhash"}
+	if _, err := Reconcile(context.Background(), in); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if !isvc.Status.Canary.PreStepHold || len(isvc.Status.Components[v1beta1.EngineComponent].Traffic) != 0 {
+		t.Fatalf("mismatched promote must keep the hold, got %+v", isvc.Status.Canary)
+	}
+
+	// Promote with the canary hash: hold clears, the promote is consumed by the
+	// release (so it cannot also advance the step), and traffic applies.
+	isvc.Annotations[constants.RolloutPromoteAnnotation] = "new"
+	if _, err := Reconcile(context.Background(), in); err != nil {
+		t.Fatalf("promoting Reconcile: %v", err)
+	}
+	if isvc.Status.Canary.PreStepHold {
+		t.Fatal("promote with the canary hash must clear the hold")
+	}
+	if _, ok := isvc.Annotations[constants.RolloutPromoteAnnotation]; ok {
+		t.Fatal("the releasing promote must be consumed")
+	}
+	if tr := isvc.Status.Components[v1beta1.EngineComponent].Traffic; len(tr) != 2 {
+		t.Fatalf("released hold must apply the step's split, got %+v", tr)
+	}
+	if isvc.Status.Canary.CurrentStep != 0 {
+		t.Fatalf("the consumed promote must not double as a step advance, got step %d", isvc.Status.Canary.CurrentStep)
+	}
+}
+
+// TestReconcile_PinnedPlanInertToSpecEdits pins the run-model inertness
+// contract: while a run is open the engine indexes the PINNED steps, so a
+// mid-run spec edit changes nothing until the next run.
+func TestReconcile_PinnedPlanInertToSpecEdits(t *testing.T) {
+	isvc := canaryISVC(twoStep(), nil)
+	pinActiveRun(isvc)
+	// Mid-run spec edit: shrink step 0 to 25% capacity / 10% traffic.
+	isvc.Spec.Rollout.Groups[0].Canary.Steps = []v1beta1.RolloutGroupStep{
+		{Capacity: intstr.FromString("25%"), Traffic: 10, Pause: &v1beta1.RolloutPause{}},
+		{Capacity: intstr.FromString("100%"), Traffic: 100},
+	}
+
+	res, err := Reconcile(context.Background(), baseInputs(isvc, map[string]int32{"new": 2, "old": 2}))
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	// Pinned step 0 is 50% of 4 → newCount 2, partition 2. The edited spec
+	// (25% → newCount 1) would report partition 3.
+	if res.Partition != 2 {
+		t.Fatalf("engine must index the pinned steps (partition 2), got %d", res.Partition)
+	}
+	var canaryPercent int32 = -1
+	for _, tr := range isvc.Status.Components[v1beta1.EngineComponent].Traffic {
+		if tr.RevisionName == coordination.PerRevisionServiceName(isvc.Name, v1beta1.EngineComponent, "new") {
+			canaryPercent = tr.Percent
+		}
+	}
+	if canaryPercent != 50 {
+		t.Fatalf("traffic must follow the pinned step (50), got %d", canaryPercent)
+	}
+	if p, ok := EffectivePartition(isvc, v1beta1.EngineComponent, 4); !ok || p == nil || *p != 2 {
+		t.Fatalf("EffectivePartition must read the pinned plan, got %v ok=%v", p, ok)
 	}
 }

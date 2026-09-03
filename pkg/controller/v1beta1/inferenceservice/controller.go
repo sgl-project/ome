@@ -56,10 +56,12 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/canary"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/rolloutrun"
 	traffic "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/traffic"
 	isvcstatus "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/status"
 	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/obsmetrics"
+	rolloutpolicycontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/rolloutpolicy"
 	"sigs.k8s.io/ome/pkg/runtimerevision"
 	"sigs.k8s.io/ome/pkg/runtimeselector"
 	"sigs.k8s.io/ome/pkg/utils"
@@ -100,6 +102,7 @@ import (
 // +kubebuilder:rbac:groups=keda.sh,resources=scaledobjects/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=keda.sh,resources=triggerauthentications,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups=ome.io,resources=autoscalerpolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=ome.io,resources=rolloutpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=leaderworkerset.x-k8s.io,resources=leaderworkersets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=leaderworkerset.x-k8s.io,resources=leaderworkersets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=leaderworkerset.x-k8s.io,resources=leaderworkersets/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -164,6 +167,12 @@ type InferenceServiceReconciler struct {
 	// rendered class=KEDA block on a KEDA-less cluster fails closed
 	// (ClassUnavailable) instead of erroring dispatch on every pass.
 	KedaAvailable bool
+	// RolloutPolicyEnabled is the cluster-discovery boolean for the
+	// RolloutPolicy CRD (chart-gated with its webhook + status controller).
+	// The run layer pins plans regardless; only ref RESOLUTION needs the
+	// feature — with it absent, a stored ref parks the rollout instead of
+	// silently no-oping.
+	RolloutPolicyEnabled bool
 	// AutoscalerPolicyEnabled is the cluster-discovery boolean for the
 	// AutoscalerPolicy CRD. The chart installs CRD + controller wiring +
 	// webhook together; when the CRD is absent no watch or index is
@@ -513,11 +522,60 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// this port, so it must be captured here and threaded down.
 	componentRunnerPorts := isvcutils.MergedRunnerPorts(mergedEngine, mergedDecoder, mergedRouter)
 
-	// Canary: when spec.rollout.canary is set, stamp the current step's
-	// RollingUpdate.Partition onto each merged Component before the Component
-	// reconcilers run, so the standard spec→IR→plan→HeldByPartition path holds
-	// the staged old/new split. The step machine + traffic run in Step 6a below.
-	if isvc.Spec.GetCanaryGroup() != nil {
+	// Rollout run layer: resolve and pin the effective plan BEFORE the
+	// partition stamp and the dispatch engines, so every consumer in this
+	// pass indexes the same frozen plan. Pinning is not chart-gated; only
+	// ref resolution depends on the policy feature. The pin and the executors'
+	// step state ride the same status flush, which is what makes them
+	// atomic.
+	var rolloutRunRequeue time.Duration
+	var rolloutConfig *controllerconfig.RolloutConfig
+	var metricProviders controllerconfig.MetricProvidersConfig
+	if isvc.Spec.Rollout != nil || isvc.Status.Rollout != nil {
+		rolloutConfig, err = controllerconfig.NewRolloutConfigCached(r.ConfigCache, r.Clientset)
+		if err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "fails to load rollout config")
+		}
+		metricProviders, err = controllerconfig.NewMetricProvidersConfigCached(r.ConfigCache, r.Clientset)
+		if err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "fails to load metricProviders config")
+		}
+		bound := make(map[string]struct{}, len(metricProviders))
+		for name := range metricProviders {
+			bound[name] = struct{}{}
+		}
+		runOutcome, runErr := rolloutrun.Reconcile(ctx, rolloutrun.Inputs{
+			Client:         r.Client,
+			Reader:         r.APIReader,
+			Recorder:       r.Recorder,
+			ISVC:           isvc,
+			FeatureEnabled: r.RolloutPolicyEnabled,
+			BoundProviders: bound,
+		})
+		if runErr != nil {
+			log.Error(runErr, "Failed to reconcile rollout run")
+			return reconcile.Result{}, errors.Wrapf(runErr, "fails to reconcile rollout run")
+		}
+		rolloutRunRequeue = runOutcome.RequeueAfter
+		// A run boundary (open/close/repin) is persisted IMMEDIATELY: the pin
+		// is load-bearing for the update gates and the partition stamp, and a
+		// fallible reconciler erroring downstream would otherwise drop the
+		// in-memory pin — reopening the run next pass and flapping the
+		// projected spec under the executors.
+		if runOutcome.StateChanged {
+			if err := r.updateStatus(isvc, deploymentMode); err != nil {
+				r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
+	// Canary: when the effective plan carries a canary group, stamp the
+	// current step's RollingUpdate.Partition onto each merged Component
+	// before the Component reconcilers run, so the standard
+	// spec→IR→plan→HeldByPartition path holds the staged old/new split. The
+	// step machine + traffic run in Step 6a below.
+	if v1beta1.EffectiveCanaryGroup(isvc) != nil {
 		if mergedEngine != nil {
 			canary.StampStepPartition(isvc, v1beta1.EngineComponent, &mergedEngine.ComponentExtensionSpec)
 		}
@@ -526,6 +584,19 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		if mergedRouter != nil {
 			canary.StampStepPartition(isvc, v1beta1.RouterComponent, &mergedRouter.ComponentExtensionSpec)
+		}
+	} else {
+		// A canary-KIND group with no resolvable plan (ref-only pre-open, or
+		// parked) stamps a full hold instead of no partition, keeping the
+		// projected spec deterministic across run states.
+		if mergedEngine != nil {
+			canary.StampPlanGateHold(isvc, v1beta1.EngineComponent, &mergedEngine.ComponentExtensionSpec)
+		}
+		if mergedDecoder != nil {
+			canary.StampPlanGateHold(isvc, v1beta1.DecoderComponent, &mergedDecoder.ComponentExtensionSpec)
+		}
+		if mergedRouter != nil {
+			canary.StampPlanGateHold(isvc, v1beta1.RouterComponent, &mergedRouter.ComponentExtensionSpec)
 		}
 	}
 
@@ -691,7 +762,10 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// Status.Components.<c>.Traffic + phase for their own Components. Cross-group
 	// ordering (the group sequencer) is a follow-on; today the groups run
 	// concurrently on their disjoint Components.
-	if isvc.Spec.GetCanaryGroup() != nil {
+	if rolloutRunRequeue > pendingRequeue.RequeueAfter {
+		pendingRequeue.RequeueAfter = rolloutRunRequeue
+	}
+	if v1beta1.EffectiveCanaryGroup(isvc) != nil {
 		// Resolve the metrics source + query timeout per-reconcile from the
 		// canaryAnalysis operator config (so ConfigMap edits take effect without a
 		// restart); the sampler's structural tuning is fixed at startup. Only
@@ -701,6 +775,10 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			log.Error(err, "Failed to load canaryAnalysis config")
 			return reconcile.Result{}, errors.Wrapf(err, "fails to load canaryAnalysis config")
 		}
+		var defaultReadyTimeout time.Duration
+		if rolloutConfig != nil {
+			defaultReadyTimeout = rolloutConfig.DefaultReadyTimeout
+		}
 		ra, err := canary.Dispatch(ctx, canary.DispatchDeps{
 			ISVC:                     isvc,
 			Client:                   r.Client,
@@ -709,6 +787,9 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			Sampler:                  r.CanarySampler,
 			BundledPrometheusAddress: analysisConfig.BundledPrometheusAddress,
 			QueryTimeout:             analysisConfig.QueryTimeoutDuration(),
+			DefaultReadyTimeout:      defaultReadyTimeout,
+			MetricProviders:          metricProviders,
+			DefaultProvider:          analysisConfig.DefaultProvider,
 			ComponentRunnerPorts:     componentRunnerPorts,
 		})
 		if err != nil {
@@ -1059,8 +1140,17 @@ func (r *InferenceServiceReconciler) updateStatus(desiredService *v1beta1.Infere
 		}
 		preWriteReady = latest.Status.GetCondition(knapis.ConditionReady)
 		preserved := preserveLifecycleStatus(latest.Status.Components)
+		// Snapshot the live run state before the overwrite: the rollout
+		// run's pinned plan must never move BACKWARD under a writer that
+		// reconciled from a stale cache (a rolled-back pin is unrecoverable
+		// — its repin verb was one-shot). The reconciler doesn't own that
+		// subtree any more than it owns Lifecycle when another pass's write
+		// is newer.
+		liveRollout := latest.Status.Rollout.DeepCopy()
+		livePreStepHold := latest.Status.Canary != nil && latest.Status.Canary.PreStepHold
 		latest.Status = desiredService.Status
 		mergeLifecycleStatus(&latest.Status, preserved)
+		rolloutrun.PreserveNewerRun(&latest.Status, liveRollout, livePreStepHold)
 		return r.Status().Update(context.TODO(), latest)
 	}); err != nil {
 		// Same race as the top-of-function Get: if the ISVC vanished
@@ -1242,6 +1332,14 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	r.AutoscalerPolicyEnabled = autoscalerPolicyFound
 
+	// RolloutPolicy follows the same chart-gated pattern: no CRD, no watch,
+	// no index — stored refs then park at run open rather than no-op.
+	rolloutPolicyFound, err := utils.IsCrdAvailable(r.ClientConfig, v1beta1.SchemeGroupVersion.String(), constants.RolloutPolicyKind)
+	if err != nil {
+		return err
+	}
+	r.RolloutPolicyEnabled = rolloutPolicyFound
+
 	podMonitorFound, err := utils.IsCrdAvailable(r.ClientConfig, monitoringv1.SchemeGroupVersion.String(), constants.PodMonitorKind)
 	if err != nil {
 		return err
@@ -1330,6 +1428,19 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		ctrlBuilder = ctrlBuilder.Watches(&v1beta1.AutoscalerPolicy{}, handler.EnqueueRequestsFromMapFunc(r.mapAutoscalerPolicyToInferenceServices))
 	} else {
 		r.Log.Info("The InferenceService controller won't watch ome.io/v1beta1/AutoscalerPolicy resources because the CRD is not available; autoscalerPolicyRef attachments fail closed until the feature is installed.")
+	}
+
+	if r.RolloutPolicyEnabled {
+		// One index over the distinct per-group ref names powers the
+		// policy-to-consumers fan-out (a parked plan recovers watch-driven
+		// when its policy appears) and the status controller's attached-group
+		// accounting.
+		if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &v1beta1.InferenceService{}, rolloutpolicycontroller.PolicyRefIndexField, rolloutpolicycontroller.PolicyRefIndexer); err != nil {
+			return err
+		}
+		ctrlBuilder = ctrlBuilder.Watches(&v1beta1.RolloutPolicy{}, handler.EnqueueRequestsFromMapFunc(r.mapRolloutPolicyToInferenceServices))
+	} else {
+		r.Log.Info("The InferenceService controller won't watch ome.io/v1beta1/RolloutPolicy resources because the CRD is not available; rollout policyRef attachments park at run open until the feature is installed.")
 	}
 
 	if podMonitorFound {
@@ -1672,6 +1783,27 @@ func (r *InferenceServiceReconciler) validateWiring() error {
 		return fmt.Errorf("inferenceservice: APIReader (AuthoritativeReader) must be wired")
 	}
 	return nil
+}
+
+// mapRolloutPolicyToInferenceServices enqueues every same-namespace consumer
+// of a changed RolloutPolicy — how a parked plan recovers without polling
+// when its missing policy appears, and how drift conditions refresh on a
+// policy edit.
+func (r *InferenceServiceReconciler) mapRolloutPolicyToInferenceServices(ctx context.Context, obj client.Object) []reconcile.Request {
+	consumers := &v1beta1.InferenceServiceList{}
+	if err := r.Client.List(ctx, consumers,
+		client.InNamespace(obj.GetNamespace()),
+		client.MatchingFields{rolloutpolicycontroller.PolicyRefIndexField: obj.GetName()}); err != nil {
+		r.Log.Error(err, "Failed to list RolloutPolicy consumers", "policy", obj.GetName(), "namespace", obj.GetNamespace())
+		return nil
+	}
+	requests := make([]reconcile.Request, 0, len(consumers.Items))
+	for i := range consumers.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{Namespace: consumers.Items[i].Namespace, Name: consumers.Items[i].Name},
+		})
+	}
+	return requests
 }
 
 // autoscalerPolicyRefIndexField indexes InferenceServices by the distinct

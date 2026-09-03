@@ -23,6 +23,30 @@ func testScheme() *runtime.Scheme {
 	return scheme
 }
 
+// pinActiveRun pins the ISVC's current spec.rollout as its active rollout run
+// (the state the run layer produces at run open). Gate tests pin because a
+// grouped Component fails closed (RolloutHoldGatePlan) while no run is open.
+// A pinned plan is inert to later spec edits — re-pin after mutating
+// spec.rollout when the edit should take effect.
+func pinActiveRun(isvc *v1beta1.InferenceService) *v1beta1.InferenceService {
+	if isvc == nil || isvc.Spec.Rollout == nil {
+		return isvc
+	}
+	groups := make([]v1beta1.RolloutRunGroup, 0, len(isvc.Spec.Rollout.Groups))
+	for i := range isvc.Spec.Rollout.Groups {
+		groups = append(groups, v1beta1.RolloutRunGroup{
+			Source: v1beta1.RolloutPlanSourceInline,
+			Group:  *isvc.Spec.Rollout.Groups[i].DeepCopy(),
+		})
+	}
+	isvc.Status.Rollout = &v1beta1.RolloutStatus{ActiveRun: &v1beta1.RolloutRun{
+		RunID:    "test",
+		OpenedAt: metav1.Now(),
+		Plan:     v1beta1.RolloutRunPlan{Groups: groups},
+	}}
+	return isvc
+}
+
 // fakeClientForISVC creates a fake client seeded with InferenceReplica objects
 // whose status is derived from the ISVC component lifecycle fixtures.
 func fakeClientForISVC(isvc *v1beta1.InferenceService) client.Client {
@@ -401,6 +425,7 @@ func TestCheckRatioGate_PerComponentPacingBypasses(t *testing.T) {
 			},
 		},
 	}
+	pinActiveRun(isvc)
 	allowed, reason := CheckRatioGate(isvc, v1beta1.EngineComponent, 0)
 	if !allowed {
 		t.Errorf("PerComponent pacing should bypass the gate: %s", reason)
@@ -427,6 +452,7 @@ func TestCheckRatioGate_NoAnchorWithCompleteIRAllowed(t *testing.T) {
 			},
 		},
 	}
+	pinActiveRun(isvc)
 	allowed, reason := CheckRatioGate(isvc, v1beta1.EngineComponent, 0)
 	if !allowed {
 		t.Errorf("complete IR observations without an anchor must allow: %s", reason)
@@ -445,6 +471,7 @@ func TestCheckRatioGate_NoAnchorAllowsWithoutIR(t *testing.T) {
 			},
 		},
 	}
+	pinActiveRun(isvc)
 	allowed, reason := CheckRatioGate(isvc, v1beta1.EngineComponent, 0)
 	if !allowed || !strings.Contains(reason, "no ObservedRatio") {
 		t.Fatalf("the no-anchor fast path must not require IR observations: allowed=%t reason=%q", allowed, reason)
@@ -555,6 +582,7 @@ func TestCheckRatioGate_SingleComponentGroupBypasses(t *testing.T) {
 			},
 		},
 	}
+	pinActiveRun(isvc)
 	allowed, _ := CheckRatioGate(isvc, v1beta1.EngineComponent, 0)
 	if !allowed {
 		t.Errorf("single-component group must bypass the gate")
@@ -632,6 +660,7 @@ func TestCheckRatioGate_InFlightProjectionTightensBand(t *testing.T) {
 		},
 	}
 
+	pinActiveRun(isvc)
 	// Baseline: no in-flight → projected serving stays at status (30/10=3.0
 	// → in band) → allowed.
 	if allowed, reason := CheckRatioGate(isvc, v1beta1.EngineComponent, 0); !allowed {
@@ -710,6 +739,7 @@ func TestCheckRatioGate_BlueGreenRatioBalancedDoesNotDeadlock(t *testing.T) {
 		},
 	}
 
+	pinActiveRun(isvc)
 	// Engine drain (-1): projected serving = {eng: 3, dec: 2}, ratio
 	// 3/2 = 1.5, lower band 2.0 * (1 - 0.25) = 1.5 → boundary, in band
 	// (inclusive) → MUST be allowed. The deadlock manifested as this
@@ -775,6 +805,7 @@ func TestCheckRatioGate_BogusOnePerComponentAnchorReproducesDeadlock(t *testing.
 		},
 	}
 
+	pinActiveRun(isvc)
 	// With anchor {1, 1}, band = 1.0 * (1 ± 0.25) = [0.75, 1.25].
 	// Live ratio 4/2 = 2.0 is OUT of band. Engine drain projects
 	// 3/2 = 1.5 → still out of band → REJECT.
@@ -798,7 +829,7 @@ func mkPDFixture(tolerance *int32) *v1beta1.InferenceService {
 	if tolerance != nil {
 		tol = *tolerance
 	}
-	return &v1beta1.InferenceService{
+	return pinActiveRun(&v1beta1.InferenceService{
 		Spec: v1beta1.InferenceServiceSpec{
 			Rollout: &v1beta1.RolloutSpec{
 				Groups: []v1beta1.RolloutGroup{{
@@ -823,7 +854,7 @@ func mkPDFixture(tolerance *int32) *v1beta1.InferenceService {
 				}},
 			},
 		},
-	}
+	})
 }
 
 func int32Ptr(v int32) *int32 { return &v }
@@ -1024,7 +1055,7 @@ func iosInt(v int) *intstr.IntOrString {
 // not run ValidateGroupShape, so a single-Component rollingUpdate fixture
 // exercises the budget math (which is what these tests pin).
 func mkUnavailFixture(maxUnavail *intstr.IntOrString) *v1beta1.InferenceService {
-	return &v1beta1.InferenceService{
+	return pinActiveRun(&v1beta1.InferenceService{
 		Spec: v1beta1.InferenceServiceSpec{
 			Rollout: &v1beta1.RolloutSpec{
 				Groups: []v1beta1.RolloutGroup{{
@@ -1035,7 +1066,7 @@ func mkUnavailFixture(maxUnavail *intstr.IntOrString) *v1beta1.InferenceService 
 				}},
 			},
 		},
-	}
+	})
 }
 
 // ----------------------------------------------------------------------
@@ -1050,7 +1081,7 @@ func mkUnavailFixture(maxUnavail *intstr.IntOrString) *v1beta1.InferenceService 
 // mkUnavailFixture for why a single-Component rollingUpdate fixture is the
 // right gate-test shape.)
 func mkSurgeFixture(maxSurge *intstr.IntOrString) *v1beta1.InferenceService {
-	return &v1beta1.InferenceService{
+	return pinActiveRun(&v1beta1.InferenceService{
 		Spec: v1beta1.InferenceServiceSpec{
 			Rollout: &v1beta1.RolloutSpec{
 				Groups: []v1beta1.RolloutGroup{{
@@ -1061,7 +1092,7 @@ func mkSurgeFixture(maxSurge *intstr.IntOrString) *v1beta1.InferenceService {
 				}},
 			},
 		},
-	}
+	})
 }
 
 func TestCheckSurgeGate_NilISVC(t *testing.T) {
@@ -1208,7 +1239,7 @@ func TestCheckSurgeGate_PercentBudget(t *testing.T) {
 // shape: a 1:1 ratio where, at tolerance 25%, the discrete pod
 // granularity leaves no room for a single -1 drain.
 func mkSymmetricRatioFixture(tol int32) *v1beta1.InferenceService {
-	return &v1beta1.InferenceService{
+	return pinActiveRun(&v1beta1.InferenceService{
 		Spec: v1beta1.InferenceServiceSpec{
 			Rollout: &v1beta1.RolloutSpec{
 				Groups: []v1beta1.RolloutGroup{{
@@ -1237,7 +1268,7 @@ func mkSymmetricRatioFixture(tol int32) *v1beta1.InferenceService {
 				v1beta1.DecoderComponent: {Lifecycle: &v1beta1.LifecycleStatus{Replicas: 4, ServingReplicas: 4}},
 			},
 		},
-	}
+	})
 }
 
 // TestCheckRatio_SurgeVsDrainProjection_SymmetricBand pins that a
@@ -1288,7 +1319,7 @@ func TestEvaluateUpdateGate_RatioBalancedSurgeNotDeadlocked(t *testing.T) {
 // the SurgeThenDrain steady state — so the serving-capacity band alone
 // would authorize every surge; only the new-revision lockstep can pace it.
 func mkRatioProgressFixture(tol, origE, newE, origD, newD int32) *v1beta1.InferenceService {
-	return &v1beta1.InferenceService{
+	return pinActiveRun(&v1beta1.InferenceService{
 		Spec: v1beta1.InferenceServiceSpec{
 			Rollout: &v1beta1.RolloutSpec{
 				Groups: []v1beta1.RolloutGroup{{
@@ -1321,7 +1352,7 @@ func mkRatioProgressFixture(tol, origE, newE, origD, newD int32) *v1beta1.Infere
 				}},
 			},
 		},
-	}
+	})
 }
 
 // TestEvaluateUpdateGate_RatioBalancedHoldsLeadingComponent is the
@@ -1564,6 +1595,7 @@ func TestEvaluateUpdateGate_RecreatePodSymmetricCleared(t *testing.T) {
 	isvc := mkSymmetricRatioFixture(25)
 	mu := intstr.FromInt(3)
 	isvc.Spec.Rollout.Groups[0].RollingUpdate.MaxUnavailable = &mu
+	pinActiveRun(isvc) // re-pin: the budget edit must be part of the pinned plan
 	client := fakeClientForISVC(isvc)
 
 	if allowed, _, reason := EvaluateUpdateGate(context.Background(), client, isvc, v1beta1.EngineComponent, nil, GroupDefaults{},
@@ -1649,7 +1681,7 @@ func mkPDGroupSurge(pacingType v1beta1.CoordinationPacingType, decoderSurgesInFl
 		})
 	}
 
-	return &v1beta1.InferenceService{
+	return pinActiveRun(&v1beta1.InferenceService{
 		Spec: v1beta1.InferenceServiceSpec{
 			Rollout: &v1beta1.RolloutSpec{
 				Groups: []v1beta1.RolloutGroup{group},
@@ -1677,7 +1709,7 @@ func mkPDGroupSurge(pacingType v1beta1.CoordinationPacingType, decoderSurgesInFl
 				}},
 			},
 		},
-	}, decoderInstances
+	}), decoderInstances
 }
 
 // TestDecoderSurgeBudget_RatioBalanced pins the shape: a bumped
@@ -1776,7 +1808,7 @@ func mkGangSurgeFixture() (*v1beta1.InferenceService, []v1beta1.OMENativeInstanc
 				Type: v1beta1.InstanceOperationUpdate,
 				Step: workloadtypes.UpdateStepGangSurgeTarget}},
 	}
-	return &v1beta1.InferenceService{
+	return pinActiveRun(&v1beta1.InferenceService{
 		Spec: v1beta1.InferenceServiceSpec{
 			Rollout: &v1beta1.RolloutSpec{
 				Groups: []v1beta1.RolloutGroup{{
@@ -1814,7 +1846,7 @@ func mkGangSurgeFixture() (*v1beta1.InferenceService, []v1beta1.OMENativeInstanc
 				}},
 			},
 		},
-	}, engineInstances
+	}), engineInstances
 }
 
 // TestCheckRatioGate_GangSurgePeakDoesNotAuthorizeDrain reproduces a
@@ -1883,7 +1915,7 @@ func mkGangSurgeDrainedFixture() (*v1beta1.InferenceService, []v1beta1.OMENative
 				Type: v1beta1.InstanceOperationUpdate,
 				Step: workloadtypes.UpdateStepGangSurgeTarget}},
 	}
-	return &v1beta1.InferenceService{
+	return pinActiveRun(&v1beta1.InferenceService{
 		Spec: v1beta1.InferenceServiceSpec{
 			Rollout: &v1beta1.RolloutSpec{
 				Groups: []v1beta1.RolloutGroup{{
@@ -1921,7 +1953,7 @@ func mkGangSurgeDrainedFixture() (*v1beta1.InferenceService, []v1beta1.OMENative
 				}},
 			},
 		},
-	}, engineInstances
+	}), engineInstances
 }
 
 // TestCheckRatioGate_DrainedGangSurgeNotANetTrough: the gate nets the
@@ -2024,5 +2056,56 @@ func TestCheckSurge_ReadErrorFailsClosed(t *testing.T) {
 	}
 	if !strings.Contains(reason, "failing closed") {
 		t.Errorf("denial reason should mark the degraded read: %s", reason)
+	}
+}
+
+// TestEvaluateUpdateGate_PlanGateHoldsWithoutRun pins the run-model ordering
+// invariant: a Component in a declared rollout group takes no updates until a
+// run pins the effective plan — the gate denies with RolloutHoldGatePlan.
+// Pinning the run restores the normal allowed path.
+func TestEvaluateUpdateGate_PlanGateHoldsWithoutRun(t *testing.T) {
+	isvc := mkUnavailFixture(iosInt(1))
+	isvc.Status.Components = map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
+		v1beta1.EngineComponent: {
+			Lifecycle: &v1beta1.LifecycleStatus{Replicas: 5, ReadyReplicas: 5, ServingReplicas: 5},
+		},
+	}
+	isvc.Status.Rollout = nil // no run pinned yet
+	client := fakeClientForISVC(isvc)
+
+	allowed, gate, reason := EvaluateUpdateGate(context.Background(), client, isvc, v1beta1.EngineComponent, nil, GroupDefaults{},
+		workloadtypes.UpdateStrategyRecreatePod, 0, 0)
+	if allowed {
+		t.Fatalf("a grouped Component without an active run must be denied, got allowed (reason=%q)", reason)
+	}
+	if gate != v1beta1.RolloutHoldGatePlan {
+		t.Fatalf("denial must name the plan gate, got gate=%q reason=%q", gate, reason)
+	}
+
+	pinActiveRun(isvc)
+	allowed, gate, reason = EvaluateUpdateGate(context.Background(), client, isvc, v1beta1.EngineComponent, nil, GroupDefaults{},
+		workloadtypes.UpdateStrategyRecreatePod, 0, 0)
+	if !allowed {
+		t.Fatalf("with the run pinned the normal gate path must allow, got denied: gate=%q reason=%q", gate, reason)
+	}
+}
+
+// TestResolveGateContext_HoldsWithoutActiveRun pins the GateContext surface of
+// the same invariant: group membership with no active run resolves to a Hold
+// (not a ShortCircuit, not a resolved group).
+func TestResolveGateContext_HoldsWithoutActiveRun(t *testing.T) {
+	isvc := mkUnavailFixture(iosInt(1))
+	isvc.Status.Rollout = nil
+	ctx := ResolveGateContext(context.Background(), nil, isvc, v1beta1.EngineComponent)
+	if !ctx.Hold || ctx.ShortCircuit {
+		t.Fatalf("grouped Component without a run: want Hold=true ShortCircuit=false, got %+v", ctx)
+	}
+	if ctx.HoldReason == "" {
+		t.Fatal("Hold must carry an operator-facing reason")
+	}
+	// A Component outside every group is not held — it is outside the run.
+	ctx = ResolveGateContext(context.Background(), nil, isvc, v1beta1.RouterComponent)
+	if ctx.Hold || !ctx.ShortCircuit {
+		t.Fatalf("ungrouped Component: want ShortCircuit (not Hold), got %+v", ctx)
 	}
 }

@@ -538,6 +538,8 @@ type ServingRuntimeRef struct {
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="BaseModel",type="string",JSONPath=".spec.model.name"
 // +kubebuilder:printcolumn:name="Runtime",type="string",JSONPath=".spec.runtime.name"
+// +kubebuilder:printcolumn:name="Plan-Source",type="string",JSONPath=".status.rollout.activeRun.plan.groups[0].source",priority=1
+// +kubebuilder:printcolumn:name="Plan-Drift",type="string",JSONPath=".status.conditions[?(@.type=='RolloutPlanDrift')].status",priority=1
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:resource:path=inferenceservices,shortName=isvc
 // +kubebuilder:storageversion

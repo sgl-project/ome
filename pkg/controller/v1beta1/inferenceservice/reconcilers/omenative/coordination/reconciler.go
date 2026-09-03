@@ -131,7 +131,7 @@ func Reconcile(ctx context.Context, in ReconcileInputs) (*Result, error) {
 	if now.IsZero() {
 		now = time.Now()
 	}
-	groups := ResolveGroups(in.ISVC.Spec.Rollout, GroupDefaults{RatioTolerancePercent: in.DefaultRatioTolerancePercent})
+	groups := ResolveGroups(v1beta1.EffectiveRollout(in.ISVC), GroupDefaults{RatioTolerancePercent: in.DefaultRatioTolerancePercent})
 	result := &Result{}
 
 	// Bind a logger keyed to the ISVC so every downstream V(1)

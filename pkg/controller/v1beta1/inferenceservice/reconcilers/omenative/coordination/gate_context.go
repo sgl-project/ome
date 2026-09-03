@@ -44,6 +44,17 @@ type GateContext struct {
 	// is true. Empty otherwise.
 	ShortReason string
 
+	// Hold is the fail-closed inverse of ShortCircuit: the Component belongs
+	// to a declared rollout group but no run has pinned an effective plan
+	// (the run is opening this pass, or the plan is parked unresolvable), so
+	// updates must be DENIED. Without it, the window between a target
+	// divergence and the pin — or a park — would roll the Component forward
+	// on a plan nothing validated, silently skipping its declared gates.
+	Hold bool
+
+	// HoldReason is the operator-facing explanation when Hold is true.
+	HoldReason string
+
 	// Ctx provides the context for reading authoritative IR status.
 	Ctx context.Context
 
@@ -91,7 +102,26 @@ func ResolveGateContextWithDefaults(ctx context.Context, reads client.Reader, is
 			Reads:        reads,
 		}
 	}
-	groups := ResolveGroups(isvc.Spec.Rollout, defaults)
+	// Fail-closed plan gate: a Component in ANY declared rollout group (raw
+	// spec membership — canary and ref-only groups included, which the
+	// coordination-only ResolveGroups below deliberately excludes) may not
+	// take updates until a run pins the effective plan. This is the load-
+	// bearing ordering invariant of the run model: between a target
+	// divergence and the pin (different loops), and while a plan is parked
+	// unresolvable, the gate holds — otherwise a ref-only group would roll
+	// forward as if it were a bare blueGreen, skipping its declared gates.
+	if isvc.Spec.Rollout != nil && specGroupMember(isvc.Spec.Rollout, component) &&
+		(isvc.Status.Rollout == nil || isvc.Status.Rollout.ActiveRun == nil) {
+		return GateContext{
+			ISVC:       isvc,
+			Component:  component,
+			Hold:       true,
+			HoldReason: "rollout plan not pinned: no active run for this rollout group (run opening, or parked on an unresolvable plan)",
+			Ctx:        ctx,
+			Reads:      reads,
+		}
+	}
+	groups := ResolveGroups(v1beta1.EffectiveRollout(isvc), defaults)
 	if len(groups) == 0 {
 		return GateContext{
 			ISVC:         isvc,
@@ -120,4 +150,19 @@ func ResolveGateContextWithDefaults(ctx context.Context, reads client.Reader, is
 		Ctx:       ctx,
 		Reads:     reads,
 	}
+}
+
+// specGroupMember reports raw spec-group membership: whether the Component is
+// listed in any spec.rollout.groups[] entry, independent of progression kind
+// or resolvability. The plan gate keys on this, not on ResolvedGroups, so
+// canary members and ref-only groups are covered too.
+func specGroupMember(spec *v1beta1.RolloutSpec, component v1beta1.ComponentType) bool {
+	for i := range spec.Groups {
+		for _, c := range spec.Groups[i].Components {
+			if c == component {
+				return true
+			}
+		}
+	}
+	return false
 }

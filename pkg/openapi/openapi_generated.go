@@ -64,6 +64,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateComponentAutoscaling":    schema_pkg_apis_ome_v1beta1_CandidateComponentAutoscaling(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidatePlacement":               schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidatePolicyDigest":            schema_pkg_apis_ome_v1beta1_CandidatePolicyDigest(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutGroup":            schema_pkg_apis_ome_v1beta1_CandidateRolloutGroup(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutLastRun":          schema_pkg_apis_ome_v1beta1_CandidateRolloutLastRun(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutStatus":           schema_pkg_apis_ome_v1beta1_CandidateRolloutStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModel":                 schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":             schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterConnectionSource":          schema_pkg_apis_ome_v1beta1_ClusterConnectionSource(ref),
@@ -153,10 +156,23 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationSpec":          schema_pkg_apis_ome_v1beta1_RolloutCoordinationSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationStatus":        schema_pkg_apis_ome_v1beta1_RolloutCoordinationStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroup":                     schema_pkg_apis_ome_v1beta1_RolloutGroup(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroupResolution":           schema_pkg_apis_ome_v1beta1_RolloutGroupResolution(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroupStep":                 schema_pkg_apis_ome_v1beta1_RolloutGroupStep(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutHold":                      schema_pkg_apis_ome_v1beta1_RolloutHold(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPause":                     schema_pkg_apis_ome_v1beta1_RolloutPause(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicy":                    schema_pkg_apis_ome_v1beta1_RolloutPolicy(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicyList":                schema_pkg_apis_ome_v1beta1_RolloutPolicyList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicyRef":                 schema_pkg_apis_ome_v1beta1_RolloutPolicyRef(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicySpec":                schema_pkg_apis_ome_v1beta1_RolloutPolicySpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicyStatus":              schema_pkg_apis_ome_v1beta1_RolloutPolicyStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRun":                       schema_pkg_apis_ome_v1beta1_RolloutRun(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunGroup":                  schema_pkg_apis_ome_v1beta1_RolloutRunGroup(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunPlan":                   schema_pkg_apis_ome_v1beta1_RolloutRunPlan(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunProvenance":             schema_pkg_apis_ome_v1beta1_RolloutRunProvenance(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunRecord":                 schema_pkg_apis_ome_v1beta1_RolloutRunRecord(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunTarget":                 schema_pkg_apis_ome_v1beta1_RolloutRunTarget(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutSpec":                      schema_pkg_apis_ome_v1beta1_RolloutSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutStatus":                    schema_pkg_apis_ome_v1beta1_RolloutStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterSpec":                       schema_pkg_apis_ome_v1beta1_RouterSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.Runner":                           schema_pkg_apis_ome_v1beta1_Runner(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec":                       schema_pkg_apis_ome_v1beta1_RunnerSpec(ref),
@@ -171,6 +187,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeSpec":               schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeStatus":             schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ShadowedAutoscalerPolicy":         schema_pkg_apis_ome_v1beta1_ShadowedAutoscalerPolicy(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ShadowedRolloutPolicyRef":         schema_pkg_apis_ome_v1beta1_ShadowedRolloutPolicyRef(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SplitSpec":                        schema_pkg_apis_ome_v1beta1_SplitSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.StorageSpec":                      schema_pkg_apis_ome_v1beta1_StorageSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SupportedModelFormat":             schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref),
@@ -2065,9 +2082,15 @@ func schema_pkg_apis_ome_v1beta1_AnalysisPrometheus(ref common.ReferenceCallback
 				Description: "AnalysisPrometheus locates and authenticates to the Prometheus the analysis queries.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
+					"providerRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ProviderRef names a logical metric provider bound per cluster in the operator's metricProviders configuration (shared with AutoscalerPolicy triggers), which supplies the server address, auth secret, and default headers. In a RolloutPolicy body this is the ONLY admitted spelling — a raw cluster-local URL inside a fleet-portable object defeats portability and is an SSRF surface. An unbound name is a deterministic config error: the rollout parks at run open rather than starting a roll whose gate cannot sample.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MetricProviderRef"),
+						},
+					},
 					"serverAddress": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ServerAddress is the base URL of the Prometheus HTTP API (e.g. http://prometheus.monitoring.svc:9090). Optional: when empty, the operator-configured default source (canaryAnalysis.bundledPrometheusAddress) is used; if that is also unset the analysis has no source and its samples read inconclusive. Admission does not check the source — an unreachable or missing source surfaces controller-side as an inconclusive sample, not a rejection.",
+							Description: "ServerAddress is the base URL of the Prometheus HTTP API (e.g. http://prometheus.monitoring.svc:9090). Optional: when empty (and no ProviderRef is set), the operator-configured default source (canaryAnalysis.bundledPrometheusAddress) is used; if that is also unset the analysis has no source and its samples read inconclusive. Admission does not check the source — an unreachable or missing source surfaces controller-side as an inconclusive sample, not a rejection.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -2098,7 +2121,7 @@ func schema_pkg_apis_ome_v1beta1_AnalysisPrometheus(ref common.ReferenceCallback
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/core/v1.SecretKeySelector"},
+			"k8s.io/api/core/v1.SecretKeySelector", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MetricProviderRef"},
 	}
 }
 
@@ -3040,6 +3063,13 @@ func schema_pkg_apis_ome_v1beta1_CanaryStatus(ref common.ReferenceCallback) comm
 							Format:      "",
 						},
 					},
+					"preStepHold": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PreStepHold holds the canary's traffic at its currently-programmed weight after a repin whose clamped step would raise exposure: a repin may only hold or tighten, so the raise waits for an explicit ome.io/rollout-promote (value = the canary revision hash). Capacity may still converge to the clamped step — capacity ahead of traffic is the supported warm-up pattern; only traffic and step advance hold.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 					"rolledBackRevisionHash": {
 						SchemaProps: spec.SchemaProps{
 							Description: "RolledBackRevisionHash is set when a rollback (ome.io/rollout-rollback) abandons a canary: it records the rejected revision hash. While set, the component is held on the stable revision and the rejected revision is NOT retried — even after the annotation is cleared. The rollout re-arms only when a different target revision appears (a fresh spec change / fix).",
@@ -3229,12 +3259,18 @@ func schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref common.ReferenceCallback
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAutoscalingStatus"),
 						},
 					},
+					"rollout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Rollout mirrors this home's rollout-run provenance (run identity plus per-group plan digests, never the plan bodies) so plan drift between homes is visible from the source InferenceService. Set only when the source's rollout groups reference a RolloutPolicy.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutStatus"),
+						},
+					},
 				},
 				Required: []string{"cluster"},
 			},
 		},
 		Dependencies: []string{
-			"knative.dev/pkg/apis.URL", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAutoscalingStatus"},
+			"knative.dev/pkg/apis.URL", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAutoscalingStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutStatus"},
 	}
 }
 
@@ -3261,6 +3297,118 @@ func schema_pkg_apis_ome_v1beta1_CandidatePolicyDigest(ref common.ReferenceCallb
 				},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_CandidateRolloutGroup(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CandidateRolloutGroup is one pinned group's provenance as observed on a home.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"source": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Source is where the group's progression came from (Inline or Policy).",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"policyName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PolicyName names the RolloutPolicy when Source is Policy.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"portableDigest": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PortableDigest is the pinned progression body's portable digest.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"source"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_CandidateRolloutLastRun(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CandidateRolloutLastRun is the bounded outcome of a home's last closed run.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"outcome": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Outcome is how the run ended.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"digest": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Digest folds the closed run's per-group portable digests into one order-sensitive comparable value.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"outcome"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_CandidateRolloutStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CandidateRolloutStatus is the bounded per-home rollout-run state the watch funnel lifts off a derived InferenceService: run identity and per-group provenance digests, never the pinned plan bodies (fleet-drift dashboards compare digests; plan content lives in the policy's git history).",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"activeRunID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ActiveRunID is the home's open rollout run, empty when none is open.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"activeGroups": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ActiveGroups is the active run's per-group provenance in pinned-plan order: which source each group pinned and under which digest.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutGroup"),
+									},
+								},
+							},
+						},
+					},
+					"lastRun": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastRun is the bounded record of the home's most recently closed run.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutLastRun"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutGroup", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutLastRun"},
 	}
 }
 
@@ -5788,11 +5936,17 @@ func schema_pkg_apis_ome_v1beta1_GroupCanary(ref common.ReferenceCallback) commo
 							Format:      "int32",
 						},
 					},
+					"readyTimeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReadyTimeout bounds how long a step's capacity gate may stay unsatisfied before the canary is marked Failed (stable keeps serving — no traffic has shifted). Unset falls back to the operator-configured default (the rollout block of the operator's ConfigMap); the ome.io/rollout-ready-timeout annotation still overrides both.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AnalysisPrometheus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroupStep"},
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AnalysisPrometheus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroupStep"},
 	}
 }
 
@@ -6826,6 +6980,12 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref common.ReferenceCall
 							Format:      "",
 						},
 					},
+					"rollout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Rollout is the run-model surface: the pinned active-run plan the executors consume, the previous run's bounded record, and the always-current per-group source resolution (including shadowed-policy previews). See rollout_run_types.go.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutStatus"),
+						},
+					},
 					"rolloutCoordination": {
 						SchemaProps: spec.SchemaProps{
 							Description: "RolloutCoordination reports per-group cross-Component coordination state for the InferenceService. Populated only when spec.rollout declares blueGreen/rollingUpdate groups (canary groups report under status.canary instead).",
@@ -6836,7 +6996,7 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref common.ReferenceCall
 			},
 		},
 		Dependencies: []string{
-			"knative.dev/pkg/apis.Condition", "knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CanaryStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationHistoryEntry", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MountedOverlay", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficStatus"},
+			"knative.dev/pkg/apis.Condition", "knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CanaryStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationHistoryEntry", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MountedOverlay", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficStatus"},
 	}
 }
 
@@ -10412,6 +10572,12 @@ func schema_pkg_apis_ome_v1beta1_RolloutGroup(ref common.ReferenceCallback) comm
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupRollingUpdate"),
 						},
 					},
+					"policyRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PolicyRef names a same-namespace RolloutPolicy that supplies this group's progression. A sibling of the progression one-of, not an arm of it: the ref may coexist with one inline progression, and the inline block wins (the preview/rollback mechanism) — the shadowed policy's would-pin digest is published in status.rollout.groups[]. A group whose only progression is an unresolvable ref PARKS at run open (fail-closed); it never falls back to the default blueGreen, because silently removing a declared gate is the failure this API exists to prevent.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicyRef"),
+						},
+					},
 					"soak": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Soak is the wait AFTER this group completes, before the next group begins. It is honored only when the rollout is a sequence of single-Component blueGreen groups (the run that collapses to the internal Sequential state machine); ignored on the last group. Admission rejects a soak the engine would silently drop — on a canary, multi-Component, or rollingUpdate group, or on a rollout that does not collapse to that sequence.",
@@ -10429,7 +10595,57 @@ func schema_pkg_apis_ome_v1beta1_RolloutGroup(ref common.ReferenceCallback) comm
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupBlueGreen", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupCanary", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupRollingUpdate", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MaintainRatio"},
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupBlueGreen", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupCanary", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupRollingUpdate", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MaintainRatio", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicyRef"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutGroupResolution(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutGroupResolution is the always-current resolution view for one spec group: which source would pin now, and the shadowed-policy preview when an inline progression outranks a ref.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"index": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Index is the group's position in spec.rollout.groups[].",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"source": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Source is the source a run opened now would pin for this group.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"policyRef": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicyRef"),
+						},
+					},
+					"observedDigest": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedDigest is the portable digest of the progression body Source resolves to right now (live render — compare against the active run's pinned digest to see drift).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"shadowedPolicyRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ShadowedPolicyRef is set when an inline progression outranks a ref: the preview surface an operator diffs before deleting the inline block.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ShadowedRolloutPolicyRef"),
+						},
+					},
+				},
+				Required: []string{"index", "source"},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicyRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ShadowedRolloutPolicyRef"},
 	}
 }
 
@@ -10541,6 +10757,492 @@ func schema_pkg_apis_ome_v1beta1_RolloutPause(ref common.ReferenceCallback) comm
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_RolloutPolicy(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutPolicy is a namespaced, reusable rollout progression consumed by InferenceService rollout groups via RolloutGroup.PolicyRef.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicySpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicyStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicySpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicyStatus"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutPolicyList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutPolicyList contains a list of RolloutPolicy.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicy"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicy"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutPolicyRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutPolicyRef names a same-namespace RolloutPolicy that supplies a rollout group's progression. Deliberately a sibling of the inline progression one-of, not an arm of it: a ref and one inline progression may coexist, and the inline block wins — the preview/rollback mechanism.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the RolloutPolicy in the InferenceService's namespace.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"progression": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Progression declares the referenced policy's kind so shape-dependent admission rules evaluate without dereferencing the policy. A mismatch with the policy's actual body parks the rollout at run open (ProgressionMismatch); it cannot mis-execute.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is reserved: v1 admission accepts only \"RolloutPolicy\"; \"ClusterRolloutPolicy\" is the reserved cluster-scoped twin.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"name", "progression"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutPolicySpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutPolicySpec carries exactly one progression body, reusing the spec.rollout group progression types verbatim so a composed plan is a literal RolloutGroup fragment and run-open re-validation can run the same checks ISVC admission runs. Policy-only restrictions (percent-only capacities, providerRef-only metrics source) are admission rules on this kind, not type differences.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"canary": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Canary is a stepped capacity+traffic progression with optional analysis gates. One-of.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupCanary"),
+						},
+					},
+					"blueGreen": {
+						SchemaProps: spec.SchemaProps{
+							Description: "BlueGreen surges the full new set, then flips traffic atomically. One-of.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupBlueGreen"),
+						},
+					},
+					"rollingUpdate": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RollingUpdate replaces pods gradually within the surge/unavailable budget. One-of.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupRollingUpdate"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupBlueGreen", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupCanary", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupRollingUpdate"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutPolicyStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutPolicyStatus is deliberately bounded: counts and digests, never consumer name lists (a popular policy would otherwise grow status with its fleet).",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedGeneration is the spec generation this status reflects.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"portableDigest": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PortableDigest is the hash of the defaulted, canonicalized spec (\"rp1:...\"): equal across clusters iff the specs match, so fleet drift is one field-compare away.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"attachedGroups": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AttachedGroups counts rollout groups currently referencing this policy across the namespace.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutRun(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutRun is one open rollout run: identity, targets, and the pinned plan.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"runID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RunID uniquely names this run (stable for its lifetime; a retarget closes the run and opens a new one with a new ID).",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"openedAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "OpenedAt is when the run was pinned.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"pinnedAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PinnedAt advances on every plan pin — the open, and each applied repin. It is the run state's monotonic clock: concurrent status writers keep whichever side is newer, so a reconcile working from a stale cache can never roll a pinned plan back to a predecessor (a repin is one-shot — its verb is consumed — so a rolled-back pin would be unrecoverable, unlike every self-healing status field).",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"targetRevisions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"component",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "TargetRevisions records, per grouped Component, the revision hash this run is rolling toward. A Component's target changing mid-run is a retarget: the run closes (Superseded) and a fresh run opens with a fresh render.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunTarget"),
+									},
+								},
+							},
+						},
+					},
+					"plan": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Plan is the effective groups list, frozen for this run. Executors index it — never the live spec — while the run is open.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunPlan"),
+						},
+					},
+				},
+				Required: []string{"runID", "openedAt", "pinnedAt", "plan"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunPlan", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunTarget"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutRunGroup(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutRunGroup is one pinned group: the resolved RolloutGroup the executors consume, plus the provenance of where its progression came from.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"source": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Source is where this group's progression came from.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"policyRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PolicyRef identifies the policy when Source is Policy. On derived ISVCs (multi-cluster inflation) it is recovered from the derive-time provenance annotation so members report the same identity a locally-resolved ref would.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicyRef"),
+						},
+					},
+					"policyGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PolicyGeneration is the referenced policy's generation at pin time.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"portableDigest": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PortableDigest is the pinned policy body's portable digest (\"rp1:...\"), or — for inline groups — the digest of the inline progression body, so drift detection works for both sources.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"group": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Group is the resolved group: components plus exactly one inline progression (a pinned group never carries a PolicyRef — the ref was resolved at pin time).",
+							Default:     map[string]interface{}{},
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroup"),
+						},
+					},
+				},
+				Required: []string{"source", "group"},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroup", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicyRef"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutRunPlan(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutRunPlan is the frozen effective plan: the resolved groups in their pinned order. Group list-index identity (which keys the coordination engine's sticky state) indexes THIS list for the whole run, so mid-run group reorders in the spec cannot re-key ratio anchors or soak clocks.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"groups": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunGroup"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunGroup"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutRunProvenance(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutRunProvenance is the provenance subset of a pinned group, kept after the run closes.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"source": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"policyRef": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicyRef"),
+						},
+					},
+					"portableDigest": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+				Required: []string{"source"},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPolicyRef"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutRunRecord(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutRunRecord is the bounded record of a closed run.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"outcome": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"openedAt": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"closedAt": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"groups": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Groups carries per-group provenance (groups may reference different policies, so one digest per run would be lossy).",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunProvenance"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"outcome"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunProvenance"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutRunTarget(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutRunTarget is one grouped Component's pinned target revision.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"component": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"revision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Revision is the Component's target revision hash at run open.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"component"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_RolloutSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -10579,6 +11281,52 @@ func schema_pkg_apis_ome_v1beta1_RolloutSpec(ref common.ReferenceCallback) commo
 		},
 		Dependencies: []string{
 			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroup"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RolloutStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutStatus is the run-model surface under status.rollout: the pinned active run, a bounded record of the previous run, and the always-current per-group resolution view (what WOULD pin now — the preview surface).",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"activeRun": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ActiveRun is the pinned plan the executors are consuming. Present iff a run is open.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRun"),
+						},
+					},
+					"lastRun": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastRun is the bounded record of the most recently closed run (digests and outcome, never the full plan — post-close plan history is the policy's git history).",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunRecord"),
+						},
+					},
+					"groups": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Groups is the always-current resolution view, written every reconcile independent of runs: per group, which source would pin now and — when an inline progression shadows a ref — what the shadowed policy would pin.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroupResolution"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroupResolution", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRun", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunRecord"},
 	}
 }
 
@@ -12372,6 +13120,33 @@ func schema_pkg_apis_ome_v1beta1_ShadowedAutoscalerPolicy(ref common.ReferenceCa
 					"wouldRenderDigest": {
 						SchemaProps: spec.SchemaProps{
 							Description: "WouldRenderDigest is the resolved digest the policy would produce for this component if the inline block were removed.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ShadowedRolloutPolicyRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ShadowedRolloutPolicyRef reports what an outranked policy ref would pin.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"wouldPinDigest": {
+						SchemaProps: spec.SchemaProps{
+							Description: "WouldPinDigest is the portable digest of the policy body that a run would pin if the inline progression were removed.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

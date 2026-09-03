@@ -97,6 +97,17 @@ type RolloutGroup struct {
 	// +optional
 	RollingUpdate *GroupRollingUpdate `json:"rollingUpdate,omitempty"`
 
+	// PolicyRef names a same-namespace RolloutPolicy that supplies this
+	// group's progression. A sibling of the progression one-of, not an arm of
+	// it: the ref may coexist with one inline progression, and the inline
+	// block wins (the preview/rollback mechanism) — the shadowed policy's
+	// would-pin digest is published in status.rollout.groups[]. A group whose
+	// only progression is an unresolvable ref PARKS at run open (fail-closed);
+	// it never falls back to the default blueGreen, because silently removing
+	// a declared gate is the failure this API exists to prevent.
+	// +optional
+	PolicyRef *RolloutPolicyRef `json:"policyRef,omitempty"`
+
 	// Soak is the wait AFTER this group completes, before the next group begins.
 	// It is honored only when the rollout is a sequence of single-Component
 	// blueGreen groups (the run that collapses to the internal Sequential state
@@ -142,6 +153,14 @@ type GroupCanary struct {
 	// revision and scaling its pods down, to drain in-flight requests.
 	// +optional
 	ScaleDownDelaySeconds *int32 `json:"scaleDownDelaySeconds,omitempty"`
+
+	// ReadyTimeout bounds how long a step's capacity gate may stay
+	// unsatisfied before the canary is marked Failed (stable keeps serving —
+	// no traffic has shifted). Unset falls back to the operator-configured
+	// default (the rollout block of the operator's ConfigMap); the
+	// ome.io/rollout-ready-timeout annotation still overrides both.
+	// +optional
+	ReadyTimeout *metav1.Duration `json:"readyTimeout,omitempty"`
 }
 
 // RolloutGroupStep is one stage of a canary progression. Capacity and traffic
@@ -279,10 +298,24 @@ type RolloutAnalysis struct {
 
 // AnalysisPrometheus locates and authenticates to the Prometheus the analysis
 // queries.
+//
+// +kubebuilder:validation:XValidation:rule="!(has(self.providerRef) && has(self.serverAddress))",message="at most one of providerRef and serverAddress may be set"
 type AnalysisPrometheus struct {
+	// ProviderRef names a logical metric provider bound per cluster in the
+	// operator's metricProviders configuration (shared with AutoscalerPolicy
+	// triggers), which supplies the server address, auth secret, and default
+	// headers. In a RolloutPolicy body this is the ONLY admitted spelling — a
+	// raw cluster-local URL inside a fleet-portable object defeats
+	// portability and is an SSRF surface. An unbound name is a deterministic
+	// config error: the rollout parks at run open rather than starting a roll
+	// whose gate cannot sample.
+	// +optional
+	ProviderRef *MetricProviderRef `json:"providerRef,omitempty"`
+
 	// ServerAddress is the base URL of the Prometheus HTTP API
-	// (e.g. http://prometheus.monitoring.svc:9090). Optional: when empty, the
-	// operator-configured default source (canaryAnalysis.bundledPrometheusAddress)
+	// (e.g. http://prometheus.monitoring.svc:9090). Optional: when empty (and
+	// no ProviderRef is set), the operator-configured default source
+	// (canaryAnalysis.bundledPrometheusAddress)
 	// is used; if that is also unset the analysis has no source and its samples read
 	// inconclusive. Admission does not check the source — an unreachable or missing
 	// source surfaces controller-side as an inconclusive sample, not a rejection.

@@ -373,6 +373,12 @@ type CanaryAnalysisConfig struct {
 	// per-CR source has no source, and its samples read as inconclusive — it does
 	// not silently fall back to a baked-in address.
 	BundledPrometheusAddress string `json:"bundledPrometheusAddress,omitempty"`
+	// DefaultProvider names a metricProviders binding used as the analysis
+	// source when a CR names neither a providerRef nor its own serverAddress.
+	// Empty keeps the BundledPrometheusAddress fallback. A name with no
+	// binding is a deterministic config error surfaced by the consumer when a
+	// run opens — never a silent fallback.
+	DefaultProvider string `json:"defaultProvider,omitempty"`
 	// QueryTimeout bounds one sampling pass (all of a step's metric queries). A
 	// duration string (e.g. "5s"); the loader falls back to DefaultAnalysisQueryTimeout.
 	QueryTimeout string `json:"queryTimeout,omitempty"`

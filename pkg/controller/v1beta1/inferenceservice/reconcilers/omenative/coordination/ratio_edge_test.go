@@ -227,6 +227,7 @@ func TestCheckRatioGate_EmptyOriginalMapIsNoSnapshot(t *testing.T) {
 			},
 		},
 	}
+	pinActiveRun(isvc)
 	allowed, reason := CheckRatioGate(isvc, v1beta1.EngineComponent, 0)
 	if !allowed {
 		t.Fatalf("empty Original map must read as no-snapshot-yet (allow, snapshot next pass); got denied: %s", reason)
@@ -279,6 +280,7 @@ func TestCheckRatioGate_RemovedMemberStaleAnchorIgnored(t *testing.T) {
 			},
 		},
 	}
+	pinActiveRun(isvc)
 	// Engine drain projects 3:2 = 1.5, exactly the lower edge of the
 	// 2.0 +/- 25% band — allowed IF the stale router entry (which has no
 	// serving pods) is excluded from the pairwise check.

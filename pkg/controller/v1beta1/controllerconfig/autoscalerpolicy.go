@@ -20,23 +20,6 @@ const (
 )
 
 // +kubebuilder:object:generate=false
-// AutoscalerPolicyMetricProvider is one cluster-local binding of a logical
-// metric-provider name (referenced by AutoscalerPolicy triggers via
-// providerRef) to an endpoint and optional credentials.
-type AutoscalerPolicyMetricProvider struct {
-	// ServerAddress is injected as the rendered trigger's serverAddress.
-	ServerAddress string `json:"serverAddress"`
-
-	// AuthSecretRef optionally names a Secret key holding a bearer token.
-	// The controller materializes a KEDA TriggerAuthentication in each
-	// consumer namespace and wires it on rendered triggers; the token itself
-	// never appears in policies, rendered blocks, status, or digests.
-	// The Secret is read from the consumer namespace.
-	// +optional
-	AuthSecretRef *v1.SecretKeySelector `json:"authSecretRef,omitempty"`
-}
-
-// +kubebuilder:object:generate=false
 // AutoscalerPolicyPreflightConfig tunes the control-plane placement
 // preflight for policy-referencing InferenceServices.
 type AutoscalerPolicyPreflightConfig struct {
@@ -58,9 +41,12 @@ type AutoscalerPolicyPreflightConfig struct {
 // AutoscalerPolicy feature, loaded from the inferenceservice-config
 // ConfigMap (key "autoscalerPolicy").
 type AutoscalerPolicyConfig struct {
-	// MetricProviders maps logical provider names to cluster-local bindings.
+	// MetricProviders are the effective cluster-local provider bindings,
+	// resolved from the shared top-level "metricProviders" ConfigMap key
+	// (with the nested alias honored when the top-level key is absent — see
+	// parseMetricProvidersConfig for the precedence invariant).
 	// +optional
-	MetricProviders map[string]AutoscalerPolicyMetricProvider `json:"metricProviders,omitempty"`
+	MetricProviders MetricProvidersConfig `json:"metricProviders,omitempty"`
 
 	// +optional
 	Preflight AutoscalerPolicyPreflightConfig `json:"preflight,omitempty"`
@@ -90,11 +76,14 @@ func parseAutoscalerPolicyConfig(configMap *v1.ConfigMap) (*AutoscalerPolicyConf
 	if err := getComponentConfig(AutoscalerPolicyConfigName, configMap, cfg); err != nil {
 		return nil, fmt.Errorf("unable to parse autoscalerPolicy config json: %w", err)
 	}
-	for name, provider := range cfg.MetricProviders {
-		if provider.ServerAddress == "" {
-			return nil, fmt.Errorf("autoscalerPolicy config: metric provider %q has no serverAddress", name)
-		}
+	// Provider bindings resolve through the shared loader so autoscaler
+	// consumers always see the same effective set (top-level key
+	// authoritative, nested alias as fallback) as every other consumer.
+	providers, err := parseMetricProvidersConfig(configMap)
+	if err != nil {
+		return nil, err
 	}
+	cfg.MetricProviders = providers
 	if cfg.Preflight.MemberGetTimeoutSeconds <= 0 {
 		cfg.Preflight.MemberGetTimeoutSeconds = DefaultPolicyMemberGetTimeoutSeconds
 	}

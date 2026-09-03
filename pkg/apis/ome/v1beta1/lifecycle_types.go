@@ -90,10 +90,15 @@ type LifecycleStatus struct {
 
 // RolloutHoldGate names the layer that most recently denied a
 // per-Instance Update for a Component.
-// +kubebuilder:validation:Enum=Pairing;Ratio;Sequential;Budget;RetryBlock;Held
+// +kubebuilder:validation:Enum=Pairing;Ratio;Sequential;Budget;RetryBlock;Held;Plan
 type RolloutHoldGate string
 
 const (
+	// RolloutHoldGatePlan: the Component belongs to a rollout group but no
+	// run has pinned an effective plan yet (run opening, or parked on an
+	// unresolvable plan) — updates fail closed rather than roll forward on a
+	// plan nothing validated.
+	RolloutHoldGatePlan RolloutHoldGate = "Plan"
 	// RolloutHoldGatePairing: the P/D pair-floor refused the step because it
 	// would leave no pairable serving engine+decoder pair during a
 	// pairing-protocol transition (coordination.CheckPairing).

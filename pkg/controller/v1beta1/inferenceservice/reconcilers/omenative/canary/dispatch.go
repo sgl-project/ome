@@ -14,6 +14,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
@@ -41,6 +42,19 @@ type DispatchDeps struct {
 	// config (fetched per-reconcile by the controller), threaded to the sampler.
 	BundledPrometheusAddress string
 	QueryTimeout             time.Duration
+	// DefaultReadyTimeout is the operator-configured capacity-gate bound
+	// (rollout.defaultReadyTimeout); zero means no configured default.
+	DefaultReadyTimeout time.Duration
+	// MetricProviders are this cluster's logical provider bindings; a canary
+	// source naming a providerRef resolves through them. Run open already
+	// parks an unbound name, so an unbound name HERE is a mid-run config
+	// regression — it degrades to a source-less (inconclusive) sample rather
+	// than un-gating anything.
+	MetricProviders map[string]controllerconfig.MetricProviderBinding
+	// DefaultProvider optionally names the binding used when the CR declares
+	// neither providerRef nor serverAddress (canaryAnalysis.defaultProvider);
+	// empty keeps the BundledPrometheusAddress fallback.
+	DefaultProvider string
 	// ComponentRunnerPorts holds each Component's effective serving ports.
 	// The per-revision routing Service publishes the port resolved from this set
 	// so it targets the port the pods actually listen on.
@@ -56,7 +70,7 @@ type DispatchDeps struct {
 //
 // No-op (requeue 0) when no canary plan is set.
 func Dispatch(ctx context.Context, d DispatchDeps) (time.Duration, error) {
-	if d.ISVC.Spec.GetCanaryGroup() == nil {
+	if v1beta1.EffectiveCanaryGroup(d.ISVC) == nil {
 		return 0, nil
 	}
 	primary := primaryComponent(d.ISVC)
@@ -184,9 +198,11 @@ func Dispatch(ctx context.Context, d DispatchDeps) (time.Duration, error) {
 		SecondaryCapacityReady:   secondaryReady,
 		Now:                      now,
 		Sampler:                  samplerOrNil(d.Sampler),
-		Prometheus:               canaryPrometheus(d.ISVC),
+		Prometheus:               resolveCanarySource(d.ISVC, d.MetricProviders, d.DefaultProvider),
 		BundledPrometheusAddress: d.BundledPrometheusAddress,
 		QueryTimeout:             d.QueryTimeout,
+		RunActive:                v1beta1.RolloutRunActive(d.ISVC),
+		DefaultReadyTimeout:      d.DefaultReadyTimeout,
 	})
 	if err != nil {
 		return 0, err
@@ -345,15 +361,56 @@ func samplerOrNil(s *Sampler) stepSampler {
 	return s
 }
 
-// canaryPrometheus returns the canary group's shared metrics source (the
-// connection every analysis step queries), or nil when unset (the sampler then
-// falls back to the bundled Prometheus).
-func canaryPrometheus(isvc *v1beta1.InferenceService) *v1beta1.AnalysisPrometheus {
-	g := isvc.Spec.GetCanaryGroup()
+// resolveCanarySource resolves the canary group's shared metrics source into
+// the concrete connection the sampler uses. A providerRef resolves through
+// the cluster's bindings (binding headers under the CR's, CR key winning); no
+// declared source falls back to the operator's default provider when one is
+// named, else to nil (the sampler's BundledPrometheusAddress fallback). An
+// unbound providerRef mid-run yields an empty source — inconclusive samples,
+// never an un-gated step.
+func resolveCanarySource(isvc *v1beta1.InferenceService, providers map[string]controllerconfig.MetricProviderBinding, defaultProvider string) *v1beta1.AnalysisPrometheus {
+	g := v1beta1.EffectiveCanaryGroup(isvc)
 	if g == nil || g.Canary == nil {
 		return nil
 	}
-	return g.Canary.Prometheus
+	p := g.Canary.Prometheus
+	if p == nil || (p.ProviderRef == nil && p.ServerAddress == "") {
+		if defaultProvider != "" {
+			if b, ok := providers[defaultProvider]; ok {
+				return bindingSource(b, p)
+			}
+		}
+		return p
+	}
+	if p.ProviderRef != nil {
+		if b, ok := providers[p.ProviderRef.Name]; ok {
+			return bindingSource(b, p)
+		}
+		return &v1beta1.AnalysisPrometheus{}
+	}
+	return p
+}
+
+// bindingSource materializes a provider binding as the sampler's connection,
+// overlaying the CR's headers (CR key wins) and honoring an inline authRef
+// over the binding's secret.
+func bindingSource(b controllerconfig.MetricProviderBinding, overlay *v1beta1.AnalysisPrometheus) *v1beta1.AnalysisPrometheus {
+	out := &v1beta1.AnalysisPrometheus{ServerAddress: b.ServerAddress, AuthRef: b.AuthSecretRef}
+	if len(b.Headers) > 0 || (overlay != nil && len(overlay.Headers) > 0) {
+		out.Headers = map[string]string{}
+		for k, v := range b.Headers {
+			out.Headers[k] = v
+		}
+		if overlay != nil {
+			for k, v := range overlay.Headers {
+				out.Headers[k] = v
+			}
+		}
+	}
+	if overlay != nil && overlay.AuthRef != nil {
+		out.AuthRef = overlay.AuthRef
+	}
+	return out
 }
 
 // configuredComponents lists the Components the canary operates on — the canary
@@ -362,7 +419,7 @@ func canaryPrometheus(isvc *v1beta1.InferenceService) *v1beta1.AnalysisPrometheu
 // group, so a PD pair stages capacity on engine+decoder together before traffic
 // shifts (the secondaryCapacityReady gate).
 func configuredComponents(isvc *v1beta1.InferenceService) []v1beta1.ComponentType {
-	g := isvc.Spec.GetCanaryGroup()
+	g := v1beta1.EffectiveCanaryGroup(isvc)
 	if g == nil {
 		return nil
 	}
@@ -386,7 +443,7 @@ func configuredComponents(isvc *v1beta1.InferenceService) []v1beta1.ComponentTyp
 // keeps ready Pods as a required capacity signal. perRev detects a live peer
 // revision while an equal current/target pair settles.
 func secondaryCapacityReady(ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService, perRev, readyPerRev map[v1beta1.ComponentType]map[string]int32, observedPods map[v1beta1.ComponentType][]*corev1.Pod, primary v1beta1.ComponentType) (bool, bool, error) {
-	g := isvc.Spec.GetCanaryGroup()
+	g := v1beta1.EffectiveCanaryGroup(isvc)
 	if g == nil || g.Canary == nil || len(g.Canary.Steps) == 0 {
 		return true, true, nil
 	}
@@ -561,7 +618,7 @@ func canaryTargetHash(ctx context.Context, reads client.Reader, isvc *v1beta1.In
 // group's Components. Secondary Components (a PD pair's engine/decoder) stage
 // capacity and gate the step but don't carry the external traffic weight.
 func primaryComponent(isvc *v1beta1.InferenceService) v1beta1.ComponentType {
-	g := isvc.Spec.GetCanaryGroup()
+	g := v1beta1.EffectiveCanaryGroup(isvc)
 	if g == nil || len(g.Components) == 0 {
 		return ""
 	}
