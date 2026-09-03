@@ -128,7 +128,6 @@ func TestLongTailColumns(t *testing.T) {
 	mt := "LoRA"
 	base := "llama-3-3-70b"
 	desired := int32(4)
-	encoding := v1beta1.InstanceStatusEncodingColumnarV2
 	cases := []struct {
 		resource string
 		obj      runtime.Object
@@ -180,8 +179,7 @@ func TestLongTailColumns(t *testing.T) {
 			Status: v1beta1.InferenceReplicaStatus{
 				Replicas: 3, ReadyReplicas: 2, AvailableReplicas: 2, ServingReplicas: 1,
 				UpdatedReplicas: 2, CurrentRevision: "rep-a", UpdateRevision: "rep-b",
-				InstanceStatusEncoding: &encoding,
-				Migrations:             []v1beta1.MigrationStatus{{}, {}},
+				Migrations: []v1beta1.MigrationStatus{{}, {}},
 				Conditions: []metav1.Condition{{
 					Type: "RolloutStalled", Status: metav1.ConditionTrue, Reason: "InstancesFailing",
 				}},
@@ -190,7 +188,7 @@ func TestLongTailColumns(t *testing.T) {
 			"NAME": "rep", "COMPONENT": "engine", "PARENT": "llama-70b",
 			"DESIRED": "4", "CURRENT": "3", "READY": "2", "AVAILABLE": "2",
 			"SERVING": "1", "UPDATED": "2", "CURRENT-REVISION": "rep-a",
-			"UPDATE-REVISION": "rep-b", "MIGRATIONS": "2", "ENCODING": "ColumnarV2",
+			"UPDATE-REVISION": "rep-b", "MIGRATIONS": "2",
 			"PAUSED": "true", "LIFECYCLE": "RolloutStalled=True", "REASON": "InstancesFailing",
 			"LIFECYCLE-FRESHNESS": "Current",
 		}},
@@ -255,7 +253,6 @@ func TestInferenceReplicaInventoryFallbacks(t *testing.T) {
 		got[column.Name] = column.Extract(replica)
 	}
 	assert.Equal(t, "-", got["DESIRED"])
-	assert.Equal(t, "DenseV1", got["ENCODING"])
 	assert.Equal(t, "-", got["CURRENT-REVISION"])
 	assert.Equal(t, "-", got["UPDATE-REVISION"])
 	assert.Equal(t, "-", got["COORDINATION"])

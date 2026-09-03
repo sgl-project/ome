@@ -709,7 +709,6 @@ var inferenceReplicasEntry = &entry{
 		{Name: "CURRENT-REVISION", Wide: true, Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return printers.OrDash(r.Status.CurrentRevision) })},
 		{Name: "UPDATE-REVISION", Wide: true, Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return printers.OrDash(r.Status.UpdateRevision) })},
 		{Name: "MIGRATIONS", Wide: true, Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return fmt.Sprintf("%d", len(r.Status.Migrations)) })},
-		{Name: "ENCODING", Wide: true, Extract: safeCol(instanceStatusEncoding)},
 		{Name: "PAUSED", Wide: true, Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return fmt.Sprintf("%t", r.Spec.Paused) })},
 		{Name: "COORDINATION", Wide: true, Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return printers.OrDash(r.Status.CoordinationGroupRef) })},
 		{Name: "LIFECYCLE-FRESHNESS", Wide: true, Extract: safeCol(func(r *v1beta1.InferenceReplica) string { return inferenceReplicaLifecycle(r).freshness })},
@@ -747,13 +746,6 @@ func int32OrDash(value *int32) string {
 		return "-"
 	}
 	return fmt.Sprintf("%d", *value)
-}
-
-func instanceStatusEncoding(replica *v1beta1.InferenceReplica) string {
-	if replica.Status.InstanceStatusEncoding == nil {
-		return "DenseV1"
-	}
-	return printers.OrDash(string(*replica.Status.InstanceStatusEncoding))
 }
 
 type inferenceReplicaLifecycleValue struct {
