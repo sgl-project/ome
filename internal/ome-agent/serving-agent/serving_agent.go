@@ -185,7 +185,7 @@ func (s *ServingSidecar) watchFileChanges(watcher *fsnotify.Watcher, filePath st
 				if !ok {
 					return
 				}
-				s.logger.Errorf("File Watcher ERROR", err)
+				s.logger.Errorf("File Watcher ERROR: %v", err)
 			}
 		}
 	}()

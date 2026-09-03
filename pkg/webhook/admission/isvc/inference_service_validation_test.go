@@ -274,38 +274,6 @@ func TestValidateTrafficCapabilityGate(t *testing.T) {
 	})
 }
 
-// Test error paths in ValidateCreate, ValidateUpdate, ValidateDelete
-func TestValidatorErrorPaths(t *testing.T) {
-	validator := &InferenceServiceValidator{}
-
-	t.Run("ValidateCreate with invalid object type", func(t *testing.T) {
-		invalidObj := &v1.Pod{} // Wrong type
-		warnings, err := validator.ValidateCreate(context.Background(), invalidObj)
-		assert.Error(t, err)
-		assert.Nil(t, warnings)
-		assert.Contains(t, err.Error(), "expected an InferenceService object")
-	})
-
-	t.Run("ValidateUpdate with invalid object type", func(t *testing.T) {
-		validIsvc := &v1beta1.InferenceService{
-			ObjectMeta: metav1.ObjectMeta{Name: "test"},
-		}
-		invalidObj := &v1.Pod{} // Wrong type
-		warnings, err := validator.ValidateUpdate(context.Background(), validIsvc, invalidObj)
-		assert.Error(t, err)
-		assert.Nil(t, warnings)
-		assert.Contains(t, err.Error(), "expected an InferenceService object")
-	})
-
-	t.Run("ValidateDelete with invalid object type", func(t *testing.T) {
-		invalidObj := &v1.Pod{} // Wrong type
-		warnings, err := validator.ValidateDelete(context.Background(), invalidObj)
-		assert.Error(t, err)
-		assert.Nil(t, warnings)
-		assert.Contains(t, err.Error(), "expected an InferenceService object")
-	})
-}
-
 // =============================================================================
 // NAME VALIDATION TESTS
 // =============================================================================
@@ -2440,59 +2408,6 @@ func TestGetIntReference(t *testing.T) {
 			result := GetIntReference(tt.input)
 			assert.NotNil(t, result)
 			assert.Equal(t, tt.expected, *result)
-		})
-	}
-}
-
-// Test error cases in convertToInferenceService
-func TestConvertToInferenceService_ErrorCases(t *testing.T) {
-	tests := []struct {
-		name    string
-		obj     runtime.Object
-		wantErr bool
-		errMsg  string
-	}{
-		{
-			name: "valid InferenceService",
-			obj: &v1beta1.InferenceService{
-				ObjectMeta: metav1.ObjectMeta{Name: "test"},
-			},
-			wantErr: false,
-		},
-		{
-			name:    "Pod instead of InferenceService",
-			obj:     &v1.Pod{},
-			wantErr: true,
-			errMsg:  "expected an InferenceService object but got *v1.Pod",
-		},
-		{
-			name:    "ConfigMap instead of InferenceService",
-			obj:     &v1.ConfigMap{},
-			wantErr: true,
-			errMsg:  "expected an InferenceService object but got *v1.ConfigMap",
-		},
-		{
-			name:    "nil object",
-			obj:     nil,
-			wantErr: true,
-			errMsg:  "expected an InferenceService object but got <nil>",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := convertToInferenceService(tt.obj)
-
-			if tt.wantErr {
-				assert.Error(t, err)
-				assert.Nil(t, result)
-				if tt.errMsg != "" {
-					assert.Contains(t, err.Error(), tt.errMsg)
-				}
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, result)
-			}
 		})
 	}
 }

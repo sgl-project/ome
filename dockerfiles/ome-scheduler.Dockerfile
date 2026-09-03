@@ -3,7 +3,7 @@
 # (scheduler/go.mod, pinned to the target Kubernetes minor), and links no
 # CGO, so it cross-compiles to a static binary on scratch. Build context is
 # the repo root (matches the other dockerfiles/).
-ARG GO_BUILDER_IMAGE=golang:1.25
+ARG GO_BUILDER_IMAGE=golang:1.26
 FROM ${GO_BUILDER_IMAGE} AS builder
 WORKDIR /workspace/scheduler
 

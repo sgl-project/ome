@@ -6,10 +6,7 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -21,8 +18,6 @@ import (
 	"sigs.k8s.io/ome/pkg/utils/storage"
 	"sigs.k8s.io/ome/pkg/validation"
 )
-
-var validatorLogger = logf.Log.WithName("inferenceservice-v1beta1-validation-webhook")
 
 // InferenceServiceValidator wires the webhook framework into the
 // per-rule validators in pkg/validation. The kubebuilder markers below
@@ -71,14 +66,9 @@ type InferenceServiceValidator struct {
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-inferenceservice,mutating=false,failurePolicy=fail,groups=ome.io,resources=inferenceservices,versions=v1beta1,name=inferenceservice.ome-webhook-server.validator
-var _ webhook.CustomValidator = &InferenceServiceValidator{}
+var _ admission.Validator[*v1beta1.InferenceService] = &InferenceServiceValidator{}
 
-func (v *InferenceServiceValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	isvc, err := convertToInferenceService(obj)
-	if err != nil {
-		validatorLogger.Error(err, "Unable to convert object to InferenceService")
-		return nil, err
-	}
+func (v *InferenceServiceValidator) ValidateCreate(ctx context.Context, isvc *v1beta1.InferenceService) (admission.Warnings, error) {
 	if err := validateLegacyAutoscalerFieldsFromCtx(ctx); err != nil {
 		return nil, err
 	}
@@ -110,17 +100,7 @@ func (v *InferenceServiceValidator) ValidateCreate(ctx context.Context, obj runt
 	return warnings, nil
 }
 
-func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	isvc, err := convertToInferenceService(newObj)
-	if err != nil {
-		validatorLogger.Error(err, "Unable to convert object to InferenceService")
-		return nil, err
-	}
-	oldIsvc, err := convertToInferenceService(oldObj)
-	if err != nil {
-		validatorLogger.Error(err, "Unable to convert prior object to InferenceService")
-		return nil, err
-	}
+func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldIsvc, isvc *v1beta1.InferenceService) (admission.Warnings, error) {
 	if err := validateLegacyAutoscalerFieldsFromCtx(ctx); err != nil {
 		return nil, err
 	}
@@ -227,11 +207,7 @@ func validateLegacyAutoscalerFieldsFromCtx(ctx context.Context) error {
 	return validation.ValidateLegacyAutoscalerFieldsRaw(req.AdmissionRequest.Object.Raw)
 }
 
-func (v *InferenceServiceValidator) ValidateDelete(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	if _, err := convertToInferenceService(obj); err != nil {
-		validatorLogger.Error(err, "Unable to convert object to InferenceService")
-		return nil, err
-	}
+func (v *InferenceServiceValidator) ValidateDelete(_ context.Context, _ *v1beta1.InferenceService) (admission.Warnings, error) {
 	return nil, nil
 }
 
@@ -426,14 +402,6 @@ func (v *InferenceServiceValidator) validateInferenceService(ctx context.Context
 		allWarnings = append(allWarnings, resWarnings...)
 	}
 	return allWarnings, nil
-}
-
-func convertToInferenceService(obj runtime.Object) (*v1beta1.InferenceService, error) {
-	isvc, ok := obj.(*v1beta1.InferenceService)
-	if !ok {
-		return nil, fmt.Errorf("expected an InferenceService object but got %T", obj)
-	}
-	return isvc, nil
 }
 
 // validateModelExists ensures the referenced BaseModel/ClusterBaseModel
