@@ -1,0 +1,14 @@
+ome:
+  # autoscalerPolicy gates the AutoscalerPolicy CRD. Deliberately the same
+  # values path as ome-resources' ome.autoscalerPolicy.enabled (which gates
+  # the manager RBAC, validating webhook, and config block): set both charts
+  # from one value so the CRD never installs without its controller and
+  # webhook, and vice versa. Alpha; default off.
+  autoscalerPolicy:
+    enabled: false
+  # rolloutPolicy gates the RolloutPolicy CRD. Deliberately the same values
+  # path as ome-resources' ome.rolloutPolicy.enabled (which gates the policy
+  # validating webhook): set both charts from one value so the CRD never
+  # installs without its webhook, and vice versa. Alpha; default off.
+  rolloutPolicy:
+    enabled: false

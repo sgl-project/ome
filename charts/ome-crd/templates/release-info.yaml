@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ome-crd-release
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-crd.labels" . | nindent 4 }}
+data:
+  chart-version: {{ .Chart.Version | quote }}
+  app-version: {{ .Chart.AppVersion | quote }}

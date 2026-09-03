@@ -106,6 +106,78 @@ ome:
         globalGateway: ""       # "namespace/name" of the global Gateway ("" => publisher is a no-op)
         routeNamespace: ""      # namespace for the published HTTPRoute + Service ("" => the ISVC's namespace)
         backendPort: 0          # port on the winner's ingress the global host forwards to
+  # autoscalerPolicy is the single gate for the reusable AutoscalerPolicy
+  # feature: the manager's policy RBAC, the policy validating webhook, and the
+  # autoscalerPolicy config block all install together on this one value —
+  # never install-but-dormant. Alpha; default off. Deliberately the same
+  # values path as the ome-crd chart's ome.autoscalerPolicy.enabled: set both
+  # charts from one value so the CRD and its controller + webhook always ship
+  # as a unit.
+  autoscalerPolicy:
+    enabled: false
+    # metricProviders binds the logical provider names policies reference
+    # (providerRef on endpoint triggers) to this cluster's metric endpoints.
+    # Deprecated alias: prefer the top-level ome.metricProviders map, which
+    # is authoritative whenever it is set; the loader reads this nested map
+    # only when the top-level key is absent.
+    # Cluster-admin owned and the ONLY source of endpoints: a policy can only
+    # NAME a provider, an unbound name is a render error (fail closed), and
+    # the OME binary has NO built-in addresses — this map is the source of
+    # truth. Per provider: serverAddress (required) is injected as the
+    # rendered trigger's serverAddress; authSecretRef ({name, key}, optional)
+    # points at a Secret key in each consumer namespace holding a bearer
+    # token, materialized as a KEDA TriggerAuthentication and never rendered
+    # into policies, status, or digests.
+    # Example, pointing at the bundled Prometheus this chart deploys (same
+    # address canaryAnalysis defaults to):
+    # metricProviders:
+    #   cluster-prometheus:
+    #     serverAddress: "http://ome-prometheus.ome.svc:9090"
+    #     # authSecretRef:
+    #     #   name: prometheus-bearer
+    #     #   key: token
+    metricProviders: {}
+    # preflight tunes the control-plane placement preflight for
+    # policy-referencing InferenceServices. 0 => the manager's built-in
+    # default (memberGetTimeoutSeconds 5, skewDeadlineSeconds 900).
+    preflight:
+      # Deadline for each per-candidate live policy GET; a timed-out member
+      # is ineligible for that placement.
+      memberGetTimeoutSeconds: 0
+      # How long a home may hold a derived policy-referencing ISVC without
+      # reporting a resolved digest before the control plane flags it.
+      skewDeadlineSeconds: 0
+  # rolloutPolicy is the single gate for the reusable RolloutPolicy feature:
+  # the policy validating webhook installs on this one value — never
+  # install-but-dormant. Alpha; default off. Deliberately the same values path
+  # as the ome-crd chart's ome.rolloutPolicy.enabled: set both charts from one
+  # value so the CRD and its webhook always ship as a unit. Manager RBAC stays
+  # ungated in the generated role (grants on an absent CRD are inert), and the
+  # ome.controller.rollout config block below stays ungated too — inline
+  # rollout plans exist on every cluster, policy CRD or not.
+  rolloutPolicy:
+    enabled: false
+  # metricProviders binds the logical provider names consumers reference (a
+  # policy trigger's providerRef, canaryAnalysis.defaultProvider) to this
+  # cluster's metric endpoints, rendered as the top-level metricProviders key
+  # of inferenceservice-config. Cluster-admin owned and the ONLY source of
+  # endpoints: consumers name providers, the OME binary has NO built-in
+  # addresses. Per provider: serverAddress (required); authSecretRef
+  # ({name, key}, optional) names a Secret key in each consumer namespace
+  # holding a bearer token; headers (optional map) are fleet-default HTTP
+  # headers attached to provider requests. Whenever this map is set it is
+  # authoritative and the deprecated nested ome.autoscalerPolicy.metricProviders
+  # alias is ignored by the loader.
+  # Example:
+  # metricProviders:
+  #   cluster-prometheus:
+  #     serverAddress: "http://ome-prometheus.ome.svc:9090"
+  #     # authSecretRef:
+  #     #   name: prometheus-bearer
+  #     #   key: token
+  #     # headers:
+  #     #   X-Scope-OrgID: tenant-a
+  metricProviders: {}
   benchmarkJob:
     image: genai-bench
     tag: 0.1.113
@@ -141,6 +213,15 @@ ome:
         engine: 3
         decoder: 3
         router: 2
+    # Admission-time pod termination grace stamped by the same webhook on any
+    # component that does not author terminationGracePeriodSeconds. Bounds how
+    # long a component has to finish in-flight requests after SIGTERM; a
+    # serving component whose requests outlive it loses them on every restart.
+    # Same contract as replicas above: the binary has no built-in default, and
+    # an authored component value always wins. Size it above the tier's
+    # longest expected request, and keep any in-process drain the runtime
+    # performs strictly under it so the runtime finishes first.
+    terminationGracePeriodSeconds: 600
     # Max reconciles each controller runs in parallel (distinct objects only —
     # controller-runtime serializes per object key, so independent objects
     # reconcile concurrently). Source of truth for these values (the OME binary
@@ -166,6 +247,28 @@ ome:
     # window; kept short so ConfigMap edits apply without a restart. Set to "0" to
     # disable caching (read the apiserver on every load).
     configCacheTTL: "30s"
+    # AcceleratorResources lists the extended resource names OME recognizes as
+    # GPU/accelerator capacity when inspecting a container's resources (GPU-enabled
+    # checks, per-pod accelerator counts feeding multi-node PARALLELISM_SIZE
+    # sizing). Exact names, no patterns. The OME binary has NO built-in default
+    # list; omitting this key (or setting an empty list) falls back to
+    # recognizing only "nvidia.com/gpu" — the sole resource name OME recognized
+    # before this field existed — so an unconfigured/upgraded cluster's behavior
+    # is unchanged. The chart default below preserves that same nvidia-only
+    # behavior for every existing install.
+    #
+    # Adding a resource name here is a template-affecting change, not a config
+    # tweak: for any multi-node Engine/Decoder Component whose runner container
+    # requests that resource, recognizing it materializes the PARALLELISM_SIZE
+    # env var onto the pod template where it was previously absent (0 GPUs
+    # detected). That changes the hashed OMENative revision payload, which mints
+    # a new revision and rolls every such Component still running. Schedule
+    # adding a vendor here like any other pod-template change, not like a
+    # config-only edit.
+    acceleratorResources:
+      - nvidia.com/gpu
+      # - amd.com/gpu
+      # - google.com/tpu
     # canaryAnalysis tunes metric-gated canary promotion (spec.rollout.canary).
     canaryAnalysis:
       # Default Prometheus the analysis queries when a canary does not set its own
@@ -173,11 +276,27 @@ ome:
       # ome-prometheus Service at prometheus.service.port. Set to your own
       # Prometheus/Thanos for production.
       bundledPrometheusAddress: ""
+      # Name of an ome.metricProviders binding used as the analysis source when
+      # a canary names neither a providerRef nor its own serverAddress. Empty
+      # keeps the bundledPrometheusAddress fallback; a name with no binding is
+      # a config error surfaced when a run opens, never a silent fallback.
+      defaultProvider: ""
       # Per-sample query timeout, max background query concurrency, and how long a
       # sampled result stays usable in the controller's cache.
       queryTimeout: "5s"
       maxConcurrency: 8
       cacheTTL: "2m"
+    # rollout tunes rollout runs (inline plans and RolloutPolicy-backed alike),
+    # so it applies regardless of ome.rolloutPolicy.enabled. Source of truth
+    # for these values: the OME binary has NO built-in defaults.
+    rollout:
+      # Cap on the JSON-rendered size of a policy/inline plan body pinned into
+      # a run's status. 0 means uncapped.
+      maxPinnedPlanBytes: 16384
+      # Fleet-default readiness deadline applied when a rollout does not set
+      # its own. Empty means no configured default (each consumer keeps its
+      # documented fallback).
+      defaultReadyTimeout: "15m"
     # coordination tunes the OMENative cross-Component coordination layer.
     coordination:
       # Per-revision hysteresis band (percent) for the pod-proportional traffic

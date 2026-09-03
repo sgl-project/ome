@@ -207,6 +207,32 @@ quotaManager:
   podAnnotations: {}
   podLabels: {}
 
+  # Pod-level securityContext, which containers that set none inherit. Empty by
+  # default, and the workload's own guarantee is asserted on its container
+  # instead — see securityContext below.
+  #
+  # The distinction matters when the platform injects a container. An injected
+  # initContainer carries no securityContext of its own, so a pod-level
+  # runAsNonRoot applies to it: an image that runs as root then fails to start
+  # with "container has runAsNonRoot and image will run as root", taking the pod
+  # with it. Constraining the pod constrains whatever the platform adds, which
+  # is not the thing this chart is trying to constrain.
+  podSecurityContext: {}
+
+  # Escape hatches for what the platform, rather than this chart, has to supply.
+  # The case they exist for is an exec-credential kubeconfig: the plugin binary
+  # runs inside this pod, so whatever it needs to authenticate -- a trust store
+  # on a host path, the environment variables naming its client certificate --
+  # has to be mounted here, and none of it is knowable from the chart.
+  #
+  # Enabling projection.execCredentials without these is the common mistake. It
+  # gets the plugin past the transport's policy check and no further: the binary
+  # then runs and fails on its own missing configuration, which reads as a
+  # certificate error rather than a chart one.
+  extraEnv: []
+  extraVolumes: []
+  extraVolumeMounts: []
+
   # A single-replica install cannot satisfy a PDB, so it is off by default and
   # only meaningful alongside replicaCount > 1.
   podDisruptionBudget:
