@@ -617,7 +617,7 @@ artifacts: kustomize ## Generate artifacts for release.
 ##@ 🧪 Testing
 
 # --- Configuration ---
-GOTOOLCHAIN      ?= go1.25.0+auto # https://github.com/golang/go/issues/75031
+GOTOOLCHAIN      ?= go1.26.0+auto # https://github.com/golang/go/issues/75031
 XET_LIB_PATH     := $(shell pwd)/pkg/xet/target/release
 EXCLUDE_PATTERNS := "pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/|pkg/modelconfig/examples/|pkg/hfutil/hub/samples/"
 # Keep this floor moving toward the 85% coverage goal. Override it locally with

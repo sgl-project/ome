@@ -52,3 +52,28 @@ issues:
     - linters:
         - staticcheck
       text: "SA1019: .*\\.Requeue is deprecated"
+
+    # GetEventRecorderFor is deprecated in favour of GetEventRecorder, but the
+    # two return different types writing different API groups:
+    # record.EventRecorder emits core/v1 Events, events.EventRecorder emits
+    # events.k8s.io/v1. Every reconciler's Recorder field is
+    # record.EventRecorder and production fills it from a record.NewBroadcaster,
+    # so the call sites here — all test harnesses — cannot move on their own,
+    # and moving all of them changes the API group OME writes plus the RBAC
+    # that permits it. Suppressed until that migration is done deliberately.
+    - linters:
+        - staticcheck
+      text: "SA1019: .*GetEventRecorderFor is deprecated"
+
+    # The client.Apply patch sentinel is deprecated in favour of Client.Apply,
+    # which takes a runtime.ApplyConfiguration. controller-runtime ships that
+    # helper for unstructured objects only, and there are no generated apply
+    # configurations for ome.io types, so the projector — which applies typed
+    # AcceleratorQuota copies — would have to round-trip through unstructured.
+    # That changes what the field manager claims on every projected object, so
+    # it is a deliberate change to make against the quota tests rather than
+    # part of a dependency bump.
+    - path: ^pkg/controller/v1beta1/acceleratorquota/project\.go$
+      linters:
+        - staticcheck
+      text: "SA1019: .*client\\.Apply is deprecated"

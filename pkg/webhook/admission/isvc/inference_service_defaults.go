@@ -5,12 +5,11 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
@@ -31,14 +30,9 @@ type InferenceServiceDefaulter struct {
 }
 
 // +kubebuilder:webhook:path=/mutate-ome-io-v1beta1-inferenceservice,mutating=true,failurePolicy=fail,groups=ome.io,resources=inferenceservices,verbs=create;update,versions=v1beta1,name=inferenceservice.ome-webhook-server.defaulter
-var _ webhook.CustomDefaulter = &InferenceServiceDefaulter{}
+var _ admission.Defaulter[*v1beta1.InferenceService] = &InferenceServiceDefaulter{}
 
-func (d *InferenceServiceDefaulter) Default(ctx context.Context, obj runtime.Object) error {
-	isvc, err := convertToInferenceService(obj)
-	if err != nil {
-		mutatorLogger.Error(err, "Unable to convert object to InferenceService")
-		return err
-	}
+func (d *InferenceServiceDefaulter) Default(ctx context.Context, isvc *v1beta1.InferenceService) error {
 	deployConfig, err := controllerconfig.NewDeployConfig(d.ClientSet)
 	if err != nil {
 		mutatorLogger.Error(err, "Failed to get deploy config")

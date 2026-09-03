@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -217,6 +218,10 @@ func (c *recordingSubResourceWriter) Patch(
 	return c.delegate.Patch(ctx, object, patch, options...)
 }
 
+func (c *recordingSubResourceWriter) Apply(context.Context, k8sruntime.ApplyConfiguration, ...ctrlclient.SubResourceApplyOption) error {
+	return errors.New("apply is not supported by this test client")
+}
+
 type recordingSubResourceClient struct {
 	parent   *recordingRuntimeClient
 	name     string
@@ -260,6 +265,10 @@ func (c *recordingSubResourceClient) Patch(
 ) error {
 	c.parent.record(c.name+"-patch", object, ctrlclient.ObjectKeyFromObject(object))
 	return c.delegate.Patch(ctx, object, patch, options...)
+}
+
+func (c *recordingSubResourceClient) Apply(context.Context, k8sruntime.ApplyConfiguration, ...ctrlclient.SubResourceApplyOption) error {
+	return errors.New("apply is not supported by this test client")
 }
 
 // TestEffectiveCommandContract catches removing the effective command, changing

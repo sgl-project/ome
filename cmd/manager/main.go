@@ -676,8 +676,7 @@ func main() {
 		} else {
 			runtimeSelector := runtimeselector.New(mgr.GetClient())
 
-			if err = ctrl.NewWebhookManagedBy(mgr).
-				For(&v1beta1.InferenceService{}).
+			if err = ctrl.NewWebhookManagedBy(mgr, &v1beta1.InferenceService{}).
 				WithDefaulter(&isvc.InferenceServiceDefaulter{
 					Client:    mgr.GetClient(),
 					ClientSet: clientSet,

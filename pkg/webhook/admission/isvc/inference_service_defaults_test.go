@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -1041,22 +1040,3 @@ func TestDefaultOMENativeComponent_SinglePodDefaults(t *testing.T) {
 
 // silence unused-helper lint if int32Ptr isn't referenced elsewhere
 var _ = int32Ptr
-
-// =============================================================================
-// Webhook Integration Tests
-// =============================================================================
-
-func TestDefault(t *testing.T) {
-	t.Run("conversion error", func(t *testing.T) {
-		// Create an object that cannot be converted to InferenceService
-		invalidObj := &v1.Pod{}
-		defaulter := &InferenceServiceDefaulter{
-			Client: createFakeClient(t),
-		}
-
-		err := defaulter.Default(context.Background(), invalidObj)
-
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "expected an InferenceService object but got")
-	})
-}
