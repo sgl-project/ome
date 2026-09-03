@@ -33,7 +33,8 @@ data:
   deploy: |-
     {
       "defaultDeploymentMode": "{{ .Values.ome.controller.deploymentMode }}"{{- with .Values.ome.controller.replicas }},
-      "replicas": {{ toJson . }}{{- end }}
+      "replicas": {{ toJson . }}{{- end }}{{- with .Values.ome.controller.terminationGracePeriodSeconds }},
+      "terminationGracePeriodSeconds": {{ . }}{{- end }}
     }
 {{- with .Values.ome.controller.podDisruptionBudget }}
   podDisruptionBudget: |-
@@ -43,10 +44,22 @@ data:
   canaryAnalysis: |-
     {
       "bundledPrometheusAddress": "{{ .Values.ome.controller.canaryAnalysis.bundledPrometheusAddress | default (printf "http://ome-prometheus.%s.svc:%v" .Release.Namespace .Values.prometheus.service.port) }}",
+      "defaultProvider": "{{ .Values.ome.controller.canaryAnalysis.defaultProvider | default "" }}",
       "queryTimeout": "{{ .Values.ome.controller.canaryAnalysis.queryTimeout | default "5s" }}",
       "maxConcurrency": {{ .Values.ome.controller.canaryAnalysis.maxConcurrency | default 8 }},
       "cacheTTL": "{{ .Values.ome.controller.canaryAnalysis.cacheTTL | default "2m" }}"
     }
+
+  rollout: |-
+    {
+      "maxPinnedPlanBytes": {{ .Values.ome.controller.rollout.maxPinnedPlanBytes | default 0 }},
+      "defaultReadyTimeout": "{{ .Values.ome.controller.rollout.defaultReadyTimeout | default "" }}"
+    }
+{{- with .Values.ome.metricProviders }}
+
+  metricProviders: |-
+    {{- toJson . | nindent 4 }}
+{{- end }}
 
   coordination: |-
     {
@@ -129,6 +142,17 @@ data:
         "backendPort": {{ .Values.ome.multicluster.config.endpoint.backendPort | default 0 }}
       }
     }
+{{- if .Values.ome.autoscalerPolicy.enabled }}
+
+  autoscalerPolicy: |-
+    {
+      "metricProviders": {{ .Values.ome.autoscalerPolicy.metricProviders | default dict | toJson }},
+      "preflight": {
+        "memberGetTimeoutSeconds": {{ .Values.ome.autoscalerPolicy.preflight.memberGetTimeoutSeconds | default 0 }},
+        "skewDeadlineSeconds": {{ .Values.ome.autoscalerPolicy.preflight.skewDeadlineSeconds | default 0 }}
+      }
+    }
+{{- end }}
 
   metricsAggregator: |-
     {
@@ -138,6 +162,10 @@ data:
 {{- if .Values.ome.podMonitor }}
   podMonitor: |-
     {{- toJson .Values.ome.podMonitor | nindent 4 }}
+{{- end }}
+{{- if .Values.ome.controller.acceleratorResources }}
+  acceleratorResources: |-
+    {{- toJson .Values.ome.controller.acceleratorResources | nindent 4 }}
 {{- end }}
   servingSidecar: |-
     {

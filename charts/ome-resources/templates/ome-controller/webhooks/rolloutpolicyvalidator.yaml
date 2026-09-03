@@ -1,0 +1,39 @@
+{{- if .Values.ome.rolloutPolicy.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: rolloutpolicy.ome.io
+  annotations:
+    cert-manager.io/inject-ca-from: ome/serving-cert
+webhooks:
+  - clientConfig:
+      caBundle: Cg==
+      service:
+        name: ome-webhook-server-service
+        namespace: {{ .Release.Namespace }}
+        path: /validate-ome-io-v1beta1-rolloutpolicy
+    failurePolicy: Fail
+    name: rolloutpolicy.ome-webhook-server.validator
+    sideEffects: None
+    admissionReviewVersions: ["v1"]
+    # Skip spec re-validation on objects already being deleted, but DELETE
+    # itself must always reach the handler (it denies in-use deletion). A
+    # DELETE review carries no `object`, so evaluating the deletionTimestamp
+    # guard there would error and failurePolicy would reject every delete —
+    # the operation check must short-circuit first.
+    matchConditions:
+      - name: skip-deletion
+        expression: "request.operation == 'DELETE' || !has(object.metadata.deletionTimestamp)"
+    rules:
+      - apiGroups:
+          - ome.io
+        apiVersions:
+          - v1beta1
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - rolloutpolicies
+{{- end }}

@@ -180,6 +180,18 @@ manifests: controller-gen yq ## 📄 Generate WebhookConfiguration, ClusterRole 
 
 	@echo "\n📁 Step 6: Copying manifests to Helm charts..."
 	@cp config/crd/full/ome* charts/ome-crd/templates/ && cp config/rbac/role.yaml charts/ome-resources/templates/ome-controller/rbac/role.yaml
+	@# The policy CRD templates are Helm-gated (each feature installs
+	@# CRD + controller + webhook together); the raw copy above drops the
+	@# wrapper, so re-wrap after every copy. The ome-crd render test fails
+	@# loudly if this ever regresses.
+	@f=charts/ome-crd/templates/ome.io_autoscalerpolicies.yaml; \
+	if ! head -1 $$f | grep -q 'autoscalerPolicy.enabled'; then \
+		{ echo '{{- if .Values.ome.autoscalerPolicy.enabled }}'; cat $$f; echo '{{- end }}'; } > $$f.tmp && mv $$f.tmp $$f; \
+	fi
+	@f=charts/ome-crd/templates/ome.io_rolloutpolicies.yaml; \
+	if ! head -1 $$f | grep -q 'rolloutPolicy.enabled'; then \
+		{ echo '{{- if .Values.ome.rolloutPolicy.enabled }}'; cat $$f; echo '{{- end }}'; } > $$f.tmp && mv $$f.tmp $$f; \
+	fi
 	@echo "✅ Manifests copied to Helm charts"
 
 	@echo "\n🎉 Manifest generation completed successfully!\n"
@@ -280,6 +292,14 @@ helm-lint: helm ## ⎈ Lint all charts
 	    exit 1; \
 	  fi \
 	done
+	@echo "🧪 Testing ome-crd chart contracts..."
+	@HELM_BIN="$(HELM)" bash $(CHARTS_DIR)/ome-crd/tests/render_test.sh
+	@echo "🧪 Testing ome-scheduler chart contracts..."
+	@HELM_BIN="$(HELM)" bash $(CHARTS_DIR)/ome-scheduler/tests/render_test.sh
+	@echo "🧪 Testing ome-resources chart contracts..."
+	@HELM_BIN="$(HELM)" bash $(CHARTS_DIR)/ome-resources/tests/render_test.sh
+	@echo "🧪 Testing ome-quota-manager chart contracts..."
+	@HELM_BIN="$(HELM)" bash $(CHARTS_DIR)/ome-quota-manager/tests/render_test.sh
 	@echo "✅ Helm lint complete"
 
 .PHONY: helm-doc
