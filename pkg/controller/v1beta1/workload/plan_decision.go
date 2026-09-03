@@ -23,6 +23,10 @@ const (
 	// ActionScaleDown deletes the InstanceStatus indices the plan no
 	// longer covers.
 	ActionScaleDown ActionKind = "ScaleDown"
+	// ActionDemote applies the truth pass: a status-only Ready→Pending
+	// transition for Instances with no live pods and no in-flight
+	// operation, where no op pass will act.
+	ActionDemote ActionKind = "Demote"
 	// ActionRestart advances the Restart state machine for the selected
 	// Instances.
 	ActionRestart ActionKind = "Restart"
@@ -130,6 +134,9 @@ type PlannedAction struct {
 	// Extras are the scale-down target indices (ActionScaleDown).
 	Extras []int32
 
+	// Demotions are the truth-pass targets (ActionDemote).
+	Demotions []DemotionSelection
+
 	// Restarts are the Instances the restart pass advances
 	// (ActionRestart).
 	Restarts []RestartSelection
@@ -152,9 +159,14 @@ type PlannedAction struct {
 type Decision struct {
 	// Actions are the selected pass-level actions,
 	// first-precedence-first. A paused plan truncates the list after
-	// scale-down: a deliberate replica reduction still releases
-	// capacity, but no lifecycle operation that can create, replace,
-	// or migrate pods is started or advanced.
+	// the restart pass: a deliberate replica reduction still releases
+	// capacity and the RestartPolicy keeps repairing existing
+	// Instances, but no Migration, Update, or Create operation is
+	// started or advanced. A frozen pause (PauseFreeze) truncates
+	// after the truth pass — repair is suspended too. The truth pass
+	// (ActionDemote) is status-only, selected only while paused (in
+	// every depth): pause suspends lifecycle operations, never status
+	// truth, while unpaused reconciles leave the correction to Create.
 	Actions []PlannedAction
 
 	// RequeueAfter is the earliest not-yet-due Backoff RetryBlock
@@ -195,14 +207,38 @@ func Plan(ctx context.Context, input ReconcileInput, plan ComponentPlan, target 
 		d.Actions = append(d.Actions, PlannedAction{Kind: ActionScaleDown, Extras: extras})
 	}
 
-	// Paused is an operator circuit breaker: scale-down above still
-	// releases capacity, but nothing after it is planned. Pod and spec
-	// watches enqueue the workload again after unpause; no periodic
-	// requeue is needed while the desired state is intentionally held.
+	// Truth pass, paused reconciles only: a Ready Instance whose pods are
+	// all gone, with no operation in flight and no op pass that will act
+	// (the policy is not RecreateInstanceOnPodRestart, and pause parks the
+	// Create pass that would otherwise re-materialize it), must not keep
+	// claiming Ready. Status-only; selected here, applied by Execute; runs
+	// in every pause depth because pause suspends lifecycle operations,
+	// never status truth. Unpaused reconciles skip it: Create both
+	// recovers the pods and re-stamps the phase in the same pass.
 	if plan.Paused {
+		demotions, derr := planUnbackedDemotions(ctx, input, plan, snapshot)
+		if derr != nil {
+			return Decision{}, derr
+		}
+		if len(demotions) > 0 {
+			d.Actions = append(d.Actions, PlannedAction{Kind: ActionDemote, Demotions: demotions})
+		}
+	}
+
+	// Paused is an operator circuit breaker: scale-down above still
+	// releases capacity, and the restart pass below keeps repairing
+	// existing Instances at their current revision (RunningRevision —
+	// repair can never advance a rollout), but no Migration, Update, or
+	// Create work is planned. PauseFreeze suspends the restart pass
+	// too. Pod and spec watches enqueue the workload again after
+	// unpause; no periodic requeue is needed while the desired state is
+	// intentionally held.
+	if plan.Paused && plan.PauseFreeze {
 		return d, nil
 	}
-	d.Escalate = true
+	if !plan.Paused {
+		d.Escalate = true
+	}
 
 	// Restart selection: per-Instance pod-loss / pod-Failed triggers,
 	// evaluated against the LIVE pod read — restart is destructive and
@@ -222,6 +258,11 @@ func Plan(ctx context.Context, input ReconcileInput, plan ComponentPlan, target 
 		if len(restarts) > 0 {
 			d.Actions = append(d.Actions, PlannedAction{Kind: ActionRestart, Restarts: restarts})
 		}
+	}
+
+	// A standard pause plans nothing beyond repair.
+	if plan.Paused {
+		return d, nil
 	}
 
 	// Migration expiry selection — the deadline consumer. Planned
@@ -268,6 +309,64 @@ func Plan(ctx context.Context, input ReconcileInput, plan ComponentPlan, target 
 	d.Actions = append(d.Actions, PlannedAction{Kind: ActionCreate})
 
 	return d, nil
+}
+
+// planUnbackedDemotions selects Ready Instances with no live pods and no
+// in-flight Operation for a status-only demotion to Pending. Phase is
+// op-owned, so this narrow observation-only correction fires exclusively
+// where no op pass will: components under RecreateInstanceOnPodRestart are
+// excluded outright (their restart pass owns Ready-with-pod-loss and
+// recreates at the running revision), and an Operation in any state keeps
+// ownership with its op. Extras belong to scale-down. Candidates are
+// screened on the cached read and confirmed against the live read, so the
+// demotion can never fire on cache lag; a Terminating pod still counts as
+// live, deferring the correction until the loss is total and settled.
+func planUnbackedDemotions(ctx context.Context, input ReconcileInput, plan ComponentPlan, snapshot *ObservedSnapshot) ([]DemotionSelection, error) {
+	if plan.RestartPolicy == RestartPolicyRecreateInstance {
+		return nil, nil
+	}
+	planned := make(map[int32]struct{}, len(plan.Instances))
+	for _, inst := range plan.Instances {
+		planned[inst.Index] = struct{}{}
+	}
+	var candidates []int32
+	for i := range input.ObservedState.InstanceStatuses {
+		s := &input.ObservedState.InstanceStatuses[i]
+		if _, ok := planned[s.Index]; !ok {
+			continue
+		}
+		if s.Phase != InstancePhaseReady || s.Operation != nil {
+			continue
+		}
+		candidates = append(candidates, s.Index)
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	cached, err := snapshot.CachedPods(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("workload.Reconcile: list pods for truth pass (component=%s): %w", plan.Component, err)
+	}
+	unbacked := candidates[:0]
+	for _, idx := range candidates {
+		if len(cached[idx]) == 0 {
+			unbacked = append(unbacked, idx)
+		}
+	}
+	if len(unbacked) == 0 {
+		return nil, nil
+	}
+	live, err := snapshot.LivePods(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("workload.Reconcile: confirm pods for truth pass (component=%s): %w", plan.Component, err)
+	}
+	var out []DemotionSelection
+	for _, idx := range unbacked {
+		if len(live[idx]) == 0 {
+			out = append(out, DemotionSelection{Index: idx, Reason: "no live pods back the Ready phase"})
+		}
+	}
+	return out, nil
 }
 
 // planUpdateSelection evaluates the per-Instance update triggers

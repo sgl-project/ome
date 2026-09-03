@@ -33,6 +33,22 @@ type RolloutSpec struct {
 	// +listType=atomic
 	// +kubebuilder:validation:MaxItems=3
 	Groups []RolloutGroup `json:"groups,omitempty"`
+
+	// PairingProtocol declares the engine↔decoder wire-compatibility contract
+	// for prefill-decode pairing (e.g. a KV-transfer protocol generation, such
+	// as "nixl-v2"). It is an opaque, operator-owned token compared only for
+	// equality; bump it ONLY when the engine↔decoder wire contract breaks.
+	// The value rides each engine and decoder revision: changing it mints new
+	// revisions for both Components (a rollout), stamps ome.io/pairing-protocol
+	// on their pods and per-revision Services, and is published on each traffic
+	// target so routing pairs only engine and decoder revisions whose values
+	// are equal. Empty or unset pairs with anything, so setting or clearing the
+	// token is upgrade-neutral. Changing it between two non-empty values
+	// requires engine and decoder to roll as one blueGreen or canary group.
+	// +optional
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$`
+	PairingProtocol *string `json:"pairingProtocol,omitempty"`
 }
 
 // RolloutGroup is a set of Components that roll together, advancing through at

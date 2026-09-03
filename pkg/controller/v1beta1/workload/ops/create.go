@@ -245,10 +245,10 @@ func createFilteredBatched(
 		}
 		var mutation workload.InstanceMutation
 		if target != nil && existingPodsMatchTargetRevision(existing, target) {
-			mutation = createStatusReadyOnRevisionMutation(inst.Index, target.Name)
+			mutation = createStatusReadyOnRevisionMutation(inst.Index, target.Name, input.Now())
 			action.pruneRevision = target.Name
 		} else {
-			mutation = createStatusReadyMutation(inst.Index)
+			mutation = createStatusReadyMutation(inst.Index, input.Now())
 		}
 		probe := workload.InstanceStatus{Index: inst.Index}
 		if observed != nil {
@@ -955,16 +955,28 @@ func createStatusCreatingMutation(idx int32, incarnation int64, timeout time.Dur
 
 // patchInstanceStatusReady idempotently moves to Phase=Ready, clears Operation.
 func patchInstanceStatusReady(ctx context.Context, input workload.ReconcileInput, idx int32) error {
-	mutation := createStatusReadyMutation(idx)
+	mutation := createStatusReadyMutation(idx, input.Now())
 	return input.MutateInstance(ctx, mutation.Index, mutation.Mutate)
 }
 
-func createStatusReadyMutation(idx int32) workload.InstanceMutation {
+// markReadyTransition flips s into Ready and stamps ReadySince when this is
+// an entry into Ready rather than an idempotent re-apply. Container restarts
+// that finished before the stamp (boot crashes, in-place update restarts)
+// therefore never read as post-Ready failures.
+func markReadyTransition(s *workload.InstanceStatus, now time.Time) {
+	if s.Phase != workload.InstancePhaseReady {
+		t := metav1.NewTime(now)
+		s.ReadySince = &t
+	}
+	s.Phase = workload.InstancePhaseReady
+}
+
+func createStatusReadyMutation(idx int32, now time.Time) workload.InstanceMutation {
 	return workload.InstanceMutation{Index: idx, Mutate: func(s *workload.InstanceStatus) bool {
 		if s.Phase == workload.InstancePhaseReady && s.Operation == nil {
 			return false
 		}
-		s.Phase = workload.InstancePhaseReady
+		markReadyTransition(s, now)
 		s.Operation = nil
 		return true
 	}}
@@ -977,7 +989,7 @@ func createStatusReadyMutation(idx int32) workload.InstanceMutation {
 // rev also prunes rev's RetryBlock — a converged subject leaves no
 // active block.
 func patchInstanceStatusReadyOnRevision(ctx context.Context, input workload.ReconcileInput, idx int32, rev string) error {
-	mutation := createStatusReadyOnRevisionMutation(idx, rev)
+	mutation := createStatusReadyOnRevisionMutation(idx, rev, input.Now())
 	err := input.MutateInstance(ctx, mutation.Index, mutation.Mutate)
 	if err != nil {
 		return err
@@ -985,7 +997,7 @@ func patchInstanceStatusReadyOnRevision(ctx context.Context, input workload.Reco
 	return pruneRetryBlockOnPromote(ctx, input, rev)
 }
 
-func createStatusReadyOnRevisionMutation(idx int32, rev string) workload.InstanceMutation {
+func createStatusReadyOnRevisionMutation(idx int32, rev string, now time.Time) workload.InstanceMutation {
 	return workload.InstanceMutation{Index: idx, Mutate: func(s *workload.InstanceStatus) bool {
 		if s.Phase == workload.InstancePhaseReady &&
 			s.Operation == nil &&
@@ -993,7 +1005,7 @@ func createStatusReadyOnRevisionMutation(idx int32, rev string) workload.Instanc
 			s.TargetRevision == "" {
 			return false
 		}
-		s.Phase = workload.InstancePhaseReady
+		markReadyTransition(s, now)
 		s.RunningRevision = rev
 		s.TargetRevision = ""
 		s.Operation = nil

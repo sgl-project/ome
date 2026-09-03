@@ -202,6 +202,17 @@ func TestPodStuckPullFailure(t *testing.T) {
 			wantStuck:  true,
 			wantReason: "RunContainerError",
 		},
+		{
+			name: "past grace, CreateContainerError: stuck",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Second))},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{{State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CreateContainerError"}}}},
+				},
+			},
+			wantStuck:  true,
+			wantReason: "CreateContainerError",
+		},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {

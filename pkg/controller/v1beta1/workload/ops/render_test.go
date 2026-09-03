@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -1578,6 +1579,131 @@ func TestBackfillEmptyContainerNames(t *testing.T) {
 		backfillEmptyContainerNames(spec)
 		if len(spec.Containers) != 0 || len(spec.InitContainers) != 0 {
 			t.Errorf("must not invent containers; got %+v", spec)
+		}
+	})
+}
+
+// TestRender_TopologySpreadConstraint pins the spread rendering contract:
+// the anchor pod (leader / single-pod default) carries one constraint on the
+// resolved fault-domain key with the policy-mapped whenUnsatisfiable and a
+// selector matching exactly its sibling anchors; workers carry none; the
+// co-location key is the fallback fault domain; an operator-authored
+// constraint on the same key wins; a single-pod component without an
+// explicit spread key renders nothing.
+func TestRender_TopologySpreadConstraint(t *testing.T) {
+	isvc := basicISVC()
+
+	t.Run("leader gets DoNotSchedule on the spread key", func(t *testing.T) {
+		plan, inst, runners := multiPodPlanWithTopologyKey(1, "topology.example.com/partition")
+		plan.TopologySpread = "Required"
+		plan.TopologySpreadKey = "topology.example.com/cube"
+		leader, err := testRenderWithRevision(isvc, basicPodSpec(), nil, plan, inst, runners[0], 0, "")
+		if err != nil {
+			t.Fatalf("render leader: %v", err)
+		}
+		if n := len(leader.Spec.TopologySpreadConstraints); n != 1 {
+			t.Fatalf("leader constraints = %d, want 1", n)
+		}
+		c := leader.Spec.TopologySpreadConstraints[0]
+		if c.TopologyKey != "topology.example.com/cube" || c.MaxSkew != 1 || c.WhenUnsatisfiable != corev1.DoNotSchedule {
+			t.Fatalf("constraint = %+v, want cube/maxSkew 1/DoNotSchedule", c)
+		}
+		want := map[string]string{
+			constants.InferenceServicePodLabelKey: isvc.Name,
+			constants.OMEComponentLabel:           string(plan.Component),
+			query.LabelRunner:                     "leader",
+		}
+		if c.LabelSelector == nil || !reflect.DeepEqual(c.LabelSelector.MatchLabels, want) {
+			t.Fatalf("selector = %+v, want %+v", c.LabelSelector, want)
+		}
+		// The selector must match the rendered leader itself (its sibling
+		// anchors carry the same labels).
+		for k, v := range want {
+			if leader.Labels[k] != v {
+				t.Fatalf("leader label %s=%q, selector wants %q", k, leader.Labels[k], v)
+			}
+		}
+
+		// Workers carry NO constraint: their required worker→leader
+		// affinity makes them unschedulable until the leader is placed,
+		// so the TSC-gated leader always decides the fault domain.
+		worker, err := testRenderWithRevision(isvc, basicPodSpec(), nil, plan, inst, runners[1], 0, "")
+		if err != nil {
+			t.Fatalf("render worker: %v", err)
+		}
+		if len(worker.Spec.TopologySpreadConstraints) != 0 {
+			t.Fatalf("worker must carry no spread constraint, got %+v", worker.Spec.TopologySpreadConstraints)
+		}
+	})
+
+	t.Run("Preferred maps to ScheduleAnyway and falls back to the co-location key", func(t *testing.T) {
+		plan, inst, runners := multiPodPlanWithTopologyKey(1, "topology.example.com/partition")
+		plan.TopologySpread = "Preferred"
+		leader, err := testRenderWithRevision(isvc, basicPodSpec(), nil, plan, inst, runners[0], 0, "")
+		if err != nil {
+			t.Fatalf("render leader: %v", err)
+		}
+		if n := len(leader.Spec.TopologySpreadConstraints); n != 1 {
+			t.Fatalf("leader constraints = %d, want 1", n)
+		}
+		c := leader.Spec.TopologySpreadConstraints[0]
+		if c.TopologyKey != "topology.example.com/partition" || c.WhenUnsatisfiable != corev1.ScheduleAnyway {
+			t.Fatalf("constraint = %+v, want partition/ScheduleAnyway", c)
+		}
+	})
+
+	t.Run("single-pod anchor spreads only with an explicit key", func(t *testing.T) {
+		plan, inst, runner := singlePodPlan()
+		plan.TopologySpread = "Required"
+		pod, err := testRenderWithRevision(isvc, basicPodSpec(), nil, plan, inst, runner, 0, "")
+		if err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		if len(pod.Spec.TopologySpreadConstraints) != 0 {
+			t.Fatalf("no co-location key and no spread key must render nothing, got %+v", pod.Spec.TopologySpreadConstraints)
+		}
+
+		plan.TopologySpreadKey = "topology.kubernetes.io/zone"
+		pod, err = testRenderWithRevision(isvc, basicPodSpec(), nil, plan, inst, runner, 0, "")
+		if err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		if n := len(pod.Spec.TopologySpreadConstraints); n != 1 {
+			t.Fatalf("constraints = %d, want 1", n)
+		}
+		if got := pod.Spec.TopologySpreadConstraints[0].LabelSelector.MatchLabels[query.LabelRunner]; got != "default" {
+			t.Fatalf("selector runner = %q, want default", got)
+		}
+	})
+
+	t.Run("operator-authored constraint on the same key wins", func(t *testing.T) {
+		plan, inst, runners := multiPodPlanWithTopologyKey(1, "topology.example.com/partition")
+		plan.TopologySpread = "Required"
+		spec := basicPodSpec()
+		spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{{
+			MaxSkew: 3, TopologyKey: "topology.example.com/partition",
+			WhenUnsatisfiable: corev1.ScheduleAnyway,
+		}}
+		leader, err := testRenderWithRevision(isvc, spec, nil, plan, inst, runners[0], 0, "")
+		if err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		if n := len(leader.Spec.TopologySpreadConstraints); n != 1 {
+			t.Fatalf("constraints = %d, want the operator's single constraint", n)
+		}
+		if leader.Spec.TopologySpreadConstraints[0].MaxSkew != 3 {
+			t.Fatalf("operator constraint was replaced: %+v", leader.Spec.TopologySpreadConstraints[0])
+		}
+	})
+
+	t.Run("no policy renders nothing", func(t *testing.T) {
+		plan, inst, runners := multiPodPlanWithTopologyKey(1, "topology.example.com/partition")
+		leader, err := testRenderWithRevision(isvc, basicPodSpec(), nil, plan, inst, runners[0], 0, "")
+		if err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		if len(leader.Spec.TopologySpreadConstraints) != 0 {
+			t.Fatalf("unset policy must render nothing, got %+v", leader.Spec.TopologySpreadConstraints)
 		}
 	})
 }

@@ -12,6 +12,12 @@ const (
 	LabelInstanceIncarnation = "ome.io/instance-incarnation"
 	LabelRunner              = "ome.io/runner"
 	LabelRevisionHash        = "ome.io/revision-hash"
+	// LabelPairingProtocol carries a revision's P/D pairing protocol: a label
+	// on rendered pods and per-revision routing Services (metadata, not
+	// selector — informational), and an annotation on ControllerRevisions
+	// (the authoritative revision→protocol record, stamped at create from the
+	// hashed payload). Absent or empty means the revision pairs with anything.
+	LabelPairingProtocol = "ome.io/pairing-protocol"
 	// LabelPodOrdinal stamps the pod-naming ordinal (0 or 1 for single-pod
 	// SurgeThenDrain alternation; 0..Size-1 for multi-pod gang members).
 	// SurgeThenDrain reads it to partition observed pods into "current"

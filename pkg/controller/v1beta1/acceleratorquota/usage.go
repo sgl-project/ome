@@ -77,6 +77,13 @@ func equalBudgets(a, b []v1beta1.AcceleratorBudgetStatus) bool {
 			x.Borrowed.Cmp(y.Borrowed) != 0 {
 			return false
 		}
+		// The per-member breakdown moves independently of the totals it sums
+		// to: two members can trade admitted work between them and leave the
+		// fleet figure unchanged. Comparing only the totals would freeze the
+		// breakdown at whatever it held the first time it was written.
+		if !equalPerCluster(x.PerCluster, y.PerCluster) {
+			return false
+		}
 	}
 	return true
 }

@@ -202,6 +202,8 @@ func (e *Engine) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferenc
 			WorkerSize:         workerSize,
 			MultiPod:           multiPod,
 			TopologyKey:        e.engineSpec.TopologyKey,
+			TopologySpread:     e.engineSpec.TopologySpread,
+			TopologySpreadKey:  e.engineSpec.TopologySpreadKey,
 			ResolvedAutoscaler: resolvedAS,
 			Client:             e.Client,
 			Reader:             e.APIReader,
@@ -381,7 +383,7 @@ func (e *Engine) setParallelismEnvVarForEngine(container *v1.Container, workerRe
 		return
 	}
 
-	numGPUsPerPod := int64(isvcutils.GetGpuCountFromContainer(container))
+	numGPUsPerPod := int64(isvcutils.GetGpuCountFromContainer(container, e.InferenceServiceConfig.AcceleratorResourceNames()))
 	numLeaders := int64(1) // at least one leader/pod
 	numWorkers := int64(workerReplicas)
 

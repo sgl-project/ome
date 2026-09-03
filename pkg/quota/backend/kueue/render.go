@@ -147,16 +147,34 @@ func resourceQuota(name corev1.ResourceName, funded map[string]v1beta1.Accelerat
 	if cover, ok := opts.CoverResources[name]; ok {
 		return q.WithNominalQuota(cover)
 	}
+	zero := resource.MustParse("0")
 	budget, ok := funded[string(name)]
 	if !ok {
 		// Covered by the group because another flavor funds it; this flavor
 		// does not, and Kueue requires the entry to be present regardless.
-		return q.WithNominalQuota(resource.MustParse("0"))
+		//
+		// Nothing to borrow with, either. Without the explicit limit a leaf
+		// budgeted none of a flavor could still take a sibling's, which is a
+		// stranger grant than an over-large one: nobody authored any share of
+		// this flavor here at all.
+		return q.WithNominalQuota(zero).WithBorrowingLimit(zero)
 	}
 	q = q.WithNominalQuota(budget.Nominal)
+	// Zero rather than absent, and the difference is the whole allowance. OME's
+	// nominal means "this leaf's share"; Kueue reads a null borrowingLimit as
+	// "at least this much, plus whatever the cohort is not using". Leaving the
+	// field off translates a ceiling into a floor.
+	//
+	// It reads worse than it sounds, because this plane sets no preemption and
+	// Kueue defaults reclaimWithinCohort to Never: an unbounded borrower cannot
+	// be made to give a share back, so nominal would be neither a ceiling for
+	// the borrower nor a floor for the lender. Burst stays available, per
+	// budget, by authoring the limit.
+	limit := zero
 	if budget.BorrowingLimit != nil {
-		q = q.WithBorrowingLimit(*budget.BorrowingLimit)
+		limit = *budget.BorrowingLimit
 	}
+	q = q.WithBorrowingLimit(limit)
 	if budget.LendingLimit != nil {
 		q = q.WithLendingLimit(*budget.LendingLimit)
 	}

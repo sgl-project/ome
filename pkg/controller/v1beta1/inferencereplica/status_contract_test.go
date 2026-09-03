@@ -198,7 +198,7 @@ func TestAggregateAndWriteStatus_ObservedGenerationFollowsGeneration(t *testing.
 		}},
 	}
 
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, nil)).To(gomega.Succeed())
+	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, nil, false, nil)).To(gomega.Succeed())
 
 	got := &v1beta1.InferenceReplica{}
 	g.Expect(c.Get(context.Background(),

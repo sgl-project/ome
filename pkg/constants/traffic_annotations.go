@@ -73,12 +73,41 @@ var (
 	// Controller clears the annotation after consuming it.
 	RolloutRollbackAnnotation = OMEAPIGroupName + "/rollout-rollback"
 
-	// PausedRolloutAnnotation, set to "true" on the InferenceService,
-	// freezes every coordination group at its current phase (and the
-	// canary step machine) until the operator clears it. Read by the
-	// OMENative coordination reconciler each pass.
+	// PausedRolloutAnnotation, set on the InferenceService, holds every
+	// coordination group at its current phase (and the canary step
+	// machine) and suspends fleet changes until the operator clears it.
+	// Two accepted values:
+	//   "true"   — pause: no Update / Create / Migration work starts or
+	//              advances, but each component's RestartPolicy keeps
+	//              repairing existing Instances at their current
+	//              revision.
+	//   "freeze" — full stop: repair is suspended too; only kubelet
+	//              container restarts and deliberate scale-down remain.
+	// Status stays truthful in either depth: an Instance that lost every
+	// pod stops reporting Ready even though its recovery stays parked.
+	// Any other value is treated as not paused.
 	PausedRolloutAnnotation = OMEAPIGroupName + "/rollout-paused"
+
+	// PausedRolloutFreezeValue is the PausedRolloutAnnotation value that
+	// additionally suspends Instance repair.
+	PausedRolloutFreezeValue = "freeze"
 )
+
+// RolloutPauseState interprets PausedRolloutAnnotation on the given
+// annotations map. paused reports whether any pause is in effect;
+// freeze reports the full-stop variant. Unknown values are not paused —
+// every consumer must share this parse so a pause registers uniformly
+// across the coordination, canary, projection, and workload layers.
+func RolloutPauseState(annotations map[string]string) (paused, freeze bool) {
+	switch annotations[PausedRolloutAnnotation] {
+	case "true":
+		return true, false
+	case PausedRolloutFreezeValue:
+		return true, true
+	default:
+		return false, false
+	}
+}
 
 // Pass-through annotation prefixes.
 //

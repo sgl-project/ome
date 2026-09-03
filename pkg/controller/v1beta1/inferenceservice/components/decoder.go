@@ -190,6 +190,8 @@ func (d *Decoder) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferen
 			WorkerSize:         workerSize,
 			MultiPod:           multiPod,
 			TopologyKey:        d.decoderSpec.TopologyKey,
+			TopologySpread:     d.decoderSpec.TopologySpread,
+			TopologySpreadKey:  d.decoderSpec.TopologySpreadKey,
 			ResolvedAutoscaler: resolvedAS,
 			Client:             d.Client,
 			Reader:             d.APIReader,
@@ -373,7 +375,7 @@ func (d *Decoder) setParallelismEnvVarForDecoder(container *v1.Container, worker
 		return
 	}
 
-	numGPUsPerPod := int64(isvcutils.GetGpuCountFromContainer(container))
+	numGPUsPerPod := int64(isvcutils.GetGpuCountFromContainer(container, d.InferenceServiceConfig.AcceleratorResourceNames()))
 	numLeaders := int64(0)
 	numWorkers := int64(workerReplicas)
 

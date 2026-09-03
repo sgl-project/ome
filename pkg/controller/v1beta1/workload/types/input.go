@@ -181,10 +181,23 @@ type ReconcileInput struct {
 	// allowed=false skips this Instance for this reconcile pass; the
 	// dispatcher emits a short requeue. inFlightSurge / inFlightUnavail
 	// are the dispatcher's within-pass counters so the gate can
-	// project against the post-this-pass shape.
+	// project against the post-this-pass shape. gate names which layer
+	// produced denyReason (RolloutHoldGateRatio / Sequential / Budget);
+	// callers surfacing denyReason as a RolloutHold read gate from here
+	// rather than parsing the message.
 	//
 	// Nil is treated as always-allowed.
-	UpdateGate func(strategy UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (allowed bool, denyReason string)
+	UpdateGate func(strategy UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (allowed bool, gate RolloutHoldGate, denyReason string)
+
+	// RecordRolloutHold, when non-nil, is called at most once per Update
+	// pass with the pass's verdict: non-nil when a StartingFresh Instance
+	// was denied by the per-Component budget or UpdateGate and nothing
+	// else progressed this pass, nil when the pass observed no denial or
+	// an Update was admitted (forward progress clears any prior hold).
+	// The adapter's status writer merges this against the same-target
+	// RetryBlock/Held state it reads directly from persisted status, so
+	// workload code never needs to know about RetryBlock semantics.
+	RecordRolloutHold func(hold *RolloutHold)
 
 	// MutateRetryBlock reads-modifies-writes the owner's persisted
 	// RetryBlock for targetRevision. mutate receives the existing block

@@ -122,7 +122,7 @@ func (r *Reconciler) buildReconcileInput(ctx context.Context, ir *v1beta1.Infere
 	// removal must resume it without waiting for a successful projection pass.
 	// When the parent is unavailable, fall back to the last projected IR value.
 	if parent != nil {
-		desired.Paused = parent.Annotations[constants.PausedRolloutAnnotation] == "true"
+		desired.Paused, desired.PauseFreeze = constants.RolloutPauseState(parent.Annotations)
 	}
 	// Thread the controller's cached gang-availability into DesiredSpec —
 	// EnsurePodGroups gates per-Instance PodGroup creation on this flag.
@@ -208,8 +208,9 @@ func (r *Reconciler) buildReconcileInput(ctx context.Context, ir *v1beta1.Infere
 		// The gate reads peer Component status, which must be live:
 		// cross-Component coordination against a cache-lagged peer would
 		// admit a rollout the peer's real state forbids.
-		input.UpdateGate = func(strategy workload.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, string) {
-			return coordination.EvaluateUpdateGate(ctx, r.APIReader, parent, ir.Spec.Component, r.Recorder, coordDefaults, strategy, inFlightSurge, inFlightUnavail)
+		input.UpdateGate = func(strategy workload.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, workload.RolloutHoldGate, string) {
+			allowed, gate, reason := coordination.EvaluateUpdateGate(ctx, r.APIReader, parent, ir.Spec.Component, r.Recorder, coordDefaults, strategy, inFlightSurge, inFlightUnavail)
+			return allowed, workload.RolloutHoldGate(gate), reason
 		}
 	}
 	// The migration audit ledger (history) lives on the user-facing
@@ -332,9 +333,19 @@ func desiredFromIR(ir *v1beta1.InferenceReplica) workload.WorkloadDesiredSpec {
 		MinReadySeconds: ir.Spec.MinReadySeconds,
 		Runners:         runnersFromIR(ir),
 		Paused:          ir.Spec.Paused,
+		PauseFreeze:     ir.Spec.Paused && ir.Spec.PauseMode == v1beta1.PauseModeFreeze,
 	}
 	if ir.Spec.TopologyKey != nil {
 		desired.TopologyKey = *ir.Spec.TopologyKey
+	}
+	if ir.Spec.TopologySpread != nil {
+		desired.TopologySpread = string(*ir.Spec.TopologySpread)
+	}
+	if ir.Spec.TopologySpreadKey != nil {
+		desired.TopologySpreadKey = *ir.Spec.TopologySpreadKey
+	}
+	if ir.Spec.PairingProtocol != nil {
+		desired.PairingProtocol = *ir.Spec.PairingProtocol
 	}
 	if ir.Spec.Pacing != nil {
 		desired.Pacing = &workload.WorkloadPacing{

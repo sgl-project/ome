@@ -23,9 +23,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -370,6 +373,23 @@ func main() {
 		// running this controller inside ome-manager and handing that process
 		// the grants a separate binary exists to keep off it.
 		clusters := workloadcluster.NewManager(mgr.GetScheme())
+		// Cache AcceleratorQuota on every member, and do it before the Connector
+		// runs: SetCacheOptions only affects clients built after the call, so a
+		// member connected first would keep a never-caching client and its
+		// events would never arrive.
+		//
+		// UNFILTERED, deliberately, where placement scopes its cache to the
+		// objects it owns. One selector covers every cached kind, and this plane
+		// reads two disjoint sets off a member: its own origin-labelled
+		// projections, and that member's reserved root, which the member creates
+		// bare and unlabelled. An origin-scoped cache would hide the root, and
+		// the capacity read would start returning NotFound -- which the projector
+		// treats as "starting up" and skips, silently emptying the basis. The
+		// kind is a handful of objects per cluster, so caching all of it is
+		// cheaper than the selector that would go wrong.
+		clusters.SetCacheOptions(workloadcluster.CacheOptions{
+			CachedKinds: sets.New(v1beta1.SchemeGroupVersion.WithKind("AcceleratorQuota").GroupKind()),
+		})
 		clusters.SetExecCredentialPolicy(workloadcluster.ExecCredentialPolicy{
 			Allowed:         opts.allowExecCredentials,
 			AllowedCommands: splitAndTrim(opts.execCredentialCommands),
@@ -401,7 +421,29 @@ func main() {
 			os.Exit(1)
 		}
 
-		setupOpts = append(setupOpts, acceleratorquota.WithTransportEvents(transportChanged))
+		// Every AcceleratorQuota change on a member wakes the hub: a projection's
+		// status carries the consumption figures the fleet view is made of, and
+		// the member's own root carries the capacity a proportional split
+		// divides by. Both move without anything on the hub changing.
+		funnel := workloadcluster.NewStatusFunnel(clusters, workloadcluster.FunnelConfig{
+			NewList:   func() client.ObjectList { return &v1beta1.AcceleratorQuotaList{} },
+			NewObject: func() client.Object { return &v1beta1.AcceleratorQuota{} },
+			// Resolved to the root rather than to the object that moved. The pass
+			// rebuilds the whole tree whatever woke it, so naming one key lets a
+			// burst of members reporting at once collapse into a single request.
+			Resolve: func(client.Object) (types.NamespacedName, bool) {
+				return types.NamespacedName{Name: v1beta1.AcceleratorQuotaRootName}, true
+			},
+		})
+		if err := mgr.Add(funnel); err != nil {
+			setupLog.Error(err, "unable to add the member status funnel")
+			os.Exit(1)
+		}
+
+		setupOpts = append(setupOpts,
+			acceleratorquota.WithTransportEvents(transportChanged),
+			acceleratorquota.WithMemberEvents(funnel.Events()),
+		)
 
 		r.Project = acceleratorquota.ProjectOptions{
 			Clusters:      clusters,

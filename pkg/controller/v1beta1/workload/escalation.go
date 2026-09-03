@@ -135,7 +135,14 @@ func escalateFromEvidence(ctx context.Context, deps Deps, input ReconcileInput, 
 				if ferr := buf.flush(ctx); ferr != nil {
 					return fmt.Errorf("flush escalation stamps (component=%s): %w", plan.Component, ferr)
 				}
-				if _, derr := DisposeExpiredAttempt(ctx, deps, input, dd, s, pods, ev.StuckReason); derr != nil {
+				dispositionPods := pods
+				if singlePodSurgeAttempt(&s, desired) {
+					// A single-pod surge shares its Instance index with the
+					// serving source. Relocation evidence belongs to the exact
+					// stuck target, not the source-plus-target node set.
+					dispositionPods = []*corev1.Pod{ev.StuckPod}
+				}
+				if _, derr := DisposeExpiredAttempt(ctx, deps, input, dd, s, dispositionPods, ev.StuckReason); derr != nil {
 					return fmt.Errorf("dispose stuck attempt (instance=%d): %w", s.Index, derr)
 				}
 				continue
@@ -187,6 +194,12 @@ func escalateFromEvidence(ctx context.Context, deps Deps, input ReconcileInput, 
 		return fmt.Errorf("flush escalation stamps (component=%s): %w", plan.Component, ferr)
 	}
 	return nil
+}
+
+func singlePodSurgeAttempt(s *InstanceStatus, desiredPods int32) bool {
+	return s != nil && desiredPods == 1 && s.Operation != nil &&
+		s.Operation.Type == InstanceOperationUpdate &&
+		s.Operation.Step == UpdateStepSurge && s.Operation.SurgeIndex == nil
 }
 
 // failureStampBuffer coalesces the escalation pass's plain Failed

@@ -150,14 +150,20 @@ func inPlaceUpdate(ctx context.Context, deps workload.Deps, input workload.Recon
 			return false, fmt.Errorf("patch annotations (instance=%d, pod=%s): %w", inst.Index, pod.Name, err)
 		}
 		mutated = mutated || annotationsPatched
-		// Restamp the revision-hash label so the in-place-rolled pod is
-		// recognized as the target revision by per-revision Service routing,
-		// drain, and stuck-pod detection (all keyed on this label). Idempotent.
-		revisionHashPatched, err := patchPodRevisionHashLabel(ctx, deps.Client, pod, query.RevisionOf(target).Hash())
-		if err != nil {
-			return false, fmt.Errorf("patch revision-hash label (instance=%d, pod=%s): %w", inst.Index, pod.Name, err)
+		// Restamp the revision-owned labels (revision hash + pairing
+		// protocol) so the in-place-rolled pod is recognized as the target
+		// revision by per-revision Service routing, drain, and stuck-pod
+		// detection, and reports the target revision's pairing cohort.
+		// Idempotent.
+		targetProtocol := ""
+		if targetPayload != nil && targetPayload.PairingProtocol != nil {
+			targetProtocol = *targetPayload.PairingProtocol
 		}
-		mutated = mutated || revisionHashPatched
+		revisionLabelsPatched, err := patchPodRevisionLabels(ctx, deps.Client, pod, query.RevisionOf(target).Hash(), targetProtocol)
+		if err != nil {
+			return false, fmt.Errorf("patch revision labels (instance=%d, pod=%s): %w", inst.Index, pod.Name, err)
+		}
+		mutated = mutated || revisionLabelsPatched
 	}
 	if mutated {
 		return false, nil

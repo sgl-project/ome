@@ -13,6 +13,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload"
 )
@@ -191,6 +192,58 @@ func TestEscalation_StuckPodNotServing_IdenticalDispositionOutcome(t *testing.T)
 	}
 	if len(rec.warns) != 1 {
 		t.Errorf("WarnInstanceFailed: got %v want one call", rec.warns)
+	}
+}
+
+// TestEscalation_SinglePodSurgeRelocatesTheFailedTarget pins the
+// source/target split for a single-pod SurgeThenDrain attempt. The healthy
+// source and failed target share one Instance index, but relocation evidence
+// must name only the target's node so the retry can be rendered away from it.
+func TestEscalation_SinglePodSurgeRelocatesTheFailedTarget(t *testing.T) {
+	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	fc := clocktesting.NewFakeClock(now)
+	insts := []workload.InstanceStatus{{
+		Index:    0,
+		Phase:    workload.InstancePhaseUpdating,
+		PodCount: 2,
+		Operation: &workload.InstanceOperation{
+			Type:           workload.InstanceOperationUpdate,
+			Step:           workload.UpdateStepSurge,
+			TargetRevision: "own-engine-targethash",
+			StartedAt:      metav1.NewTime(now.Add(-time.Minute)),
+			Deadline:       metav1.NewTime(now.Add(30 * time.Minute)),
+		},
+	}}
+	c := fakeLedgerClient(t)
+	input, rec := dispositionFixtureInput(fc, &insts, "own-engine-targethash", nil, ledgerOwnerCM())
+	input.ObservedState.InstanceStatuses = append([]workload.InstanceStatus(nil), insts...)
+	input.StuckPodGrace = time.Second
+	input.Disposition.AutoMigrateMaxAttempts = 3
+
+	source := servingPod("engine-0-default-0")
+	source.Spec.NodeName = "node-source"
+	target := waitingPod("engine-0-default-1", "CreateContainerError", "node-target", now.Add(-time.Minute))
+
+	plan := singleInstancePlan(0, 1)
+	plan.MigrationMode = workload.MigrationModeAuto
+	if err := runEscalationPass(t, workload.Deps{Client: c, Clock: fc}, input, plan,
+		map[int32][]*corev1.Pod{0: {source, target}}); err != nil {
+		t.Fatalf("escalation pass: %v", err)
+	}
+
+	ledger := loadLedger(t, c)
+	if len(ledger.Entries) != 1 || ledger.Entries[0].FromNode != "node-target" {
+		t.Fatalf("relocation entries: got %+v want one directive for node-target", ledger.Entries)
+	}
+	if insts[0].Phase != workload.InstancePhaseFailed || insts[0].Operation != nil {
+		t.Fatalf("instance: got Phase=%q Operation=%+v want Failed with no operation", insts[0].Phase, insts[0].Operation)
+	}
+	if insts[0].LastFailure == nil || insts[0].LastFailure.PodName != target.Name ||
+		insts[0].LastFailure.Reason != "CreateContainerError" {
+		t.Fatalf("LastFailure: got %+v want target pod CreateContainerError", insts[0].LastFailure)
+	}
+	if len(rec.blockCalls) != 0 {
+		t.Fatalf("RetryBlocks: got %+v want none for ambiguous node-local failure", rec.blockCalls)
 	}
 }
 

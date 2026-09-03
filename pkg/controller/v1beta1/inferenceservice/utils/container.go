@@ -75,19 +75,35 @@ func UpdateEnvVars(container *v1.Container, envVar *v1.EnvVar) {
 	}
 }
 
-// GetGpuCountFromContainer extracts the GPU count from container resources.
-// It checks both Limits and Requests, preferring Limits.
-func GetGpuCountFromContainer(container *v1.Container) int {
+// GetGpuCountFromContainer extracts the accelerator count from container
+// resources: it walks acceleratorResources in order and returns the value of
+// the first name present, checking that name's Limits before its Requests.
+//
+// acceleratorResources is the operator-configured list of extended resource
+// names that count as an accelerator (inferenceservice-config ConfigMap's
+// "acceleratorResources" key — see
+// controllerconfig.InferenceServicesConfig.AcceleratorResourceNames). There is
+// NO in-code default list: an empty/nil acceleratorResources means the config
+// is absent, and this falls back to recognizing only
+// constants.NvidiaGPUResourceType, so an unconfigured cluster keeps
+// NVIDIA-only counting.
+func GetGpuCountFromContainer(container *v1.Container, acceleratorResources []string) int {
 	if container == nil {
 		return 0
 	}
-	var gpuCount int
-	resourceName := v1.ResourceName(constants.NvidiaGPUResourceType)
-
-	if quantity, ok := container.Resources.Limits[resourceName]; ok {
-		gpuCount = int(quantity.Value())
-	} else if quantity, ok := container.Resources.Requests[resourceName]; ok {
-		gpuCount = int(quantity.Value())
+	names := acceleratorResources
+	if len(names) == 0 {
+		names = []string{constants.NvidiaGPUResourceType}
 	}
-	return gpuCount
+
+	for _, name := range names {
+		resourceName := v1.ResourceName(name)
+		if quantity, ok := container.Resources.Limits[resourceName]; ok {
+			return int(quantity.Value())
+		}
+		if quantity, ok := container.Resources.Requests[resourceName]; ok {
+			return int(quantity.Value())
+		}
+	}
+	return 0
 }

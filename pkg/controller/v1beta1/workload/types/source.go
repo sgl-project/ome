@@ -61,6 +61,25 @@ type WorkloadDesiredSpec struct {
 	// spec at the boundary.
 	TopologyKey string
 
+	// TopologySpread is the gang spreading policy ("Preferred" /
+	// "Required"; empty = pure bin-packing) advertised on each
+	// multi-pod Instance's PodGroup for the topology-aware gang
+	// scheduler. Adapters project it from the owner-CRD component spec.
+	TopologySpread string
+
+	// TopologySpreadKey is the fault-domain node-label key TopologySpread
+	// spreads across; empty defaults to TopologyKey.
+	TopologySpreadKey string
+
+	// PairingProtocol is the P/D wire-compatibility token this Component's
+	// revision is minted under. It participates in the revision hash (a
+	// change mints a new revision) and is stamped as the
+	// ome.io/pairing-protocol label on rendered pods. Empty means the
+	// Component pairs with anything. Adapters project it from the owner-CRD
+	// spec at the boundary; only Components that pair (engine, decoder)
+	// carry it.
+	PairingProtocol string
+
 	// Lifecycle holds RestartPolicy / UpdateStrategy / ReadyPolicy /
 	// InstanceReadyTimeout / MigrationPolicy as workload-owned mirror
 	// values; adapters project the CRD-shape lifecycle into this struct
@@ -71,10 +90,15 @@ type WorkloadDesiredSpec struct {
 	// means "no pacing constraint" (treated as allowed).
 	Pacing *WorkloadPacing
 
-	// Paused, when true, stops the reconciler from starting any fresh
-	// Update / Restart / Create operations. In-flight operations
-	// resume on unpause.
+	// Paused, when true, stops the reconciler from starting or advancing
+	// Update, Create, and Migration operations. The RestartPolicy keeps
+	// repairing existing Instances unless PauseFreeze is also set.
 	Paused bool
+
+	// PauseFreeze deepens Paused to a full stop: the restart pass is
+	// suspended too, so no Instance repair runs. Meaningless unless
+	// Paused is true.
+	PauseFreeze bool
 
 	// GangSchedulingAvailable is true when the scheduler-plugins
 	// PodGroup CRD was discovered at controller startup. Drives

@@ -109,6 +109,15 @@ func (s *InferenceServiceSpec) GetRolloutGroups() []RolloutGroup {
 	return s.Rollout.Groups
 }
 
+// RolloutPairingProtocol returns spec.rollout.pairingProtocol, or "" when the
+// rollout block or the field is unset. Nil-safe on a nil receiver.
+func (s *InferenceServiceSpec) RolloutPairingProtocol() string {
+	if s == nil || s.Rollout == nil || s.Rollout.PairingProtocol == nil {
+		return ""
+	}
+	return *s.Rollout.PairingProtocol
+}
+
 // GetCanaryGroup returns the first rollout group whose progression is canary, or
 // nil if none. Admission rejects more than one canary group, so there is at most
 // one; a canary group may span multiple Components (primary-driven). Nil-safe.
@@ -246,10 +255,55 @@ type EngineSpec struct {
 	// +optional
 	TopologyKey *string `json:"topologyKey,omitempty"`
 
+	// TopologySpread spreads this component's instances across fault
+	// domains so losing one domain (rack / fabric slice / cube) cannot
+	// take out every instance at once. Rendered as a standard
+	// topologySpreadConstraint (maxSkew 1) on each instance's anchor pod
+	// (the leader, or the sole pod of a single-pod instance); workers
+	// follow their leader, so gangs stay whole. Required renders as
+	// DoNotSchedule — balanced spreading enforced by any scheduler that
+	// keeps PodTopologySpread's Filter, including the OME gang
+	// scheduler's packing profile. Preferred renders as ScheduleAnyway —
+	// advisory only, and currently without effect under the OME gang
+	// scheduler (its profile disables the spreading Score and pre-narrows
+	// gang candidates to one domain). Not part of the revision hash:
+	// changing it shapes future placements without rolling a healthy
+	// fleet. Unset keeps pure bin-packing.
+	// +optional
+	// +kubebuilder:validation:Enum=Preferred;Required
+	TopologySpread *TopologySpreadPolicy `json:"topologySpread,omitempty"`
+
+	// TopologySpreadKey is the node-label key naming the fault domains
+	// TopologySpread spreads across. Defaults to TopologyKey — right for
+	// fabrics where the co-location domain IS the failure zone (an NVLink
+	// rack). Set it to a coarser label when the failure zone contains many
+	// gang domains: e.g. co-locate by the TPU partition label while
+	// spreading across cloud.google.com/gce-topology-subblock. Single-pod
+	// components have no co-location key, so spreading them requires
+	// setting this explicitly. Ignored unless TopologySpread is set.
+	// +optional
+	TopologySpreadKey *string `json:"topologySpreadKey,omitempty"`
+
 	// AcceleratorOverride allows overriding the global accelerator selection for this component
 	// +optional
 	AcceleratorOverride *AcceleratorSelector `json:"acceleratorOverride,omitempty"`
 }
+
+// TopologySpreadPolicy selects how a component's instances spread across
+// fault domains, expressed through a rendered topologySpreadConstraint on
+// each instance's anchor pod.
+type TopologySpreadPolicy string
+
+const (
+	// TopologySpreadPreferred renders whenUnsatisfiable: ScheduleAnyway —
+	// best-effort spreading, honored by schedulers that score topology
+	// spreading.
+	TopologySpreadPreferred TopologySpreadPolicy = "Preferred"
+	// TopologySpreadRequired renders whenUnsatisfiable: DoNotSchedule with
+	// maxSkew 1 — balanced spreading (instance counts per fault domain may
+	// differ by at most one); a placement that would over-skew waits.
+	TopologySpreadRequired TopologySpreadPolicy = "Required"
+)
 
 // DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment)
 // Used specifically for prefill-decode disaggregated deployments to handle the token generation phase.
@@ -296,6 +350,35 @@ type DecoderSpec struct {
 	// auto-generated gang affinity.
 	// +optional
 	TopologyKey *string `json:"topologyKey,omitempty"`
+
+	// TopologySpread spreads this component's instances across fault
+	// domains so losing one domain (rack / fabric slice / cube) cannot
+	// take out every instance at once. Rendered as a standard
+	// topologySpreadConstraint (maxSkew 1) on each instance's anchor pod
+	// (the leader, or the sole pod of a single-pod instance); workers
+	// follow their leader, so gangs stay whole. Required renders as
+	// DoNotSchedule — balanced spreading enforced by any scheduler that
+	// keeps PodTopologySpread's Filter, including the OME gang
+	// scheduler's packing profile. Preferred renders as ScheduleAnyway —
+	// advisory only, and currently without effect under the OME gang
+	// scheduler (its profile disables the spreading Score and pre-narrows
+	// gang candidates to one domain). Not part of the revision hash:
+	// changing it shapes future placements without rolling a healthy
+	// fleet. Unset keeps pure bin-packing.
+	// +optional
+	// +kubebuilder:validation:Enum=Preferred;Required
+	TopologySpread *TopologySpreadPolicy `json:"topologySpread,omitempty"`
+
+	// TopologySpreadKey is the node-label key naming the fault domains
+	// TopologySpread spreads across. Defaults to TopologyKey — right for
+	// fabrics where the co-location domain IS the failure zone (an NVLink
+	// rack). Set it to a coarser label when the failure zone contains many
+	// gang domains: e.g. co-locate by the TPU partition label while
+	// spreading across cloud.google.com/gce-topology-subblock. Single-pod
+	// components have no co-location key, so spreading them requires
+	// setting this explicitly. Ignored unless TopologySpread is set.
+	// +optional
+	TopologySpreadKey *string `json:"topologySpreadKey,omitempty"`
 
 	// AcceleratorOverride allows overriding the global accelerator selection for this component
 	// +optional

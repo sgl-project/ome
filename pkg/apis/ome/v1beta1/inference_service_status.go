@@ -215,6 +215,13 @@ type ComponentTrafficTarget struct {
 	// LatestRolledoutRevision for the Component.
 	// +optional
 	LatestRevision bool `json:"latestRevision,omitempty"`
+
+	// PairingProtocol is the engine↔decoder wire-compatibility token the
+	// target's revision was minted under (spec.rollout.pairingProtocol at
+	// mint time). Consumers MUST only pair engine and decoder targets whose
+	// PairingProtocol values are equal; an empty value pairs with anything.
+	// +optional
+	PairingProtocol string `json:"pairingProtocol,omitempty"`
 }
 
 // AcceleratorSelection shows what accelerator was selected and why

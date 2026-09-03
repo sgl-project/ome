@@ -95,7 +95,16 @@ const (
 // freshly read lifecycle rows, then computes the IR summaries and conditions.
 // Lifecycle fields and CurrentRevision retain their dedicated writers. A nil
 // target leaves revision pointers untouched while counters still publish.
-func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.InferenceReplica, plan workload.ComponentPlan, target *appsv1.ControllerRevision) error {
+//
+// holdObserved/hold carry this pass's Update-pass rollout-hold verdict
+// (ReconcileInput.RecordRolloutHold): holdObserved is true when the Update
+// pass ran at all this reconcile, and hold is its verdict (nil clears).
+// When the Update pass did not run (holdObserved is false — nothing needed
+// updating this pass, or Plan selected no target), the RetryBlock/Held
+// state persisted in status is the only signal available, since a
+// RetryBlock-denied Instance never reaches the Update pass to be gated
+// there — see computeRetryBlockRolloutHold.
+func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.InferenceReplica, plan workload.ComponentPlan, target *appsv1.ControllerRevision, holdObserved bool, hold *workload.RolloutHold) error {
 	if r.Client == nil {
 		return fmt.Errorf("aggregateAndWriteStatus: nil client")
 	}
@@ -227,6 +236,9 @@ func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.In
 		// failing Instances (e.g. new-rev CrashLoopBackOff) without affecting
 		// the Ready condition above (old-rev pods keep serving).
 		apimeta.SetStatusCondition(&fresh.Status.Conditions, computeRolloutStalledCondition(&fresh.Status))
+		now := r.now()
+		fresh.Status.RolloutHold = nextRolloutHold(fresh.Status.RolloutHold,
+			effectiveRolloutHold(holdObserved, hold, &fresh.Status, now), metav1.NewTime(now))
 
 		// Skip the write when the recomputed status matches what's
 		// already live: a no-op reconcile must perform ZERO writes so it
@@ -291,6 +303,7 @@ func mirrorBack(ir, fresh *v1beta1.InferenceReplica, publication []workload.Inst
 	ir.Status.CurrentRevision = fresh.Status.CurrentRevision
 	ir.Status.ObservedGeneration = fresh.Status.ObservedGeneration
 	ir.Status.LabelSelector = fresh.Status.LabelSelector
+	ir.Status.RolloutHold = fresh.Status.RolloutHold.DeepCopy()
 	// The transient publication view is the source for same-pass derived fields.
 	mirrorInstanceCounters(&ir.Status, publication)
 	// Conditions: deep-copy the just-computed slice so callers reading
@@ -507,6 +520,86 @@ func summarizeFailureReasons(reasons map[string]int) string {
 		parts = append(parts, fmt.Sprintf("%s x%d", k, reasons[k]))
 	}
 	return strings.Join(parts, ", ")
+}
+
+// effectiveRolloutHold resolves this pass's RolloutHold observation for
+// InferenceReplicaConditionRolloutStalled's sibling status.rolloutHold
+// field. A Component with no rollout in flight (or already converged) has
+// nothing to hold regardless of any stale signal.
+//
+// When the Update pass ran this reconcile (holdObserved), its verdict is
+// authoritative: a RetryBlock-denied Instance never reaches the Update
+// pass (see workloadops.evaluateUpdateTriggerFast), so a nil verdict here
+// means genuine forward progress or nothing needed updating. When the
+// Update pass did NOT run — Plan selected no ActionUpdate because every
+// candidate Instance was denied before reaching it, most commonly a
+// same-target RetryBlock — the persisted RetryBlock/Held state is the
+// only available signal.
+func effectiveRolloutHold(holdObserved bool, hold *workload.RolloutHold, status *v1beta1.InferenceReplicaStatus, now time.Time) *v1beta1.RolloutHold {
+	if status.UpdateRevision == "" || status.CurrentRevision == status.UpdateRevision {
+		return nil
+	}
+	if holdObserved {
+		if hold == nil {
+			return nil
+		}
+		return &v1beta1.RolloutHold{
+			Gate:   v1beta1.RolloutHoldGate(hold.Gate),
+			Reason: hold.Reason,
+			Target: hold.Target,
+		}
+	}
+	return computeRetryBlockRolloutHold(status, now)
+}
+
+// computeRetryBlockRolloutHold derives a RolloutHold from a same-target
+// RetryBlock in Held or not-yet-due Backoff — the two RetryBlock states
+// that stop every fresh Update attempt at the current target (see
+// workloadops.evaluateRetryBlockGate). Returns nil when the target
+// carries no block, the block is RetryInProgress (an attempt is
+// authorized), or a Backoff whose NextRetryAt has already elapsed (about
+// to retry, not currently held).
+func computeRetryBlockRolloutHold(status *v1beta1.InferenceReplicaStatus, now time.Time) *v1beta1.RolloutHold {
+	b, found := retryBlockForRevision(status.RetryBlocks, status.UpdateRevision)
+	if !found {
+		return nil
+	}
+	switch b.State {
+	case v1beta1.RetryBlockHeld:
+		return &v1beta1.RolloutHold{
+			Gate:   v1beta1.RolloutHoldGateHeld,
+			Reason: fmt.Sprintf("update to %s held after %d failed attempt(s): %s", b.TargetRevision, b.AttemptsStarted, b.Reason),
+			Target: b.TargetRevision,
+		}
+	case v1beta1.RetryBlockBackoff:
+		if b.NextRetryAt != nil && b.NextRetryAt.Time.After(now) {
+			return &v1beta1.RolloutHold{
+				Gate:   v1beta1.RolloutHoldGateRetryBlock,
+				Reason: fmt.Sprintf("update to %s in backoff after %d failed attempt(s): %s", b.TargetRevision, b.AttemptsStarted, b.Reason),
+				Target: b.TargetRevision,
+			}
+		}
+	}
+	return nil
+}
+
+// nextRolloutHold merges this pass's observed RolloutHold onto the
+// previously persisted value. Since is preserved when Gate and Target are
+// unchanged — mirroring how apimeta.SetStatusCondition preserves
+// LastTransitionTime while a condition's Status is unchanged — so a gate
+// whose display Reason fluctuates (e.g. a countdown) without a real
+// change of cause does not reset the "held since" anchor. observed == nil
+// clears the hold outright (progressed or converged).
+func nextRolloutHold(existing, observed *v1beta1.RolloutHold, now metav1.Time) *v1beta1.RolloutHold {
+	if observed == nil {
+		return nil
+	}
+	if existing != nil && existing.Gate == observed.Gate && existing.Target == observed.Target {
+		observed.Since = existing.Since
+		return observed
+	}
+	observed.Since = now
+	return observed
 }
 
 func computeReadyCondition(status *v1beta1.InferenceReplicaStatus, desiredReplicas *int32, lifecycle *v1beta1.LifecycleSpec, pacing *v1beta1.InferenceReplicaPacing) metav1.Condition {

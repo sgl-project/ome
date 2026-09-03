@@ -51,7 +51,7 @@ func TestPartitionForNewCount(t *testing.T) {
 }
 
 func TestCanaryWeights(t *testing.T) {
-	w := canaryWeights("new", "old", 10)
+	w := canaryWeights("new", "old", "proto-b", "proto-a", 10)
 	if len(w) != 2 {
 		t.Fatalf("want 2 weights, got %d", len(w))
 	}
@@ -62,6 +62,9 @@ func TestCanaryWeights(t *testing.T) {
 	if w[1].RevisionHash != "old" || w[1].Percent != 90 {
 		t.Fatalf("stable weight wrong: %+v", w[1])
 	}
+	if w[0].PairingProtocol != "proto-b" || w[1].PairingProtocol != "proto-a" {
+		t.Fatalf("pairing protocols not carried per revision: %+v", w)
+	}
 }
 
 func TestApplyTraffic(t *testing.T) {
@@ -70,7 +73,7 @@ func TestApplyTraffic(t *testing.T) {
 	isvc.Status.Canary = &v1beta1.CanaryStatus{}
 
 	// 10% to canary → both per-revision Services present.
-	applyTraffic(isvc, v1beta1.EngineComponent, "new", "old", 10)
+	applyTraffic(isvc, v1beta1.EngineComponent, "new", "old", "proto-b", "proto-a", 10)
 	tr := isvc.Status.Components[v1beta1.EngineComponent].Traffic
 	if len(tr) != 2 {
 		t.Fatalf("want 2 targets at 10%%, got %d (%+v)", len(tr), tr)
@@ -89,14 +92,14 @@ func TestApplyTraffic(t *testing.T) {
 	}
 
 	// 100% → only the canary Service (stable 0 is filtered out).
-	applyTraffic(isvc, v1beta1.EngineComponent, "new", "old", 100)
+	applyTraffic(isvc, v1beta1.EngineComponent, "new", "old", "proto-b", "proto-a", 100)
 	tr = isvc.Status.Components[v1beta1.EngineComponent].Traffic
 	if len(tr) != 1 || tr[0].RevisionName != wantNew || tr[0].Percent != 100 {
 		t.Fatalf("at 100%% want only canary 100, got %+v", tr)
 	}
 
 	// 0% → only the stable Service.
-	applyTraffic(isvc, v1beta1.EngineComponent, "new", "old", 0)
+	applyTraffic(isvc, v1beta1.EngineComponent, "new", "old", "proto-b", "proto-a", 0)
 	tr = isvc.Status.Components[v1beta1.EngineComponent].Traffic
 	if len(tr) != 1 || tr[0].RevisionName != wantOld || tr[0].Percent != 100 {
 		t.Fatalf("at 0%% want only stable 100, got %+v", tr)

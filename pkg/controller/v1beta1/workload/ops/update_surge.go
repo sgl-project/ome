@@ -3,11 +3,13 @@ package ops
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/drain"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
@@ -23,10 +25,134 @@ func surgeDrainKey(idx int32, newOrdinal int32) string {
 	return fmt.Sprintf("update-surge-drain-%d-%d", idx, newOrdinal)
 }
 
+const createContainerErrorReason = "CreateContainerError"
+
+// recycleFailedCreateContainerTarget removes a failed, non-serving surge
+// target after disposition has authorized relocation away from its node. The
+// active source remains untouched. Returning handled=true parks the normal
+// surge state machine until the failed pod is gone or a retry is authorized.
+func recycleFailedCreateContainerTarget(
+	ctx context.Context,
+	deps workload.Deps,
+	input workload.ReconcileInput,
+	inst workload.InstancePlan,
+	target *appsv1.ControllerRevision,
+	status *workload.InstanceStatus,
+	oldPods, surgePods []*corev1.Pod,
+) (bool, error) {
+	if status == nil || status.Phase != workload.InstancePhaseFailed || status.Operation != nil ||
+		status.LastFailure == nil || status.LastFailure.Reason != createContainerErrorReason ||
+		target == nil || status.TargetRevision == "" || status.TargetRevision != target.Name {
+		return false, nil
+	}
+
+	if len(oldPods) != 1 || oldPods[0] == nil {
+		return true, nil
+	}
+	liveSource := &corev1.Pod{}
+	if err := deps.Reader().Get(ctx, client.ObjectKeyFromObject(oldPods[0]), liveSource); err != nil {
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
+		return true, fmt.Errorf("read serving source before failed-target cleanup %s/%s: %w", oldPods[0].Namespace, oldPods[0].Name, err)
+	}
+	// Cleanup is safe only while the canonical source is still healthy and in
+	// rotation. A missing or unhealthy source requires operator attention rather
+	// than another automatic target recycle.
+	if liveSource.DeletionTimestamp != nil || !podreadiness.IsContainersReady(liveSource) || !podreadiness.IsServing(liveSource) {
+		return true, nil
+	}
+	sourceRev := query.RevisionFromName(status.RunningRevision)
+	activePodRev := query.RevisionFromPod(liveSource)
+	if sourceRev.IsZero() || activePodRev.IsZero() || !activePodRev.Same(sourceRev) {
+		return true, nil
+	}
+
+	// An empty surge slot means the prior delete completed. Let the ordinary
+	// Phase 1 path stamp a fresh operation and create the replacement.
+	if len(surgePods) == 0 {
+		return false, nil
+	}
+	if len(surgePods) != 1 {
+		return true, nil
+	}
+	observedTarget := surgePods[0]
+	if observedTarget == nil {
+		return true, nil
+	}
+	pod := &corev1.Pod{}
+	if err := deps.Reader().Get(ctx, client.ObjectKeyFromObject(observedTarget), pod); err != nil {
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
+		return true, fmt.Errorf("read failed surge target %s/%s: %w", observedTarget.Namespace, observedTarget.Name, err)
+	}
+	if pod.DeletionTimestamp != nil {
+		return true, nil
+	}
+	if status.LastFailure.PodName != "" && status.LastFailure.PodName != pod.Name {
+		return true, nil
+	}
+	failedRev := query.RevisionFromName(status.TargetRevision)
+	podRev := query.RevisionFromPod(pod)
+	if failedRev.IsZero() || podRev.IsZero() || !podRev.Same(failedRev) {
+		return false, nil
+	}
+	if podreadiness.IsServing(pod) || podreadiness.IsPodReady(pod) || !podHasWaitingReason(pod, createContainerErrorReason) {
+		return false, nil
+	}
+
+	// ExcludedNodes is projected from persisted AutoRecover directives. The
+	// failed pod's node appearing here proves that disposition authorized this
+	// relocation attempt. Once the configured budget is exhausted, a new node is
+	// not recorded and this branch parks the Instance instead of churning pods.
+	if pod.Spec.NodeName == "" || !slices.Contains(inst.ExcludedNodes, pod.Spec.NodeName) {
+		return true, nil
+	}
+	if pod.UID == "" {
+		return true, fmt.Errorf("recycle failed surge target %s/%s without an observed UID", pod.Namespace, pod.Name)
+	}
+	if !deps.ExpectationsCache().Satisfied(input.Key.Namespace, input.Key.OwnerName, input.Key.Component, inst.Index) {
+		return true, nil
+	}
+
+	uid := pod.UID
+	deps.ExpectationsCache().ExpectDeletes(input.Key.Namespace, input.Key.OwnerName, input.Key.Component, inst.Index, 1)
+	if err := deps.Client.Delete(ctx, pod, client.Preconditions{UID: &uid}); err != nil {
+		deps.ExpectationsCache().ObservedDelete(input.Key.Namespace, input.Key.OwnerName, input.Key.Component, inst.Index)
+		if apierrors.IsNotFound(err) || apierrors.IsConflict(err) {
+			return true, nil
+		}
+		return true, fmt.Errorf("delete failed surge target %s/%s: %w", pod.Namespace, pod.Name, err)
+	}
+	recordNormal(deps.Recorder, eventTarget(input), workload.EventReasonFailedSurgeTargetRecycled,
+		"OMENative %s deleted failed non-serving surge target %s on excluded node %s; retry will create a fresh pod",
+		instanceKey(input.Key.Component, inst.Index), pod.Name, pod.Spec.NodeName)
+	return true, nil
+}
+
+func podHasWaitingReason(pod *corev1.Pod, reason string) bool {
+	if pod == nil {
+		return false
+	}
+	for _, statuses := range [][]corev1.ContainerStatus{pod.Status.ContainerStatuses, pod.Status.InitContainerStatuses} {
+		for _, status := range statuses {
+			if status.State.Waiting != nil && status.State.Waiting.Reason == reason {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // surgeUpdate runs the SurgeThenDrain rollout for one Instance.
 //
 // State machine (per Instance):
 //
+//	Recovery:          A failed CreateContainerError target with an
+//	                   authorized node exclusion is deleted while the active
+//	                   source remains serving. The empty slot then re-enters
+//	                   Phase 1.
 //	Phase 1 (Surge):   Op{Step=Surge}. Create the surge pod at
 //	                   ordinal=1-ActiveOrdinal with target revision.
 //	                   Wait ContainersReady, mark it serving, then wait
@@ -92,13 +218,16 @@ func surgeUpdate(ctx context.Context, deps workload.Deps, input workload.Reconci
 		return false, nil
 	}
 
+	status := findInstanceStatus(input.ObservedState.InstanceStatuses, inst.Index)
+	if handled, err := recycleFailedCreateContainerTarget(ctx, deps, input, inst, target, status, oldPods, surgePods); err != nil || handled {
+		return false, err
+	}
+
 	// Superseded-surge redirect (level-triggered "desired wins"): the in-flight
 	// surge is committed to a revision that is no longer the desired target AND is
 	// not about to promote (surge pod not yet Ready). Abandon JUST the stuck surge
-	// pod — the source at oldOrdinal keeps serving, so capacity never drops (unlike
-	// the Failed-recovery reclassify path, which drains the whole slot; that's safe
-	// only because a Failed Instance is already compromised) — and reset the
-	// Instance to Ready on its running revision. The NEXT reconcile re-surges
+	// pod — the source at oldOrdinal keeps serving, so capacity never drops — and
+	// reset the Instance to Ready on its running revision. The NEXT reconcile re-surges
 	// toward the current target through the normal gated path, so maxSurge / ratio
 	// / canary all re-apply. Without this, a surge that never becomes Ready and
 	// never escalates pins itself to a dead rev and holds the maxSurge budget until
@@ -106,7 +235,7 @@ func surgeUpdate(ctx context.Context, deps workload.Deps, input workload.Reconci
 	// (Ready) skips this and keeps the X-2 pin below so its promote stamps the rev
 	// its pods actually run. Only Step=Surge — later surge steps are past the
 	// point of no return (source already draining) and finish their cycle.
-	if s := findInstanceStatus(input.ObservedState.InstanceStatuses, inst.Index); s != nil &&
+	if s := status; s != nil &&
 		s.Phase != workload.InstancePhaseFailed && s.Operation != nil &&
 		s.Operation.Type == workload.InstanceOperationUpdate &&
 		s.Operation.Step == updateStepSurge && s.Operation.TargetRevision != "" &&
@@ -157,12 +286,11 @@ func surgeUpdate(ctx context.Context, deps workload.Deps, input workload.Reconci
 	// naturally after this surge promotes, because detectUpdateTrigger
 	// observes RunningRevision != target.Name.
 	surgeTargetName := target.Name
-	// instanceFailed: this surge already escalated to Phase=Failed (e.g. its pod
-	// hit ImagePullBackOff on a bad revision). Recovery drops the pin below and
-	// drains the failed pod so a corrective target can re-surge — otherwise the
-	// surge stays pinned to the bad revision and the Instance is wedged forever.
+	// instanceFailed: this surge already escalated to Phase=Failed. Recovery drops
+	// the pin below so a corrective target can classify the old target as stale;
+	// same-target CreateContainerError relocation is handled before this point.
 	instanceFailed := false
-	if s := findInstanceStatus(input.ObservedState.InstanceStatuses, inst.Index); s != nil {
+	if s := status; s != nil {
 		instanceFailed = s.Phase == workload.InstancePhaseFailed
 		if !instanceFailed && s.Operation != nil && s.Operation.Type == workload.InstanceOperationUpdate &&
 			isSurgeUpdateStep(s.Operation.Step) &&

@@ -17,7 +17,7 @@
       ],
       "properties": {
         "borrowingLimit": {
-          "description": "BorrowingLimit is how far above its share this leaf may burst by borrowing idle sibling capacity, passed through to Kueue. Borrowing is cluster-local, so enabling it turns nominal from a fleet ceiling into a guaranteed floor plus reclaimable overage; the relaxed ceiling is reported in status. Leaves only.",
+          "description": "BorrowingLimit is how far above its share this leaf may burst by borrowing idle sibling capacity, passed through to Kueue. Unset, this leaf does not borrow: nominal is its ceiling, and the materialized queue carries an explicit limit of zero to say so, because the enforcement backend reads an absent limit as unbounded.\n\nBorrowing is cluster-local, so setting it turns nominal from a ceiling into a floor plus overage, and the relaxed ceiling is reported in status.\n\nWARNING: overage is not currently reclaimable. This plane sets no preemption policy, so a borrower holds what it took until its own work finishes -- a leaf that bursts can leave a sibling waiting for the share that sibling was guaranteed. Leaves only.",
           "$ref": "#/definitions/resource.Quantity"
         },
         "lendingLimit": {
@@ -1879,6 +1879,10 @@
           "description": "LatestRevision is true when this entry corresponds to the LatestRolledoutRevision for the Component.",
           "type": "boolean"
         },
+        "pairingProtocol": {
+          "description": "PairingProtocol is the engine↔decoder wire-compatibility token the target's revision was minted under (spec.rollout.pairingProtocol at mint time). Consumers MUST only pair engine and decoder targets whose PairingProtocol values are equal; an empty value pairs with anything.",
+          "type": "string"
+        },
         "percent": {
           "description": "Percent is the percentage of traffic the consumer should route to RevisionName. Sum across all entries for one Component is 100.",
           "type": "integer",
@@ -2264,6 +2268,10 @@
           "description": "TopologyKey is the node-label key (e.g. an NVLink/RDMA fabric-domain label) used to co-locate all pods of one multi-node (leader+worker) gang into a single network / NVLink topology domain. When set on a multi-node component, OME auto-generates the per-instance worker→leader podAffinity that anchors every worker to its gang's leader on a node sharing this label value — so users need not hand-write that affinity. Only meaningful for multi-node components; ignored for single-pod (no leader to anchor to). Unset means no auto-generated gang affinity.",
           "type": "string"
         },
+        "topologySpread": {
+          "description": "TopologySpread spreads this component's instances across fault domains so losing one domain (rack / fabric slice / cube) cannot take out every instance at once. Rendered as a standard topologySpreadConstraint (maxSkew 1) on each instance's anchor pod (the leader, or the sole pod of a single-pod instance); workers follow their leader, so gangs stay whole. Required renders as DoNotSchedule — balanced spreading enforced by any scheduler that keeps PodTopologySpread's Filter, including the OME gang scheduler's packing profile. Preferred renders as ScheduleAnyway — advisory only, and currently without effect under the OME gang scheduler (its profile disables the spreading Score and pre-narrows gang candidates to one domain). Not part of the revision hash: changing it shapes future placements without rolling a healthy fleet. Unset keeps pure bin-packing.",
+          "type": "string"
+        },
         "topologySpreadConstraints": {
           "description": "TopologySpreadConstraints describes how a group of pods ought to spread across topology domains. Scheduler will schedule pods in a way which abides by the constraints. All topologySpreadConstraints are ANDed.",
           "type": "array",
@@ -2278,6 +2286,10 @@
           "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "topologyKey",
           "x-kubernetes-patch-strategy": "merge"
+        },
+        "topologySpreadKey": {
+          "description": "TopologySpreadKey is the node-label key naming the fault domains TopologySpread spreads across. Defaults to TopologyKey — right for fabrics where the co-location domain IS the failure zone (an NVLink rack). Set it to a coarser label when the failure zone contains many gang domains: e.g. co-locate by the TPU partition label while spreading across cloud.google.com/gce-topology-subblock. Single-pod components have no co-location key, so spreading them requires setting this explicitly. Ignored unless TopologySpread is set.",
+          "type": "string"
         },
         "volumes": {
           "description": "List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes",
@@ -2731,6 +2743,10 @@
           "description": "TopologyKey is the node-label key (e.g. an NVLink/RDMA fabric-domain label) used to co-locate all pods of one multi-node (leader+worker) gang into a single network / NVLink topology domain. When set on a multi-node component, OME auto-generates the per-instance worker→leader podAffinity that anchors every worker to its gang's leader on a node sharing this label value — so users need not hand-write that affinity. Only meaningful for multi-node components; ignored for single-pod (no leader to anchor to). Unset means no auto-generated gang affinity.",
           "type": "string"
         },
+        "topologySpread": {
+          "description": "TopologySpread spreads this component's instances across fault domains so losing one domain (rack / fabric slice / cube) cannot take out every instance at once. Rendered as a standard topologySpreadConstraint (maxSkew 1) on each instance's anchor pod (the leader, or the sole pod of a single-pod instance); workers follow their leader, so gangs stay whole. Required renders as DoNotSchedule — balanced spreading enforced by any scheduler that keeps PodTopologySpread's Filter, including the OME gang scheduler's packing profile. Preferred renders as ScheduleAnyway — advisory only, and currently without effect under the OME gang scheduler (its profile disables the spreading Score and pre-narrows gang candidates to one domain). Not part of the revision hash: changing it shapes future placements without rolling a healthy fleet. Unset keeps pure bin-packing.",
+          "type": "string"
+        },
         "topologySpreadConstraints": {
           "description": "TopologySpreadConstraints describes how a group of pods ought to spread across topology domains. Scheduler will schedule pods in a way which abides by the constraints. All topologySpreadConstraints are ANDed.",
           "type": "array",
@@ -2745,6 +2761,10 @@
           "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "topologyKey",
           "x-kubernetes-patch-strategy": "merge"
+        },
+        "topologySpreadKey": {
+          "description": "TopologySpreadKey is the node-label key naming the fault domains TopologySpread spreads across. Defaults to TopologyKey — right for fabrics where the co-location domain IS the failure zone (an NVLink rack). Set it to a coarser label when the failure zone contains many gang domains: e.g. co-locate by the TPU partition label while spreading across cloud.google.com/gce-topology-subblock. Single-pod components have no co-location key, so spreading them requires setting this explicitly. Ignored unless TopologySpread is set.",
+          "type": "string"
         },
         "volumes": {
           "description": "List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes",
@@ -3125,13 +3145,21 @@
           "description": "Pacing is the InferenceService controller's projection of the active RolloutCoordinationGroup pacing for this replica. Written by the ISVC controller; read by the InferenceReplica controller. Includes Partition (canary hold) and MaxUnavailable (rollout budget). Nil means independent rollout.",
           "$ref": "#/definitions/v1beta1.InferenceReplicaPacing"
         },
+        "pairingProtocol": {
+          "description": "PairingProtocol is the engine↔decoder wire-compatibility token projected from spec.rollout.pairingProtocol on the parent InferenceService. It is folded into the revision hash (a change mints a new revision) and stamped as the ome.io/pairing-protocol label on rendered pods. Projected only onto engine and decoder — the router does not participate in P/D pairing and must not re-roll on a protocol change. Nil pairs with anything.",
+          "type": "string"
+        },
         "parentRef": {
           "description": "ParentRef names the InferenceService that owns this replica. Set by the ISVC controller at create time; immutable thereafter.",
           "default": {},
           "$ref": "#/definitions/v1beta1.ParentReference"
         },
+        "pauseMode": {
+          "description": "PauseMode selects how much of the lifecycle Paused suspends. Only meaningful while Paused is true.\n  - \"Recover\" (default when empty): fleet changes are suspended;\n    the RestartPolicy continues to repair existing Instances at\n    the revision they already run.\n  - \"Freeze\": every lifecycle operation is suspended, including\n    Instance repair. Only kubelet-level container restarts and\n    deliberate replica reduction (scale-down) remain active.\nStatus stays truthful in every depth: a Ready Instance whose pods are all gone (and whose RestartPolicy will not repair it) is demoted to Pending without running any recovery operation.",
+          "type": "string"
+        },
         "paused": {
-          "description": "Paused, when true, stops the InferenceReplica controller from initiating any new Update / Restart / Create operations. In-flight operations resume on unpause.",
+          "description": "Paused, when true, stops the InferenceReplica controller from initiating fleet changes: Update, Create, and Migration operations are neither started nor advanced. The component's RestartPolicy keeps repairing existing Instances at their current revision unless PauseMode is Freeze. In-flight operations resume on unpause.",
           "type": "boolean"
         },
         "replicas": {
@@ -3158,6 +3186,14 @@
         },
         "topologyKey": {
           "description": "TopologyKey is the resolved gang co-location node-label key for this Component, projected verbatim from the effective ISVC↔runtime component spec (spec.\u003ccomponent\u003e.topologyKey, else the runtime component-config value). When set on a multi-node Component, the InferenceReplica controller auto-generates the per-Instance worker→leader podAffinity that co-locates every worker onto its gang's leader on a node sharing this label value. Nil means no auto-generated gang affinity.",
+          "type": "string"
+        },
+        "topologySpread": {
+          "description": "TopologySpread is the resolved spreading policy for this Component, projected verbatim from the effective ISVC↔runtime component spec. The InferenceReplica controller renders it as a topologySpreadConstraint on each Instance's anchor pod; nil keeps pure bin-packing.",
+          "type": "string"
+        },
+        "topologySpreadKey": {
+          "description": "TopologySpreadKey is the resolved fault-domain node-label key TopologySpread spreads across; nil defaults to TopologyKey.",
           "type": "string"
         }
       }
@@ -3252,6 +3288,10 @@
             "targetRevision"
           ],
           "x-kubernetes-list-type": "map"
+        },
+        "rolloutHold": {
+          "description": "RolloutHold records the most recent reason a per-Instance Update was denied for this Component — cross-Component coordination (Ratio, Sequential), a surge/unavailability budget, or a same-target retry hold (RetryBlock, Held). Nil while the Component is progressing or has no rollout in flight. See RolloutHold for the field semantics.",
+          "$ref": "#/definitions/v1beta1.RolloutHold"
         },
         "servingReplicas": {
           "description": "ServingReplicas is the number of Instances whose every pod is both ContainersReady AND has serving=True on the controller-managed readiness gate (i.e., actually in the load balancer rotation). MaxUnavailable budgets are computed against this count, not ReadyReplicas, so \"missing from traffic\" reflects reality during in-place updates.",
@@ -4070,6 +4110,10 @@
           "type": "integer",
           "format": "int32"
         },
+        "rolloutHold": {
+          "description": "RolloutHold reports the most recent reason this Component's rollout did not advance, mirrored verbatim from the owning InferenceReplica's status. Nil while the Component is progressing or has no rollout in flight.",
+          "$ref": "#/definitions/v1beta1.RolloutHold"
+        },
         "servingReplicas": {
           "description": "ServingReplicas is the number of Instances whose every pod is BOTH ContainersReady AND has serving=True on the controller-managed readiness gate — i.e., the pod is actually in the load balancer's rotation. This is the count operators care about for traffic availability, and the count MaxUnavailable budgets gate against.\n\nDiverges from ReadyReplicas during in-place updates and any other scenario where the controller flips the serving gate to False while containers remain technically Ready.",
           "type": "integer",
@@ -4666,6 +4710,10 @@
           "description": "ReadyPodCount is retained for API compatibility. OMENative derives readiness from Pods and does not persist this field.",
           "type": "integer",
           "format": "int32"
+        },
+        "readySince": {
+          "description": "ReadySince is when the Instance last entered Ready. Anchors post-Ready failure detection: container restarts that finished before this time belong to boot and never trigger a recreate.",
+          "$ref": "#/definitions/v1.Time"
         },
         "runningRevision": {
           "description": "RunningRevision is the ControllerRevision the live pods are running.",
@@ -5485,6 +5533,35 @@
         }
       }
     },
+    "v1beta1.RolloutHold": {
+      "description": "RolloutHold records the most recent reason a per-Instance Update was denied for a Component — the detail behind \"why has this rollout not moved\". Overwritten whenever a reconcile observes a fresh denial; cleared once the Component's rollout advances (an Update is admitted) or completes (CurrentRevision == UpdateRevision, or no rollout is in flight). Since is preserved across reconciles that keep reporting the same Gate and Target, so it anchors \"held since\" rather than \"last observed at\".",
+      "type": "object",
+      "required": [
+        "gate",
+        "reason",
+        "since"
+      ],
+      "properties": {
+        "gate": {
+          "description": "Gate names the layer that produced Reason.",
+          "type": "string",
+          "default": ""
+        },
+        "reason": {
+          "description": "Reason is the operator-facing denial string from the gate that produced it (e.g. \"Sequential waiting on decoder\").",
+          "type": "string",
+          "default": ""
+        },
+        "since": {
+          "description": "Since is when this Gate+Target combination was first observed without interruption. A change in Gate or Target restarts the clock; a change in Reason text alone does not (mirrors how apimeta.SetStatusCondition preserves LastTransitionTime while a condition's Status is unchanged).",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "target": {
+          "description": "Target is the ControllerRevision name the held Update was aimed at.",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.RolloutPause": {
       "description": "RolloutPause holds a rollout at a step boundary; its meaning depends on the step's gate (see RolloutGroupStep):\n  - manual step (Pause, no Duration): wait for the ome.io/rollout-promote\n    annotation.\n  - timed step (Pause with Duration, no Analysis): advance after Duration.\n  - analysis step (Analysis set): Duration is the minimum bake time before a\n    passing sample may advance.",
       "type": "object",
@@ -5507,6 +5584,10 @@
             "$ref": "#/definitions/v1beta1.RolloutGroup"
           },
           "x-kubernetes-list-type": "atomic"
+        },
+        "pairingProtocol": {
+          "description": "PairingProtocol declares the engine↔decoder wire-compatibility contract for prefill-decode pairing (e.g. a KV-transfer protocol generation, such as \"nixl-v2\"). It is an opaque, operator-owned token compared only for equality; bump it ONLY when the engine↔decoder wire contract breaks. The value rides each engine and decoder revision: changing it mints new revisions for both Components (a rollout), stamps ome.io/pairing-protocol on their pods and per-revision Services, and is published on each traffic target so routing pairs only engine and decoder revisions whose values are equal. Empty or unset pairs with anything, so setting or clearing the token is upgrade-neutral. Changing it between two non-empty values requires engine and decoder to roll as one blueGreen or canary group.",
+          "type": "string"
         }
       }
     },

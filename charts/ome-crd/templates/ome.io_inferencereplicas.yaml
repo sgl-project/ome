@@ -640,6 +640,10 @@ spec:
                     rollbackToRevision:
                       type: string
                   type: object
+                pairingProtocol:
+                  maxLength: 63
+                  pattern: ^[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$
+                  type: string
                 parentRef:
                   properties:
                     name:
@@ -647,6 +651,11 @@ spec:
                   required:
                     - name
                   type: object
+                pauseMode:
+                  enum:
+                    - Recover
+                    - Freeze
+                  type: string
                 paused:
                   type: boolean
                 replicas:
@@ -3742,6 +3751,13 @@ spec:
                   x-kubernetes-list-type: map
                 topologyKey:
                   type: string
+                topologySpread:
+                  enum:
+                    - Preferred
+                    - Required
+                  type: string
+                topologySpreadKey:
+                  type: string
               required:
                 - component
                 - parentRef
@@ -3947,6 +3963,9 @@ spec:
                       readyPodCount:
                         format: int32
                         type: integer
+                      readySince:
+                        format: date-time
+                        type: string
                       runningRevision:
                         type: string
                       scheduledPodCount:
@@ -4078,6 +4097,29 @@ spec:
                   x-kubernetes-list-map-keys:
                     - targetRevision
                   x-kubernetes-list-type: map
+                rolloutHold:
+                  properties:
+                    gate:
+                      enum:
+                        - Pairing
+                        - Ratio
+                        - Sequential
+                        - Budget
+                        - RetryBlock
+                        - Held
+                      type: string
+                    reason:
+                      type: string
+                    since:
+                      format: date-time
+                      type: string
+                    target:
+                      type: string
+                  required:
+                    - gate
+                    - reason
+                    - since
+                  type: object
                 servingReplicas:
                   format: int32
                   type: integer
@@ -4086,6 +4128,8 @@ spec:
                     properties:
                       latestRevision:
                         type: boolean
+                      pairingProtocol:
+                        type: string
                       percent:
                         format: int32
                         maximum: 100

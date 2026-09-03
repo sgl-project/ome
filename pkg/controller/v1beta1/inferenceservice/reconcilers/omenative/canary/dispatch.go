@@ -157,6 +157,18 @@ func Dispatch(ctx context.Context, d DispatchDeps) (time.Duration, error) {
 			stableHash = sc.StableRevisionHash
 		}
 	}
+	// Resolve the two revisions' pairing protocols through the cached client:
+	// a ControllerRevision's protocol is immutable from create, so a cache
+	// read can only lag into "" (pairs with anything) for a just-minted CR,
+	// which the meaningful-diff traffic write corrects on the next pass.
+	canaryProtocol, _, err := coordination.PairingProtocolForRevision(ctx, d.Client, d.ISVC.Namespace, d.ISVC.Name, primary, canaryHash)
+	if err != nil {
+		return 0, err
+	}
+	stableProtocol, _, err := coordination.PairingProtocolForRevision(ctx, d.Client, d.ISVC.Namespace, d.ISVC.Name, primary, stableHash)
+	if err != nil {
+		return 0, err
+	}
 	res, err := Reconcile(ctx, ReconcileInputs{
 		Client:                   d.Client,
 		Reader:                   d.Reader,
@@ -164,6 +176,8 @@ func Dispatch(ctx context.Context, d DispatchDeps) (time.Duration, error) {
 		Component:                primary,
 		CanaryRevisionHash:       canaryHash,
 		StableRevisionHash:       stableHash,
+		CanaryPairingProtocol:    canaryProtocol,
+		StablePairingProtocol:    stableProtocol,
 		ReadyCanaryInstances:     revisions.readyTargetInstanceCount(observedPods[primary]),
 		DesiredReplicas:          componentReplicas(d.ISVC, primary),
 		PerRevisionPods:          readyRev[primary],

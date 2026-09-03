@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -635,6 +636,9 @@ func TestReconcile_TrafficLatestRevisionFlipPersists(t *testing.T) {
 	if err := corev1.AddToScheme(scheme); err != nil {
 		panic(err)
 	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		panic(err)
+	}
 	if err := v1beta1.AddToScheme(scheme); err != nil {
 		panic(err)
 	}
@@ -998,6 +1002,9 @@ func podName(isvc string, component v1beta1.ComponentType, idx int) string {
 func testClient(objs ...runtime.Object) client.Client {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
+		panic(err)
+	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
 		panic(err)
 	}
 	if err := v1beta1.AddToScheme(scheme); err != nil {

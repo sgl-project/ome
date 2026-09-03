@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/quota/backend"
 	"sigs.k8s.io/ome/pkg/quota/tree"
+	"sigs.k8s.io/ome/pkg/quota/usage"
 )
 
 // Mode selects which half of the quota plane a manager runs. It is a manager
@@ -206,6 +207,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 	}
 
+	// What the fleet is holding, summed up the tree. Only leaves carry figures
+	// -- a share is apportioned to a leaf and an ancestor travels budget-less --
+	// so without this a grouping tier and the root report nothing while the
+	// leaves beneath them run the whole fleet.
+	//
+	// The same roll the workload plane uses on its own queues, rather than a
+	// second one here: an ancestor's borrowed figure is recomputed rather than
+	// summed, because a loan between two siblings is internal to the subtree
+	// that contains them and adding the children's numbers would report the
+	// subtree borrowing from outside itself.
+	fleetRollup := usage.Roll(built, fleetLeafUsage(fleet))
+
 	// Observational, so a backend that cannot be read costs the fleet its usage
 	// figures for this pass and nothing else. Failing here would stop the
 	// conditions and tree positions below from being written too, which is the
@@ -216,7 +229,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	for _, node := range built.Nodes() {
-		if err := r.reconcileStatus(ctx, node, frozen, outcomes[node.Name()], reading, fleet[node.Name()]); err != nil {
+		if err := r.reconcileStatus(ctx, node, frozen, outcomes[node.Name()], reading,
+			fleet[node.Name()], fleetRollup[node.Name()]); err != nil {
 			errs = append(errs, fmt.Errorf("writing status for node %s: %w", node.Name(), err))
 		}
 	}
@@ -277,7 +291,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 // resync tick and spin the watch.
 func (r *Reconciler) reconcileStatus(ctx context.Context, node *tree.Node, frozen map[string]tree.Violation,
 	outcome backend.NodeOutcome, reading usageReading,
-	onClusters map[string]clusterState,
+	onClusters map[string]clusterState, rolled map[usage.Key]usage.Total,
 ) error {
 	current := node.Quota
 	updated := current.DeepCopy()
@@ -301,6 +315,10 @@ func (r *Reconciler) reconcileStatus(ctx context.Context, node *tree.Node, froze
 	// management plane published about the same node name.
 	if r.Project.Enabled() {
 		updated.Status.Clusters = clusterStatuses(onClusters, current.Status.Clusters)
+		// The management plane's own budget figures, which no backend can give
+		// it: it runs no Kueue and materializes nothing, so its numbers are the
+		// fleet's members added up.
+		updated.Status.Budgets = fleetBudgets(node.Quota.Spec.Budgets, onClusters, rolled)
 	}
 
 	violation, isFrozen := frozen[node.Name()]
@@ -445,6 +463,116 @@ func clusterStatuses(observed map[string]clusterState,
 	return out
 }
 
+// fleetLeafUsage reshapes the per-cluster view into what the roll expects: one
+// entry per node, summed across the members holding it.
+//
+// Summing across CLUSTERS is not the same as summing across children, which the
+// roll refuses to do for borrowed. Borrowing is cluster-local -- a Kueue cohort
+// lives on one member -- so two members each lending to the same tenant are two
+// separate loans, and the fleet really is running that much above its shares.
+func fleetLeafUsage(fleet fleetView) map[string]map[usage.Key]usage.Observed {
+	if len(fleet) == 0 {
+		return nil
+	}
+	out := map[string]map[usage.Key]usage.Observed{}
+	for node, byCluster := range fleet {
+		for _, st := range byCluster {
+			for _, cb := range st.budgets {
+				if cb.resourceName == "" {
+					continue
+				}
+				if out[node] == nil {
+					out[node] = map[usage.Key]usage.Observed{}
+				}
+				k := usage.Key{ResourceName: cb.resourceName, ResourceFlavor: cb.resourceFlavor}
+				agg := out[node][k]
+				agg.Admitted.Add(cb.admitted)
+				agg.Reserved.Add(cb.reserved)
+				agg.Borrowed.Add(cb.borrowed)
+				out[node][k] = agg
+			}
+		}
+	}
+	return out
+}
+
+// fleetBudgets is the hub's view of one node's budgets: what the admin
+// authorized, and what the fleet is doing with it.
+//
+// Nominal is the authored total rather than the sum of the shares. They agree
+// when every member reported, and when one did not the split is held -- so
+// summing would quietly report a smaller fleet total for as long as a member
+// was missing.
+// The authored number is what the admin wrote and stays what the hub reports.
+//
+// The consumption figures ARE sums, because consumption is a fact about the
+// fleet: work admitted on one member is work the fleet is running. Borrowed
+// sums too, and means the same thing one tier up -- how much of what is running
+// sits above the share that authorized it.
+func fleetBudgets(authored []v1beta1.AcceleratorBudget,
+	onClusters map[string]clusterState, rolled map[usage.Key]usage.Total,
+) []v1beta1.AcceleratorBudgetStatus {
+	if len(authored) == 0 {
+		return nil
+	}
+	out := make([]v1beta1.AcceleratorBudgetStatus, 0, len(authored))
+	for _, b := range authored {
+		key := budgetKey(b.ResourceName, b.ResourceFlavor)
+		row := v1beta1.AcceleratorBudgetStatus{
+			ResourceName:   b.ResourceName,
+			ResourceFlavor: b.ResourceFlavor,
+			Nominal:        b.Nominal.DeepCopy(),
+		}
+		// The breakdown is this node's own, so only a leaf has one: a share is
+		// apportioned to a leaf, and an ancestor is projected budget-less. An
+		// ancestor with per-cluster rows would have to invent a nominal nobody
+		// assigned it.
+		for cluster, st := range onClusters {
+			cb, ok := st.budgets[key]
+			if !ok {
+				continue
+			}
+			row.PerCluster = append(row.PerCluster, v1beta1.AcceleratorClusterBudgetStatus{
+				Cluster:  cluster,
+				Nominal:  cb.nominal.DeepCopy(),
+				Admitted: cb.admitted.DeepCopy(),
+				Reserved: cb.reserved.DeepCopy(),
+				Borrowed: cb.borrowed.DeepCopy(),
+			})
+		}
+		sort.Slice(row.PerCluster, func(i, j int) bool {
+			return row.PerCluster[i].Cluster < row.PerCluster[j].Cluster
+		})
+
+		// The totals come from the roll, which is what carries a leaf's figures
+		// up to the tiers above it.
+		if t, ok := rolled[usage.Key{ResourceName: b.ResourceName, ResourceFlavor: b.ResourceFlavor}]; ok {
+			row.Admitted = t.Admitted.DeepCopy()
+			row.Reserved = t.Reserved.DeepCopy()
+			row.Borrowed = t.Borrowed.DeepCopy()
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+// equalPerCluster compares one budget's member rows.
+func equalPerCluster(a, b []v1beta1.AcceleratorClusterBudgetStatus) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Cluster != b[i].Cluster ||
+			a[i].Nominal.Cmp(b[i].Nominal) != 0 ||
+			a[i].Admitted.Cmp(b[i].Admitted) != 0 ||
+			a[i].Reserved.Cmp(b[i].Reserved) != 0 ||
+			a[i].Borrowed.Cmp(b[i].Borrowed) != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // equalClusters compares the per-member rows, excluding AppliedTime. Including
 // it would make every successful pass a write, since a clean re-apply restamps
 // the time whether or not anything moved -- and this status is watched, so a
@@ -517,11 +645,30 @@ func WithTransportEvents(ch <-chan event.GenericEvent) Option {
 	return func(o *options) { o.transportEvents = ch }
 }
 
+// WithMemberEvents wires the channel a status funnel fills when an
+// AcceleratorQuota changes on any member, so the hub's account of the fleet
+// follows the fleet instead of a clock.
+//
+// Consumption moves without anything in the tree changing, and none of this
+// controller's own triggers notice: it is woken by edits to the hub's own
+// nodes and by its resync tick, neither of which fires when a tenant's work
+// starts or finishes on a member. The workload plane has the same problem one
+// layer down and solves it the same way, by watching the objects that carry the
+// figures rather than re-reading them on a timer.
+//
+// This does not feed back on itself. The hub's own applies to a member are
+// server-side applies, and one that changes nothing does not bump
+// resourceVersion, so it raises no event to wake the pass that made it.
+func WithMemberEvents(ch <-chan event.GenericEvent) Option {
+	return func(o *options) { o.memberEvents = ch }
+}
+
 // Option configures SetupWithManager.
 type Option func(*options)
 
 type options struct {
 	transportEvents <-chan event.GenericEvent
+	memberEvents    <-chan event.GenericEvent
 }
 
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
@@ -600,14 +747,21 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
 			builder.WithPredicates(usageChanged),
 		)
 	}
+	// One handler for both, because the pass they trigger is the same one: it
+	// rebuilds the whole tree from the root, so a burst of member events and a
+	// reconnection collapse into a single queued request rather than one each.
+	wake := handler.EnqueueRequestsFromMapFunc(
+		func(_ context.Context, obj client.Object) []reconcile.Request {
+			return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: obj.GetName()}}}
+		})
+	if cfg.memberEvents != nil {
+		b = b.WatchesRawSource(source.Channel(cfg.memberEvents, wake))
+	}
 	if cfg.transportEvents != nil {
 		// Every event names the root and the pass rebuilds the whole tree, so a
 		// burst of reconnections collapses into one queued pass rather than one
 		// per member.
-		b = b.WatchesRawSource(source.Channel(cfg.transportEvents,
-			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
-				return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: obj.GetName()}}}
-			})))
+		b = b.WatchesRawSource(source.Channel(cfg.transportEvents, wake))
 	}
 	return b.Complete(r)
 }

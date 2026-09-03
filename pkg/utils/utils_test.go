@@ -385,46 +385,97 @@ func TestMergeEnvs(t *testing.T) {
 
 func TestIsGpuEnabled(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
+	multiVendor := []string{constants.NvidiaGPUResourceType, "amd.com/gpu", "google.com/tpu"}
 	scenarios := map[string]struct {
-		resource v1.ResourceRequirements
-		expected bool
+		resource             v1.ResourceRequirements
+		acceleratorResources []string
+		expected             bool
 	}{
-		"GpuEnabled": {
+		"NvidiaGpuEnabled_WithConfiguredList": {
 			resource: v1.ResourceRequirements{
 				Limits: v1.ResourceList{
-					"cpu": resource.Quantity{
-						Format: "100",
-					},
+					"cpu":                           resource.Quantity{Format: "100"},
 					constants.NvidiaGPUResourceType: resource.MustParse("1"),
 				},
 				Requests: v1.ResourceList{
-					"cpu": resource.Quantity{
-						Format: "90",
-					},
+					"cpu":                           resource.Quantity{Format: "90"},
 					constants.NvidiaGPUResourceType: resource.MustParse("1"),
 				},
 			},
-			expected: true,
+			acceleratorResources: multiVendor,
+			expected:             true,
 		},
-		"GPUDisabled": {
+		"AmdGpuEnabled_WithConfiguredList": {
 			resource: v1.ResourceRequirements{
 				Limits: v1.ResourceList{
-					"cpu": resource.Quantity{
-						Format: "100",
-					},
-				},
-				Requests: v1.ResourceList{
-					"cpu": resource.Quantity{
-						Format: "90",
-					},
+					"cpu":         resource.Quantity{Format: "100"},
+					"amd.com/gpu": resource.MustParse("1"),
 				},
 			},
-			expected: false,
+			acceleratorResources: multiVendor,
+			expected:             true,
+		},
+		"TpuEnabled_WithConfiguredList": {
+			resource: v1.ResourceRequirements{
+				Limits: v1.ResourceList{
+					"google.com/tpu": resource.MustParse("4"),
+				},
+			},
+			acceleratorResources: multiVendor,
+			expected:             true,
+		},
+		"GPUDisabled_EmptyLimits": {
+			resource: v1.ResourceRequirements{
+				Limits: v1.ResourceList{
+					"cpu": resource.Quantity{Format: "100"},
+				},
+				Requests: v1.ResourceList{
+					"cpu": resource.Quantity{Format: "90"},
+				},
+			},
+			acceleratorResources: multiVendor,
+			expected:             false,
+		},
+		"AbsentConfig_PreservesNvidiaOnlyBehavior": {
+			resource: v1.ResourceRequirements{
+				Limits: v1.ResourceList{
+					constants.NvidiaGPUResourceType: resource.MustParse("1"),
+				},
+			},
+			acceleratorResources: nil,
+			expected:             true,
+		},
+		"AbsentConfig_DoesNotRecognizeAmd": {
+			resource: v1.ResourceRequirements{
+				Limits: v1.ResourceList{
+					"amd.com/gpu": resource.MustParse("1"),
+				},
+			},
+			acceleratorResources: nil,
+			expected:             false,
+		},
+		"EmptyConfiguredList_AlsoFallsBackToNvidiaOnly": {
+			resource: v1.ResourceRequirements{
+				Limits: v1.ResourceList{
+					constants.NvidiaGPUResourceType: resource.MustParse("1"),
+				},
+			},
+			acceleratorResources: []string{},
+			expected:             true,
+		},
+		"RequestsOnlyNeverCounts_EvenWithMatchingConfig": {
+			resource: v1.ResourceRequirements{
+				Requests: v1.ResourceList{
+					constants.NvidiaGPUResourceType: resource.MustParse("1"),
+				},
+			},
+			acceleratorResources: multiVendor,
+			expected:             false,
 		},
 	}
 	for name, scenario := range scenarios {
 		t.Run(name, func(t *testing.T) {
-			res := IsGPUEnabled(scenario.resource)
+			res := IsGPUEnabled(scenario.resource, scenario.acceleratorResources)
 			g.Expect(res).To(gomega.Equal(scenario.expected))
 		})
 	}

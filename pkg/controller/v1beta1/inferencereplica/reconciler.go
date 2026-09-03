@@ -336,6 +336,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 	input.ScaleDownPodBatchSize = r.ScaleDownPodBatchSize
 	input.ScaleDownRequeueInterval = r.ScaleDownRequeueInterval
 
+	// Capture the update pass's rollout-hold verdict (if any) for the
+	// deferred status write below. execHoldObserved distinguishes "the
+	// Update pass ran and found nothing to hold" (clear) from "the Update
+	// pass never ran this reconcile" (the status writer falls back to the
+	// persisted RetryBlock/Held state instead).
+	var (
+		execHoldObserved bool
+		execHold         *workload.RolloutHold
+	)
+	input.RecordRolloutHold = func(hold *workload.RolloutHold) {
+		execHoldObserved = true
+		execHold = hold
+	}
+
 	// Relocation-directive memory: prune AutoRecover ledger records for
 	// instances observed Ready (the success-prune mirror of the
 	// RetryBlock prune), then project the per-instance node-exclusion
@@ -474,7 +488,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 				log.V(1).Error(perr, "CurrentRevision promotion also failed; primary error preserved")
 			}
 		}
-		serr := r.aggregateAndWriteStatus(ctx, ir, plan, specTarget)
+		serr := r.aggregateAndWriteStatus(ctx, ir, plan, specTarget, execHoldObserved, execHold)
 		if errors.Is(serr, workload.ErrStatusMutationPrecondition) {
 			result, err = ctrl.Result{Requeue: true}, nil
 			return
@@ -1197,6 +1211,13 @@ func (r *Reconciler) applyRollbackPayload(ctx context.Context, ir *v1beta1.Infer
 	desired.PodSpec = payload.PodSpec
 	desired.WorkerPodSpec = payload.WorkerPodSpec
 	desired.PodTemplateObjectMeta = payload.PodMeta
+	// The pairing protocol is revision-owned: pods rendered from a stored
+	// revision must carry that revision's protocol, not the current spec's,
+	// or a repaired old-cohort pod would be mislabeled into the new cohort.
+	desired.PairingProtocol = ""
+	if payload.PairingProtocol != nil {
+		desired.PairingProtocol = *payload.PairingProtocol
+	}
 	desired.TopologyKey = ""
 	if payload.TopologyKey != nil {
 		desired.TopologyKey = *payload.TopologyKey
@@ -1396,10 +1417,11 @@ func (r *Reconciler) revisionHash(ir *v1beta1.InferenceReplica, input workload.R
 
 	// Hash a copy without inherited ISVC annotations while retaining them on rendered pods.
 	meta := stripExcludedAnnotations(input.DesiredSpec.PodTemplateObjectMeta, parseExcludedAnnotationKeys(ir))
-	hash, raw, err := revision.HashWithWorkerAndTopology(
+	hash, raw, err := revision.HashWithWorkerTopologyAndPairing(
 		input.DesiredSpec.PodSpec, input.DesiredSpec.WorkerPodSpec,
 		meta,
 		input.DesiredSpec.TopologyKey,
+		input.DesiredSpec.PairingProtocol,
 		collisionCount, scopeUID,
 	)
 	if err != nil {

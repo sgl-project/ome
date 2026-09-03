@@ -10,9 +10,11 @@
 // carry through the pod-selector composition the rest of the workload
 // pipeline does.
 //
-// Imports the audit subpackage solely to share the
-// MigrationRequestAnnotationPrefix constant — the controller-written
-// lifecycle annotation that must NOT participate in the revision hash.
+// Imports the audit and query subpackages solely to share constants:
+// audit's MigrationRequestAnnotationPrefix (the controller-written
+// lifecycle annotation that must NOT participate in the revision hash)
+// and query's LabelPairingProtocol (the annotation key that surfaces a
+// revision's pairing protocol on the emitted ControllerRevision).
 package revision
 
 import (
@@ -36,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/audit"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	workload "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -78,6 +81,12 @@ type DataPayload struct {
 	// It is omitted when topology is unset so existing topology-free revisions
 	// retain their canonical payload and hash.
 	TopologyKey *string `json:"topologyKey,omitempty"`
+	// PairingProtocol records the P/D wire-compatibility token the revision
+	// was minted under, so a protocol change mints a new revision. Unlike
+	// TopologyKey it applies to single-pod Components too (a PD engine is
+	// often single-pod). Omitted when unset so protocol-free revisions retain
+	// their canonical payload and hash.
+	PairingProtocol *string `json:"pairingProtocol,omitempty"`
 }
 
 // dataPayloadJSON is the wire shape DataPayload marshals to. It exists so the
@@ -86,10 +95,11 @@ type DataPayload struct {
 // not stable across Kubernetes releases, and any shift in it renames every
 // live ControllerRevision and rolls the fleet with no other signal.
 type dataPayloadJSON struct {
-	PodSpec       *corev1.PodSpec   `json:"podSpec"`
-	PodMeta       *templateMetaJSON `json:"podMeta"`
-	WorkerPodSpec *corev1.PodSpec   `json:"workerPodSpec,omitempty"`
-	TopologyKey   *string           `json:"topologyKey,omitempty"`
+	PodSpec         *corev1.PodSpec   `json:"podSpec"`
+	PodMeta         *templateMetaJSON `json:"podMeta"`
+	WorkerPodSpec   *corev1.PodSpec   `json:"workerPodSpec,omitempty"`
+	TopologyKey     *string           `json:"topologyKey,omitempty"`
+	PairingProtocol *string           `json:"pairingProtocol,omitempty"`
 }
 
 // templateMetaJSON is the pod-template metadata exactly as it is hashed: an
@@ -108,9 +118,10 @@ type templateMetaJSON struct {
 // so stored payloads decode straight back into PodMeta.
 func (p DataPayload) MarshalJSON() ([]byte, error) {
 	out := dataPayloadJSON{
-		PodSpec:       p.PodSpec,
-		WorkerPodSpec: p.WorkerPodSpec,
-		TopologyKey:   p.TopologyKey,
+		PodSpec:         p.PodSpec,
+		WorkerPodSpec:   p.WorkerPodSpec,
+		TopologyKey:     p.TopologyKey,
+		PairingProtocol: p.PairingProtocol,
 	}
 	if p.PodMeta != nil {
 		out.PodMeta = &templateMetaJSON{
@@ -180,6 +191,14 @@ func HashWithWorker(template, workerSpec *corev1.PodSpec, templateMeta *metav1.O
 // preserves the legacy topology-free payload and hash; single-pod hashes remain
 // unchanged regardless of the supplied key.
 func HashWithWorkerAndTopology(template, workerSpec *corev1.PodSpec, templateMeta *metav1.ObjectMeta, topologyKey string, collisionCount *int32, ownerUID types.UID) (string, []byte, error) {
+	return HashWithWorkerTopologyAndPairing(template, workerSpec, templateMeta, topologyKey, "", collisionCount, ownerUID)
+}
+
+// HashWithWorkerTopologyAndPairing extends HashWithWorkerAndTopology with the
+// P/D pairing protocol, so a protocol change mints a new revision for the
+// Component. Unlike topology, pairing applies to single-pod Components too. An
+// empty protocol preserves the protocol-free payload and hash.
+func HashWithWorkerTopologyAndPairing(template, workerSpec *corev1.PodSpec, templateMeta *metav1.ObjectMeta, topologyKey, pairingProtocol string, collisionCount *int32, ownerUID types.UID) (string, []byte, error) {
 	if template == nil {
 		return "", nil, fmt.Errorf("nil pod template")
 	}
@@ -190,11 +209,16 @@ func HashWithWorkerAndTopology(template, workerSpec *corev1.PodSpec, templateMet
 	if workerSpec != nil && topologyKey != "" {
 		topologyKeyPayload = &topologyKey
 	}
+	var pairingPayload *string
+	if pairingProtocol != "" {
+		pairingPayload = &pairingProtocol
+	}
 	raw, err := json.Marshal(DataPayload{
-		PodSpec:       template,
-		PodMeta:       TemplateMeta(templateMeta),
-		WorkerPodSpec: workerSpec,
-		TopologyKey:   topologyKeyPayload,
+		PodSpec:         template,
+		PodMeta:         TemplateMeta(templateMeta),
+		WorkerPodSpec:   workerSpec,
+		TopologyKey:     topologyKeyPayload,
+		PairingProtocol: pairingPayload,
 	})
 	if err != nil {
 		return "", nil, fmt.Errorf("marshal revision payload: %w", err)
@@ -302,6 +326,45 @@ func isLifecycleAnnotation(key string) bool {
 		return true
 	}
 	return false
+}
+
+// revisionAnnotations derives the annotations stamped on a freshly-created
+// ControllerRevision from its canonical payload bytes. The pairing protocol is
+// surfaced as an annotation so readers on hot paths (traffic building, the
+// pair-floor gate) can resolve revision→protocol from object metadata without
+// decoding Data.Raw. Runs only at CR create, so the decode cost is per-mint,
+// not per-reconcile. Returns nil when the payload carries no annotation-worthy
+// fields, keeping protocol-free CRs byte-identical to their legacy shape.
+func revisionAnnotations(raw []byte) map[string]string {
+	var p DataPayload
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil
+	}
+	if p.PairingProtocol == nil || *p.PairingProtocol == "" {
+		return nil
+	}
+	return map[string]string{query.LabelPairingProtocol: *p.PairingProtocol}
+}
+
+// PairingProtocolFromRevision returns the P/D pairing protocol a
+// ControllerRevision was minted under: the ome.io/pairing-protocol annotation
+// stamped at create, falling back to decoding the stored payload for CRs
+// created without the annotation. "" means the revision pairs with anything —
+// which is definitionally correct for every pre-pairing revision, so the
+// fallback swallows decode errors rather than failing a read that could only
+// ever concern a revision minted without a protocol.
+func PairingProtocolFromRevision(cr *appsv1.ControllerRevision) string {
+	if cr == nil {
+		return ""
+	}
+	if v, ok := cr.Annotations[query.LabelPairingProtocol]; ok {
+		return v
+	}
+	p, err := PayloadFromControllerRevision(cr)
+	if err != nil || p == nil || p.PairingProtocol == nil {
+		return ""
+	}
+	return *p.PairingProtocol
 }
 
 // PayloadFromControllerRevision unmarshals a ControllerRevision's Data into the
@@ -482,6 +545,7 @@ func EnsureControllerRevisionFromHash(
 			Name:            name,
 			Namespace:       key.Namespace,
 			Labels:          Labels(key),
+			Annotations:     revisionAnnotations(raw),
 			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(owner, ownerGVK)},
 		},
 		Data:     runtime.RawExtension{Raw: raw},

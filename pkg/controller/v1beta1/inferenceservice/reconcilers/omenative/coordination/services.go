@@ -274,8 +274,32 @@ func EnsurePerRevisionServices(ctx context.Context, c client.Client, isvc *v1bet
 		return out, fmt.Errorf("EnsurePerRevisionServices: nil client")
 	}
 
+	// The revision's pairing protocol rides the routing Service as a metadata
+	// label (never the selector — pod selection stays purely revision-hash
+	// based) so routing consumers can pair engine/decoder Services without
+	// decoding revisions. A missing CR degrades to no label (pairs with
+	// anything); the label is drift-corrected on every ensure.
+	protocol, _, perr := PairingProtocolForRevision(ctx, c, isvc.Namespace, isvc.Name, component, revisionHash)
+	if perr != nil {
+		return out, perr
+	}
 	routingBuild := func(i *v1beta1.InferenceService, comp v1beta1.ComponentType, hash string) (*corev1.Service, error) {
-		return BuildPerRevisionRoutingService(i, comp, hash, routing, runnerPorts)
+		svc, err := BuildPerRevisionRoutingService(i, comp, hash, routing, runnerPorts)
+		if err != nil || svc == nil {
+			return svc, err
+		}
+		if protocol != "" {
+			// Replace the label map rather than mutate it: the builder may
+			// alias Labels and Spec.Selector, and the protocol must never
+			// enter the selector (pod selection stays revision-hash based).
+			lbls := make(map[string]string, len(svc.Labels)+1)
+			for k, v := range svc.Labels {
+				lbls[k] = v
+			}
+			lbls[query.LabelPairingProtocol] = protocol
+			svc.Labels = lbls
+		}
+		return svc, nil
 	}
 	switch err := ensureService(ctx, c, isvc, routingBuild, component, revisionHash, out.RoutingName, false); {
 	case errors.Is(err, ErrNoServingPort):

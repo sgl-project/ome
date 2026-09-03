@@ -131,8 +131,11 @@ func (ctx GateContext) CheckSequential() (allowed bool, reason string) {
 			if !completed.IsZero() {
 				elapsed := time.Since(completed)
 				if elapsed < group.Soak {
-					remaining := group.Soak - elapsed
-					return false, fmt.Sprintf("Sequential.Soak: %s remaining", remaining)
+					// Stable facts only (component + configured duration):
+					// a live countdown here would change every reconcile
+					// and defeat the Since preservation on
+					// status.rolloutHold (storms the apiserver).
+					return false, fmt.Sprintf("Sequential.Soak: %s waiting out the %s soak after %s", component, group.Soak, prev)
 				}
 			}
 		}

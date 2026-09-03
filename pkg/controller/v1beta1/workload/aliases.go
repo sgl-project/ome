@@ -56,7 +56,10 @@ type (
 	RetryBlock              = types.RetryBlock
 	RetryBlockState         = types.RetryBlockState
 	RetryBlockDisposition   = types.RetryBlockDisposition
+	RolloutHold             = types.RolloutHold
+	RolloutHoldGate         = types.RolloutHoldGate
 	RetryPolicy             = types.RetryPolicy
+	DemotionSelection       = types.DemotionSelection
 	ForceDeletePolicy       = types.ForceDeletePolicy
 	DispositionDeps         = types.DispositionDeps
 )
@@ -116,6 +119,7 @@ const (
 	InstanceOperationMigrate = types.InstanceOperationMigrate
 	InstanceOperationDelete  = types.InstanceOperationDelete
 
+	UpdateStepSurge                  = types.UpdateStepSurge
 	UpdateStepGangSurgeTarget        = types.UpdateStepGangSurgeTarget
 	UpdateStepGangSurgeTargetCleanup = types.UpdateStepGangSurgeTargetCleanup
 	UpdateStepSurgeDrain             = types.UpdateStepSurgeDrain
@@ -127,6 +131,7 @@ const (
 	EventReasonInPlaceUpdateNotPossible      = types.EventReasonInPlaceUpdateNotPossible
 	EventReasonRecreateUpdateStarted         = types.EventReasonRecreateUpdateStarted
 	EventReasonRecreateUpdateCompleted       = types.EventReasonRecreateUpdateCompleted
+	EventReasonFailedSurgeTargetRecycled     = types.EventReasonFailedSurgeTargetRecycled
 	EventReasonRestartTriggered              = types.EventReasonRestartTriggered
 	EventReasonRestartCompleted              = types.EventReasonRestartCompleted
 	EventReasonFoundOrphan                   = types.EventReasonFoundOrphan
@@ -136,6 +141,7 @@ const (
 	EventReasonRetryHeld                     = types.EventReasonRetryHeld
 	EventReasonRetryBlockReleased            = types.EventReasonRetryBlockReleased
 	EventReasonRetryBlockReleaseSkipped      = types.EventReasonRetryBlockReleaseSkipped
+	EventReasonInstanceDemoted               = types.EventReasonInstanceDemoted
 	EventReasonPodForceDeleted               = types.EventReasonPodForceDeleted
 	EventReasonPodDeleteBlockedByFinalizer   = types.EventReasonPodDeleteBlockedByFinalizer
 	EventReasonMigrationRequestAccepted      = types.EventReasonMigrationRequestAccepted
@@ -151,6 +157,12 @@ const (
 	RetryBlockBackoff         = types.RetryBlockBackoff
 	RetryBlockHeld            = types.RetryBlockHeld
 	RetryBlockRetryInProgress = types.RetryBlockRetryInProgress
+
+	RolloutHoldGateRatio      = types.RolloutHoldGateRatio
+	RolloutHoldGateSequential = types.RolloutHoldGateSequential
+	RolloutHoldGateBudget     = types.RolloutHoldGateBudget
+	RolloutHoldGateRetryBlock = types.RolloutHoldGateRetryBlock
+	RolloutHoldGateHeld       = types.RolloutHoldGateHeld
 
 	RetryBlockUnchanged = types.RetryBlockUnchanged
 	RetryBlockPersist   = types.RetryBlockPersist

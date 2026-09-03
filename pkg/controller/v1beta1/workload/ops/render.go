@@ -108,6 +108,11 @@ func RenderWithRevision(
 	if revisionHash != "" {
 		lbls[query.LabelRevisionHash] = revisionHash
 	}
+	// Informational cohort marker; routing reads the per-revision Service
+	// label and the traffic targets, not this. Absent = pairs with anything.
+	if plan.PairingProtocol != "" {
+		lbls[query.LabelPairingProtocol] = plan.PairingProtocol
+	}
 	// Multi-pod Instances stamp the scheduler-plugins pod-group label so
 	// the gang-aware scheduler co-schedules every pod in the Instance.
 	// Single-pod Instances skip the label — no PodGroup, no gang. The
@@ -164,6 +169,7 @@ func RenderWithRevision(
 
 	injectOMENativeEnv(pod, plan, inst, runner, ordinal, isvcName)
 	injectGangDomainAffinity(pod, plan, inst, runner, isvcName)
+	injectTopologySpread(pod, plan, inst, runner, isvcName)
 	applyMigrationOverlay(pod, inst.MigrationOverlay)
 	// Relocation-directive exclusions: same required NotIn machinery
 	// as the migration overlay's FromNode, one term per recorded node.
@@ -201,6 +207,60 @@ func backfillEmptyContainerNames(spec *corev1.PodSpec) {
 			spec.InitContainers[i].Name = constants.MainContainerName
 		}
 	}
+}
+
+// spreadPolicyRequired is the one TopologySpread value with hard semantics.
+// Matches the API enum byte-for-byte; the workload package stays free of
+// v1beta1 imports.
+const spreadPolicyRequired = "Required"
+
+// injectTopologySpread renders the component's TopologySpread policy as a
+// standard topologySpreadConstraint on the Instance's ANCHOR pod — the
+// leader, or the sole pod of a single-pod Instance. One anchor per Instance
+// makes matching-pod counts equal Instance counts, so spreading anchors
+// spreads gangs. Workers deliberately carry no constraint: their generated
+// worker→leader REQUIRED podAffinity already makes them unschedulable until
+// their leader is placed, so the TSC-gated leader always decides the fault
+// domain and a worker can never anchor the gang into one the leader could
+// not enter. Required renders as DoNotSchedule (maxSkew 1: balanced
+// spreading, enforced by any scheduler that runs PodTopologySpread's Filter
+// — including the OME gang scheduler's packing profile, whose retry loop
+// re-plans a vetoed domain choice); anything else renders as ScheduleAnyway
+// (advisory; inert under a profile that disables the spreading Score). The
+// constraint is deliberately not part of the revision hash: toggling the
+// policy shapes future placements (creates, repairs, migrations, rollouts)
+// without rolling a healthy fleet.
+func injectTopologySpread(pod *corev1.Pod, plan workload.ComponentPlan, inst workload.InstancePlan, runner workload.RunnerPlan, isvcName string) {
+	if plan.TopologySpread == "" || runner.Name == "worker" {
+		return
+	}
+	key := plan.TopologySpreadKey
+	if key == "" {
+		key = plan.TopologyKeyForInstance(inst.Index)
+	}
+	if key == "" {
+		return
+	}
+	// An operator-authored constraint on the same label wins.
+	for _, c := range pod.Spec.TopologySpreadConstraints {
+		if c.TopologyKey == key {
+			return
+		}
+	}
+	when := corev1.ScheduleAnyway
+	if plan.TopologySpread == spreadPolicyRequired {
+		when = corev1.DoNotSchedule
+	}
+	pod.Spec.TopologySpreadConstraints = append(pod.Spec.TopologySpreadConstraints, corev1.TopologySpreadConstraint{
+		MaxSkew:           1,
+		TopologyKey:       key,
+		WhenUnsatisfiable: when,
+		LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{
+			constants.InferenceServicePodLabelKey: isvcName,
+			constants.OMEComponentLabel:           string(plan.Component),
+			query.LabelRunner:                     runner.Name,
+		}},
+	})
 }
 
 // applyMigrationOverlay layers migration placement onto the rendered pod.
