@@ -213,6 +213,7 @@ func populatedInstanceStatus() v1beta1.OMENativeInstanceStatus {
 		NodesOccupied:     []string{"node-a", "node-b"},
 		Conditions:        []metav1.Condition{{Type: "Ready", Status: metav1.ConditionTrue, ObservedGeneration: 3, LastTransitionTime: now, Reason: "PodsReady", Message: "all pods are ready"}},
 		ActiveOrdinal:     1,
+		ReadySince:        &now,
 		Operation:         &v1beta1.InstanceOperation{ID: "operation-a", Type: v1beta1.InstanceOperationMigrate, Step: "WaitReady", StartedAt: now, LastProgressAt: now, Deadline: now, RetryCount: 1, TargetRevision: "revision-b", Reason: "placement", SurgeIndex: &surgeIndex, FromNode: "node-a", HintTargetNodes: []string{"node-b"}, RequestUUID: "request-a"},
 		LastFailure:       &v1beta1.InstanceTermination{PodName: "model-engine-7", ContainerName: "server", Reason: "OOMKilled", ExitCode: &exitCode, Message: "container terminated", Time: now},
 	}

@@ -135,31 +135,49 @@ func patchPodImages(ctx context.Context, c client.Client, pod *corev1.Pod, targe
 	return true, nil
 }
 
-// patchPodRevisionHashLabel strategic-merge-patches the pod's
-// ome.io/revision-hash label to targetHash. An in-place update changes a
-// pod's revision (image / annotations) WITHOUT recreating it, but that
-// label is stamped only at pod create time (render.go). Without restamping
-// it here, an in-place-rolled pod keeps its OLD revision-hash label while
+// patchPodRevisionLabels strategic-merge-patches the pod's revision-owned
+// labels (ome.io/revision-hash, ome.io/pairing-protocol) to the target
+// revision's values. An in-place update changes a pod's revision (image /
+// annotations) WITHOUT recreating it, but those labels are stamped only at
+// pod create time (render.go). Without restamping them here, an
+// in-place-rolled pod keeps its OLD revision-hash label while
 // InstanceStatus.RunningRevision advances — so per-revision Service
 // routing, drain (drain.IsPodDrained), and stuck-pod detection
 // (HasWedgedPodAgainstCurrent), which all key on this label, treat the
-// rolled pod as the PREVIOUS revision. Returns whether a patch was issued;
-// matching labels and empty target hashes are no-ops.
-func patchPodRevisionHashLabel(ctx context.Context, c client.Client, pod *corev1.Pod, targetHash string) (bool, error) {
+// rolled pod as the PREVIOUS revision — and a stale pairing-protocol label
+// would misreport the pod's cohort. An empty pairingProtocol deletes the
+// label (the target revision pairs with anything). Returns whether a patch
+// was issued; matching labels and empty target hashes are no-ops.
+func patchPodRevisionLabels(ctx context.Context, c client.Client, pod *corev1.Pod, targetHash, pairingProtocol string) (bool, error) {
 	if pod == nil {
-		return false, fmt.Errorf("patchPodRevisionHashLabel: nil pod")
+		return false, fmt.Errorf("patchPodRevisionLabels: nil pod")
 	}
-	if targetHash == "" || pod.Labels[query.LabelRevisionHash] == targetHash {
+	if targetHash == "" {
+		return false, nil
+	}
+	labelsPatch := map[string]any{}
+	if pod.Labels[query.LabelRevisionHash] != targetHash {
+		labelsPatch[query.LabelRevisionHash] = targetHash
+	}
+	current, hasCurrent := pod.Labels[query.LabelPairingProtocol]
+	switch {
+	case pairingProtocol != "" && current != pairingProtocol:
+		labelsPatch[query.LabelPairingProtocol] = pairingProtocol
+	case pairingProtocol == "" && hasCurrent:
+		// Strategic-merge null deletes the key.
+		labelsPatch[query.LabelPairingProtocol] = nil
+	}
+	if len(labelsPatch) == 0 {
 		return false, nil
 	}
 	raw, err := json.Marshal(map[string]any{
-		"metadata": map[string]any{"labels": map[string]string{query.LabelRevisionHash: targetHash}},
+		"metadata": map[string]any{"labels": labelsPatch},
 	})
 	if err != nil {
-		return false, fmt.Errorf("marshal revision-hash label patch for pod %s/%s: %w", pod.Namespace, pod.Name, err)
+		return false, fmt.Errorf("marshal revision label patch for pod %s/%s: %w", pod.Namespace, pod.Name, err)
 	}
 	if err := c.Patch(ctx, pod, client.RawPatch(types.StrategicMergePatchType, raw)); err != nil {
-		return false, fmt.Errorf("patch pod %s/%s revision-hash label: %w", pod.Namespace, pod.Name, err)
+		return false, fmt.Errorf("patch pod %s/%s revision labels: %w", pod.Namespace, pod.Name, err)
 	}
 	return true, nil
 }

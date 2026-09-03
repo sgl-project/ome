@@ -8061,6 +8061,11 @@ spec:
                       x-kubernetes-list-type: atomic
                     topologyKey:
                       type: string
+                    topologySpread:
+                      enum:
+                        - Preferred
+                        - Required
+                      type: string
                     topologySpreadConstraints:
                       items:
                         properties:
@@ -8119,6 +8124,8 @@ spec:
                         - topologyKey
                         - whenUnsatisfiable
                       x-kubernetes-list-type: map
+                    topologySpreadKey:
+                      type: string
                     volumes:
                       items:
                         properties:
@@ -21362,6 +21369,11 @@ spec:
                       x-kubernetes-list-type: atomic
                     topologyKey:
                       type: string
+                    topologySpread:
+                      enum:
+                        - Preferred
+                        - Required
+                      type: string
                     topologySpreadConstraints:
                       items:
                         properties:
@@ -21420,6 +21432,8 @@ spec:
                         - topologyKey
                         - whenUnsatisfiable
                       x-kubernetes-list-type: map
+                    topologySpreadKey:
+                      type: string
                     volumes:
                       items:
                         properties:
@@ -26906,6 +26920,10 @@ spec:
                       maxItems: 3
                       type: array
                       x-kubernetes-list-type: atomic
+                    pairingProtocol:
+                      maxLength: 63
+                      pattern: ^[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$
+                      type: string
                   type: object
                 router:
                   properties:
@@ -31596,6 +31614,29 @@ spec:
                           replicas:
                             format: int32
                             type: integer
+                          rolloutHold:
+                            properties:
+                              gate:
+                                enum:
+                                  - Pairing
+                                  - Ratio
+                                  - Sequential
+                                  - Budget
+                                  - RetryBlock
+                                  - Held
+                                type: string
+                              reason:
+                                type: string
+                              since:
+                                format: date-time
+                                type: string
+                              target:
+                                type: string
+                            required:
+                              - gate
+                              - reason
+                              - since
+                            type: object
                           servingReplicas:
                             format: int32
                             type: integer
@@ -31659,6 +31700,8 @@ spec:
                           properties:
                             latestRevision:
                               type: boolean
+                            pairingProtocol:
+                              type: string
                             percent:
                               format: int32
                               maximum: 100

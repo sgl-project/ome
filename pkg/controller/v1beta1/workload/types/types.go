@@ -112,6 +112,10 @@ const (
 	InstanceOperationDelete  InstanceOperationType = "Delete"
 )
 
+// UpdateStepSurge marks the source Instance while a single-pod or gang
+// SurgeThenDrain replacement is being created.
+const UpdateStepSurge = "Surge"
+
 // UpdateStepGangSurgeTarget is the InstanceOperation.Step marking the
 // surge-target (replacement) Instance of an in-flight multi-pod (gang)
 // SurgeThenDrain update. Lives here in the leaf types package so both the
@@ -208,6 +212,11 @@ type InstanceStatus struct {
 	NodesOccupied []string
 
 	Conditions []metav1.Condition
+
+	// ReadySince is when the Instance last entered Ready. It anchors
+	// post-Ready failure detection: container restarts that finished
+	// before this time belong to boot and are never restart triggers.
+	ReadySince *metav1.Time
 
 	// Operation is the durable record of an in-flight destructive
 	// action against this Instance. Set before the action starts,

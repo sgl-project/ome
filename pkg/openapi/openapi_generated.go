@@ -140,6 +140,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationStatus":        schema_pkg_apis_ome_v1beta1_RolloutCoordinationStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroup":                     schema_pkg_apis_ome_v1beta1_RolloutGroup(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutGroupStep":                 schema_pkg_apis_ome_v1beta1_RolloutGroupStep(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutHold":                      schema_pkg_apis_ome_v1beta1_RolloutHold(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutPause":                     schema_pkg_apis_ome_v1beta1_RolloutPause(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutSpec":                      schema_pkg_apis_ome_v1beta1_RolloutSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterSpec":                       schema_pkg_apis_ome_v1beta1_RouterSpec(ref),
@@ -209,7 +210,7 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorBudget(ref common.ReferenceCallback)
 					},
 					"borrowingLimit": {
 						SchemaProps: spec.SchemaProps{
-							Description: "BorrowingLimit is how far above its share this leaf may burst by borrowing idle sibling capacity, passed through to Kueue. Borrowing is cluster-local, so enabling it turns nominal from a fleet ceiling into a guaranteed floor plus reclaimable overage; the relaxed ceiling is reported in status. Leaves only.",
+							Description: "BorrowingLimit is how far above its share this leaf may burst by borrowing idle sibling capacity, passed through to Kueue. Unset, this leaf does not borrow: nominal is its ceiling, and the materialized queue carries an explicit limit of zero to say so, because the enforcement backend reads an absent limit as unbounded.\n\nBorrowing is cluster-local, so setting it turns nominal from a ceiling into a floor plus overage, and the relaxed ceiling is reported in status.\n\nWARNING: overage is not currently reclaimable. This plane sets no preemption policy, so a borrower holds what it took until its own work finishes -- a leaf that bursts can leave a sibling waiting for the share that sibling was guaranteed. Leaves only.",
 							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
 						},
 					},
@@ -3475,6 +3476,13 @@ func schema_pkg_apis_ome_v1beta1_ComponentTrafficTarget(ref common.ReferenceCall
 							Format:      "",
 						},
 					},
+					"pairingProtocol": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PairingProtocol is the engine↔decoder wire-compatibility token the target's revision was minted under (spec.rollout.pairingProtocol at mint time). Consumers MUST only pair engine and decoder targets whose PairingProtocol values are equal; an empty value pairs with anything.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"revisionName", "percent"},
 			},
@@ -4167,6 +4175,20 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 					"topologyKey": {
 						SchemaProps: spec.SchemaProps{
 							Description: "TopologyKey is the node-label key (e.g. an NVLink/RDMA fabric-domain label) used to co-locate all pods of one multi-node (leader+worker) gang into a single network / NVLink topology domain. When set on a multi-node component, OME auto-generates the per-instance worker→leader podAffinity that anchors every worker to its gang's leader on a node sharing this label value — so users need not hand-write that affinity. Only meaningful for multi-node components; ignored for single-pod (no leader to anchor to). Unset means no auto-generated gang affinity.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"topologySpread": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologySpread spreads this component's instances across fault domains so losing one domain (rack / fabric slice / cube) cannot take out every instance at once. Rendered as a standard topologySpreadConstraint (maxSkew 1) on each instance's anchor pod (the leader, or the sole pod of a single-pod instance); workers follow their leader, so gangs stay whole. Required renders as DoNotSchedule — balanced spreading enforced by any scheduler that keeps PodTopologySpread's Filter, including the OME gang scheduler's packing profile. Preferred renders as ScheduleAnyway — advisory only, and currently without effect under the OME gang scheduler (its profile disables the spreading Score and pre-narrows gang candidates to one domain). Not part of the revision hash: changing it shapes future placements without rolling a healthy fleet. Unset keeps pure bin-packing.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"topologySpreadKey": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologySpreadKey is the node-label key naming the fault domains TopologySpread spreads across. Defaults to TopologyKey — right for fabrics where the co-location domain IS the failure zone (an NVLink rack). Set it to a coarser label when the failure zone contains many gang domains: e.g. co-locate by the TPU partition label while spreading across cloud.google.com/gce-topology-subblock. Single-pod components have no co-location key, so spreading them requires setting this explicitly. Ignored unless TopologySpread is set.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -4990,6 +5012,20 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 							Format:      "",
 						},
 					},
+					"topologySpread": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologySpread spreads this component's instances across fault domains so losing one domain (rack / fabric slice / cube) cannot take out every instance at once. Rendered as a standard topologySpreadConstraint (maxSkew 1) on each instance's anchor pod (the leader, or the sole pod of a single-pod instance); workers follow their leader, so gangs stay whole. Required renders as DoNotSchedule — balanced spreading enforced by any scheduler that keeps PodTopologySpread's Filter, including the OME gang scheduler's packing profile. Preferred renders as ScheduleAnyway — advisory only, and currently without effect under the OME gang scheduler (its profile disables the spreading Score and pre-narrows gang candidates to one domain). Not part of the revision hash: changing it shapes future placements without rolling a healthy fleet. Unset keeps pure bin-packing.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"topologySpreadKey": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologySpreadKey is the node-label key naming the fault domains TopologySpread spreads across. Defaults to TopologyKey — right for fabrics where the co-location domain IS the failure zone (an NVLink rack). Set it to a coarser label when the failure zone contains many gang domains: e.g. co-locate by the TPU partition label while spreading across cloud.google.com/gce-topology-subblock. Single-pod components have no co-location key, so spreading them requires setting this explicitly. Ignored unless TopologySpread is set.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"acceleratorOverride": {
 						SchemaProps: spec.SchemaProps{
 							Description: "AcceleratorOverride allows overriding the global accelerator selection for this component",
@@ -5640,6 +5676,27 @@ func schema_pkg_apis_ome_v1beta1_InferenceReplicaSpec(ref common.ReferenceCallba
 							Format:      "",
 						},
 					},
+					"topologySpread": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologySpread is the resolved spreading policy for this Component, projected verbatim from the effective ISVC↔runtime component spec. The InferenceReplica controller renders it as a topologySpreadConstraint on each Instance's anchor pod; nil keeps pure bin-packing.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"topologySpreadKey": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologySpreadKey is the resolved fault-domain node-label key TopologySpread spreads across; nil defaults to TopologyKey.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"pairingProtocol": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PairingProtocol is the engine↔decoder wire-compatibility token projected from spec.rollout.pairingProtocol on the parent InferenceService. It is folded into the revision hash (a change mints a new revision) and stamped as the ome.io/pairing-protocol label on rendered pods. Projected only onto engine and decoder — the router does not participate in P/D pairing and must not re-roll on a protocol change. Nil pairs with anything.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"runners": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
@@ -5682,8 +5739,15 @@ func schema_pkg_apis_ome_v1beta1_InferenceReplicaSpec(ref common.ReferenceCallba
 					},
 					"paused": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Paused, when true, stops the InferenceReplica controller from initiating any new Update / Restart / Create operations. In-flight operations resume on unpause.",
+							Description: "Paused, when true, stops the InferenceReplica controller from initiating fleet changes: Update, Create, and Migration operations are neither started nor advanced. The component's RestartPolicy keeps repairing existing Instances at their current revision unless PauseMode is Freeze. In-flight operations resume on unpause.",
 							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"pauseMode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PauseMode selects how much of the lifecycle Paused suspends. Only meaningful while Paused is true.\n  - \"Recover\" (default when empty): fleet changes are suspended;\n    the RestartPolicy continues to repair existing Instances at\n    the revision they already run.\n  - \"Freeze\": every lifecycle operation is suspended, including\n    Instance repair. Only kubelet-level container restarts and\n    deliberate replica reduction (scale-down) remain active.\nStatus stays truthful in every depth: a Ready Instance whose pods are all gone (and whose RestartPolicy will not repair it) is demoted to Pending without running any recovery operation.",
+							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
@@ -5906,11 +5970,17 @@ func schema_pkg_apis_ome_v1beta1_InferenceReplicaStatus(ref common.ReferenceCall
 							Format:      "",
 						},
 					},
+					"rolloutHold": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RolloutHold records the most recent reason a per-Instance Update was denied for this Component — cross-Component coordination (Ratio, Sequential), a surge/unavailability budget, or a same-target retry hold (RetryBlock, Held). Nil while the Component is progressing or has no rollout in flight. See RolloutHold for the field semantics.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutHold"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentTrafficTarget", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.OMENativeInstanceStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RetryBlock"},
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentTrafficTarget", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.OMENativeInstanceStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RetryBlock", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutHold"},
 	}
 }
 
@@ -7293,11 +7363,17 @@ func schema_pkg_apis_ome_v1beta1_LifecycleStatus(ref common.ReferenceCallback) c
 							},
 						},
 					},
+					"rolloutHold": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RolloutHold reports the most recent reason this Component's rollout did not advance, mirrored verbatim from the owning InferenceReplica's status. Nil while the Component is progressing or has no rollout in flight.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutHold"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutHold"},
 	}
 }
 
@@ -8292,6 +8368,12 @@ func schema_pkg_apis_ome_v1beta1_OMENativeInstanceStatus(ref common.ReferenceCal
 							},
 						},
 					},
+					"readySince": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReadySince is when the Instance last entered Ready. Anchors post-Ready failure detection: container restarts that finished before this time belong to boot and never trigger a recreate.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
 					"operation": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Operation is the durable record of an in-flight destructive action against this Instance. Set before the action starts, cleared after it completes. Lets a crashed controller resume work without diffing pod state.",
@@ -8316,7 +8398,7 @@ func schema_pkg_apis_ome_v1beta1_OMENativeInstanceStatus(ref common.ReferenceCal
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceOperation", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceTermination"},
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "k8s.io/apimachinery/pkg/apis/meta/v1.Time", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceOperation", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.InstanceTermination"},
 	}
 }
 
@@ -9765,6 +9847,51 @@ func schema_pkg_apis_ome_v1beta1_RolloutGroupStep(ref common.ReferenceCallback) 
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_RolloutHold(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RolloutHold records the most recent reason a per-Instance Update was denied for a Component — the detail behind \"why has this rollout not moved\". Overwritten whenever a reconcile observes a fresh denial; cleared once the Component's rollout advances (an Update is admitted) or completes (CurrentRevision == UpdateRevision, or no rollout is in flight). Since is preserved across reconciles that keep reporting the same Gate and Target, so it anchors \"held since\" rather than \"last observed at\".",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"gate": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Gate names the layer that produced Reason.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reason is the operator-facing denial string from the gate that produced it (e.g. \"Sequential waiting on decoder\").",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"target": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Target is the ControllerRevision name the held Update was aimed at.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"since": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Since is when this Gate+Target combination was first observed without interruption. A change in Gate or Target restarts the clock; a change in Reason text alone does not (mirrors how apimeta.SetStatusCondition preserves LastTransitionTime while a condition's Status is unchanged).",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+				},
+				Required: []string{"gate", "reason", "since"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_RolloutPause(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -9810,6 +9937,13 @@ func schema_pkg_apis_ome_v1beta1_RolloutSpec(ref common.ReferenceCallback) commo
 									},
 								},
 							},
+						},
+					},
+					"pairingProtocol": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PairingProtocol declares the engine↔decoder wire-compatibility contract for prefill-decode pairing (e.g. a KV-transfer protocol generation, such as \"nixl-v2\"). It is an opaque, operator-owned token compared only for equality; bump it ONLY when the engine↔decoder wire contract breaks. The value rides each engine and decoder revision: changing it mints new revisions for both Components (a rollout), stamps ome.io/pairing-protocol on their pods and per-revision Services, and is published on each traffic target so routing pairs only engine and decoder revisions whose values are equal. Empty or unset pairs with anything, so setting or clearing the token is upgrade-neutral. Changing it between two non-empty values requires engine and decoder to roll as one blueGreen or canary group.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 				},

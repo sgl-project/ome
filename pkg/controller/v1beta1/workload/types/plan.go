@@ -41,10 +41,16 @@ type ComponentPlan struct {
 	// never).
 	MigrationMode MigrationMode
 
-	// Paused stops the dispatcher before it starts or advances Restart,
-	// Migration, Update, or Create operations. Scale-down remains active so a
-	// reduced desired replica count can still release capacity while paused.
+	// Paused stops the dispatcher from starting or advancing Migration,
+	// Update, or Create operations. Scale-down remains active so a reduced
+	// desired replica count can still release capacity, and the restart pass
+	// keeps repairing existing Instances at their current revision unless
+	// PauseFreeze is also set.
 	Paused bool
+
+	// PauseFreeze deepens Paused to a full stop: the restart pass is
+	// suspended too. Meaningless unless Paused is true.
+	PauseFreeze bool
 
 	// TopologyKey is the resolved gang co-location node-label key for
 	// this Component (e.g. an NVLink/RDMA fabric-domain label). Empty for
@@ -60,6 +66,21 @@ type ComponentPlan struct {
 	// that active gang must use the same immutable topology contract; fresh
 	// Instances and surge indices fall back to TopologyKey.
 	InstanceTopologyKeys map[int32]string
+
+	// TopologySpread is the gang spreading policy ("Preferred" / "Required";
+	// empty = pure bin-packing) the PodGroup builder advertises to the
+	// topology-aware gang scheduler. Placement-time preference only — it
+	// never constrains rendered pods.
+	TopologySpread string
+
+	// TopologySpreadKey is the fault-domain node-label key TopologySpread
+	// spreads across; empty defaults to TopologyKey.
+	TopologySpreadKey string
+
+	// PairingProtocol is the P/D wire-compatibility token of the revision
+	// being rendered; Render stamps it as the ome.io/pairing-protocol label
+	// on every pod. Empty renders no label (pairs with anything).
+	PairingProtocol string
 }
 
 // TopologyKeyForInstance returns the live-safe topology contract for an
@@ -70,6 +91,13 @@ func (p ComponentPlan) TopologyKeyForInstance(index int32) string {
 		return key
 	}
 	return p.TopologyKey
+}
+
+// DemotionSelection is one Instance the truth pass corrects, with the
+// observed evidence that justifies the status-only transition.
+type DemotionSelection struct {
+	Index  int32
+	Reason string
 }
 
 // InstancePlan is the desired state for one Instance — the atomic

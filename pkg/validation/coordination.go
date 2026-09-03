@@ -32,6 +32,7 @@ const (
 	ReasonOrphanCoordinationGroup                = "OrphanCoordinationGroup"
 	ReasonInvalidCoordinationOrder               = "InvalidCoordinationOrder"
 	ReasonRollingUpdateLockstepViolation         = "RollingUpdateLockstepViolation"
+	ReasonPairingProtocolChangeUncoordinated     = "PairingProtocolChangeUncoordinated"
 	// ReasonSequentialDuplicateOrder flags a duplicate entry in a group's Order
 	// (the rule applies to any group's surge Order, not only the v1 Sequential
 	// policy that is gone).
@@ -118,6 +119,45 @@ func ValidateCoordinationUpdate(oldSpec, newSpec *v1beta1.InferenceServiceSpec) 
 		}
 	}
 	return nil
+}
+
+// ValidatePairingProtocolUpdate rejects a pairing-protocol change between two
+// non-empty values unless engine and decoder roll as ONE group under blueGreen
+// or canary. Any other shape — independent Components, separate groups, or a
+// rollingUpdate group — reaches a step where every serving engine speaks a
+// protocol no serving decoder does (or vice versa), leaving routing with no
+// valid pair. Transitions to or from the empty value are always admitted:
+// empty pairs with anything, so every intermediate mix stays routable. So is
+// a change on a spec without both engine and decoder — there is no pair to
+// break.
+func ValidatePairingProtocolUpdate(oldSpec, newSpec *v1beta1.InferenceServiceSpec) error {
+	oldProtocol := oldSpec.RolloutPairingProtocol()
+	newProtocol := newSpec.RolloutPairingProtocol()
+	if oldProtocol == newProtocol || oldProtocol == "" || newProtocol == "" {
+		return nil
+	}
+	if newSpec.Engine == nil || newSpec.Decoder == nil {
+		return nil
+	}
+	for _, g := range newSpec.GetRolloutGroups() {
+		if g.RollingUpdate != nil {
+			continue
+		}
+		hasEngine, hasDecoder := false, false
+		for _, c := range g.Components {
+			switch c {
+			case v1beta1.EngineComponent:
+				hasEngine = true
+			case v1beta1.DecoderComponent:
+				hasDecoder = true
+			}
+		}
+		if hasEngine && hasDecoder {
+			return nil
+		}
+	}
+	return fmt.Errorf("spec.rollout.pairingProtocol: changing the pairing protocol (%q -> %q) requires engine and decoder to roll as one blueGreen or canary group; declare a spec.rollout group listing both components (rollingUpdate groups and independent rollouts cannot keep a pairable engine+decoder pair serving through the transition) (%s)",
+		oldProtocol, newProtocol, ReasonPairingProtocolChangeUncoordinated)
 }
 
 // CoordinationRatioToleranceWarning returns a warning when any group sets a

@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -65,6 +66,29 @@ type clusterState struct {
 	appliedTime            *metav1.Time
 	materializedGeneration int64
 	message                string
+
+	// budgets is this member's numbers for each (resource, flavor) the node
+	// budgets, keyed by budgetKey.
+	budgets map[string]clusterBudget
+}
+
+// clusterBudget is what one member was given and what it is doing with it.
+//
+// Nominal comes from the hub's own split, the rest from the member: it is the
+// only party that can see its Kueue, and it publishes what it sees on the copy
+// the hub projected. So the hub reads its own arithmetic back alongside the
+// consumption that arithmetic authorized.
+type clusterBudget struct {
+	// The pair these figures describe, carried rather than parsed back out of
+	// the map key: a resource name is an arbitrary qualified name and splitting
+	// a rendered key would be a guess about what may appear inside one.
+	resourceName   string
+	resourceFlavor string
+
+	nominal  resource.Quantity
+	admitted resource.Quantity
+	reserved resource.Quantity
+	borrowed resource.Quantity
 }
 
 // fleetView is every node's state on every registered member.
@@ -73,6 +97,18 @@ type clusterState struct {
 // one that is missing, and a view that listed only who answered would drop it
 // silently -- the same shape of mistake as a split taken over whoever answered.
 type fleetView map[string]map[string]clusterState
+
+// observe records one member's numbers for one budget on one node.
+func (v fleetView) observe(node, cluster, key string, mutate func(*clusterBudget)) {
+	v.note(node, cluster, func(st *clusterState) {
+		if st.budgets == nil {
+			st.budgets = map[string]clusterBudget{}
+		}
+		b := st.budgets[key]
+		mutate(&b)
+		st.budgets[key] = b
+	})
+}
 
 func (v fleetView) note(node, cluster string, mutate func(*clusterState)) {
 	if v[node] == nil {
@@ -247,6 +283,18 @@ func (r *Reconciler) projectOnto(ctx context.Context, built *tree.Tree,
 		return nil
 	}
 
+	// The hub's half of the record: what it decided this member should have.
+	// Kept even when the apply below fails, because "assigned 40 and could not
+	// write it" is a different report from "assigned nothing".
+	for _, a := range allowances {
+		nominal := a.Nominal.DeepCopy()
+		name, flavor := a.ResourceName, a.ResourceFlavor
+		view.observe(a.Node, cluster, budgetKey(name, flavor), func(b *clusterBudget) {
+			b.resourceName, b.resourceFlavor = name, flavor
+			b.nominal = nominal
+		})
+	}
+
 	objects, err := projection.For(built, cluster, allowances, projection.Options{Origin: r.Project.Origin})
 	if err != nil {
 		return fmt.Errorf("rendering: %w", err)
@@ -281,13 +329,59 @@ func (r *Reconciler) projectOnto(ctx context.Context, built *tree.Tree,
 		})
 	}
 
+	// One read, two uses. The sweep needs every copy this plane owns here, and
+	// so does the read-back -- listing twice would double the cost of a pass for
+	// nothing, and could see two different states.
+	live, err := r.projectionsOn(ctx, remote, cluster)
+	if err != nil {
+		return errors.Join(append(errs, err)...)
+	}
+	r.readBack(cluster, live, view)
+
 	// Applied first, swept second. A node that moved between clusters exists
 	// briefly on both, and sweeping first would delete the copy this pass is
 	// about to write.
-	if err := r.sweepMember(ctx, remote, cluster, keepOn(objects, frozen)); err != nil {
+	if err := r.sweepMember(ctx, remote, cluster, live, keepOn(objects, frozen)); err != nil {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
+}
+
+// projectionsOn is every copy this plane owns on one member.
+func (r *Reconciler) projectionsOn(ctx context.Context, remote client.Client, cluster string,
+) ([]v1beta1.AcceleratorQuota, error) {
+	var live v1beta1.AcceleratorQuotaList
+	if err := remote.List(ctx, &live, client.MatchingLabels{
+		v1beta1.AcceleratorQuotaOriginLabel: r.Project.Origin,
+	}); err != nil {
+		return nil, fmt.Errorf("listing projections on %s: %w", cluster, err)
+	}
+	return live.Items, nil
+}
+
+// readBack takes what each copy reports about itself onto the hub's view.
+//
+// Read from the copy rather than asked of the member's Kueue directly: the hub
+// holds no Kueue credential on a member and should not, and the member has
+// already done the work of rolling its queues up onto the node they belong to.
+func (r *Reconciler) readBack(cluster string, live []v1beta1.AcceleratorQuota, view fleetView) {
+	for i := range live {
+		obj := &live[i]
+		// What the member has actually rendered, which is not what it was last
+		// sent. The two are compared on status, so reporting the sent number
+		// here would make every member look permanently caught up.
+		view.note(obj.Name, cluster, func(st *clusterState) {
+			st.materializedGeneration = obj.Status.SourceGeneration
+		})
+		for _, b := range obj.Status.Budgets {
+			admitted, reserved, borrowed := b.Admitted.DeepCopy(), b.Reserved.DeepCopy(), b.Borrowed.DeepCopy()
+			name, flavor := b.ResourceName, b.ResourceFlavor
+			view.observe(obj.Name, cluster, budgetKey(name, flavor), func(cb *clusterBudget) {
+				cb.resourceName, cb.resourceFlavor = name, flavor
+				cb.admitted, cb.reserved, cb.borrowed = admitted, reserved, borrowed
+			})
+		}
+	}
 }
 
 // keepOn is what may remain on a member: what this pass wrote, plus the copies
@@ -365,28 +459,21 @@ func depthByParentRef(items []v1beta1.AcceleratorQuota) map[string]int {
 }
 
 func (r *Reconciler) sweepMember(ctx context.Context, remote client.Client,
-	cluster string, keep sets.Set[string],
+	cluster string, live []v1beta1.AcceleratorQuota, keep sets.Set[string],
 ) error {
-	var live v1beta1.AcceleratorQuotaList
-	if err := remote.List(ctx, &live, client.MatchingLabels{
-		v1beta1.AcceleratorQuotaOriginLabel: r.Project.Origin,
-	}); err != nil {
-		return fmt.Errorf("listing projections on %s: %w", cluster, err)
-	}
-
 	// Deepest first, the reverse of the order they were applied in: a node is
 	// refused deletion while it still has children, so removing a whole subtree
 	// parent-first is denied at every tier but the last and takes as many passes
 	// as the subtree is deep.
-	doomed := make([]*v1beta1.AcceleratorQuota, 0, len(live.Items))
-	for i := range live.Items {
-		obj := &live.Items[i]
+	doomed := make([]*v1beta1.AcceleratorQuota, 0, len(live))
+	for i := range live {
+		obj := &live[i]
 		if keep.Has(obj.Name) || !obj.DeletionTimestamp.IsZero() {
 			continue
 		}
 		doomed = append(doomed, obj)
 	}
-	depth := depthByParentRef(live.Items)
+	depth := depthByParentRef(live)
 	sort.Slice(doomed, func(i, j int) bool {
 		if di, dj := depth[doomed[i].Name], depth[doomed[j].Name]; di != dj {
 			return di > dj

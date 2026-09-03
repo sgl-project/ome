@@ -130,6 +130,15 @@ type Params struct {
 	// for single-pod Components or when unset on both ISVC and runtime.
 	TopologyKey *string
 
+	// TopologySpread is the resolved gang spreading policy for the
+	// Component, projected verbatim onto ir.Spec.TopologySpread so the IR
+	// controller can advertise it on each Instance's PodGroup.
+	TopologySpread *v1beta1.TopologySpreadPolicy
+
+	// TopologySpreadKey is the resolved fault-domain label key for
+	// TopologySpread; nil defaults to the co-location TopologyKey.
+	TopologySpreadKey *string
+
 	// ResolvedAutoscaler is the authoritative per-Component
 	// ComponentAutoscaler the autoscaler.ResolveComponentAutoscaler
 	// helper picked from the ISVC → runtime → default chain. The
@@ -382,12 +391,29 @@ func applyDesiredSpec(ir *v1beta1.InferenceReplica, p Params, name string) {
 	ir.Spec.Replicas = desiredReplicas(ir, p)
 	ir.Spec.Runners = runnersFromParams(p)
 	ir.Spec.Lifecycle = lifecycleFromComponentExt(p.ComponentExt)
-	ir.Spec.Paused = p.ISVC.Annotations[constants.PausedRolloutAnnotation] == "true"
+	paused, freeze := constants.RolloutPauseState(p.ISVC.Annotations)
+	ir.Spec.Paused = paused
+	ir.Spec.PauseMode = ""
+	if freeze {
+		ir.Spec.PauseMode = v1beta1.PauseModeFreeze
+	}
 	ir.Spec.RevisionHistoryLimit = revisionHistoryLimitFromISVC(p.ISVC)
 	// Project the resolved gang co-location key verbatim. The IR
 	// controller reads it to auto-generate the worker→leader podAffinity
 	// for multi-node Components; nil is a no-op there.
 	ir.Spec.TopologyKey = p.TopologyKey
+	ir.Spec.TopologySpread = p.TopologySpread
+	ir.Spec.TopologySpreadKey = p.TopologySpreadKey
+	// Project the P/D pairing protocol onto the Components that pair. The
+	// token rides the engine/decoder revision hash so a protocol change rolls
+	// both; the router does not participate in pairing and must not re-roll
+	// on a protocol change.
+	ir.Spec.PairingProtocol = nil
+	if p.Component == v1beta1.EngineComponent || p.Component == v1beta1.DecoderComponent {
+		if proto := p.ISVC.Spec.RolloutPairingProtocol(); proto != "" {
+			ir.Spec.PairingProtocol = &proto
+		}
+	}
 	// Project the resolved Autoscaler onto the IR. Whole-block replace
 	// semantics — operator-side changes to isvc.spec.<comp>.autoscaler
 	// always win over any drifted IR.spec.autoscaler. DeepCopy keeps the

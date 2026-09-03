@@ -22,9 +22,11 @@ import (
 // here — in the coordination package the IR path depends on — means
 // there is exactly one tested implementation.
 //
-// Gate order: ratio -> surge | unavailability -> sequential. First denial
-// wins; later gates short-circuit. The caller reads only the allowed bit;
-// denyReason is for logging/observability.
+// Gate order: pairing -> ratio -> surge | unavailability -> sequential.
+// First denial wins; later gates short-circuit. The caller reads the
+// allowed bit and may also surface gate + denyReason as a RolloutHold;
+// gate names Pairing, Ratio, Budget (surge or unavailability), or
+// Sequential accordingly.
 //
 // Ratio projection is strategy-aware (see the projDelta computation
 // below): SurgeThenDrain projects +1 (a Ready pod is added before the old
@@ -60,11 +62,19 @@ func EvaluateUpdateGate(
 	defaults GroupDefaults,
 	strategy workloadtypes.UpdateStrategyType,
 	inFlightSurge, inFlightUnavail int32,
-) (allowed bool, denyReason string) {
+) (allowed bool, gate v1beta1.RolloutHoldGate, denyReason string) {
 	// The gate context is resolved once so the shared prelude (ResolveGroups +
 	// MembershipFor + nil-isvc / no-coord short-circuit) runs once instead of
 	// four times -- see the coordination.GateContext docs.
 	gateCtx := ResolveGateContextWithDefaults(ctx, reads, isvc, component, defaults)
+
+	// Pairing runs first, for EVERY strategy: an in-place update keeps net
+	// capacity flat (which is why CheckRatio bypasses it below) but still
+	// moves the instance across pairing cohorts — the exact transition the
+	// pair floor exists to pace.
+	if ok, reason := gateCtx.CheckPairing(strategy, inFlightSurge, inFlightUnavail); !ok {
+		return false, v1beta1.RolloutHoldGatePairing, reason
+	}
 
 	inPlace := strategy == workloadtypes.UpdateStrategyInPlaceIfPossible ||
 		strategy == workloadtypes.UpdateStrategyInPlaceOnly
@@ -80,7 +90,7 @@ func EvaluateUpdateGate(
 			projDelta = 1
 		}
 		if ok, reason := gateCtx.CheckRatio(inFlightSurge, inFlightUnavail, projDelta); !ok {
-			return false, reason
+			return false, v1beta1.RolloutHoldGateRatio, reason
 		}
 	} else {
 		RecordRatioGateBypassed(string(component), string(strategy))
@@ -93,16 +103,16 @@ func EvaluateUpdateGate(
 
 	if strategy == workloadtypes.UpdateStrategySurgeThenDrain || strategy == "" {
 		if ok, reason := gateCtx.CheckSurge(inFlightSurge); !ok {
-			return false, reason
+			return false, v1beta1.RolloutHoldGateBudget, reason
 		}
 	} else {
 		if ok, reason := gateCtx.CheckUnavailability(inFlightUnavail); !ok {
-			return false, reason
+			return false, v1beta1.RolloutHoldGateBudget, reason
 		}
 	}
 
 	if ok, reason := gateCtx.CheckSequential(); !ok {
-		return false, reason
+		return false, v1beta1.RolloutHoldGateSequential, reason
 	}
-	return true, ""
+	return true, "", ""
 }

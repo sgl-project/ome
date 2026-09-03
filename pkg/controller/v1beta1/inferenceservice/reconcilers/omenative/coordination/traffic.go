@@ -35,6 +35,12 @@ type RevisionWeight struct {
 	// LatestRevision marks this entry as the LatestRolledoutRevision
 	// for the Component.
 	LatestRevision bool
+
+	// PairingProtocol is the P/D pairing token the revision was minted
+	// under; copied onto the emitted ComponentTrafficTarget so routing
+	// consumers can pair engine/decoder targets by equal values. Empty
+	// pairs with anything.
+	PairingProtocol string
 }
 
 // BuildTrafficTargets converts a sorted weight list into the
@@ -52,10 +58,11 @@ func BuildTrafficTargets(isvcName string, component v1beta1.ComponentType, weigh
 			continue
 		}
 		out = append(out, v1beta1.ComponentTrafficTarget{
-			RevisionName:   PerRevisionServiceName(isvcName, component, w.RevisionHash),
-			Percent:        w.Percent,
-			Tag:            w.Tag,
-			LatestRevision: w.LatestRevision,
+			RevisionName:    PerRevisionServiceName(isvcName, component, w.RevisionHash),
+			Percent:         w.Percent,
+			Tag:             w.Tag,
+			LatestRevision:  w.LatestRevision,
+			PairingProtocol: w.PairingProtocol,
 		})
 	}
 	return out
@@ -161,10 +168,11 @@ func ComputeWeightsFromPods(perRevisionPods map[string]int32, total int32, lates
 // write. Used to avoid no-op status writes that would bounce the
 // apiserver and add reconcile pressure.
 //
-// The comparison is set-aware on RevisionName + Percent + LatestRevision
-// and ignores Tag drift (Tag is cosmetic; LatestRevision is operator-
-// visible and consumed by HTTPRoute reconcilers, so a flip MUST trigger
-// a write).
+// The comparison is set-aware on RevisionName + Percent + LatestRevision +
+// PairingProtocol and ignores Tag drift (Tag is cosmetic; LatestRevision is
+// operator-visible and consumed by HTTPRoute reconcilers, and
+// PairingProtocol is what routing consumers pair engine/decoder targets on,
+// so a flip of either MUST trigger a write).
 //
 // Bug context: when the very first reconcile that observed pods saw an
 // empty LifecycleStatus.UpdateRevision (the IR controller had
@@ -182,16 +190,17 @@ func TrafficDiffersMeaningfully(desired, observed []v1beta1.ComponentTrafficTarg
 		return true
 	}
 	type want struct {
-		percent        int32
-		latestRevision bool
+		percent         int32
+		latestRevision  bool
+		pairingProtocol string
 	}
 	wantBy := make(map[string]want, len(desired))
 	for _, t := range desired {
-		wantBy[t.RevisionName] = want{percent: t.Percent, latestRevision: t.LatestRevision}
+		wantBy[t.RevisionName] = want{percent: t.Percent, latestRevision: t.LatestRevision, pairingProtocol: t.PairingProtocol}
 	}
 	for _, t := range observed {
 		w, ok := wantBy[t.RevisionName]
-		if !ok || w.percent != t.Percent || w.latestRevision != t.LatestRevision {
+		if !ok || w.percent != t.Percent || w.latestRevision != t.LatestRevision || w.pairingProtocol != t.PairingProtocol {
 			return true
 		}
 	}
@@ -234,12 +243,13 @@ func TrafficWithinDeadband(desired, observed []v1beta1.ComponentTrafficTarget, d
 		return false
 	}
 	type have struct {
-		percent        int32
-		latestRevision bool
+		percent         int32
+		latestRevision  bool
+		pairingProtocol string
 	}
 	haveBy := make(map[string]have, len(observed))
 	for _, t := range observed {
-		haveBy[t.RevisionName] = have{percent: t.Percent, latestRevision: t.LatestRevision}
+		haveBy[t.RevisionName] = have{percent: t.Percent, latestRevision: t.LatestRevision, pairingProtocol: t.PairingProtocol}
 	}
 	for _, t := range desired {
 		h, ok := haveBy[t.RevisionName]
@@ -250,8 +260,12 @@ func TrafficWithinDeadband(desired, observed []v1beta1.ComponentTrafficTarget, d
 		}
 		// A LatestRevision flag flip is operator-visible and consumed by
 		// HTTPRoute reconcilers; never suppress it (mirrors the contract
-		// in TrafficDiffersMeaningfully).
+		// in TrafficDiffersMeaningfully). A PairingProtocol change is what
+		// consumers pair on; never suppress it either.
 		if h.latestRevision != t.LatestRevision {
+			return false
+		}
+		if h.pairingProtocol != t.PairingProtocol {
 			return false
 		}
 		// A revision arriving at or leaving a boundary (0 or 100) is a

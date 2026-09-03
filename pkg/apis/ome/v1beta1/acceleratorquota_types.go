@@ -414,10 +414,18 @@ type AcceleratorBudget struct {
 	Nominal resource.Quantity `json:"nominal"`
 
 	// BorrowingLimit is how far above its share this leaf may burst by borrowing
-	// idle sibling capacity, passed through to Kueue. Borrowing is
-	// cluster-local, so enabling it turns nominal from a fleet ceiling into a
-	// guaranteed floor plus reclaimable overage; the relaxed ceiling is reported
-	// in status. Leaves only.
+	// idle sibling capacity, passed through to Kueue. Unset, this leaf does not
+	// borrow: nominal is its ceiling, and the materialized queue carries an
+	// explicit limit of zero to say so, because the enforcement backend reads an
+	// absent limit as unbounded.
+	//
+	// Borrowing is cluster-local, so setting it turns nominal from a ceiling
+	// into a floor plus overage, and the relaxed ceiling is reported in status.
+	//
+	// WARNING: overage is not currently reclaimable. This plane sets no
+	// preemption policy, so a borrower holds what it took until its own work
+	// finishes -- a leaf that bursts can leave a sibling waiting for the share
+	// that sibling was guaranteed. Leaves only.
 	// +optional
 	BorrowingLimit *resource.Quantity `json:"borrowingLimit,omitempty"`
 

@@ -2161,3 +2161,47 @@ func TestAddNodeSelectorForReadyModel(t *testing.T) {
 		})
 	}
 }
+
+// TestMergeTopologySpread_Resolution pins the effective-topologySpread rule:
+// the ISVC component value wins when set, otherwise the runtime
+// component-config value is inherited; unset on both stays nil (opt-in,
+// zero behavior change — placement remains pure bin-packing).
+func TestMergeTopologySpread_Resolution(t *testing.T) {
+	spread := func(p v1beta1.TopologySpreadPolicy) *v1beta1.TopologySpreadPolicy { return &p }
+
+	t.Run("engine-isvc-overrides-runtime", func(t *testing.T) {
+		runtime := &v1beta1.EngineSpec{TopologySpread: spread(v1beta1.TopologySpreadPreferred)}
+		isvc := &v1beta1.EngineSpec{TopologySpread: spread(v1beta1.TopologySpreadRequired)}
+		merged, err := MergeEngineSpec(runtime, isvc)
+		assert.NoError(t, err)
+		assert.NotNil(t, merged.TopologySpread)
+		assert.Equal(t, v1beta1.TopologySpreadRequired, *merged.TopologySpread, "ISVC topologySpread must override the runtime value")
+	})
+	t.Run("engine-inherits-runtime-when-isvc-unset", func(t *testing.T) {
+		runtime := &v1beta1.EngineSpec{TopologySpread: spread(v1beta1.TopologySpreadPreferred)}
+		merged, err := MergeEngineSpec(runtime, &v1beta1.EngineSpec{})
+		assert.NoError(t, err)
+		assert.NotNil(t, merged.TopologySpread, "runtime topologySpread must be inherited when ISVC leaves it unset")
+		assert.Equal(t, v1beta1.TopologySpreadPreferred, *merged.TopologySpread)
+	})
+	t.Run("engine-nil-on-both", func(t *testing.T) {
+		merged, err := MergeEngineSpec(&v1beta1.EngineSpec{}, &v1beta1.EngineSpec{})
+		assert.NoError(t, err)
+		assert.Nil(t, merged.TopologySpread, "unset on both runtime and ISVC must stay nil")
+	})
+	t.Run("decoder-inherits-runtime-when-isvc-unset", func(t *testing.T) {
+		runtime := &v1beta1.DecoderSpec{TopologySpread: spread(v1beta1.TopologySpreadRequired)}
+		merged, err := MergeDecoderSpec(runtime, &v1beta1.DecoderSpec{})
+		assert.NoError(t, err)
+		assert.NotNil(t, merged.TopologySpread)
+		assert.Equal(t, v1beta1.TopologySpreadRequired, *merged.TopologySpread)
+	})
+	t.Run("engine-spread-key-follows-the-same-rule", func(t *testing.T) {
+		key := func(s string) *string { return &s }
+		runtime := &v1beta1.EngineSpec{TopologySpreadKey: key("cloud.google.com/gce-topology-subblock")}
+		merged, err := MergeEngineSpec(runtime, &v1beta1.EngineSpec{})
+		assert.NoError(t, err)
+		assert.NotNil(t, merged.TopologySpreadKey, "runtime topologySpreadKey must be inherited when ISVC leaves it unset")
+		assert.Equal(t, "cloud.google.com/gce-topology-subblock", *merged.TopologySpreadKey)
+	})
+}

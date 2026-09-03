@@ -56,13 +56,12 @@ import (
 // For those, a wrong suppression (holding the revision) is an
 // UNBOUNDED loop on dead hardware — the revision is fine, the block
 // never lifts, and nothing relocates the pod — while a wrong migration
-// is RELOCATION-bounded (the operator's autoMigrate.maxAttempts): once
-// the budget drains, each subsequent expiry disposes terminal at the
-// stuckPodGrace / InstanceReadyTimeout cadence without further
-// relocation — the rebuild loop continues; no parking state exists for
-// ambiguous failures. An instance that reaches Ready prunes its
-// AutoRecover records and resets the budget. Ambiguous reasons
-// therefore route to bounded relocation, never to revision blame.
+// is RELOCATION-bounded by the operator's autoMigrate.maxAttempts.
+// Operation-specific recovery may retry only when the persisted
+// relocation evidence authorizes it; otherwise it leaves the Instance
+// Failed for operator action. An instance that reaches Ready prunes its
+// AutoRecover records and resets the budget. Ambiguous reasons therefore
+// route to bounded relocation, never to revision blame.
 var workloadCausedWaitingReasons = map[string]struct{}{
 	"ImagePullBackOff":           {},
 	"ErrImagePull":               {},
@@ -85,8 +84,8 @@ const (
 	// ran. RetryBlocks untouched.
 	DispositionRelocationDirective
 	// DispositionTerminal — everything else: Operation cleared,
-	// Phase=Failed, no RetryBlock (failure not proven revision-scoped;
-	// the recreate lands via the scheduler on healthy nodes).
+	// Phase=Failed, no RetryBlock. The owning operation reconciler may
+	// retry only when its own safety and authorization checks pass.
 	DispositionTerminal
 	// DispositionSkippedSuperseded — the only workload-caused pod belongs
 	// to a SUPERSEDED revision (its revision-hash label is not the current
@@ -110,11 +109,12 @@ const (
 //     UpdateRevision for an unpinned Create whose pod does not prove a
 //     different revision): record the RetryBlock for that revision,
 //     then clear the Operation and stamp Phase=Failed in ONE
-//     MutateInstance call. Failed-with-no-Operation is a fresh start
-//     next pass; the RetryBlock gate denies the same revision and
-//     admits a corrected one. No resolvable revision → there is
-//     nothing to hold; fall through to the terminal branch rather than
-//     report a held revision with no block.
+//     MutateInstance call. The owning operation reconciler evaluates
+//     the Failed-with-no-Operation state on the next pass; the RetryBlock
+//     gate denies the same revision and admits a corrected one. No
+//     resolvable revision → there is nothing to hold; fall through to
+//     the terminal branch rather than report a held revision with no
+//     block.
 //  2. RELOCATABLE — no workload-caused reason, MigrationMode=Auto,
 //     relocation budget (operator config) not exhausted, and the
 //     attempt's pods occupy exactly ONE resolvable node (single-pod
@@ -235,9 +235,13 @@ func DisposeExpiredAttempt(ctx context.Context, deps Deps, input ReconcileInput,
 		// Workload-caused evidence without a resolvable revision still
 		// carries the wedged pod's diagnostics into LastFailure.
 		termination = PodTerminationWithReason(causePod, matched, now)
+	} else if pod := firstPodWaitingForReason(pods, shortReason); pod != nil {
+		// Ambiguous runtime-start failures still identify the exact failed
+		// pod so operation-specific cleanup can remove only that object.
+		termination = PodTerminationWithReason(pod, shortReason, now)
 	}
 	outcome := DispositionTerminal
-	detail := "attempt disposed terminal (no workload-caused evidence, relocation unavailable); a fresh attempt re-schedules on the next pass"
+	detail := "attempt disposed terminal (no workload-caused evidence, relocation unavailable); operation-specific recovery decides whether another attempt is safe"
 	if directiveRecorded {
 		outcome = DispositionRelocationDirective
 		detail = "attempt disposed with relocation directive; the rebuild is steered off the recorded node"
@@ -301,6 +305,22 @@ func firstWorkloadCausedPod(pods []*corev1.Pod) (*corev1.Pod, string) {
 		}
 	}
 	return nil, ""
+}
+
+func firstPodWaitingForReason(pods []*corev1.Pod, reason string) *corev1.Pod {
+	for _, pod := range pods {
+		if pod == nil || pod.DeletionTimestamp != nil {
+			continue
+		}
+		for _, statuses := range [][]corev1.ContainerStatus{pod.Status.ContainerStatuses, pod.Status.InitContainerStatuses} {
+			for _, status := range statuses {
+				if status.State.Waiting != nil && status.State.Waiting.Reason == reason {
+					return pod
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // singleLiveNode returns the one node name hosting every pod of the
@@ -464,11 +484,11 @@ func recordRelocationDirective(ctx context.Context, deps Deps, input ReconcileIn
 
 // failInstanceClearingOperation stamps Phase=Failed AND clears the
 // in-flight Operation in one MutateInstance call — the abandon-analogue
-// for single-pod / create attempts. Failed-with-no-Operation is a fresh
-// start: the update trigger re-drives it through the RetryBlock gate,
-// and no per-op stamper can re-arm the cleared attempt. A fresh-empty
-// slot (Phase=="") from MutateInstance's append path is a sentinel for
-// a slot deleted out from under us — don't resurrect. termination, when
+// for single-pod / create attempts. Failed-with-no-Operation hands control
+// back to operation-specific recovery on a later reconcile; clearing the
+// Operation prevents the current attempt's stamper from extending it. A
+// fresh-empty slot (Phase=="") from MutateInstance's append path is a
+// sentinel for a slot deleted out from under us — don't resurrect. termination, when
 // non-nil, is recorded on LastFailure in the same write.
 func failInstanceClearingOperation(ctx context.Context, input ReconcileInput, idx int32, termination *InstanceTermination) error {
 	return input.MutateInstance(ctx, idx, func(s *InstanceStatus) bool {

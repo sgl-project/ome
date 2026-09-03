@@ -64,6 +64,13 @@ func (g *GangPack) Permit(_ context.Context, state framework.CycleState, pod *v1
 // member reaches Permit, the informer has the gang; force-activating its siblings
 // makes the earlier member retry immediately instead of waiting for the periodic
 // unschedulable flush.
+//
+// Unconditional and per-member: whenever any gang member reaches Permit, every
+// live member is activated, regardless of whether the gate then admits or
+// waits. This is also what lets an affinity-ordered gang (a worker whose
+// Filter depends on its leader already being assumed) converge promptly on an
+// otherwise quiet cluster, since an assumed-but-unbound pod produces no
+// cluster event of its own for that worker to react to.
 func (g *GangPack) activateGangMembers(gang gangInfo) {
 	lister, ok := g.podLister.(gangMemberLister)
 	if !ok || g.handle == nil {

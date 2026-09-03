@@ -318,6 +318,7 @@ func InstanceStatusToWorkload(v v1beta1.OMENativeInstanceStatus) workload.Instan
 		ScheduledPodCount: v.ScheduledPodCount,
 		Admitted:          v.Admitted,
 		ActiveOrdinal:     v.ActiveOrdinal,
+		ReadySince:        v.ReadySince.DeepCopy(),
 		Operation:         InstanceOperationToWorkload(v.Operation),
 		LastFailure:       InstanceTerminationToWorkload(v.LastFailure),
 	}
@@ -349,6 +350,7 @@ func InstanceStatusFromWorkload(w workload.InstanceStatus) v1beta1.OMENativeInst
 		Admitted:          w.Admitted,
 		ActiveOrdinal:     w.ActiveOrdinal,
 		Operation:         InstanceOperationFromWorkload(w.Operation),
+		ReadySince:        w.ReadySince.DeepCopy(),
 		LastFailure:       InstanceTerminationFromWorkload(w.LastFailure),
 	}
 	if w.NodesOccupied != nil {

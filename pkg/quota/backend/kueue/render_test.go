@@ -178,7 +178,7 @@ func TestRenderClusterQueue(t *testing.T) {
 					Resources: []renderedResource{
 						{Name: "cpu", NominalQuota: "1k"},
 						{Name: "memory", NominalQuota: "1Ti"},
-						{Name: "nvidia.com/gpu", NominalQuota: "8"},
+						{Name: "nvidia.com/gpu", NominalQuota: "8", BorrowingLimit: "0"},
 					},
 				}},
 				Labels: map[string]string{
@@ -211,18 +211,18 @@ func TestRenderClusterQueue(t *testing.T) {
 						Name: "a100",
 						Resources: []renderedResource{
 							{Name: "cpu", NominalQuota: "1k"},
-							{Name: "google.com/tpu", NominalQuota: "0"},
+							{Name: "google.com/tpu", NominalQuota: "0", BorrowingLimit: "0"},
 							{Name: "memory", NominalQuota: "1Ti"},
-							{Name: "nvidia.com/gpu", NominalQuota: "8"},
+							{Name: "nvidia.com/gpu", NominalQuota: "8", BorrowingLimit: "0"},
 						},
 					},
 					{
 						Name: "tpu7x",
 						Resources: []renderedResource{
 							{Name: "cpu", NominalQuota: "1k"},
-							{Name: "google.com/tpu", NominalQuota: "16"},
+							{Name: "google.com/tpu", NominalQuota: "16", BorrowingLimit: "0"},
 							{Name: "memory", NominalQuota: "1Ti"},
-							{Name: "nvidia.com/gpu", NominalQuota: "0"},
+							{Name: "nvidia.com/gpu", NominalQuota: "0", BorrowingLimit: "0"},
 						},
 					},
 				},
@@ -256,7 +256,7 @@ func TestRenderClusterQueue(t *testing.T) {
 					Resources: []renderedResource{
 						{Name: "cpu", NominalQuota: "1k"},
 						{Name: "memory", NominalQuota: "1Ti"},
-						{Name: "nvidia.com/gpu", NominalQuota: "8"},
+						{Name: "nvidia.com/gpu", NominalQuota: "8", BorrowingLimit: "0"},
 					},
 				}},
 				Labels: map[string]string{
@@ -286,7 +286,7 @@ func TestRenderClusterQueue(t *testing.T) {
 					Resources: []renderedResource{
 						{Name: "cpu", NominalQuota: "1k"},
 						{Name: "memory", NominalQuota: "1Ti"},
-						{Name: "nvidia.com/gpu", NominalQuota: "8"},
+						{Name: "nvidia.com/gpu", NominalQuota: "8", BorrowingLimit: "0"},
 					},
 				}},
 				Labels: map[string]string{
@@ -316,7 +316,7 @@ func TestRenderClusterQueue(t *testing.T) {
 					Resources: []renderedResource{
 						{Name: "cpu", NominalQuota: "1k"},
 						{Name: "memory", NominalQuota: "1Ti"},
-						{Name: "nvidia.com/gpu", NominalQuota: "8"},
+						{Name: "nvidia.com/gpu", NominalQuota: "8", BorrowingLimit: "0"},
 					},
 				}},
 				Labels: map[string]string{
@@ -678,3 +678,62 @@ func TestRenderDoesNotMutateInput(t *testing.T) {
 
 // Quantity carries unexported cached state, so compare on value.
 func quantityEqual(a, b resource.Quantity) bool { return a.Cmp(b) == 0 }
+
+// Nominal is a ceiling unless a budget says otherwise, and the rendered queue
+// has to say so explicitly: Kueue reads an absent borrowingLimit as unbounded,
+// so leaving the field off translates OME's "this leaf's share" into "at least
+// this much, plus whatever the cohort is not using".
+//
+// It is worse than an over-large grant, because this plane sets no preemption
+// and Kueue defaults reclaimWithinCohort to Never: an unbounded borrower cannot
+// be made to give a share back, so the number would be neither a ceiling for
+// the borrower nor a floor for the lender.
+func TestRenderBorrowingIsOffUnlessAuthored(t *testing.T) {
+	limit := func(q *resource.Quantity) *v1beta1.AcceleratorBudget {
+		return &v1beta1.AcceleratorBudget{
+			ResourceName:   "nvidia.com/gpu",
+			ResourceFlavor: "a100",
+			Nominal:        resource.MustParse("8"),
+			BorrowingLimit: q,
+		}
+	}
+	four := resource.MustParse("4")
+	zero := resource.MustParse("0")
+
+	tests := []struct {
+		name   string
+		budget *v1beta1.AcceleratorBudget
+		want   string
+	}{
+		{
+			name:   "an unauthored limit is rendered as no borrowing",
+			budget: limit(nil),
+			want:   "0",
+		},
+		{
+			name:   "an authored limit is passed through",
+			budget: limit(&four),
+			want:   "4",
+		},
+		{
+			// Explicitly zero and absent must render the same, or an admin who
+			// writes the safe value gets a different queue from one who omits it.
+			name:   "an explicit zero is the same as none",
+			budget: limit(&zero),
+			want:   "0",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			funded := map[string]v1beta1.AcceleratorBudget{"nvidia.com/gpu": *tc.budget}
+			got := resourceQuota("nvidia.com/gpu", funded, Options{})
+			if got.BorrowingLimit == nil {
+				t.Fatal("no borrowing limit rendered; Kueue reads that as unbounded")
+			}
+			if s := got.BorrowingLimit.String(); s != tc.want {
+				t.Errorf("borrowingLimit = %s, want %s", s, tc.want)
+			}
+		})
+	}
+}

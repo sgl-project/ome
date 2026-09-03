@@ -257,6 +257,7 @@ func IRStatusToComponentStatus(ir *v1beta1.InferenceReplica) *v1beta1.LifecycleS
 		cc := *ir.Status.CollisionCount
 		out.CollisionCount = &cc
 	}
+	out.RolloutHold = ir.Status.RolloutHold.DeepCopy()
 	// Per-Instance detail is intentionally NOT projected onto the ISVC
 	// summary — the authoritative source is the IR's own status, read
 	// directly by in-cluster consumers via ComponentIRStatus.

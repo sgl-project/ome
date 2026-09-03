@@ -192,7 +192,7 @@ func TestAggregateAndWriteStatusPersistsCompactRowsAndMirrorsCurrentObservations
 		}},
 	}
 
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, nil)).To(gomega.Succeed())
+	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, nil, false, nil)).To(gomega.Succeed())
 	got := &v1beta1.InferenceReplica{}
 	g.Expect(stored.Get(context.Background(), client.ObjectKeyFromObject(ir), got)).To(gomega.Succeed())
 	g.Expect(got.Status.InstanceStatuses[0].Admitted).To(gomega.BeTrue())
@@ -211,7 +211,7 @@ func TestAggregateAndWriteStatusPersistsCompactRowsAndMirrorsCurrentObservations
 		"same-pass observations remain available without being persisted")
 
 	rvAfterCompaction := got.ResourceVersion
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), got.DeepCopy(), plan, nil)).To(gomega.Succeed())
+	g.Expect(r.aggregateAndWriteStatus(context.Background(), got.DeepCopy(), plan, nil, false, nil)).To(gomega.Succeed())
 	steady := &v1beta1.InferenceReplica{}
 	g.Expect(stored.Get(context.Background(), client.ObjectKeyFromObject(ir), steady)).To(gomega.Succeed())
 	g.Expect(steady.ResourceVersion).To(gomega.Equal(rvAfterCompaction),
@@ -751,7 +751,7 @@ func TestAggregateAndWriteStatus_NoWriteWhenUnchanged(t *testing.T) {
 
 	// First pass: status changes (per-Instance counters, conditions,
 	// LabelSelector, ObservedGeneration all get stamped) → a write lands.
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, nil)).To(gomega.Succeed())
+	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, nil, false, nil)).To(gomega.Succeed())
 	afterFirst := &v1beta1.InferenceReplica{}
 	g.Expect(c.Get(context.Background(), key, afterFirst)).To(gomega.Succeed())
 	rvAfterFirst := afterFirst.ResourceVersion
@@ -759,7 +759,7 @@ func TestAggregateAndWriteStatus_NoWriteWhenUnchanged(t *testing.T) {
 	// Second pass over the now-converged IR: recomputed status equals
 	// live status → the DeepEqual guard must skip Status().Update, so the
 	// ResourceVersion is unchanged.
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), afterFirst.DeepCopy(), plan, nil)).To(gomega.Succeed())
+	g.Expect(r.aggregateAndWriteStatus(context.Background(), afterFirst.DeepCopy(), plan, nil, false, nil)).To(gomega.Succeed())
 	afterSecond := &v1beta1.InferenceReplica{}
 	g.Expect(c.Get(context.Background(), key, afterSecond)).To(gomega.Succeed())
 	g.Expect(afterSecond.ResourceVersion).To(gomega.Equal(rvAfterFirst),
@@ -835,7 +835,7 @@ func TestAggregateAndWriteStatusReusesPublicationReadsAcrossConflictRetry(t *tes
 	}
 
 	target := &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: "rev-target"}}
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, target)).To(gomega.Succeed())
+	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, target, false, nil)).To(gomega.Succeed())
 	g.Expect(statusWrites).To(gomega.Equal(2))
 	g.Expect(podLists).To(gomega.Equal(1), "the publication Pod observation is captured outside conflict retry")
 	g.Expect(endpointSliceLists).To(gomega.Equal(1), "the publication availability observation is captured outside conflict retry")
@@ -895,7 +895,7 @@ func TestAggregateAndWriteStatus_RebasesAfterAdjacentLifecycleWrite(t *testing.T
 		}},
 	}
 
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), stale, plan, nil)).To(gomega.Succeed())
+	g.Expect(r.aggregateAndWriteStatus(context.Background(), stale, plan, nil, false, nil)).To(gomega.Succeed())
 	got := &v1beta1.InferenceReplica{}
 	g.Expect(apiClient.Get(context.Background(), key, got)).To(gomega.Succeed())
 	g.Expect(got.Status.InstanceStatuses).To(gomega.HaveLen(1))
@@ -931,7 +931,7 @@ func TestAggregateAndWriteStatus_SameNameReplacementIsUntouched(t *testing.T) {
 		}},
 	}
 
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), stale, plan, nil)).To(gomega.Succeed())
+	g.Expect(r.aggregateAndWriteStatus(context.Background(), stale, plan, nil, false, nil)).To(gomega.Succeed())
 	g.Expect(*writes).To(gomega.Equal(0))
 	got := &v1beta1.InferenceReplica{}
 	g.Expect(live.Get(context.Background(), client.ObjectKeyFromObject(replacement), got)).To(gomega.Succeed())
@@ -966,7 +966,7 @@ func TestAggregateAndWriteStatus_GenerationChangeAborts(t *testing.T) {
 		metricBefore[result] = irStatusUpdateMetric(t, result)
 	}
 
-	err := r.aggregateAndWriteStatus(context.Background(), stale, plan, nil)
+	err := r.aggregateAndWriteStatus(context.Background(), stale, plan, nil, false, nil)
 	g.Expect(errors.Is(err, workload.ErrStatusMutationPrecondition)).To(gomega.BeTrue())
 	g.Expect(*writes).To(gomega.Equal(0))
 	for result, before := range metricBefore {
@@ -1115,7 +1115,7 @@ func TestAggregateAndWriteStatus_ConflictSurfacesAsConflict(t *testing.T) {
 		},
 	}
 
-	err := r.aggregateAndWriteStatus(context.Background(), ir, plan, nil)
+	err := r.aggregateAndWriteStatus(context.Background(), ir, plan, nil, false, nil)
 	g.Expect(err).To(gomega.HaveOccurred())
 	g.Expect(apierrors.IsConflict(err)).To(gomega.BeTrue(),
 		"a terminal status conflict must remain recognizable so the caller can requeue instead of logging ERROR")
@@ -1592,5 +1592,354 @@ func TestComputeRolloutStalledCondition(t *testing.T) {
 	// Advisory: distinct condition type from Ready (never folds into it).
 	if computeRolloutStalledCondition(mk()).Type == InferenceReplicaConditionReady {
 		t.Errorf("RolloutStalled must be a distinct condition type from Ready")
+	}
+}
+
+// TestNextRolloutHold_StableSinceAcrossIdenticalGateTarget pins the
+// churn-safety contract behind status.rolloutHold: repeated observations
+// reporting the SAME Gate+Target preserve the prior Since even when
+// Reason text drifts pass to pass (e.g. a fluctuating in-flight count),
+// and a change in either Gate or Target restarts the clock.
+func TestNextRolloutHold_StableSinceAcrossIdenticalGateTarget(t *testing.T) {
+	t0 := metav1.NewTime(time.Unix(1000, 0))
+	t1 := metav1.NewTime(time.Unix(2000, 0))
+
+	first := nextRolloutHold(nil, &v1beta1.RolloutHold{
+		Gate: v1beta1.RolloutHoldGateBudget, Reason: "budget 2 exhausted (would become 3)", Target: "rev-a",
+	}, t0)
+	if first == nil || !first.Since.Equal(&t0) {
+		t.Fatalf("first observation must stamp Since=now: got %+v", first)
+	}
+
+	// Same Gate+Target, DIFFERENT Reason text (a fluctuating count) ->
+	// Since must be preserved from the first call, and no update storm
+	// results from Reason text alone (verified end-to-end in
+	// TestAggregateAndWriteStatus_RolloutHold_ChurnSafeAcrossReconciles).
+	second := nextRolloutHold(first, &v1beta1.RolloutHold{
+		Gate: v1beta1.RolloutHoldGateBudget, Reason: "budget 2 exhausted (would become 4)", Target: "rev-a",
+	}, t1)
+	if second == nil || !second.Since.Equal(&t0) {
+		t.Errorf("same Gate+Target must preserve Since despite Reason drift: got %+v", second)
+	}
+	if second == nil || second.Reason != "budget 2 exhausted (would become 4)" {
+		t.Errorf("Reason must still update to the latest observation: got %+v", second)
+	}
+
+	// A different Target (e.g. a corrected revision published) restarts
+	// the clock even with the same Gate.
+	third := nextRolloutHold(second, &v1beta1.RolloutHold{
+		Gate: v1beta1.RolloutHoldGateBudget, Reason: "budget 2 exhausted (would become 3)", Target: "rev-b",
+	}, t1)
+	if third == nil || !third.Since.Equal(&t1) {
+		t.Errorf("a new Target must restart Since: got %+v", third)
+	}
+
+	// A different Gate (the denial moved to a different layer) also
+	// restarts the clock even with the same Target.
+	fourth := nextRolloutHold(third, &v1beta1.RolloutHold{
+		Gate: v1beta1.RolloutHoldGateSequential, Reason: "Sequential waiting on decoder", Target: "rev-b",
+	}, t1)
+	if fourth == nil || fourth.Gate != v1beta1.RolloutHoldGateSequential || !fourth.Since.Equal(&t1) {
+		t.Errorf("a new Gate must restart Since and report the newly observed layer: got %+v", fourth)
+	}
+
+	// nil observation clears the hold outright (progressed or converged).
+	if cleared := nextRolloutHold(fourth, nil, t1); cleared != nil {
+		t.Errorf("nil observation must clear the hold: got %+v", cleared)
+	}
+}
+
+// TestComputeRetryBlockRolloutHold pins the RetryBlock -> RolloutHold
+// projection used when the Update pass never ran this reconcile (every
+// candidate Instance was denied before reaching it).
+func TestComputeRetryBlockRolloutHold(t *testing.T) {
+	now := time.Unix(5000, 0)
+	future := metav1.NewTime(now.Add(time.Minute))
+	past := metav1.NewTime(now.Add(-time.Minute))
+
+	// Held: unbounded, gate=Held regardless of NextRetryAt (unset here,
+	// matching "Held has no time bound").
+	held := &v1beta1.InferenceReplicaStatus{
+		UpdateRevision: "bad-rev",
+		RetryBlocks: []v1beta1.RetryBlock{
+			{TargetRevision: "bad-rev", State: v1beta1.RetryBlockHeld, AttemptsStarted: 2, Reason: "ImagePullBackOff"},
+		},
+	}
+	if h := computeRetryBlockRolloutHold(held, now); h == nil || h.Gate != v1beta1.RolloutHoldGateHeld || h.Target != "bad-rev" {
+		t.Errorf("Held block must produce gate=Held target=bad-rev: got %+v", h)
+	}
+
+	// Backoff not yet due: gate=RetryBlock.
+	backoff := &v1beta1.InferenceReplicaStatus{
+		UpdateRevision: "bad-rev",
+		RetryBlocks: []v1beta1.RetryBlock{
+			{TargetRevision: "bad-rev", State: v1beta1.RetryBlockBackoff, AttemptsStarted: 1, NextRetryAt: &future, Reason: "CrashLoopBackOff"},
+		},
+	}
+	if h := computeRetryBlockRolloutHold(backoff, now); h == nil || h.Gate != v1beta1.RolloutHoldGateRetryBlock {
+		t.Errorf("not-yet-due Backoff must produce gate=RetryBlock: got %+v", h)
+	}
+
+	// Backoff already due: about to retry, not currently held.
+	due := &v1beta1.InferenceReplicaStatus{
+		UpdateRevision: "bad-rev",
+		RetryBlocks: []v1beta1.RetryBlock{
+			{TargetRevision: "bad-rev", State: v1beta1.RetryBlockBackoff, AttemptsStarted: 1, NextRetryAt: &past, Reason: "CrashLoopBackOff"},
+		},
+	}
+	if h := computeRetryBlockRolloutHold(due, now); h != nil {
+		t.Errorf("an elapsed Backoff window must not report a hold: got %+v", h)
+	}
+
+	// RetryInProgress: an attempt is authorized, not a hold.
+	inProgress := &v1beta1.InferenceReplicaStatus{
+		UpdateRevision: "bad-rev",
+		RetryBlocks: []v1beta1.RetryBlock{
+			{TargetRevision: "bad-rev", State: v1beta1.RetryBlockRetryInProgress, AttemptsStarted: 1},
+		},
+	}
+	if h := computeRetryBlockRolloutHold(inProgress, now); h != nil {
+		t.Errorf("RetryInProgress must not report a hold: got %+v", h)
+	}
+
+	// No block for the current target.
+	none := &v1beta1.InferenceReplicaStatus{UpdateRevision: "other-rev"}
+	if h := computeRetryBlockRolloutHold(none, now); h != nil {
+		t.Errorf("no matching RetryBlock must not report a hold: got %+v", h)
+	}
+}
+
+// TestEffectiveRolloutHold pins the top-level decision effectiveRolloutHold
+// makes each reconcile: no rollout / converged always clears regardless of
+// a stale signal; an observed Update-pass verdict is authoritative when
+// the Update pass ran; the persisted RetryBlock/Held state is the fallback
+// when it did not.
+func TestEffectiveRolloutHold(t *testing.T) {
+	now := time.Unix(9000, 0)
+
+	// No rollout in flight: nothing to hold, even with an exec verdict.
+	noRollout := &v1beta1.InferenceReplicaStatus{}
+	if h := effectiveRolloutHold(true, &workload.RolloutHold{Gate: workload.RolloutHoldGateBudget, Reason: "x", Target: "y"}, noRollout, now); h != nil {
+		t.Errorf("no UpdateRevision must clear regardless of exec verdict: got %+v", h)
+	}
+
+	// Converged (CurrentRevision == UpdateRevision): nothing to hold.
+	converged := &v1beta1.InferenceReplicaStatus{CurrentRevision: "rev-a", UpdateRevision: "rev-a"}
+	if h := effectiveRolloutHold(true, &workload.RolloutHold{Gate: workload.RolloutHoldGateBudget, Reason: "x", Target: "rev-a"}, converged, now); h != nil {
+		t.Errorf("converged rollout must clear regardless of exec verdict: got %+v", h)
+	}
+
+	inFlight := &v1beta1.InferenceReplicaStatus{CurrentRevision: "rev-a", UpdateRevision: "rev-b"}
+
+	// Update pass ran and found nothing to hold (forward progress) ->
+	// clear even though the rollout is still in flight.
+	if h := effectiveRolloutHold(true, nil, inFlight, now); h != nil {
+		t.Errorf("Update pass ran with a nil verdict must clear: got %+v", h)
+	}
+
+	// Update pass ran and denied a fresh start -> the exec verdict wins,
+	// converted to the v1beta1 shape.
+	h := effectiveRolloutHold(true, &workload.RolloutHold{
+		Gate: workload.RolloutHoldGateSequential, Reason: "Sequential waiting on decoder", Target: "rev-b",
+	}, inFlight, now)
+	if h == nil || h.Gate != v1beta1.RolloutHoldGateSequential || h.Reason != "Sequential waiting on decoder" || h.Target != "rev-b" {
+		t.Errorf("an observed exec denial must be surfaced verbatim: got %+v", h)
+	}
+
+	// Update pass did NOT run this reconcile -> fall back to the
+	// persisted RetryBlock/Held state.
+	inFlight.RetryBlocks = []v1beta1.RetryBlock{
+		{TargetRevision: "rev-b", State: v1beta1.RetryBlockHeld, AttemptsStarted: 2, Reason: "ImagePullBackOff"},
+	}
+	if h := effectiveRolloutHold(false, nil, inFlight, now); h == nil || h.Gate != v1beta1.RolloutHoldGateHeld {
+		t.Errorf("Update pass not run must fall back to the persisted RetryBlock/Held state: got %+v", h)
+	}
+}
+
+// TestAggregateAndWriteStatus_RolloutHold_ChurnSafeAcrossReconciles proves
+// the end-to-end write contract: a fresh denial writes and stamps Since; a
+// byte-identical repeat denial performs ZERO writes (ResourceVersion
+// unchanged); and forward progress (a nil exec verdict) clears the hold
+// with a write.
+func TestAggregateAndWriteStatus_RolloutHold_ChurnSafeAcrossReconciles(t *testing.T) {
+	g := gomega.NewWithT(t)
+	ir := baselineIR("llama-engine", "prod", 1)
+	ir.Status.CurrentRevision = "rev-prior"
+	ir.Status.InstanceStatuses = []v1beta1.OMENativeInstanceStatus{
+		{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "rev-prior"},
+	}
+	pod0 := podForIR(ir, 0, "default", 0, true, true)
+	slice0 := sliceForIRPod(ir, pod0, true)
+	r, c := newReconciler(t, ir, pod0, slice0)
+
+	plan := workload.ComponentPlan{
+		Component: v1beta1convert.ComponentTypeToWorkload(ir.Spec.Component),
+		Replicas:  1,
+		Instances: []workload.InstancePlan{
+			{Index: 0, Incarnation: 1, Runners: []workload.RunnerPlan{{Name: "default", Size: 1}}},
+		},
+	}
+	target := &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: "rev-target"}}
+	key := client.ObjectKeyFromObject(ir)
+
+	budgetHold := func(inFlight int) *workload.RolloutHold {
+		return &workload.RolloutHold{
+			Gate:   workload.RolloutHoldGateBudget,
+			Reason: fmt.Sprintf("per-Component surge budget 2 exhausted (would become %d)", inFlight),
+			Target: target.Name,
+		}
+	}
+
+	// Pass 1: a fresh denial -> the hold is recorded with Since stamped.
+	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, target, true, budgetHold(3))).To(gomega.Succeed())
+	afterFirst := &v1beta1.InferenceReplica{}
+	g.Expect(c.Get(context.Background(), key, afterFirst)).To(gomega.Succeed())
+	g.Expect(afterFirst.Status.RolloutHold).NotTo(gomega.BeNil())
+	g.Expect(afterFirst.Status.RolloutHold.Gate).To(gomega.Equal(v1beta1.RolloutHoldGateBudget))
+	since := afterFirst.Status.RolloutHold.Since
+	g.Expect(since.IsZero()).To(gomega.BeFalse())
+
+	// Pass 2: byte-identical denial -> ZERO writes (ResourceVersion
+	// unchanged) and Since untouched.
+	rvAfterFirst := afterFirst.ResourceVersion
+	g.Expect(r.aggregateAndWriteStatus(context.Background(), afterFirst.DeepCopy(), plan, target, true, budgetHold(3))).To(gomega.Succeed())
+	afterRepeat := &v1beta1.InferenceReplica{}
+	g.Expect(c.Get(context.Background(), key, afterRepeat)).To(gomega.Succeed())
+	g.Expect(afterRepeat.ResourceVersion).To(gomega.Equal(rvAfterFirst),
+		"an identical repeat denial must perform ZERO writes")
+	g.Expect(afterRepeat.Status.RolloutHold.Since.Equal(&since)).To(gomega.BeTrue(),
+		"Since must not move across a byte-identical repeat denial")
+
+	// Pass 3: forward progress (nil exec verdict) -> the hold clears, and
+	// this DOES write (a real state change).
+	g.Expect(r.aggregateAndWriteStatus(context.Background(), afterRepeat.DeepCopy(), plan, target, true, nil)).To(gomega.Succeed())
+	afterClear := &v1beta1.InferenceReplica{}
+	g.Expect(c.Get(context.Background(), key, afterClear)).To(gomega.Succeed())
+	g.Expect(afterClear.Status.RolloutHold).To(gomega.BeNil(), "forward progress must clear the hold")
+	g.Expect(afterClear.ResourceVersion).NotTo(gomega.Equal(rvAfterFirst), "clearing the hold is a real state change")
+}
+
+// TestAggregateAndWriteStatus_RolloutHold_SoakChurnSafeAcrossMultipleReconciles
+// is the regression pin for a live-countdown reason string turning a
+// multi-minute Sequential.Soak window into a per-reconcile status-write
+// storm: the coordination gate's soak-denial message
+// (coordination.CheckSequential) carries only stable facts (component +
+// configured duration), so driving several reconciles "mid-soak" with the
+// identical exec verdict must perform ZERO writes after the first and
+// must never move Since — exactly the same contract
+// TestAggregateAndWriteStatus_RolloutHold_ChurnSafeAcrossReconciles proves
+// for a Budget hold, pinned here against the specific reason shape a
+// Sequential soak produces.
+func TestAggregateAndWriteStatus_RolloutHold_SoakChurnSafeAcrossMultipleReconciles(t *testing.T) {
+	g := gomega.NewWithT(t)
+	ir := baselineIR("llama-engine", "prod", 1)
+	ir.Status.CurrentRevision = "rev-prior"
+	ir.Status.InstanceStatuses = []v1beta1.OMENativeInstanceStatus{
+		{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "rev-prior"},
+	}
+	pod0 := podForIR(ir, 0, "default", 0, true, true)
+	slice0 := sliceForIRPod(ir, pod0, true)
+	r, c := newReconciler(t, ir, pod0, slice0)
+
+	plan := workload.ComponentPlan{
+		Component: v1beta1convert.ComponentTypeToWorkload(ir.Spec.Component),
+		Replicas:  1,
+		Instances: []workload.InstancePlan{
+			{Index: 0, Incarnation: 1, Runners: []workload.RunnerPlan{{Name: "default", Size: 1}}},
+		},
+	}
+	target := &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: "rev-target"}}
+	key := client.ObjectKeyFromObject(ir)
+
+	// coordination.CheckSequential's soak-denial message carries only stable
+	// facts for the whole soak window: component, configured duration, and the
+	// completed predecessor, with no elapsed/remaining countdown.
+	soakHold := &workload.RolloutHold{
+		Gate:   workload.RolloutHoldGateSequential,
+		Reason: "Sequential.Soak: engine waiting out the 15s soak after decoder",
+		Target: target.Name,
+	}
+
+	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, target, true, soakHold)).To(gomega.Succeed())
+	first := &v1beta1.InferenceReplica{}
+	g.Expect(c.Get(context.Background(), key, first)).To(gomega.Succeed())
+	g.Expect(first.Status.RolloutHold).NotTo(gomega.BeNil())
+	g.Expect(first.Status.RolloutHold.Gate).To(gomega.Equal(v1beta1.RolloutHoldGateSequential))
+	rv := first.ResourceVersion
+	since := first.Status.RolloutHold.Since
+	g.Expect(since.IsZero()).To(gomega.BeFalse())
+
+	// Simulate several reconciles landing mid-soak (e.g. the dispatcher's
+	// short requeue firing repeatedly while the soak elapses). Every one
+	// observes the identical exec verdict, since the gate's message does not
+	// depend on elapsed time.
+	live := first
+	for i := 0; i < 4; i++ {
+		g.Expect(r.aggregateAndWriteStatus(context.Background(), live.DeepCopy(), plan, target, true, soakHold)).To(gomega.Succeed())
+		next := &v1beta1.InferenceReplica{}
+		g.Expect(c.Get(context.Background(), key, next)).To(gomega.Succeed())
+		g.Expect(next.ResourceVersion).To(gomega.Equal(rv),
+			"reconcile %d mid-soak must perform ZERO writes (identical Sequential.Soak reason)", i+2)
+		g.Expect(next.Status.RolloutHold.Since.Equal(&since)).To(gomega.BeTrue(),
+			"reconcile %d mid-soak must not move Since", i+2)
+		live = next
+	}
+}
+
+// TestAggregateAndWriteStatus_RolloutHold_PausedRetryBlockFallbackChurnSafe
+// checks the hold surface under an operator pause. Plan returns before
+// ever reaching Update selection while paused (see workload/plan_decision.go),
+// so executeUpdatePass never runs and RecordRolloutHold is never invoked —
+// every paused reconcile calls aggregateAndWriteStatus with
+// holdObserved=false, exercising the same RetryBlock/Held fallback used
+// when nothing was gated. A standing Held block must keep reporting
+// (and keep its Since) across repeated paused reconciles with ZERO
+// writes — pausing must not fabricate a fresh Since nor storm the
+// apiserver.
+func TestAggregateAndWriteStatus_RolloutHold_PausedRetryBlockFallbackChurnSafe(t *testing.T) {
+	g := gomega.NewWithT(t)
+	ir := baselineIR("llama-engine", "prod", 1)
+	ir.Status.CurrentRevision = "rev-prior"
+	ir.Status.InstanceStatuses = []v1beta1.OMENativeInstanceStatus{
+		{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "rev-prior"},
+	}
+	ir.Status.RetryBlocks = []v1beta1.RetryBlock{
+		{TargetRevision: "rev-target", State: v1beta1.RetryBlockHeld, AttemptsStarted: 2, Reason: "ImagePullBackOff"},
+	}
+	pod0 := podForIR(ir, 0, "default", 0, true, true)
+	slice0 := sliceForIRPod(ir, pod0, true)
+	r, c := newReconciler(t, ir, pod0, slice0)
+
+	plan := workload.ComponentPlan{
+		Component: v1beta1convert.ComponentTypeToWorkload(ir.Spec.Component),
+		Replicas:  1,
+		Instances: []workload.InstancePlan{
+			{Index: 0, Incarnation: 1, Runners: []workload.RunnerPlan{{Name: "default", Size: 1}}},
+		},
+	}
+	target := &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: "rev-target"}}
+	key := client.ObjectKeyFromObject(ir)
+
+	// holdObserved=false on every call: the Update pass is parked by
+	// Paused, exactly as it would be on every reconcile while paused.
+	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, target, false, nil)).To(gomega.Succeed())
+	first := &v1beta1.InferenceReplica{}
+	g.Expect(c.Get(context.Background(), key, first)).To(gomega.Succeed())
+	g.Expect(first.Status.RolloutHold).NotTo(gomega.BeNil())
+	g.Expect(first.Status.RolloutHold.Gate).To(gomega.Equal(v1beta1.RolloutHoldGateHeld))
+	rv := first.ResourceVersion
+	since := first.Status.RolloutHold.Since
+	g.Expect(since.IsZero()).To(gomega.BeFalse())
+
+	live := first
+	for i := 0; i < 3; i++ {
+		g.Expect(r.aggregateAndWriteStatus(context.Background(), live.DeepCopy(), plan, target, false, nil)).To(gomega.Succeed())
+		next := &v1beta1.InferenceReplica{}
+		g.Expect(c.Get(context.Background(), key, next)).To(gomega.Succeed())
+		g.Expect(next.ResourceVersion).To(gomega.Equal(rv),
+			"paused reconcile %d must perform ZERO writes", i+2)
+		g.Expect(next.Status.RolloutHold.Since.Equal(&since)).To(gomega.BeTrue(),
+			"paused reconcile %d must not fabricate a fresh Since", i+2)
+		live = next
 	}
 }

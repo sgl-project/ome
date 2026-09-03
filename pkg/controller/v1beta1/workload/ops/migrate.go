@@ -662,7 +662,7 @@ func Migrate(ctx context.Context, deps workload.Deps, input workload.ReconcileIn
 		return false, accepted, nil
 	}
 	promotedSurge := *surge
-	promotedSurge.Phase = workload.InstancePhaseReady
+	markReadyTransition(&promotedSurge, input.Now())
 	promotedSurge.RunningRevision = surgeRev.Name
 	promotedSurge.TargetRevision = ""
 	promotedSurge.Operation = nil
@@ -935,7 +935,7 @@ func promoteMigrationSurge(
 	}
 	sourceGuard, sourceState := terminalIdentityGuard(input, source.Index, source)
 	surgeGuard, surgeState := terminalIdentityGuard(input, surge.Index, surge)
-	mutation := createStatusReadyOnRevisionMutation(surge.Index, targetRevision)
+	mutation := createStatusReadyOnRevisionMutation(surge.Index, targetRevision, input.Now())
 	promoted := false
 	mutation.BatchPrecondition = func(snapshot workload.InstanceMutationSnapshot) bool {
 		if !sourceGuard(snapshot) || !sourceState.matched ||

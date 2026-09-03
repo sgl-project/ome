@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -553,13 +554,16 @@ func testComponentRunnerPorts() map[v1beta1.ComponentType][]corev1.ContainerPort
 	}
 }
 
-func fakeClient() client.Client {
+func fakeClient(initObjs ...client.Object) client.Client {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
+		panic(err)
+	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
 		panic(err)
 	}
 	if err := v1beta1.AddToScheme(scheme); err != nil {
 		panic(err)
 	}
-	return fake.NewClientBuilder().WithScheme(scheme).Build()
+	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjs...).Build()
 }

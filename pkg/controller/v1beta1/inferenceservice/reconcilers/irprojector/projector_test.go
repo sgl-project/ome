@@ -207,6 +207,25 @@ func TestEnsureInferenceReplica_ProjectsPauseAnnotationAndClearsOnRemoval(t *tes
 	g.Expect(paused.Spec.Paused).To(gomega.BeTrue(),
 		"the controller-only IR must receive pause intent from its parent ISVC")
 
+	isvc.Annotations[constants.PausedRolloutAnnotation] = constants.PausedRolloutFreezeValue
+	_, err = EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	frozen := &v1beta1.InferenceReplica{}
+	g.Expect(c.Get(context.Background(), key, frozen)).To(gomega.Succeed())
+	g.Expect(frozen.Spec.Paused).To(gomega.BeTrue(),
+		"the freeze value must still project as paused")
+	g.Expect(frozen.Spec.PauseMode).To(gomega.Equal(v1beta1.PauseModeFreeze),
+		"the freeze value must project the full-stop depth")
+
+	isvc.Annotations[constants.PausedRolloutAnnotation] = "true"
+	_, err = EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	replain := &v1beta1.InferenceReplica{}
+	g.Expect(c.Get(context.Background(), key, replain)).To(gomega.Succeed())
+	g.Expect(replain.Spec.Paused).To(gomega.BeTrue())
+	g.Expect(replain.Spec.PauseMode).To(gomega.BeEmpty(),
+		"downgrading freeze to plain pause must clear the projected depth")
+
 	delete(isvc.Annotations, constants.PausedRolloutAnnotation)
 	_, err = EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -214,6 +233,7 @@ func TestEnsureInferenceReplica_ProjectsPauseAnnotationAndClearsOnRemoval(t *tes
 	g.Expect(c.Get(context.Background(), key, unpaused)).To(gomega.Succeed())
 	g.Expect(unpaused.Spec.Paused).To(gomega.BeFalse(),
 		"removing the parent annotation must clear the projected circuit breaker")
+	g.Expect(unpaused.Spec.PauseMode).To(gomega.BeEmpty())
 }
 
 // TestEnsureInferenceReplica_ProjectsRevisionHistoryLimit pins the

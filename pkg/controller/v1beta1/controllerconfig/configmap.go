@@ -25,14 +25,15 @@ import (
 )
 
 const (
-	IngressConfigKeyName          = "ingress"
-	DeployConfigName              = "deploy"
-	OmeAgentConfigName            = "omeAgent"
-	CanaryAnalysisConfigName      = "canaryAnalysis"
-	CoordinationConfigName        = "coordination"
-	PodMonitorConfigName          = "podMonitor"
-	LifecycleConfigName           = "lifecycle"
-	PodDisruptionBudgetConfigName = "podDisruptionBudget"
+	IngressConfigKeyName           = "ingress"
+	DeployConfigName               = "deploy"
+	OmeAgentConfigName             = "omeAgent"
+	CanaryAnalysisConfigName       = "canaryAnalysis"
+	CoordinationConfigName         = "coordination"
+	PodMonitorConfigName           = "podMonitor"
+	LifecycleConfigName            = "lifecycle"
+	PodDisruptionBudgetConfigName  = "podDisruptionBudget"
+	AcceleratorResourcesConfigName = "acceleratorResources"
 
 	DefaultDomainTemplate = "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"
 	DefaultIngressDomain  = "example.com"
@@ -65,6 +66,33 @@ type InferenceServicesConfig struct {
 	PodMonitor PodMonitorConfig `json:"podMonitor,omitempty"`
 	// PodDisruptionBudget carries per-deployment-mode disruption budget policy.
 	PodDisruptionBudget PodDisruptionBudgetConfig `json:"podDisruptionBudget,omitempty"`
+	// AcceleratorResources are the extended resource names OME recognizes as
+	// GPU/accelerator capacity when inspecting a container's resources (e.g.
+	// utils.IsGPUEnabled, isvcutils.GetGpuCountFromContainer). Exact names, no
+	// patterns — mirrors quota/capacity.Options.AcceleratorResources, e.g.
+	// "nvidia.com/gpu", "amd.com/gpu", "google.com/tpu".
+	//
+	// There is intentionally NO in-code default list — the value is supplied via
+	// the inferenceservice-config ConfigMap's "acceleratorResources" key (Helm
+	// chart / GitOps). Unlike quota/capacity (where empty disables derivation),
+	// empty/absent here does NOT disable accelerator recognition: these helpers
+	// existed before this field did and always recognized
+	// constants.NvidiaGPUResourceType, so silently switching to "recognize
+	// nothing" on upgrade would break every existing nvidia-only cluster.
+	// AcceleratorResourceNames applies that documented fallback and should be
+	// used instead of reading this field directly.
+	AcceleratorResources []string `json:"acceleratorResources,omitempty"`
+}
+
+// AcceleratorResourceNames returns the accelerator resource names OME
+// recognizes when inspecting a container's resources, applying the
+// unconfigured fallback documented on AcceleratorResources. Safe to call on a
+// nil receiver.
+func (c *InferenceServicesConfig) AcceleratorResourceNames() []string {
+	if c == nil || len(c.AcceleratorResources) == 0 {
+		return []string{constants.NvidiaGPUResourceType}
+	}
+	return c.AcceleratorResources
 }
 
 // PodDisruptionBudgetPolicy configures one deployment mode's availability
@@ -238,6 +266,16 @@ type DeployConfig struct {
 	// corresponding field as authored, never a silent fallback to baked-in
 	// numbers. Configured values must be > 0 (rejected at config-load).
 	Replicas *ReplicasDefaultsConfig `json:"replicas,omitempty"`
+	// TerminationGracePeriodSeconds is the admission-time pod termination
+	// grace the ISVC defaulter stamps on any component that does not author
+	// one. It bounds how long a component has to finish in-flight work after
+	// SIGTERM, so a serving component whose requests outlive the platform
+	// default loses them on every restart unless this is raised.
+	//
+	// Following Replicas above, there is no in-code default: nil means
+	// unconfigured and the component keeps whatever it authored. A configured
+	// value must be > 0 (rejected at config-load).
+	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 }
 
 // ReplicasDefaultsConfig is the admission-time replica-defaulting policy
@@ -923,6 +961,11 @@ func inferenceServicesConfigFromConfigMap(cm *v1.ConfigMap) (*InferenceServicesC
 			return nil, fmt.Errorf("unable to parse %q config json: %w", PodMonitorConfigName, err)
 		}
 	}
+	if data, ok := cm.Data[AcceleratorResourcesConfigName]; ok && strings.TrimSpace(data) != "" {
+		if err := json.Unmarshal([]byte(data), &cfg.AcceleratorResources); err != nil {
+			return nil, fmt.Errorf("unable to parse %q config json: %w", AcceleratorResourcesConfigName, err)
+		}
+	}
 	if data, ok := cm.Data[PodDisruptionBudgetConfigName]; ok && strings.TrimSpace(data) != "" {
 		if err := validatePodDisruptionBudgetJSONKeys([]byte(data)); err != nil {
 			return nil, fmt.Errorf("unable to parse %q config json: %w", PodDisruptionBudgetConfigName, err)
@@ -1232,6 +1275,10 @@ func parseDeployConfig(configMap *v1.ConfigMap) (*DeployConfig, error) {
 			if err := deployConfig.Replicas.validate(); err != nil {
 				return nil, err
 			}
+		}
+
+		if v := deployConfig.TerminationGracePeriodSeconds; v != nil && *v <= 0 {
+			return nil, fmt.Errorf("invalid deploy config, terminationGracePeriodSeconds must be > 0, got %d", *v)
 		}
 	}
 	return deployConfig, nil

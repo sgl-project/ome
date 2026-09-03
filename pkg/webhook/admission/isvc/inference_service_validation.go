@@ -120,6 +120,9 @@ func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldObj, 
 	if err := validation.ValidateCoordinationUpdate(&oldIsvc.Spec, &isvc.Spec); err != nil {
 		return nil, err
 	}
+	if err := validation.ValidatePairingProtocolUpdate(&oldIsvc.Spec, &isvc.Spec); err != nil {
+		return nil, err
+	}
 	// Ratchet: only a newly-set or changed scaling policy is validated,
 	// so a stored object carrying a rejected mode keeps accepting
 	// unrelated spec updates.

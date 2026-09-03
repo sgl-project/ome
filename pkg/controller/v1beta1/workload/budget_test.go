@@ -462,8 +462,8 @@ func TestReconcile_PerComponentMaxSurge_NilDefersToGroupGate(t *testing.T) {
 	}
 	// Per-Component RollingUpdate left nil (BudgetNoLimit). The group
 	// gate should be the only constraint.
-	in.UpdateGate = func(_ workload.UpdateStrategyType, _, _ int32) (bool, string) {
-		return false, "group gate denies"
+	in.UpdateGate = func(_ workload.UpdateStrategyType, _, _ int32) (bool, workload.RolloutHoldGate, string) {
+		return false, workload.RolloutHoldGateBudget, "group gate denies"
 	}
 	mutatedIndices := map[int32]int{}
 	in.MutateInstance = func(_ context.Context, idx int32, fn func(*workload.InstanceStatus) bool) error {
@@ -627,13 +627,13 @@ func TestReconcile_FailedRestart_RecreateBypassesCoordGate(t *testing.T) {
 	// 1 + delta + 1 = 2 > 1 and is denied — the double count under
 	// test.
 	var gateDeltas []int32
-	in.UpdateGate = func(_ workload.UpdateStrategyType, _, inFlightUnavail int32) (bool, string) {
+	in.UpdateGate = func(_ workload.UpdateStrategyType, _, inFlightUnavail int32) (bool, workload.RolloutHoldGate, string) {
 		gateDeltas = append(gateDeltas, inFlightUnavail)
 		const desired, serving, budget = 2, 1, 1
 		if desired-serving+inFlightUnavail+1 > budget {
-			return false, "unavailable budget exhausted"
+			return false, workload.RolloutHoldGateBudget, "unavailable budget exhausted"
 		}
-		return true, "within unavailable budget"
+		return true, "", "within unavailable budget"
 	}
 
 	plan := workload.ComponentPlan{

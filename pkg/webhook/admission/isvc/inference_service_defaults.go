@@ -93,26 +93,29 @@ func DefaultInferenceService(ctx context.Context, c client.Client, isvc *v1beta1
 	// inferenceservice-config ConfigMap). An unconfigured value disables
 	// defaulting of that field: the spec is stored as authored.
 	var replicas *controllerconfig.ReplicasDefaultsConfig
+	var gracePeriod *int64
 	if deployConfig != nil {
 		replicas = deployConfig.Replicas
+		gracePeriod = deployConfig.TerminationGracePeriodSeconds
 	}
 
 	if isvc.Spec.Engine != nil {
-		defaultEngine(isvc.Spec.Engine, resolvedMode, replicas)
+		defaultEngine(isvc.Spec.Engine, resolvedMode, replicas, gracePeriod)
 	}
 	if isvc.Spec.Decoder != nil {
-		defaultDecoder(isvc.Spec.Decoder, resolvedMode, replicas)
+		defaultDecoder(isvc.Spec.Decoder, resolvedMode, replicas, gracePeriod)
 	}
 	if isvc.Spec.Router != nil {
-		defaultRouter(isvc.Spec.Router, resolvedMode, replicas)
+		defaultRouter(isvc.Spec.Router, resolvedMode, replicas, gracePeriod)
 	}
 	// Rollout pacing/structure defaults are applied at runtime by the resolve
 	// layer (coordination.ResolveGroups), not at admission.
 	return nil
 }
 
-func defaultEngine(engine *v1beta1.EngineSpec, specMode *constants.DeploymentModeType, replicas *controllerconfig.ReplicasDefaultsConfig) {
+func defaultEngine(engine *v1beta1.EngineSpec, specMode *constants.DeploymentModeType, replicas *controllerconfig.ReplicasDefaultsConfig, gracePeriod *int64) {
 	defaultReplicaBounds(&engine.ComponentExtensionSpec, replicas.Min(), replicas.EngineMax())
+	defaultTerminationGracePeriod(&engine.PodSpec, gracePeriod)
 	defaultWorkerSize(engine.Leader, engine.Worker)
 	// A raw spec without a runner shape may inherit Leader/Worker from its
 	// runtime.
@@ -123,8 +126,9 @@ func defaultEngine(engine *v1beta1.EngineSpec, specMode *constants.DeploymentMod
 	defaultOMENativeComponent(&engine.ComponentExtensionSpec, shape, specMode)
 }
 
-func defaultDecoder(decoder *v1beta1.DecoderSpec, specMode *constants.DeploymentModeType, replicas *controllerconfig.ReplicasDefaultsConfig) {
+func defaultDecoder(decoder *v1beta1.DecoderSpec, specMode *constants.DeploymentModeType, replicas *controllerconfig.ReplicasDefaultsConfig, gracePeriod *int64) {
 	defaultReplicaBounds(&decoder.ComponentExtensionSpec, replicas.Min(), replicas.DecoderMax())
+	defaultTerminationGracePeriod(&decoder.PodSpec, gracePeriod)
 	defaultWorkerSize(decoder.Leader, decoder.Worker)
 	// A raw spec without a runner shape may inherit Leader/Worker from its
 	// runtime.
@@ -163,6 +167,21 @@ func defaultedMaxReplicas(configuredDefault int, minReplicas *int) int {
 	return configuredDefault
 }
 
+// defaultTerminationGracePeriod fills an unset component
+// terminationGracePeriodSeconds from the configured admission default. A nil
+// default leaves the field as authored, and an authored value always wins, so
+// a component that needs a longer drain than the cluster default can keep it.
+func defaultTerminationGracePeriod(podSpec *v1beta1.PodSpec, defaultSeconds *int64) {
+	if podSpec == nil || defaultSeconds == nil {
+		return
+	}
+	if podSpec.TerminationGracePeriodSeconds != nil {
+		return
+	}
+	seconds := *defaultSeconds
+	podSpec.TerminationGracePeriodSeconds = &seconds
+}
+
 // defaultWorkerSize sets Worker.Size=1 only for a declared Leader+Worker pair.
 // Explicit sizes and one-sided shapes are preserved for validation.
 func defaultWorkerSize(leader *v1beta1.LeaderSpec, worker *v1beta1.WorkerSpec) {
@@ -176,8 +195,9 @@ func defaultWorkerSize(leader *v1beta1.LeaderSpec, worker *v1beta1.WorkerSpec) {
 	worker.Size = &size
 }
 
-func defaultRouter(router *v1beta1.RouterSpec, specMode *constants.DeploymentModeType, replicas *controllerconfig.ReplicasDefaultsConfig) {
+func defaultRouter(router *v1beta1.RouterSpec, specMode *constants.DeploymentModeType, replicas *controllerconfig.ReplicasDefaultsConfig, gracePeriod *int64) {
 	defaultReplicaBounds(&router.ComponentExtensionSpec, replicas.Min(), replicas.RouterMax())
+	defaultTerminationGracePeriod(&router.PodSpec, gracePeriod)
 	// Router has no Leader/Worker; always single-pod.
 	defaultOMENativeComponent(&router.ComponentExtensionSpec, podShapeSingle, specMode)
 }

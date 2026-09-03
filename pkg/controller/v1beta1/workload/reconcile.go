@@ -56,24 +56,28 @@ const ratioGateRequeueInterval = 3 * time.Second
 //  1. Scale-down — DeleteBatch for any InstanceStatus index the plan no
 //     longer asks for. Completes before scale-up so excess pods don't
 //     run alongside in-flight drains.
-//  2. Restart — per-Instance pod-loss / pod-Failed triggers; dispatched
+//  2. Truth — status-only demotion of Ready Instances with no live pods
+//     and no in-flight operation, where no op pass will act. Selected
+//     only on paused reconciles (every depth — unpaused, Create both
+//     recovers and re-stamps the phase); never touches a pod.
+//  3. Restart — per-Instance pod-loss / pod-Failed triggers; dispatched
 //     when the Component's restart policy allows it. One pass per
 //     reconcile.
-//  3. Migration expiry — Manual records past their Deadline are
+//  4. Migration expiry — Manual records past their Deadline are
 //     consumed (ops.ExpireMigrations): record closed, pair unpinned,
 //     source restored from observation. Runs BEFORE the drive pass so
 //     an expired record can never be driven (re-stamped) again, and
 //     regardless of MigrationMode so a mode flip to Never cannot
 //     strand a non-terminal record.
-//  4. Migration — the oldest non-terminal Manual record from
+//  5. Migration — the oldest non-terminal Manual record from
 //     ObservedState.Migrations drives Migrate, one per pass. Returns
 //     Requeue=true after completion so the next reconcile rebuilds
 //     plan from the post-migration status.
-//  5. Update — DetectUpdateTrigger then Update. Tracks within-pass
+//  6. Update — DetectUpdateTrigger then Update. Tracks within-pass
 //     in-flight counters and consults input.UpdateGate so
 //     cross-Component coordination can throttle the rollout.
-//  6. Create — materialize any missing Instances.
-//  7. Escalation — the terminal-failure pass (escalation.go): stuck-pod
+//  7. Create — materialize any missing Instances.
+//  8. Escalation — the terminal-failure pass (escalation.go): stuck-pod
 //     and elapsed-deadline evidence from the snapshot decides the
 //     Phase=Failed transition through the disposition classification.
 //     Runs after eligible non-error op-pass returns. A scale-down admission
@@ -155,7 +159,7 @@ func Execute(ctx context.Context, deps Deps, input ReconcileInput, plan Componen
 	return res, nil
 }
 
-// executeActions runs the op-pass pipeline (steps 1-6 of the chain documented
+// executeActions runs the op-pass pipeline (steps 1-7 of the chain documented
 // on Reconcile) for the Decision's selected actions, in order. The bool result
 // marks a scale-down status-commit boundary. Other early returns preserve the
 // existing end-of-pass escalation and pruning behavior.
@@ -175,7 +179,14 @@ func executeActions(ctx context.Context, deps Deps, input ReconcileInput, plan C
 				return scaleDownPollResult(input, outcome.RequeueAfter, outcome.PolicyDeadlineDue), false, nil
 			}
 
-		// 2. Per-Instance restart pass.
+		// 2. Truth pass: status-only, never a scheduling or lifecycle
+		// effect — apply and continue the pipeline.
+		case ActionDemote:
+			if derr := workloadops.DemoteUnbackedInstances(ctx, deps, input, plan, action.Demotions); derr != nil {
+				return ctrl.Result{}, false, derr
+			}
+
+		// 3. Per-Instance restart pass.
 		case ActionRestart:
 			anyRestarting := false
 			for _, sel := range action.Restarts {
@@ -191,7 +202,7 @@ func executeActions(ctx context.Context, deps Deps, input ReconcileInput, plan C
 				return ctrl.Result{RequeueAfter: workloadops.RestartRequeueInterval}, false, nil
 			}
 
-		// 3. Migration expiry pass. When anything expired, requeue
+		// 4. Migration expiry pass. When anything expired, requeue
 		// immediately: ObservedState and plan are now stale (record
 		// terminal, pair ops cleared), and the next pass's rebuilt plan
 		// drops the unpinned surge index so the ordinary step-1 Delete
@@ -316,6 +327,11 @@ func scaleDownExtras(d Decision) map[int32]struct{} {
 func executeUpdatePass(ctx context.Context, deps Deps, input ReconcileInput, plan ComponentPlan, target *appsv1.ControllerRevision, snapshot *ObservedSnapshot, sel *UpdateSelection, retryBlockWait time.Duration) (res ctrl.Result, stop bool, err error) {
 	anyUpdating := false
 	anyGated := false
+	// hold records the first StartingFresh denial this pass (Budget or
+	// UpdateGate) for RecordRolloutHold — one Component has one hold
+	// slot, so the first denial found (plan order) wins, matching the
+	// gate stack's own first-denial-wins precedence.
+	var hold *RolloutHold
 	// anyUpdateRan tracks whether ANY Update call fired this wake-up
 	// — including ones that returned done=true (e.g., a surge that
 	// just promoted Phase to Ready and stamped RunningRevision). Even
@@ -397,6 +413,13 @@ func executeUpdatePass(ctx context.Context, deps Deps, input ReconcileInput, pla
 					projected := sel.PriorSurgeInFlight + inFlightSurge + 1
 					if projected > sel.SurgeBudget {
 						anyGated = true
+						if hold == nil {
+							hold = &RolloutHold{
+								Gate:   RolloutHoldGateBudget,
+								Reason: fmt.Sprintf("per-Component surge budget %d exhausted (would become %d)", sel.SurgeBudget, projected),
+								Target: target.Name,
+							}
+						}
 						continue
 					}
 				}
@@ -405,6 +428,13 @@ func executeUpdatePass(ctx context.Context, deps Deps, input ReconcileInput, pla
 					projected := sel.PriorUnavailInFlight + inFlightUnavail + 1
 					if projected > sel.UnavailBudget {
 						anyGated = true
+						if hold == nil {
+							hold = &RolloutHold{
+								Gate:   RolloutHoldGateBudget,
+								Reason: fmt.Sprintf("per-Component unavailability budget %d exhausted (would become %d)", sel.UnavailBudget, projected),
+								Target: target.Name,
+							}
+						}
 						continue
 					}
 				}
@@ -418,8 +448,11 @@ func executeUpdatePass(ctx context.Context, deps Deps, input ReconcileInput, pla
 				// unavailability, so gating their own recreate is a
 				// double count that starves the recovery (see
 				// UpdateItem.CoordGateExempt).
-				if allowed, _ := input.UpdateGate(sel.Strategy, inFlightSurge, gateUnavail); !allowed {
+				if allowed, gate, reason := input.UpdateGate(sel.Strategy, inFlightSurge, gateUnavail); !allowed {
 					anyGated = true
+					if hold == nil {
+						hold = &RolloutHold{Gate: gate, Reason: reason, Target: target.Name}
+					}
 					continue
 				}
 			}
@@ -444,6 +477,17 @@ func executeUpdatePass(ctx context.Context, deps Deps, input ReconcileInput, pla
 		if !done {
 			anyUpdating = true
 		}
+	}
+	if anyUpdateRan {
+		// Forward progress this pass: whatever was gated for a DIFFERENT
+		// Instance is superseded — the Component is not stuck, it will
+		// re-observe fresh state (including any still-active gate) next
+		// pass. Clearing here is also what lets a resolved hold disappear
+		// promptly instead of lingering until the next denial-free pass.
+		hold = nil
+	}
+	if input.RecordRolloutHold != nil {
+		input.RecordRolloutHold(hold)
 	}
 	if anyUpdating || anyGated || anyUpdateRan {
 		// About to requeue without the full Create pass. Brand-new

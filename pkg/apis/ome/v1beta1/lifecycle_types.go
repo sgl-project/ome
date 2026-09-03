@@ -74,11 +74,77 @@ type LifecycleStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
+	// RolloutHold reports the most recent reason this Component's rollout
+	// did not advance, mirrored verbatim from the owning InferenceReplica's
+	// status. Nil while the Component is progressing or has no rollout in
+	// flight.
+	// +optional
+	RolloutHold *RolloutHold `json:"rolloutHold,omitempty"`
+
 	// NOTE: per-Instance detail (InstanceStatuses) is intentionally NOT
 	// mirrored here. The authoritative source of truth is the owning
 	// InferenceReplica's status; the ISVC carries only this aggregated
 	// summary. In-cluster consumers read the IR directly via
 	// irprojector.ComponentIRStatus.
+}
+
+// RolloutHoldGate names the layer that most recently denied a
+// per-Instance Update for a Component.
+// +kubebuilder:validation:Enum=Pairing;Ratio;Sequential;Budget;RetryBlock;Held
+type RolloutHoldGate string
+
+const (
+	// RolloutHoldGatePairing: the P/D pair-floor refused the step because it
+	// would leave no pairable serving engine+decoder pair during a
+	// pairing-protocol transition (coordination.CheckPairing).
+	RolloutHoldGatePairing RolloutHoldGate = "Pairing"
+	// RolloutHoldGateRatio: cross-Component RatioBalanced coordination
+	// refused the surge because it would skew the observed ratio past
+	// tolerance (coordination.CheckRatio).
+	RolloutHoldGateRatio RolloutHoldGate = "Ratio"
+	// RolloutHoldGateSequential: cross-Component Sequential coordination is
+	// waiting on a different Component's turn, or on the inter-Component
+	// soak window (coordination.CheckSequential).
+	RolloutHoldGateSequential RolloutHoldGate = "Sequential"
+	// RolloutHoldGateBudget: a surge or unavailability budget is
+	// exhausted — either the per-Component cap or the cross-Component
+	// MaxSurge/MaxUnavailable cap (coordination.CheckSurge /
+	// CheckUnavailability).
+	RolloutHoldGateBudget RolloutHoldGate = "Budget"
+	// RolloutHoldGateRetryBlock: a same-target RetryBlock is in Backoff,
+	// waiting for its NextRetryAt.
+	RolloutHoldGateRetryBlock RolloutHoldGate = "RetryBlock"
+	// RolloutHoldGateHeld: a same-target RetryBlock is Held — retry
+	// attempts are exhausted; only a new target revision releases it.
+	RolloutHoldGateHeld RolloutHoldGate = "Held"
+)
+
+// RolloutHold records the most recent reason a per-Instance Update was
+// denied for a Component — the detail behind "why has this rollout not
+// moved". Overwritten whenever a reconcile observes a fresh denial;
+// cleared once the Component's rollout advances (an Update is admitted)
+// or completes (CurrentRevision == UpdateRevision, or no rollout is in
+// flight). Since is preserved across reconciles that keep reporting the
+// same Gate and Target, so it anchors "held since" rather than "last
+// observed at".
+type RolloutHold struct {
+	// Gate names the layer that produced Reason.
+	Gate RolloutHoldGate `json:"gate"`
+
+	// Reason is the operator-facing denial string from the gate that
+	// produced it (e.g. "Sequential waiting on decoder").
+	Reason string `json:"reason"`
+
+	// Target is the ControllerRevision name the held Update was aimed at.
+	// +optional
+	Target string `json:"target,omitempty"`
+
+	// Since is when this Gate+Target combination was first observed
+	// without interruption. A change in Gate or Target restarts the
+	// clock; a change in Reason text alone does not (mirrors how
+	// apimeta.SetStatusCondition preserves LastTransitionTime while a
+	// condition's Status is unchanged).
+	Since metav1.Time `json:"since"`
 }
 
 // OMENativeInstancePhase is the lifecycle phase of an OMENative Instance.
@@ -166,6 +232,12 @@ type OMENativeInstanceStatus struct {
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// ReadySince is when the Instance last entered Ready. Anchors
+	// post-Ready failure detection: container restarts that finished
+	// before this time belong to boot and never trigger a recreate.
+	// +optional
+	ReadySince *metav1.Time `json:"readySince,omitempty"`
 
 	// Operation is the durable record of an in-flight destructive action
 	// against this Instance. Set before the action starts, cleared after

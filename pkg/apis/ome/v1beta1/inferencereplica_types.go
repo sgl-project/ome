@@ -91,6 +91,31 @@ type InferenceReplicaSpec struct {
 	// +optional
 	TopologyKey *string `json:"topologyKey,omitempty"`
 
+	// TopologySpread is the resolved spreading policy for this
+	// Component, projected verbatim from the effective ISVC↔runtime
+	// component spec. The InferenceReplica controller renders it as a
+	// topologySpreadConstraint on each Instance's anchor pod; nil keeps
+	// pure bin-packing.
+	// +optional
+	// +kubebuilder:validation:Enum=Preferred;Required
+	TopologySpread *TopologySpreadPolicy `json:"topologySpread,omitempty"`
+
+	// TopologySpreadKey is the resolved fault-domain node-label key
+	// TopologySpread spreads across; nil defaults to TopologyKey.
+	// +optional
+	TopologySpreadKey *string `json:"topologySpreadKey,omitempty"`
+
+	// PairingProtocol is the engine↔decoder wire-compatibility token projected
+	// from spec.rollout.pairingProtocol on the parent InferenceService. It is
+	// folded into the revision hash (a change mints a new revision) and stamped
+	// as the ome.io/pairing-protocol label on rendered pods. Projected only
+	// onto engine and decoder — the router does not participate in P/D pairing
+	// and must not re-roll on a protocol change. Nil pairs with anything.
+	// +optional
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$`
+	PairingProtocol *string `json:"pairingProtocol,omitempty"`
+
 	// Runners is the fully-rendered set of pod templates per Instance.
 	// MUST be non-empty. Single-pod Instances have one Runner with
 	// Name="default" and Size=1; multi-node Instances typically have
@@ -133,10 +158,28 @@ type InferenceReplicaSpec struct {
 	Autoscaler *ComponentAutoscaler `json:"autoscaler,omitempty"`
 
 	// Paused, when true, stops the InferenceReplica controller from
-	// initiating any new Update / Restart / Create operations.
-	// In-flight operations resume on unpause.
+	// initiating fleet changes: Update, Create, and Migration
+	// operations are neither started nor advanced. The component's
+	// RestartPolicy keeps repairing existing Instances at their current
+	// revision unless PauseMode is Freeze. In-flight operations resume
+	// on unpause.
 	// +optional
 	Paused bool `json:"paused,omitempty"`
+
+	// PauseMode selects how much of the lifecycle Paused suspends.
+	// Only meaningful while Paused is true.
+	//   - "Recover" (default when empty): fleet changes are suspended;
+	//     the RestartPolicy continues to repair existing Instances at
+	//     the revision they already run.
+	//   - "Freeze": every lifecycle operation is suspended, including
+	//     Instance repair. Only kubelet-level container restarts and
+	//     deliberate replica reduction (scale-down) remain active.
+	// Status stays truthful in every depth: a Ready Instance whose pods
+	// are all gone (and whose RestartPolicy will not repair it) is
+	// demoted to Pending without running any recovery operation.
+	// +optional
+	// +kubebuilder:validation:Enum=Recover;Freeze
+	PauseMode PauseMode `json:"pauseMode,omitempty"`
 
 	// RevisionHistoryLimit caps how many non-live ControllerRevisions
 	// the InferenceReplica controller retains for this replica,
@@ -160,6 +203,18 @@ type ParentReference struct {
 	// Name is the name of the parent InferenceService.
 	Name string `json:"name"`
 }
+
+// PauseMode is the enum of pause depths for InferenceReplicaSpec.Paused.
+type PauseMode string
+
+const (
+	// PauseModeRecover suspends fleet changes while the RestartPolicy
+	// keeps repairing existing Instances at their current revision.
+	PauseModeRecover PauseMode = "Recover"
+	// PauseModeFreeze suspends every lifecycle operation, including
+	// Instance repair.
+	PauseModeFreeze PauseMode = "Freeze"
+)
 
 // RunnerName is the enum of recognized Runner roles within an
 // Instance. Matches the established Runner vocabulary so existing
@@ -353,6 +408,14 @@ type InferenceReplicaStatus struct {
 	// child without parsing the ISVC spec.
 	// +optional
 	CoordinationGroupRef string `json:"coordinationGroupRef,omitempty"`
+
+	// RolloutHold records the most recent reason a per-Instance Update was
+	// denied for this Component — cross-Component coordination (Ratio,
+	// Sequential), a surge/unavailability budget, or a same-target retry
+	// hold (RetryBlock, Held). Nil while the Component is progressing or
+	// has no rollout in flight. See RolloutHold for the field semantics.
+	// +optional
+	RolloutHold *RolloutHold `json:"rolloutHold,omitempty"`
 }
 
 // RetryBlockState is the retry authority state for one target revision.

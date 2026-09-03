@@ -354,6 +354,35 @@ func TestCheckSequentialGate_SoakHoldsActiveComponent(t *testing.T) {
 	}
 }
 
+// TestCheckSequentialGate_SoakReasonStableAcrossElapsedTime pins that the
+// soak denial message carries only stable facts (component + configured
+// duration), not a live elapsed/remaining countdown: two consults against
+// the identical fixture, spaced apart in real wall-clock time (so
+// time.Since(decoderReady) genuinely differs between them), must return
+// byte-identical reason strings. A caller persisting this string into
+// status.rolloutHold.reason relies on that stability to avoid rewriting
+// status (and resetting rolloutHold.since) on every reconcile for the
+// entire soak window.
+func TestCheckSequentialGate_SoakReasonStableAcrossElapsedTime(t *testing.T) {
+	const soak = 15 * time.Second
+	isvc := mkSequentialFixture("seq-isvc", soak)
+	setComponentRevisions(isvc, v1beta1.DecoderComponent, "rev2", "rev2")
+	setComponentRevisions(isvc, v1beta1.EngineComponent, "rev1", "rev2")
+	setComponentReadyAt(isvc, v1beta1.DecoderComponent, time.Now())
+	client := fakeClientForSeqISVC(isvc)
+
+	allowed1, reason1 := CheckSequentialGate(context.Background(), client, isvc, v1beta1.EngineComponent)
+	time.Sleep(50 * time.Millisecond)
+	allowed2, reason2 := CheckSequentialGate(context.Background(), client, isvc, v1beta1.EngineComponent)
+
+	if allowed1 || allowed2 {
+		t.Fatalf("both consults must stay denied within the soak window: allowed1=%v allowed2=%v", allowed1, allowed2)
+	}
+	if reason1 != reason2 {
+		t.Errorf("soak denial reason must be stable across elapsed time (no live countdown): first=%q second=%q", reason1, reason2)
+	}
+}
+
 func TestCheckSequentialGate_SoakReleasesAfterDuration(t *testing.T) {
 	// Same shape as the hold case but decoder's Ready transition
 	// is well past the soak window — gate allows.

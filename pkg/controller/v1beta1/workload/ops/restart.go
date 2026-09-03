@@ -10,6 +10,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/drain"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
@@ -91,6 +92,9 @@ func DetectRestartTriggerWithPods(input workload.ReconcileInput, plan workload.C
 	}
 
 	for _, pod := range instancePods {
+		if reason, restarted := runnerRestartedSinceReady(pod, s.ReadySince); restarted {
+			return true, reason
+		}
 		if pod.Status.Phase == corev1.PodFailed {
 			// Build a richer reason from the failed pod's container
 			// termination so the RestartTriggered event names the actual
@@ -509,4 +513,37 @@ func revisionHashForInstance(input workload.ReconcileInput, idx int32) string {
 		return query.RevisionFromName(s.TargetRevision).Hash()
 	}
 	return ""
+}
+
+// runnerRestartedSinceReady reports whether pod's runner container carries
+// restart evidence dated after readySince: a current run that began after the
+// Instance entered Ready, or a termination that finished after it. Either
+// proves the process group formed at Ready has lost this member's original
+// process, even though kubelet's in-place restart left the Pod Running under
+// the same UID. Sidecar and init containers never count — kubelet's in-place
+// restart is their recovery path and does not break the Instance's process
+// group. A nil readySince (Instance was last promoted before the field
+// existed) reports false; the anchor appears on the next Ready transition.
+func runnerRestartedSinceReady(pod *corev1.Pod, readySince *metav1.Time) (string, bool) {
+	if pod == nil || readySince == nil || readySince.IsZero() || pod.DeletionTimestamp != nil {
+		return "", false
+	}
+	for i := range pod.Status.ContainerStatuses {
+		cs := &pod.Status.ContainerStatuses[i]
+		if cs.Name != constants.MainContainerName {
+			continue
+		}
+		if t := cs.LastTerminationState.Terminated; t != nil && t.FinishedAt.After(readySince.Time) {
+			reason := t.Reason
+			if reason == "" {
+				reason = "Error"
+			}
+			return fmt.Sprintf("pod %s container %s restarted after Ready: %s (exit %d)",
+				pod.Name, cs.Name, reason, t.ExitCode), true
+		}
+		if r := cs.State.Running; r != nil && r.StartedAt.After(readySince.Time) {
+			return fmt.Sprintf("pod %s container %s restarted after Ready", pod.Name, cs.Name), true
+		}
+	}
+	return "", false
 }

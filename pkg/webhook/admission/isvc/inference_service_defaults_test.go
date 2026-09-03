@@ -328,7 +328,7 @@ func TestDefaultComponents(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				defaultEngine(tt.engine, nil, testReplicaDefaults())
+				defaultEngine(tt.engine, nil, testReplicaDefaults(), nil)
 				require.NotNil(t, tt.engine.MinReplicas)
 				assert.Equal(t, tt.wantMinReplicas, *tt.engine.MinReplicas)
 				assert.Equal(t, tt.wantMaxReplicas, tt.engine.MaxReplicas)
@@ -385,7 +385,7 @@ func TestDefaultComponents(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				defaultDecoder(tt.decoder, nil, testReplicaDefaults())
+				defaultDecoder(tt.decoder, nil, testReplicaDefaults(), nil)
 				require.NotNil(t, tt.decoder.MinReplicas)
 				assert.Equal(t, tt.wantMinReplicas, *tt.decoder.MinReplicas)
 				assert.Equal(t, tt.wantMaxReplicas, tt.decoder.MaxReplicas)
@@ -442,7 +442,7 @@ func TestDefaultComponents(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				defaultRouter(tt.router, nil, testReplicaDefaults())
+				defaultRouter(tt.router, nil, testReplicaDefaults(), nil)
 				require.NotNil(t, tt.router.MinReplicas)
 				assert.Equal(t, tt.wantMinReplicas, *tt.router.MinReplicas)
 				assert.Equal(t, tt.wantMaxReplicas, tt.router.MaxReplicas)
@@ -458,21 +458,21 @@ func TestDefaultComponents(t *testing.T) {
 func TestDefaultComponents_UnconfiguredReplicaDefaults(t *testing.T) {
 	t.Run("nil config leaves replica bounds as authored", func(t *testing.T) {
 		engine := &v1beta1.EngineSpec{}
-		defaultEngine(engine, nil, nil)
+		defaultEngine(engine, nil, nil, nil)
 		assert.Nil(t, engine.MinReplicas)
 		assert.Zero(t, engine.MaxReplicas)
 
 		decoder := &v1beta1.DecoderSpec{
 			ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: intPtr(5)},
 		}
-		defaultDecoder(decoder, nil, nil)
+		defaultDecoder(decoder, nil, nil, nil)
 		assert.Equal(t, 5, *decoder.MinReplicas)
 		assert.Zero(t, decoder.MaxReplicas)
 
 		router := &v1beta1.RouterSpec{
 			ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: intPtr(2), MaxReplicas: 4},
 		}
-		defaultRouter(router, nil, nil)
+		defaultRouter(router, nil, nil, nil)
 		assert.Equal(t, 2, *router.MinReplicas)
 		assert.Equal(t, 4, router.MaxReplicas)
 	})
@@ -481,7 +481,7 @@ func TestDefaultComponents_UnconfiguredReplicaDefaults(t *testing.T) {
 		// Only the min default configured: max stays unset.
 		minOnly := &controllerconfig.ReplicasDefaultsConfig{DefaultMinReplicas: intPtr(1)}
 		engine := &v1beta1.EngineSpec{}
-		defaultEngine(engine, nil, minOnly)
+		defaultEngine(engine, nil, minOnly, nil)
 		assert.Equal(t, 1, *engine.MinReplicas)
 		assert.Zero(t, engine.MaxReplicas)
 
@@ -493,14 +493,68 @@ func TestDefaultComponents_UnconfiguredReplicaDefaults(t *testing.T) {
 		clamped := &v1beta1.EngineSpec{
 			ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: intPtr(5)},
 		}
-		defaultEngine(clamped, nil, maxOnly)
+		defaultEngine(clamped, nil, maxOnly, nil)
 		assert.Equal(t, 5, *clamped.MinReplicas)
 		assert.Equal(t, 5, clamped.MaxReplicas)
 
 		unset := &v1beta1.EngineSpec{}
-		defaultEngine(unset, nil, maxOnly)
+		defaultEngine(unset, nil, maxOnly, nil)
 		assert.Nil(t, unset.MinReplicas)
 		assert.Equal(t, 3, unset.MaxReplicas)
+	})
+}
+
+func TestDefaultComponents_TerminationGracePeriod(t *testing.T) {
+	t.Run("unconfigured leaves the field as authored", func(t *testing.T) {
+		engine := &v1beta1.EngineSpec{}
+		defaultEngine(engine, nil, nil, nil)
+		assert.Nil(t, engine.TerminationGracePeriodSeconds)
+
+		authored := int64(45)
+		router := &v1beta1.RouterSpec{
+			PodSpec: v1beta1.PodSpec{TerminationGracePeriodSeconds: &authored},
+		}
+		defaultRouter(router, nil, nil, nil)
+		assert.Equal(t, int64(45), *router.TerminationGracePeriodSeconds)
+	})
+
+	t.Run("configured default fills every component", func(t *testing.T) {
+		grace := int64(600)
+
+		engine := &v1beta1.EngineSpec{}
+		defaultEngine(engine, nil, nil, &grace)
+		require.NotNil(t, engine.TerminationGracePeriodSeconds)
+		assert.Equal(t, int64(600), *engine.TerminationGracePeriodSeconds)
+
+		decoder := &v1beta1.DecoderSpec{}
+		defaultDecoder(decoder, nil, nil, &grace)
+		require.NotNil(t, decoder.TerminationGracePeriodSeconds)
+		assert.Equal(t, int64(600), *decoder.TerminationGracePeriodSeconds)
+
+		router := &v1beta1.RouterSpec{}
+		defaultRouter(router, nil, nil, &grace)
+		require.NotNil(t, router.TerminationGracePeriodSeconds)
+		assert.Equal(t, int64(600), *router.TerminationGracePeriodSeconds)
+	})
+
+	t.Run("authored value wins over the configured default", func(t *testing.T) {
+		grace := int64(600)
+		authored := int64(1800)
+		engine := &v1beta1.EngineSpec{
+			PodSpec: v1beta1.PodSpec{TerminationGracePeriodSeconds: &authored},
+		}
+		defaultEngine(engine, nil, nil, &grace)
+		assert.Equal(t, int64(1800), *engine.TerminationGracePeriodSeconds)
+	})
+
+	t.Run("stamped value is a copy, not the shared config pointer", func(t *testing.T) {
+		grace := int64(600)
+		engine := &v1beta1.EngineSpec{}
+		router := &v1beta1.RouterSpec{}
+		defaultEngine(engine, nil, nil, &grace)
+		defaultRouter(router, nil, nil, &grace)
+		assert.NotSame(t, &grace, engine.TerminationGracePeriodSeconds)
+		assert.NotSame(t, engine.TerminationGracePeriodSeconds, router.TerminationGracePeriodSeconds)
 	})
 }
 
@@ -528,14 +582,14 @@ func TestDefaultOMENativeEngineAndDecoder_DeferPoliciesWhenRunnerShapeIsUnresolv
 
 	t.Run("Engine", func(t *testing.T) {
 		engine := &v1beta1.EngineSpec{}
-		defaultEngine(engine, &mode, testReplicaDefaults())
+		defaultEngine(engine, &mode, testReplicaDefaults(), nil)
 
 		assertUnresolvedShapePolicies(t, engine.Lifecycle)
 	})
 
 	t.Run("Decoder", func(t *testing.T) {
 		decoder := &v1beta1.DecoderSpec{}
-		defaultDecoder(decoder, &mode, testReplicaDefaults())
+		defaultDecoder(decoder, &mode, testReplicaDefaults(), nil)
 
 		assertUnresolvedShapePolicies(t, decoder.Lifecycle)
 	})
@@ -765,7 +819,7 @@ func TestDefaultEngine_OMENativeAnnotationTriggersDefaults(t *testing.T) {
 		Leader: &v1beta1.LeaderSpec{},
 		Worker: &v1beta1.WorkerSpec{Size: func() *int { v := 3; return &v }()},
 	}
-	defaultEngine(engine, nil, nil)
+	defaultEngine(engine, nil, nil, nil)
 	require.NotNil(t, engine.Lifecycle)
 	require.NotNil(t, engine.Lifecycle.RestartPolicy)
 	assert.Equal(t, v1beta1.InstanceRestartPolicyRecreateInstance, *engine.Lifecycle.RestartPolicy)
@@ -777,7 +831,7 @@ func TestDefaultRouter_OMENativeAlwaysSinglePod(t *testing.T) {
 			Annotations: map[string]string{constants.DeploymentMode: string(constants.OMENative)},
 		},
 	}
-	defaultRouter(router, nil, nil)
+	defaultRouter(router, nil, nil, nil)
 	require.NotNil(t, router.Lifecycle)
 	require.NotNil(t, router.Lifecycle.RestartPolicy)
 	assert.Equal(t, v1beta1.InstanceRestartPolicyNone, *router.Lifecycle.RestartPolicy)
@@ -851,7 +905,7 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 			Leader: &v1beta1.LeaderSpec{},
 			Worker: &v1beta1.WorkerSpec{},
 		}
-		defaultEngine(engine, nil, nil)
+		defaultEngine(engine, nil, nil, nil)
 		require.NotNil(t, engine.Worker.Size)
 		assert.Equal(t, 1, *engine.Worker.Size)
 		// downstream multi-pod detection should kick in:
@@ -867,7 +921,7 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 			Leader: &v1beta1.LeaderSpec{},
 			Worker: &v1beta1.WorkerSpec{Size: intPtr(3)},
 		}
-		defaultEngine(engine, nil, nil)
+		defaultEngine(engine, nil, nil, nil)
 		require.NotNil(t, engine.Worker.Size)
 		assert.Equal(t, 3, *engine.Worker.Size)
 	})
@@ -880,7 +934,7 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 			Leader: &v1beta1.LeaderSpec{},
 			Worker: &v1beta1.WorkerSpec{Size: intPtr(0)},
 		}
-		defaultEngine(engine, nil, nil)
+		defaultEngine(engine, nil, nil, nil)
 		require.NotNil(t, engine.Worker.Size)
 		assert.Equal(t, 0, *engine.Worker.Size)
 	})
@@ -890,7 +944,7 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 		// defaulter handles. The validator catches it with
 		// LeaderRequiresWorker.
 		engine := &v1beta1.EngineSpec{Leader: &v1beta1.LeaderSpec{}}
-		defaultEngine(engine, nil, nil)
+		defaultEngine(engine, nil, nil, nil)
 		assert.Nil(t, engine.Worker)
 	})
 
@@ -900,7 +954,7 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 		// WorkerRequiresLeader; the malformed Size remains for the
 		// error message to surface.
 		engine := &v1beta1.EngineSpec{Worker: &v1beta1.WorkerSpec{}}
-		defaultEngine(engine, nil, nil)
+		defaultEngine(engine, nil, nil, nil)
 		assert.Nil(t, engine.Worker.Size)
 	})
 
@@ -912,7 +966,7 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 			Leader: &v1beta1.LeaderSpec{},
 			Worker: &v1beta1.WorkerSpec{},
 		}
-		defaultDecoder(decoder, nil, nil)
+		defaultDecoder(decoder, nil, nil, nil)
 		require.NotNil(t, decoder.Worker.Size)
 		assert.Equal(t, 1, *decoder.Worker.Size)
 		require.NotNil(t, decoder.Lifecycle)
@@ -924,7 +978,7 @@ func TestDefaultWorkerSize_MultiPodWithoutSize(t *testing.T) {
 
 	t.Run("single-pod engine — Worker field unset, no panic", func(t *testing.T) {
 		engine := &v1beta1.EngineSpec{}
-		defaultEngine(engine, nil, nil)
+		defaultEngine(engine, nil, nil, nil)
 		assert.Nil(t, engine.Worker)
 		assert.Nil(t, engine.Leader)
 	})

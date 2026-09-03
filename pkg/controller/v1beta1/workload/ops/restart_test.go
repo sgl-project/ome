@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/ops"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
@@ -776,5 +777,138 @@ func TestDetectRestartTrigger_MigratingPhaseWithoutOperation(t *testing.T) {
 
 	if needs, reason := ops.DetectRestartTriggerWithPods(input, plan, inst, gangLossPods(1)); needs {
 		t.Fatalf("a migrating Instance must not be recreated; got reason %q", reason)
+	}
+}
+
+// runnerStatus builds the runner container status for post-Ready restart
+// scenarios: startedAt is the current run's start; terminated, when
+// non-nil, is the previous run's termination record.
+func runnerStatus(name string, startedAt time.Time, terminated *corev1.ContainerStateTerminated) corev1.ContainerStatus {
+	cs := corev1.ContainerStatus{
+		Name:         name,
+		RestartCount: 0,
+		State: corev1.ContainerState{
+			Running: &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(startedAt)},
+		},
+	}
+	if terminated != nil {
+		cs.RestartCount = 1
+		cs.LastTerminationState = corev1.ContainerState{Terminated: terminated}
+	}
+	return cs
+}
+
+// TestDetectRestartTrigger_RunnerRestartAfterReady is the regression lock
+// for the in-place kubelet restart gap: a Ready multi-pod Instance whose
+// runner container was restarted inside the same Pod UID (Pod present,
+// phase Running) must trigger RecreateInstanceOnPodRestart even though no
+// pod is missing or Failed.
+func TestDetectRestartTrigger_RunnerRestartAfterReady(t *testing.T) {
+	resetExpectations(t)
+	isvc, ir := isvcReadyAtIncarnation("llama-70b", "prod", 1)
+	readySince := metav1.NewTime(time.Now().Add(-time.Hour))
+	ir.Status.InstanceStatuses[0].ReadySince = &readySince
+
+	pod := podForInstance(isvc, 0, true, true)
+	pod.Status.Phase = corev1.PodRunning
+	pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		runnerStatus(constants.MainContainerName, readySince.Add(10*time.Minute), &corev1.ContainerStateTerminated{
+			Reason:     "OOMKilled",
+			ExitCode:   137,
+			FinishedAt: metav1.NewTime(readySince.Add(9 * time.Minute)),
+		}),
+	}
+
+	c := newFakeClient(t, isvc, ir, pod)
+	input := buildTestInput(isvc, c, workload.ComponentEngine)
+	plan := buildPlanSinglePodEngineForRestart(c, isvc)
+
+	needs, reason := ops.DetectRestartTriggerWithPods(input, plan, plan.Instances[0], []*corev1.Pod{pod})
+	if !needs {
+		t.Fatalf("expected restart trigger for a post-Ready in-place runner restart")
+	}
+	if !strings.Contains(reason, "OOMKilled") || !strings.Contains(reason, "137") {
+		t.Errorf("reason must carry the termination cause; got %q", reason)
+	}
+}
+
+// Boot-time restarts are forgiven: all restart evidence predates ReadySince
+// (probe kills while loading weights), so the Ready Instance must not be
+// recycled.
+func TestDetectRestartTrigger_BootRestartsForgiven(t *testing.T) {
+	resetExpectations(t)
+	isvc, ir := isvcReadyAtIncarnation("llama-70b", "prod", 1)
+	readySince := metav1.NewTime(time.Now().Add(-time.Hour))
+	ir.Status.InstanceStatuses[0].ReadySince = &readySince
+
+	pod := podForInstance(isvc, 0, true, true)
+	pod.Status.Phase = corev1.PodRunning
+	pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		runnerStatus(constants.MainContainerName, readySince.Add(-5*time.Minute), &corev1.ContainerStateTerminated{
+			Reason:     "Error",
+			ExitCode:   1,
+			FinishedAt: metav1.NewTime(readySince.Add(-6 * time.Minute)),
+		}),
+	}
+
+	c := newFakeClient(t, isvc, ir, pod)
+	input := buildTestInput(isvc, c, workload.ComponentEngine)
+	plan := buildPlanSinglePodEngineForRestart(c, isvc)
+
+	if needs, reason := ops.DetectRestartTriggerWithPods(input, plan, plan.Instances[0], []*corev1.Pod{pod}); needs {
+		t.Fatalf("boot-time restarts must not trigger a recycle; got reason %q", reason)
+	}
+}
+
+// Sidecar restarts never break the Instance's process group; only the
+// runner container counts.
+func TestDetectRestartTrigger_SidecarRestartIgnored(t *testing.T) {
+	resetExpectations(t)
+	isvc, ir := isvcReadyAtIncarnation("llama-70b", "prod", 1)
+	readySince := metav1.NewTime(time.Now().Add(-time.Hour))
+	ir.Status.InstanceStatuses[0].ReadySince = &readySince
+
+	pod := podForInstance(isvc, 0, true, true)
+	pod.Status.Phase = corev1.PodRunning
+	pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		runnerStatus(constants.MainContainerName, readySince.Add(-5*time.Minute), nil),
+		runnerStatus(constants.ServingSidecarContainerName, readySince.Add(20*time.Minute), &corev1.ContainerStateTerminated{
+			Reason:     "Error",
+			ExitCode:   1,
+			FinishedAt: metav1.NewTime(readySince.Add(19 * time.Minute)),
+		}),
+	}
+
+	c := newFakeClient(t, isvc, ir, pod)
+	input := buildTestInput(isvc, c, workload.ComponentEngine)
+	plan := buildPlanSinglePodEngineForRestart(c, isvc)
+
+	if needs, reason := ops.DetectRestartTriggerWithPods(input, plan, plan.Instances[0], []*corev1.Pod{pod}); needs {
+		t.Fatalf("sidecar restart must not trigger a recycle; got reason %q", reason)
+	}
+}
+
+// Instances promoted before ReadySince existed have no anchor; the trigger
+// must stay silent rather than guess.
+func TestDetectRestartTrigger_NilReadySinceStaysSilent(t *testing.T) {
+	resetExpectations(t)
+	isvc, ir := isvcReadyAtIncarnation("llama-70b", "prod", 1)
+
+	pod := podForInstance(isvc, 0, true, true)
+	pod.Status.Phase = corev1.PodRunning
+	pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		runnerStatus(constants.MainContainerName, time.Now(), &corev1.ContainerStateTerminated{
+			Reason:     "Error",
+			ExitCode:   1,
+			FinishedAt: metav1.NewTime(time.Now().Add(-time.Minute)),
+		}),
+	}
+
+	c := newFakeClient(t, isvc, ir, pod)
+	input := buildTestInput(isvc, c, workload.ComponentEngine)
+	plan := buildPlanSinglePodEngineForRestart(c, isvc)
+
+	if needs, reason := ops.DetectRestartTriggerWithPods(input, plan, plan.Instances[0], []*corev1.Pod{pod}); needs {
+		t.Fatalf("nil ReadySince must not trigger; got reason %q", reason)
 	}
 }

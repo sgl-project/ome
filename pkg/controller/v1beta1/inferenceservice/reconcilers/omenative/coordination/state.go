@@ -91,9 +91,10 @@ type GroupObservation struct {
 	OriginalReplicas map[v1beta1.ComponentType]int32
 
 	// PausedGlobal is true when the operator paused the whole
-	// rollout via ome.io/rollout-paused: "true" on the ISVC. The
-	// state machine honors this by leaving every group in Paused
-	// until the annotation is removed.
+	// rollout via the ome.io/rollout-paused annotation on the ISVC
+	// (either accepted value — pause and freeze hold coordination
+	// identically). The state machine honors this by leaving every
+	// group in Paused until the annotation is removed.
 	PausedGlobal bool
 
 	// Now is the reference time the state machine compares against

@@ -780,6 +780,15 @@ func TestDispatch_RepairsInvertedStableIdentity(t *testing.T) {
 		t.Fatalf("global pause must defer status repair, got %q", got)
 	}
 
+	// The freeze depth must hold the canary identically to a plain pause.
+	isvc.Annotations[constants.PausedRolloutAnnotation] = constants.PausedRolloutFreezeValue
+	if _, err := Dispatch(context.Background(), deps); err != nil {
+		t.Fatalf("Dispatch while frozen: %v", err)
+	}
+	if got := isvc.Status.Canary.StableRevisionHash; got != "target" {
+		t.Fatalf("freeze must defer status repair like a plain pause, got %q", got)
+	}
+
 	delete(isvc.Annotations, constants.PausedRolloutAnnotation)
 	if _, err := Dispatch(context.Background(), deps); err != nil {
 		t.Fatalf("Dispatch: %v", err)

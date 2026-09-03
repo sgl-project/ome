@@ -19,8 +19,9 @@ const (
 	EventReasonInPlaceUpdateNotPossible EventReason = "InPlaceUpdateNotPossible"
 
 	// Recreate / surge update (workload/ops/update.go).
-	EventReasonRecreateUpdateStarted   EventReason = "RecreateUpdateStarted"
-	EventReasonRecreateUpdateCompleted EventReason = "RecreateUpdateCompleted"
+	EventReasonRecreateUpdateStarted     EventReason = "RecreateUpdateStarted"
+	EventReasonRecreateUpdateCompleted   EventReason = "RecreateUpdateCompleted"
+	EventReasonFailedSurgeTargetRecycled EventReason = "FailedSurgeTargetRecycled"
 
 	// Restart (workload/ops/restart.go).
 	EventReasonRestartTriggered EventReason = "RestartTriggered"
@@ -79,6 +80,11 @@ const (
 	// The annotation is still consumed; the event explains why nothing
 	// changed.
 	EventReasonRetryBlockReleaseSkipped EventReason = "RetryBlockReleaseSkipped"
+
+	// EventReasonInstanceDemoted fires when the truth pass demotes a
+	// Ready Instance with no live pods and no in-flight operation to
+	// Pending. Status-only; recovery stays with the ordinary passes.
+	EventReasonInstanceDemoted EventReason = "InstanceDemoted"
 
 	// EventReasonPodForceDeleted fires when scale-down escalation
 	// force-deletes (grace 0, UID-preconditioned) a Terminating pod

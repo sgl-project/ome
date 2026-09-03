@@ -504,7 +504,7 @@ func promoteGangSurgeTarget(
 	targetIdentity := captureTerminalInstanceIdentity(target)
 	ownerUID := input.OwnerObject.GetUID()
 	promoted := false
-	mutation := createStatusReadyOnRevisionMutation(target.Index, targetRevision)
+	mutation := createStatusReadyOnRevisionMutation(target.Index, targetRevision, input.Now())
 	mutation.BatchPrecondition = func(snapshot workload.InstanceMutationSnapshot) bool {
 		if snapshot.OwnerUID != ownerUID {
 			return false
@@ -559,7 +559,7 @@ func resetGangSurgeSourceAfterTargetConflict(
 
 	sourceIdentity := captureTerminalInstanceIdentity(source)
 	targetIdentity := captureTerminalInstanceIdentity(target)
-	reset := createStatusReadyOnRevisionMutation(source.Index, source.RunningRevision)
+	reset := createStatusReadyOnRevisionMutation(source.Index, source.RunningRevision, input.Now())
 	reset.Postcondition = func(status *workload.InstanceStatus) bool {
 		return status != nil && status.Index == source.Index &&
 			status.Incarnation == source.Incarnation &&
@@ -958,7 +958,7 @@ func finalizeAndResetAbandonedGangSurge(
 	}
 
 	committed := false
-	reset := createStatusReadyOnRevisionMutation(source.Index, sourceRunningRev)
+	reset := createStatusReadyOnRevisionMutation(source.Index, sourceRunningRev, input.Now())
 	reset.BatchPrecondition = guard
 	reset.Postcondition = func(status *workload.InstanceStatus) bool {
 		return status != nil && status.Index == source.Index &&

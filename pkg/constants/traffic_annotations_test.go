@@ -122,3 +122,33 @@ func TestKnownAnnotation_NoCollisionWithPassthrough(t *testing.T) {
 		}
 	}
 }
+
+// TestRolloutPauseState pins the shared parse every pause consumer
+// (coordination, canary, projection, workload adapter) relies on:
+// exactly two values pause, everything else does not.
+func TestRolloutPauseState(t *testing.T) {
+	cases := []struct {
+		name       string
+		anno       map[string]string
+		wantPaused bool
+		wantFreeze bool
+	}{
+		{name: "nil map", anno: nil},
+		{name: "absent", anno: map[string]string{"other": "x"}},
+		{name: "true pauses", anno: map[string]string{PausedRolloutAnnotation: "true"}, wantPaused: true},
+		{name: "freeze pauses and freezes", anno: map[string]string{PausedRolloutAnnotation: PausedRolloutFreezeValue}, wantPaused: true, wantFreeze: true},
+		{name: "case variants are not paused", anno: map[string]string{PausedRolloutAnnotation: "True"}},
+		{name: "Freeze capitalized is not paused", anno: map[string]string{PausedRolloutAnnotation: "Freeze"}},
+		{name: "false is not paused", anno: map[string]string{PausedRolloutAnnotation: "false"}},
+		{name: "empty value is not paused", anno: map[string]string{PausedRolloutAnnotation: ""}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			paused, freeze := RolloutPauseState(tc.anno)
+			if paused != tc.wantPaused || freeze != tc.wantFreeze {
+				t.Fatalf("RolloutPauseState(%v) = (%v, %v), want (%v, %v)",
+					tc.anno, paused, freeze, tc.wantPaused, tc.wantFreeze)
+			}
+		})
+	}
+}
