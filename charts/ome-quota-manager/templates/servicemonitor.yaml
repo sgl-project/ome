@@ -1,0 +1,51 @@
+{{/*
+Scrape wiring for the controller-runtime metrics endpoint, for collectors that
+select monitor objects. The other path -- pod annotations, for the bundled
+Prometheus in charts/ome-resources -- is on the Deployment.
+
+Both are off by default. A monitor object no collector selects is
+indistinguishable from a broken scrape, and an annotation on a cluster with no
+annotation-driven job is inert; neither should appear uninvited.
+*/}}
+{{- $metrics := .Values.quotaManager.metrics | default dict }}
+{{- $sm := $metrics.serviceMonitor | default dict }}
+{{- if $sm.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Values.quotaManager.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+    {{- with $sm.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "ome-quota-manager.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+    - {{ .Release.Namespace }}
+  endpoints:
+  # Named, so the webhook port on the same Service is not scraped.
+  - port: metrics
+    path: /metrics
+    {{- with $sm.interval }}
+    interval: {{ . }}
+    {{- end }}
+    {{- with $sm.scrapeTimeout }}
+    scrapeTimeout: {{ . }}
+    {{- end }}
+    {{- if $sm.honorLabels }}
+    honorLabels: true
+    {{- end }}
+    {{- with $sm.relabelings }}
+    relabelings:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with $sm.metricRelabelings }}
+    metricRelabelings:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+{{- end }}

@@ -41,6 +41,18 @@ app.kubernetes.io/part-of: ome
 {{- end -}}
 
 {{/*
+The one Service in front of this component. It fronts both the webhook and the
+metrics endpoint, so the name is referenced from five places: the Service, the
+serving cert's CN and DNS names, the ValidatingWebhookConfiguration's
+clientConfig, the --webhook-service-name flag, and the ServiceMonitor's target.
+A rename that missed any one of them would fail closed — the apiserver dialling
+a name the cert does not cover rejects every AcceleratorQuota write.
+*/}}
+{{- define "ome-quota-manager.serviceName" -}}
+{{ .Values.quotaManager.name }}-service
+{{- end -}}
+
+{{/*
 Where the webhook serving cert lives inside the container. Not a values knob —
 it is a container-local path, not an operator decision — but it is shared
 between the volume mount and the flag, and the two silently disagreeing would

@@ -470,4 +470,155 @@ for forbidden in \
   fi
 done
 
+# --- the metrics endpoint is served always; the monitor object is opt-in ---
+#
+# Scrape annotations are stamped unconditionally, matching ome-controller-manager:
+# inert where no annotation-driven collector runs, required where one does. A
+# ServiceMonitor is different -- an object no collector selects is
+# indistinguishable from a broken scrape -- so it may not appear uninvited.
+
+if grep -Fq 'kind: ServiceMonitor' <<<"${default}"; then
+  fail "a ServiceMonitor rendered without being asked for"
+fi
+grep -Fq 'prometheus.io/scrape: "true"' <<<"${default}" ||
+  fail "the scrape annotation is not stamped by default"
+# The port must track metricsPort. A literal would be scraped at the wrong port
+# the moment an operator moves the endpoint.
+grep -Fq 'prometheus.io/port: "8080"' <<<"${default}" ||
+  fail "the scrape annotation did not carry metricsPort"
+
+# --- one Service fronts every port, and five references must agree on its name ---
+#
+# The Service name reaches the serving cert's CN and DNS names, the
+# ValidatingWebhookConfiguration's clientConfig, the --webhook-service-name flag
+# and the ServiceMonitor's target. A rename that missed one would fail closed:
+# the apiserver dialling a name the cert does not cover rejects every
+# AcceleratorQuota write.
+
+if [ "$(grep -c '^kind: Service$' <<<"${default}")" -ne 1 ]; then
+  fail "expected exactly one Service; the component fronts all ports with one"
+fi
+# Anchored: the cert Secret is ome-quota-manager-webhook-cert and keeps its name.
+if grep -Eq 'name: ome-quota-manager-webhook$' <<<"${default}"; then
+  fail "the webhook-only Service name came back"
+fi
+grep -Fq 'name: ome-quota-manager-service' <<<"${default}" ||
+  fail "the Service is not named from the serviceName helper"
+# Under internal cert management the DNS name is not in a manifest at all: the
+# rotator derives it from this flag. cert-controller verifies the existing cert
+# against that name and reissues on a mismatch, which is what makes renaming the
+# Service safe on a live cluster.
+grep -Fq -- '--webhook-service-name=ome-quota-manager-service' <<<"${default}" ||
+  fail "the cert flag does not point at the Service"
+
+# On the cert-manager path the SANs are explicit, and must cover the same name.
+certmgr="$(render --set quotaManager.mode=workload \
+  --set quotaManager.webhook.internalCertManagement=false)"
+for san in \
+  'commonName: ome-quota-manager-service.ome.svc' \
+  '- ome-quota-manager-service.ome.svc' \
+  '- ome-quota-manager-service.ome.svc.cluster.local'; do
+  grep -Fq -- "${san}" <<<"${certmgr}" ||
+    fail "the issued cert does not cover the Service DNS name: ${san}"
+done
+
+# The rename must follow quotaManager.name through every reference. The cert
+# flags render only under internal management and the SANs only under
+# cert-manager, so each path is checked on its own render.
+svc_renamed="$(render --set quotaManager.mode=workload --set quotaManager.name=aq-mgr)"
+for ref in \
+  'name: aq-mgr-service' \
+  '--webhook-service-name=aq-mgr-service'; do
+  grep -Fq -- "${ref}" <<<"${svc_renamed}" ||
+    fail "a Service-name reference did not follow the rename: ${ref}"
+done
+if grep -Eq 'name: aq-mgr-webhook$' <<<"${svc_renamed}"; then
+  fail "the renamed chart still emits a webhook-only Service"
+fi
+
+certmgr_renamed="$(render --set quotaManager.mode=workload --set quotaManager.name=aq-mgr \
+  --set quotaManager.webhook.internalCertManagement=false)"
+grep -Fq 'commonName: aq-mgr-service.ome.svc' <<<"${certmgr_renamed}" ||
+  fail "the issued cert's DNS name did not follow the rename"
+
+# With the webhook off there is nothing to front unless metrics asked for it.
+nowebhook="$(render --set quotaManager.mode=workload --set quotaManager.webhook.enabled=false)"
+if grep -q '^kind: Service$' <<<"${nowebhook}"; then
+  fail "a Service rendered with no port to serve"
+fi
+
+annotated="$(render --set quotaManager.mode=workload \
+  --set quotaManager.podAnnotations.keep=me)"
+grep -Fq 'keep: me' <<<"${annotated}" ||
+  fail "the scrape annotations displaced operator-supplied podAnnotations"
+
+moved="$(render --set quotaManager.mode=workload --set quotaManager.metricsPort=9090)"
+grep -Fq 'prometheus.io/port: "9090"' <<<"${moved}" ||
+  fail "the scrape annotation did not follow metricsPort"
+
+monitored="$(render --set quotaManager.mode=workload \
+  --set quotaManager.metrics.serviceMonitor.enabled=true \
+  --set quotaManager.metrics.serviceMonitor.additionalLabels.release=kps)"
+grep -Fq 'kind: ServiceMonitor' <<<"${monitored}" ||
+  fail "the ServiceMonitor did not render"
+grep -Fq 'release: kps' <<<"${monitored}" ||
+  fail "additionalLabels did not reach the ServiceMonitor"
+# Still one Service: the metrics port joins the existing one rather than
+# spawning a second object whose labels would be indistinguishable from it.
+if [ "$(grep -c '^kind: Service$' <<<"${monitored}")" -ne 1 ]; then
+  fail "enabling the ServiceMonitor added a second Service"
+fi
+# targetPort is the container port NAME, so it survives a metricsPort change.
+grep -Fq 'targetPort: metrics' <<<"${monitored}" ||
+  fail "the Service did not target the named metrics container port"
+# The monitor selects the metrics port by name, so the webhook port on the same
+# Service is not scraped.
+grep -Fq 'port: metrics' <<<"${monitored}" ||
+  fail "the ServiceMonitor did not select the metrics port by name"
+
+# --- exactly one collector, never two ---
+#
+# The annotation path and the ServiceMonitor are collectors, not preferences. A
+# cluster that runs both scrapes the pod twice, every unqualified sum() over the
+# result is doubled, and a leader gauge reads 2 on a healthy deployment. The
+# monitor wins because it carries namespace, pod, service and endpoint.
+
+if grep -Fq 'prometheus.io/scrape' <<<"${monitored}"; then
+  fail "both scrape paths are on at once; the pod would be collected twice"
+fi
+# ...and with no operator annotations either, the block must not render empty.
+if grep -Eq '^      annotations:$' <<<"${monitored}"; then
+  fail "an empty annotations block rendered"
+fi
+# Operator annotations still render when the scrape ones are suppressed.
+ident="$(render --set quotaManager.mode=workload \
+  --set quotaManager.metrics.serviceMonitor.enabled=true \
+  --set 'quotaManager.podAnnotations.identity\.example\.com/inject=true')"
+grep -Fq 'identity.example.com/inject: true' <<<"${ident}" ||
+  fail "suppressing the scrape annotations dropped operator podAnnotations"
+if grep -Fq 'prometheus.io/scrape' <<<"${ident}"; then
+  fail "the scrape annotation survived alongside a ServiceMonitor"
+fi
+# The escape hatch: an operator who genuinely wants both restates it explicitly.
+both="$(render --set quotaManager.mode=workload \
+  --set quotaManager.metrics.serviceMonitor.enabled=true \
+  --set 'quotaManager.podAnnotations.prometheus\.io/scrape=true')"
+grep -Fq 'prometheus.io/scrape' <<<"${both}" ||
+  fail "an explicit podAnnotations override could not re-enable the annotation path"
+
+# Metrics without a webhook: the Service exists for the metrics port alone.
+metricsonly="$(render --set quotaManager.mode=workload \
+  --set quotaManager.webhook.enabled=false \
+  --set quotaManager.metrics.serviceMonitor.enabled=true)"
+grep -Fq 'name: ome-quota-manager-service' <<<"${metricsonly}" ||
+  fail "the Service did not render for metrics alone"
+if grep -Fq 'targetPort: webhook' <<<"${metricsonly}"; then
+  fail "the Service kept a webhook port with the webhook disabled"
+fi
+# No interval is set by default: the collector's own default applies, rather
+# than the chart inventing a scrape rate on its behalf.
+if grep -Eq '^\s+interval:' <<<"${monitored}"; then
+  fail "the ServiceMonitor invented a scrape interval"
+fi
+
 echo "ome-quota-manager chart contracts OK"

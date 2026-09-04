@@ -41,31 +41,15 @@ metadata:
   labels:
     {{- include "ome-quota-manager.labels" . | nindent 4 }}
 spec:
-  commonName: {{ .Values.quotaManager.name }}-webhook.{{ .Release.Namespace }}.svc
+  commonName: {{ include "ome-quota-manager.serviceName" . }}.{{ .Release.Namespace }}.svc
   dnsNames:
-  - {{ .Values.quotaManager.name }}-webhook.{{ .Release.Namespace }}.svc
-  - {{ .Values.quotaManager.name }}-webhook.{{ .Release.Namespace }}.svc.cluster.local
+  - {{ include "ome-quota-manager.serviceName" . }}.{{ .Release.Namespace }}.svc
+  - {{ include "ome-quota-manager.serviceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
   issuerRef:
     kind: Issuer
     name: {{ .Values.quotaManager.name }}-selfsigned
   secretName: {{ .Values.quotaManager.name }}-webhook-cert
 {{- end }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ .Values.quotaManager.name }}-webhook
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "ome-quota-manager.labels" . | nindent 4 }}
-spec:
-  ports:
-  - port: 443
-    targetPort: webhook
-    protocol: TCP
-    name: https
-  selector:
-    {{- include "ome-quota-manager.selectorLabels" . | nindent 4 }}
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -84,7 +68,7 @@ webhooks:
     # or cainjector via the annotation above.
     caBundle: Cg==
     service:
-      name: {{ .Values.quotaManager.name }}-webhook
+      name: {{ include "ome-quota-manager.serviceName" . }}
       namespace: {{ .Release.Namespace }}
       path: /validate-ome-io-v1beta1-acceleratorquota
   # Fail closed. A write that breaks the tree is exactly what this exists to
