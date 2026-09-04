@@ -1278,6 +1278,9 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, isvc *v1beta1.Inferenc
 	if f, ok := r.nominate().(forgetRoundState); ok {
 		f.forget(isvc.UID)
 	}
+	// Likewise the placement metrics, so a deleted ISVC stops reporting a phase
+	// and a winning cluster.
+	DeleteForISVC(isvc.Namespace, isvc.Name)
 	return ctrl.Result{}, nil
 }
 
@@ -1336,6 +1339,9 @@ func (r *Reconciler) writePlacement(ctx context.Context, isvc *v1beta1.Inference
 		}
 		return ctrl.Result{}, err
 	}
+	// Publish only after the status write landed, so the gauges never advertise
+	// a placement the API server rejected.
+	recordPlacement(isvc, res)
 	return ctrl.Result{RequeueAfter: r.safetyRequeue()}, nil
 }
 

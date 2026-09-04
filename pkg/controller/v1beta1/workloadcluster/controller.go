@@ -112,6 +112,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			}
 			r.clearFailure(req.Name)
 			r.clearRetry(req.Name)
+			// The member is gone: drop its series so it stops counting toward
+			// the fleet size reported by ome_workload_cluster_ready.
+			deleteForCluster(req.Name)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -202,6 +205,9 @@ func (r *Reconciler) finish(ctx context.Context, wc *v1beta1.WorkloadCluster, re
 		}
 		return ctrl.Result{}, fmt.Errorf("workloadcluster %s: update status: %w", wc.Name, err)
 	}
+	// Publish only after the status write landed, so the gauges track the
+	// condition that was actually persisted.
+	recordWorkloadCluster(wc)
 	return ctrl.Result{RequeueAfter: requeue}, nil
 }
 

@@ -327,6 +327,7 @@ func main() {
 			MaxDepth: opts.maxTreeDepth,
 		},
 		ResyncInterval: opts.resyncInterval,
+		Mode:           mode,
 	}
 	// Workload mode only. A management-mode manager holds the authored fleet
 	// tree; the nodes it would measure belong to members it reaches over a

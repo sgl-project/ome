@@ -78,7 +78,9 @@ func (r *Reconciler) finalize(ctx context.Context, quota *v1beta1.AcceleratorQuo
 			Sweep(context.Context, sets.Set[string]) (int, error)
 		})
 		if ok {
-			if _, err := sweeper.Sweep(ctx, keep); err != nil {
+			swept, err := sweeper.Sweep(ctx, keep)
+			recordSwept(SweepTriggerFinalize, swept)
+			if err != nil {
 				return fmt.Errorf("reaping objects for %s: %w", quota.Name, err)
 			}
 		}
@@ -89,6 +91,11 @@ func (r *Reconciler) finalize(ctx context.Context, quota *v1beta1.AcceleratorQuo
 			return fmt.Errorf("reaping projections for %s: %w", quota.Name, err)
 		}
 	}
+
+	// The node's enforcement objects are gone; its accelerator figures describe
+	// nothing now, and a gauge left behind would keep reporting a deleted
+	// tenant's allowance.
+	deleteQuotaSeries(quota.Name)
 
 	updated := quota.DeepCopy()
 	controllerutil.RemoveFinalizer(updated, v1beta1.AcceleratorQuotaFinalizer)
@@ -131,11 +138,14 @@ func (r *Reconciler) materialize(ctx context.Context, built *tree.Tree, frozen m
 	if err != nil {
 		return nil, fmt.Errorf("materializing the quota tree: %w", err)
 	}
+	recordApplied(result.Applied)
 
 	if sweeper, ok := r.Materialize.Backend.(interface {
 		Sweep(context.Context, sets.Set[string]) (int, error)
 	}); ok {
-		if _, err := sweeper.Sweep(ctx, keep); err != nil {
+		swept, err := sweeper.Sweep(ctx, keep)
+		recordSwept(SweepTriggerMaterialize, swept)
+		if err != nil {
 			return result.Nodes, fmt.Errorf("sweeping orphaned objects: %w", err)
 		}
 	}
