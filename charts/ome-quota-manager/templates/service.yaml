@@ -1,0 +1,39 @@
+{{/*
+The component's Service, fronting every port it serves. One object rather than
+one per purpose: the webhook and the metrics endpoint live in the same pod
+behind the same selector, so splitting them would mean two objects whose labels
+are identical and whose only difference is a port.
+
+Each port is gated by whether anything needs it, and the Service itself renders
+only when at least one does — a Service with no ports is rejected by the
+apiserver.
+*/}}
+{{- $metrics := .Values.quotaManager.metrics | default dict }}
+{{- $sm := $metrics.serviceMonitor | default dict }}
+{{- if or .Values.quotaManager.webhook.enabled $sm.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ome-quota-manager.serviceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ome-quota-manager.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "ome-quota-manager.selectorLabels" . | nindent 4 }}
+  ports:
+  {{- if .Values.quotaManager.webhook.enabled }}
+  - name: https
+    port: 443
+    targetPort: webhook
+    protocol: TCP
+  {{- end }}
+  {{- if $sm.enabled }}
+  # targetPort is the container port NAME, so moving metricsPort cannot leave
+  # the Service pointing at the old one.
+  - name: metrics
+    port: {{ .Values.quotaManager.metricsPort }}
+    targetPort: metrics
+    protocol: TCP
+  {{- end }}
+{{- end }}

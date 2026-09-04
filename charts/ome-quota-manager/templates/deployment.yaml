@@ -17,9 +17,34 @@ spec:
         {{- with .Values.quotaManager.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.quotaManager.podAnnotations }}
+      {{- $sm := (.Values.quotaManager.metrics | default dict).serviceMonitor | default dict }}
+      {{- $ann := .Values.quotaManager.podAnnotations | default dict }}
+      {{- if or (not $sm.enabled) $ann }}
       annotations:
+        {{- if not $sm.enabled }}
+        # The annotation path, for collectors that discover by pod annotation --
+        # among them the bundled Prometheus in charts/ome-resources, whose
+        # ome-control-plane job keeps a pod on exactly these plus the release
+        # namespace.
+        #
+        # Suppressed when a ServiceMonitor is enabled, because the two paths are
+        # collectors, not preferences: a cluster that runs both scrapes the pod
+        # twice and every unqualified sum() over the result is doubled. The
+        # monitor wins because it carries namespace, pod, service and endpoint,
+        # which the annotation path does not.
+        #
+        # An operator who genuinely wants both can restate these under
+        # podAnnotations below; that is deliberate rather than accidental.
+        #
+        # The port tracks metricsPort so moving the endpoint cannot leave a
+        # collector dialling the old one.
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: {{ .Values.quotaManager.metricsPort | quote }}
+        {{- end }}
+        {{- with $ann }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
     spec:
       serviceAccountName: {{ .Values.quotaManager.name }}
@@ -80,7 +105,7 @@ spec:
         # could disagree with what this chart rendered.
         - "--cert-namespace={{ .Release.Namespace }}"
         - "--cert-secret-name={{ .Values.quotaManager.name }}-webhook-cert"
-        - "--webhook-service-name={{ .Values.quotaManager.name }}-webhook"
+        - "--webhook-service-name={{ include "ome-quota-manager.serviceName" . }}"
         - "--webhook-config-name={{ .Values.quotaManager.name }}.ome.io"
         - "--ca-name={{ .Values.quotaManager.name }}-ca"
         - "--ca-organization=ome"

@@ -242,6 +242,40 @@ quotaManager:
   metricsPort: 8080
   probePort: 8081
 
+  # Who collects the metrics endpoint. The binary always serves it.
+  #
+  # Two paths, and the chart keeps them mutually exclusive. By default the
+  # Deployment stamps prometheus.io/scrape, which is all the bundled Prometheus
+  # in charts/ome-resources consults. Enabling serviceMonitor below suppresses
+  # those annotations, because a cluster running both collectors scrapes the pod
+  # twice and every unqualified sum() over the result is doubled. The monitor
+  # wins because it carries namespace, pod, service and endpoint, which the
+  # annotation path does not. An operator who genuinely wants both can restate
+  # prometheus.io/scrape under podAnnotations.
+  #
+  # serviceMonitor is off by default: an object no collector selects is
+  # indistinguishable from a broken scrape. additionalLabels has no default for
+  # the same reason -- kube-prometheus-stack wants `release: <name>`, other
+  # collectors key on their own label, and guessing wrong yields an object that
+  # exists and is never scraped. Enabling it adds a metrics port to the
+  # component's Service, which the webhook already fronts.
+  #
+  # relabelings and metricRelabelings pass through verbatim, for collectors that
+  # derive labels from pod annotations or need targets renamed before ingest.
+  metrics:
+    serviceMonitor:
+      enabled: false
+      additionalLabels: {}
+      # Left unset so the collector's own default applies. Set only to override.
+      interval: ""
+      scrapeTimeout: ""
+      # The endpoint exports no namespace or pod label of its own, so the
+      # collector's target labels win either way; honorLabels is here for
+      # symmetry with collectors that need it.
+      honorLabels: false
+      relabelings: []
+      metricRelabelings: []
+
   # Projecting the authored fleet tree onto workload clusters. Management mode
   # only; a workload-mode manager holds no transport, which is what makes a
   # projection unable to be re-projected.
