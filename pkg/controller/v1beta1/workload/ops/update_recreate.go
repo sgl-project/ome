@@ -150,7 +150,10 @@ func recreateUpdate(ctx context.Context, deps workload.Deps, input workload.Reco
 		return false, nil
 	}
 
-	// Phase C: flip serving, promote Ready+RunningRevision.
+	// Phase C: flip serving, then wait for kubelet to incorporate the
+	// controller readiness gate into PodReady before promoting the Instance.
+	// ContainersReady alone only proves that the runtime probe passed; the Pod
+	// is not eligible for its Service until PodReady also observes serving=True.
 	if !query.AllPodsRuntimeReady(newPods) {
 		return false, nil
 	}
@@ -162,6 +165,11 @@ func recreateUpdate(ctx context.Context, deps workload.Deps, input workload.Reco
 		// lived on the now-deleted old pods.
 		if err := podreadiness.MarkPodServing(ctx, deps.Client, deps.Reader(), pod, podreadiness.WriterLifecycle, podreadiness.KeyLifecycleInstanceReady); err != nil {
 			return false, fmt.Errorf("mark serving (instance=%d, pod=%s): %w", inst.Index, pod.Name, err)
+		}
+	}
+	for _, pod := range newPods {
+		if !podreadiness.IsPodReady(pod) {
+			return false, nil
 		}
 	}
 	if err := patchInstanceStatusReadyOnRevision(ctx, input, inst.Index, target.Name); err != nil {
