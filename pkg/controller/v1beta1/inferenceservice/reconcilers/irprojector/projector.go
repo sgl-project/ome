@@ -401,6 +401,7 @@ func applyDesiredSpec(ir *v1beta1.InferenceReplica, p Params, name string) {
 	ir.Spec.Replicas = desiredReplicas(ir, p)
 	ir.Spec.Runners = runnersFromParams(p)
 	ir.Spec.Lifecycle = lifecycleFromComponentExt(p.ComponentExt)
+	ir.Spec.MinReadySeconds = minReadySecondsFromComponentExt(p.ComponentExt)
 	paused, freeze := constants.RolloutPauseState(p.ISVC.Annotations)
 	ir.Spec.Paused = paused
 	ir.Spec.PauseMode = ""
@@ -692,6 +693,16 @@ func lifecycleFromComponentExt(c *v1beta1.ComponentExtensionSpec) *v1beta1.Lifec
 		return nil
 	}
 	return c.Lifecycle.DeepCopy()
+}
+
+// minReadySecondsFromComponentExt projects lifecycle.minReadySeconds onto
+// the IR's top-level field the workload engine reads. Unset projects to 0
+// (Available as soon as Ready).
+func minReadySecondsFromComponentExt(c *v1beta1.ComponentExtensionSpec) int32 {
+	if c == nil || c.Lifecycle == nil || c.Lifecycle.MinReadySeconds == nil {
+		return 0
+	}
+	return *c.Lifecycle.MinReadySeconds
 }
 
 // copyMap returns a shallow copy of m. nil input returns nil so the

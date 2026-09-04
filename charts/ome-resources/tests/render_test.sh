@@ -28,9 +28,25 @@ grep -Fq '"scaleDownRequeueInterval":"5s"' <<<"${controller_config}" ||
   fail "default OMENative scale-down requeue interval was not rendered"
 grep -Fq '"rawDeployment":{"maxUnavailable":1}' <<<"${controller_config}" ||
   fail "default RawDeployment disruption budget was not rendered"
-if grep -Fq '"omeNative"' <<<"${controller_config}"; then
-  fail "an OMENative disruption budget default was rendered"
+grep -Fq '"omeNative":{"maxUnavailable":1}' <<<"${controller_config}" ||
+  fail "default OMENative disruption budget was not rendered"
+if grep -Fq 'minReadySeconds' <<<"${controller_config}"; then
+  fail "deploy.minReadySeconds was rendered when unset"
 fi
+
+min_ready_zero="$("${helm_bin}" template ome-resources "${chart_dir}" \
+  --namespace ome \
+  --set ome.controller.minReadySeconds=0 \
+  --show-only templates/ome-controller/configmap.yaml)"
+grep -Fq '"minReadySeconds": 0' <<<"${min_ready_zero}" ||
+  fail "explicit zero deploy.minReadySeconds was not rendered"
+
+min_ready_overridden="$("${helm_bin}" template ome-resources "${chart_dir}" \
+  --namespace ome \
+  --set ome.controller.minReadySeconds=30 \
+  --show-only templates/ome-controller/configmap.yaml)"
+grep -Fq '"minReadySeconds": 30' <<<"${min_ready_overridden}" ||
+  fail "deploy.minReadySeconds override was not rendered"
 
 scale_up_batch_overridden="$("${helm_bin}" template ome-resources "${chart_dir}" \
   --namespace ome \

@@ -237,19 +237,9 @@ func (r *Reconciler) reconcileTeardown(ctx context.Context, log logr.Logger, ir 
 		// Deadline release is strictly after the configured duration. One
 		// nanosecond schedules the smallest representable wake past equality.
 		remaining := deadlineAt.Sub(now) + time.Nanosecond
-		result = foldTeardownRequeueAfter(result, remaining)
+		result = foldRequeueAfter(result, remaining)
 	}
 	return result, nil
-}
-
-func foldTeardownRequeueAfter(result ctrl.Result, requeueAfter time.Duration) ctrl.Result {
-	if requeueAfter <= 0 || (result.Requeue && result.RequeueAfter == 0) {
-		return result
-	}
-	if result.RequeueAfter == 0 || requeueAfter < result.RequeueAfter {
-		result.RequeueAfter = requeueAfter
-	}
-	return result
 }
 
 // closeDanglingLedgerEntries marks every in-flight (Phase=Started)

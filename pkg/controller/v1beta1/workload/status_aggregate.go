@@ -165,17 +165,51 @@ func CountScheduledPods(pods []*corev1.Pod) int32 {
 	return n
 }
 
-// CountAvailablePods returns the number of pods named in
-// availableByName. Used in conjunction with AvailablePodSet to compute
-// per-Instance availability.
-func CountAvailablePods(pods []*corev1.Pod, availableByName map[string]struct{}) int32 {
+// AvailabilityWindow is the Ready-age requirement layered on EndpointSlice
+// membership when counting Available pods. MinReadySeconds is the
+// Component's window; Now is the reconcile's clock reading. A zero window
+// leaves rotation membership as the whole rule.
+type AvailabilityWindow struct {
+	MinReadySeconds int32
+	Now             time.Time
+}
+
+// CountAvailablePods returns the number of pods that are in rotation
+// (named in availableByName, the AvailablePodSet result) and, under a
+// positive window, have been Ready for at least MinReadySeconds. The
+// duration is how long until the earliest in-rotation pod still inside the
+// window becomes Available (0 when none is pending): the counters it feeds
+// change at that instant without any watch event, so the caller schedules
+// its next reconcile from it.
+func CountAvailablePods(pods []*corev1.Pod, availableByName map[string]struct{}, window AvailabilityWindow) (int32, time.Duration) {
 	var n int32
+	var nextAvailableIn time.Duration
 	for _, p := range pods {
-		if _, ok := availableByName[p.Name]; ok {
-			n++
+		if _, ok := availableByName[p.Name]; !ok {
+			continue
 		}
+		if window.MinReadySeconds > 0 {
+			available, remaining := podreadiness.IsPodAvailable(p, window.MinReadySeconds, window.Now)
+			if !available {
+				nextAvailableIn = earliestPending(nextAvailableIn, remaining)
+				continue
+			}
+		}
+		n++
 	}
-	return n
+	return n, nextAvailableIn
+}
+
+// earliestPending folds candidate into the running "next wake" value: the
+// smallest positive duration wins and a non-positive candidate is no wake.
+func earliestPending(current, candidate time.Duration) time.Duration {
+	if candidate <= 0 {
+		return current
+	}
+	if current <= 0 || candidate < current {
+		return candidate
+	}
+	return current
 }
 
 // UniqueNodes returns the deterministically-sorted set of node names
@@ -380,14 +414,16 @@ func HasWedgedPodAgainstCurrent(pods []*corev1.Pod, currentHash, revisionHashLab
 
 // CountersForInstance computes the per-Instance counter set from the
 // live pod bucket. availableByPod is the map returned by
-// AvailablePodSet.
-func CountersForInstance(pods []*corev1.Pod, availableByPod map[string]struct{}) InstanceCounters {
+// AvailablePodSet; window is the Component's minReadySeconds rule.
+func CountersForInstance(pods []*corev1.Pod, availableByPod map[string]struct{}, window AvailabilityWindow) InstanceCounters {
+	available, nextAvailableIn := CountAvailablePods(pods, availableByPod, window)
 	return InstanceCounters{
 		PodCount:          int32(len(pods)),
 		ReadyPodCount:     CountReadyPods(pods),
 		ServingPodCount:   CountServingPods(pods),
 		ScheduledPodCount: CountScheduledPods(pods),
-		AvailablePodCount: CountAvailablePods(pods, availableByPod),
+		AvailablePodCount: available,
+		NextAvailableIn:   nextAvailableIn,
 		Admitted:          instancePodsAdmitted(pods),
 		NodesOccupied:     UniqueNodes(pods),
 	}
@@ -413,8 +449,12 @@ type InstanceCounters struct {
 	ServingPodCount   int32
 	ScheduledPodCount int32
 	AvailablePodCount int32
-	Admitted          bool
-	NodesOccupied     []string
+	// NextAvailableIn is how long until AvailablePodCount next rises on its
+	// own: the remaining minReadySeconds window of the earliest in-rotation
+	// pod still inside it, 0 when no pod is pending. Not persisted.
+	NextAvailableIn time.Duration
+	Admitted        bool
+	NodesOccupied   []string
 }
 
 // ComponentCounters is the field-level Component publication result.
@@ -425,6 +465,9 @@ type ComponentCounters struct {
 	AvailableReplicas    int32
 	UpdatedReplicas      int32
 	UpdatedReadyReplicas int32
+	// NextAvailableIn is the smallest pending InstanceCounters.NextAvailableIn
+	// across the Component, 0 when no pod is inside its window.
+	NextAvailableIn time.Duration
 }
 
 // TakeInlineV1Publication consumes the owned rows, overlays the publication
@@ -444,6 +487,7 @@ func (o *ComponentObservation) TakeInlineV1Publication(desiredByIdx map[int32]in
 		if InstanceMeetsThreshold(current.PodCount, current.AvailablePodCount, desired) {
 			counters.AvailableReplicas++
 		}
+		counters.NextAvailableIn = earliestPending(counters.NextAvailableIn, current.NextAvailableIn)
 		if targetRevName != "" && query.RevisionFromName(runningRevision).Same(target) {
 			counters.UpdatedReplicas++
 			if InstanceMeetsThreshold(current.PodCount, current.ReadyPodCount, desired) {
@@ -460,8 +504,8 @@ func (o *ComponentObservation) TakeInlineV1Publication(desiredByIdx map[int32]in
 
 // String formats InstanceCounters for debug output.
 func (c InstanceCounters) String() string {
-	return fmt.Sprintf("pods=%d ready=%d serving=%d scheduled=%d available=%d nodes=%v",
-		c.PodCount, c.ReadyPodCount, c.ServingPodCount, c.ScheduledPodCount, c.AvailablePodCount, c.NodesOccupied)
+	return fmt.Sprintf("pods=%d ready=%d serving=%d scheduled=%d available=%d nextAvailableIn=%s nodes=%v",
+		c.PodCount, c.ReadyPodCount, c.ServingPodCount, c.ScheduledPodCount, c.AvailablePodCount, c.NextAvailableIn, c.NodesOccupied)
 }
 
 // disposableAttempt reports whether s's in-flight attempt is owned by

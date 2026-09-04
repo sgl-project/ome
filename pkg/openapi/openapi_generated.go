@@ -6276,7 +6276,7 @@ func schema_pkg_apis_ome_v1beta1_InferenceReplicaSpec(ref common.ReferenceCallba
 					},
 					"minReadySeconds": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MinReadySeconds is propagated from the ISVC spec.",
+							Description: "MinReadySeconds is the minimum time a newly Ready pod must stay Ready before it counts as Available, projected from the parent ISVC's spec.<component>.lifecycle.minReadySeconds. The workload engine paces rollout drains and promotions on Available pods and counts only Available pods in availableReplicas. 0 means Available as soon as Ready.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -6416,7 +6416,7 @@ func schema_pkg_apis_ome_v1beta1_InferenceReplicaStatus(ref common.ReferenceCall
 					},
 					"availableReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "AvailableReplicas is the number of Instances that have been Ready for at least MinReadySeconds.",
+							Description: "AvailableReplicas is the number of Instances whose desired pod count is Available: in rotation on the Component's headless Service and, when spec.minReadySeconds is set, Ready for at least that long.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -7984,6 +7984,13 @@ func schema_pkg_apis_ome_v1beta1_LifecycleSpec(ref common.ReferenceCallback) com
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
 						},
 					},
+					"minReadySeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinReadySeconds is the minimum time a newly Ready pod must stay Ready before OMENative treats it as Available. A pod is Available when its PodReady condition is True and that condition's lastTransitionTime plus MinReadySeconds is not after the current time, evaluated per pod (the Deployment.spec.minReadySeconds rule). Ready remains the health signal; Available is the pacing signal: a rollout drains or promotes an Instance only once its new pods are Available, so the maxSurge / maxUnavailable budgets stay held for the whole window, and availableReplicas / availablePodCount count only Available pods. Unset or 0 means Available as soon as Ready. A value authored on the InferenceService always wins. Clusters may supply an admission-time default through the inferenceservice-config ConfigMap; it is stamped onto the InferenceService, so it also takes precedence over a value authored in the ServingRuntime's engineConfig / decoderConfig / routerConfig lifecycle (the InferenceService overrides the runtime when the two merge), as terminationGracePeriodSeconds does.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
 					"migrationPolicy": {
 						SchemaProps: spec.SchemaProps{
 							Description: "MigrationPolicy controls whether and how OMENative honors a migration request annotation for this Component.",
@@ -8063,7 +8070,7 @@ func schema_pkg_apis_ome_v1beta1_LifecycleStatus(ref common.ReferenceCallback) c
 					},
 					"availableReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "AvailableReplicas is the number of Instances that have been Ready continuously for at least MinReadySeconds.",
+							Description: "AvailableReplicas is the number of Instances whose desired pod count is Available: in rotation on the Component's headless Service and, when lifecycle.minReadySeconds is set, Ready for at least that long.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -9068,7 +9075,7 @@ func schema_pkg_apis_ome_v1beta1_OMENativeInstanceStatus(ref common.ReferenceCal
 					},
 					"availablePodCount": {
 						SchemaProps: spec.SchemaProps{
-							Description: "AvailablePodCount is the number of pods ready for at least MinReadySeconds.",
+							Description: "AvailablePodCount is the number of pods that are Available: in rotation on the Component's headless Service and, when lifecycle.minReadySeconds is set, Ready for at least that long.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},

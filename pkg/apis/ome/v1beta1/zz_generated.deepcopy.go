@@ -3224,6 +3224,11 @@ func (in *LifecycleSpec) DeepCopyInto(out *LifecycleSpec) {
 		*out = new(metav1.Duration)
 		**out = **in
 	}
+	if in.MinReadySeconds != nil {
+		in, out := &in.MinReadySeconds, &out.MinReadySeconds
+		*out = new(int32)
+		**out = **in
+	}
 	if in.MigrationPolicy != nil {
 		in, out := &in.MigrationPolicy, &out.MigrationPolicy
 		*out = new(MigrationPolicy)

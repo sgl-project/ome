@@ -3466,7 +3466,7 @@
           "$ref": "#/definitions/v1beta1.LifecycleSpec"
         },
         "minReadySeconds": {
-          "description": "MinReadySeconds is propagated from the ISVC spec.",
+          "description": "MinReadySeconds is the minimum time a newly Ready pod must stay Ready before it counts as Available, projected from the parent ISVC's spec.\u003ccomponent\u003e.lifecycle.minReadySeconds. The workload engine paces rollout drains and promotions on Available pods and counts only Available pods in availableReplicas. 0 means Available as soon as Ready.",
           "type": "integer",
           "format": "int32"
         },
@@ -3532,7 +3532,7 @@
       "type": "object",
       "properties": {
         "availableReplicas": {
-          "description": "AvailableReplicas is the number of Instances that have been Ready for at least MinReadySeconds.",
+          "description": "AvailableReplicas is the number of Instances whose desired pod count is Available: in rotation on the Component's headless Service and, when spec.minReadySeconds is set, Ready for at least that long.",
           "type": "integer",
           "format": "int32"
         },
@@ -4451,6 +4451,11 @@
           "description": "MigrationPolicy controls whether and how OMENative honors a migration request annotation for this Component.",
           "$ref": "#/definitions/v1beta1.MigrationPolicy"
         },
+        "minReadySeconds": {
+          "description": "MinReadySeconds is the minimum time a newly Ready pod must stay Ready before OMENative treats it as Available. A pod is Available when its PodReady condition is True and that condition's lastTransitionTime plus MinReadySeconds is not after the current time, evaluated per pod (the Deployment.spec.minReadySeconds rule). Ready remains the health signal; Available is the pacing signal: a rollout drains or promotes an Instance only once its new pods are Available, so the maxSurge / maxUnavailable budgets stay held for the whole window, and availableReplicas / availablePodCount count only Available pods. Unset or 0 means Available as soon as Ready. A value authored on the InferenceService always wins. Clusters may supply an admission-time default through the inferenceservice-config ConfigMap; it is stamped onto the InferenceService, so it also takes precedence over a value authored in the ServingRuntime's engineConfig / decoderConfig / routerConfig lifecycle (the InferenceService overrides the runtime when the two merge), as terminationGracePeriodSeconds does.",
+          "type": "integer",
+          "format": "int32"
+        },
         "readyPolicy": {
           "description": "ReadyPolicy controls how Instance-level readiness is aggregated from the underlying pods. None is accepted only for single-pod Instances, where it is equivalent to AllPodReady; admission rejects None on multi-pod OMENative Components because per-pod readiness reporting is not supported.",
           "type": "string"
@@ -4470,7 +4475,7 @@
       "type": "object",
       "properties": {
         "availableReplicas": {
-          "description": "AvailableReplicas is the number of Instances that have been Ready continuously for at least MinReadySeconds.",
+          "description": "AvailableReplicas is the number of Instances whose desired pod count is Available: in rotation on the Component's headless Service and, when lifecycle.minReadySeconds is set, Ready for at least that long.",
           "type": "integer",
           "format": "int32"
         },
@@ -5066,7 +5071,7 @@
           "type": "boolean"
         },
         "availablePodCount": {
-          "description": "AvailablePodCount is the number of pods ready for at least MinReadySeconds.",
+          "description": "AvailablePodCount is the number of pods that are Available: in rotation on the Component's headless Service and, when lifecycle.minReadySeconds is set, Ready for at least that long.",
           "type": "integer",
           "format": "int32"
         },

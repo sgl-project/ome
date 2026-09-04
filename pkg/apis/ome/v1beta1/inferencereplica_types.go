@@ -75,7 +75,12 @@ type InferenceReplicaSpec struct {
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// MinReadySeconds is propagated from the ISVC spec.
+	// MinReadySeconds is the minimum time a newly Ready pod must stay
+	// Ready before it counts as Available, projected from the parent
+	// ISVC's spec.<component>.lifecycle.minReadySeconds. The workload
+	// engine paces rollout drains and promotions on Available pods and
+	// counts only Available pods in availableReplicas. 0 means Available
+	// as soon as Ready.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	MinReadySeconds int32 `json:"minReadySeconds,omitempty"`
@@ -316,8 +321,10 @@ type InferenceReplicaStatus struct {
 	// +optional
 	ServingReplicas int32 `json:"servingReplicas,omitempty"`
 
-	// AvailableReplicas is the number of Instances that have been
-	// Ready for at least MinReadySeconds.
+	// AvailableReplicas is the number of Instances whose desired pod
+	// count is Available: in rotation on the Component's headless
+	// Service and, when spec.minReadySeconds is set, Ready for at least
+	// that long.
 	// +optional
 	AvailableReplicas int32 `json:"availableReplicas,omitempty"`
 

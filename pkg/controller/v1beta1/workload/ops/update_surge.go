@@ -422,6 +422,13 @@ func surgeUpdate(ctx context.Context, deps workload.Deps, input workload.Reconci
 				return false, nil
 			}
 		}
+		// ...and, while the source is still in rotation, until the
+		// replacement has stayed Ready for the minReadySeconds window. The
+		// surge stays in flight (budget slot held) for the whole wait.
+		if surgeWindowApplies(findInstanceStatus(input.ObservedState.InstanceStatuses, inst.Index)) &&
+			!podsAvailable(surgePods, plan.MinReadySeconds, input.Now()) {
+			return false, nil
+		}
 		// Transition Step Surge → Drain once. Subsequent passes idempotency-
 		// skip inside the helper.
 		if err := patchInstanceStatusSurgeStepDrain(ctx, input, inst.Index); err != nil {

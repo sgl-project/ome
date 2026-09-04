@@ -17,17 +17,11 @@ type WorkloadDesiredSpec struct {
 	// Replicas is the desired Instance count.
 	Replicas int32
 
-	// MinReadySeconds is the minimum age (in seconds) for an Instance
-	// to count as Available after becoming Ready.
-	//
-	// LATENT BUG: this field is populated by the IR converter
-	// (inferencereplica/convert.go, from IR spec.minReadySeconds) but is
-	// NEVER read by the rollout engine. Availability is computed from
-	// EndpointSlice membership, not a readiness-age gate, so IR
-	// spec.minReadySeconds is currently NOT honored. The
-	// AvailablePodCount doc in types.go ("ready for at least
-	// MinReadySeconds") is aspirational on this account. Documented
-	// rather than wired: nothing sets this field today.
+	// MinReadySeconds is how long (in seconds) a newly Ready pod must stay
+	// Ready before it is Available. BuildPlan copies it onto
+	// ComponentPlan.MinReadySeconds; the rollout engine paces drains and
+	// promotions on Available pods and status aggregation counts only
+	// Available pods. 0 means Available as soon as Ready.
 	MinReadySeconds int32
 
 	// Runners enumerates the Runner roles (default | leader | worker)

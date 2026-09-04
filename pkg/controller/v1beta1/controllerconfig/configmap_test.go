@@ -758,6 +758,54 @@ func TestNewDeployConfig(t *testing.T) {
 			},
 			expectedError: true,
 		},
+		{
+			name: "minReadySeconds default parsed",
+			configMapData: map[string]string{
+				DeployConfigName: `{
+					"defaultDeploymentMode": "RawDeployment",
+					"minReadySeconds": 30
+				}`,
+			},
+			expectedError: false,
+			validateConfig: func(t *testing.T, cfg *DeployConfig) {
+				require.NotNil(t, cfg.MinReadySeconds)
+				assert.Equal(t, int32(30), *cfg.MinReadySeconds)
+			},
+		},
+		{
+			name: "zero minReadySeconds is a valid explicit value",
+			configMapData: map[string]string{
+				DeployConfigName: `{
+					"defaultDeploymentMode": "RawDeployment",
+					"minReadySeconds": 0
+				}`,
+			},
+			expectedError: false,
+			validateConfig: func(t *testing.T, cfg *DeployConfig) {
+				require.NotNil(t, cfg.MinReadySeconds)
+				assert.Equal(t, int32(0), *cfg.MinReadySeconds)
+			},
+		},
+		{
+			name: "omitted minReadySeconds stays unconfigured",
+			configMapData: map[string]string{
+				DeployConfigName: `{"defaultDeploymentMode": "RawDeployment"}`,
+			},
+			expectedError: false,
+			validateConfig: func(t *testing.T, cfg *DeployConfig) {
+				assert.Nil(t, cfg.MinReadySeconds)
+			},
+		},
+		{
+			name: "negative minReadySeconds rejected at config-load",
+			configMapData: map[string]string{
+				DeployConfigName: `{
+					"defaultDeploymentMode": "RawDeployment",
+					"minReadySeconds": -1
+				}`,
+			},
+			expectedError: true,
+		},
 	}
 
 	for _, tt := range tests {

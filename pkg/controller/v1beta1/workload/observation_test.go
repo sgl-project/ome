@@ -51,7 +51,7 @@ func TestPublicationObservationReusesOwnedRowsWithoutMutatingSource(t *testing.T
 	observation, err := workload.NewOwnedPublicationObservation(
 		owned,
 		workload.NewCachedSelectorPodObservation(nil, byInstance),
-		map[string]struct{}{podA.Name: {}},
+		map[string]struct{}{podA.Name: {}}, workload.AvailabilityWindow{},
 	)
 	if err != nil {
 		t.Fatalf("NewOwnedPublicationObservation: %v", err)
@@ -157,7 +157,7 @@ func TestPublicationObservationRejectsUnsupportedProvenance(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := workload.NewOwnedPublicationObservation(nil, test.pods, nil); err == nil {
+			if _, err := workload.NewOwnedPublicationObservation(nil, test.pods, nil, workload.AvailabilityWindow{}); err == nil {
 				t.Fatal("publication observation accepted unsupported provenance")
 			}
 		})
@@ -179,7 +179,7 @@ func TestPublicationObservationCopiesNestedDurableState(t *testing.T) {
 	observation, err := workload.NewOwnedPublicationObservation(
 		owned,
 		workload.NewCachedSelectorPodObservation(nil, nil),
-		nil,
+		nil, workload.AvailabilityWindow{},
 	)
 	if err != nil {
 		t.Fatalf("NewOwnedPublicationObservation: %v", err)
@@ -218,7 +218,7 @@ func TestPublicationObservationPreservesNilStatusSlice(t *testing.T) {
 	observation, err := workload.NewOwnedPublicationObservation(
 		nil,
 		workload.NewCachedSelectorPodObservation(nil, nil),
-		nil,
+		nil, workload.AvailabilityWindow{},
 	)
 	if err != nil {
 		t.Fatalf("NewOwnedPublicationObservation: %v", err)
@@ -260,7 +260,7 @@ func BenchmarkPublicationObservationMaterialization(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				owned := append([]workload.InstanceStatus(nil), persisted...)
-				observation, err := workload.NewOwnedPublicationObservation(owned, pods, available)
+				observation, err := workload.NewOwnedPublicationObservation(owned, pods, available, workload.AvailabilityWindow{})
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -276,7 +276,7 @@ func BenchmarkPublicationObservationMaterialization(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				owned := append([]workload.InstanceStatus(nil), persisted...)
-				observation, err := workload.NewOwnedPublicationObservation(owned, pods, available)
+				observation, err := workload.NewOwnedPublicationObservation(owned, pods, available, workload.AvailabilityWindow{})
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -293,7 +293,7 @@ func BenchmarkPublicationObservationMaterialization(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				owned := append([]workload.InstanceStatus(nil), persisted...)
-				observation, err := workload.NewOwnedPublicationObservation(owned, pods, available)
+				observation, err := workload.NewOwnedPublicationObservation(owned, pods, available, workload.AvailabilityWindow{})
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -310,7 +310,7 @@ func BenchmarkPublicationObservationMaterialization(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				owned := append([]workload.InstanceStatus(nil), persisted...)
-				observation, err := workload.NewOwnedPublicationObservation(owned, pods, available)
+				observation, err := workload.NewOwnedPublicationObservation(owned, pods, available, workload.AvailabilityWindow{})
 				if err != nil {
 					b.Fatal(err)
 				}
