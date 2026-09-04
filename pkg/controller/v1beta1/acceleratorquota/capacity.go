@@ -157,6 +157,11 @@ func (r *Reconciler) reconcileCapacity(ctx context.Context, root *v1beta1.Accele
 		return fmt.Errorf("summing node capacity: %w", err)
 	}
 
+	// Publish before merging. mergeCapacity folds the observation into the
+	// high-water marks and only the merged figure reaches status, so the
+	// unattributed slice and the raw node counts have no other reader.
+	recordCapacity(observed)
+
 	updated := root.DeepCopy()
 	updated.Status.Capacity = mergeCapacity(
 		root.Status.Capacity, observed.Capacities, r.Capacity.HysteresisPercent, metav1.Now())

@@ -115,6 +115,13 @@ type Reconciler struct {
 	// management-mode shape and the way a workload cluster runs before an
 	// operator opts into writing Kueue objects.
 	Materialize MaterializeOptions
+
+	// Mode is which half of the plane this manager runs, carried here only so
+	// the budget metrics can say which. The option structs above already encode
+	// the behavioural difference; this names it for a reader of the series,
+	// where the same metric means the authored fleet total in one mode and one
+	// cluster's share in the other.
+	Mode Mode
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -228,12 +235,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		log.V(1).Info("consumption not read this pass", "reason", err.Error())
 	}
 
+	inTree := make(map[string]struct{}, len(built.Nodes()))
 	for _, node := range built.Nodes() {
+		inTree[node.Name()] = struct{}{}
 		if err := r.reconcileStatus(ctx, node, frozen, outcomes[node.Name()], reading,
 			fleet[node.Name()], fleetRollup[node.Name()]); err != nil {
 			errs = append(errs, fmt.Errorf("writing status for node %s: %w", node.Name(), err))
 		}
 	}
+	// The pass holds the authoritative node set, so a node that left the tree
+	// without going through its finalizer -- force-stripped, or deleted while
+	// this manager was down -- loses its series here rather than reporting a
+	// deleted tenant's accelerators forever.
+	sweepBudgets(inTree)
 	if len(errs) > 0 {
 		// One node's failure must not skip the rest, so they are collected and
 		// the whole pass retried. Each carries the stage it came from: claiming,
@@ -308,6 +322,7 @@ func (r *Reconciler) reconcileStatus(ctx context.Context, node *tree.Node, froze
 	// only one of them is safe to publish on a failed read.
 	if totals, ok := reading.forNode(node.Name()); ok {
 		updated.Status.Budgets = budgetStatus(node, totals)
+		recordBudgets(string(r.Mode), node.Name(), node.Path, string(node.Role()), updated.Status.Budgets)
 	}
 
 	// Only a projecting plane has members to report, and only it should clear
