@@ -896,9 +896,21 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if err := r.ensureIngressDisableAnnotation(isvc); err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "fails to add ingress disable annotation")
 		}
+		// A missing external service is not a failure. The reconciler above
+		// creates one only for a non-cluster-local InferenceService that has
+		// something to route to, and where it does create one, the read below
+		// goes through the informer cache, which has not observed that write
+		// yet. The Service is owned by this InferenceService and watched, so
+		// its create event brings the reconcile back to set the URL. Returning
+		// an error would add a backoff, a warning event and a stack trace to a
+		// state that either resolves itself or is correct as it stands.
 		if err := r.setExternalServiceURL(ctx, isvc, resolvedIngressConfig); err != nil {
-			r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
-			return reconcile.Result{}, errors.Wrapf(err, "fails to set external service URL")
+			if !apierrors.IsNotFound(err) {
+				r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
+				return reconcile.Result{}, errors.Wrapf(err, "fails to set external service URL")
+			}
+			log.V(1).Info("external service absent; leaving the URL unset for this pass",
+				"service", isvc.Name)
 		}
 	}
 
@@ -1695,6 +1707,13 @@ func (r *InferenceServiceReconciler) isvcsWithAcceleratorPreference(ctx context.
 	return reqs
 }
 
+// setExternalServiceURL points the InferenceService's URL and Address at the
+// Service that fronts it when ingress creation is disabled.
+//
+// The caller separates a missing Service from a real failure by asking
+// apierrors.IsNotFound, so the lookup's error has to reach it as an API status
+// error. Adding context around it is safe; replacing it with a plain error is
+// not, and would make every absent Service fatal again.
 func (r *InferenceServiceReconciler) setExternalServiceURL(ctx context.Context, isvc *v1beta1.InferenceService, ingressConfig *controllerconfig.IngressConfig) error {
 	// Get the external service
 	externalService := &v1.Service{}
