@@ -59,6 +59,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -361,6 +362,44 @@ func IsPodReady(pod *corev1.Pod) bool {
 		}
 	}
 	return false
+}
+
+// IsPodAvailable reports whether the pod is Available: PodReady is True and
+// the condition's lastTransitionTime plus minReadySeconds is not after now
+// (the Deployment minReadySeconds rule). A window <= 0 makes Available the
+// same as Ready. The duration is how much longer the pod must stay Ready
+// before it becomes Available; it is 0 when the pod already is, when it is
+// not Ready, and when a Ready condition carries no lastTransitionTime (its
+// age cannot be proven, so no later instant makes it Available). The status
+// aggregator folds the smallest pending duration into the reconcile requeue
+// so the Available counters refresh when the window elapses; the update
+// strategies discard it because an in-flight Update already polls.
+func IsPodAvailable(pod *corev1.Pod, minReadySeconds int32, now time.Time) (bool, time.Duration) {
+	if pod == nil {
+		return false, 0
+	}
+	var ready *corev1.PodCondition
+	for i := range pod.Status.Conditions {
+		if pod.Status.Conditions[i].Type == corev1.PodReady {
+			ready = &pod.Status.Conditions[i]
+			break
+		}
+	}
+	if ready == nil || ready.Status != corev1.ConditionTrue {
+		return false, 0
+	}
+	if minReadySeconds <= 0 {
+		return true, 0
+	}
+	if ready.LastTransitionTime.IsZero() {
+		return false, 0
+	}
+	window := time.Duration(minReadySeconds) * time.Second
+	availableAt := ready.LastTransitionTime.Add(window)
+	if !now.Before(availableAt) {
+		return true, 0
+	}
+	return false, availableAt.Sub(now)
 }
 
 // MarkPodServing removes the {userAgent, key} entry from the

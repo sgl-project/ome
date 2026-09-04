@@ -76,6 +76,7 @@ type ComponentObservation struct {
 	persisted            []InstanceStatus
 	pods                 PodObservation
 	availableByPod       map[string]struct{}
+	availabilityWindow   AvailabilityWindow
 	availabilityObserved bool
 	consumed             bool
 }
@@ -97,8 +98,10 @@ func NewDecisionObservation(persisted []InstanceStatus, pods PodObservation) (Co
 var errPublicationObservationProvenance = errors.New("publication observation requires a selector-scoped cache read")
 
 // NewOwnedPublicationObservation takes ownership of persisted. The caller must
-// not access that slice after construction.
-func NewOwnedPublicationObservation(persisted []InstanceStatus, pods PodObservation, availableByPod map[string]struct{}) (*ComponentObservation, error) {
+// not access that slice after construction. availableByPod is the
+// EndpointSlice rotation set and window the Component's minReadySeconds rule;
+// together they define the Available counters this observation publishes.
+func NewOwnedPublicationObservation(persisted []InstanceStatus, pods PodObservation, availableByPod map[string]struct{}, window AvailabilityWindow) (*ComponentObservation, error) {
 	if pods.source != PodObservationSourceCache || pods.scope != PodObservationScopeSelector {
 		return nil, fmt.Errorf("%w: source=%d scope=%d", errPublicationObservationProvenance, pods.source, pods.scope)
 	}
@@ -107,6 +110,7 @@ func NewOwnedPublicationObservation(persisted []InstanceStatus, pods PodObservat
 		persisted:            persisted,
 		pods:                 pods,
 		availableByPod:       availableByPod,
+		availabilityWindow:   window,
 		availabilityObserved: true,
 	}, nil
 }
@@ -125,7 +129,7 @@ func (o *ComponentObservation) PersistedStatuses() []InstanceStatus {
 // CurrentCounters returns index-keyed Pod facts and whether availability was
 // observed at this epoch.
 func (o *ComponentObservation) CurrentCounters(index int32) (InstanceCounters, bool) {
-	return CountersForInstance(o.pods.PodsForInstance(index), o.availableByPod), o.availabilityObserved
+	return CountersForInstance(o.pods.PodsForInstance(index), o.availableByPod, o.availabilityWindow), o.availabilityObserved
 }
 
 var errPublicationObservationRequired = errors.New("publication materialization requires a publication observation")

@@ -104,9 +104,14 @@ const (
 // state persisted in status is the only signal available, since a
 // RetryBlock-denied Instance never reaches the Update pass to be gated
 // there — see computeRetryBlockRolloutHold.
-func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.InferenceReplica, plan workload.ComponentPlan, target *appsv1.ControllerRevision, holdObserved bool, hold *workload.RolloutHold) error {
+//
+// The returned duration is how long until the earliest in-rotation pod still
+// inside the spec.minReadySeconds window becomes Available (0 when none is
+// pending). That raises the Available counters without any watch event, so
+// the caller folds it into the reconcile result to publish them on time.
+func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.InferenceReplica, plan workload.ComponentPlan, target *appsv1.ControllerRevision, holdObserved bool, hold *workload.RolloutHold) (time.Duration, error) {
 	if r.Client == nil {
-		return fmt.Errorf("aggregateAndWriteStatus: nil client")
+		return 0, fmt.Errorf("aggregateAndWriteStatus: nil client")
 	}
 	key := client.ObjectKeyFromObject(ir)
 	ownerUID := ir.UID
@@ -130,17 +135,18 @@ func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.In
 	// (drain/delete/recreate confirm) that genuinely need a live read.
 	pods, err := query.ListOMENativePodsByName(ctx, r.Client, ir.Namespace, ir.Spec.ParentRef.Name, component, true)
 	if err != nil {
-		return fmt.Errorf("aggregateAndWriteStatus: list pods: %w", err)
+		return 0, fmt.Errorf("aggregateAndWriteStatus: list pods: %w", err)
 	}
 	byIndex := query.BucketPodsByInstanceIdx(pods)
 	podObservation := workload.NewCachedSelectorPodObservation(pods, byIndex)
 	serviceName := query.HeadlessServiceName(ir.Spec.ParentRef.Name, component)
 	availableByPod, err := workload.AvailablePodSet(ctx, r.Client, ir.Namespace, serviceName)
 	if err != nil {
-		return fmt.Errorf("aggregateAndWriteStatus: compute availability: %w", err)
+		return 0, fmt.Errorf("aggregateAndWriteStatus: compute availability: %w", err)
 	}
 
 	ownerUnavailable := false
+	var nextAvailableIn time.Duration
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		fresh := &v1beta1.InferenceReplica{}
 		if err := r.APIReader.Get(ctx, key, fresh); err != nil {
@@ -174,6 +180,7 @@ func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.In
 			v1beta1convert.InstanceStatusSliceToWorkload(fresh.Status.InstanceStatuses),
 			podObservation,
 			availableByPod,
+			workload.AvailabilityWindow{MinReadySeconds: plan.MinReadySeconds, Now: r.now()},
 		)
 		if err != nil {
 			return fmt.Errorf("aggregateAndWriteStatus: build publication observation: %w", err)
@@ -186,6 +193,7 @@ func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.In
 		if err != nil {
 			return fmt.Errorf("aggregateAndWriteStatus: consume publication observation: %w", err)
 		}
+		nextAvailableIn = counters.NextAvailableIn
 		for i := range fresh.Status.InstanceStatuses {
 			fresh.Status.InstanceStatuses[i].PodCount = publication[i].PodCount
 			fresh.Status.InstanceStatuses[i].ReadyPodCount = publication[i].ReadyPodCount
@@ -203,10 +211,8 @@ func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.In
 		// observation above. The surge-tolerant classifier
 		// (InstanceMeetsThreshold) means an Instance with the canonical
 		// pod ContainersReady is counted even mid-surge or mid-drain,
-		// while availability follows EndpointSlice membership.
-		//
-		// InferenceReplicaSpec.MinReadySeconds is not applied by this
-		// availability calculation.
+		// while availability follows EndpointSlice membership plus the
+		// spec.minReadySeconds Ready-age window.
 		fresh.Status.ReadyReplicas = counters.ReadyReplicas
 		fresh.Status.AvailableReplicas = counters.AvailableReplicas
 		if target != nil {
@@ -273,10 +279,10 @@ func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.In
 				obsmetrics.RecordStatusUpdate(obsmetrics.ControllerIR, obsmetrics.ResultError)
 			}
 		}
-		return err
+		return 0, err
 	}
 	if ownerUnavailable {
-		return nil
+		return 0, nil
 	}
 
 	// Park the InstanceReadyTimeout clock for any Instance whose pods are
@@ -286,7 +292,10 @@ func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.In
 	// pass inside workload.Reconcile honors the parked (zeroed) deadline
 	// and additionally skips gated Instances outright; once the pods
 	// clear the gate the clock restarts from admission.
-	return r.reconcileHeldDeadlines(ctx, ir, byIndex, plan.Paused, plan.InstanceReadyTimeout)
+	if err := r.reconcileHeldDeadlines(ctx, ir, byIndex, plan.Paused, plan.InstanceReadyTimeout); err != nil {
+		return 0, err
+	}
+	return nextAvailableIn, nil
 }
 
 // mirrorBack copies Component fields and transient publication counters onto

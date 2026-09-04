@@ -47,10 +47,17 @@ func inPlaceUpdate(ctx context.Context, deps workload.Deps, input workload.Recon
 		markNotReady = *plan.UpdateStrategy.InPlaceUpdateStrategy.MarkNotReadyDuringLifecycle
 	}
 
+	// A pod already relabeled to the target revision has been through the
+	// drain + patch steps and is back in (or returning to) rotation; draining
+	// it again would remove converged capacity and restart its PodReady age
+	// on every pass while promotion waits out the minReadySeconds window.
+	targetRev := query.RevisionOf(target)
+	onTarget := func(pod *corev1.Pod) bool { return query.RevisionFromPod(pod).Same(targetRev) }
+
 	// Drain first when the strategy requires it.
 	if markNotReady {
 		for _, pod := range pods {
-			if !podreadiness.IsServing(pod) {
+			if !podreadiness.IsServing(pod) || onTarget(pod) {
 				continue
 			}
 			if err := podreadiness.MarkPodNotServing(ctx, deps.Client, deps.Reader(), pod, podreadiness.WriterUpdateInPlace, updateDrainKey(inst.Index, inst.Incarnation)); err != nil {
@@ -59,6 +66,9 @@ func inPlaceUpdate(ctx context.Context, deps workload.Deps, input workload.Recon
 		}
 		// Live reader on drain check so kube-proxy isn't still routing.
 		for _, pod := range pods {
+			if onTarget(pod) {
+				continue
+			}
 			serviceName := drainServiceForPod(input, plan, pod)
 			if serviceName == "" {
 				continue
@@ -213,6 +223,12 @@ func inPlaceUpdate(ctx context.Context, deps workload.Deps, input workload.Recon
 		}
 	}
 
+	// Promotion releases this Instance's unavailability budget slot, so under
+	// a minReadySeconds window it waits until every patched pod has stayed
+	// Ready for that long. A zero window keeps the runtime-image gate above.
+	if plan.MinReadySeconds > 0 && !podsAvailable(livePods, plan.MinReadySeconds, input.Now()) {
+		return false, nil
+	}
 	if err := patchInstanceStatusReadyOnRevision(ctx, input, inst.Index, target.Name); err != nil {
 		return false, fmt.Errorf("patch status Ready (instance=%d): %w", inst.Index, err)
 	}

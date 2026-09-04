@@ -228,3 +228,39 @@ func lifecycleWithRolling(mu, ms *intstr.IntOrString) *v1beta1.LifecycleSpec {
 		},
 	}
 }
+
+// TestValidateLifecycle_MinReadySeconds pins the pure-validator half of
+// the lifecycle.minReadySeconds bound: nil, zero, and positive values are
+// accepted on any Component; a negative value is rejected with the
+// Component's field path and the InvalidMinReadySeconds reason.
+func TestValidateLifecycle_MinReadySeconds(t *testing.T) {
+	seconds := func(v int32) *int32 { return &v }
+	spec := func(component string, v *int32) *v1beta1.InferenceServiceSpec {
+		lc := &v1beta1.LifecycleSpec{MinReadySeconds: v}
+		out := &v1beta1.InferenceServiceSpec{}
+		switch component {
+		case "engine":
+			out.Engine = &v1beta1.EngineSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{Lifecycle: lc}}
+		case "decoder":
+			out.Decoder = &v1beta1.DecoderSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{Lifecycle: lc}}
+		case "router":
+			out.Router = &v1beta1.RouterSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{Lifecycle: lc}}
+		}
+		return out
+	}
+	for _, component := range []string{"engine", "decoder", "router"} {
+		for _, ok := range []*int32{nil, seconds(0), seconds(30)} {
+			if err := ValidateLifecycle(spec(component, ok)); err != nil {
+				t.Fatalf("%s minReadySeconds=%v: unexpected error %v", component, ok, err)
+			}
+		}
+		err := ValidateLifecycle(spec(component, seconds(-1)))
+		if err == nil {
+			t.Fatalf("%s minReadySeconds=-1: expected rejection", component)
+		}
+		wantPath := "spec." + component + ".lifecycle.minReadySeconds"
+		if !strings.Contains(err.Error(), wantPath) || !strings.Contains(err.Error(), ReasonInvalidMinReadySeconds) {
+			t.Fatalf("%s: error must name %s and %s; got %v", component, wantPath, ReasonInvalidMinReadySeconds, err)
+		}
+	}
+}

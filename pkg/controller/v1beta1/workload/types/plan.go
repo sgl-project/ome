@@ -37,6 +37,12 @@ type ComponentPlan struct {
 	// Instance becoming Ready.
 	InstanceReadyTimeout time.Duration
 
+	// MinReadySeconds is how long a newly Ready pod must stay Ready before
+	// it is Available. Rollout drains and promotions wait on Available
+	// pods, so the per-Component budgets stay held for the window. 0 means
+	// Available as soon as Ready.
+	MinReadySeconds int32
+
 	// MigrationMode is the effective migration disposition (auto / surge /
 	// never).
 	MigrationMode MigrationMode

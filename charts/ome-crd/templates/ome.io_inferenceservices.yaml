@@ -7128,6 +7128,10 @@ spec:
                                 - Never
                               type: string
                           type: object
+                        minReadySeconds:
+                          format: int32
+                          minimum: 0
+                          type: integer
                         readyPolicy:
                           enum:
                             - AllPodReady
@@ -20455,6 +20459,10 @@ spec:
                                 - Never
                               type: string
                           type: object
+                        minReadySeconds:
+                          format: int32
+                          minimum: 0
+                          type: integer
                         readyPolicy:
                           enum:
                             - AllPodReady
@@ -29533,6 +29541,10 @@ spec:
                                 - Never
                               type: string
                           type: object
+                        minReadySeconds:
+                          format: int32
+                          minimum: 0
+                          type: integer
                         readyPolicy:
                           enum:
                             - AllPodReady

@@ -3,6 +3,7 @@ package podreadiness
 import (
 	"context"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -746,5 +747,65 @@ func TestMessageListSerialization_Deterministic(t *testing.T) {
 
 	if cond1.Message != cond2.Message {
 		t.Errorf("Message ordering not stable:\n  p1: %s\n  p2: %s", cond1.Message, cond2.Message)
+	}
+}
+
+// TestIsPodAvailable pins the Deployment minReadySeconds rule: Available
+// is PodReady plus a Ready age of at least the window, with the window's
+// boundary inclusive and a zero window collapsing to plain Ready.
+func TestIsPodAvailable(t *testing.T) {
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	readyPod := func(readyAt time.Time) *corev1.Pod {
+		pod := newReadinessTestPod("p")
+		pod.Status.Conditions = []corev1.PodCondition{{
+			Type:               corev1.PodReady,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: metav1.NewTime(readyAt),
+		}}
+		return pod
+	}
+	tests := []struct {
+		name          string
+		pod           *corev1.Pod
+		window        int32
+		wantAvailable bool
+		wantRetry     time.Duration
+	}{
+		{name: "nil pod", pod: nil, window: 10},
+		{name: "no Ready condition", pod: newReadinessTestPod("p"), window: 10},
+		{
+			name: "Ready False",
+			pod: func() *corev1.Pod {
+				pod := readyPod(now.Add(-time.Hour))
+				pod.Status.Conditions[0].Status = corev1.ConditionFalse
+				return pod
+			}(),
+			window: 10,
+		},
+		{name: "zero window is Ready", pod: readyPod(now), window: 0, wantAvailable: true},
+		{name: "negative window is Ready", pod: readyPod(now), window: -5, wantAvailable: true},
+		{name: "inside window", pod: readyPod(now.Add(-4 * time.Second)), window: 10, wantRetry: 6 * time.Second},
+		{name: "exactly at window boundary", pod: readyPod(now.Add(-10 * time.Second)), window: 10, wantAvailable: true},
+		{name: "past window", pod: readyPod(now.Add(-11 * time.Second)), window: 10, wantAvailable: true},
+		{
+			name: "Ready without transition time cannot prove age",
+			pod: func() *corev1.Pod {
+				pod := readyPod(now)
+				pod.Status.Conditions[0].LastTransitionTime = metav1.Time{}
+				return pod
+			}(),
+			window: 10,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			available, retry := IsPodAvailable(tt.pod, tt.window, now)
+			if available != tt.wantAvailable {
+				t.Fatalf("available: got %v want %v", available, tt.wantAvailable)
+			}
+			if retry != tt.wantRetry {
+				t.Fatalf("retry: got %v want %v", retry, tt.wantRetry)
+			}
+		})
 	}
 }

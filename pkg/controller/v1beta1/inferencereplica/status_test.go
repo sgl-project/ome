@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	clocktesting "k8s.io/utils/clock/testing"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,12 +32,19 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 )
 
+// writeStatus runs aggregateAndWriteStatus for tests that only care about the
+// write outcome, discarding the availability wake.
+func writeStatus(r *Reconciler, ir *v1beta1.InferenceReplica, plan workload.ComponentPlan, target *appsv1.ControllerRevision, holdObserved bool, hold *workload.RolloutHold) error {
+	_, err := r.aggregateAndWriteStatus(context.Background(), ir, plan, target, holdObserved, hold)
+	return err
+}
+
 func materializeInlinePublicationStatuses(t *testing.T, insts []v1beta1.OMENativeInstanceStatus, byIndex map[int32][]*corev1.Pod, availableByPod map[string]struct{}) []v1beta1.OMENativeInstanceStatus {
 	t.Helper()
 	observation, err := workload.NewOwnedPublicationObservation(
 		v1beta1convert.InstanceStatusSliceToWorkload(insts),
 		workload.NewCachedSelectorPodObservation(nil, byIndex),
-		availableByPod,
+		availableByPod, workload.AvailabilityWindow{},
 	)
 	if err != nil {
 		t.Fatalf("build publication observation: %v", err)
@@ -192,7 +200,7 @@ func TestAggregateAndWriteStatusPersistsCompactRowsAndMirrorsCurrentObservations
 		}},
 	}
 
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, nil, false, nil)).To(gomega.Succeed())
+	g.Expect(writeStatus(r, ir, plan, nil, false, nil)).To(gomega.Succeed())
 	got := &v1beta1.InferenceReplica{}
 	g.Expect(stored.Get(context.Background(), client.ObjectKeyFromObject(ir), got)).To(gomega.Succeed())
 	g.Expect(got.Status.InstanceStatuses[0].Admitted).To(gomega.BeTrue())
@@ -211,7 +219,7 @@ func TestAggregateAndWriteStatusPersistsCompactRowsAndMirrorsCurrentObservations
 		"same-pass observations remain available without being persisted")
 
 	rvAfterCompaction := got.ResourceVersion
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), got.DeepCopy(), plan, nil, false, nil)).To(gomega.Succeed())
+	g.Expect(writeStatus(r, got.DeepCopy(), plan, nil, false, nil)).To(gomega.Succeed())
 	steady := &v1beta1.InferenceReplica{}
 	g.Expect(stored.Get(context.Background(), client.ObjectKeyFromObject(ir), steady)).To(gomega.Succeed())
 	g.Expect(steady.ResourceVersion).To(gomega.Equal(rvAfterCompaction),
@@ -297,6 +305,67 @@ func TestAggregateStatus_AvailableReplicas_MatchesReadyWithEndpointSlices(t *tes
 		"ReadyReplicas should be 2 (two pods ContainersReady)")
 	g.Expect(got.Status.AvailableReplicas).To(gomega.Equal(int32(2)),
 		"AvailableReplicas should match ReadyReplicas when EndpointSlices publish both pods Ready")
+}
+
+// TestReconcile_WakesWhenMinReadyWindowElapses pins the requeue that keeps
+// the windowed Available counters current: a pod in rotation and Ready but
+// still inside spec.minReadySeconds crosses the window with no watch event,
+// so the reconcile result must wake exactly when the earliest such pod does.
+// A pod past the window, or a zero window, schedules nothing.
+func TestReconcile_WakesWhenMinReadyWindowElapses(t *testing.T) {
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	reconcile := func(t *testing.T, minReadySeconds int32, readyAt time.Time) (ctrl.Result, *v1beta1.InferenceReplica) {
+		t.Helper()
+		g := gomega.NewWithT(t)
+		ir := baselineIR("llama-engine", "prod", 1)
+		ir.Spec.MinReadySeconds = minReadySeconds
+		ir.Status.InstanceStatuses = []v1beta1.OMENativeInstanceStatus{
+			{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceReady,
+				PodCount: 1, ReadyPodCount: 1, ServingPodCount: 1, ActiveOrdinal: 0},
+		}
+		pod0 := podForIR(ir, 0, "default", 0, true, true)
+		pod0.Status.Conditions = append(pod0.Status.Conditions, corev1.PodCondition{
+			Type:               corev1.PodReady,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: metav1.NewTime(readyAt),
+		})
+		slice0 := sliceForIRPod(ir, pod0, true)
+		r, c := newReconciler(t, ir, pod0, slice0)
+		r.Clock = clocktesting.NewFakeClock(now)
+
+		result, err := r.Reconcile(context.Background(), ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: ir.Name, Namespace: ir.Namespace},
+		})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		got := &v1beta1.InferenceReplica{}
+		g.Expect(c.Get(context.Background(), types.NamespacedName{Name: ir.Name, Namespace: ir.Namespace}, got)).To(gomega.Succeed())
+		return result, got
+	}
+
+	t.Run("inside the window wakes at the remaining window", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		result, got := reconcile(t, 20, now.Add(-5*time.Second))
+		g.Expect(got.Status.ReadyReplicas).To(gomega.Equal(int32(1)))
+		g.Expect(got.Status.AvailableReplicas).To(gomega.BeZero(),
+			"a pod inside the window is Ready but not yet Available")
+		g.Expect(result.RequeueAfter).To(gomega.Equal(15*time.Second),
+			"the reconcile must wake exactly when the pod crosses the window")
+	})
+
+	t.Run("past the window schedules nothing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		result, got := reconcile(t, 20, now.Add(-30*time.Second))
+		g.Expect(got.Status.AvailableReplicas).To(gomega.Equal(int32(1)))
+		g.Expect(result.RequeueAfter).To(gomega.BeZero())
+	})
+
+	t.Run("zero window schedules nothing", func(t *testing.T) {
+		g := gomega.NewWithT(t)
+		result, got := reconcile(t, 0, now.Add(-5*time.Second))
+		g.Expect(got.Status.AvailableReplicas).To(gomega.Equal(int32(1)),
+			"a zero window makes Available the same as in rotation")
+		g.Expect(result.RequeueAfter).To(gomega.BeZero())
+	})
 }
 
 // TestAggregateStatus_AvailableReplicas_ZeroWhenSliceNotReady pins the
@@ -751,7 +820,7 @@ func TestAggregateAndWriteStatus_NoWriteWhenUnchanged(t *testing.T) {
 
 	// First pass: status changes (per-Instance counters, conditions,
 	// LabelSelector, ObservedGeneration all get stamped) → a write lands.
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, nil, false, nil)).To(gomega.Succeed())
+	g.Expect(writeStatus(r, ir, plan, nil, false, nil)).To(gomega.Succeed())
 	afterFirst := &v1beta1.InferenceReplica{}
 	g.Expect(c.Get(context.Background(), key, afterFirst)).To(gomega.Succeed())
 	rvAfterFirst := afterFirst.ResourceVersion
@@ -759,7 +828,7 @@ func TestAggregateAndWriteStatus_NoWriteWhenUnchanged(t *testing.T) {
 	// Second pass over the now-converged IR: recomputed status equals
 	// live status → the DeepEqual guard must skip Status().Update, so the
 	// ResourceVersion is unchanged.
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), afterFirst.DeepCopy(), plan, nil, false, nil)).To(gomega.Succeed())
+	g.Expect(writeStatus(r, afterFirst.DeepCopy(), plan, nil, false, nil)).To(gomega.Succeed())
 	afterSecond := &v1beta1.InferenceReplica{}
 	g.Expect(c.Get(context.Background(), key, afterSecond)).To(gomega.Succeed())
 	g.Expect(afterSecond.ResourceVersion).To(gomega.Equal(rvAfterFirst),
@@ -835,7 +904,7 @@ func TestAggregateAndWriteStatusReusesPublicationReadsAcrossConflictRetry(t *tes
 	}
 
 	target := &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: "rev-target"}}
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, target, false, nil)).To(gomega.Succeed())
+	g.Expect(writeStatus(r, ir, plan, target, false, nil)).To(gomega.Succeed())
 	g.Expect(statusWrites).To(gomega.Equal(2))
 	g.Expect(podLists).To(gomega.Equal(1), "the publication Pod observation is captured outside conflict retry")
 	g.Expect(endpointSliceLists).To(gomega.Equal(1), "the publication availability observation is captured outside conflict retry")
@@ -895,7 +964,7 @@ func TestAggregateAndWriteStatus_RebasesAfterAdjacentLifecycleWrite(t *testing.T
 		}},
 	}
 
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), stale, plan, nil, false, nil)).To(gomega.Succeed())
+	g.Expect(writeStatus(r, stale, plan, nil, false, nil)).To(gomega.Succeed())
 	got := &v1beta1.InferenceReplica{}
 	g.Expect(apiClient.Get(context.Background(), key, got)).To(gomega.Succeed())
 	g.Expect(got.Status.InstanceStatuses).To(gomega.HaveLen(1))
@@ -931,7 +1000,7 @@ func TestAggregateAndWriteStatus_SameNameReplacementIsUntouched(t *testing.T) {
 		}},
 	}
 
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), stale, plan, nil, false, nil)).To(gomega.Succeed())
+	g.Expect(writeStatus(r, stale, plan, nil, false, nil)).To(gomega.Succeed())
 	g.Expect(*writes).To(gomega.Equal(0))
 	got := &v1beta1.InferenceReplica{}
 	g.Expect(live.Get(context.Background(), client.ObjectKeyFromObject(replacement), got)).To(gomega.Succeed())
@@ -966,7 +1035,7 @@ func TestAggregateAndWriteStatus_GenerationChangeAborts(t *testing.T) {
 		metricBefore[result] = irStatusUpdateMetric(t, result)
 	}
 
-	err := r.aggregateAndWriteStatus(context.Background(), stale, plan, nil, false, nil)
+	err := writeStatus(r, stale, plan, nil, false, nil)
 	g.Expect(errors.Is(err, workload.ErrStatusMutationPrecondition)).To(gomega.BeTrue())
 	g.Expect(*writes).To(gomega.Equal(0))
 	for result, before := range metricBefore {
@@ -1115,7 +1184,7 @@ func TestAggregateAndWriteStatus_ConflictSurfacesAsConflict(t *testing.T) {
 		},
 	}
 
-	err := r.aggregateAndWriteStatus(context.Background(), ir, plan, nil, false, nil)
+	err := writeStatus(r, ir, plan, nil, false, nil)
 	g.Expect(err).To(gomega.HaveOccurred())
 	g.Expect(apierrors.IsConflict(err)).To(gomega.BeTrue(),
 		"a terminal status conflict must remain recognizable so the caller can requeue instead of logging ERROR")
@@ -1791,7 +1860,7 @@ func TestAggregateAndWriteStatus_RolloutHold_ChurnSafeAcrossReconciles(t *testin
 	}
 
 	// Pass 1: a fresh denial -> the hold is recorded with Since stamped.
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, target, true, budgetHold(3))).To(gomega.Succeed())
+	g.Expect(writeStatus(r, ir, plan, target, true, budgetHold(3))).To(gomega.Succeed())
 	afterFirst := &v1beta1.InferenceReplica{}
 	g.Expect(c.Get(context.Background(), key, afterFirst)).To(gomega.Succeed())
 	g.Expect(afterFirst.Status.RolloutHold).NotTo(gomega.BeNil())
@@ -1802,7 +1871,7 @@ func TestAggregateAndWriteStatus_RolloutHold_ChurnSafeAcrossReconciles(t *testin
 	// Pass 2: byte-identical denial -> ZERO writes (ResourceVersion
 	// unchanged) and Since untouched.
 	rvAfterFirst := afterFirst.ResourceVersion
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), afterFirst.DeepCopy(), plan, target, true, budgetHold(3))).To(gomega.Succeed())
+	g.Expect(writeStatus(r, afterFirst.DeepCopy(), plan, target, true, budgetHold(3))).To(gomega.Succeed())
 	afterRepeat := &v1beta1.InferenceReplica{}
 	g.Expect(c.Get(context.Background(), key, afterRepeat)).To(gomega.Succeed())
 	g.Expect(afterRepeat.ResourceVersion).To(gomega.Equal(rvAfterFirst),
@@ -1812,7 +1881,7 @@ func TestAggregateAndWriteStatus_RolloutHold_ChurnSafeAcrossReconciles(t *testin
 
 	// Pass 3: forward progress (nil exec verdict) -> the hold clears, and
 	// this DOES write (a real state change).
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), afterRepeat.DeepCopy(), plan, target, true, nil)).To(gomega.Succeed())
+	g.Expect(writeStatus(r, afterRepeat.DeepCopy(), plan, target, true, nil)).To(gomega.Succeed())
 	afterClear := &v1beta1.InferenceReplica{}
 	g.Expect(c.Get(context.Background(), key, afterClear)).To(gomega.Succeed())
 	g.Expect(afterClear.Status.RolloutHold).To(gomega.BeNil(), "forward progress must clear the hold")
@@ -1860,7 +1929,7 @@ func TestAggregateAndWriteStatus_RolloutHold_SoakChurnSafeAcrossMultipleReconcil
 		Target: target.Name,
 	}
 
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, target, true, soakHold)).To(gomega.Succeed())
+	g.Expect(writeStatus(r, ir, plan, target, true, soakHold)).To(gomega.Succeed())
 	first := &v1beta1.InferenceReplica{}
 	g.Expect(c.Get(context.Background(), key, first)).To(gomega.Succeed())
 	g.Expect(first.Status.RolloutHold).NotTo(gomega.BeNil())
@@ -1875,7 +1944,7 @@ func TestAggregateAndWriteStatus_RolloutHold_SoakChurnSafeAcrossMultipleReconcil
 	// depend on elapsed time.
 	live := first
 	for i := 0; i < 4; i++ {
-		g.Expect(r.aggregateAndWriteStatus(context.Background(), live.DeepCopy(), plan, target, true, soakHold)).To(gomega.Succeed())
+		g.Expect(writeStatus(r, live.DeepCopy(), plan, target, true, soakHold)).To(gomega.Succeed())
 		next := &v1beta1.InferenceReplica{}
 		g.Expect(c.Get(context.Background(), key, next)).To(gomega.Succeed())
 		g.Expect(next.ResourceVersion).To(gomega.Equal(rv),
@@ -1922,7 +1991,7 @@ func TestAggregateAndWriteStatus_RolloutHold_PausedRetryBlockFallbackChurnSafe(t
 
 	// holdObserved=false on every call: the Update pass is parked by
 	// Paused, exactly as it would be on every reconcile while paused.
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, target, false, nil)).To(gomega.Succeed())
+	g.Expect(writeStatus(r, ir, plan, target, false, nil)).To(gomega.Succeed())
 	first := &v1beta1.InferenceReplica{}
 	g.Expect(c.Get(context.Background(), key, first)).To(gomega.Succeed())
 	g.Expect(first.Status.RolloutHold).NotTo(gomega.BeNil())
@@ -1933,7 +2002,7 @@ func TestAggregateAndWriteStatus_RolloutHold_PausedRetryBlockFallbackChurnSafe(t
 
 	live := first
 	for i := 0; i < 3; i++ {
-		g.Expect(r.aggregateAndWriteStatus(context.Background(), live.DeepCopy(), plan, target, false, nil)).To(gomega.Succeed())
+		g.Expect(writeStatus(r, live.DeepCopy(), plan, target, false, nil)).To(gomega.Succeed())
 		next := &v1beta1.InferenceReplica{}
 		g.Expect(c.Get(context.Background(), key, next)).To(gomega.Succeed())
 		g.Expect(next.ResourceVersion).To(gomega.Equal(rv),

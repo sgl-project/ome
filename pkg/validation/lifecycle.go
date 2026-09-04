@@ -42,13 +42,15 @@ const (
 	// Mirrors the upstream appsv1.Deployment validation rule. Either
 	// field nil (defaulted upstream) does NOT trip this check.
 	ReasonRollingUpdateZeroBudget = "RollingUpdateZeroBudget"
+	// ReasonInvalidMinReadySeconds rejects a negative lifecycle.minReadySeconds.
+	// The CRD schema carries the same Minimum=0 bound; the pure validator
+	// keeps the rule enforceable off-cluster.
+	ReasonInvalidMinReadySeconds = "InvalidMinReadySeconds"
 )
 
 // ValidateLifecycle inspects every Component's LifecycleSpec on the
-// InferenceService. Today the only per-Component knobs that need
-// semantic validation past the CRD schema are
-// UpdateStrategy.RollingUpdate.MaxUnavailable and .MaxSurge — both
-// *intstr.IntOrString.
+// InferenceService: UpdateStrategy.RollingUpdate.MaxUnavailable and
+// .MaxSurge (both *intstr.IntOrString) and MinReadySeconds.
 // Wired into the webhook from inference_service_validation.go.
 func ValidateLifecycle(spec *v1beta1.InferenceServiceSpec) error {
 	if spec == nil {
@@ -73,7 +75,14 @@ func ValidateLifecycle(spec *v1beta1.InferenceServiceSpec) error {
 }
 
 func validateComponentLifecycle(name string, lc *v1beta1.LifecycleSpec) error {
-	if lc == nil || lc.UpdateStrategy == nil || lc.UpdateStrategy.RollingUpdate == nil {
+	if lc == nil {
+		return nil
+	}
+	if lc.MinReadySeconds != nil && *lc.MinReadySeconds < 0 {
+		return fmt.Errorf("spec.%s.lifecycle.minReadySeconds must be >= 0, got %d (%s)",
+			name, *lc.MinReadySeconds, ReasonInvalidMinReadySeconds)
+	}
+	if lc.UpdateStrategy == nil || lc.UpdateStrategy.RollingUpdate == nil {
 		return nil
 	}
 	ru := lc.UpdateStrategy.RollingUpdate

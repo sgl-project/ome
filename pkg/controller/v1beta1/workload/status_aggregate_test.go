@@ -755,6 +755,7 @@ func TestTakeInlineV1PublicationCountersIgnorePersistedObservationFields(t *test
 				append([]workload.InstanceStatus(nil), persisted...),
 				workload.NewCachedSelectorPodObservation(nil, nil),
 				nil,
+				workload.AvailabilityWindow{},
 			)
 			if err != nil {
 				t.Fatalf("NewOwnedPublicationObservation: %v", err)
@@ -862,5 +863,49 @@ func TestEscalateStuckPodFailures_CapturesLastFailure(t *testing.T) {
 	// A stuck waiting-state wedge never ran a process → no exit code.
 	if lf.ExitCode != nil {
 		t.Errorf("LastFailure.ExitCode: got %v want nil for a waiting-state wedge", lf.ExitCode)
+	}
+}
+
+// TestCountAvailablePods_MinReadySecondsWindow pins the Available counter's
+// two inputs — EndpointSlice rotation membership always, and the Ready-age
+// window only when the Component sets minReadySeconds — and the wake it
+// reports: the remaining window of the earliest in-rotation pod still inside
+// it, nothing once every such pod is Available or when no window applies.
+func TestCountAvailablePods_MinReadySecondsWindow(t *testing.T) {
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	readyPod := func(name string, readyAt time.Time) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Status: corev1.PodStatus{Conditions: []corev1.PodCondition{{
+				Type:               corev1.PodReady,
+				Status:             corev1.ConditionTrue,
+				LastTransitionTime: metav1.NewTime(readyAt),
+			}}},
+		}
+	}
+	aged := readyPod("aged", now.Add(-30*time.Second))
+	fresh := readyPod("fresh", now.Add(-5*time.Second))
+	notInRotation := readyPod("out", now.Add(-30*time.Second))
+	pods := []*corev1.Pod{aged, fresh, notInRotation}
+	inRotation := map[string]struct{}{aged.Name: {}, fresh.Name: {}}
+
+	if got, wake := workload.CountAvailablePods(pods, inRotation, workload.AvailabilityWindow{Now: now}); got != 2 || wake != 0 {
+		t.Fatalf("zero window: got %d/%s want 2/0s (rotation membership alone, nothing pending)", got, wake)
+	}
+	window := workload.AvailabilityWindow{MinReadySeconds: 20, Now: now}
+	if got, wake := workload.CountAvailablePods(pods, inRotation, window); got != 1 || wake != 15*time.Second {
+		t.Fatalf("20s window: got %d/%s want 1/15s (only the aged pod; the fresh pod crosses in 15s)", got, wake)
+	}
+	if got, wake := workload.CountAvailablePods([]*corev1.Pod{fresh, notInRotation}, map[string]struct{}{notInRotation.Name: {}}, window); got != 1 || wake != 0 {
+		t.Fatalf("out-of-rotation pod inside the window: got %d/%s want 1/0s (no wake for a pod rotation will not admit by time alone)", got, wake)
+	}
+	window.Now = now.Add(15 * time.Second)
+	if got, wake := workload.CountAvailablePods(pods, inRotation, window); got != 2 || wake != 0 {
+		t.Fatalf("20s window after it elapsed: got %d/%s want 2/0s", got, wake)
+	}
+	counters := workload.CountersForInstance(pods, inRotation, workload.AvailabilityWindow{MinReadySeconds: 20, Now: now})
+	if counters.AvailablePodCount != 1 || counters.ReadyPodCount != 0 || counters.NextAvailableIn != 15*time.Second {
+		t.Fatalf("counters: got available=%d ready=%d nextAvailableIn=%s want available=1 ready=0 nextAvailableIn=15s (Ready counts ContainersReady)",
+			counters.AvailablePodCount, counters.ReadyPodCount, counters.NextAvailableIn)
 	}
 }

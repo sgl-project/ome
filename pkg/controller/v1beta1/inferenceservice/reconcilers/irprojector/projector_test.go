@@ -1261,3 +1261,37 @@ func TestEnsureInferenceReplica_NoISVCAnnotations_NoExcludeStamp(t *testing.T) {
 		constants.RevisionExcludedAnnotationKeysAnnotationKey),
 		"no ISVC object annotations -> no exclude stamp")
 }
+
+// TestEnsureInferenceReplica_ProjectsMinReadySeconds pins the lifecycle
+// minReadySeconds projection onto the IR's top-level spec field the
+// workload engine reads: unset projects to 0, an authored value is copied
+// verbatim, and a later ISVC edit re-projects onto the live IR.
+func TestEnsureInferenceReplica_ProjectsMinReadySeconds(t *testing.T) {
+	g := gomega.NewWithT(t)
+	isvc := baselineISVC("llama", "prod")
+	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+
+	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	got := &v1beta1.InferenceReplica{}
+	g.Expect(c.Get(context.Background(), types.NamespacedName{Name: "llama-engine", Namespace: "prod"}, got)).To(gomega.Succeed())
+	g.Expect(got.Spec.MinReadySeconds).To(gomega.Equal(int32(0)),
+		"unset lifecycle.minReadySeconds must project to 0 (Available as soon as Ready)")
+
+	isvc.Spec.Engine.Lifecycle.MinReadySeconds = ptr.To(int32(20))
+	_, err = EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Expect(c.Get(context.Background(), types.NamespacedName{Name: "llama-engine", Namespace: "prod"}, got)).To(gomega.Succeed())
+	g.Expect(got.Spec.MinReadySeconds).To(gomega.Equal(int32(20)),
+		"authored lifecycle.minReadySeconds must project onto IR spec.minReadySeconds")
+	g.Expect(got.Spec.Lifecycle).NotTo(gomega.BeNil())
+	g.Expect(got.Spec.Lifecycle.MinReadySeconds).To(gomega.HaveValue(gomega.Equal(int32(20))),
+		"the lifecycle block keeps the field too")
+
+	isvc.Spec.Engine.Lifecycle.MinReadySeconds = nil
+	_, err = EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Expect(c.Get(context.Background(), types.NamespacedName{Name: "llama-engine", Namespace: "prod"}, got)).To(gomega.Succeed())
+	g.Expect(got.Spec.MinReadySeconds).To(gomega.Equal(int32(0)),
+		"clearing the field must re-project 0 rather than keep the stale window")
+}

@@ -51,8 +51,9 @@ type LifecycleStatus struct {
 	// +optional
 	ServingReplicas int32 `json:"servingReplicas,omitempty"`
 
-	// AvailableReplicas is the number of Instances that have been Ready
-	// continuously for at least MinReadySeconds.
+	// AvailableReplicas is the number of Instances whose desired pod count
+	// is Available: in rotation on the Component's headless Service and,
+	// when lifecycle.minReadySeconds is set, Ready for at least that long.
 	// +optional
 	AvailableReplicas int32 `json:"availableReplicas,omitempty"`
 
@@ -208,7 +209,9 @@ type OMENativeInstanceStatus struct {
 	// +optional
 	ServingPodCount int32 `json:"servingPodCount,omitempty"`
 
-	// AvailablePodCount is the number of pods ready for at least MinReadySeconds.
+	// AvailablePodCount is the number of pods that are Available: in
+	// rotation on the Component's headless Service and, when
+	// lifecycle.minReadySeconds is set, Ready for at least that long.
 	// +optional
 	AvailablePodCount int32 `json:"availablePodCount,omitempty"`
 
@@ -493,6 +496,26 @@ type LifecycleSpec struct {
 	// or initial creation).
 	// +optional
 	InstanceReadyTimeout *metav1.Duration `json:"instanceReadyTimeout,omitempty"`
+
+	// MinReadySeconds is the minimum time a newly Ready pod must stay Ready
+	// before OMENative treats it as Available. A pod is Available when its
+	// PodReady condition is True and that condition's lastTransitionTime
+	// plus MinReadySeconds is not after the current time, evaluated per pod
+	// (the Deployment.spec.minReadySeconds rule). Ready remains the health
+	// signal; Available is the pacing signal: a rollout drains or promotes
+	// an Instance only once its new pods are Available, so the maxSurge /
+	// maxUnavailable budgets stay held for the whole window, and
+	// availableReplicas / availablePodCount count only Available pods.
+	// Unset or 0 means Available as soon as Ready. A value authored on the
+	// InferenceService always wins. Clusters may supply an admission-time
+	// default through the inferenceservice-config ConfigMap; it is stamped
+	// onto the InferenceService, so it also takes precedence over a value
+	// authored in the ServingRuntime's engineConfig / decoderConfig /
+	// routerConfig lifecycle (the InferenceService overrides the runtime
+	// when the two merge), as terminationGracePeriodSeconds does.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	MinReadySeconds *int32 `json:"minReadySeconds,omitempty"`
 
 	// MigrationPolicy controls whether and how OMENative honors a migration
 	// request annotation for this Component.

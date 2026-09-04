@@ -205,8 +205,8 @@ type scaleDownSeriesIdentity struct {
 //     dispatcher returns early.
 //  7. Call workload.Reconcile.
 //
-// Returns whatever (ctrl.Result, error) the workload dispatcher hands
-// back, unchanged.
+// Returns the workload dispatcher's (ctrl.Result, error), with the status
+// aggregator's next availability wake folded into RequeueAfter.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := r.Log.WithValues("inferencereplica", req.NamespacedName)
 
@@ -488,7 +488,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 				log.V(1).Error(perr, "CurrentRevision promotion also failed; primary error preserved")
 			}
 		}
-		serr := r.aggregateAndWriteStatus(ctx, ir, plan, specTarget, execHoldObserved, execHold)
+		nextAvailableIn, serr := r.aggregateAndWriteStatus(ctx, ir, plan, specTarget, execHoldObserved, execHold)
 		if errors.Is(serr, workload.ErrStatusMutationPrecondition) {
 			result, err = ctrl.Result{Requeue: true}, nil
 			return
@@ -516,6 +516,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 			}
 			result = ctrl.Result{}
 			err = fmt.Errorf("InferenceReplica reconciler: write status: %w", serr)
+			return
+		}
+		if err == nil {
+			// A pod crossing its minReadySeconds window raises the Available
+			// counters with no watch event; wake for the earliest one.
+			result = foldRequeueAfter(result, nextAvailableIn)
 		}
 	}()
 
@@ -696,6 +702,19 @@ func scaleDownRequeueResult(interval time.Duration) ctrl.Result {
 		return ctrl.Result{}
 	}
 	return ctrl.Result{RequeueAfter: interval}
+}
+
+// foldRequeueAfter schedules a wake no later than requeueAfter: an immediate
+// Requeue is left alone, otherwise the earlier RequeueAfter wins. A
+// non-positive requeueAfter asks for nothing.
+func foldRequeueAfter(result ctrl.Result, requeueAfter time.Duration) ctrl.Result {
+	if requeueAfter <= 0 || (result.Requeue && result.RequeueAfter == 0) {
+		return result
+	}
+	if result.RequeueAfter == 0 || requeueAfter < result.RequeueAfter {
+		result.RequeueAfter = requeueAfter
+	}
+	return result
 }
 
 // requiresAuthoritativePodGroupInventory keeps steady single-pod workloads on

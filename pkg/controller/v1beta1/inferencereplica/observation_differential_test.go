@@ -139,7 +139,7 @@ func TestPublicationObservationMatchesInlineV1Projection(t *testing.T) {
 			observation, err := workload.NewOwnedPublicationObservation(
 				v1beta1convert.InstanceStatusSliceToWorkload(test.statuses),
 				workload.NewCachedSelectorPodObservation(test.pods, nil),
-				test.available,
+				test.available, workload.AvailabilityWindow{},
 			)
 			if err != nil {
 				t.Fatalf("NewOwnedPublicationObservation: %v", err)
@@ -234,7 +234,7 @@ func TestPublicationObservationMatchesInlineV1ProjectionAtScale(t *testing.T) {
 			observation, err := workload.NewOwnedPublicationObservation(
 				v1beta1convert.InstanceStatusSliceToWorkload(statuses),
 				workload.NewCachedSelectorPodObservation(pods, nil),
-				available,
+				available, workload.AvailabilityWindow{},
 			)
 			if err != nil {
 				t.Fatalf("NewOwnedPublicationObservation: %v", err)
@@ -264,7 +264,7 @@ func legacyInlineV1Projection(instances []v1beta1.OMENativeInstanceStatus, byInd
 		out[i].PodCount = int32(len(pods))
 		out[i].ReadyPodCount = workload.CountReadyPods(pods)
 		out[i].ServingPodCount = workload.CountServingPods(pods)
-		out[i].AvailablePodCount = workload.CountAvailablePods(pods, available)
+		out[i].AvailablePodCount, _ = workload.CountAvailablePods(pods, available, workload.AvailabilityWindow{})
 		out[i].ScheduledPodCount = workload.CountScheduledPods(pods)
 		out[i].Admitted = legacyPodsAdmitted(pods)
 		out[i].NodesOccupied = workload.UniqueNodes(pods)

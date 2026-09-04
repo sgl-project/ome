@@ -88,19 +88,24 @@ func DefaultInferenceService(ctx context.Context, c client.Client, isvc *v1beta1
 	// defaulting of that field: the spec is stored as authored.
 	var replicas *controllerconfig.ReplicasDefaultsConfig
 	var gracePeriod *int64
+	var minReadySeconds *int32
 	if deployConfig != nil {
 		replicas = deployConfig.Replicas
 		gracePeriod = deployConfig.TerminationGracePeriodSeconds
+		minReadySeconds = deployConfig.MinReadySeconds
 	}
 
 	if isvc.Spec.Engine != nil {
 		defaultEngine(isvc.Spec.Engine, resolvedMode, replicas, gracePeriod)
+		defaultOMENativeMinReadySeconds(&isvc.Spec.Engine.ComponentExtensionSpec, resolvedMode, minReadySeconds)
 	}
 	if isvc.Spec.Decoder != nil {
 		defaultDecoder(isvc.Spec.Decoder, resolvedMode, replicas, gracePeriod)
+		defaultOMENativeMinReadySeconds(&isvc.Spec.Decoder.ComponentExtensionSpec, resolvedMode, minReadySeconds)
 	}
 	if isvc.Spec.Router != nil {
 		defaultRouter(isvc.Spec.Router, resolvedMode, replicas, gracePeriod)
+		defaultOMENativeMinReadySeconds(&isvc.Spec.Router.ComponentExtensionSpec, resolvedMode, minReadySeconds)
 	}
 	// Rollout pacing/structure defaults are applied at runtime by the resolve
 	// layer (coordination.ResolveGroups), not at admission.
@@ -174,6 +179,31 @@ func defaultTerminationGracePeriod(podSpec *v1beta1.PodSpec, defaultSeconds *int
 	}
 	seconds := *defaultSeconds
 	podSpec.TerminationGracePeriodSeconds = &seconds
+}
+
+// defaultOMENativeMinReadySeconds fills an unset lifecycle.minReadySeconds on
+// an OMENative-resolving component from the configured admission default. A
+// nil default stamps nothing (the component keeps "Available as soon as
+// Ready"), an authored value always wins, and non-OMENative components are
+// left untouched because the field has no meaning for them. The stamp lands
+// on the InferenceService, which overrides the ServingRuntime in the later
+// spec merge, so a runtime-authored value yields to the cluster default the
+// same way terminationGracePeriodSeconds does.
+func defaultOMENativeMinReadySeconds(ext *v1beta1.ComponentExtensionSpec, specMode *constants.DeploymentModeType, defaultSeconds *int32) {
+	if ext == nil || defaultSeconds == nil {
+		return
+	}
+	if !componentResolvesToOMENative(ext.Annotations, specMode) {
+		return
+	}
+	if ext.Lifecycle == nil {
+		ext.Lifecycle = &v1beta1.LifecycleSpec{}
+	}
+	if ext.Lifecycle.MinReadySeconds != nil {
+		return
+	}
+	seconds := *defaultSeconds
+	ext.Lifecycle.MinReadySeconds = &seconds
 }
 
 // defaultWorkerSize sets Worker.Size=1 only for a declared Leader+Worker pair.

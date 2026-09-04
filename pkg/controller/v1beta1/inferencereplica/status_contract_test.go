@@ -198,7 +198,7 @@ func TestAggregateAndWriteStatus_ObservedGenerationFollowsGeneration(t *testing.
 		}},
 	}
 
-	g.Expect(r.aggregateAndWriteStatus(context.Background(), ir, plan, nil, false, nil)).To(gomega.Succeed())
+	g.Expect(writeStatus(r, ir, plan, nil, false, nil)).To(gomega.Succeed())
 
 	got := &v1beta1.InferenceReplica{}
 	g.Expect(c.Get(context.Background(),
@@ -252,7 +252,7 @@ func TestPublicationCounters_DeriveFromPodsNotPhases(t *testing.T) {
 			1: {pod1},
 			2: {pod2},
 		}),
-		map[string]struct{}{pod0.Name: {}},
+		map[string]struct{}{pod0.Name: {}}, workload.AvailabilityWindow{},
 	)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 

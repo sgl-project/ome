@@ -12,6 +12,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/revision"
 	workload "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
@@ -31,6 +32,31 @@ func updateDrainKey(idx int32, incarnation int64) string {
 // in flight. Exported so the dispatcher's requeue cadence stays in
 // lockstep with the per-Instance state machine.
 const UpdateRequeueInterval = 5 * time.Second
+
+// podsAvailable reports whether every pod has been Ready for the
+// Component's minReadySeconds window (podreadiness.IsPodAvailable). A zero
+// window reduces to every pod being PodReady. Rollouts pace on this rather
+// than on Ready: a drain or promotion that ran the moment a pod flipped
+// Ready would release its budget slot before the pod proved it stays up.
+// The in-flight Update keeps the dispatcher polling at UpdateRequeueInterval
+// until the window elapses.
+func podsAvailable(pods []*corev1.Pod, minReadySeconds int32, now time.Time) bool {
+	for _, pod := range pods {
+		if available, _ := podreadiness.IsPodAvailable(pod, minReadySeconds, now); !available {
+			return false
+		}
+	}
+	return true
+}
+
+// surgeWindowApplies reports whether the minReadySeconds window still gates a
+// surge: the Operation has not advanced past Step=Surge, so the source is in
+// rotation and the replacement's Ready age decides when it may leave. Past
+// that step the source is already draining, and a replacement that flaps
+// Ready must not hold the drained source out of service for another window.
+func surgeWindowApplies(s *workload.InstanceStatus) bool {
+	return s == nil || s.Operation == nil || s.Operation.Step == updateStepSurge
+}
 
 // Update drives one Instance toward the target ControllerRevision.
 // Mode is chosen per Instance:

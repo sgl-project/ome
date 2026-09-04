@@ -276,6 +276,13 @@ type DeployConfig struct {
 	// unconfigured and the component keeps whatever it authored. A configured
 	// value must be > 0 (rejected at config-load).
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
+	// MinReadySeconds is the admission-time lifecycle.minReadySeconds the
+	// ISVC defaulter stamps on every OMENative component that does not
+	// author one: the time a newly Ready pod must stay Ready before a
+	// rollout drains or promotes past it. No in-code default: nil means
+	// unconfigured and the component keeps whatever it authored (unset =
+	// Available as soon as Ready). A configured value must be >= 0.
+	MinReadySeconds *int32 `json:"minReadySeconds,omitempty"`
 }
 
 // ReplicasDefaultsConfig is the admission-time replica-defaulting policy
@@ -1296,6 +1303,10 @@ func parseDeployConfig(configMap *v1.ConfigMap) (*DeployConfig, error) {
 
 		if v := deployConfig.TerminationGracePeriodSeconds; v != nil && *v <= 0 {
 			return nil, fmt.Errorf("invalid deploy config, terminationGracePeriodSeconds must be > 0, got %d", *v)
+		}
+
+		if v := deployConfig.MinReadySeconds; v != nil && *v < 0 {
+			return nil, fmt.Errorf("invalid deploy config, minReadySeconds must be >= 0, got %d", *v)
 		}
 	}
 	return deployConfig, nil

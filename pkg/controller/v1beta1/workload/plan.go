@@ -60,6 +60,7 @@ func BuildPlan(component ComponentType, desired WorkloadDesiredSpec, observed Wo
 		UpdateStrategy:       updateStrategyWithDefaults(lifecycle.UpdateStrategy),
 		ReadyPolicy:          readyPolicyOrDefault(lifecycle.ReadyPolicy, desired.MultiPod),
 		InstanceReadyTimeout: InstanceReadyTimeoutOrDefault(lifecycle.InstanceReadyTimeout),
+		MinReadySeconds:      max(desired.MinReadySeconds, 0),
 		MigrationMode:        MigrationModeOrDefault(lifecycle.MigrationPolicy),
 		Paused:               desired.Paused,
 		PauseFreeze:          desired.PauseFreeze,

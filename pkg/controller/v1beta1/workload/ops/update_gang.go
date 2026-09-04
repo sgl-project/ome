@@ -270,6 +270,12 @@ func gangSurgeUpdate(ctx context.Context, deps workload.Deps, input workload.Rec
 				return false, nil
 			}
 		}
+		// Nor, while the source is still in rotation, until the whole
+		// replacement gang has stayed Ready for the minReadySeconds window;
+		// the surge budget slot is held meanwhile.
+		if surgeWindowApplies(src) && !podsAvailable(surgePods, plan.MinReadySeconds, input.Now()) {
+			return false, nil
+		}
 	}
 	if !promotedSurgeTarget && input.ApplyInstanceMutationsWithRetryBlock != nil {
 		claimed, err := claimGangSurgeDrain(ctx, input, src, surgeMarker)

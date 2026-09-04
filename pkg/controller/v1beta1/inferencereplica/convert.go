@@ -323,11 +323,10 @@ func desiredFromIR(ir *v1beta1.InferenceReplica) workload.WorkloadDesiredSpec {
 	if ir.Spec.Replicas != nil && *ir.Spec.Replicas > 0 {
 		replicas = *ir.Spec.Replicas
 	}
-	// MinReadySeconds and Pacing.{Partition,MaxUnavailable} are populated
-	// here but currently unread by the rollout engine — see the
-	// WorkloadPacing / MinReadySeconds notes in workload/types/source.go.
-	// Kept populated so wiring them requires no converter change.
-	// (Pacing.RollbackToRevision IS live — handled in reconciler.go.)
+	// Pacing.{Partition,MaxUnavailable} are populated here but unread by
+	// the rollout engine — see the WorkloadPacing notes in
+	// workload/types/source.go. (Pacing.RollbackToRevision IS live —
+	// handled in reconciler.go.)
 	desired := workload.WorkloadDesiredSpec{
 		Replicas:        replicas,
 		MinReadySeconds: ir.Spec.MinReadySeconds,

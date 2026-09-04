@@ -1000,10 +1000,10 @@ func migrationPromotedSurgeMatches(status *workload.InstanceStatus, targetRevisi
 //     per-revision Service. Rotation reads the live reader so a cold
 //     informer doesn't falsely report zero slices, and without it the
 //     source swap can hit a zero-routable-endpoint window.
-//   - the surge InstanceStatus reports full availability (Ready ≥
-//     minReadySeconds; at alpha minReadySeconds defaults to 0 so this
-//     collapses onto Ready, but the gate stays for when a non-zero
-//     value is added).
+//   - the surge InstanceStatus reports full availability: its
+//     AvailablePodCount covers every pod, which counts a pod only once it
+//     is in rotation and, under a positive minReadySeconds window, has
+//     been Ready for at least that long.
 //
 // SHARED between the Migrate drive pass and the expiry pass's Draining
 // carve-out (migrationTailReady): the carve-out defers expiry exactly
