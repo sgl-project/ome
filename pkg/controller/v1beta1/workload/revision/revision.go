@@ -271,13 +271,63 @@ func TemplateMeta(src *metav1.ObjectMeta) *metav1.ObjectMeta {
 			filtered[k] = v
 		}
 	}
-	if len(src.Labels) == 0 && len(filtered) == 0 {
+	labels := src.Labels
+	if hasSchedulingLabel(src.Labels) {
+		labels = make(map[string]string, len(src.Labels))
+		for k, v := range src.Labels {
+			if isSchedulingLabel(k) {
+				continue
+			}
+			labels[k] = v
+		}
+	}
+	if len(labels) == 0 && len(filtered) == 0 {
 		return nil
 	}
 	return &metav1.ObjectMeta{
-		Labels:      src.Labels,
+		Labels:      labels,
 		Annotations: filtered,
 	}
+}
+
+// Labels naming the queue a pod is admitted against, and the priority it is
+// admitted at. Duplicated as literals to keep this package a leaf, like the
+// rollout verbs above.
+const (
+	kueueQueueNameLabel     = "kueue.x-k8s.io/queue-name"
+	kueuePriorityClassLabel = "kueue.x-k8s.io/priority-class"
+)
+
+// isSchedulingLabel reports whether the label is one the admission plane owns
+// rather than the user, and therefore must not feed the pod-template revision
+// hash — the label mirror of isLifecycleAnnotation.
+//
+// A queue assignment is derived from cluster state, not from the spec: it moves
+// when quota is re-authored or when the operator turns queue stamping on or off.
+// Hashing it makes each of those a full rollout of every workload, which is a
+// steep price for a value the running pods cannot act on anyway. Kueue reads
+// these at admission, so a pod already admitted keeps its queue whatever the
+// label later says, and the new value takes effect when the pod is next created.
+//
+// The consequence to know: re-pointing a workload at another queue does not
+// recreate its pods on its own. It takes effect on the next rollout.
+func isSchedulingLabel(key string) bool {
+	switch key {
+	case kueueQueueNameLabel, kueuePriorityClassLabel:
+		return true
+	}
+	return false
+}
+
+// hasSchedulingLabel reports whether any key is admission-plane owned. Fast path
+// so the common case skips the copy in TemplateMeta.
+func hasSchedulingLabel(labels map[string]string) bool {
+	for k := range labels {
+		if isSchedulingLabel(k) {
+			return true
+		}
+	}
+	return false
 }
 
 // hasLifecycleAnnotation reports whether any key in annotations is a
