@@ -467,6 +467,76 @@ func TestRevisionHash_PausedRolloutAnnotationDoesNotDriftHash(t *testing.T) {
 	}
 }
 
+// A queue assignment is derived from cluster state, not from the spec: it moves
+// when quota is re-authored, and it appears or disappears wholesale when the
+// operator turns queue stamping on or off. Hashing it makes each of those a
+// rollout of every workload on the cluster.
+func TestRevisionHash_SchedulingLabelsDoNotDriftHash(t *testing.T) {
+	ps := basicPodSpecForRevision()
+	base := &metav1.ObjectMeta{Labels: map[string]string{"app": "llama"}}
+
+	for _, tc := range []struct {
+		name   string
+		labels map[string]string
+	}{
+		{
+			name:   "queue stamped where there was none",
+			labels: map[string]string{"app": "llama", "kueue.x-k8s.io/queue-name": "team-a"},
+		},
+		{
+			name:   "queue re-pointed at another leaf",
+			labels: map[string]string{"app": "llama", "kueue.x-k8s.io/queue-name": "team-b"},
+		},
+		{
+			name: "priority class alongside the queue",
+			labels: map[string]string{
+				"app":                           "llama",
+				"kueue.x-k8s.io/queue-name":     "team-a",
+				"kueue.x-k8s.io/priority-class": "high",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hBase, _, _ := Hash(ps, base, nil, "")
+			hWith, _, _ := Hash(ps, &metav1.ObjectMeta{Labels: tc.labels}, nil, "")
+			if hBase != hWith {
+				t.Errorf("admission-owned labels must not reach the revision hash: base=%s with=%s", hBase, hWith)
+			}
+		})
+	}
+}
+
+// The exclusion is scoped to the admission plane's own keys. A user label is
+// spec the user wrote, and changing it is a rollout they asked for.
+func TestRevisionHash_UserLabelsStillDriftHash(t *testing.T) {
+	ps := basicPodSpecForRevision()
+	a := &metav1.ObjectMeta{Labels: map[string]string{"app": "llama", "tier": "gold"}}
+	b := &metav1.ObjectMeta{Labels: map[string]string{"app": "llama", "tier": "silver"}}
+
+	hA, _, _ := Hash(ps, a, nil, "")
+	hB, _, _ := Hash(ps, b, nil, "")
+	if hA == hB {
+		t.Errorf("a user label change must still bump the hash, got %s for both", hA)
+	}
+}
+
+// A template carrying nothing but admission-owned labels has to hash as though
+// it carried no metadata at all, or the exclusion just moves the drift: such a
+// workload would differ from one that never had labels.
+func TestRevisionHash_OnlySchedulingLabelsEqualsNoMeta(t *testing.T) {
+	ps := basicPodSpecForRevision()
+	only := &metav1.ObjectMeta{Labels: map[string]string{"kueue.x-k8s.io/queue-name": "team-a"}}
+
+	hNil, _, _ := Hash(ps, nil, nil, "")
+	hOnly, _, _ := Hash(ps, only, nil, "")
+	if hNil != hOnly {
+		t.Errorf("a template with only admission labels must hash as empty: nil=%s only=%s", hNil, hOnly)
+	}
+	if got := TemplateMeta(only); got != nil {
+		t.Errorf("TemplateMeta should collapse to nil, got %+v", got)
+	}
+}
+
 // The canary operator verbs (rollout-promote / rollout-rollback) are
 // added to and removed from the ISVC mid-rollout. They must NOT feed the
 // revision hash: otherwise an operator promoting revision X would mint a
