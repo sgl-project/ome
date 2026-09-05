@@ -52,6 +52,7 @@ func (g *GangPack) gcPins() {
 	if err != nil {
 		return
 	}
+	g.pruneTemplatesIncomplete()
 	for group, owner := range g.pins.Owners() {
 		stale := !live[group]
 		// A live pod label only identifies namespace/name. Compare the immutable

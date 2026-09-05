@@ -75,7 +75,8 @@ type boundGangPlacement struct {
 	domain string
 	count  int
 	split  bool
-	names  map[string]bool
+	// placed holds the gang members found in the snapshot, by name.
+	placed map[string]*v1.Pod
 }
 
 // inspectBoundGangMembers also detects an already-split gang. Silently adopting
@@ -86,7 +87,7 @@ func inspectBoundGangMembers(nodeInfos []framework.NodeInfo, pod *v1.Pod, topolo
 	if !ok {
 		return boundGangPlacement{}
 	}
-	result := boundGangPlacement{names: make(map[string]bool)}
+	result := boundGangPlacement{placed: make(map[string]*v1.Pod)}
 	for _, info := range nodeInfos {
 		n := info.Node()
 		if n == nil {
@@ -96,7 +97,7 @@ func inspectBoundGangMembers(nodeInfos []framework.NodeInfo, pod *v1.Pod, topolo
 		for _, pi := range info.GetPods() {
 			mp := pi.GetPod()
 			if mp != nil && mp.Namespace == ns && mp.Labels[podGroupLabel] == pgName {
-				result.names[mp.Name] = true
+				result.placed[mp.Name] = mp
 				if dom == "" {
 					result.split = true
 					result.count++

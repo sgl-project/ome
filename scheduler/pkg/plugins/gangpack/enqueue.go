@@ -23,7 +23,9 @@ import (
 //
 // Registering these is what makes a gang recover promptly instead of on the
 // periodic flush. Queueing hints keep unrelated pod/node/PodGroup churn from
-// waking every blocked gang at once.
+// waking every blocked gang at once. The queue only routes an Add for an
+// already-assigned pod; an unscheduled sibling's creation reaches parked members
+// through the plugin's own activation (see activateGangMembers).
 func (g *GangPack) EventsToRegister(_ context.Context) ([]framework.ClusterEventWithHint, error) {
 	// Custom-resource events are named "<resource>.<version>.<group>".
 	pgGVK := fmt.Sprintf("podgroups.v1alpha1.%v", scheduling.GroupName)
