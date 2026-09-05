@@ -28,12 +28,14 @@ func (w *fakeWaitingPod) Reject(string, string) { w.rejected = true }
 // scan. The embedded nil Handle satisfies the rest.
 type fakeHandle struct {
 	framework.Handle
-	waiting   []framework.WaitingPod
-	snapshot  []framework.NodeInfo // nodes (with their pods) the bound scan sees
-	activated map[string]*v1.Pod
+	waiting       []framework.WaitingPod
+	snapshot      []framework.NodeInfo // nodes (with their pods) the bound scan sees
+	activated     map[string]*v1.Pod
+	activateCalls int
 }
 
 func (h *fakeHandle) Activate(_ klog.Logger, pods map[string]*v1.Pod) {
+	h.activateCalls++
 	if h.activated == nil {
 		h.activated = make(map[string]*v1.Pod)
 	}

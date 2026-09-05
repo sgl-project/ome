@@ -61,6 +61,12 @@ type GangPack struct {
 	// in-memory reservation drains; no Kubernetes object event represents it.
 	blockedMu          sync.Mutex
 	reservationBlocked map[string]*v1.Pod
+	// templatesIncomplete records gangs that parked a member because the live
+	// member set was still short of minMember. An unscheduled sibling's creation
+	// is not a queue event, so the first PreFilter that sees the set complete
+	// activates the gang once and clears the record.
+	templatesMu         sync.Mutex
+	templatesIncomplete map[string]bool
 	// failedDomains remembers domains whose candidates all failed another Filter.
 	// The next attempt excludes them until every feasible domain has been tried.
 	failedMu      sync.Mutex
@@ -236,6 +242,15 @@ func (g *GangPack) pinGang(state framework.CycleState, nodes []framework.NodeInf
 	templates, need, status := g.gangTemplates(gang, pod, placement)
 	if status != nil {
 		return nil, status
+	}
+	// A required affinity to a sibling that is neither bound nor assumed fails on
+	// every node, so planning now would only fail Filter and record the chosen
+	// domain as failed. Yield without a pin; the sibling's own Permit activation
+	// retries this member once it is placed.
+	if sibling, blocked := siblingAffinityBlocked(pod, templates[1:], placement.placed); blocked {
+		klog.V(4).InfoS("gangpack.pinGang.sibling_wait", "gang", gang.key, "sibling", klog.KObj(sibling))
+		return nil, framework.NewStatus(framework.Unschedulable,
+			"waiting for gang sibling "+sibling.Namespace+"/"+sibling.Name+" to be placed")
 	}
 
 	// Existing commitments only need matching inside their pinned domain. An
@@ -503,15 +518,22 @@ func (g *GangPack) gangTemplates(gang gangInfo, current *v1.Pod, placement bound
 	sort.Slice(members, func(i, j int) bool { return members[i].Name < members[j].Name })
 	out := []*v1.Pod{current}
 	for _, member := range members {
-		if member == nil || member.Name == current.Name || member.Spec.NodeName != "" || placement.names[member.Name] ||
+		if member == nil || member.Name == current.Name || member.Spec.NodeName != "" || placement.placed[member.Name] != nil ||
 			member.DeletionTimestamp != nil || member.Status.Phase == v1.PodSucceeded || member.Status.Phase == v1.PodFailed {
 			continue
 		}
 		out = append(out, member)
 	}
 	if len(out) < need {
+		g.markTemplatesIncomplete(gang)
 		return nil, 0, framework.NewStatus(framework.Unschedulable,
 			"waiting for all PodGroup member templates for "+gang.key)
+	}
+	// Members parked on the incomplete set are woken here, once per completion.
+	// The record is consumed only after the activation has actually run.
+	if g.hasTemplatesIncomplete(gang) && g.activateGangMembers(gang, activationTriggerTemplatesComplete, current) {
+		g.clearTemplatesIncomplete(gang)
+		klog.V(4).InfoS("gangpack.templates.complete", "gang", gang.key, "members", len(out), "need", need)
 	}
 	return out, need, nil
 }

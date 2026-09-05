@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -232,6 +233,31 @@ func ensureNotBound(t *testing.T, tc *testContext, ns, name string, window time.
 			t.Fatalf("pod %s/%s bound to %s while its gang was incomplete (gate should hold)", ns, name, p.Spec.NodeName)
 		}
 		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// waitForPodRejected polls until the scheduler has recorded a failed attempt for
+// the pod (PodScheduled=False, reason Unschedulable) whose message contains
+// reason. It orders a test step after the pod has been popped and parked for a
+// specific cause, without relying on wall-clock sleeps.
+func waitForPodRejected(t *testing.T, tc *testContext, ns, name, reason string, timeout time.Duration) {
+	t.Helper()
+	err := wait.PollUntilContextTimeout(tc.Ctx, 100*time.Millisecond, timeout, true,
+		func(ctx context.Context) (bool, error) {
+			p, err := tc.ClientSet.CoreV1().Pods(ns).Get(ctx, name, metav1.GetOptions{})
+			if err != nil {
+				return false, nil
+			}
+			for _, c := range p.Status.Conditions {
+				if c.Type == v1.PodScheduled && c.Status == v1.ConditionFalse &&
+					c.Reason == v1.PodReasonUnschedulable && strings.Contains(c.Message, reason) {
+					return true, nil
+				}
+			}
+			return false, nil
+		})
+	if err != nil {
+		t.Fatalf("pod %s/%s was never rejected by the scheduler for %q: %v", ns, name, reason, err)
 	}
 }
 

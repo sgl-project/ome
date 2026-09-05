@@ -39,6 +39,19 @@ var (
 		[]string{"result"},
 	)
 
+	// gangActivationTotal counts explicit sibling activations by trigger:
+	// "permit" (a member reached the gate) or "templates_complete" (the live
+	// member set reached minMember after a member had parked short of it).
+	gangActivationTotal = metrics.NewCounterVec(
+		&metrics.CounterOpts{
+			Subsystem:      metricsSubsystem,
+			Name:           "gang_activation_total",
+			Help:           "Explicit gang member activations by trigger (permit, templates_complete).",
+			StabilityLevel: metrics.ALPHA,
+		},
+		[]string{"trigger"},
+	)
+
 	// gangUnwindTotal counts gangs torn down by Unreserve after a member failed to
 	// schedule (gate timeout or bind failure).
 	gangUnwindTotal = metrics.NewCounter(
@@ -68,7 +81,7 @@ var registerMetricsOnce sync.Once
 // registry exactly once.
 func registerMetrics() {
 	registerMetricsOnce.Do(func() {
-		legacyregistry.MustRegister(gangPinTotal, gangGateTotal, gangUnwindTotal, pinnedGroups)
+		legacyregistry.MustRegister(gangPinTotal, gangGateTotal, gangActivationTotal, gangUnwindTotal, pinnedGroups)
 	})
 }
 

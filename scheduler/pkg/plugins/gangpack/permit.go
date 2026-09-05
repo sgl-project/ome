@@ -36,7 +36,7 @@ func (g *GangPack) Permit(_ context.Context, state framework.CycleState, pod *v1
 			"gang permit timeout is not configured"), 0
 	}
 	g.rememberAttempt(pod, pin.commitment)
-	g.activateGangMembers(gang)
+	g.activateGangMembers(gang, activationTriggerPermit, nil)
 
 	// Reserve has already converted this member's claim into assumed occupancy.
 	// The commitment reaches zero exactly when minMember slots, including any
@@ -58,37 +58,106 @@ func (g *GangPack) Permit(_ context.Context, state framework.CycleState, pod *v1
 	return framework.NewStatus(framework.Success), 0
 }
 
-// activateGangMembers closes the queueing-hint race where a sibling Add event
-// occurs while an earlier member is still in flight and that earlier member
-// subsequently becomes Unschedulable waiting for the full template set. Once any
-// member reaches Permit, the informer has the gang; force-activating its siblings
-// makes the earlier member retry immediately instead of waiting for the periodic
-// unschedulable flush.
-//
-// Unconditional and per-member: whenever any gang member reaches Permit, every
-// live member is activated, regardless of whether the gate then admits or
-// waits. This is also what lets an affinity-ordered gang (a worker whose
-// Filter depends on its leader already being assumed) converge promptly on an
-// otherwise quiet cluster, since an assumed-but-unbound pod produces no
-// cluster event of its own for that worker to react to.
-func (g *GangPack) activateGangMembers(gang gangInfo) {
+// Activation triggers, recorded as the gang_activation_total label value.
+const (
+	// activationTriggerPermit: a member reached Permit. An assumed-but-unbound
+	// member produces no cluster event, yet siblings whose Filter depends on it
+	// (a worker with required affinity to its leader) must retry now.
+	activationTriggerPermit = "permit"
+	// activationTriggerTemplatesComplete: the live member set reached
+	// minMember. An unscheduled pod's creation is not a queue move event, so a
+	// member parked on the incomplete set would otherwise wait for the
+	// periodic unschedulable flush.
+	activationTriggerTemplatesComplete = "templates_complete"
+)
+
+// activateGangMembers force-activates every live member of the gang. Gang
+// progress is plugin-internal state with no cluster event behind it, so each
+// transition that can unblock a parked sibling must be turned into queue
+// activity explicitly; the triggers above are the two such transitions.
+// Activation bypasses backoff, so callers must fire it on a real transition,
+// not on every failed attempt. except, when non-nil, is the in-flight member
+// observing the transition; it is already being scheduled and needs no wake-up.
+// The result reports whether the activation ran (lister and handle available),
+// so a caller can consume a one-shot record only after the wake-up happened.
+func (g *GangPack) activateGangMembers(gang gangInfo, trigger string, except *v1.Pod) bool {
 	lister, ok := g.podLister.(gangMemberLister)
 	if !ok || g.handle == nil {
-		return
+		return false
 	}
 	ns, name, ok := splitGangKey(gang.key)
 	if !ok {
-		return
+		return false
 	}
 	pods, err := lister.gangPods(ns, name)
 	if err != nil {
-		return
+		return false
 	}
 	activate := make(map[string]*v1.Pod, len(pods))
 	for _, pod := range pods {
-		if pod != nil {
-			activate[pod.Namespace+"/"+pod.Name] = pod
+		if pod == nil || samePodIdentity(pod, except) {
+			continue
+		}
+		activate[pod.Namespace+"/"+pod.Name] = pod
+	}
+	if len(activate) == 0 {
+		return true
+	}
+	gangActivationTotal.WithLabelValues(trigger).Inc()
+	g.handle.Activate(klog.Background(), activate)
+	return true
+}
+
+// markTemplatesIncomplete records that a member of the gang was parked because
+// the live member set is short of minMember.
+func (g *GangPack) markTemplatesIncomplete(gang gangInfo) {
+	g.templatesMu.Lock()
+	if g.templatesIncomplete == nil {
+		g.templatesIncomplete = make(map[string]bool)
+	}
+	g.templatesIncomplete[gang.key] = true
+	g.templatesMu.Unlock()
+}
+
+// hasTemplatesIncomplete reports whether the gang has an incomplete-set record.
+func (g *GangPack) hasTemplatesIncomplete(gang gangInfo) bool {
+	g.templatesMu.Lock()
+	defer g.templatesMu.Unlock()
+	return g.templatesIncomplete[gang.key]
+}
+
+// clearTemplatesIncomplete consumes the gang's incomplete-set record. It reports
+// true exactly once per incomplete-to-complete transition, so the caller's
+// activation cannot repeat while the set stays complete.
+func (g *GangPack) clearTemplatesIncomplete(gang gangInfo) bool {
+	g.templatesMu.Lock()
+	defer g.templatesMu.Unlock()
+	if !g.templatesIncomplete[gang.key] {
+		return false
+	}
+	delete(g.templatesIncomplete, gang.key)
+	return true
+}
+
+// pruneTemplatesIncomplete drops records for gangs with no live pods, so a gang
+// deleted while still incomplete does not retain its entry. Liveness is checked
+// per record under the lock: a member marking its gang concurrently waits for
+// the lock, so a record for a gang that has just gained a pod is never dropped.
+func (g *GangPack) pruneTemplatesIncomplete() {
+	lister, ok := g.podLister.(gangMemberLister)
+	if !ok {
+		return
+	}
+	g.templatesMu.Lock()
+	defer g.templatesMu.Unlock()
+	for key := range g.templatesIncomplete {
+		ns, name, ok := splitGangKey(key)
+		if !ok {
+			delete(g.templatesIncomplete, key)
+			continue
+		}
+		if pods, err := lister.gangPods(ns, name); err == nil && len(pods) == 0 {
+			delete(g.templatesIncomplete, key)
 		}
 	}
-	g.handle.Activate(klog.Background(), activate)
 }
