@@ -2675,16 +2675,15 @@ engine must not preclude them.
   Request annotations are a mailbox and the workload audit ledger retains
   durable history. A fresh capability Lease, not CRD/status presence alone,
   proves executor availability. RawDeployment and LWS are advisory-only until
-  their lifecycle owner implements the request contract. Condition-change early
-  passes now force a serialized snapshot refresh before policy evaluation
-  without moving the regular decision cadence. Current implementation gaps
-  (Node-Health evacuation, Dispatcher, and executor readiness) are recorded
-  explicitly.
+  their lifecycle owner implements the request contract.
 - 2026-09-07: The checked OMENative snapshot is implemented against dense
   `InferenceReplica.Status.InstanceStatuses` directly. Live Pods remain the
   source of truth for placement and readiness; compatibility-only ready,
   scheduled, and nodes fields are ignored. RawDeployment candidates are
-  advisory-only in current policy code.
+  advisory-only in current policy code. Condition-change early passes now force
+  a serialized snapshot refresh before policy evaluation without moving the
+  regular decision cadence. Current implementation gaps (Node-Health
+  evacuation, Dispatcher, and executor readiness) are recorded explicitly.
 - TBD: Complete Alpha implementation (capability Lease, Policy #2, Dispatcher,
   and outcome-fed safety ledger).
 - TBD: First Beta user.

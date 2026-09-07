@@ -53,7 +53,10 @@ type notifyingTimer struct {
 
 func (t *notifyingTimer) C() <-chan time.Time {
 	if t.reads != nil {
-		t.reads <- struct{}{}
+		select {
+		case t.reads <- struct{}{}:
+		default:
+		}
 	}
 	return t.Timer.C()
 }
