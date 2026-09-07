@@ -143,7 +143,8 @@ func Build(ctx context.Context, r client.Reader, opts Options) (*ClusterSnapshot
 	var irList v1beta1.InferenceReplicaList
 	irListErr := r.List(ctx, &irList)
 	irIndex := indexInferenceReplicas(irList.Items)
-	routedPods := routeWorkloadPods(podEvidence, isvcList.Items, irIndex)
+	routedPods, ownerResolvedTargets := routeWorkloadPods(podEvidence, isvcList.Items, irIndex)
+	projectOwnerResolvedNodeOccupancy(s.Nodes, ownerResolvedTargets)
 	for i := range isvcList.Items {
 		isvc := &isvcList.Items[i]
 		key := types.NamespacedName{Namespace: isvc.Namespace, Name: isvc.Name}
@@ -201,6 +202,7 @@ func ingestPod(s *ClusterSnapshot, pod *corev1.Pod, podEvidence *[]PodInfo, opts
 		GPUs:        gpus,
 		Ready:       podIsReady(pod),
 		Terminating: pod.DeletionTimestamp != nil,
+		Component:   component,
 		ManagedBy:   pod.Labels[query.LabelManagedBy],
 	}
 	parseOMENativePodIdentity(&info, pod)
@@ -210,7 +212,6 @@ func ingestPod(s *ClusterSnapshot, pod *corev1.Pod, podEvidence *[]PodInfo, opts
 	}
 	if isvcName != "" {
 		info.ISVC = types.NamespacedName{Namespace: pod.Namespace, Name: isvcName}
-		info.Component = component
 	}
 
 	// Node occupancy: GPU-holding pods only.
@@ -220,7 +221,7 @@ func ingestPod(s *ClusterSnapshot, pod *corev1.Pod, podEvidence *[]PodInfo, opts
 			if info.Terminating {
 				node.TerminatingGPUs += gpus
 			}
-			if isvcName != "" {
+			if isvcName != "" || info.ControllerOwnerValid || info.ManagedBy == query.ManagedByOMENative {
 				node.OMEPods = append(node.OMEPods, info)
 			} else {
 				node.OtherOccupants = append(node.OtherOccupants, info)
@@ -363,8 +364,12 @@ func parseOMENativePodIdentity(info *PodInfo, pod *corev1.Pod) {
 			return
 		}
 		info.ControllerOwnerPresent = true
+		info.ControllerOwnerAPIVersion = owner.APIVersion
+		info.ControllerOwnerKind = owner.Kind
+		info.ControllerOwnerName = owner.Name
 		info.ControllerOwnerUID = owner.UID
-		info.ControllerOwnerValid = owner.UID != ""
+		info.ControllerOwnerValid = owner.APIVersion == v1beta1.SchemeGroupVersion.String() &&
+			owner.Kind == "InferenceReplica" && owner.Name != "" && owner.UID != ""
 	}
 }
 

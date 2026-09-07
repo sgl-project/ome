@@ -6,7 +6,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 
@@ -46,11 +48,58 @@ func TestRenderedAlfredWriteBoundary(t *testing.T) {
 		}
 		assertBinding(t, roleBinding.RoleRef, roleBinding.Subjects, "Role")
 		assertBinding(t, clusterRoleBinding.RoleRef, clusterRoleBinding.Subjects, "ClusterRole")
+
+		var applicable []string
+		for _, object := range objects {
+			switch object.GetKind() {
+			case "RoleBinding":
+				binding := manifestAs[rbacv1.RoleBinding](t, object)
+				if subjectsCoverAlfred(binding.Subjects, binding.Namespace) {
+					applicable = append(applicable, "RoleBinding|"+binding.Namespace+"|"+binding.Name+"|"+
+						binding.RoleRef.Kind+"|"+binding.RoleRef.Name)
+				}
+			case "ClusterRoleBinding":
+				binding := manifestAs[rbacv1.ClusterRoleBinding](t, object)
+				if subjectsCoverAlfred(binding.Subjects, "") {
+					applicable = append(applicable, "ClusterRoleBinding|<cluster>|"+binding.Name+"|"+
+						binding.RoleRef.Kind+"|"+binding.RoleRef.Name)
+				}
+			}
+		}
+		want := []string{
+			"ClusterRoleBinding|<cluster>|ome-alfred|ClusterRole|ome-alfred",
+			"RoleBinding|ome|ome-alfred|Role|ome-alfred",
+		}
+		sort.Strings(applicable)
+		if !reflect.DeepEqual(applicable, want) {
+			t.Fatalf("rendered bindings covering ome/ome-alfred = %v, want exactly %v", applicable, want)
+		}
 	})
+	if clusterRole.AggregationRule != nil {
+		t.Fatalf("ome-alfred ClusterRole must not acquire dynamic aggregated rules: %+v", clusterRole.AggregationRule)
+	}
 
 	// Alfred receives both bindings, so authorization is the union. Auditing
 	// either object alone could miss a broad grant on the other one.
 	effectiveRules := append(append([]rbacv1.PolicyRule(nil), role.Rules...), clusterRole.Rules...)
+	t.Run("effective writes exactly match the current boundary", func(t *testing.T) {
+		got := append(
+			effectiveWriteTuples("Role", role.Rules),
+			effectiveWriteTuples("ClusterRole", clusterRole.Rules)...,
+		)
+		want := []string{
+			"ClusterRole|core|events|create|<all>",
+			"ClusterRole|core|events|patch|<all>",
+			"Role|coordination.k8s.io|leases|update|alfred.ome.io",
+			"Role|core|configmaps|update|alfred-recommendations",
+		}
+		sort.Strings(got)
+		sort.Strings(want)
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("effective write tuples =\n  %s\nwant exactly =\n  %s",
+				strings.Join(got, "\n  "), strings.Join(want, "\n  "))
+		}
+	})
 	t.Run("effective Lease verbs are name scoped", func(t *testing.T) {
 		verbs := []string{"get", "update", "create", "list", "watch", "patch", "delete", "deletecollection"}
 		tests := []struct {
@@ -88,6 +137,70 @@ func TestRenderedAlfredWriteBoundary(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("Nodes and Pods remain read-only", func(t *testing.T) {
+		for _, resource := range []string{"nodes", "pods"} {
+			for _, verb := range []string{"get", "list", "watch"} {
+				if !allowsResource(effectiveRules, "", resource, verb) {
+					t.Errorf("effective permission %s core/%s = false, want read access", verb, resource)
+				}
+			}
+		}
+		for _, resource := range []string{"nodes", "nodes/status", "pods", "pods/status", "pods/eviction"} {
+			for _, verb := range []string{"create", "update", "patch", "delete", "deletecollection"} {
+				if allowsResource(effectiveRules, "", resource, verb) {
+					t.Errorf("effective permission %s core/%s = true, want read-only access", verb, resource)
+				}
+			}
+		}
+	})
+}
+
+func TestEffectiveWriteTuplesRetainsWildcardAndNonResourceGrants(t *testing.T) {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"*"},
+			Resources: []string{"*"},
+			Verbs:     []string{"*"},
+		},
+		{
+			NonResourceURLs: []string{"/debug/*"},
+			Verbs:           []string{"post"},
+		},
+	}
+	want := []string{
+		"Role|*|*|*|<all>",
+		"Role|non-resource|/debug/*|post|<not-applicable>",
+	}
+	if got := effectiveWriteTuples("Role", rules); !reflect.DeepEqual(got, want) {
+		t.Fatalf("effectiveWriteTuples() = %v, want %v", got, want)
+	}
+}
+
+func TestSubjectsCoverAlfred(t *testing.T) {
+	tests := []struct {
+		name             string
+		subject          rbacv1.Subject
+		bindingNamespace string
+		want             bool
+	}{
+		{name: "exact service account", subject: rbacv1.Subject{Kind: rbacv1.ServiceAccountKind, Namespace: "ome", Name: "ome-alfred"}, want: true},
+		{name: "service account defaults to binding namespace", subject: rbacv1.Subject{Kind: rbacv1.ServiceAccountKind, Name: "ome-alfred"}, bindingNamespace: "ome", want: true},
+		{name: "canonical user", subject: rbacv1.Subject{Kind: rbacv1.UserKind, Name: "system:serviceaccount:ome:ome-alfred"}, want: true},
+		{name: "authenticated group", subject: rbacv1.Subject{Kind: rbacv1.GroupKind, Name: "system:authenticated"}, want: true},
+		{name: "all service accounts", subject: rbacv1.Subject{Kind: rbacv1.GroupKind, Name: "system:serviceaccounts"}, want: true},
+		{name: "namespace service accounts", subject: rbacv1.Subject{Kind: rbacv1.GroupKind, Name: "system:serviceaccounts:ome"}, want: true},
+		{name: "other service account", subject: rbacv1.Subject{Kind: rbacv1.ServiceAccountKind, Namespace: "other", Name: "ome-alfred"}},
+		{name: "unrelated group", subject: rbacv1.Subject{Kind: rbacv1.GroupKind, Name: "developers"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := subjectsCoverAlfred([]rbacv1.Subject{test.subject}, test.bindingNamespace); got != test.want {
+				t.Fatalf("subjectsCoverAlfred(%+v, %q) = %t, want %t",
+					test.subject, test.bindingNamespace, got, test.want)
+			}
+		})
+	}
 }
 
 func TestAllowsResourceRecognizesWildcardGrants(t *testing.T) {
@@ -218,6 +331,31 @@ func assertBinding(t *testing.T, ref rbacv1.RoleRef, subjects []rbacv1.Subject, 
 	}
 }
 
+func subjectsCoverAlfred(subjects []rbacv1.Subject, bindingNamespace string) bool {
+	for _, subject := range subjects {
+		switch subject.Kind {
+		case rbacv1.ServiceAccountKind:
+			namespace := subject.Namespace
+			if namespace == "" {
+				namespace = bindingNamespace
+			}
+			if namespace == alfredNamespace && subject.Name == alfredServiceAccount {
+				return true
+			}
+		case rbacv1.UserKind:
+			if subject.Name == "system:serviceaccount:"+alfredNamespace+":"+alfredServiceAccount {
+				return true
+			}
+		case rbacv1.GroupKind:
+			if subject.Name == "system:authenticated" || subject.Name == "system:serviceaccounts" ||
+				subject.Name == "system:serviceaccounts:"+alfredNamespace {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func allowsLease(rules []rbacv1.PolicyRule, verb, name string) bool {
 	for _, rule := range rules {
 		if !containsRBAC(rule.APIGroups, "coordination.k8s.io") ||
@@ -241,6 +379,44 @@ func containsRBAC(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// effectiveWriteTuples expands every effective verb other than the three
+// read-only Kubernetes verbs. Keeping wildcards and uncommon verbs in the
+// result makes the rendered-manifest allowlist fail closed if a broad grant is
+// introduced on either binding.
+func effectiveWriteTuples(scope string, rules []rbacv1.PolicyRule) []string {
+	var tuples []string
+	for _, rule := range rules {
+		resourceNames := "<all>"
+		if len(rule.ResourceNames) > 0 {
+			names := append([]string(nil), rule.ResourceNames...)
+			sort.Strings(names)
+			resourceNames = strings.Join(names, ",")
+		}
+
+		for _, verb := range rule.Verbs {
+			if verb == "get" || verb == "list" || verb == "watch" {
+				continue
+			}
+			for _, group := range rule.APIGroups {
+				groupName := group
+				if groupName == "" {
+					groupName = "core"
+				}
+				for _, resource := range rule.Resources {
+					tuples = append(tuples,
+						scope+"|"+groupName+"|"+resource+"|"+verb+"|"+resourceNames)
+				}
+			}
+			for _, nonResourceURL := range rule.NonResourceURLs {
+				tuples = append(tuples,
+					scope+"|non-resource|"+nonResourceURL+"|"+verb+"|<not-applicable>")
+			}
+		}
+	}
+	sort.Strings(tuples)
+	return tuples
 }
 
 func allowsResource(rules []rbacv1.PolicyRule, group, resource, verb string) bool {

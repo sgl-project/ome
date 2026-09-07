@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -25,11 +26,11 @@ func TestNewRegistersEverySeries(t *testing.T) {
 	m.RecommendationsProduced.WithLabelValues("defragmentation", "prod/svc", "engine", "fragmentation", "true").Inc()
 	m.RecommendationsAccepted.WithLabelValues("defragmentation", "prod/svc", "engine").Inc()
 	m.RecommendationsRejected.WithLabelValues("defragmentation", "prod/svc", "engine", "Cooldown").Inc()
-	m.MigrationCalls.WithLabelValues("defragmentation", "prod/svc", "RollingUpdate", "rollingrestart").Inc()
-	m.MigrationOutcome.WithLabelValues("defragmentation", "prod/svc", "RollingUpdate", "completed").Inc()
-	m.LWSRecommendations.WithLabelValues("prod/svc", "manual").Inc()
+	m.MigrationCalls.WithLabelValues("defragmentation", "prod/svc", "OMENative", "omenative").Inc()
+	m.MigrationOutcome.WithLabelValues("defragmentation", "prod/svc", "OMENative", "completed").Inc()
+	m.LWSRecommendations.WithLabelValues("prod/svc", "MigrateToOMENative").Inc()
 	m.NodeHealthEvacuations.WithLabelValues("node1", "prod/svc", "omenative", "completed").Inc()
-	m.NodeHealthSignals.WithLabelValues("node1", "RemediationSignal").Inc()
+	m.NodeHealthSignals.WithLabelValues("node1", "NodeRepairNeeded").Inc()
 	m.CooldownOverrides.WithLabelValues("nodehealth").Inc()
 	m.ObservationLoopDuration.Observe(0.1)
 	m.DecisionLoopDuration.Observe(0.2)
@@ -51,6 +52,56 @@ func TestNewRegistersEverySeries(t *testing.T) {
 			t.Fatalf("metric %s has no help text", family.GetName())
 		}
 	}
+}
+
+func TestNodeHealthSignalsMetricDescribesLifecycleReasons(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+	m.NodeHealthSignals.WithLabelValues("node1", "NodeRepairNeeded").Inc()
+
+	families, err := registry.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, family := range families {
+		if family.GetName() != "alfred_nodehealth_signals_total" {
+			continue
+		}
+		help := family.GetHelp()
+		for _, reason := range []string{"NodeRepairNeeded", "NodeDrainedForRepair"} {
+			if !strings.Contains(help, reason) {
+				t.Fatalf("node-health signal help %q does not document lifecycle reason %q", help, reason)
+			}
+		}
+		labels := family.GetMetric()[0].GetLabel()
+		if len(labels) != 2 || labels[0].GetName() != "node" || labels[1].GetName() != "reason" {
+			t.Fatalf("node-health signal labels = %v, want node,reason", labels)
+		}
+		return
+	}
+	t.Fatal("alfred_nodehealth_signals_total was not gathered")
+}
+
+func TestOMENativeUnavailableMetricCoversEveryOMENativeCandidate(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := New(registry)
+	m.OMENativeUnavailable.Set(1)
+
+	families, err := registry.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, family := range families {
+		if family.GetName() != "alfred_omenative_unavailable" {
+			continue
+		}
+		help := family.GetHelp()
+		if !strings.Contains(help, "OMENative candidates") || strings.Contains(help, "multi-pod") {
+			t.Fatalf("OMENative unavailable help is surface-incomplete: %q", help)
+		}
+		return
+	}
+	t.Fatal("alfred_omenative_unavailable was not gathered")
 }
 
 // TestPoolGaugeLabelKeys pins the exported label contract of the pool-keyed

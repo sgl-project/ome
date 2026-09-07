@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync/atomic"
 	"testing"
@@ -11,12 +12,18 @@ import (
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/clock"
 	clocktesting "k8s.io/utils/clock/testing"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/alfred/config"
 	"sigs.k8s.io/ome/pkg/alfred/policy"
+	"sigs.k8s.io/ome/pkg/alfred/policy/nodehealth"
 	"sigs.k8s.io/ome/pkg/alfred/snapshot"
+	"sigs.k8s.io/ome/pkg/alfred/testutil"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 type stubSource struct {
@@ -151,6 +158,107 @@ func TestRunOncePipeline(t *testing.T) {
 	if got := promtestutil.CollectAndCount(m.DecisionLoopDuration); got != 1 {
 		t.Fatalf("decision duration histogram families = %d", got)
 	}
+}
+
+func TestRunOnceNodeHealthPolicyIntegration(t *testing.T) {
+	snap := testutil.NewSnapshot().
+		WithNode("bad", "h100", 8, testutil.NodeUnhealthy()).
+		WithNode("target", "h100", 8).
+		WithInstance("prod/model", v1beta1.EngineComponent, constants.OMENative, "bad", 1).
+		Build()
+	reporter, m, recorder, cl := newTestReporter(t, recommendationsCM(nil))
+	store := config.NewStore()
+	loop := &DecisionLoop{
+		Snapshots: &stubSource{snap: snap},
+		Store:     store,
+		Policies:  []policy.Policy{&nodehealth.Policy{}},
+		Arbiter:   &Arbiter{Ledger: NewLedger()},
+		Reporter:  reporter,
+		Metrics:   m,
+		Log:       logr.Discard(),
+		Now:       func() time.Time { return testNow },
+	}
+
+	loop.RunOnce(context.Background())
+
+	if events := drainEvents(recorder); !hasEvent(events, eventNodeRepairNeeded) ||
+		!hasEvent(events, "RecommendationWithheld") {
+		t.Fatalf("first pass events = %v, want repair-needed and withheld recommendation", events)
+	}
+	node, ok := nodeRecord(t, cl, "bad")
+	if !ok || node.SignaledAt == nil || len(node.Workloads) != 1 || node.Workloads[0] != "prod/model" {
+		t.Fatalf("node remediation record = %+v, present %v", node, ok)
+	}
+	firstSignaledAt := *node.SignaledAt
+	record := readCycleRecord(t, cl)
+	if len(record.Recommendations) != 1 {
+		t.Fatalf("recommendations = %+v, want one workload finding and no marker", record.Recommendations)
+	}
+	got := record.Recommendations[0]
+	if got.Workload != "prod/model" || got.Policy != nodehealth.PolicyName ||
+		got.Reason != policy.ReasonNodeUnhealthy || got.Outcome != OutcomeWithheld ||
+		got.FromNode != "bad" || got.Target != "target" {
+		t.Fatalf("node-health recommendation = %+v", got)
+	}
+	if count := promtestutil.ToFloat64(m.RecommendationsProduced.WithLabelValues(
+		nodehealth.PolicyName, "", "", policy.ReasonRemediationSignal, "false")); count != 0 {
+		t.Fatalf("remediation marker entered generic recommendation metrics: %v", count)
+	}
+	if count := promtestutil.ToFloat64(m.RecommendationsProduced.WithLabelValues(
+		nodehealth.PolicyName, "prod/model", string(v1beta1.EngineComponent), policy.ReasonNodeUnhealthy, "true")); count != 1 {
+		t.Fatalf("workload recommendation count = %v, want 1", count)
+	}
+
+	if _, err := store.Update([]byte("schemaVersion: 1\npolicies:\n  nodeHealth:\n    signalOnly: true\n")); err != nil {
+		t.Fatal(err)
+	}
+	loop.RunOnce(context.Background())
+	if events := drainEvents(recorder); len(events) != 0 {
+		t.Fatalf("signal-only replayed lifecycle or workload events: %v", events)
+	}
+	node, ok = nodeRecord(t, cl, "bad")
+	if !ok || node.SignaledAt == nil || !node.SignaledAt.Equal(firstSignaledAt) {
+		t.Fatalf("signal-only lost or replayed the active episode: %+v, present %v", node, ok)
+	}
+	if got := readCycleRecord(t, cl).Recommendations; len(got) != 0 {
+		t.Fatalf("signal-only workload recommendations = %+v, want none", got)
+	}
+
+	if _, err := store.Update([]byte("schemaVersion: 1\npolicies:\n  nodeHealth:\n    enabled: false\n")); err != nil {
+		t.Fatal(err)
+	}
+	loop.RunOnce(context.Background())
+	if events := drainEvents(recorder); len(events) != 0 {
+		t.Fatalf("disabled policy emitted events: %v", events)
+	}
+	if node, ok := nodeRecord(t, cl, "bad"); ok {
+		t.Fatalf("disabled policy retained node record: %+v", node)
+	}
+	if got := readCycleRecord(t, cl).Recommendations; len(got) != 0 {
+		t.Fatalf("disabled policy workload recommendations = %+v, want none", got)
+	}
+	if count := promtestutil.ToFloat64(m.RecommendationsProduced.WithLabelValues(
+		nodehealth.PolicyName, "prod/model", string(v1beta1.EngineComponent), policy.ReasonNodeUnhealthy, "true")); count != 1 {
+		t.Fatalf("later marker-only/disabled passes changed workload count: %v", count)
+	}
+}
+
+func readCycleRecord(t *testing.T, cl interface {
+	Get(context.Context, types.NamespacedName, client.Object, ...client.GetOption) error
+}) cycleRecord {
+	t.Helper()
+	var cm corev1.ConfigMap
+	if err := cl.Get(context.Background(), types.NamespacedName{
+		Namespace: "ome",
+		Name:      "alfred-recommendations",
+	}, &cm); err != nil {
+		t.Fatal(err)
+	}
+	var got cycleRecord
+	if err := json.Unmarshal([]byte(cm.Data[recommendationsKey]), &got); err != nil {
+		t.Fatalf("decode %s: %v", recommendationsKey, err)
+	}
+	return got
 }
 
 func TestRunOnceReportsStructuredOMENativeExecutorState(t *testing.T) {

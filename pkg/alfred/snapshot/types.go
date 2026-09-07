@@ -136,7 +136,12 @@ type Node struct {
 	// Preemptible is set when the node matches a configured
 	// spot/preemptible label.
 	Preemptible bool
-	// OMEPods are the OME-managed GPU pods bound to this node.
+	// OMEPods are the OME-managed GPU pods bound to this node. Raw ISVC or
+	// managed-by labels and exact InferenceReplica owner evidence are sufficient
+	// even while the IR is absent; when present, the IR projects canonical
+	// ISVC/component identity here. An ambiguous owner can therefore produce
+	// multiple logical blockers for one physical Pod without changing
+	// AllocatedGPUs.
 	OMEPods []PodInfo
 	// OtherOccupants are non-OME GPU pods (notebooks, batch jobs, ...):
 	// they count against capacity but are never migration candidates.
@@ -157,10 +162,12 @@ type PodInfo struct {
 	// StartTime is pod.status.startTime when set (drives the
 	// authorship-blind placement cooldown).
 	StartTime *time.Time
-	// ISVC is the owning InferenceService (zero for non-OME pods).
+	// ISVC is the owning InferenceService (zero for non-OME pods). Transient
+	// workload-validation evidence retains the raw label; Node.OMEPods carries
+	// controller-owner-resolved identity when that relationship is proven.
 	ISVC types.NamespacedName
-	// Component is the OME component label value (engine/decoder/router);
-	// empty for non-OME pods.
+	// Component follows the same raw-evidence/canonical-occupancy distinction
+	// as ISVC; it is empty for non-OME pods.
 	Component v1beta1.ComponentType
 	// ManagedBy is the ome.io/managed-by label value.
 	ManagedBy string
@@ -181,11 +188,16 @@ type PodInfo struct {
 	PodOrdinalPresent    bool
 	PodOrdinalValid      bool
 
-	// ControllerOwnerUID is the sole controller OwnerReference UID when one
-	// structurally valid reference is present.
-	ControllerOwnerUID     types.UID
-	ControllerOwnerPresent bool
-	ControllerOwnerValid   bool
+	// ControllerOwner* retain the sole controller OwnerReference. Valid means
+	// exactly one controller names an ome/v1beta1 InferenceReplica with a
+	// nonempty name and UID; owner resolution additionally matches that full
+	// identity to an observed InferenceReplica.
+	ControllerOwnerAPIVersion string
+	ControllerOwnerKind       string
+	ControllerOwnerName       string
+	ControllerOwnerUID        types.UID
+	ControllerOwnerPresent    bool
+	ControllerOwnerValid      bool
 }
 
 // Workload is one InferenceService with everything policies need to reason

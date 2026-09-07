@@ -62,9 +62,10 @@ data:
     recommendationsConfigMapEnabled: true
     recommendationsConfigMapName: alfred-recommendations
 
-    # Global safety bounds, applied once by the arbiter across every policy.
+    # Cross-policy admission bounds, enforced once by the arbiter.
     maxInFlightMigrations: 3
     maxMigrationsPerHour: 10
+    # Defrag pending-pressure urgency; Node Health does not use this score.
     emergencyPendingAgeMinutes: 10
 
     # Weekly UTC windows reserved for future defrag dispatch.
@@ -84,6 +85,8 @@ data:
 
     allowCrossTenantOptimization: true
 
+    # Reserved schema fields: accepted and defaulted, but not applied yet.
+    # Current logging is controlled by the controller-runtime zap CLI flags.
     logLevel: info
     structuredLogging: true
 ---

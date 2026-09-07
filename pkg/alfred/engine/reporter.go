@@ -2,8 +2,11 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -18,6 +21,7 @@ import (
 	"sigs.k8s.io/ome/pkg/alfred/config"
 	"sigs.k8s.io/ome/pkg/alfred/metrics"
 	"sigs.k8s.io/ome/pkg/alfred/policy"
+	"sigs.k8s.io/ome/pkg/alfred/snapshot"
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
@@ -34,12 +38,22 @@ const (
 )
 
 // recommendationsKey is the ConfigMap key holding the latest cycle record;
-// node remediation records (Policy #2) live beside it under node.<name> keys.
+// node remediation records (Policy #2) live beside it under derived per-node keys.
 const recommendationsKey = "last-cycle.json"
 
-// Reporter is the engine's single observability emitter: every Event, every
-// decision metric, and every alfred-recommendations ConfigMap entry comes
+const (
+	nodeRecordPrefix          = "node."
+	hashedNodeRecordPrefix    = "node-hash."
+	maxConfigMapDataKeyLength = 253
+	eventNodeRepairNeeded     = "NodeRepairNeeded"
+	eventNodeDrainedForRepair = "NodeDrainedForRepair"
+)
+
+// Reporter centralizes candidate, decision, and remediation-lifecycle output:
+// their Events, metrics, and alfred-recommendations ConfigMap entries come
 // from here, so emission is tested and deduplicated once, not per policy.
+// Loop health, snapshot gauges, leader status, and config-reload output remain
+// with the components that own those operational signals.
 type Reporter struct {
 	// Client updates the recommendations ConfigMap. Update-only: the chart
 	// pre-creates it, and a missing ConfigMap disables the record with a
@@ -68,10 +82,12 @@ type Reporter struct {
 	// cmMissingLogged dedups the missing-ConfigMap log.
 	cmMissingLogged bool
 
-	// nodeSignals dedups node remediation signals across decision loops (a
-	// flapping condition must not spam fresh signals): node name → the
-	// condition fingerprint last signaled. Policy #2 drives this.
-	nodeSignals map[string]string
+	// nodeEpisodes carries lifecycle-event phase across decision loops. The
+	// durable per-node records seed it after leader failover; persistence
+	// retries never roll it back, because doing so would replay Events and
+	// counters on every failed ConfigMap write.
+	nodeEpisodes       map[string]nodeEpisode
+	nodeEpisodesSeeded bool
 }
 
 // cycleRecord is the JSON document written to the recommendations ConfigMap.
@@ -99,19 +115,51 @@ type recommendationView struct {
 	CooldownOver   bool     `json:"cooldownOverridden,omitempty"`
 }
 
+type nodeEpisode struct {
+	signaledAt *time.Time
+	drainedAt  *time.Time
+}
+
+type nodeRemediationRecord struct {
+	State                  snapshot.NodeHealthState `json:"state"`
+	Conditions             []nodeConditionRecord    `json:"conditions"`
+	SuspectUntil           *time.Time               `json:"suspectUntil,omitempty"`
+	Workloads              []string                 `json:"workloads"`
+	OMEGPUOccupantsPresent bool                     `json:"omeGpuOccupantsPresent"`
+	ObservedAt             time.Time                `json:"observedAt"`
+	SignaledAt             *time.Time               `json:"signaledAt,omitempty"`
+	DrainedAt              *time.Time               `json:"drainedAt,omitempty"`
+}
+
+type nodeConditionRecord struct {
+	Type               corev1.NodeConditionType `json:"type"`
+	Status             corev1.ConditionStatus   `json:"status"`
+	LastTransitionTime time.Time                `json:"lastTransitionTime"`
+}
+
 // ReportCycle publishes one decision pass: produced/accepted/rejected
 // counters, Events on the target InferenceServices, and (when enabled) the
 // recommendations ConfigMap record. decisions covers the executable
 // candidates; advisories appear only in candidates.
 func (r *Reporter) ReportCycle(ctx context.Context, candidates []policy.Candidate, decisions []Decision, cfg *config.Config, now time.Time) {
 	record := cycleRecord{Timestamp: now, Mode: cfg.Mode}
+	workloadCandidates := make([]policy.Candidate, 0, len(candidates))
+	remediations := make([]*policy.NodeRemediation, 0)
+	for i := range candidates {
+		if candidates[i].Remediation != nil {
+			remediations = append(remediations, candidates[i].Remediation)
+			continue
+		}
+		workloadCandidates = append(workloadCandidates, candidates[i])
+	}
+	nodeRecords, reconcileNodeRecords := r.reconcileNodeRemediations(ctx, remediations, cfg, now)
 
 	decided := map[string]Decision{}
 	for _, d := range decisions {
 		decided[candidateKey(d.Candidate)] = d
 	}
 
-	for _, c := range candidates {
+	for _, c := range workloadCandidates {
 		executable := "false"
 		if c.Executable {
 			executable = "true"
@@ -166,7 +214,7 @@ func (r *Reporter) ReportCycle(ctx context.Context, candidates []policy.Candidat
 	}
 
 	if *cfg.RecommendationsConfigMapEnabled {
-		r.writeRecord(ctx, cfg.RecommendationsConfigMapName, record)
+		r.writeRecord(ctx, cfg.RecommendationsConfigMapName, record, nodeRecords, reconcileNodeRecords)
 	}
 }
 
@@ -216,7 +264,7 @@ func (r *Reporter) ReportOMENativeState(available bool) {
 	enteringDegraded := degraded && (!r.omenativeSeeded || !r.omenativeDegraded)
 	if enteringDegraded {
 		r.Recorder.Eventf(r.namespaceRef(), corev1.EventTypeWarning, "OMENativeUnavailable",
-			"no OMENative executor is available; multi-pod candidates degrade to advisory")
+			"no OMENative executor is available; OMENative candidates degrade to advisory")
 	}
 	if r.omenativeSeeded && r.omenativeDegraded && available {
 		r.Log.Info("OMENative executor available again; degraded mode cleared")
@@ -224,73 +272,313 @@ func (r *Reporter) ReportOMENativeState(available bool) {
 	r.omenativeSeeded, r.omenativeDegraded = true, degraded
 }
 
-// NodeSignal emits a node remediation signal, deduplicated across decision
-// loops: a Warning Event on the Node (what remediation controllers watch), a
-// node.<name> entry in the recommendations ConfigMap (the durable record
-// Alfred owns), and the signal counter. A repeat with the same condition
-// fingerprint is suppressed until ClearNodeSignal. Policy #2 drives this.
-func (r *Reporter) NodeSignal(ctx context.Context, node, condition string, workloads []string, cfg *config.Config, now time.Time) {
-	if r.nodeSignals == nil {
-		r.nodeSignals = map[string]string{}
+// reconcileNodeRemediations treats the current policy markers as the complete
+// desired node-record set. It advances lifecycle Events independently of the
+// ConfigMap write: a failed write is retried next cycle without replaying an
+// Event or incrementing its counter again.
+func (r *Reporter) reconcileNodeRemediations(
+	ctx context.Context,
+	markers []*policy.NodeRemediation,
+	cfg *config.Config,
+	now time.Time,
+) (map[string]nodeRemediationRecord, bool) {
+	if r.nodeEpisodes == nil {
+		r.nodeEpisodes = map[string]nodeEpisode{}
 	}
-	if r.nodeSignals[node] == condition {
-		return
+	desired := make(map[string]*policy.NodeRemediation, len(markers))
+	for _, marker := range markers {
+		if marker == nil || marker.Node == "" || marker.Health.State == "" ||
+			marker.Health.State == snapshot.NodeHealthClear {
+			continue
+		}
+		desired[marker.Node] = marker
 	}
-	r.nodeSignals[node] = condition
+	if *cfg.RecommendationsConfigMapEnabled &&
+		!r.seedNodeEpisodes(ctx, cfg.RecommendationsConfigMapName, desired) {
+		// Until durable event phase is known, fail closed: neither emit a
+		// lifecycle signal nor replace node records. The normal cycle record
+		// may still be written, and seeding is retried on the next pass.
+		return nil, false
+	}
 
-	r.Metrics.NodeHealthSignals.WithLabelValues(node, condition).Inc()
-	r.Recorder.Eventf(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: node}},
-		corev1.EventTypeWarning, "GpuUnhealthyEvacuating",
-		"node %s is unhealthy (%s); Alfred is evacuating %d workload(s) and signaling for repair",
-		node, condition, len(workloads))
-
-	if !*cfg.RecommendationsConfigMapEnabled {
-		return
+	for node := range r.nodeEpisodes {
+		if _, ok := desired[node]; !ok {
+			delete(r.nodeEpisodes, node)
+		}
 	}
-	entry, err := json.Marshal(map[string]interface{}{
-		"condition": condition,
-		"workloads": workloads,
-		"signaled":  now,
-	})
+
+	nodes := make([]string, 0, len(desired))
+	for node := range desired {
+		nodes = append(nodes, node)
+	}
+	sort.Strings(nodes)
+
+	records := make(map[string]nodeRemediationRecord, len(nodes))
+	for _, node := range nodes {
+		marker := desired[node]
+		episode := r.nodeEpisodes[node]
+		workloads := sortedUniqueStrings(marker.Workloads)
+		occupantsPresent := marker.OMEGPUOccupantsPresent || len(workloads) > 0
+		wasSignaled := episode.signaledAt != nil
+		// Alfred does not cordon Nodes. A workload can land after a drained
+		// transition, so persisted repair readiness describes only the current
+		// continuous empty interval. Withdraw it on reoccupation; if the node
+		// empties again, the later transition is reported again.
+		if occupantsPresent && episode.drainedAt != nil {
+			episode.drainedAt = nil
+		}
+
+		if !wasSignaled &&
+			(marker.Health.State == snapshot.NodeHealthUnhealthy || marker.Health.State == snapshot.NodeHealthUnknown) {
+			signaledAt := now
+			episode.signaledAt = &signaledAt
+			r.Metrics.NodeHealthSignals.WithLabelValues(node, eventNodeRepairNeeded).Inc()
+			r.Recorder.Eventf(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: node}},
+				corev1.EventTypeWarning, eventNodeRepairNeeded,
+				"node %s requires repair; Alfred observed %s health with %d identified OME workload(s)",
+				node, marker.Health.State, len(workloads))
+		}
+		if wasSignaled && episode.drainedAt == nil && !occupantsPresent {
+			drainedAt := now
+			episode.drainedAt = &drainedAt
+			r.Metrics.NodeHealthSignals.WithLabelValues(node, eventNodeDrainedForRepair).Inc()
+			r.Recorder.Eventf(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: node}},
+				corev1.EventTypeNormal, eventNodeDrainedForRepair,
+				"node %s has no remaining OME GPU workloads and is ready for repair", node)
+		}
+		r.nodeEpisodes[node] = episode
+		records[node] = remediationRecord(marker, workloads, occupantsPresent, episode, now)
+	}
+	return records, true
+}
+
+// seedNodeEpisodes restores event phase from Alfred's durable node records so
+// a newly elected Reporter does not replay repair/drained signals. A failed
+// read is retried on the next cycle; locally observed phases always win. It
+// reports whether durable phase is known and lifecycle reconciliation is safe.
+func (r *Reporter) seedNodeEpisodes(
+	ctx context.Context,
+	name string,
+	desired map[string]*policy.NodeRemediation,
+) bool {
+	if r.nodeEpisodesSeeded {
+		return true
+	}
+	var cm corev1.ConfigMap
+	err := r.reader().Get(ctx, types.NamespacedName{Namespace: r.Namespace, Name: name}, &cm)
+	if apierrors.IsNotFound(err) {
+		r.nodeEpisodesSeeded = true
+		return true
+	}
 	if err != nil {
-		return
+		r.Log.Error(err, "seed node remediation episodes")
+		return false
 	}
-	writeErr := r.updateConfigMap(ctx, cfg.RecommendationsConfigMapName, func(cm *corev1.ConfigMap) {
-		cm.Data["node."+node] = string(entry)
-	})
-	if writeErr != nil && !apierrors.IsNotFound(writeErr) {
-		// The durable record is missing while the fingerprint says
-		// "signaled" — drop it so the next pass retries the write. A
-		// NotFound keeps the dedup: the record surface is absent by
-		// operator choice, and the event and metric already fired.
-		delete(r.nodeSignals, node)
+	for node, marker := range desired {
+		raw, ok := cm.Data[nodeRecordKey(node)]
+		if !ok {
+			continue
+		}
+		var record nodeRemediationRecord
+		if json.Unmarshal([]byte(raw), &record) != nil {
+			continue
+		}
+		if _, local := r.nodeEpisodes[node]; local {
+			continue
+		}
+		if record.SignaledAt == nil || !recordCoversHealth(record, marker.Health) {
+			continue
+		}
+		r.nodeEpisodes[node] = nodeEpisode{
+			signaledAt: cloneTime(record.SignaledAt),
+			drainedAt:  cloneTime(record.DrainedAt),
+		}
+	}
+	r.nodeEpisodesSeeded = true
+	return true
+}
+
+// recordCoversHealth is deliberately conservative about failover dedup. A
+// failed desired-set deletion can leave an old node record behind, so node
+// name alone never proves episode continuity. Durable phase is reused only
+// when its observation covered the exact current condition evidence. Newer or
+// identity-free evidence drops durable phase: a bad state signals at least
+// once, while Suspect remains phase-free instead of inheriting stale drained
+// state.
+func recordCoversHealth(record nodeRemediationRecord, current snapshot.NodeHealthObservation) bool {
+	if record.ObservedAt.IsZero() || record.State != current.State || len(record.Conditions) == 0 ||
+		len(record.Conditions) != len(current.Conditions) || record.SignaledAt == nil ||
+		record.SignaledAt.After(record.ObservedAt) {
+		return false
+	}
+	if record.DrainedAt != nil &&
+		(record.DrainedAt.Before(*record.SignaledAt) || record.DrainedAt.After(record.ObservedAt)) {
+		return false
+	}
+
+	recorded := make(map[corev1.NodeConditionType]nodeConditionRecord, len(record.Conditions))
+	for _, condition := range record.Conditions {
+		if !usableConditionEvidence(condition.Type, condition.Status, condition.LastTransitionTime) ||
+			condition.LastTransitionTime.After(record.ObservedAt) {
+			return false
+		}
+		if _, duplicate := recorded[condition.Type]; duplicate {
+			return false
+		}
+		recorded[condition.Type] = condition
+	}
+	for _, condition := range current.Conditions {
+		if !usableConditionEvidence(condition.Type, condition.Status, condition.LastTransitionTime) ||
+			condition.LastTransitionTime.After(record.ObservedAt) {
+			return false
+		}
+		previous, ok := recorded[condition.Type]
+		if !ok || previous.Status != condition.Status ||
+			!previous.LastTransitionTime.Equal(condition.LastTransitionTime) {
+			return false
+		}
+		delete(recorded, condition.Type)
+	}
+	return len(recorded) == 0
+}
+
+func usableConditionEvidence(
+	conditionType corev1.NodeConditionType,
+	status corev1.ConditionStatus,
+	transitioned time.Time,
+) bool {
+	if conditionType == "" || transitioned.IsZero() {
+		return false
+	}
+	switch status {
+	case corev1.ConditionTrue, corev1.ConditionFalse, corev1.ConditionUnknown:
+		return true
+	default:
+		return false
 	}
 }
 
-// ClearNodeSignal forgets a node's dedup record so a fresh incident signals
-// again after the condition genuinely cleared.
-func (r *Reporter) ClearNodeSignal(node string) {
-	delete(r.nodeSignals, node)
+func remediationRecord(
+	marker *policy.NodeRemediation,
+	workloads []string,
+	occupantsPresent bool,
+	episode nodeEpisode,
+	now time.Time,
+) nodeRemediationRecord {
+	conditions := make([]nodeConditionRecord, len(marker.Health.Conditions))
+	for i, condition := range marker.Health.Conditions {
+		conditions[i] = nodeConditionRecord{
+			Type:               condition.Type,
+			Status:             condition.Status,
+			LastTransitionTime: condition.LastTransitionTime,
+		}
+	}
+	return nodeRemediationRecord{
+		State:                  marker.Health.State,
+		Conditions:             conditions,
+		SuspectUntil:           cloneTime(marker.Health.SuspectUntil),
+		Workloads:              workloads,
+		OMEGPUOccupantsPresent: occupantsPresent,
+		ObservedAt:             now,
+		SignaledAt:             cloneTime(episode.signaledAt),
+		DrainedAt:              cloneTime(episode.drainedAt),
+	}
 }
 
-func (r *Reporter) writeRecord(ctx context.Context, name string, rec cycleRecord) {
+func sortedUniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func cloneTime(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
+}
+
+// nodeRecordKey keeps the readable node.<name> form whenever it fits a
+// ConfigMap data key. Kubernetes node names may themselves use all 253 bytes,
+// so longer derived keys use a disjoint prefix, a readable name prefix, and a
+// collision-resistant digest. The disjoint prefix prevents a hashed long name
+// from colliding with an otherwise valid short name. Seeding computes the key
+// from the desired Node rather than trying to recover a name from the truncated
+// form.
+func nodeRecordKey(node string) string {
+	key := nodeRecordPrefix + node
+	if len(key) <= maxConfigMapDataKeyLength {
+		return key
+	}
+	digest := sha256.Sum256([]byte(node))
+	suffix := fmt.Sprintf(".%x", digest[:])
+	prefixLength := maxConfigMapDataKeyLength - len(hashedNodeRecordPrefix) - len(suffix)
+	return hashedNodeRecordPrefix + node[:prefixLength] + suffix
+}
+
+func isNodeRecordKey(key string) bool {
+	return strings.HasPrefix(key, nodeRecordPrefix) || strings.HasPrefix(key, hashedNodeRecordPrefix)
+}
+
+func (r *Reporter) writeRecord(
+	ctx context.Context,
+	name string,
+	rec cycleRecord,
+	nodeRecords map[string]nodeRemediationRecord,
+	reconcileNodeRecords bool,
+) {
 	raw, err := json.Marshal(rec)
 	if err != nil {
 		r.Log.Error(err, "marshal recommendations record")
 		return
 	}
+	nodeRaw := map[string]string(nil)
+	if reconcileNodeRecords {
+		nodeRaw = make(map[string]string, len(nodeRecords))
+		for node, record := range nodeRecords {
+			entry, err := json.Marshal(record)
+			if err != nil {
+				r.Log.Error(err, "marshal node remediation record", "node", node)
+				return
+			}
+			nodeRaw[node] = string(entry)
+		}
+	}
 	// A failed cycle record needs no unwinding: the next pass rewrites it.
 	_ = r.updateConfigMap(ctx, name, func(cm *corev1.ConfigMap) {
 		cm.Data[recommendationsKey] = string(raw)
+		if !reconcileNodeRecords {
+			return
+		}
+		for key := range cm.Data {
+			if isNodeRecordKey(key) {
+				delete(cm.Data, key)
+			}
+		}
+		for node, entry := range nodeRaw {
+			cm.Data[nodeRecordKey(node)] = entry
+		}
 	})
 }
 
 // updateConfigMap applies a mutation to the recommendations ConfigMap,
 // update-only: other keys (node records) are preserved, and a missing
 // ConfigMap logs once instead of being created. The read-modify-write cycle
-// retries on conflict with an uncached read — a lost node-signal write would
-// otherwise be deduped away and never rewritten. The error is returned
-// (already logged) so callers holding dedup state can undo it on failure.
+// retries on conflict with an uncached read so the complete desired record is
+// not lost to a stale update. A later reporting pass retries other failures
+// while retaining lifecycle phase, so Events and counters are not replayed.
 func (r *Reporter) updateConfigMap(ctx context.Context, name string, mutate func(*corev1.ConfigMap)) error {
 	key := types.NamespacedName{Namespace: r.Namespace, Name: name}
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -310,7 +598,7 @@ func (r *Reporter) updateConfigMap(ctx context.Context, name string, mutate func
 	case apierrors.IsNotFound(err):
 		if !r.cmMissingLogged {
 			r.cmMissingLogged = true
-			r.Log.Info("recommendations ConfigMap missing; record disabled (the chart pre-creates it)",
+			r.Log.Info("recommendations ConfigMap missing; record disabled (the Kustomize bundle pre-creates it)",
 				"configmap", key.String())
 		}
 	default:

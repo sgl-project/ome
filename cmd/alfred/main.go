@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/ome/pkg/alfred/observer"
 	"sigs.k8s.io/ome/pkg/alfred/policy"
 	"sigs.k8s.io/ome/pkg/alfred/policy/defrag"
+	"sigs.k8s.io/ome/pkg/alfred/policy/nodehealth"
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 )
@@ -56,6 +57,15 @@ const (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(v1beta1.AddToScheme(scheme))
+}
+
+// decisionPolicies is the production composition root for Alfred's pure
+// candidate-producing policies.
+func decisionPolicies() []policy.Policy {
+	return []policy.Policy{
+		&defrag.Policy{},
+		&nodehealth.Policy{},
+	}
 }
 
 // Options holds the command-line configuration.
@@ -163,6 +173,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// OMENativeExecutor intentionally remains nil until a checked capability
+	// supplier ships. The zero state keeps otherwise eligible OMENative
+	// findings advisory in production.
 	observationLoop := &observer.Loop{
 		Reader:  mgr.GetClient(),
 		Store:   store,
@@ -191,7 +204,7 @@ func main() {
 	decisionLoop := &engine.DecisionLoop{
 		Snapshots: observationLoop,
 		Store:     store,
-		Policies:  []policy.Policy{&defrag.Policy{}},
+		Policies:  decisionPolicies(),
 		Arbiter:   &engine.Arbiter{Ledger: engine.NewLedger()},
 		Reporter: &engine.Reporter{
 			Client:        mgr.GetClient(),

@@ -66,6 +66,18 @@ const (
 // recommendation). Component-wide candidates are never dispatched.
 const ComponentWideInstance int32 = -1
 
+// NodeRemediation is the typed desired-state payload carried by a node-health
+// marker Candidate. It identifies the node incident, preserves the complete
+// structured health observation, lists every affected OME GPU workload whose
+// identity is known, and separately preserves unresolved OME GPU occupancy so
+// Reporter never mistakes "identity unavailable" for "node drained."
+type NodeRemediation struct {
+	Node                   string
+	Health                 snapshot.NodeHealthObservation
+	Workloads              []string
+	OMEGPUOccupantsPresent bool
+}
+
 // Candidate is a single proposed action — "migrate Component X's Instance Y
 // off Node Z" — with explicit, cross-policy-comparable benefit and cost so
 // the Arbiter can rank on a common axis instead of trusting each policy's
@@ -84,9 +96,13 @@ type Candidate struct {
 
 	// Reason is the event-facing cause (Fragmentation, NodeUnhealthy, ...).
 	Reason string
+	// Remediation is set only on node-health marker Candidates. Workload
+	// findings leave it nil and use the ordinary Candidate action fields.
+	Remediation *NodeRemediation
 
-	// FromNode is the node the move vacates (for a multi-node instance,
-	// the node holding the largest share of its GPUs).
+	// FromNode is the policy-selected source node for the finding. Defrag
+	// selects the member holding the largest GPU share; Node Health selects
+	// the lexicographically first actually unhealthy member.
 	FromNode string
 	// HintTargetNodes is the bounded, ranked policy-supplied target set for
 	// operator-facing reporting. The scheduler still makes the final pod-level
@@ -115,8 +131,9 @@ type Candidate struct {
 	Benefit float64
 	// Cost is the disruption risk keyed off the migration mode.
 	Cost float64
-	// Score = Benefit - CostWeight*Cost, emergency-boosted when the move
-	// unblocks an over-age pending pod.
+	// Score is the policy-defined rank within a priority class. Defrag uses
+	// Benefit-CostWeight*Cost with optional emergency/source boosts; Node
+	// Health uses the workload's numeric priority directly.
 	Score float64
 	// Emergency marks a candidate whose move unblocks a pending pod older
 	// than emergencyPendingAgeMinutes.

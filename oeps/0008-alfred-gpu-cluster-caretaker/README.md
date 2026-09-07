@@ -29,7 +29,7 @@
     - [Fragmentation scoring](#fragmentation-scoring)
     - [Candidate selection](#candidate-selection)
     - [Placement-hint computation](#placement-hint-computation)
-    - [Execution](#execution)
+    - [Target execution (not currently implemented)](#target-execution-not-currently-implemented)
   - [Policy #2: Node-health evacuation](#policy-2-node-health-evacuation)
     - [Goal and context](#goal-and-context)
     - [What must be true](#what-must-be-true)
@@ -50,7 +50,7 @@
   - [Spot and preemptible nodes](#spot-and-preemptible-nodes)
   - [Multi-tenancy](#multi-tenancy)
   - [Model-download coordination](#model-download-coordination)
-  - [Degraded mode](#degraded-mode)
+  - [Target degraded execution mode (executor readiness is deferred)](#target-degraded-execution-mode-executor-readiness-is-deferred)
   - [Deployment model](#deployment-model)
   - [Leader election](#leader-election)
   - [RBAC](#rbac)
@@ -80,9 +80,9 @@
 
 **Tl;dr:** Alfred is designed as the GPU **Cluster Caretaker** — a cluster-level control loop that watches the *physical* GPU layer (nodes, accelerators, workload placement) and, when it drifts into a bad state, arbitrates a safe corrective action and actuates it through narrow write contracts. The current implementation stops after arbitration and reporting. Alfred does not schedule pods, scale replicas, or touch node lifecycle.
 
-The target caretaker is a single observe → arbitrate → actuate engine, not a grab-bag of one-off scripts. One shared, read-only **ClusterSnapshot** (the physical GPU state for a reconcile pass) is fed to a set of **Policies**; each Policy is a pure function `Evaluate(snapshot) → []Candidate`, where a *Candidate* is a proposed action plus its justification. An **Arbiter** selects and sequences across all Policies' candidates under global safety bounds (rate limits, cooldowns, concurrency caps), a **Dispatcher** actuates the winners through one narrow contract — the OEP-0007 migration-request annotation — and the controller that owns each workload executes the request. OMENative is the only implemented consumer of that contract today. `RawDeployment` and legacy LWS candidates remain advisory-only until their lifecycle owner implements and validates an equivalent consumer. A **Reporter** is the only component that emits observability output (K8s Events, decision metrics, the optional recommendations `ConfigMap`), so a Policy holds no client and writes nothing at all.
+The target caretaker is a single observe → arbitrate → actuate engine, not a grab-bag of one-off scripts. One shared, read-only **ClusterSnapshot** (the physical GPU state for a reconcile pass) is fed to a set of **Policies**; each Policy is a pure function `Evaluate(snapshot, config) → []Candidate`, where a *Candidate* is a proposed action or typed reporting marker plus its justification. An **Arbiter** selects and sequences executable Candidates under global safety bounds (rate limits, cooldowns, concurrency caps), a future **Dispatcher** actuates the winners through one narrow contract — the OEP-0007 migration-request annotation — and the controller that owns each workload executes the request. OMENative is the only implemented consumer of that contract today, but Alfred does not yet dispatch it. `RawDeployment` and legacy LWS candidates remain advisory-only until their lifecycle owner implements and validates an equivalent consumer. A **Reporter** centralizes Candidate, decision, and remediation-lifecycle output (their K8s Events, decision metrics, and optional recommendations `ConfigMap` entries), so a Policy holds no client and writes nothing at all. Operational signals stay with their owners: the observation and decision loops publish gauges and durations, the config watcher reports reload failures, and the composition root publishes leader status.
 
-Three policies, staged: **Policy #1 — Defragmentation** is implemented as observation, scoring, arbitration, and reporting; execution is not yet wired. **Policy #2 — Node-Health Evacuation** is the next policy: on a bad node condition, evacuate eligible OME workloads off the node *and emit a remediation signal* — it does **not** cordon, drain, terminate, or reboot the node. **Policy #3 — Descheduling** (rebalance against drifted constraints) is future, and named here only to show the engine generalizes. Alfred introduces **no new CRDs**: configuration lives in a `ConfigMap`, per-workload gating in annotations, and output in Prometheus metrics, K8s Events, and an optional recommendations `ConfigMap`.
+Three policies, staged: **Policy #1 — Defragmentation** is implemented as observation, scoring, arbitration, and reporting; execution is not yet wired. **Policy #2 — Node-Health Evacuation** now implements pure finding generation and desired-state remediation reporting; actual workload evacuation remains deferred with the Dispatcher. Its target behavior is to move eligible OME workloads off a bad node *and emit a remediation signal* — it does **not** cordon, drain, terminate, or reboot the node. **Policy #3 — Descheduling** (rebalance against drifted constraints) is future, and named here only to show the engine generalizes. Alfred introduces **no new CRDs**: configuration lives in a `ConfigMap`, per-workload gating in annotations, and output in Prometheus metrics, K8s Events, and an optional recommendations `ConfigMap`.
 
 ## Motivation
 
@@ -118,13 +118,13 @@ The reader's reasonable objection: "These are three unrelated jobs. Why not thre
 2. **One safety layer.** Rate limits, per-workload cooldowns, concurrency caps, and "reject high-uncertainty actions" (*primum non nocere*) are not policy-specific — they bound *actuation*, regardless of which policy proposed it. Centralizing them in the Arbiter means a defrag migration and a health evacuation can't both move the same workload, or together exceed the cluster's churn budget. N independent controllers cannot enforce a shared budget without inventing a coordination protocol between them — i.e., reinventing the Arbiter, badly.
 3. **One narrow actuation contract.** Both moving a fragmented workload and evacuating a workload off a bad node reduce to the *same* primitive: write the migration-request annotation and let the controller that owns the workload's lifecycle move it safely. The planned Dispatcher centralizes "how to request a move without breaking the workload." A second actuator would either duplicate that contract or, worse, take a wider, more dangerous surface.
 
-**Policy #1 (Defragmentation)** now implements the observation and recommendation part of the original vision. **Policy #2 (Node-Health Evacuation)** remains target design. On a bad node condition, Policy #2 will evacuate eligible OME workloads through the same narrow Dispatcher contract and emit a remediation signal (a Prometheus metric, plus K8s Events at detection and at drain completion) for whatever system actually owns hardware remediation. It explicitly does **not** cordon, drain, terminate, or reboot the node, and it does **not** call any cloud Compute API. That is the line between the archived design and this one: we keep "react to a `GpuUnhealthy` node," we drop "patch/repair the hardware." (Refined non-goal below.)
+**Policy #1 (Defragmentation)** implements the observation and recommendation part of the original vision. **Policy #2 (Node-Health Evacuation)** implements the same pure recommendation boundary plus desired-state remediation reporting: it identifies eligible occupants and reports `NodeRepairNeeded` / `NodeDrainedForRepair`, but does not move a workload in the current baseline. The target Dispatcher will eventually request those moves through the same narrow contract. Policy #2 never cordons, drains, terminates, reboots, or calls a cloud Compute API. That is the line between the archived design and this one: we keep "react to a `GpuUnhealthy` node," we drop "patch/repair the hardware." (Refined non-goal below.)
 
 Generalizing to a caretaker engine has a cost, and it is worth naming: a single process now carries three policies' blast radius, and a snapshot bug or a Dispatcher bug is a bug for *all* policies at once. The mitigation is the same property that makes the engine tractable — every policy actuates only through the narrow contract and only under the Arbiter's bounds — so a misbehaving policy is bounded to "proposes a bad Candidate," which the Arbiter can reject, not "directly does damage." This is a mitigation, not a full fix: a wrong *snapshot* fools the Arbiter too. TBD: the snapshot-consistency guarantees and how a policy declares a Candidate's confidence are Design Details, not settled here.
 
 ### Goals
 
-1. **Run one observe → arbitrate → actuate engine** over the physical GPU layer: a shared read-only ClusterSnapshot, a set of Policies (`Evaluate(snapshot) → []Candidate`), an Arbiter that selects and sequences under global safety bounds, a Dispatcher that actuates through the existing narrow contracts, and a Reporter that is the sole emitter of observability output (Events, decision metrics, the optional recommendations ConfigMap). The engine is the deliverable; policies are pluggable on top of it.
+1. **Run one observe → arbitrate → actuate engine** over the physical GPU layer: a shared read-only ClusterSnapshot, a set of Policies (`Evaluate(snapshot, config) → []Candidate`), an Arbiter that selects and sequences under global safety bounds, a Dispatcher that actuates through the existing narrow contracts, and a Reporter that centralizes Candidate, decision, and remediation-lifecycle output. Operational gauges, loop durations, leader status, and config-reload failures remain with their owning components. The engine is the deliverable; policies are pluggable on top of it.
 2. **Ship Policy #1 — Defragmentation.** Continuously observe GPU utilization, workload placement, and pending-pod pressure; compute a fragmentation metric; produce candidates identifying which workloads, if relocated, would reduce fragmentation most; and execute only those candidates for which a lifecycle owner exposes the migration-request contract.
 3. **Ship Policy #2 — Node-Health Evacuation.** On a bad node condition (consumed from existing signals — node conditions — not newly detected by Alfred), produce candidates that evacuate eligible OME workloads off the affected node through the narrow contract, **and** emit a remediation signal (metric + two Events: `NodeRepairNeeded` at detection, `NodeDrainedForRepair` at drain completion) for the system that owns remediation. Evacuate and signal; never cordon, drain, terminate, or reboot.
 4. **Reserve Policy #3 — Descheduling** as a future policy on the same engine (rebalancing workloads whose placement has drifted from current constraints). Named here only to validate that the engine generalizes; **no** behavior is promised in this OEP.
@@ -140,7 +140,7 @@ Generalizing to a caretaker engine has a cost, and it is worth naming: a single 
 2. **No node lifecycle management — Alfred does not cordon, drain, terminate, or reboot nodes.** This stays **true** even with Policy #2: node-health *evacuation* moves OME *workloads* off a node through the narrow Dispatcher contract and emits a remediation signal; it never touches the *node* object's lifecycle. Cordon/drain/terminate/reboot belong to the operator or cluster autoscaler. *Rationale:* node lifecycle is destructive and cluster-wide; keeping Alfred to workload-level actuation is what keeps its blast radius bounded.
 3. **No replica scaling — that is [OEP-0013](../0013-autoscaling/README.md)'s domain.** Alfred relocates existing workloads; it never changes how many replicas a workload has. *Rationale:* scaling and defragmentation are separate control loops with separate triggers; merging them couples two independent decisions and double-counts churn budget.
 4. **No new CRDs.** Hard constraint. Configuration is a `ConfigMap`, gating is annotations, output is metrics/Events/ConfigMap. *Rationale:* a caretaker should be deployable into an existing OME cluster without an API surface change or a migration.
-5. **Node-health *evacuation* is in scope (Policy #2); hardware *remediation* stays deferred.** This **refines** the archived Alfred's blanket "no auto-repair." We keep reacting to a bad node condition by evacuating workloads and signaling; we do **not** patch, repair, soft-reset, image-rotate, or call any cloud Compute API. Remediation — the part that actually fixes or recycles hardware — remains out of scope and is left to the operator/cloud, with an optional remediation plugin a possible *future* extension (not promised here). *Rationale:* evacuation is reversible and lives entirely within Alfred's existing narrow contract; remediation is irreversible, cloud-specific, and a different trust boundary.
+5. **Node-health *evacuation* is in scope (Policy #2); hardware *remediation* stays deferred.** This **refines** the archived Alfred's blanket "no auto-repair." The current milestone reports bad-node findings and remediation state without moving workloads. Target evacuation will request eligible moves through the same narrow, owner-mediated contract as Defrag; neither phase patches, repairs, soft-resets, image-rotates, or calls any cloud Compute API. Remediation — the part that actually fixes or recycles hardware — remains out of scope and is left to the operator/cloud, with an optional remediation plugin a possible *future* extension (not promised here). *Rationale:* target evacuation is a reversible workload request bounded by the planned migration contract; remediation is irreversible, cloud-specific, and a different trust boundary.
 6. **Not solving GPU health detection.** Alfred *consumes* existing signals (node conditions) to trigger Policy #2; it adds no new telemetry and runs no health probes of its own. *Rationale:* detection is a separate concern with its own ownership; conflating it would expand scope past a caretaker.
 7. **Not an optimization engine in the mathematical sense.** Policies use heuristic candidate selection under safety bounds. "Good enough to reduce fragmentation" is the standard; global optimality is **not** promised. *Rationale:* optimal bin-packing is NP-hard and the cluster state moves under you anyway; a safe heuristic that converges beats an optimum that's stale on arrival.
 8. **Not managing workloads beyond InferenceService.** Non-OME GPU workloads are *observed* (they count toward the fragmentation picture in the ClusterSnapshot) but **never** migrated or evacuated. *Rationale:* Alfred only has a safe actuation contract for OME-owned workloads; acting on anything else would exceed that contract.
@@ -154,8 +154,8 @@ runs one loop, observe → arbitrate → actuate, on top of a shared read-only
 **ClusterSnapshot**. Independent **Policies** each propose work against that
 snapshot; a single **Arbiter** selects and sequences across them; a
 **Dispatcher** actuates only through the narrow write contracts OEP-0008 already
-owns; a single **Reporter** emits every Event, decision metric, and
-recommendation. The caretaker never orchestrates pod lifecycle itself, so its blast radius
+owns; a single **Reporter** emits Candidate, decision, and remediation-lifecycle
+Events, metrics, and recommendations. The caretaker never orchestrates pod lifecycle itself, so its blast radius
 is bounded by that surface — and adding the new node-health policy needs **no**
 new node-write RBAC and **no** cloud credentials.
 
@@ -209,20 +209,26 @@ Target Alfred reads:
 - InferenceServices.
 - InferenceReplicas (OMENative Instance lifecycle and migration status).
 - OMENative per-owner migration-audit ConfigMaps (durable UUID history).
-- The OMENative executor capability Lease (read-only liveness/capability proof).
+- The OMENative executor capability Lease (planned read-only
+  liveness/capability proof; not part of the current baseline).
 - BaseModels / ClusterBaseModels.
 - PersistentVolumeClaims / PersistentVolumes (PVC-backed model topology).
 - Alfred's own ConfigMap for policy configuration.
 
-Target Alfred writes — and this list is exhaustive (see [the engine
+Current Alfred runtime writes — and this list is exhaustive (see [the engine
 table](#the-engine-snapshot--policies--arbiter--dispatcher--reporter)):
 - Prometheus metrics (continuous).
-- K8s Events on InferenceServices and Nodes (recommendations, migrations,
-  evacuation signals, skip reasons).
-- Optional `alfred-recommendations` ConfigMap in its own namespace.
-- Migration-request annotations on InferenceServices (only in execute mode; the
-  single migration verb, and only for a deployment mode with a confirmed
-  consumer).
+- K8s Event objects whose involved object is an InferenceService, a Node, or
+  Alfred's configured policy ConfigMap (recommendations, remediation lifecycle
+  signals, executor degradation, and config-reload failures).
+- Updates to the optional, pre-created `alfred-recommendations` ConfigMap in
+  Alfred's namespace.
+- Updates to the pre-created, named `alfred.ome.io` leader-election Lease.
+
+The target Dispatcher adds one planned write: migration-request annotations on
+InferenceServices, only in execute mode and only for a deployment mode with a
+confirmed consumer. Current Alfred has no Dispatcher and no InferenceService
+write permission; `mode: execute` still reports admitted actions as withheld.
 
 Everything else in the target design is read-only.
 
@@ -235,11 +241,11 @@ At the 2026-09-07 baseline, the source tree has the following status:
 |------|--------|------------------|
 | Observation and configuration | Implemented | Every replica builds snapshots and publishes gauges; configuration hot-reloads with last-known-good fallback. |
 | Defragmentation Policy #1 | Partially implemented | Scoring, candidate generation, arbitration, and reporting run; placement feasibility is not yet scheduler-complete. |
-| Arbiter and Reporter | Partially implemented | Core admission gates and outputs exist; positive-benefit/regression admission and dispatch/outcome-fed ledger state are not connected. |
-| Node-Health Policy #2 | Foundation implemented | Snapshots retain configured failure-condition status and transition time as `Clear`, `Suspect`, `Unknown`, or `Unhealthy`; every non-clear state is excluded from defrag targets and surge headroom. Condition-change requests force a serialized fresh snapshot without moving the regular decision deadline. No evacuation candidates or remediation signals are produced. |
-| Dispatcher | Not implemented | Alfred does not patch migration-request annotations and its current ClusterRole grants no InferenceService write. Both modes report Arbiter-admitted candidates as `withheld`: `RecommendOnly` in recommend-only mode and `DispatcherUnavailable` in execute mode. |
-| OMENative state | Implemented | Alfred validates dense `InferenceReplica.Status.InstanceStatuses` directly for stable Instance identity and lifecycle state, reads `Status.Migrations`, and joins live Pods by Instance index and incarnation for physical placement and readiness. Compatibility-only ready, scheduled, and nodes fields are not source-of-truth inputs. |
-| OMENative executor readiness | Not implemented | No capability producer or Alfred reader ships in the current implementation. The target design requires a fresh OMENative capability Lease; its producer, reader, and just-in-time pre-dispatch check are deferred with the Dispatcher. |
+| Arbiter and Reporter | Partially implemented | Core admission gates and workload outputs exist. Reporter reconciliation consumes typed node-remediation markers as a complete desired set, maintains derived per-node records, and emits deduplicated repair-needed/drained lifecycle signals. Positive-benefit/regression admission, dispatch, and outcome-fed ledgers are not connected. |
+| Node-Health Policy #2 | Reporting implemented | The pure policy emits one typed marker per non-clear node and deterministic workload findings for unhealthy nodes. Reporter emits `NodeRepairNeeded` / `NodeDrainedForRepair` and reconciles structured records. Production has no executor-capability provider, so OMENative workload findings are advisory and bypass arbitration; no workload is evacuated. Synthetic tests inject capability availability to exercise arbitration and reporting. Full scheduler feasibility and durable one-wave enforcement are deferred. |
+| Dispatcher | Not implemented | Alfred does not patch migration-request annotations and its current ClusterRole grants no InferenceService write. Production currently has no executable OMENative finding because executor capability is unavailable. In synthetic/pure-pipeline coverage where a Candidate is executable and Arbiter-admitted, Reporter records it as `withheld`: `RecommendOnly` in recommend-only mode and `DispatcherUnavailable` in execute mode. |
+| OMENative state | Implemented | Alfred validates the checked, possibly sparse rows in `InferenceReplica.Status.InstanceStatuses` for stable Instance identity and lifecycle state, reads `Status.Migrations`, and joins live Pods by Instance index and incarnation for physical placement and readiness. Compatibility-only ready, scheduled, and nodes fields are not source-of-truth inputs. |
+| OMENative executor readiness | Not implemented | No capability producer or Alfred reader ships in the current implementation: `cmd/alfred` leaves the observer's `OMENativeExecutor` callback nil, which is the bounded unavailable state. Therefore no OMENative workload finding is executable in production today. An otherwise eligible finding carries advisory reason `OMENativeUnavailable`; a finding that fails an earlier, more specific check retains that advisory reason instead. Synthetic tests may inject `Available=true` to exercise the future arbitration boundary, where `Executable` still means policy-classified, not Arbiter-admitted or dispatch-ready. The target Lease reader and just-in-time pre-dispatch check are deferred with the Dispatcher. |
 | RawDeployment execution | Advisory-only | Current policy reports each Raw Instance as a source-only advisory with `Executable=false`; neither an Alfred Dispatcher nor a Raw request consumer exists. Raw execution remains deferred until both are implemented and tested. |
 
 The remaining sections describe the target architecture unless they explicitly
@@ -267,7 +273,7 @@ why eviction is unsafe for these groups and why their migration must be delegate
    metrics, events, and an optional ConfigMap. A recommendation is a *statement*,
    not an action; in `recommend-only` mode the caretaker never gets past this
    role.
-3. **Narrow actuator.** When configured to act, Alfred executes a Recommendation
+3. **Target narrow actuator.** After Dispatcher integration, Alfred will execute a Recommendation
    only by *delegating*:
    - OMENative-managed workloads → **OMENative**, the controller that owns
      their lifecycle, via the OEP-0007 migration-request annotation.
@@ -301,8 +307,9 @@ bearing safety property of the whole design.
 
 Tl;dr: One read-only snapshot feeds many independent policies; one arbiter is the
 *only* component that reasons across policies; one dispatcher is the *only*
-component that actuates; one reporter is the *only* component that emits
-observability output. Policies never write at all.
+component that actuates; one reporter centralizes Candidate, decision, and
+remediation-lifecycle output. Operational signals remain with their owning
+loops, config watcher, and composition root. Policies never write at all.
 
 The engine is a five-component pipeline — the Dispatcher and the Reporter sit
 side by side at its end — and the separation between stages is the design, not
@@ -318,25 +325,31 @@ ClusterSnapshot ──▶ [ Policy₁ Defragmentation ]──┐
                         (Executable=false)        │       │ withheld / rejected + reason)
                                                   │◀──────┘
                                                   ▼
-                                                 Reporter ──▶ observability contracts
-                                                 (the only      (Events, decision metrics,
-                                                  observability   recommendations ConfigMap)
-                                                  writer)
+                                                 Reporter ──▶ policy-result contracts
+                                                 (Candidate,     (Events, decision metrics,
+                                                  decision,       recommendations ConfigMap)
+                                                  lifecycle)
 ```
 
-**The Policy interface.** Every policy implements exactly one method:
+The diagram shows the policy-result path. Snapshot gauges and observation
+duration come from the observation loop; decision duration and breaker state
+come from the decision loop; the config watcher reports reload results; and the
+composition root reports leader status.
+
+**The Policy interface.** Every policy implements two methods:
 
 ```go
 // A Policy reads the shared snapshot and proposes work. It never writes.
 type Policy interface {
-    Evaluate(snapshot *ClusterSnapshot) []Candidate
+    Name() string
+    Evaluate(snapshot *ClusterSnapshot, config *Config) []Candidate
 }
 ```
 
 The contract is deliberately tiny, and the consequence is the point:
 
-- A policy is a **pure function of the snapshot**: given a snapshot, it returns
-  Candidates and mutates nothing. That makes each policy **independently
+- A policy is a **pure function of the snapshot and validated configuration**:
+  given those inputs, it returns Candidates and mutates nothing. That makes each policy **independently
   testable** against a synthetic snapshot fixture — no fake clients, no informer
   plumbing, no apiserver. The defragmentation scorer can be exercised on an
   adversarial cluster state in a table-driven unit test, and the node-health
@@ -352,8 +365,11 @@ The contract is deliberately tiny, and the consequence is the point:
   Candidates and the Arbiter's recorded outcomes. This keeps the purity claim
   literal — a policy holds no client of any kind — so the table-driven tests
   exercise exactly the code production runs.
-- Adding a policy is additive: register a new `Evaluate` implementation. The
-  Arbiter, Reporter, and Dispatcher are unchanged. **Descheduling (Policy #3)** is named
+- Adding a workload-action policy is additive: register a new `Evaluate`
+  implementation. Typed reporting markers use Reporter reconciliation rather
+  than arbitration; adding a new marker kind requires a corresponding Reporter
+  projection, but never gives the Policy a client. The Arbiter and Dispatcher
+  remain unchanged. **Descheduling (Policy #3)** is named
   here precisely to show the seam — it is future work, not in this OEP's scope,
   and it slots in as one more `Evaluate` with zero change to the actuation path.
 
@@ -363,10 +379,10 @@ The contract is deliberately tiny, and the consequence is the point:
    scattered across nodes so that a large contiguous request cannot schedule) and
    proposes consolidating migrations. This is the original OEP-0008 workload.
 2. **Node-Health Evacuation (Policy #2).** Detects a node that has gone
-   `GpuUnhealthy` (node condition) and proposes evacuating eligible OMENative
-   Instances off it, plus *signalling* that the node needs repair (an Event on
-   the node and an Alfred-owned ConfigMap record). It **evacuates and signals —
-   it does not repair.** The actual hardware repair (cordon-and-reset via a
+   `GpuUnhealthy` (node condition), reports deterministic evacuation findings,
+   and signals that the node needs repair (an Event on the node and an
+   Alfred-owned ConfigMap record). Current Policy #2 **finds and signals but
+   does not evacuate**; target dispatch adds evacuation without repair. The actual hardware repair (cordon-and-reset via a
    cloud Compute API) is left to
    whatever node-lifecycle controller the operator already runs. This is the key
    reframing of the old `ome-operator` auto-repair: the evacuation reuses the
@@ -378,67 +394,71 @@ The contract is deliberately tiny, and the consequence is the point:
 
 **The Arbiter** is the *only* cross-policy reasoner. Each policy is myopic by
 design — it sees the whole snapshot but only its own concern. The Arbiter takes
-the union of all Candidates and resolves them globally: it deduplicates moves
-that two policies both proposed, orders by priority (a `GpuUnhealthy` evacuation
-should usually preempt a routine defrag consolidation), enforces cluster-wide
-caps and per-node/per-workload cooldowns, and runs the regression check
-(simulate the post-move snapshot, reject moves that make fragmentation worse).
+the union of all workload-action Candidates and resolves them globally: it
+deduplicates moves that two policies both proposed, applies the fixed safety
+priority (`nodehealth` before Defrag), enforces cluster-wide caps and
+per-node/per-workload cooldowns, and in the target action path runs a Defrag-only
+regression check. Health findings are not rejected for making fragmentation
+worse; their benefit is leaving unhealthy hardware.
 Its output is an ordered list of **Recommendations**, plus a recorded reason for
 every Candidate it drops, defers, or withholds — the Reporter turns those
 reasons into Events and metrics. Centralizing cross-policy reasoning in one
 place means thrashing prevention and rate limiting are written once, not
 re-implemented per policy.
 
-**The Dispatcher** is the *only* component that actuates against the wider
+**The planned Dispatcher** is the *only* component that actuates against the wider
 cluster — the sole writer of the migration-request annotation, the one
 executable contract. It takes the Arbiter's ordered Recommendations and actuates the
 executable ones through the narrow write contracts — by workload type, exactly
 as the posture section describes.
 
-**The Reporter** is the *only* component that emits observability output: every
-K8s Event, every decision metric, and (if enabled) every
-`alfred-recommendations` ConfigMap entry comes from this one stage. It is fed
+**The Reporter** is the one component for Candidate, decision, and
+remediation-lifecycle output: their K8s Events, decision metrics, and (if
+enabled) `alfred-recommendations` ConfigMap entries come from this stage. It is fed
 from two directions. From the arbitrated path it receives the Arbiter's
 outcomes (admitted, withheld, rejected — each with its recorded reason) and the
-Dispatcher's actuation results. And **advisory Candidates** (`Executable=false`
-— a Raw/LWS defrag recommendation, a node remediation signal) are routed to it
-directly, bypassing arbitration entirely. The bypass is deliberate: an advisory
-carries no action to admit, so sending it through the Arbiter could only hurt —
-a benefit-cost admission threshold would silently drop it, or an inert
-recommendation would debit the budget real actions need. Concentrating
-actuation in one component and observability in another is what makes the
+Dispatcher's actuation results. **Advisory workload Candidates**
+(`Executable=false`, such as Raw/LWS findings) are routed to it directly,
+bypassing arbitration. Typed node-remediation markers are reconciled separately
+as the complete desired node-signal set for the cycle; they do not become
+workload recommendation records. The bypass is deliberate: neither an advisory
+finding nor a reporting marker carries an action to admit, so arbitration could
+only silently drop it or debit the budget real actions need. Keeping Policies
+pure and assigning each write to an explicit engine component makes the
 write-contract table below an *exhaustive* and *auditable* surface rather than
-a hope: every write traces to exactly one stage, and a Policy traces to
-neither.
+a hope: every write has one named owner, and a Policy traces to none.
 
-**The narrow write contracts** (everything the Dispatcher and the Reporter —
-and therefore Alfred — write to the wider cluster):
+**The narrow write contracts** (current Reporter/engine writes plus the planned
+Dispatcher write):
 
 | Target | Resource | Write | Writer | Why | New RBAC for Policy #2? |
 |--------|----------|-------|--------|-----|-------------------------|
-| Alfred namespace | ConfigMap (`alfred-recommendations`) | `get`, `update`, `patch`, `delete` | Reporter | Alfred's pre-created output | No |
+| Alfred namespace | ConfigMap (`alfred-recommendations`) | runtime `get`, `update` | Reporter | Alfred's pre-created output | No |
 | Alfred namespace | Lease (`alfred.ome.io`) | named `get`, `update` | engine (leader election) | Pre-created, spec-less leader-election Lease | No |
-| Any namespace | Events (on ISVC **and** Node) | `create`, `patch` | Reporter | Surface recommendations, migrations, evacuation + repair signals | No — `events` already granted |
+| Any namespace | Events (on ISVC, Node, and the configured Alfred policy ConfigMap) | `create`, `patch` | Reporter/config watcher | Surface recommendations, outcomes, remediation lifecycle signals, executor degradation, and reload failures | No — `events` already granted |
 | Any namespace | InferenceService annotations | None currently; target `patch` is deferred | Dispatcher (future) | OEP-0007 migration verb after Dispatcher plus admission guard land | No — same future annotation for both policies |
 
-The load-bearing property: **Policy #2 (Node-Health Evacuation) introduces no new
-write contract.** It evacuates by reusing the same migration annotation the
-Dispatcher writes for defragmentation — the owning controller (currently
-OMENative) executes the actual moves — and it signals repair by writing an
-Event on the node — a verb Alfred already has. It
+The load-bearing property: **Policy #2 introduces no broad write contract.** It
+currently signals repair through Reporter using Events and Alfred's own
+ConfigMap. Target evacuation will reuse the same migration annotation as
+defragmentation — the owning controller executes the actual moves. Policy #2
 does **not** cordon nodes via the node-write API, and it does **not** call any
 cloud Compute API. Contrast the old `ome-operator` auto-repair, which cordoned
 nodes and triggered Compute resets and therefore needed both node-write RBAC
 and cloud credentials. Folding node-health into the caretaker as a policy keeps
-the entire surface read-only-plus-four-narrow-writes — the same surface OEP-0008
-already justified for defragmentation alone.
+the current surface reporting-only and the target surface bounded to the same
+narrow migration verb already justified for defragmentation.
 
-**One pass at a time.** A decision pass — snapshot build, policy evaluation,
-one Arbiter admission run, dispatch — is non-overlapping by construction: the
-loop is non-reentrant, so if a pass overruns `decisionLoopInterval`, the next
-tick is delayed until it completes, never started concurrently (cadence
-degrades under load; correctness does not). A coalesced early request adds one
-serialized pass without resetting the periodic timer. *Rationale:* every safety
+**One decision pass at a time.** Policy evaluation, one Arbiter admission run,
+and reporting are non-overlapping by construction: the decision loop is
+non-reentrant, so if a pass overruns `decisionLoopInterval`, the next tick is
+delayed until it completes, never started concurrently (cadence degrades under
+load; correctness does not). A condition-change pass first performs a forced
+snapshot build/publication under the observer's refresh mutex, then releases
+that mutex before evaluation. A later periodic observation may therefore
+refresh and publish while that evaluation is running; the pass keeps using the
+snapshot pointer it already read. Early requests coalesce without resetting an
+unconsumed periodic deadline. *Rationale:* every safety
 bound — the shared budget, the capacity check net of in-flight claims, the
 cooldown bookkeeping — assumes admissions are totally ordered. Two concurrent
 Arbiter passes are two admitting authorities racing one ledger: both read "2
@@ -447,18 +467,31 @@ N-independent-controllers failure this engine exists to eliminate,
 reintroduced inside one process.
 
 **Failover re-derives; it never resumes.** On leader change, the new leader
-builds a fresh snapshot and recomputes from scratch: a pass is never resumed,
+recomputes from its replica's last successful snapshot: a pass is never resumed,
 and no Candidate survives the leader that computed it — Candidates are derived
 cache with the lifetime of one pass, not persisted state that could go stale.
-This imposes a standing requirement: **all arbitration bookkeeping must be
-reconstructible from the cluster**, because leader memory is defined to be
-losable. Pending mailbox writes reconstruct from migration-request annotations;
-accepted and terminal OMENative work reconstructs from
+That snapshot can be stale after repeated refresh failures. The current
+reporting-only baseline takes no workload action from it; a future Dispatcher
+must require a successful just-in-time refresh or enforce the explicit snapshot
+freshness bound before dispatch.
+The current reporting-only baseline has no Alfred-dispatched workload action to
+resume. Its node-lifecycle Event phase is deduplicated across leaders only when
+recommendations-ConfigMap persistence is enabled, the named ConfigMap exists,
+the read succeeds, and a valid persisted record derived for that Node exactly matches
+the current health state and condition type/status/transition-time evidence. A
+failed read delays lifecycle reconciliation; a missing, disabled, malformed, or
+non-matching record is processed from local state and gives at-least-once Event
+semantics across failover.
+
+The target Dispatcher imposes a further requirement: **all action-bookkeeping
+must be reconstructible from the cluster**, because leader memory is defined to
+be losable. Pending mailbox writes reconstruct from migration-request
+annotations; accepted and terminal OMENative work reconstructs from
 `InferenceReplica.Status.Migrations`; long-term rate and cooldown history
 reconstructs from the workload audit ledger. The same request UUID is
-deduplicated across all three surfaces. Where durable history is incomplete,
-the new leader assumes the relevant budget window is spent — degrading toward
-quiescence, never toward a storm.
+deduplicated across all three surfaces. Where target durable action history is
+incomplete, the new leader assumes the relevant budget window is spent —
+degrading toward quiescence, never toward a storm.
 
 **The guarantee's honest boundary.** Lease-based election is advisory, not
 fenced: a paused old leader may dispatch briefly after losing the Lease.
@@ -493,46 +526,54 @@ Each term defined before use, with the consequence baked in.
   joins and deduplicates these surfaces by UUID; annotation disappearance is
   never interpreted as success, and the recommendations ConfigMap is never used
   as execution truth.
-- **Policy.** A pluggable decision module implementing `Evaluate(snapshot) →
-  []Candidate`. *Consequence:* a policy is a pure, side-effect-free function of
-  the snapshot — independently unit-testable and structurally incapable of
+- **Policy.** A pluggable decision module implementing `Name()` and
+  `Evaluate(snapshot, config) → []Candidate`. *Consequence:* a policy is a
+  pure, side-effect-free function of the snapshot and validated configuration —
+  independently unit-testable and structurally incapable of
   actuating (it has no client).
-- **Candidate.** A single proposed action — e.g. "migrate Component X's Instance
-  Y off Node Z." Each Candidate carries a **benefit** (expected improvement: GPUs
-  freed, fragmentation reduced, or a node drained for repair) and a **cost**
-  (disruption risk: pods restarted, model re-pull, in-flight requests). *Consequence:*
-  benefit and cost are explicit and comparable, so the Arbiter can rank across
-  policies on a common axis instead of trusting each policy's self-assessment.
-  A Candidate flagged `Executable=false` is *advisory* — a finding to surface
-  (a Raw/LWS defrag recommendation, a node remediation signal), not an action to
-  dispatch; the engine routes it directly to the Reporter, so it never enters
-  arbitration and never consumes budget.
-- **Recommendation.** A Candidate that has survived the Arbiter — passed
-  opt-in/eligibility, cooldown, rate-limit, capacity, and regression checks — and
-  is ready to emit or dispatch. *Consequence:* a Recommendation is the only thing
-  the Dispatcher will act on; an un-arbitrated Candidate never reaches an
-  actuation write — the only surface an advisory Candidate can reach is the
-  Reporter's observability output.
+- **Candidate.** A proposed workload action or typed reporting marker. A workload
+  Candidate says, for example, "migrate Component X's Instance Y off Node Z"
+  and carries scores, execution classification, and target planning. A typed
+  `Candidate.Remediation` (`*policy.NodeRemediation`) marker instead carries a node,
+  its structured health observation, sorted unique affected workloads whose
+  identity is known, and an independent OME-GPU-occupancy boolean; it
+  is desired reporting state, never an action. `Executable=false` workload findings are advisory and
+  bypass arbitration. Typed markers bypass both workload-recommendation
+  projection and arbitration and go to Reporter cycle reconciliation. Neither
+  kind consumes migration budget unless an executable workload action is
+  actually dispatched.
+- **Recommendation.** A workload Candidate that has survived the Arbiter —
+  passed opt-in/eligibility, cooldown, rate-limit, capacity, and any
+  policy-applicable scoring checks — and is ready to report or, eventually,
+  dispatch. Defrag's target regression check does not apply to Node Health.
+  The current Reporter's admitted path records a Recommendation as withheld,
+  but production's unavailable executor means no OMENative finding reaches that
+  path today; synthetic tests exercise it. A future Dispatcher will act only on
+  arbitrated Recommendations.
 - **Arbiter.** The single cross-policy reasoner: it takes the union of all
   policies' Candidates and selects + sequences them into ordered Recommendations,
-  resolving conflicts, deduplicating, prioritizing (health evac usually over
+  resolving conflicts, deduplicating, prioritizing (health evacuation always over
   routine defrag), and enforcing global caps and cooldowns. *Consequence:* there
   is exactly **one** place where cross-policy tradeoffs and rate limits live, so
   thrashing prevention is not re-derived per policy.
-- **Dispatcher.** The single actuator: it executes Recommendations by writing
+- **Dispatcher.** The planned single actuator: it executes Recommendations by writing
   the migration-request annotation; the controller that owns the workload
   performs the actual move. In the current compatibility baseline, only
   OMENative is such a consumer; RawDeployment and LWS remain advisory-only.
+  No Dispatcher exists in the current baseline.
   *Consequence:* all
   actuation writes funnel through one component, making the write surface
   exhaustively auditable alongside the Reporter's observability writes.
-- **Reporter.** The single observability emitter: it turns returned Candidates,
-  Arbiter outcomes, and Dispatcher results into K8s Events, Prometheus decision
-  metrics, and the optional `alfred-recommendations` ConfigMap. Advisory
+- **Reporter.** The single emitter for Candidate, decision, and
+  remediation-lifecycle output: it turns returned Candidates, Arbiter outcomes,
+  and Dispatcher results into K8s Events, Prometheus decision metrics, and the
+  optional `alfred-recommendations` ConfigMap. Advisory
   Candidates reach it directly, without arbitration. *Consequence:* policies and
-  the Arbiter stay pure decision logic — values in, values out — and every
-  operator-visible surface is produced in exactly one place, so emission can be
-  tested (and deduplicated) once, not per policy.
+  the Arbiter stay pure decision logic — values in, values out — and these
+  policy-result surfaces are produced in exactly one place, so emission can be
+  tested (and deduplicated) once, not per policy. Operational output such as
+  snapshot gauges, loop durations, leader status, and config-reload failures is
+  emitted by the component that owns it.
 - **Fragmentation Score.** A cluster-level number in [0, 1] summarizing fixable
   fragmentation opportunity plus eligible pending pressure. `0` means Alfred
   models no executable relocation that would help — which includes perfectly
@@ -554,6 +595,11 @@ Each term defined before use, with the consequence baked in.
   through Alfred-driven eviction.
 
 ### User stories
+
+These stories describe target operator outcomes unless a paragraph explicitly
+labels the current reporting-only boundary. Today Alfred does not dispatch any
+migration: production OMENative capability is unavailable, and the Dispatcher
+and InferenceService write permission are absent.
 
 #### Story 1: Operator observes fragmentation, then opts into action
 
@@ -581,37 +627,45 @@ migration verb, consolidating Node1. Llama4 schedules on Node3 within minutes.
 
 Node7's node condition flips to `GpuUnhealthy` (a GPU has failed). The
 Node-Health Evacuation policy sees the condition in the snapshot and returns
-Candidates for every OME occupant on Node7. Eligible OMENative Instances can
-evacuate; RawDeployment, LWS, and ineligible OMENative findings stay advisory.
-The Arbiter prioritizes executable health Candidates over routine defrag
-Candidates and emits ordered Recommendations. The Dispatcher writes migration
-requests for the eligible OMENative Instances; OMENative surges them away via
-OEP-0007. Alfred
-*signals twice*: `NodeRepairNeeded` on Node7 at detection — before any drain,
+one typed marker and deduplicated findings for its OME GPU occupants. Eligible
+OMENative Instances could enter arbitration only after executor capability is
+implemented. Current production supplies no such capability, so every
+otherwise eligible OMENative finding is `OMENativeUnavailable` and advisory;
+RawDeployment, LWS, and other ineligible findings are advisory as well.
+Synthetic/target arbitration prioritizes executable health Candidates over
+routine Defrag Candidates and reports admitted actions as withheld until a
+Dispatcher exists. In the target execution phase, the Dispatcher writes
+migration requests for the eligible OMENative Instances and OMENative surges
+them away via OEP-0007. Independently of dispatch, Alfred emits two lifecycle
+reasons:
+`NodeRepairNeeded` on Node7 at detection — before any drain,
 giving the repair pipeline its lead time while workloads still run — and
-`NodeDrainedForRepair` only once the node is empty of every OME workload. If an
-advisory-only occupant remains, Alfred withholds the completion Event and keeps
+`NodeDrainedForRepair` when a later observation is empty of every OME GPU
+workload. If an advisory-only occupant remains, Alfred withholds the completion Event and keeps
 reporting the blocker. **Alfred does not cordon the node and does not call any cloud Compute API
 to reset it.** Repair is delegated to whatever node-lifecycle controller the
-operator already runs. The whole story uses only the existing narrow write
-contracts: migration annotation, node Event. No new RBAC, no cloud
-credentials, and no pod-level write by Alfred.
+operator already runs. Current reporting uses the Node Event and Alfred-owned
+ConfigMap; the target story adds the planned migration annotation. Neither
+phase needs node-write RBAC, cloud credentials, or a pod-level write by Alfred.
 
 #### Story 4: Maintenance-window honor
 
-An operator sets a weekday business-hours maintenance window. During the window,
-high fragmentation produces Recommendations (metrics + events) but the Arbiter
-withholds them from the Dispatcher — Alfred observes and recommends, but does not
-act. After the window, dispatch resumes under the standard rate limit. An
-`emergencyPendingAgeMinutes` override lets the Arbiter release a Recommendation
-during the window if a Pending pod has waited past the threshold.
+An operator sets a weekday business-hours maintenance window. Outside the
+window, snapshot metrics and advisory findings remain visible, but routine
+executable Defrag findings are suppressed. When the window opens, target
+dispatch may resume under the standard rate limit. Omitting
+`maintenanceWindows` or setting it to `[]` means **always open**; clearing the
+list does not pause Defrag.
+An `emergencyPendingAgeMinutes` override lets Defrag release a Recommendation
+outside the window if a Pending pod has waited past the threshold. Node Health
+ignores maintenance windows because failure response cannot wait.
 
 #### Story 5: Opt-out for a critical workload
 
 A business-critical InferenceService is annotated `alfred.ome.io/movable:
-"false"`. Every policy's `Evaluate` excludes it from Candidate generation
-entirely (the eligibility filter reads the annotation off the snapshot). The
-Reporter emits an Event on the ISVC explaining the exclusion — useful when an
+"false"`. Every policy excludes it from executable action, but may retain an
+advisory Candidate so the finding is visible. The Reporter emits an Event on the
+ISVC explaining the exclusion — useful when an
 operator wonders why no Recommendation was produced despite obvious
 fragmentation.
 
@@ -620,10 +674,10 @@ fragmentation.
 An InferenceService using `deploymentMode: MultiNode` (LWS-backed) is highly
 fragmented. A policy produces a Candidate, but the Dispatcher will **not**
 execute it, because Alfred has no safe delegated path for an LWS group (LWS is
-not OMENative; there is no migration verb to delegate to). The event explains:
-
-> LWS-backed workload cannot be migrated safely by alfred. Migrate the workload
-> to OMENative strategy for automatic defragmentation, or handle manually.
+not OMENative; there is no migration verb to delegate to). The generic policy
+recommendation Event includes `LWSMigrationUnsupported` in its message. The
+explicit operator guidance is machine-readable on
+`alfred_lws_recommendations_total{action="MigrateToOMENative"}`.
 
 The operator migrates the workload to OMENative (per OEP-0007 §Strategy Migration
 Procedure) or handles the defragmentation manually. This is the posture in
@@ -634,26 +688,31 @@ than reaching for an unsafe direct action.
 
 Cluster-autoscaler (CA) is enabled and scales down underutilized nodes. The
 Defragmentation policy's consolidation feeds this: as Alfred packs workloads onto
-fewer nodes, CA notices the emptied nodes and removes them. The policy reads each
-node's `cluster-autoscaler.kubernetes.io/scale-down-disabled` annotation off the
-snapshot and excludes such nodes from placement hints, so the two controllers do
-not fight over the same node.
+fewer nodes, CA notices the emptied nodes and removes them. Alfred excludes nodes
+carrying CA's `ToBeDeletedByClusterAutoscaler` taint from placement hints, so it
+does not place onto an active deletion target. The snapshot also records
+`cluster-autoscaler.kubernetes.io/scale-down-disabled`, but that annotation opts
+a node *out* of CA scale-down and is not itself an active-deletion signal or a
+current Alfred exclusion.
 
 ### Risks and mitigations
 
 Each risk in failure-mode → mitigation form. "Mitigation, not full fix" is noted
-where true.
+where true. Migration/dispatch risks and their mitigations describe the target
+execution phase; the current reporting-only implementation performs no move.
 
 **Risk: a policy proposes a counterproductive move (scorer bug).** A
 Defragmentation Candidate that, if executed, would *increase* fragmentation.
-*Mitigation:* the Arbiter runs a regression check — the post-move
-snapshot and reject any Recommendation that worsens the Fragmentation Score.
+*Mitigation:* the target Arbiter runs a Defrag-only regression check against the
+post-move snapshot and rejects any Defrag Recommendation that worsens the
+Fragmentation Score. Node-Health is deliberately exempt: leaving failing
+hardware is the benefit, even when the resulting placement is less compact.
 Because policies are pure functions of the snapshot, the same scorer is exercised
 in table-driven unit tests over adversarial synthetic snapshots before it ever
 ships. `recommend-only` is the default for early deployments, so a bad scorer
 produces visible-but-inert Recommendations, not disruption.
 
-**Risk: thrashing.** Alfred migrates workload A, creating fragmentation
+**Risk: target execution thrashes.** Alfred could migrate workload A, creating fragmentation
 elsewhere, triggering a migration of workload B that undoes A.
 *Mitigation:* the Arbiter owns this — per-workload cooldown (no migration within
 30 minutes of the last; health evacuation uses a shorter floor — see Safety
@@ -666,16 +725,20 @@ policy inherits anti-thrash for free; it cannot forget to implement it.
 Defragmentation policy wants to keep a workload where it packs best; the
 Node-Health policy wants it evacuated off a sick node.
 *Mitigation:* the Arbiter is the *only* cross-policy reasoner and resolves the
-conflict by priority — health evacuation usually preempts routine defrag — and
+conflict by the fixed priority — health evacuation preempts routine defrag — and
 deduplicates moves both policies proposed. No policy sees another policy's
 Candidates, so conflicts cannot be resolved (or mishandled) inside a policy.
 
 **Risk: migration storm.** Many Candidates approved at once; OMENative is
 overwhelmed.
 *Mitigation:* the Arbiter enforces a cluster-wide cap (default 3 in-flight, 10
-per hour). The Dispatcher observes OMENative `RateLimited` rejections and backs
-off. A circuit breaker trips if the failure rate exceeds 50% of the recent 10
-dispatched actions — pause for 1 hour, emit a critical event.
+per hour), reported through generic `RecommendationRejected` Events with
+payload reason `InFlightCap` or `HourlyCap`. A target Dispatcher will also
+observe owner-side execution failures and feed outcome history. A circuit
+breaker trips if the failure rate exceeds 50% of the recent 10
+dispatched actions and pauses for 1 hour. The gate and gauge exist; feeding
+production outcomes and emitting breaker-transition Events are target
+Dispatcher/Reporter work.
 
 **Risk: consecutive node failures exhaust the hourly budget.** One 8-workload
 drain spends 8 of the default 10 hourly slots; a second node failing in the
@@ -691,8 +754,8 @@ emergency budget would optimize the independent case by disarming the defense
 for the correlated one, so we accept under-response instead. *Mitigation, not
 full fix:* size `maxMigrationsPerHour` for the largest legitimate burst you
 intend to tolerate (a full drain of the densest node plus routine defrag in
-the same hour); withheld evacuations are published with `reason: RateLimited`,
-so "N evacuations pending, budget-gated" is a visible, alertable state rather
+the same hour); budget rejections are published with `InFlightCap` or
+`HourlyCap`, so "N evacuations pending, budget-gated" is a visible, alertable state rather
 than silence; and Alfred's caps bound Alfred, not the cluster —
 `kubectl drain` remains available. Remediation signaling is decoupled from the
 budget by splitting it into two Events: `NodeRepairNeeded` at *detection*
@@ -711,8 +774,9 @@ to advisory with `NoSurgeHeadroom`, correctly but unhelpfully: the
 consolidation that would create the slot is defrag's job, and nothing steers
 defrag toward that specific hole. The emergency boost keys on Pending pods,
 and the stranded Instance is not Pending — it is running-degraded on failing
-hardware, invisible to every urgency mechanism. *Mitigation:* a blocked
-evacuation is fed back into the next snapshot as a **virtual pending pod** of
+hardware, invisible to every urgency mechanism. *Target mitigation, deferred
+until dispatch/outcome state exists:* a blocked evacuation is fed back into the
+next snapshot as a **virtual pending pod** of
 its footprint (the snapshot already carries Alfred-caused state —
 `ActiveMigration` — so this adds a field, not a concept). Existing machinery
 then does the rest unmodified: demand weighting steers `Frag(c, s)` toward the
@@ -728,10 +792,13 @@ so pass N's downgrades steer pass N+1 (a one-pass lag), the sick condition
 re-produces the blockage every pass while it lasts, and on failover migration
 state reconstructs from InferenceReplica status and the workload audit ledger.
 
-**Risk: broken GPU discovered only after migration.** Alfred migrates onto Node5,
+**Risk: broken GPU discovered only after target migration.** Target Alfred requests a move onto Node5,
 which has a broken NVLink; NCCL fails.
 *Mitigation:* the snapshot carries node health (including `GpuUnhealthy`), so
-unhealthy nodes are excluded from placement hints during Candidate generation.
+unhealthy nodes are excluded from Alfred's placement plans during Candidate
+generation. This prevents Alfred from recommending the known-bad target; because
+current Alfred does not dispatch and future hints remain advisory to the owning
+controller and scheduler, it is not by itself a cluster-wide scheduling fence.
 This is also exactly why **Node-Health Evacuation is a first-class policy** rather
 than an afterthought — the same health signal that excludes a node as a *target*
 also makes it a *source* to evacuate. If a configured failure condition later
@@ -741,9 +808,12 @@ the later durable outcome/evacuation record. Mitigation, not full fix: a fault
 that is invisible to the node condition can still bite.
 
 **Risk: conflict with HPA / scheduler / other controllers.**
-*Mitigation:* the snapshot records active HPA scaling and the Arbiter defers
-every policy's Candidate for that Component while scaling is in progress.
-Alfred respects `scale-down-disabled` on nodes. Alfred's per-workload exclusion
+*Mitigation:* the target autoscaler-intent reader will let the Arbiter defer
+every policy's Candidate for a Component while scaling is in progress; the
+callback and defer behavior are pure-tested but not wired in production today.
+Alfred excludes CA's `ToBeDeletedByClusterAutoscaler`-tainted nodes as placement
+targets; `scale-down-disabled=true` is observed but does not mean deletion is in
+progress and is not a current Alfred exclusion. Alfred's per-workload exclusion
 prevents competing UUIDs from its own policies; OMENative then revalidates live
 source identity, fences source/surge operations in status, selects accepted
 Manual records oldest-first, and applies execution-capacity gates. A future
@@ -765,19 +835,24 @@ version are ignored, behavior-changing fields require a new version. On
 `UnsupportedSchemaVersion`, Alfred degrades that workload to recommend-only and
 emits an event.
 
-**Risk: Alfred is a cluster-wide SPOF.**
-*Mitigation:* leader-elected with 3 replicas; a crashed leader fails over in
-~15s. Alfred is **not** on the critical path — workloads run fine if Alfred is
-down for hours, because Alfred only *optimizes*, it does not *serve*. The
-caretaker going dark degrades GPU efficiency over time; it never takes a workload
-offline.
+**Risk: Alfred is a cluster-wide SPOF.** The current opt-in testing Kustomize
+bundle runs one replica and therefore has no replica failover. This is limited
+to reporting and is **not** on the serving path: workloads continue to run while
+Alfred is unavailable. The target production Helm chart mitigates caretaker
+availability with leader election and 3 replicas, with a crashed leader expected
+to fail over in about 15 seconds. The caretaker going dark degrades GPU
+efficiency over time; it does not itself take a workload offline.
 
 **Risk: snapshot staleness produces a bad decision.** The snapshot is a point-in-
 time view; the cluster can change between snapshot and dispatch.
-*Mitigation:* the snapshot is rebuilt every observation-loop period (default
-30s), bounding staleness to the loop frequency, and the Dispatcher does a
-pre-flight re-check against the latest snapshot before each actuation. Mitigation,
-not full fix: a change inside the pre-flight window is still possible — caught
+*Mitigation:* Alfred attempts a rebuild every observation-loop period (default
+30s) and publishes only successful snapshots. A failed refresh leaves the last
+successful snapshot in place, so repeated failures can make current reporting
+arbitrarily old; the reporting-only baseline performs no action from it. Before
+execution lands, the Dispatcher must require a successful just-in-time refresh
+or reject any snapshot whose `Timestamp` exceeds an explicit freshness bound,
+then re-check live source/target state before each actuation. Mitigation, not
+full fix: a change inside the pre-flight window is still possible — caught
 downstream by OMENative's own lock and by the bounded blast radius of the narrow
 posture.
 
@@ -794,7 +869,7 @@ The engine — shared `ClusterSnapshot` → `Policies` → `Arbiter` → `Dispat
 
 ### Policy #1: Defragmentation
 
-Tl;dr: Policy #1 implements `Evaluate(snapshot) → []Candidate`. It reads the
+Tl;dr: Policy #1 implements `Evaluate(snapshot, config) → []Candidate`. It reads the
 shared `ClusterSnapshot`, scores fixable GPU fragmentation plus eligible pending
 pressure, and — only when that score crosses a threshold — returns a ranked
 slice of candidate migrations to the Arbiter. It does not move pods. Execution
@@ -811,7 +886,7 @@ in mind while reading — every "emit", "score", and "rank" below produces a
 **Definitions (used throughout this section).**
 
 - *Candidate*: a proposed move of one Component Instance — "Component X's Instance Y off Node Z" — carrying a *benefit score* (expected fragmentation improvement), a *cost score* (disruption risk), an `Executable` flag, and a ranked list of `HintTargetNodes`. A Candidate is a value, not an action; the Arbiter decides whether any Candidate is dispatched.
-- *Instance*: per the OEP-0007 hierarchy, a Component (router/engine/decoder) is a set of Instances; an Instance is the atomic unit Alfred reasons about and migrates. An OMENative Instance may contain one pod or an atomic multi-pod group. Its stable index, incarnation, and lifecycle state come from the owning `InferenceReplica.Status`, while live placement and readiness come from Pods joined by the `ome.io/instance-index` and `ome.io/instance-incarnation` labels — never from pod-name order. A RawDeployment Instance is a single pod (one replica of the component) and is advisory-only until a Raw migration consumer exists.
+- *Instance*: per the OEP-0007 hierarchy, a Component (router/engine/decoder) is a set of Instances; an Instance is the atomic unit Alfred reasons about and the target lifecycle owner would migrate. An OMENative Instance may contain one pod or an atomic multi-pod group. Its stable index, incarnation, and lifecycle state come from the owning `InferenceReplica.Status`, while live placement and readiness come from Pods joined by the `ome.io/instance-index` and `ome.io/instance-incarnation` labels — never from pod-name order. A RawDeployment Instance is a single pod (one replica of the component) and is advisory-only until a Raw migration consumer exists.
 - *Movable*: a workload Alfred is permitted to migrate automatically. Default
   true; set false by the `alfred.ome.io/movable: "false"` annotation. A
   non-movable workload is excluded from executable candidates, but a Policy may
@@ -879,20 +954,20 @@ type WorkloadState struct {
 type ComponentState struct {
     DeploymentMode   string                      // OMENative, RawDeployment, MultiNode (LWS), etc.
     InferenceReplica *omev1beta1.InferenceReplica // OMENative source of truth
-    StatusFresh      bool                        // observedGeneration and dense status validated
-    Instances        []*InstanceState            // stable indexes from dense status
+    StatusFresh      bool                        // observedGeneration and checked status rows validated
+    Instances        []*InstanceState            // stable, possibly sparse indexes from validated rows
 }
 
 type InstanceState struct {
-    InstanceIndex    int32                       // stable index from dense IR status
+    InstanceIndex    int32                       // stable index from a validated IR status row
     Incarnation      int64                       // status value; must match joined Pods
-    Phase            string                      // validated dense IR status
-    RunningRevision  string                      // validated dense IR status
-    Admitted         bool                        // validated dense IR status
-    ActiveOrdinal    int32                       // validated dense IR status
-    ServingPods      int32                       // validated dense IR status
-    AvailablePods    int32                       // validated dense IR status
-    OperationActive  bool                        // validated dense IR status
+    Phase            string                      // validated IR status row
+    RunningRevision  string                      // validated IR status row
+    Admitted         bool                        // validated IR status row
+    ActiveOrdinal    int32                       // validated IR status row
+    ServingPods      int32                       // validated IR status row
+    AvailablePods    int32                       // validated IR status row
+    OperationActive  bool                        // validated IR status row
     DesiredPods      int32                       // derived from the runner templates
     ObservedPods     int32                       // live Pods joined by index + incarnation
     ReadyPods        int32                       // derived from current live Pod conditions
@@ -922,8 +997,8 @@ The following properties of the read surface are load-bearing for later sections
 
 - **Non-OME GPU workloads count against capacity but are never candidates.** Kubeflow Notebook pods, generic Jobs, and any other non-OME GPU consumer appear in `NodeState.OtherOccupants` and are folded into `AllocatedGPUs` / `FreeGPUs` so the fragmentation score reflects reality. But Policy #1 enumerates candidates only from `WorkloadState` (i.e. OME InferenceServices). *Failure mode if we got this wrong:* if non-OME pods were invisible to scoring, Alfred would underestimate fragmentation and sit quiescent on a genuinely packed cluster; if they were eligible for migration, Alfred would try to evict a notebook it does not own. The snapshot threads the needle by counting them for scoring and excluding them from selection.
 - **OMENative state is a checked join, not either API alone.** The snapshot
-  validates dense `Status.InstanceStatuses` directly, preserving stable and
-  sparse Instance indexes, incarnation, lifecycle phase, operation, serving and
+  validates the possibly sparse rows in `Status.InstanceStatuses` directly,
+  preserving stable Instance indexes, incarnation, lifecycle phase, operation, serving and
   available counts. It reads `Status.Migrations` for accepted and terminal
   migration work. Current Pods are then joined through the stable Instance index
   and incarnation labels to derive physical placement, GPU footprint, and live
@@ -933,7 +1008,7 @@ The following properties of the read surface are load-bearing for later sections
   is busy, not steady. Compatibility-only `ReadyPodCount`, `ScheduledPodCount`,
   and `NodesOccupied` are not treated as persisted truth. An
   OMENative Candidate is executable only when both sides agree, status reflects the current
-  generation, the dense status is valid, migration policy permits the action, and
+  generation, the checked status rows are valid, migration policy permits the action, and
   the selected Instance is admitted, fully ready, available, and serving with no
   active lifecycle operation, rollout, scale transition, or migration. A
   missing/stale status, label mismatch, incomplete Pod set, or readiness
@@ -953,7 +1028,7 @@ The following properties of the read surface are load-bearing for later sections
   topology, evaluable required pod affinity/anti-affinity, and the atomic
   multi-pod footprint. A required constraint Alfred cannot evaluate downgrades
   the Candidate to advisory rather than producing a speculative target.
-- **`ModelAvailability` is storage-aware, because PVC-backed models have no per-node readiness.** Per-node models (model-agent downloads) report readiness through `Status.NodesReady` and the `models.ome.io/...=Ready` node label — and the ISVC controller stamps that label as a hard `nodeSelector` on the pods, so the scheduler enforces it independently of Alfred. PVC-backed models intentionally never populate `NodesReady` (there is no per-node copy to report, and the ISVC controller likewise skips the readiness selector for them). *Failure mode if we got this wrong:* filtering PVC-backed workloads' targets by `NodesReady` would yield zero feasible targets and silently mark every PVC-backed workload `NoFeasibleTarget` forever. So the snapshot records the storage backend and, for PVC, the access modes and CSI topology — and the target filter switches on it (mechanism in Placement-hint computation).
+- **`ModelAvailability` is storage-aware, because PVC-backed models have no per-node readiness.** Per-node models (model-agent downloads) report readiness through `Status.NodesReady` and the `models.ome.io/...=Ready` node label — and the ISVC controller stamps that label as a hard `nodeSelector` on the pods, so the scheduler enforces it independently of Alfred. PVC-backed models intentionally never populate `NodesReady` (there is no per-node copy to report, and the ISVC controller likewise skips the readiness selector for them). *Failure mode if we got this wrong:* filtering PVC-backed workloads' targets by `NodesReady` would yield zero feasible targets and downgrade every PVC-backed workload to `NoSurgeHeadroom` forever. So the snapshot records the storage backend and, for PVC, the access modes and CSI topology — and the target filter switches on it (mechanism in Placement-hint computation).
 
 #### Fragmentation scoring
 
@@ -1032,9 +1107,12 @@ When the score is above threshold, the policy turns the snapshot into a ranked `
    [Safety bounds](#safety-bounds). Keeping these Candidates visible lets the
    Reporter explain a skip instead of turning it into silence.
 2. **Classify by deployment mode** — this sets the `Executable` flag, it does not drop the candidate:
-   - **OMENative**: potentially executable via the OMENative migration verb,
-     subject to the checked InferenceReplica-plus-Pod view, a fresh compatible
-     executor Lease, and fail-closed placement checks.
+   - **OMENative**: the target execution shape is potentially executable via the
+     OMENative migration verb, subject to the checked
+     InferenceReplica-plus-Pod view, a fresh compatible executor signal, and
+     fail-closed placement checks. Current production wiring supplies no
+     executor signal, so its OMENative findings are advisory; synthetic tests
+     explicitly inject availability to exercise the executable branch.
    - **RawDeployment** (any replica count): `Executable=false` until a Raw
      migration-request consumer exists. Still emit the Candidate so operators
      see the opportunity.
@@ -1051,7 +1129,7 @@ When the score is above threshold, the policy turns the snapshot into a ranked `
    FinalScore   = BenefitScore - CostWeight * CostScore
    ```
 
-   Alpha has one executable mechanism: **OMENative surge**, for either a
+   Target Alpha has one executable mechanism: **OMENative surge**, for either a
    single-pod or multi-pod Instance. It needs the complete replacement footprint
    as headroom while the source still runs; step 3 enforces that as feasibility,
    while the cost term prices the affected serving footprint. RawDeployment and
@@ -1064,18 +1142,26 @@ When the score is above threshold, the policy turns the snapshot into a ranked `
 5. **Boost emergencies.** If a candidate's migration would unblock a pod — real, or a virtual pending from a blocked evacuation (see the risks section) — that has been Pending longer than `emergencyPendingAgeMinutes`, multiply its `FinalScore` by a boost factor. This is what lets Story 2 — a Llama4 stuck Pending despite 70 free GPUs — jump the queue ahead of routine consolidation. (Complementary to the scoring gate's pending-pressure term `P`: `P` decides whether the policy wakes at all; the boost decides what the woken policy does first.)
 6. **Rank** by `FinalScore` descending, breaking ties toward the smaller surge footprint — smaller moves fit more often, disrupt less, and each completion frees GPUs that make larger moves feasible later. High-utilization defragmentation is designed to converge across decision cycles, smallest-first, not in one pass.
 7. **Apply policy-local eligibility** before returning: deployment support,
-   steady lifecycle state, model/storage reachability, and placement certainty.
-   Shared cooldown, maintenance-window, tenant-boundary, and rate-limit gates
-   remain in the Arbiter so they are enforced once across policies and their
-   rejection reasons reach the Reporter.
-8. **Return** the surviving ranked slice as `[]Candidate`. That return value is the policy's entire output — Policy #1 itself emits no Event, no metric, and no ConfigMap entry (it holds no client; see the engine's purity contract). The engine then routes the slice: executable Candidates enter the Arbiter; advisory ones (`Executable=false`) go straight to the Reporter. The Reporter emits a `FragmentationRecommendationProduced` K8s Event on each target InferenceService, increments `alfred_recommendations_produced_total`, and (if enabled) writes the `alfred-recommendations` ConfigMap entry — for every Candidate outcome it sees: produced, admitted, withheld, or rejected, each with its reason. Whether a returned Candidate is acted on remains the Arbiter's call, and dispatch the Dispatcher's.
+   steady lifecycle state, model/storage reachability, placement certainty, and
+   Defrag's maintenance-window rule. Shared cooldown, tenant-boundary, and
+   rate-limit gates remain in the Arbiter so they are enforced once across
+   policies and their rejection reasons reach the Reporter.
+8. **Return** the surviving ranked slice as `[]Candidate`. That return value is the policy's entire output — Policy #1 itself emits no Event, no metric, and no ConfigMap entry (it holds no client; see the engine's purity contract). The engine then routes the slice: executable Candidates enter the Arbiter; advisory ones (`Executable=false`) go straight to the Reporter. The Reporter increments `alfred_recommendations_produced_total` for every workload Candidate and, if enabled, includes every reported outcome in `alfred-recommendations`. An advisory normally produces `FragmentationRecommendationProduced` on its InferenceService (Raw has the dedicated `RawDeploymentMigrationUnsupported` Event reason); an Arbiter decision instead produces `RecommendationWithheld` or `RecommendationRejected`. Whether a returned Candidate is acted on remains the Arbiter's call, and dispatch the future Dispatcher's.
 
 #### Placement-hint computation
 
-Each Candidate carries `HintTargetNodes`: a ranked, *advisory* list of nodes the migration should prefer. Advisory is the key word — Alfred computes a good target, but the K8s scheduler makes the final placement, and Alfred re-evaluates from the observed outcome rather than insisting. Computing a hint:
+Each workload Candidate carries `HintTargetNodes`, a bounded ranked list for
+operator-facing reporting, and may carry a larger internal placement plan used
+to prove an atomic surge against the snapshot. The hints are *advisory*: current
+Alfred only reports them, and in the target execution path the owning controller
+and Kubernetes scheduler still revalidate live placement. Excluding a node from
+Alfred's plan means Alfred will never recommend it; without a Dispatcher or a
+hard scheduling constraint it is not a guarantee that another actor cannot
+place there. Computing a target plan:
 
 1. **Enumerate** nodes that can physically accommodate the Instance's footprint (GPU count and hardware pool).
-2. **Filter** out nodes that would make the migration pointless or unsafe:
+2. **Filter** out nodes that would make the migration pointless or unsafe. The
+   target scheduler-complete filter is:
    - **Required scheduling constraints fail closed** — evaluate CPU, memory and
      scalar requests; node selectors; required node affinity; taints and
      tolerations; PVC/PV topology; evaluable required pod affinity and
@@ -1084,15 +1170,37 @@ Each Candidate carries `HintTargetNodes`: a ranked, *advisory* list of nodes the
      evaluated soundly, the Candidate becomes advisory instead of receiving a
      speculative target hint.
    - **Model not available** — storage-aware, switching on `ModelAvailability.Backend`. *Per-node models*: the target must have the model ready, per `BaseModel.Status.NodesReady` or the node label `models.ome.io/{ns}.basemodel.{name}=Ready` (OEP-0007 Q-017) — migrating to a node that must first pull a multi-hundred-GB model defeats the purpose, and the pod's own readiness `nodeSelector` would block the placement anyway. *PVC-backed models*: `NodesReady` is intentionally empty and must **not** be used as a filter; the target set is the nodes that can mount the volume — for RWX/ROX storage, any node satisfying the PVC's CSI topology, with no model pull ever needed. *RWO (and RWOP) PVCs pin the workload*: the volume attaches to one node at a time and the source pod still holds it while a surge replacement starts, so no surge-shaped mechanism can run — the candidate is downgraded to advisory with reason `VolumePinned`.
-   - **Health-quarantined or cordoned**: excluded. `Unhealthy`, `Unknown`, and recovery-window `Suspect` states all make capacity unusable for target hints. An `Unhealthy` node that Policy #1 refuses as a target is the source Policy #2 will consider draining; `Unknown` and `Suspect` alone do not authorize evacuation. (Mechanism for Policy #2 in its own section.)
-   - **CA scale-down in progress**: a node with `scale-down-disabled` being processed is excluded, so Alfred and the cluster-autoscaler do not fight over it.
+   - **Health-quarantined or cordoned**: excluded. `Unhealthy`, `Unknown`, and recovery-window `Suspect` states all make capacity unusable for target plans. An `Unhealthy` node that Policy #1 refuses as a target is the source Policy #2 reports for evacuation; `Unknown` and `Suspect` alone do not authorize a workload finding. (Mechanism for Policy #2 in its own section.)
+   - **CA scale-down in progress**: a node carrying CA's
+     `ToBeDeletedByClusterAutoscaler` taint is excluded, so Alfred and the
+     cluster-autoscaler do not fight over it. The separately observed
+     `scale-down-disabled=true` annotation opts a node out of CA scale-down and
+     is not an exclusion.
    - **Spot / preemptible**: excluded from targets by default (see the spot/preemptible section) — moving a workload onto a node that can vanish is a poor trade.
-3. **Rank** by a bin-packing heuristic whose direction depends on the goal: prefer partially-filled nodes when the goal is to consolidate, or prefer empty nodes when the goal is to free contiguous capacity elsewhere.
-4. **Return** the top N (default `3`).
+3. **Rank** by a bin-packing heuristic whose direction depends on the goal:
+   Defrag uses its consolidation objective; Node Health uses its deterministic
+   atomic surge ordering and does not add a spot-source boost.
+4. **Return** the top N hints (default `3`) while retaining the exhaustive
+   feasible set internally for Arbiter capacity claims.
 
-#### Execution
+The current shared planner implements a conservative subset of step 2:
+same-pool GPU fit, structured health quarantine, storage/model classification,
+spot exclusion, and complete atomic GPU footprint. Scheduler-complete scalar,
+affinity, taint/toleration, and topology evaluation remains planned. Until that
+lands alongside execution, the current plan is an operator-facing feasibility
+finding, not proof that dispatch is safe.
 
-Policy #1 does not execute. It returns `[]Candidate`; the Arbiter selects which Candidate(s) to act on across all policies; the shared **Dispatcher** carries out the move. This separation is the safety boundary of the whole design: a bad *recommendation* is just a value the Arbiter can decline, and the policy never holds an eviction client. The Dispatcher writes exactly one thing — the OEP-0007 migration-request annotation — and the controller that owns the workload's lifecycle executes the move. Which controller consumes a request is determined by the component's deployment mode, so there is no ambiguity; Alfred performs no pod-level action on any path:
+#### Target execution (not currently implemented)
+
+Policies do not execute. They return `[]Candidate`; the Arbiter selects action
+Candidates across all policies. When synthetic tests supply an executable
+Candidate, current Alfred reports an admission as withheld because no Dispatcher
+exists; production OMENative findings are advisory before arbitration. The
+target **Dispatcher** below will carry out a move. This separation is the safety boundary of the whole
+design: a bad recommendation is a value the Arbiter can decline, and a policy
+never holds an eviction client. The target Dispatcher writes exactly one thing
+— the OEP-0007 migration-request annotation — and the controller that owns the
+workload's lifecycle executes the move. Alfred performs no pod-level action:
 
 **OMENative-managed → migration-request annotation (OEP-0007 Q-004).** The Dispatcher does not evict multi-pod groups; it asks the controller that owns the group's lifecycle to migrate it, by PATCHing a request annotation onto the ISVC:
 
@@ -1136,13 +1244,13 @@ Retry semantics (OEP-0007 Q-021):
 **RawDeployment → advisory-only in the current phase.** No production
 InferenceService controller consumes the migration-request annotation for
 RawDeployment today. Alfred therefore marks Raw candidates
-`Executable=false`, emits the proposed source and target hints, and does not
-write an annotation. A future Raw executor may adopt the same contract, but it
+`Executable=false`, reports the observed source context with no target hints,
+and does not write an annotation. A future Raw executor may adopt the same contract, but it
 must land with live-state validation, UUID idempotency, PDB-safe disruption,
 durable status/audit reporting, and end-to-end tests before this OEP marks Raw
 execution supported.
 
-**Legacy LWS-backed → never dispatched, advisory only.** An LWS-backed Candidate arrives flagged `Executable=false`, and the engine routes it directly to the Reporter — it never enters the Arbiter and never reaches the Dispatcher, so it consumes no rate-limit budget and starts no cooldown. The Reporter emits the recommendation event with a message directing the operator to migrate the workload to OMENative, and increments `alfred_lws_recommendations_total{isvc, action: manual}` so a dashboard can alert that manual defragmentation is needed. *Why route around arbitration:* an advisory carries no action to admit, and pushing it through benefit-cost admission would either silently drop it or let an inert recommendation debit the budget real actions need. *Why refuse rather than try:* LWS's `RecreateGroupOnPodRestart` tears down the entire group on a single eviction with no surge protection — Alfred would cause the very outage it exists to prevent.
+**Legacy LWS-backed → never dispatched, advisory only.** An LWS-backed Candidate arrives flagged `Executable=false`, and the engine routes it directly to the Reporter — it never enters the Arbiter and never reaches the Dispatcher, so it consumes no rate-limit budget and starts no cooldown. The generic policy recommendation Event includes advisory reason `LWSMigrationUnsupported` in its message; that value is not the Kubernetes Event `reason`. The separate `alfred_lws_recommendations_total{isvc,action="MigrateToOMENative"}` counter supplies the explicit operator-action label for dashboards and alerts. *Why route around arbitration:* an advisory carries no action to admit, and pushing it through benefit-cost admission would either silently drop it or let an inert recommendation debit the budget real actions need. *Why refuse rather than try:* LWS's `RecreateGroupOnPodRestart` tears down the entire group on a single eviction with no surge protection — Alfred would cause the very outage it exists to prevent.
 
 **Failure handling at dispatch:**
 - **Request validation or execution gate fails** (policy disabled, invalid
@@ -1157,21 +1265,22 @@ execution supported.
 
 ### Policy #2: Node-health evacuation
 
-Tl;dr: when a node's GPU goes bad, get the OME workloads off it and tell the
-operator the node needs repair — but do not touch the node. Policy #2 is
-"evacuate + signal," and that two-word actuation depth is the whole point: it
-stays inside the exact write contracts Policy #1 already uses, so it needs no
-new RBAC and no cloud credentials.
+Tl;dr: current Policy #2 reports the OME workloads on a bad GPU node and tells
+the operator that the node needs repair; it does not move them or touch the
+node. The target is "evacuate + signal": future evacuation would reuse the
+same narrow owner-mediated migration contract planned for Policy #1, with no
+node-write RBAC or cloud credentials.
 
 **Definition.** *Policy #1* is defragmentation (the bin-packing relocation of
 the rest of this document): its trigger is a fragmentation score crossing a
-threshold. *Policy #2* is node-health evacuation: same machinery, different
-trigger. A *bad node condition* is a node-level signal the snapshot already
-carries — `GpuUnhealthy` is the canonical one — that marks a node's
-accelerators as unusable for OME workloads. *Evacuate + signal* means Alfred
-produces evacuation Candidates for the workloads on that node and emits a
-remediation signal for whoever owns the hardware; it does **not** repair,
-replace, cordon, drain, terminate, or reboot the node.
+threshold. *Policy #2* is node-health evacuation: same policy interface,
+different trigger and ranking. A *bad node condition* is a node-level signal
+the snapshot already carries — `GpuUnhealthy` is the canonical one — that
+marks a node's accelerators as unusable for OME workloads. The current
+reporting implementation identifies evacuation findings and reconciles repair
+signals but does not move a workload. The target *evacuate + signal* behavior
+adds Dispatcher execution later; it never repairs, replaces, cordons, drains,
+terminates, or reboots the node.
 
 #### Goal and context
 
@@ -1197,76 +1306,171 @@ cloud provider, or the cluster autoscaler — see the anticipated objection belo
    Non-Goal #6 stands — Alfred adds no new GPU-health telemetry. Policy #2
    consumes `GpuUnhealthy` through `NodeState.Health`; it does not probe GPUs
    itself.
-2. Evacuation uses the same execution surface as defrag, unchanged: every
-   executable evacuation Candidate goes out as the OEP-0007 migration-request
-   annotation and is executed by the owning controller. OMENative surge is the
-   supported path in this phase; RawDeployment and LWS findings are
-   recommendation-only until their lifecycle owners expose a compatible
-   consumer. *Rationale:* the safety argument — workloads are moved by their
-   owning controller, never evicted out from under themselves by an outsider —
-   must hold identically for health evacuation, because the destructiveness of
-   the action does not depend on what triggered it.
+2. Target evacuation uses the same execution surface as defrag, unchanged:
+   every dispatched evacuation Candidate goes out as the OEP-0007
+   migration-request annotation and is executed by the owning controller.
+   Current Alfred has no Dispatcher, no executor-liveness proof, and no
+   InferenceService write permission. Production health findings therefore stay
+   advisory before arbitration; a synthetic executable finding admitted by the
+   Arbiter is reported as withheld. RawDeployment and LWS findings are advisory until
+   their lifecycle owners expose a compatible consumer. *Rationale:* workloads
+   must be moved by their owning controller, never evicted out from under
+   themselves by an outsider.
 3. The remediation signal is observable by the operator/cloud/cluster-autoscaler
    without Alfred holding any node-write permission. *Rationale:* this is the
    property that keeps Non-Goal #3 ("Alfred does not cordon, drain, or terminate
    nodes") literally true while still making the bad node *actionable*.
-4. Node health is a small state machine, not a boolean. A configured condition
-   at `True` makes the node unhealthy and evacuation-eligible. `Unknown`
-   quarantines the node as a target and will make Policy #2 emit a remediation
-   signal, but does not authorize migration. A current `False` condition with a
-   recent `LastTransitionTime` enters a recovery suspicion window; only an
-   expired window is clear. A missing transition time is `Unknown`. This
-   reconstruction conservatively includes a newly initialized `False`
-   condition and cannot prove that a prior incident or Alfred evacuation
-   occurred. *Rationale:* treating inconclusive evidence as healthy is unsafe,
-   while treating it as sufficient evidence for disruption is also unsafe.
-   `policies.nodeHealth.enabled` controls candidate and signal production, not
-   this global target-safety quarantine.
+4. Node health is a small state machine, not a boolean. Policy #2 maps it to
+   output exactly as follows:
+   - zero-value or `Clear`: no marker and no workload finding;
+   - `Suspect`: one typed marker, so Reporter creates or updates the recovery
+     record and preserves an already-signaled episode, but no new
+     `NodeRepairNeeded` and no workload finding;
+   - `Unknown`: one marker and a repair-needed lifecycle signal, but no workload
+     finding; and
+   - `Unhealthy`: one marker and one deduplicated finding per affected atomic
+     Instance, plus a repair-needed lifecycle signal.
+
+   Any configured `True` row produces `Unhealthy`, even if its transition time
+   is zero. An explicit `Unknown`/unrecognized status, or a `False` row with a
+   missing transition time, produces `Unknown`. A recent or future-dated
+   `False` row produces `Suspect`; it becomes `Clear` at the exact expiry
+   boundary or later. If no configured condition row is present, state is
+   immediately `Clear`. This reconstruction cannot prove that a prior incident
+   or Alfred evacuation occurred. `policies.nodeHealth.enabled` controls all
+   Policy #2 markers and findings, not the snapshot's global target-safety
+   quarantine. On disable, Clear, or condition disappearance, the complete
+   desired marker set omits the node and Reporter removes its in-memory episode.
+   A stale persisted node-record key is removed only while recommendations
+   persistence remains enabled and its ConfigMap update succeeds.
 5. A condition-change early tick refreshes the snapshot before policy
-   evaluation. Refresh, publication, and evaluation are serialized; a failed
+   evaluation. Snapshot build and publication are serialized against every
+   other refresh; evaluation starts from the just-published snapshot after that
+   lock is released, so a later periodic refresh may overlap evaluation. A failed
    refresh skips the early decision. An early pass does not postpone the regular
    decision cadence. *Rationale:* waking quickly but evaluating the pre-change
    snapshot provides neither fast detection nor safe evacuation.
+6. Eligibility has two owners. Policy #2 owns source discovery, cross-node
+   Instance deduplication, deployment/steady-state classification, model/storage
+   classification, and deterministic atomic surge planning. The Arbiter remains
+   the authoritative enforcement point for opt-in, malformed or busy migration
+   state, termination, autoscaler activity, class-aware cooldowns, cross-policy
+   exclusion, capacity claims, global caps, and the circuit breaker. Policy
+   preclassification improves explanations; it never replaces Arbiter safety
+   revalidation.
 
 #### Approach (how)
 
-On a bad condition for node N, Alfred does two things, both within its existing
-contracts:
+On each evaluation, Alfred performs these pure and reporting-only steps:
 
-a) **Evacuate.** Produce evacuation Candidates for every OME workload occupying
-   N, scored and dispatched through the same Candidate pipeline Policy #1
-   uses (eligibility check, simulation against the *healthy* remainder of the
-   cluster, capacity check, dispatch via the migration-request annotation).
-   Ineligible Instances and deployment modes without a consumer remain visible
-   as advisory Candidates; they are never silently dropped or speculatively
-   dispatched. Source enumeration starts from the OME occupants physically on
-   N and resolves each pod to its stable InferenceReplica Instance. Every
-   resulting Candidate carries `FromNode=N`; Alfred never substitutes a
-   "primary" node guessed from where the rest of a multi-pod Instance happens
-   to consume the most GPUs.
-   Health-evacuation Candidates carry a distinct reason (`NodeUnhealthy`, vs
-   `Fragmentation`) so operators can tell defrag moves from forced evacuations in
-   metrics and Events — but they flow through the same code path. Within the
-   class, candidates order: feasible-target candidates first, then higher
-   `alfred.ome.io/priority` workloads (the most important leave the sick node
-   first), then smaller surge footprints (likelier to fit, and each completion
-   frees room for the larger moves).
+a) **Return one typed remediation marker per non-clear node.**
+   `Candidate.Remediation` (`*policy.NodeRemediation`) carries the node name, the
+   complete structured health observation, sorted unique names of the OME GPU
+   workloads whose identity is known, and `OMEGPUOccupantsPresent`. That
+   independent boolean keeps unresolved OME ownership from looking like an
+   empty node. Markers are
+   not workload recommendations and never enter the Arbiter. The engine passes
+   the complete marker set to Reporter cycle reconciliation.
 
-b) **Signal.** Return, alongside the evacuation Candidates, one advisory
-   Candidate per bad node (`Executable=false`, reason `RemediationSignal`). The
-   engine routes it directly to the Reporter. At first detection the Reporter
-   emits a `NodeRepairNeeded` Warning Event on the Node. When the refreshed
-   snapshot shows no OME workloads left on the node, it emits
-   `NodeDrainedForRepair`. It also maintains an entry in Alfred's own
-   `alfred-recommendations` ConfigMap keyed by node name with the health state,
-   affected workloads, suspicion deadline, and timestamps. The policy itself
-   writes none of these surfaces. Reporter reconciliation treats each policy
-   result as the complete desired signal set, so cleared nodes remove stale
-   records and repeated observations do not spam Events.
+   Snapshot construction deliberately retains two identity views. Workload and
+   Instance validation keeps each Pod's raw labels so malformed evidence cannot
+   become executable. Node occupancy separately projects canonical
+   workload/component identity only when the Pod's sole controller reference
+   exactly matches an observed `ome.io/v1beta1 InferenceReplica` by name and UID
+   and that IR has a nonempty parent. Missing/wrong labels, an undeclared
+   component, or a temporarily missing parent ISVC therefore remain invalid for
+   migration while still blocking a false `NodeDrainedForRepair`. An exact IR
+   owner reference whose object is temporarily absent, or the raw
+   `ManagedBy=OMENative` label alone, remains unresolved OME occupancy: it sets
+   the boolean without inventing a workload name. A wrong owner GVK/name does
+   not become OME evidence by UID alone. If one full owner identity ambiguously
+   matches duplicate IR rows, every deduplicated parent is retained as a logical
+   blocker, while the physical Pod's GPU request contributes to `AllocatedGPUs`
+   exactly once.
 
-c) **Stay suspicious during condition recovery.** A configured failure
+b) **Create deterministic workload findings only for `Unhealthy`.** Source
+   enumeration starts from physical OME GPU occupants and resolves each pod to
+   its stable atomic Instance. If one Instance has members on several unhealthy
+   nodes, Policy #2 emits exactly one finding: it sorts the affected unhealthy
+   member-node names and uses the lexicographically first as the exact
+   `FromNode`. It still returns one marker for every non-clear node. This avoids
+   duplicate actions against one atomic Instance without inventing a
+   GPU-majority "primary" node.
+
+   `signalOnly: true` stops here: Policy #2 returns markers only and does not
+   manufacture advisory workload findings. Otherwise Raw, LWS, non-movable,
+   invalid/unavailable/disabled/pinned OMENative, and no-headroom findings remain
+   visible as real advisory workload Candidates. The production observer has no
+   OMENative-executor supplier, so no OMENative finding is executable today: an
+   otherwise eligible Instance is reported with `OMENativeUnavailable`, while a
+   more fundamental model, surface, or observation failure retains its specific
+   advisory reason. Tests may construct an available capability state; only in
+   that synthetic/target state can a steady, movable, surge-feasible OMENative
+   Instance be marked executable for the Arbiter. That classification is still
+   not dispatch readiness or actual evacuation.
+
+   Invalid OMENative identity is surfaced without inventing one. Every stable
+   Instance whose joined pods cover unhealthy physical evidence keeps its
+   per-Instance finding. If physical OME GPU pods remain uncovered — including
+   zero status rows, rejected/empty invalid rows, or a mixed component with both
+   resolved and unjoined pods — Policy #2 adds exactly one component-wide
+   advisory (`Instance=-1`, `OMENativeObservationInvalid`) for that component,
+   with zero GPU footprint and no target hints. It uses the first uncovered
+   unhealthy node as source evidence. The component-wide fallback is emitted
+   only when no stable Instance identity covers that physical evidence; it does
+   not replace correctly resolved per-Instance findings.
+
+c) **Plan targets conservatively and report the proof.** The implemented shared
+   planner is deterministic, same-pool, health-quarantine-aware,
+   storage/spot-aware, and place-then-free for the complete atomic footprint.
+   Production's unavailable executor classification occurs before this planner,
+   so otherwise-eligible OMENative advisories currently carry no target hints;
+   synthetic available-capability tests exercise the planning path. The planner builds
+   per-pod `SurgePlan.Moves` internally to prove the placement, but a returned
+   Candidate discards those Moves and exposes only bounded operator-facing
+   `HintTargetNodes` plus the exhaustive internal `PlacementTargetNodes` list.
+   Full Kubernetes scheduler feasibility
+   (all scalar resources, affinity, taints/tolerations, and topology interactions)
+   remains target design; uncertainty is advisory, never permission to dispatch.
+
+d) **Rank the health class explicitly.** Executable findings precede advisory
+   findings; then numeric `alfred.ome.io/priority` sorts descending, footprint
+   sorts ascending, and stable workload/component/Instance identity breaks
+   ties. For a health Candidate, `Score` carries the numeric workload priority
+   so the existing Arbiter preserves that ordering. Health does not use the
+   fragmentation threshold, fragmentation benefit-cost score, or fragmentation
+   regression rejection. Across classes, the Arbiter's fixed safety order is
+   Node-Health before Defrag; operators cannot configure it away.
+
+e) **Reconcile the remediation lifecycle.** Reporter emits
+   `NodeRepairNeeded` (`Warning`) once per active `Unknown` or `Unhealthy`
+   episode. It emits `NodeDrainedForRepair` (`Normal`) on the transition to a
+   continuous empty interval, only after that episode was signaled and a
+   refreshed snapshot reports
+   `OMEGPUOccupantsPresent=false`. Raw, LWS, unresolved, and otherwise ineligible
+   OME GPU occupants keep it true and block the drained transition; non-OME
+   occupants do not. An empty `Workloads` list alone is never proof of drain.
+   Because Alfred does not cordon Nodes, a later OME occupant immediately clears
+   the derived in-memory `drainedAt` readiness and writes the cleared record;
+   persistence can lag and is retried after a ConfigMap update failure. If the
+   node then becomes empty again, Reporter emits a fresh
+   `NodeDrainedForRepair` transition.
+   Within one process, Reporter
+   keeps Event phase in memory and retries failed writes without replaying an
+   already-emitted Event or lifecycle metric. Cross-leader deduplication is
+   conditional: it reuses the current Node's derived record phase only when recommendations
+   persistence is enabled, the named ConfigMap is present and readable, and the
+   persisted record is valid and exactly matches the current health state plus
+   condition type/status/transition-time evidence. Missing, disabled, malformed,
+   or non-matching durable state is processed locally, so lifecycle Events are
+   at-least-once across failover. While persistence is enabled and its
+   ConfigMap update succeeds, Reporter updates valid records every cycle,
+   preserves unrelated keys, and deletes stale node keys when their markers
+   disappear.
+
+f) **Stay suspicious during condition recovery.** A configured failure
    condition that is currently `False` keeps the node excluded from every
-   policy's *target* hints until `LastTransitionTime +
+   policy's target plans until `LastTransitionTime +
    nodeSuspicionWindowMinutes` (default 30). This reconstructible guard prevents
    a freshly cleared node from immediately becoming a placement target. It
    depends on the condition producer retaining the `False` row and transition
@@ -1274,29 +1478,31 @@ c) **Stay suspicious during condition recovery.** A configured failure
    Alfred evacuated the node nor replaces the durable per-node evacuation
    record that prevents repeated waves across condition flaps.
 
-The only genuinely new behavior versus Policy #1 is the **trigger** (a node
-condition, not a fragmentation score), the **remediation Event**, and the
-**suspicion window**. Everything
-downstream — Candidate scoring, simulation, the global safety bounds, dispatch
-— is reused verbatim. That reuse is deliberate: it is what bounds the blast
-radius of adding a second policy to roughly zero new write surface.
+Policy #2 reuses the Policy interface, shared OMENative classification/planning
+helpers, Arbiter safety gates, and future Dispatcher contract. Its state
+transitions, cross-node deduplication, ranking, and Reporter lifecycle are
+policy-specific. That separation is deliberate: health urgency is not disguised
+as fragmentation benefit, while all actual actuation remains behind the shared
+safety and write boundaries.
 
 #### The narrow-contracts property (no new RBAC, no cloud credentials)
 
 State it plainly, because it is the load-bearing reason Policy #2 is cheap and
-safe to add: **evacuate + signal stays entirely within the three write contracts
-Alfred already holds.** Those three, and nothing more:
+safe to add: **report now, and eventually evacuate + signal, stays within three
+narrow write contracts.** The last two are current; the migration write is
+planned and remains absent:
 
 | Write surface | Used by | Node-level? | New for Policy #2? |
 |---|---|---|---|
-| OEP-0007 migration-request annotation on the ISVC | defrag + evacuation for workload owners with a validated consumer (OMENative in Alpha) | no | no |
-| Kubernetes Events | recommendations + remediation signal | Event *targets* a Node; it is **not** a write to the Node's spec/status | the Node-targeted Event is new; the verb (`create events`) is not |
-| Alfred's own `alfred-recommendations` ConfigMap | recommendations + node remediation record | no | no |
+| OEP-0007 migration-request annotation on the ISVC | target defrag + evacuation for workload owners with a validated consumer | no | **planned; no current Dispatcher or RBAC** |
+| Kubernetes Events | recommendations + remediation lifecycle signals | Event *targets* a Node; it is **not** a write to the Node's spec/status | current; the Node-targeted Event reuses the existing Events verb |
+| Alfred's own `alfred-recommendations` ConfigMap | recommendations + desired per-node remediation records | no | current |
 
-There is **no** `patch nodes`, **no** `update nodes/status`, **no** cordon (which
-is a node spec write), **no** drain, **no** cloud-API call, **no** pod-level
-write of any kind. RawDeployment and LWS remain advisory in Alpha, and therefore
-**no** cloud credential anywhere in Policy #2. Emitting an Event whose `involvedObject`
+There is currently also **no** InferenceService patch. There is **no** `patch
+nodes`, **no** `update nodes/status`, **no** cordon (which is a node spec write),
+**no** drain, **no** cloud-API call, and **no** pod-level write of any kind.
+RawDeployment and LWS remain advisory in Alpha, and there is **no** cloud
+credential anywhere in Policy #2. Emitting an Event whose `involvedObject`
 is a Node requires only the `create events` permission Alfred already has for its
 recommendations — it does not require write access to the Node itself.
 
@@ -1306,7 +1512,9 @@ cordon the wrong node or terminate a healthy instance, and the bounded-blast-
 radius guarantee from the architectural posture section evaporates. Keeping the
 write set frozen at three contracts is what *makes* "Alfred does not manage node
 lifecycle" an enforceable invariant rather than an aspiration — an auditor can
-verify it from the RBAC manifest alone.
+verify it from the RBAC manifest alone. The structured remediation ConfigMap is
+reporting state, not the future durable evacuation-wave ledger and never proof
+that a workload moved.
 
 #### Anticipated objection
 Q. If Alfred only signals and never repairs, what closes the loop — couldn't a
@@ -1315,12 +1523,14 @@ bad node sit forever with workloads refusing to land on it?
 A. The loop is closed by whoever already owns nodes, not by Alfred. The Node
 Event and ConfigMap record are the handoff; cluster-autoscaler replacing the node
 or an operator repairing it is the completion. If nobody acts, the node stays
-excluded from placement hints. Eligible OMENative Instances may already have
-moved, but RawDeployment, LWS, or ineligible OMENative occupants can remain; in
-that case Alfred withholds `NodeDrainedForRepair` and keeps their advisory
-blockers visible. Policy #2 reduces exposure where a validated migration path
-exists. It does not guarantee that every workload is safe or that the hardware
-gets fixed; those residual actions belong to the operator and node owner.
+excluded from Alfred's placement plans. In the current reporting-only baseline,
+an operator or another controller must move the occupants; after the Dispatcher
+lands, eligible OMENative Instances may move through the migration request.
+RawDeployment, LWS, or ineligible OMENative GPU occupants can remain in either
+case; Alfred withholds `NodeDrainedForRepair` and keeps those advisory blockers
+visible. Policy #2 does not guarantee that every workload is safe or that the
+hardware gets fixed; those residual actions belong to the operator and node
+owner.
 
 ### Policy #3: Descheduling (future)
 
@@ -1362,7 +1572,7 @@ The failure mode it prevents: two policies, run independently, issue
 contradictory or unsafe-in-aggregate actions in the same cycle. Concretely —
 Policy #1 (defrag) wants to migrate workload A *onto* node N to improve packing,
 while Policy #2 (health) is simultaneously evacuating node N because it just went
-`GpuUnhealthy`. Without arbitration, Alfred migrates A directly into a node it is
+`GpuUnhealthy`. Without arbitration, target Alfred could request A directly into a node it is
 in the middle of evacuating: the worst possible move. Or: two policies each emit
 a Candidate for the same workload, and the workload gets two concurrent
 migration requests, violating Alfred's one-action-per-workload invariant. The arbiter exists
@@ -1403,16 +1613,18 @@ c) **Global safety bounds — the existing cooldown, rate-limit, and capacity-ch
    section would be defeated. The safety envelope is a property of Alfred as a
    whole, so it is enforced once, globally, at the arbiter.
 
-d) **OEP-0013 awareness — defer to the autoscaler.** Before a Candidate clears
-   the arbiter, Alfred reads the autoscaler's intent (read-only; see the next
-   section) and skips any workload the autoscaler is *actively scaling*.
+d) **Target OEP-0013 awareness — defer to the autoscaler.** Before a Candidate
+   clears the arbiter, target Alfred reads the autoscaler's intent (read-only;
+   see the next section) and skips any workload the autoscaler is *actively scaling*.
    *Rationale:* migrating a Component while OEP-0013 is adding or removing its
    replicas races two controllers over the same pods. *Failure-mode default:* if
-   the autoscaler-intent signal is unavailable (CRD absent, read error, stale
+   a wired autoscaler-intent signal is unavailable (read error or stale
    beyond the snapshot window), the arbiter treats the workload as **busy** and
    defers it. We choose the safe default — skip on uncertainty — because acting
    on a workload that might be mid-scale is the costlier error; a deferred
-   Candidate simply reappears next cycle.
+   Candidate simply reappears next cycle. The Arbiter exposes and tests this
+   seam, but production `cmd/alfred` currently leaves `AutoscalerIntent` nil;
+   nil means the integration is absent and is treated as idle, not busy.
 
 #### Why lite, and what a heavier version would add
 
@@ -1436,16 +1648,16 @@ and we will not pretend the lite arbiter does more than order actions.
 
 ### Coexisting with the autoscaler (OEP-0013)
 
-Tl;dr: read-only, one direction. Alfred consults the autoscaler's intent before
-acting and **never** writes into OEP-0013's surface. Two controllers, two jobs,
-one boundary.
+Tl;dr: the target seam is read-only and one direction. Current production does
+not wire an autoscaler-intent reader; Alfred never writes into OEP-0013's
+surface. Two controllers, two jobs, one planned boundary.
 
-The division of labor, as a one-liner: **Alfred decides *where* pods live and
-when to move or evacuate them; the autoscaler (OEP-0013) decides *how many*; the
-scheduler decides *initial placement*; the operator/cloud repairs hardware.**
+The target division of labor, as a one-liner: **Alfred recommends and requests
+when a workload should move; the autoscaler (OEP-0013) decides *how many*; the
+scheduler makes pod placement decisions; the operator/cloud repairs hardware.**
 Each owns a different verb, and the verbs don't overlap.
 
-The seam is deliberately asymmetric and minimal: Alfred *reads* OEP-0013's intent
+The planned seam is deliberately asymmetric and minimal: Alfred *reads* OEP-0013's intent
 (is this Component being actively scaled right now?) as the input to arbiter rule
 (d), and that is the entire interaction. Alfred does not create, patch, or delete
 ScaledObjects, HorizontalPodAutoscalers, or any OEP-0013-owned object; it does
@@ -1456,16 +1668,16 @@ arbiter's safe default (treat unavailable/stale intent as "busy, defer") already
 bounds that. The moment the seam became bidirectional — Alfred writing into the
 autoscaler's state, or the autoscaler asking Alfred to move pods — we would own a
 two-controller write contract with all the version-skew and ordering hazards that
-implies. We are not building that. The autoscaler scales; Alfred places and
-evacuates; they meet only at a single read.
+implies. We are not building that. The autoscaler scales; target Alfred requests
+owner-mediated moves; they meet only at a single read.
 
-See also: OEP-0013 (Component-Scoped Autoscaling) for the autoscaler-intent
-surface Alfred reads. Open question (TBD): the exact shape of the
-"actively-scaling" read — whether Alfred infers it from observed ScaledObject /
-HPA status conditions and recent replica churn (no OEP-0013 cooperation needed,
-works today) or OEP-0013 publishes an explicit intent marker (cleaner, requires
-coordination). v1 uses the inference path because it needs nothing from OEP-0013;
-an explicit marker is a Phase 2 refinement if the inference proves too noisy.
+See also: OEP-0013 (Component-Scoped Autoscaling) for the target
+autoscaler-intent surface. Open question (TBD): the exact shape of the
+"actively-scaling" read — whether Alfred will infer it from observed ScaledObject
+/ HPA status conditions and recent replica churn, or OEP-0013 will publish an
+explicit intent marker. Neither reader is wired today. The current seam is an
+injectable Arbiter callback exercised by pure tests; selecting and implementing
+the production reader is target work.
 
 ### Policy and configuration model
 
@@ -1488,7 +1700,9 @@ last-known-good fallback do the validation work a CRD would get for free
 
 Configured via the `alfred-config` ConfigMap. The schema extends the existing
 `config.yaml` with a per-Policy block; the global scoring, rate-limiting, and
-window keys stay where they were (they now feed the Arbiter — see
+window keys stay where they were. Their code owners differ: Defrag owns its
+scoring and maintenance gate, shared placement planning owns target filters,
+and the Arbiter owns cross-policy admission bounds (see
 [Safety bounds](#safety-bounds)):
 
 ```yaml
@@ -1520,11 +1734,11 @@ config.yaml: |
         pendingUrgencyTauMinutes: 30  # tau in the pending-pressure term
     nodeHealth:
       enabled: true
-      aggressiveness: balanced
+      aggressiveness: balanced     # reserved; current health ranking is deterministic
       # which node conditions trigger evacuation; consumes existing signals,
       # does not detect health itself (see Non-Goals).
       triggerConditions: [GpuUnhealthy]
-      signalOnly: false            # true = signal only, never dispatch
+      signalOnly: false            # true = typed node markers only; no workload findings
       healthCooldownFloorMinutes: 5   # per-workload cooldown floor for NodeUnhealthy candidates
       nodeSuspicionWindowMinutes: 30  # recently cleared failure conditions quarantine targets during recovery
 
@@ -1532,43 +1746,73 @@ config.yaml: |
   defaultMovable: true
   recentPlacementCooldownMinutes: 10  # authorship-blind placement cooldown, Arbiter-enforced (see Human intervention)
 
-  # Execution surfaces (all annotation-mediated; the owning controllers execute)
+  # Current classification switches; no Dispatcher consumes them today
   rawDeploymentMigrationEnabled: false # reserved; Raw is advisory until a consumer exists
   omenativeMigrationEnabled: true      # OMENative controller: Instance surge
-  omenativeCapabilityLeaseName: ome-inferencereplica-executor
-  omenativeCapabilityLeaseNamespace: ome
-  omenativeCapabilityMaxStaleness: 30s # absent/stale/incompatible = recommend-only
   lwsRecommendationsEnabled: true      # produce recommendations for LWS (never execute)
 
   # Output
   recommendationsConfigMapEnabled: true
   recommendationsConfigMapName: alfred-recommendations
 
-  # Logging
+  # Reserved logging fields; accepted/defaulted but currently unused.
+  # Current logging is controlled by the controller-runtime zap CLI flags.
   logLevel: info
   structuredLogging: true
 ```
 
-The global safety, spot, multi-tenancy, and maintenance-window keys are
-unchanged and documented in their own sections below; they are deliberately
-*not* nested under `policies` because they are applied once, by the Arbiter,
-across every Policy's output.
+The block above is accepted by the current strict loader. Executor capability
+configuration is target design and is deliberately **not** part of that schema.
+The two logging fields are reserved compatibility fields: the current binary
+does not apply them, and logging remains controlled by its
+controller-runtime zap CLI flags.
+For clarity, the intended shape below is non-runnable pseudocode; placing these
+keys in current `config.yaml` causes the last-known-good reload path to reject
+the document as containing unknown fields:
 
-**Aggressiveness is a scoring knob, not a kill switch.** `conservative` raises
-the benefit/cost threshold a candidate must clear before the Arbiter will admit
-it; `aggressive` lowers it. It does not bypass cooldowns, rate limits, or the
-capacity check — those are global and non-negotiable (see
-[Safety bounds](#safety-bounds)). Naming the failure mode: if aggressiveness
-*could* relax safety bounds, an operator chasing utilization would set
-`aggressive` and silently disable the very gates that keep the caretaker from
-churning the cluster. So it can't.
+```text
+# TARGET PSEUDOCODE — NOT VALID CURRENT alfred-config
+omenativeCapabilityLeaseName: ome-inferencereplica-executor
+omenativeCapabilityLeaseNamespace: ome
+omenativeCapabilityMaxStaleness: 30s
+```
+
+The current schema accepts a custom `recommendationsConfigMapName`, but the
+bundled namespace Role authorizes writes only to `alfred-recommendations`. An
+operator choosing another pre-created output name must update the Role's
+`resourceNames` in the same deployment; changing the config value alone does
+not authorize Reporter writes.
+
+The global safety, spot, multi-tenancy, and maintenance-window keys are
+unchanged and documented in their own sections below; they remain outside the
+per-policy config blocks because they are shared configuration. Their current
+owners differ: the Arbiter authoritatively enforces cross-policy cooldowns,
+capacity claims, and rate/concurrency bounds; shared placement planning applies
+target-health, CA-taint, model, and spot eligibility; Defrag applies tenancy to
+its pending-pressure benefit and applies its maintenance window locally.
+
+`maintenanceWindows` defaults to an empty list, which means Defrag is allowed at
+all times. Adding one or more windows restricts routine Defrag to their union;
+clearing the list restores always-open behavior. To stop Defrag, set
+`policies.defragmentation.enabled: false` (or use `mode: recommend-only` to
+quiesce all future dispatch while retaining findings).
+
+**Aggressiveness is a Defrag scoring knob, not a kill switch.** `conservative`
+raises Defrag's benefit/cost threshold and `aggressive` lowers it. The
+`nodeHealth.aggressiveness` field remains schema-compatible but is reserved in
+the current reporting implementation: binary health state, numeric workload
+priority, and footprint determine its ranking. No aggressiveness value bypasses
+cooldowns, rate limits, or the capacity check; those are global and
+non-negotiable (see [Safety bounds](#safety-bounds)).
 
 **Per-Policy enable + per-workload gating are orthogonal axes.** Disabling
-`policies.nodeHealth` stops the caretaker from proposing evacuations for anyone;
-annotating one workload `alfred.ome.io/movable: "false"` opts that workload out
-of automatic action by *all* Policies; operator advisories may still be
-reported. An operator needs both: cluster-wide "don't run node-health yet" and
-per-workload "never touch this one."
+`policies.nodeHealth` removes all Node-Health workload findings and typed
+markers and its in-memory episodes. When recommendations persistence remains
+enabled and the ConfigMap update succeeds, Reporter also deletes the policy's
+stale per-node records. Snapshot-derived target quarantine remains active
+because it is global safety state, not Policy output. Annotating one workload
+`alfred.ome.io/movable: "false"` opts that workload out of automatic action by
+all Policies; its advisory finding may still be reported.
 
 Per-workload overrides via InferenceService annotations:
 
@@ -1576,14 +1820,18 @@ Per-workload overrides via InferenceService annotations:
 metadata:
   annotations:
     alfred.ome.io/movable: "false"                       # opt out of automatic action
-    alfred.ome.io/priority: "0.3"                        # lower = more protected
+    alfred.ome.io/priority: "0.3"                        # numeric descending; lower moves later
     alfred.ome.io/cooldown-minutes: "60"                 # per-workload override
     alfred.ome.io/opt-out-reason: "critical production"  # operator note
     alfred.ome.io/tenant-group: "team-alpha"             # for cross-tenant opt-in
 ```
 
-Annotations win over ConfigMap defaults: the per-workload signal is closer to
-the workload owner than the cluster-wide default, so it takes precedence.
+Annotations win over ConfigMap defaults for ordinary workload classification.
+Numeric priority sorts descending, so a lower value is more protected and
+leaves an unhealthy node later. A workload cooldown annotation replaces the
+standard workload window, but health still becomes eligible after
+`healthCooldownFloorMinutes`; an admission before the annotated/standard window
+ends is audited as `CooldownOverriddenForEvacuation`.
 
 **Reload semantics.** Alfred watches the ConfigMap and reloads on change. An
 invalid `schemaVersion`, or a config that fails schema validation, triggers
@@ -1605,7 +1853,7 @@ executable action by *any* Policy unless one of these holds:
   recommendation-only; Serverless is not managed.
 - It is backed by an RWO (or RWOP) PVC — the volume can attach to one node at a
   time, so no surge-shaped mechanism can move it; advisory-only
-  (`MigrationSkippedVolumePinned`). Moving it means downtime, which stays a
+  (`VolumePinned`). Moving it means downtime, which stays a
   manual operator action — Alfred has no downtime-migration mode.
 
 Operators preferring opt-in-only set `defaultMovable: false`; then a workload
@@ -1685,12 +1933,12 @@ The gates, applied by the Arbiter to the merged candidate stream:
   health-evacuation candidates wait only the `healthCooldownFloorMinutes`
   floor. See [Human intervention](#human-intervention-and-incident-posture).
 - **Terminating exclusion**: no action is admitted for an Instance with any
-  pod carrying a `DeletionTimestamp`; past
-  `max(2 × terminationGracePeriodSeconds, 5m)` of deletion age the Reporter
-  emits a `StuckTerminating` advisory instead. Action never; silence never.
+  pod carrying a `DeletionTimestamp`. A dedicated, age-gated
+  `StuckTerminating` advisory is target work and is not emitted by the current
+  Reporter.
 - **Capacity check**: before admitting a candidate, the Arbiter re-checks the
   `ClusterSnapshot` for a feasible target with enough contiguous free GPUs and a
-  ready model copy. Every executable Alpha path is OMENative surge and therefore
+  ready model copy. Every target dispatchable Alpha path is OMENative surge and therefore
   **place-then-free**: the complete replacement must fit while the source still
   holds its GPUs. The check is **net of in-flight claims**: GPUs that a
   still-running migration's replacement will occupy count as allocated, so two
@@ -1698,25 +1946,32 @@ The gates, applied by the Arbiter to the merged candidate stream:
   scored against a stale snapshot whose target has since filled is rejected
   here, not dispatched into a guaranteed stall.
 - **Circuit breaker**: if the recent-10-actions failure rate exceeds 50%, the
-  Arbiter pauses *all* execution for 60 minutes and emits a critical event.
+  Arbiter pauses *all* execution for 60 minutes. The gate and gauge exist now;
+  a target Dispatcher must feed real outcomes. No current breaker-transition
+  Event is emitted (see the exact Event catalog).
   Failure mode: a systematically bad target (a node that looks free but rejects
   scheduling) would otherwise let the caretaker thrash; the breaker stops the
   bleeding.
 - **Dry-run mode**: `mode: recommend-only` disables execution entirely — Policies
   still produce recommendations, the Arbiter still scores and gates them, and
-  the Reporter still publishes every outcome; only the Dispatcher never fires.
-  Useful during rollout to watch what the caretaker *would* do.
+  the Reporter still publishes every outcome; only the target Dispatcher never
+  fires. Current Alfred has no Dispatcher and no production-executable
+  OMENative findings. Its synthetic admitted path uses
+  `DispatcherUnavailable` in execute mode, while remediation lifecycle reporting
+  remains live in both modes.
 
 These defaults are deliberately low. The caretaker optimizes a steady-state
 property (fragmentation) and reacts to a rare event (node health); neither
 justifies moving more than a handful of workloads per hour. An operator who
 wants faster convergence raises the caps explicitly and owns the consequence.
 
-One bound that is *not* the Arbiter's: maintenance windows. Defragmentation runs
-only inside configured `maintenanceWindows` (default business hours UTC,
-weekdays), because a steady-state optimization can wait. Node-health evacuation
-overrides the window — a failing accelerator is not a "wait until Monday"
-problem. `emergencyPendingAgeMinutes` (default 10) likewise overrides the window
+One bound that is *not* the Arbiter's: maintenance windows. The default is an
+empty `maintenanceWindows` list, meaning always open. Once at least one weekly
+UTC window is configured, Defragmentation runs only inside the union of those
+windows because a steady-state optimization can wait. Current Node-Health
+findings ignore the window, and target evacuation will too — a failing
+accelerator is not a "wait until Monday" problem.
+`emergencyPendingAgeMinutes` (default 10) likewise overrides the window
 for defragmentation when a pending pod has starved past the threshold. The
 window is a per-Policy urgency policy; the rate limits, cooldowns, and capacity
 check above are global.
@@ -1725,18 +1980,20 @@ check above are global.
 
 The caretaker is one of several actors moving pods around. Acting blind to the
 others is how it picks a target the Cluster Autoscaler is about to delete, or
-migrates an ISVC the HPA is mid-scale on. Each is a concrete defer-or-exclude
-rule, applied by the Arbiter regardless of which Policy proposed the candidate:
+migrates an ISVC the HPA is mid-scale on. These rules have explicit owners:
+workload-level concurrency gates live in the Arbiter, while target eligibility
+is established by policy/shared placement planning on the same snapshot:
 
-- **HPA**: the Arbiter checks HPA status conditions / scale history for the
-  target InferenceService. If the HPA scaled within the last 2 minutes, that
-  ISVC is deferred — migrating a workload mid-scale fights the autoscaler and
-  produces churn neither actor wanted.
-- **Cluster Autoscaler**: nodes annotated
-  `cluster-autoscaler.kubernetes.io/scale-down-disabled: "true"` are excluded
-  from placement hints. Nodes in active CA scale-down (detected via CA's
-  deletion-candidate label) are also excluded — placing a workload on a node the
-  CA is about to drain guarantees a second move.
+- **HPA / OEP-0013 (target seam)**: once a production intent reader is wired,
+  the Arbiter will defer a target InferenceService while scaling intent is active
+  or unreadable. Current `cmd/alfred` leaves the callback nil and does not inspect
+  HPA status or scale history; pure Arbiter tests inject the intent states.
+- **Cluster Autoscaler**: nodes in active CA scale-down, detected by the
+  `ToBeDeletedByClusterAutoscaler` taint, are excluded from placement hints —
+  placing a workload on a node CA is about to drain guarantees a second move.
+  The snapshot records `scale-down-disabled=true` for visibility, but that
+  annotation prevents CA scale-down; it is not an active-deletion marker and is
+  not a current Alfred target exclusion.
 - **In-flight migrations**: a pending request annotation, a non-terminal
   `InferenceReplica.Status.Migrations` entry, or a non-terminal workload-audit
   ledger row makes the affected workload busy. Alfred deduplicates these
@@ -1797,19 +2054,18 @@ pre-filter as an optimization but the Arbiter is the guarantee:
   carrying a `DeletionTimestamp` produces no admitted action — this is what
   stops Policy #2 from racing a human drain of the same node with duplicate
   disruption. The exclusion is absolute for *action* (Alfred's contracts
-  cannot even express force-delete, by design), but not for *observation*:
-  past `max(2 × terminationGracePeriodSeconds, 5m)` of deletion age the
-  Reporter emits a `StuckTerminating` advisory on the InferenceService — a
-  wedged finalizer is a human's problem, and silence about it was never the
-  intent.
+  cannot even express force-delete, by design). A future dedicated
+  `StuckTerminating` advisory may make a long-running deletion explicit; no such
+  Reporter value or Event reason exists today.
 
 **Quiescing actuation is a config flip, not a process stop:**
 
 | Tool | Effect | When |
 |------|--------|------|
-| `mode: recommend-only` | Dispatcher off; Policies, Arbiter, Reporter keep running | the incident default — the only flip that also quiesces evacuation |
-| Narrow or clear `maintenanceWindows` | defragmentation stops (it dispatches only inside windows); evacuation deliberately overrides windows | suppress routine churn, keep evacuations |
-| `policies.<name>.enabled: false` | disables one policy entirely | e.g. defrag off, evacuation on |
+| `mode: recommend-only` | Target Dispatcher off; Policies, Arbiter, Reporter keep running | the incident default — after dispatch lands, the flip that quiesces evacuation |
+| Configure narrower `maintenanceWindows` | routine Defrag is eligible only inside those windows; an over-age pending emergency and Node Health override them | time-bound routine churn; `[]` means always open and is not a stop control |
+| `policies.defragmentation.enabled: false` | stops Defrag findings; global snapshot quarantine and other policies remain | definitive Defrag stop |
+| `policies.nodeHealth.enabled: false` | stops Node-Health findings and markers; global snapshot quarantine remains | Node-Health reporting off |
 | `Movable=false` annotation | per-workload shield | targeted protection; too much toil at mass scale |
 
 Runbook: `kubectl -n <alfred-namespace> edit configmap alfred-config` →
@@ -1821,10 +2077,11 @@ do, a running second opinion while you operate ("Alfred also thinks these
 six workloads should leave node B, in this order"). Recommend-only turns
 Alfred from actor into incident advisor.
 
-**Recovery is re-derivation.** When surgery ends, flip the mode back: the
-next pass re-derives everything from the post-surgery world, and the budget
-and cooldown ledgers reconstruct from cluster history exactly as on leader
-failover — no restart, no state cleanup, no memory of the interruption.
+**Recovery is re-derivation.** When surgery ends, flip the mode back: the next
+pass re-derives Candidates from the post-surgery world. Current Alfred has no
+dispatched-action ledger to recover. After Dispatcher integration, target budget
+and cooldown history must reconstruct from the authoritative action surfaces
+described under failover — no restart or manual state cleanup.
 
 ### Spot and preemptible nodes
 
@@ -1847,14 +2104,14 @@ spotPolicy:
 
 - `avoidAsTarget: true` excludes preemptible nodes from `hint_target_nodes`.
   Stable workloads land on non-preemptible nodes.
-- `preferAsSource: true` boosts the priority of workloads on preemptible nodes
-  so they evacuate before a preemption event, not after.
+- `preferAsSource: true` boosts Defrag source selection for workloads on
+  preemptible nodes. It does not alter Node Health's exact priority/footprint
+  ordering.
 - Per-workload override via `alfred.ome.io/spot-policy: avoid|migrate|ignore`.
 
-This is a scoring input shared by both Policies: defragmentation prefers spot
-nodes as evacuation sources, and node-health treats a failing spot node the same
-as any failing node — it just gets there first because the spot boost already
-raised its priority.
+Target exclusion is shared by both Policies. Source preference belongs to
+Defrag; Node Health treats a failing spot node exactly like any other failing
+node and does not apply a hidden spot boost.
 
 ### Multi-tenancy
 
@@ -1879,16 +2136,19 @@ migration into an outage. So, for per-node models, placement hints filter by
 `BaseModel.Status.NodesReady` / `ClusterBaseModel.Status.NodesReady` (OEP-0007
 Q-017). If no ready node is feasible as a target:
 
-- Skip the candidate.
-- Emit event `NoFeasibleTarget` on the ISVC with the reason.
+- Retain the finding as an advisory Candidate.
+- Emit the ordinary recommendation Event on the ISVC with
+  `NoSurgeHeadroom` in its advisory payload (or `ModelUnresolved` when model
+  availability itself could not be resolved). Neither value is a dedicated
+  Event reason.
 - Do *not* trigger a pre-download in v1. The operator pre-provisions the model
   (via BaseModel / ClusterBaseModel distribution) before expecting migrations to
   that node.
 
-This applies to both Policies: a node-health evacuation that has nowhere with a
-ready model copy is skipped and surfaced, not forced. Anticipated objection: "a
+This applies to both Policies: a node-health finding that has nowhere with a
+ready model copy is retained as advisory and surfaced, not forced. Anticipated objection: "a
 failing node with no migration target leaves the workload stranded." Honest
-answer for v1 — yes; the caretaker signals `NoFeasibleTarget` and the owning
+answer for v1 — yes; the caretaker reports the advisory blockage and the owning
 controller's normal recovery applies. Auto-triggered pre-download (the caretaker
 asking model-agent to distribute the model to a target before retrying) is a
 future iteration, out of scope for v1.
@@ -1897,7 +2157,7 @@ future iteration, out of scope for v1.
 never populate `NodesReady` — there is no per-node copy, and the ISVC
 controller also skips the readiness `nodeSelector` for them — so the readiness
 filter must not apply; applying it would make every PVC-backed workload
-permanently `NoFeasibleTarget`. Their real constraint is volume reachability.
+permanently targetless (`NoSurgeHeadroom`). Their real constraint is volume reachability.
 For **RWX or ROX** storage (shared filesystems, or read-only-many volumes —
 model weights are read-only at inference time, so ROX behaves exactly like RWX
 here), any node satisfying the PVC's CSI topology is a valid target and no
@@ -1906,12 +2166,12 @@ migrate. For **RWO** (or `ReadWriteOncePod`) storage, the volume attaches to
 one node at a time and the source pod still holds the attachment while a surge
 replacement starts, so surge-shaped migration cannot work — the replacement
 would sit in `ContainerCreating` on a Multi-Attach error until timeout.
-RWO-backed workloads are therefore advisory-only, skipped with
-`MigrationSkippedVolumePinned`, and Alfred offers **no downtime-migration
+RWO-backed workloads are therefore advisory-only, reported with advisory reason
+`VolumePinned`, and Alfred offers **no downtime-migration
 mode, not even opt-in**: moving one means downtime, and that stays an operator
 decision, performed manually outside Alfred.
 
-### Degraded mode
+### Target degraded execution mode (executor readiness is deferred)
 
 The caretaker executes migrations only through a confirmed lifecycle-owner
 consumer. In this phase that consumer is OMENative. CRD discovery alone is not
@@ -1952,25 +2212,40 @@ the InferenceReplica controller is disabled, not cache-synced, or shutting down.
   mode, not on every decision loop — otherwise the event stream becomes noise.
 - ConfigMap `omenativeMigrationEnabled: true` is a no-op while degraded.
 
-Both Policies degrade the same way: node-health evacuation of an OMENative
-Instance also requires the executor, so in degraded mode it falls back to
-recommend-only and signals the operator rather than acting.
+After executor readiness and dispatch land, both Policies degrade the same way:
+node-health evacuation of an OMENative Instance also requires the executor, so
+it falls back to recommend-only and Reporter continues the remediation
+lifecycle. Current Alfred has neither the Lease reader nor the Dispatcher; its
+health workload findings therefore make no liveness claim and never actuate.
 
 ### Deployment model
 
-Ships as:
+Current source-tree packaging is an opt-in testing Kustomize bundle, not a
+released production chart:
 
 - Binary: `cmd/alfred/main.go` → `alfred` container image.
-- Helm chart: `charts/ome-alfred/` (or a sub-chart of `ome-resources`).
-- Deployment: 3 replicas, leader election enabled.
+- Kustomize: `config/alfred/`, installed for testing with
+  `make install-alfred` or `kubectl apply -k config/alfred` after OME itself.
+- Deployment: 1 replica with leader election enabled. The manifest references a
+  placeholder `ghcr.io/moirai-internal/alfred:latest`; CI does not yet publish a
+  released Alfred image, so operators must build/supply one.
 - ServiceAccount, namespace Role/RoleBinding, and ClusterRole/ClusterRoleBinding
   per [RBAC](#rbac) below.
 - A pre-created, spec-less `alfred.ome.io` leader-election Lease.
-- ConfigMap `alfred-config` with default values.
+- Pre-created `alfred-config` and `alfred-recommendations` ConfigMaps.
 
-The caretaker installs alongside OME (same Helm release) or independently; it is
-a separate Deployment, not embedded in the main OME manager, so it has an
-independent release cadence, failure domain, and resource footprint. Target
+Target production packaging is a `charts/ome-alfred/` chart (or an equivalent
+sub-chart of `ome-resources`) with a three-replica Deployment and the same
+leader-election/write boundaries. That chart and released image do not exist in
+the current repository.
+
+The current production composition root registers Defrag and
+`&nodehealth.Policy{}` through `decisionPolicies()`. The exact policy identifier
+used in Candidate and metric labels is `nodehealth`.
+
+The target caretaker installs alongside OME (same Helm release) or independently;
+it remains a separate Deployment, not embedded in the main OME manager, so it
+has an independent release cadence, failure domain, and resource footprint. Target
 execution dependencies (current Alfred performs no execution):
 
 - OME `InferenceService` CRD installed.
@@ -1991,31 +2266,32 @@ The `alfred.ome.io` Lease is pre-created without a `spec`. Alfred's namespace
 Role grants only named `get` and `update` on that Lease; it cannot create Leases
 or access an unrelated Lease.
 
-Only the leader runs the decision loop — Policies, Arbiter, and Dispatchers — so
-exactly one replica is acting on the cluster at a time. All replicas run the
-observation loop, so Prometheus can scrape any replica for snapshot-derived
-gauges. This mirrors cluster-autoscaler's pattern.
+Only the leader runs the decision loop — Policies, Arbiter, and Reporter today,
+plus the target Dispatcher later — so exactly one replica performs
+decision-side work at a time. All replicas run the observation loop, so
+Prometheus can scrape any replica for snapshot-derived gauges. This mirrors
+cluster-autoscaler's pattern.
 
-On leader loss, in-flight action tracking is transient state; the new leader
-rebuilds it from pending migration-request annotations,
+Current Alfred dispatches no action, so there is no current Alfred migration to
+resume after leader loss. Current cross-leader node-lifecycle Event deduplication
+has the conditional recommendations-ConfigMap boundary described under the
+engine: without valid, exactly matching persisted evidence, Event delivery is
+at-least-once across failover. The target Dispatcher must rebuild in-flight
+action tracking from pending migration-request annotations,
 `InferenceReplica.Status.Migrations`, and the workload audit ledger, deduplicated
-by request UUID. The recommendations ConfigMap is an operator-facing record, not
-an authoritative migration ledger. Failure mode
-being mitigated: a leader handoff must not double-dispatch an in-flight
-migration, so the global in-flight cap is reconstructed from durable cluster
-state, not from the dead leader's memory.
+by request UUID. The recommendations ConfigMap remains operator-facing reporting
+state, never an authoritative migration ledger. This target reconstruction is
+what will prevent a leader handoff from double-dispatching in-flight work.
 
 ### RBAC
 
-Tl;dr: the caretaker re-scope adds *no* new write permissions — and the unified
-annotation path *removes* one: `pods/eviction` is gone from the ClusterRole,
-because every pod-level action is executed by the owning controllers. Policy #2
-is **evacuate + signal** — it migrates via the existing migration-request
-annotation and otherwise emits an Event and Alfred-owned record for the node
-remediation owner. In particular:
-**no node-write permission and no pod-write permission.** The caretaker never
-cordons, drains, patches a Node, or evicts a pod; it reads cluster state and
-requests moves on workloads.
+Tl;dr: the caretaker re-scope adds *no* new current write permissions, and
+`pods/eviction` is absent from the ClusterRole. Current Policy #2 reports
+findings plus node lifecycle Events and Alfred-owned records; it performs no
+InferenceService patch and no workload evacuation. Target Policy #2 would
+request evacuation through the same owner-mediated migration annotation planned
+for Defrag. In both phases there is **no node-write permission and no pod-write
+permission**: Alfred never cordons, drains, patches a Node, or evicts a pod.
 
 The effective namespace Role plus ClusterRole — the defragmenter scope minus
 the eviction verb:
@@ -2036,15 +2312,14 @@ the eviction verb:
   resources: [persistentvolumeclaims, persistentvolumes]
   verbs: [get, list, watch]
 
-# ConfigMaps (read for policy loading, write only to pre-created Alfred-owned ConfigMaps)
+# ConfigMaps (read for policy loading, update only the pre-created output)
 - apiGroups: [""]
   resources: [configmaps]
   verbs: [get, list, watch]
 - apiGroups: [""]
   resources: [configmaps]
-  verbs: [update, patch, delete]
+  verbs: [update]
   resourceNames:
-    - alfred-config
     - alfred-recommendations
 
 # Events
@@ -2075,27 +2350,45 @@ the eviction verb:
 # guard must land together before Alfred receives patch permission.
 ```
 
+The rendered current mutation allowlist is exact and wildcard-free:
+
+| Binding scope | API group / resource | Mutating verbs | `resourceNames` |
+|---|---|---|---|
+| ClusterRole | core / `events` | `create`, `patch` | unrestricted (Event objects in any namespace) |
+| Alfred namespace Role | core / `configmaps` | `update` | exactly `alfred-recommendations` |
+| Alfred namespace Role | `coordination.k8s.io` / `leases` | `update` | exactly `alfred.ome.io` |
+
+There is no wildcard API group, resource, or verb. Every other granted resource
+is read-only (`get`, `list`, `watch`), including Nodes, Pods, PVCs, PVs,
+InferenceServices, and InferenceReplicas. Alfred has no permission at all for
+Secrets, Deployments, or resources not expressly named in the rendered rules.
+The bundled Role's writable ConfigMap name is fixed; using a custom
+recommendations name requires the operator to change this allowlist
+deliberately.
+
 The write contracts in detail — each is the *only* mutation the caretaker can
 perform on that resource:
 
 | Resource | Verbs | What the write can do | Why no broader grant |
 |---|---|---|---|
-| `nodes` | get, list, watch | nothing — read-only | Policy #2 evacuates *workloads*, it never touches the Node object; node cordon/drain belongs to maintenance tooling, not the caretaker |
+| `nodes` | get, list, watch | nothing — read-only | Current Policy #2 reports; target Policy #2 evacuates *workloads* through their owner and never touches the Node object |
 | `pods` | get, list, watch | nothing — read-only | physical placement and current readiness; Alfred never performs pod-level lifecycle actions |
 | `persistentvolumeclaims`, `persistentvolumes` | get, list, watch | nothing — read-only | model-volume access modes and topology for placement feasibility |
 | `inferencereplicas` | get, list, watch | nothing — read-only | stable OMENative Instance identity, lifecycle state, and authoritative migration status |
 | OMENative capability `lease` | none currently; target `get` | nothing — read-only | target proof that a compatible InferenceReplica executor is currently enabled and renewing; producer and reader are not implemented |
 | `inferenceservices` | get, list, watch | nothing — read-only | target annotation patch is deferred until the Dispatcher and admission guard land together |
-| `configmaps` (named) | update, patch, delete | mutate only `alfred-config` / `alfred-recommendations` | the caretaker does not create ConfigMaps at runtime; Helm pre-creates them |
+| `configmaps` (named) | update | read-modify-update only `alfred-recommendations`; no write to `alfred-config` | the caretaker does not create ConfigMaps at runtime; the current Kustomize bundle pre-creates the output and a target chart must do the same |
 | `events` | create, patch | emit observability events | events are the audit trail; no other side effect |
 | `leases` | named get, update | pre-created, spec-less `alfred.ome.io` leader-election Lease | no runtime create and no access to unrelated Leases |
 
 **Why the re-scope needs nothing new — and drops a verb.** Node-health
 evacuation could, in a naive design, demand `nodes` write (to cordon the failing
-node) and `pods` delete (to force the workload off). It demands neither:
-evacuation writes the same `migration-request` annotation as defragmentation,
-and the owning controller performs the pod-level actions under authority it
-already holds as workload owner. RawDeployment and LWS remain advisory until
+node) and `pods` delete (to force the workload off). Current reporting demands
+neither and performs no evacuation. Target evacuation would write the same
+`migration-request` annotation as target defragmentation, after Dispatcher RBAC
+and admission enforcement land together; the owning controller would perform
+the pod-level actions under authority it already holds as workload owner.
+RawDeployment and LWS remain advisory until
 such a consumer exists. Alfred holds **no pod-level write at all**. The narrow
 surface that
 bounded the defragmenter's blast radius bounds the caretaker's even more
@@ -2146,9 +2439,12 @@ caretaker might send, execute mode must reject that patch type rather than rely
 on ambiguous CEL behavior.
 
 **ConfigMap write boundary.** The caretaker does not create ConfigMaps at
-runtime. Helm pre-creates `alfred-config` and, if recommendation snapshots are
-enabled, `alfred-recommendations`; the caretaker only updates/patches/deletes
-those named objects.
+runtime. The current Kustomize bundle pre-creates `alfred-config` and
+`alfred-recommendations`; a future Helm chart must preserve that contract. The
+rendered Role authorizes only `update` on `alfred-recommendations`. Current code
+watches but cannot mutate `alfred-config`; Reporter performs a
+read-modify-`update` of `alfred-recommendations`. Alfred cannot patch or delete
+either ConfigMap.
 
 ### Observability
 
@@ -2157,11 +2453,13 @@ tell defragmentation churn from node-health churn at a glance; the fragmentation
 gauges are re-keyed by hardware pool and size (observed / reclaimable /
 pending pressure — see Fragmentation scoring); migration metrics are unchanged;
 two node-health counters are added. Events
-and the recommendations ConfigMap stay as the human-readable surfaces. Every
-decision-side surface in this section is emitted by the engine's single
-Reporter stage — policies and the Arbiter produce values and recorded reasons;
-only the Reporter writes. The snapshot-derived gauges come from the observation
-loop.
+and the recommendations ConfigMap stay as the human-readable surfaces. Candidate,
+decision, and remediation-lifecycle surfaces in this section are emitted by the
+engine's Reporter — policies and the Arbiter produce values and recorded
+reasons. Snapshot-derived gauges and observation duration come from the
+observation loop; the decision loop owns its duration and breaker gauge; the
+config watcher owns reload metrics and `PolicyReloadFailed`; and the composition
+root owns leader status.
 
 **Why the `policy` label.** With two Policies feeding one Arbiter, an
 undifferentiated `alfred_recommendations_produced_total` can't answer "is the
@@ -2192,19 +2490,19 @@ Recommendation / migration counters (now `policy`-labeled):
 - `alfred_recommendations_rejected_total{policy,workload,component,reason}` (counter)
 - `alfred_migration_calls_total{policy,workload,mode,surface}` (counter; `surface=omenative` in Alpha; future validated consumers add values without changing the annotation contract)
 - `alfred_migration_outcome_total{policy,workload,mode,outcome}` (counter; outcome: completed/failed/timeout)
-- `alfred_lws_recommendations_total{isvc,action}` (counter; action: manual)
+- `alfred_lws_recommendations_total{isvc,action}` (counter; current action value: `MigrateToOMENative`)
 
 Node-health counters (new):
 
-- `alfred_nodehealth_evacuations_total{node,workload,surface,outcome}` (counter; the count of evacuation actions Policy #2 actually dispatched)
-- `alfred_nodehealth_signals_total{node,reason}` (counter; the count of signal-only outcomes — degraded mode, no feasible target, or `signalOnly: true` — where the caretaker emitted a signal instead of acting)
+- `alfred_nodehealth_evacuations_total{node,workload,surface,outcome}` (target counter; remains unused until a Dispatcher actually requests evacuation)
+- `alfred_nodehealth_signals_total{node,reason}` (current counter; increments only when Reporter emits an actual lifecycle signal, with `reason="NodeRepairNeeded"` or `reason="NodeDrainedForRepair"`)
 - `alfred_cooldown_overrides_total{policy}` (counter; admissions under the health cooldown floor — each also emits `CooldownOverriddenForEvacuation`)
 
-The split between `_evacuations_total` and `_signals_total` is the load-bearing
-distinction: an evacuation moved a workload; a signal punted to the owning
-remediation system. An operator watching `_signals_total` climb while
-`_evacuations_total` stays flat knows the caretaker *wants* to act but can't —
-no target, or degraded mode — which is exactly when a human should look.
+`_signals_total` measures lifecycle transitions, not advisory findings and not
+"signal instead of action." Repeated observations and ConfigMap write retries do
+not increment it. `_evacuations_total` remains zero in the reporting-only
+baseline because an executable or Arbiter-admitted Candidate is not an
+evacuation; only future successful dispatch can debit that counter.
 
 Loop / operational metrics (unchanged):
 
@@ -2215,39 +2513,73 @@ Loop / operational metrics (unchanged):
 - `alfred_circuit_breaker_state` (gauge; 0: closed/1: open)
 - `alfred_omenative_unavailable` (gauge; 0/1)
 
-**Events** on InferenceService:
+**Current Kubernetes Event catalog (exact `reason` and target):**
 
-- `FragmentationRecommendationProduced`
-- `MigrationRequested`, `MigrationCompleted`, `MigrationFailed`, `MigrationRejected`
-- `MigrationSkippedOptOut`
-- `MigrationSkippedMaintenanceWindow`
-- `MigrationSkippedCooldown`
-- `MigrationSkippedRateLimit`
-- `MigrationSkippedVolumePinned` (RWO/RWOP PVC — no surge-shaped mechanism can move the workload; relocation is a manual, operator-only action)
-- `RawDeploymentMigrationUnsupported`
-- `LWSMigrationUnsupported`
-- `NoFeasibleTarget`
-- `NoSurgeHeadroom` (surge-shaped candidate downgraded to advisory — no target can hold the replacement while the source still runs)
-- `NodeHealthEvacuationRequested` (Policy #2 dispatched an evacuation for this workload)
-- `CooldownOverriddenForEvacuation` (health evacuation admitted inside the standard per-workload cooldown; records the node, the condition, and how much cooldown was bypassed)
+| Event reason | `involvedObject` target | Current emission |
+|---|---|---|
+| `FragmentationRecommendationProduced` | InferenceService | Normal Event for a non-Raw Defrag advisory |
+| `EvacuationRecommendationProduced` | InferenceService | Normal Event for a non-Raw Node-Health workload advisory |
+| `RawDeploymentMigrationUnsupported` | InferenceService | Normal Event for a Raw advisory; this is the one advisory value also used as a dedicated Event reason |
+| `RecommendationRejected` | InferenceService | Normal Event for an executable Candidate rejected by the Arbiter; the rejection code is payload, not the Event reason |
+| `RecommendationWithheld` | InferenceService | Normal Event for an Arbiter-admitted Candidate that was not dispatched |
+| `CooldownOverriddenForEvacuation` | InferenceService | Normal Event when an admitted health Candidate used the health cooldown floor |
+| `NodeRepairNeeded` | Node | Warning Event once per locally known active `Unknown`/`Unhealthy` episode |
+| `NodeDrainedForRepair` | Node | Normal Event when a previously signaled episode enters a continuous interval with no OME GPU occupants; reoccupation clears readiness, so a later empty transition emits again |
+| `OMENativeUnavailable` | configured Alfred policy ConfigMap (default `alfred-config`) | Warning Event on transition into the unavailable state; the Event object lives in Alfred's namespace, not on a cluster-scoped pseudo-target |
+| `PolicyReloadFailed` | the watched Alfred policy ConfigMap | Warning Event when strict parsing or validation rejects a changed document |
 
-**Events** on Alfred's own ConfigMap:
+Production currently supplies no available OMENative executor state, so its
+workload findings do not reach the admitted/rejected Event branches.
+`RecommendationWithheld`, `RecommendationRejected`, and
+`CooldownOverriddenForEvacuation` are nevertheless current Reporter/Arbiter
+behavior covered with synthetic executable Candidates; they are not evidence
+of a current migration or a current production admission.
 
-- `PolicyReloadFailed`
-- `CircuitBreakerOpened` / `CircuitBreakerClosed`
+**Current payload reason values (not additional Event reasons):**
 
-**Events** cluster-wide:
+- Candidate causes: `Fragmentation` and `NodeUnhealthy`.
+  `RemediationSignal` identifies a typed node marker, which bypasses the
+  workload Event projection.
+- Advisory reasons: `NoSurgeHeadroom`, `VolumePinned`,
+  `LWSMigrationUnsupported`, `RawDeploymentMigrationUnsupported`,
+  `OMENativeUnavailable`, `OMENativeObservationInvalid`,
+  `OMENativeStateIneligible`, `NonExecutableObservedFragmentation`,
+  `MigrationSurfaceDisabled`, and `ModelUnresolved`.
+- Arbiter rejection reasons: `CircuitBreakerOpen`, `InstanceGone`,
+  `NotMovable`, `MalformedRequestPending`, `MigrationStateInvalid`,
+  `InstanceTerminating`, `WorkloadBusy`, `AutoscalerActive`, `Cooldown`,
+  `PlacementCooldown`, `NodeCooldown`, `TargetUnderEvacuation`,
+  `TargetNodeBusy`, `NoCapacity`, `InFlightCap`, and `HourlyCap`.
+- Withhold reasons: `RecommendOnly` and `DispatcherUnavailable`.
 
-- `OMENativeUnavailable`
+These values appear in the recommendation record, Event message, or metric
+labels as applicable. In particular, `VolumePinned`, `LWSMigrationUnsupported`,
+and `NoSurgeHeadroom` are advisory payload values, not Event reasons.
 
-**Events** on Nodes:
+**Target/future Events (not emitted by current Alfred):**
 
-- `NodeRepairNeeded`
-- `NodeDrainedForRepair`
+- Dispatcher/owner lifecycle: `MigrationRequested`, `MigrationCompleted`,
+  `MigrationFailed`, `MigrationRejected`, and
+  `NodeHealthEvacuationRequested`. Their final target and ownership must land
+  with Dispatcher integration rather than being inferred from today's Reporter.
+- Reporter breaker transitions: `CircuitBreakerOpened` and
+  `CircuitBreakerClosed`. Current visibility is the
+  `alfred_circuit_breaker_state` gauge plus a generic
+  `RecommendationRejected` whose payload reason may be `CircuitBreakerOpen`;
+  no breaker-transition Event emitter exists.
 
-**Logs**: structured JSON. Every multi-step operation carries a correlation ID
-(recommendation UUID) so a single migration can be traced from Policy through
-Arbiter to Dispatcher.
+Names such as `MigrationSkippedOptOut`, `MigrationSkippedMaintenanceWindow`,
+`MigrationSkippedCooldown`, and `MigrationSkippedRateLimit` are not current
+Event reasons. Current code uses the generic Event reasons and typed payload
+codes above; a closed maintenance window suppresses routine executable Defrag
+findings before arbitration.
+
+**Logs**: current log level and encoding are controlled by the
+controller-runtime zap CLI flags. The accepted `logLevel` and
+`structuredLogging` config fields are reserved and currently unused. The target
+Dispatcher must carry the request UUID as a correlation field from dispatch
+through owner-observed outcome; current Alfred has no multi-step migration
+operation to trace.
 
 **Recommendations ConfigMap (optional)**: if `recommendationsConfigMapEnabled: true`, the
 Reporter maintains the `alfred-recommendations` ConfigMap in Alfred's namespace —
@@ -2256,57 +2588,97 @@ recommendation now records which Policy produced it:
 
 ```yaml
 data:
-  recommendations.json: |
+  last-cycle.json: |
     {
-      "generated_at": "2026-04-16T12:00:00Z",
-      "cluster_fragmentation_score": 0.62,
-      "threshold": 0.5,
+      "timestamp": "2026-09-07T12:00:05Z",
+      "mode": "recommend-only",
       "recommendations": [
         {
-          "id": "rec-001",
-          "policy": "defragmentation",
           "workload": "prod/llama-70b",
           "component": "engine",
           "instance": 0,
-          "from_node": "node1",
-          "hint_target_nodes": ["node3", "node7"],
-          "benefit_score": 0.18,
-          "cost_score": 0.1,
-          "final_score": 0.08,
-          "reason": "fragmentation",
-          "executable": true,
-          "strategy": "OMENative",
-          "status": "accepted"
+          "policy": "nodehealth",
+          "reason": "NodeUnhealthy",
+          "outcome": "advisory",
+          "advisoryReason": "OMENativeUnavailable",
+          "fromNode": "node1",
+          "score": 0.3
         }
       ]
     }
 ```
+
+That is the current `cycleRecord`/`recommendationView` shape. Optional
+camelCase fields are `advisoryReason`, `rejectReason`, `withholdReason`,
+`fromNode`, `target`, `hintTargets`, `emergency`, and `cooldownOverridden`;
+`score` is always present. It contains no recommendation ID, cluster score,
+snake_case benefit/cost fields, execution strategy, or migration status.
+
+Node-remediation desired state is stored separately from workload
+recommendations, one JSON document per derived per-node key. When
+`node.<name>` fits Kubernetes' 253-byte ConfigMap-key limit, that readable form
+is used. For a maximum-length Node name, Reporter uses the collision-disjoint
+`node-hash.<truncated-name>.<sha256>` form with the full SHA-256 digest of the
+original name; failover seeding derives the same key from the desired Node
+rather than attempting to reverse it.
+Each record includes
+structured state, configured condition statuses and transition times, optional
+suspicion deadline, sorted unique identified OME workloads, the independent
+`omeGpuOccupantsPresent` fact,
+observation time, and optional signaled/drained times. For example:
+
+```yaml
+data:
+  node.node7: |
+    {
+      "state": "Unhealthy",
+      "conditions": [
+        {
+          "type": "GpuUnhealthy",
+          "status": "True",
+          "lastTransitionTime": "2026-09-07T12:00:00Z"
+        }
+      ],
+      "workloads": ["prod/llama-70b"],
+      "omeGpuOccupantsPresent": true,
+      "observedAt": "2026-09-07T12:00:05Z",
+      "signaledAt": "2026-09-07T12:00:05Z"
+    }
+```
+
+Reporter treats the cycle's typed markers as the complete desired node set.
+When persistence is enabled and its update succeeds, it preserves unrelated
+ConfigMap keys and deletes stale `node.*` / `node-hash.*` keys. A record seeds Event phase
+after failover only when persistence is enabled and the
+record is present, readable, valid, and an exact match for current condition
+evidence; otherwise delivery is at-least-once. These records are reporting state,
+not migration truth or the future durable evacuation-wave guard.
 
 ## Test plan
 
 Tl;dr: the old suite covered one policy (Defrag) end-to-end; the engine
 refactor adds three things that can break independently — the **Arbiter**
 (cross-policy conflict resolution), **Node-Health Evacuation** (a second
-policy that actuates), and the **OEP-0013 read-only seam** (Alfred must not
-fight Component-Scoped Autoscaling). Each gets its own coverage below, on top
-of the existing Defrag tests, which are preserved verbatim because Defrag is
-now Policy #1, not a special case.
+policy that currently reports findings and remediation lifecycle), and the **OEP-0013 read-only seam** (Alfred must not
+fight Component-Scoped Autoscaling). Each gets its own coverage below, alongside
+the Defrag coverage maintained under Policy #1.
 
 Terminology used throughout this section:
 
 - **Policy** : a pluggable unit implementing the `Policy` interface
-  (`Evaluate(snapshot) -> []Candidate`). Defrag is Policy #1, Node-Health
+  (`Name()` plus `Evaluate(snapshot, config) -> []Candidate`). Defrag is Policy #1, Node-Health
   Evacuation is Policy #2, Descheduling is Policy #3.
-- **Candidate** : a policy's request to act on a (workload, target) — the
-  rename of the old single-policy "Recommendation", generalized so the
-  Arbiter can compare candidates from different policies.
+- **Candidate** : a workload action/advisory or typed reporting marker. Only
+  executable workload Candidates enter arbitration; node-remediation markers
+  go to Reporter cycle reconciliation.
 - **Arbiter** : the engine stage that takes all candidates for one cycle,
   resolves conflicts, enforces mutual exclusion, and emits at most one action
   per (workload, node).
-- **Reporter** : the engine stage that emits every Event, decision metric, and
-  recommendations-ConfigMap entry, from the other stages' returned values and
-  recorded reasons. Advisory candidates (`Executable=false`) route to it
-  directly, bypassing the Arbiter.
+- **Reporter** : the engine stage that emits Candidate, decision, and
+  remediation-lifecycle Events and metrics plus recommendations-ConfigMap
+  entries, from the other stages' returned values and recorded reasons. Advisory
+  candidates (`Executable=false`) route to it directly, bypassing the Arbiter.
+  Other components retain their own operational signals.
 
 ### Unit tests
 
@@ -2331,8 +2703,10 @@ is load-bearing.
 New unit coverage for the engine refactor:
 
 1. **Arbiter priority ordering.** Two policies propose actions on disjoint
-   workloads; verify the Arbiter emits both, ordered by the configured policy
-   priority (Node-Health > Defrag > Descheduling). *Failure mode if absent:* a
+   workloads; verify the Arbiter emits Node-Health before every non-health
+   Candidate, then uses score descending, footprint ascending, and stable input
+   order within a class. Descheduling has no current behavior or dedicated
+   class rank. *Failure mode if absent:* a
    low-priority cosmetic defrag could be scheduled ahead of an urgent
    node-health evacuation, delaying evacuation off a failing GPU.
 2. **Arbiter mutual exclusion on a workload.** Defrag and Node-Health both
@@ -2345,33 +2719,49 @@ New unit coverage for the engine refactor:
    if both ran; verify the Arbiter serializes or drops to keep the node within
    capacity.
 4. **OEP-0013 skip.** A workload's Component is mid-scaling per the OEP-0013
-   read-only seam (autoscaler is actively changing replica count); verify every
-   policy's candidate against that workload is filtered before it reaches the
-   Arbiter. *Failure mode if absent:* Alfred migrates a pod the autoscaler is
-   simultaneously scaling — the two controllers thrash.
+   read-only seam (autoscaler is actively changing replica count); inject the
+   callback and verify every policy's candidate against that workload is
+   rejected by the Arbiter. Production-reader wiring is a separate target test.
 5. **Node-health candidate selection.** Given a snapshot with one node carrying
    a `GpuUnhealthy=True` condition, verify Node-Health Evacuation identifies
-   every OME occupant on that node, marks only eligible OMENative Instances
-   executable, and never selects workloads on healthy nodes. Verify `Unknown`
-   quarantines and signals without evacuation, recent `False` remains suspect,
-   and only expired suspicion becomes clear.
-6. **Node-health returns evacuate + signal.** Verify the policy returns both an
-   evacuation candidate **and** the advisory remediation-signal candidate that
-   the Reporter turns into the Node Event (Phase 1; the pluggable cloud
-   node-remediation provider is Phase 3). The two are coupled: evacuating
-   without signalling leaves a bad node in service for new pods.
+   every OME GPU occupant on that node. With synthetic executor availability,
+   only steady, movable, surge-feasible OMENative Instances are executable;
+   with the production-default unavailable state, none are. Retain all other
+   findings as advisory. Verify `Unknown` returns a marker and signal without a
+   workload finding, `Suspect` returns only a marker, and Clear returns nothing.
+   For one Instance spanning several unhealthy nodes, verify one finding whose
+   `FromNode` is the lexicographically first affected unhealthy member, plus one
+   marker per non-clear node. For zero status rows, rejected/empty invalid rows,
+   and mixed resolved-plus-unjoined pods, verify per-Instance findings remain for
+   covered evidence and exactly one component-wide, zero-footprint
+   `OMENativeObservationInvalid` advisory covers only the remaining physical
+   evidence. Verify owner-resolved Pods with missing/wrong raw identity remain
+   observation-invalid but project canonical node blockers; undeclared-component
+   or missing-parent-workload targets still block drain. Verify an exact orphaned
+   InferenceReplica owner reference and raw `ManagedBy=OMENative` each set the
+   unresolved-occupancy bit without inventing a workload, while a wrong owner
+   GVK/name alone remains non-OME. Ambiguous owner targets all remain visible
+   without double-counting physical GPU allocation. Verify numeric
+   priority descending, then footprint ascending, then
+   stable identity, and that `signalOnly` returns markers only.
+6. **Node-health returns findings + typed desired state.** Verify the Policy
+   returns workload findings and a typed remediation marker rather than writing
+   an Event. Verify Reporter emits `NodeRepairNeeded` once for
+   Unknown/Unhealthy, preserves a Suspect episode without claiming a new one,
+   and emits `NodeDrainedForRepair` only after a signaled episode has zero OME
+   GPU occupants. Verify reoccupation clears `drainedAt` without replaying
+   `NodeRepairNeeded`, and a later empty transition emits a new drained signal.
 7. **Advisory candidates bypass arbitration but are always reported.** A policy
-   returns an `Executable=false` Candidate (a Raw/LWS-backed defrag opportunity,
-   or a node remediation signal); verify it consumes no rate-limit budget,
-   starts no cooldown, never reaches the Dispatcher — and the Reporter still
-   emits its Event and metric. *Failure mode if absent:* benefit-cost admission
-   silently drops the advisory before an operator ever sees it, or an inert
-   recommendation debits the migration budget real actions need.
+   returns an `Executable=false` workload Candidate; verify it consumes no
+   rate-limit budget, starts no cooldown, never reaches a Dispatcher, and the
+   Reporter still publishes it. Separately verify typed remediation markers
+   bypass workload recommendation projection and arbitration and are reconciled
+   as a complete desired node set without repeating lifecycle Events/metrics.
 8. **Surge feasibility is place-then-free.** Given a snapshot where the target
    fits the Instance only if the source is freed first, verify a surge-shaped
    OMENative candidate is downgraded
    to advisory with `NoSurgeHeadroom` and never dispatched; given genuine
-   headroom, verify it is executable. Verify Raw and LWS candidates remain
+   headroom and synthetic executor availability, verify it is executable. Verify Raw and LWS candidates remain
    advisory regardless of apparent headroom, and that in-flight OMENative surge
    claims are subtracted from available capacity. *Failure mode if absent:* Alfred
    dispatches migrations that stall in `SurgePending` on exactly the clusters
@@ -2380,19 +2770,19 @@ New unit coverage for the engine refactor:
    health-evacuation candidate: verify rejection at T+4 (inside the floor),
    admission at T+6 with `CooldownOverriddenForEvacuation` emitted — and that
    a *defrag* candidate at T+6 is still rejected until T+30. Verify one
-   evacuation wave per flapping node (the node evacuation record, not the
-   workload cooldown, is the guard) and that a node inside its suspicion
-   window is excluded from every policy's target hints. *Failure mode if
-   absent:* workloads sit on failing GPUs waiting out a routine-optimization
-   cooldown, or a flapping node pumps evacuate/refill cycles.
-10. **InferenceReplica validation and eligibility.** Validate dense
-    `Status.InstanceStatuses` directly into a stable, sparse Instance set.
+   node inside its suspicion window is excluded from every policy's target
+   plans. Durable one-wave enforcement across flaps is a separate deferred
+   Dispatcher/ledger test; the reporting record is not that guard. *Failure
+   mode if absent:* workloads sit on failing GPUs waiting out a
+   routine-optimization cooldown.
+10. **InferenceReplica validation and eligibility.** Validate the possibly
+    sparse `Status.InstanceStatuses` rows directly into a stable Instance set.
     Reject excessive cardinality, duplicate or negative indexes, unknown
     phases, invalid ordinals, and negative counters. Join live Pods by Instance
     index and incarnation, and derive current
     placement/readiness from those Pods rather than compatibility-only status
     fields. Verify single-pod `ActiveOrdinal` selection and complete multi-pod
-    runner membership. Reject stale generation, invalid dense status,
+    runner membership. Reject stale generation, invalid status rows,
     label/incarnation mismatch, incomplete Pods, paused or migration-disabled components,
     partially ready/serving Instances, active operations, and rollout/scale
     transitions as advisory-only.
@@ -2405,10 +2795,16 @@ New unit coverage for the engine refactor:
     `refresh → publish → evaluate`, a refresh failure performs no decision,
     concurrent refreshes serialize, and the early pass does not reset the
     regular decision cadence.
-13. **Executor capability fails closed.** With a valid CRD and current
-    InferenceReplica status, verify an absent, stale, or wire-incompatible
-    OMENative capability Lease still produces advisory Candidates only; a fresh
-    compatible Lease enables otherwise eligible Candidates.
+13. **Executor capability fails closed.** Observer unit coverage verifies that
+    a nil supplier publishes the unavailable zero state and therefore makes
+    every otherwise-executable OMENative finding advisory with
+    `OMENativeUnavailable`. The current composition root intentionally provides
+    no supplier; until that construction gains a test seam, code/wiring review
+    audits the omission rather than claiming a composition-level unit test.
+    Synthetic snapshots may set `Available=true` to exercise the executable
+    branch. Missing/stale/wire-incompatible Lease-reader cases become target
+    tests when that reader exists; CRD or status presence alone must never imply
+    availability.
 
 The existing single-policy unit expectations (fragmentation scoring, threshold
 gating, placement-hint computation, cooldown, rate limiting) remain under
@@ -2417,7 +2813,9 @@ gating, placement-hint computation, cooldown, rate limiting) remain under
 ### Integration tests
 
 The target integration suite deploys Alfred in a kind cluster and verifies the
-following behavior end to end:
+following behavior end to end. Tests that require a Dispatcher, executor Lease,
+or actual migration are target acceptance tests, not current
+reporting-boundary claims:
 
 1. **End-to-end observation**: deploy Alfred in a kind cluster, deploy mock
    InferenceServices (via test CRDs), verify
@@ -2435,22 +2833,28 @@ following behavior end to end:
    workload audit row, and clears the annotation. Verify Alfred follows the UUID
    to its terminal phase and applies cooldown once.
 6. **LWS recommendation-only**: LWS-backed workload; verify recommendation
-   emitted but no migration request; event reflects `LWSMigrationUnsupported`.
+   emitted but no migration request; the generic recommendation Event carries
+   advisory payload `LWSMigrationUnsupported`.
 7. **Opt-out**: `alfred.ome.io/movable: "false"` excludes the workload from
    executable candidates; any Candidate still surfaced is advisory and its
    event explains why Alfred will not act.
 8. **Per-workload cooldown**: execute a migration, verify no new attempt for
    the same workload within cooldown.
-9. **Maintenance window**: active window; Alfred continues recommending, does
-   not execute.
+9. **Maintenance window**: outside every configured window, routine executable
+   Defrag findings are suppressed while advisory findings remain reportable;
+   inside one, target dispatch may proceed. Verify omitted/empty windows are
+   always open. Node Health and over-age pending emergencies ignore the window.
 10. **Rate limiting**: 10 candidates; only 3 migrations in-flight.
 11. **Policy hot reload**: update ConfigMap; Alfred reloads without restart.
 12. **Leader election**: 3 replicas; kill leader; new leader elected within 20s.
 13. **Post-migration health monitoring**: migration succeeds and the target's
-    configured failure condition trips; Alfred quarantines the node, while the
-    future durable per-node evacuation record prevents repeated migration waves.
+    configured failure condition trips; Alfred quarantines the node. Repeated
+    migration-wave prevention waits for the future durable per-node evacuation
+    record.
 14. **HPA coexistence**: HPA scaling the target ISVC; Alfred defers.
-15. **CA coexistence**: node marked `scale-down-disabled`; excluded from hints.
+15. **CA coexistence**: a node tainted `ToBeDeletedByClusterAutoscaler` is
+    excluded from hints; `scale-down-disabled=true` alone is observed and does
+    not exclude the node.
 16. **OMENative-unavailable degraded mode**: stop the controller while leaving
     the CRD and its last current-looking InferenceReplica status installed.
     Once the capability Lease becomes stale, Alfred enters degraded mode and
@@ -2477,17 +2881,20 @@ following behavior end to end:
 
 New integration coverage for the multi-policy engine:
 
-24. **Node-health end-to-end (the headline Phase 1 test).** A node transitions
-    to `GpuUnhealthy`. Verify, in order: (a) Alfred (Node-Health policy)
-    identifies every OME occupant, (b) eligible OMENative Instances are
-    evacuated through the migration-request annotation while Raw/LWS/ineligible
-    findings remain advisory, (c) a `NodeRepairNeeded` Event is emitted naming
-    the node, (d) `NodeDrainedForRepair` is emitted only after no OME occupant
-    remains and is withheld while an advisory blocker remains, and (e) the bad
-    node receives **no re-placement** —
-    Alfred excludes it from every policy's target set for as long as the
-    condition holds. *Failure mode if absent:* Alfred evacuates a node and then
-    immediately migrates a different workload back onto it.
+24. **Node-health reporting end-to-end (the current boundary, with synthetic
+    executor capability).** Inject `OMENativeExecutor.Available=true`; production
+    currently leaves the supplier nil and therefore keeps all OMENative findings
+    advisory. A node
+    transitions to `GpuUnhealthy`. Verify, in order: (a) Policy `nodehealth`
+    identifies and deduplicates every OME GPU occupant, (b) eligible OMENative
+    findings enter arbitration while Raw/LWS/ineligible findings remain
+    advisory, (c) every admitted action is withheld and Alfred performs no
+    InferenceService/Pod/Node write, (d) `NodeRepairNeeded` and the structured
+    per-node remediation record appear once, (e) `NodeDrainedForRepair` appears only
+    after a later observation has no OME GPU occupant and remains withheld while
+    an advisory blocker remains, and (f) the bad node is absent from Alfred's
+    target plans. Actual evacuation, executor proof, and a hard no-replacement
+    guarantee are follow-on Dispatcher acceptance tests.
 25. **Arbiter cross-policy in a live cluster.** Stage a cluster where Defrag
     wants to consolidate workload W onto node N while Node-Health wants to
     evacuate a workload off node N in the same cycle; verify the Arbiter lets
@@ -2505,9 +2912,9 @@ New integration coverage for the multi-policy engine:
     migrates with no model-ready filtering — verify the target set is the
     CSI-topology-reachable nodes and the migration completes with no model
     re-download. An ISVC backed by an RWO PVC is never dispatched — verify the
-    candidate surfaces as advisory with `MigrationSkippedVolumePinned` and no
+    candidate surfaces as advisory with `VolumePinned` and no
     surge is attempted. *Failure mode if absent:* the readiness filter silently
-    marks every PVC-backed workload `NoFeasibleTarget`, or a surge against an
+    marks every PVC-backed workload `NoSurgeHeadroom`, or a surge against an
     RWO volume deadlocks in `ContainerCreating` on a Multi-Attach error.
 
 ### Chaos / robustness
@@ -2519,7 +2926,8 @@ Existing:
 - OMENative rejects all requests; verify circuit breaker triggers.
 - InferenceService deleted mid-migration; verify Alfred cleans up gracefully.
 
-New, targeting the multi-policy failure surface:
+New, targeting the multi-policy failure surface. The first item is a deferred
+Dispatcher/ledger requirement, not a claim of the reporting-only baseline:
 
 - **Flapping node conditions don't thrash.** A node's `GpuUnhealthy` condition
   flaps on/off faster than the cooldown window. Verify Alfred evacuates **at
@@ -2528,7 +2936,7 @@ New, targeting the multi-policy failure surface:
   cooldown (which health candidates may shorten to the floor): the record is
   keyed by node and held across the flap — the condition clearing does not
   reset it — and the node-suspicion window keeps the cleared node out of every
-  policy's target hints, so freshly cleared capacity is not immediately
+  policy's target plans, so freshly cleared capacity is not immediately
   refilled and re-evacuated. *Failure mode if absent:* a node with
   intermittently-reported health flaps Alfred into an evacuate/re-place loop,
   churning workloads.
@@ -2561,32 +2969,35 @@ slip without blocking the one below it.
 
 ### Alpha
 
-Scope: the engine refactor (`Policy` interface + `Arbiter` + `Reporter`), Defrag ported to
-**Policy #1**, **Policy #2 Node-Health Evacuation** (evacuate + remediation
-signal), the checked InferenceReplica-plus-Pod snapshot, OMENative executor
-capability Lease, Dispatcher, **arbitration-lite** (priority ordering + mutual
-exclusion, no forecasting), and
-the **OEP-0013 read-only seam**.
+The current reporting milestone includes the `Policy` interface, Arbiter,
+Reporter, Defrag as Policy #1, Policy #2's deterministic findings and
+remediation lifecycle, and the checked InferenceReplica-plus-Pod snapshot. Full
+Alpha additionally requires actual Node-Health evacuation, an OMENative executor
+capability Lease, Dispatcher, scheduler-complete feasibility, durable one-wave
+state, arbitration-lite, and the OEP-0013 read-only seam.
 
 - Unit tests ≥ 80% coverage, including the new `engine/arbiter`,
   `engine/reporter`, `policy/defrag`, and `policy/nodehealth` packages.
-- Dense `InferenceReplica.Status.InstanceStatuses` validates into the stable
+- Checked, possibly sparse `InferenceReplica.Status.InstanceStatuses` rows validate into the stable
   Instance model; Pods join by stable index and incarnation for live readiness and
   placement; migration state and cooldowns reconstruct from
   `InferenceReplica.Status.Migrations` and the workload audit ledger across
   leader failover.
-- A fresh, wire-compatible OMENative capability Lease gates every executable
-  Candidate; CRD and status presence alone fail the execution-readiness test.
+- Before dispatch lands, a fresh, wire-compatible OMENative capability Lease
+  must gate every dispatchable Candidate. Current production supplies no
+  capability, so no OMENative finding is executable; synthetic `Executable`
+  classifications assert neither production capability, Arbiter admission, nor
+  dispatch readiness.
 - `RawDeployment` and LWS are advisory-only. A future Raw executor is additive
   and is not an Alpha graduation dependency.
 - Integration tests 1–10 passing, plus the node-health end-to-end test (24),
   the cross-policy arbiter test (25), and the OEP-0013 seam test (26).
-- The two new chaos tests passing: flapping-node cooldown, and the
-  no-same-cycle-collision invariant.
+- Before evacuation ships, the two new chaos tests pass: flapping-node
+  one-wave enforcement and the no-same-cycle-collision invariant.
 - Deployment via Helm documented.
 - Feature gate `AlfredGPUDefragmenter` disabled by default in the OME Helm chart.
-- Policy schema documented, including how to enable/disable each policy and set
-  the Arbiter priority order.
+- Policy schema documented, including how to enable/disable each policy and the
+  fixed Node-Health-before-Defrag safety order.
 - `recommend-only` is the default mode; `execute` is opt-in. This applies to
   **every** policy, Node-Health included: an alpha operator can run Node-Health
   in recommend-only and watch the Events before enabling the Dispatcher.
@@ -2640,9 +3051,9 @@ engine must not preclude them.
 - 2026-08-14: Engine gains an explicit **Reporter** stage: all observability
   emission (Events, decision metrics, the recommendations ConfigMap) moves out
   of `Evaluate` into the engine, making the policies-are-pure-functions
-  guarantee literal; advisory (`Executable=false`) candidates — LWS
-  recommendations, node remediation signals — bypass arbitration and route
-  directly to the Reporter.
+  guarantee literal; advisory (`Executable=false`) workload findings bypass
+  arbitration. Node remediation was later refined into typed desired-state
+  markers reconciled per cycle rather than workload advisories.
 - 2026-08-15: Actuation design unified on the single migration-request
   annotation. A RawDeployment consumer was proposed but not implemented;
   `pods/eviction` remains outside Alfred's RBAC. Candidate simulation plus the
@@ -2664,11 +3075,12 @@ engine must not preclude them.
   5-minute floor instead of the 30-minute per-workload cooldown (audited via
   `CooldownOverriddenForEvacuation`); flap protection restated on the per-node
   evacuation record; a condition-recovery suspicion window keeps recently
-  cleared nodes out of target hints; per-node mutual
+  cleared nodes out of target plans; per-node mutual
   exclusion and the per-node cooldown scoped to *targets*, so a failing node
-  can drain multiple workloads per cycle; within-class ordering of evacuation
-  candidates defined (feasible first, higher priority first, smaller footprint
-  first).
+  can drain multiple workloads per cycle; within-class ordering of health
+  findings refined to executable first, numeric workload priority descending,
+  footprint ascending, then stable identity. The durable node record remains a
+  future execution guard, not Reporter state.
 - 2026-08-20: Scoring keyed by node-derived hardware pool instead of
   AcceleratorClass: shape-scoped classes (H100x1..x8) can overlap-claim the
   same node and cannot partition hardware, so the pool key comes from the
@@ -2684,8 +3096,8 @@ engine must not preclude them.
   durable history. A fresh capability Lease, not CRD/status presence alone,
   proves executor availability. RawDeployment and LWS are advisory-only until
   their lifecycle owner implements the request contract.
-- 2026-09-07: The checked OMENative snapshot is implemented against dense
-  `InferenceReplica.Status.InstanceStatuses` directly. Live Pods remain the
+- 2026-09-07: The checked OMENative snapshot is implemented against the possibly
+  sparse rows in `InferenceReplica.Status.InstanceStatuses` directly. Live Pods remain the
   source of truth for placement and readiness; compatibility-only ready,
   scheduled, and nodes fields are ignored. RawDeployment candidates are
   advisory-only in current policy code. Condition-change early passes now force
@@ -2698,8 +3110,19 @@ engine must not preclude them.
   from defrag targets and surge headroom. `Suspect` is a condition-recovery
   quarantine, not proof of evacuation; evacuation candidates, remediation
   signals, and the durable one-wave record remain deferred.
-- TBD: Complete Alpha implementation (capability Lease, Policy #2, Dispatcher,
-  and outcome-fed safety ledger).
+- 2026-09-07: Node-Health Policy #2 reporting implemented. The pure `nodehealth`
+  policy returns typed per-node remediation markers plus deterministic,
+  cross-bad-node-deduplicated workload findings; `signalOnly` returns markers
+  only. Health ranking is executable first, numeric priority descending,
+  footprint ascending, and stable identity, with priority carried in `Score`
+  and no fragmentation threshold/regression gate. Reporter reconciles the
+  complete desired marker set into derived per-node records and emits deduplicated
+  `NodeRepairNeeded` / `NodeDrainedForRepair` lifecycle Events and metrics.
+  Production composition includes Defrag and Node Health. Nodes and Pods remain
+  read-only and InferenceService writes remain absent.
+- TBD: Complete Alpha execution (capability Lease, Dispatcher,
+  scheduler-complete feasibility, durable per-node one-wave state, and
+  outcome-fed safety ledger).
 - TBD: First Beta user.
 - TBD: Beta (Policy #3 Descheduling).
 - TBD: GA.
@@ -2720,11 +3143,11 @@ engine must not preclude them.
    predictive planner (Phase 3) is the proposed answer, but it is not yet
    justified — see Open Questions.
 4. **Operational overhead.** Operators learn Alfred's metrics, policy schema,
-   and failure modes — now multiplied across three policies and an Arbiter
-   priority order they must configure.
+   and failure modes — now multiplied across three policies and a fixed
+   cross-policy safety order they must understand.
 5. **Policy complexity.** The ConfigMap schema has many knobs, and the
-   multi-policy engine adds per-policy enablement plus the Arbiter priority
-   list. Good defaults mitigate, but the failure surface is larger than the
+   multi-policy engine adds per-policy enablement plus fixed Arbiter ordering.
+   Good defaults mitigate, but the failure surface is larger than the
    single-policy design.
 6. **Cross-controller interaction space.** Alfred, OMENative, HPA, CA,
    OEP-0013 Component-Scoped Autoscaling, and the scheduler form a complex
@@ -2841,7 +3264,7 @@ New, from the Caretaker reframing:
 
 2. **The cloud-remediation consumer schema.** Phase 1 is settled: Alfred emits
    `NodeRepairNeeded` at detection and `NodeDrainedForRepair` after the node has
-   no OME occupants, and mirrors structured health state in its recommendations
+   no OME GPU occupants, and mirrors structured health state in its recommendations
    ConfigMap. Alfred does not annotate the Node. The remaining question is what
    contract a Phase 3 pluggable cloud-remediation provider consumes — these
    Events, the structured ConfigMap record, or a richer external interface. The

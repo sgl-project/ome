@@ -10,8 +10,9 @@ import (
 )
 
 // Metrics holds every Alfred series. Snapshot-derived gauges are published by
-// the observation loop; decision-side series are emitted only by the engine's
-// Reporter stage.
+// the observation loop; policy-result and recommendation series are emitted by
+// Reporter; loop, leader, and configuration series are emitted by their owning
+// runtime components.
 type Metrics struct {
 	// Snapshot / fragmentation gauges.
 	ClusterFragmentationScore prometheus.Gauge
@@ -23,18 +24,21 @@ type Metrics struct {
 	PendingPodGPURequirements *prometheus.GaugeVec // size
 	SurgeHeadroomGPUs         *prometheus.GaugeVec // pool
 
-	// Recommendation / migration counters (Reporter-only).
+	// Policy result and recommendation counters (Reporter).
 	RecommendationsProduced *prometheus.CounterVec // policy, workload, component, reason, executable
 	RecommendationsAccepted *prometheus.CounterVec // policy, workload, component
 	RecommendationsRejected *prometheus.CounterVec // policy, workload, component, reason
-	MigrationCalls          *prometheus.CounterVec // policy, workload, mode, surface
-	MigrationOutcome        *prometheus.CounterVec // policy, workload, mode, outcome
 	LWSRecommendations      *prometheus.CounterVec // isvc, action
 
-	// Node-health counters (Reporter-only).
+	// Node-health lifecycle and override counters (Reporter).
+	NodeHealthSignals *prometheus.CounterVec // node, reason
+	CooldownOverrides *prometheus.CounterVec // policy
+
+	// Target action counters. These are registered for the future Dispatcher
+	// contract but are not emitted by the reporting-only baseline.
+	MigrationCalls        *prometheus.CounterVec // policy, workload, mode, surface
+	MigrationOutcome      *prometheus.CounterVec // policy, workload, mode, outcome
 	NodeHealthEvacuations *prometheus.CounterVec // node, workload, surface, outcome
-	NodeHealthSignals     *prometheus.CounterVec // node, reason
-	CooldownOverrides     *prometheus.CounterVec // policy
 
 	// Loop / operational.
 	ObservationLoopDuration prometheus.Histogram
@@ -100,7 +104,7 @@ func New(reg prometheus.Registerer) *Metrics {
 		}, []string{"policy", "workload", "component", "reason"}),
 		MigrationCalls: factory.NewCounterVec(prometheus.CounterOpts{
 			Name: "alfred_migration_calls_total",
-			Help: "Migration requests dispatched; surface is omenative, rollingrestart, or eviction.",
+			Help: "Reserved for migration requests dispatched through a validated owning-controller surface; the current target surface is omenative.",
 		}, []string{"policy", "workload", "mode", "surface"}),
 		MigrationOutcome: factory.NewCounterVec(prometheus.CounterOpts{
 			Name: "alfred_migration_outcome_total",
@@ -113,11 +117,11 @@ func New(reg prometheus.Registerer) *Metrics {
 
 		NodeHealthEvacuations: factory.NewCounterVec(prometheus.CounterOpts{
 			Name: "alfred_nodehealth_evacuations_total",
-			Help: "Evacuation actions Policy #2 dispatched.",
+			Help: "Reserved for terminal outcomes of future delegated node-health evacuation actions.",
 		}, []string{"node", "workload", "surface", "outcome"}),
 		NodeHealthSignals: factory.NewCounterVec(prometheus.CounterOpts{
 			Name: "alfred_nodehealth_signals_total",
-			Help: "Signal-only outcomes where the caretaker emitted a signal instead of acting.",
+			Help: "Node-health lifecycle signals emitted by Reporter: NodeRepairNeeded or NodeDrainedForRepair.",
 		}, []string{"node", "reason"}),
 		CooldownOverrides: factory.NewCounterVec(prometheus.CounterOpts{
 			Name: "alfred_cooldown_overrides_total",
@@ -131,7 +135,7 @@ func New(reg prometheus.Registerer) *Metrics {
 		}),
 		DecisionLoopDuration: factory.NewHistogram(prometheus.HistogramOpts{
 			Name:    "alfred_decision_loop_duration_seconds",
-			Help:    "Duration of one decision pass (policies + arbiter + reporter + dispatch).",
+			Help:    "Duration of one decision pass (policy evaluation + arbitration + reporting).",
 			Buckets: prometheus.DefBuckets,
 		}),
 		LeaderStatus: factory.NewGaugeVec(prometheus.GaugeOpts{
@@ -148,7 +152,7 @@ func New(reg prometheus.Registerer) *Metrics {
 		}),
 		OMENativeUnavailable: factory.NewGauge(prometheus.GaugeOpts{
 			Name: "alfred_omenative_unavailable",
-			Help: "1 while no OMENative executor is available (multi-pod candidates degrade to advisory).",
+			Help: "1 while no OMENative executor is available (OMENative candidates degrade to advisory).",
 		}),
 	}
 }
