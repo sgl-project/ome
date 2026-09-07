@@ -308,7 +308,7 @@ func TestBuildNodeAccounting(t *testing.T) {
 	if node1.TotalGPUs != 8 || node1.AllocatedGPUs != 5 || node1.FreeGPUs != 3 {
 		t.Fatalf("node1 accounting: total=%d allocated=%d free=%d, want 8/5/3", node1.TotalGPUs, node1.AllocatedGPUs, node1.FreeGPUs)
 	}
-	if !node1.ScaleDownDisabled || node1.Cordoned || node1.Unhealthy {
+	if !node1.ScaleDownDisabled || node1.Cordoned || node1.Health.Quarantined() {
 		t.Fatalf("node1 flags: %+v", node1)
 	}
 	if len(node1.OMEPods) != 1 || len(node1.OtherOccupants) != 1 {
@@ -322,13 +322,96 @@ func TestBuildNodeAccounting(t *testing.T) {
 	if node2.AllocatedGPUs != 3 || node2.FreeGPUs != 5 || node2.TerminatingGPUs != 2 {
 		t.Fatalf("node2 accounting: allocated=%d free=%d terminating=%d, want 3/5/2", node2.AllocatedGPUs, node2.FreeGPUs, node2.TerminatingGPUs)
 	}
-	if !node2.Unhealthy || len(node2.UnhealthyConditions) != 1 || node2.UnhealthyConditions[0] != "GpuUnhealthy" {
+	if node2.Health.State != NodeHealthUnhealthy || len(node2.Health.Conditions) != 1 ||
+		node2.Health.Conditions[0].Type != "GpuUnhealthy" ||
+		node2.Health.Conditions[0].Status != corev1.ConditionTrue {
 		t.Fatalf("node2 health: %+v", node2)
 	}
 
 	node3 := snap.Nodes["node3"]
 	if !node3.Cordoned || !node3.ScaleDownMarked || !node3.Preemptible {
 		t.Fatalf("node3 flags: %+v", node3)
+	}
+}
+
+func TestBuildReconstructsNodeHealthWithDefaultWindow(t *testing.T) {
+	recent := buildNow.Add(-10 * time.Minute)
+	expired := buildNow.Add(-DefaultNodeSuspicionWindow)
+	recentNode := gpuNode("recent", "8", func(node *corev1.Node) {
+		node.Status.Conditions = []corev1.NodeCondition{{
+			Type:               "GpuUnhealthy",
+			Status:             corev1.ConditionFalse,
+			LastTransitionTime: metav1.NewTime(recent),
+		}}
+	})
+	expiredNode := gpuNode("expired", "8", func(node *corev1.Node) {
+		node.Status.Conditions = []corev1.NodeCondition{{
+			Type:               "GpuUnhealthy",
+			Status:             corev1.ConditionFalse,
+			LastTransitionTime: metav1.NewTime(expired),
+		}}
+	})
+	unknownNode := gpuNode("unknown", "8", func(node *corev1.Node) {
+		node.Status.Conditions = []corev1.NodeCondition{{
+			Type:               "GpuUnhealthy",
+			Status:             corev1.ConditionUnknown,
+			LastTransitionTime: metav1.NewTime(recent),
+		}}
+	})
+	reader := fake.NewClientBuilder().WithScheme(testScheme(t)).
+		WithObjects(recentNode, expiredNode, unknownNode).Build()
+
+	snap, err := Build(context.Background(), reader, Options{Now: func() time.Time { return buildNow }})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	wantUntil := recent.Add(DefaultNodeSuspicionWindow)
+	if got := snap.Nodes["recent"].Health; got.State != NodeHealthSuspect ||
+		got.SuspectUntil == nil || !got.SuspectUntil.Equal(wantUntil) {
+		t.Fatalf("recent health = %+v, want Suspect until %v", got, wantUntil)
+	}
+	if got := snap.Nodes["expired"].Health; got.State != NodeHealthClear || got.SuspectUntil != nil {
+		t.Fatalf("expired health = %+v, want Clear", got)
+	}
+	if got := snap.Nodes["unknown"].Health; got.State != NodeHealthUnknown || !got.Quarantined() {
+		t.Fatalf("unknown health = %+v, want quarantined Unknown", got)
+	}
+}
+
+func TestBuildUsesOneTimestampForNodeHealth(t *testing.T) {
+	transitioned := buildNow.Add(-4 * time.Minute)
+	node1 := gpuNode("node1", "8", func(node *corev1.Node) {
+		node.Status.Conditions = []corev1.NodeCondition{{
+			Type:               "GpuUnhealthy",
+			Status:             corev1.ConditionFalse,
+			LastTransitionTime: metav1.NewTime(transitioned),
+		}}
+	})
+	node2 := node1.DeepCopy()
+	node2.Name = "node2"
+	reader := fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(node1, node2).Build()
+
+	clockReads := 0
+	snap, err := Build(context.Background(), reader, Options{
+		NodeSuspicionWindow: 5 * time.Minute,
+		Now: func() time.Time {
+			clockReads++
+			return buildNow.Add(time.Duration(clockReads-1) * 10 * time.Minute)
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if clockReads != 1 {
+		t.Fatalf("Now calls = %d, want 1", clockReads)
+	}
+	if !snap.Timestamp.Equal(buildNow) {
+		t.Fatalf("Timestamp = %v, want %v", snap.Timestamp, buildNow)
+	}
+	for _, name := range []string{"node1", "node2"} {
+		if got := snap.Nodes[name].Health.State; got != NodeHealthSuspect {
+			t.Errorf("%s health = %q, want %q", name, got, NodeHealthSuspect)
+		}
 	}
 }
 
