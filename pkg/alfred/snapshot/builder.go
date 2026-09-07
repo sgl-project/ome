@@ -40,9 +40,12 @@ var DefaultTriggerConditions = []string{"GpuUnhealthy"}
 // Options configures a snapshot build. The zero value is usable: default
 // trigger conditions, no preemptible labels, workloads movable by default.
 type Options struct {
-	// TriggerConditions are the node condition types that mark a node
-	// Unhealthy (policies.nodeHealth.triggerConditions).
+	// TriggerConditions are failure-condition types whose True status marks a
+	// node unhealthy (policies.nodeHealth.triggerConditions).
 	TriggerConditions []string
+	// NodeSuspicionWindow keeps a recently cleared failure condition
+	// quarantined. Values <= 0 use DefaultNodeSuspicionWindow.
+	NodeSuspicionWindow time.Duration
 	// PreemptibleLabels are node-label keys whose presence (with any
 	// value but "false") marks a node spot/preemptible.
 	PreemptibleLabels []string
@@ -76,14 +79,22 @@ func (o *Options) now() time.Time {
 	return o.Now()
 }
 
+func (o *Options) nodeSuspicionWindow() time.Duration {
+	if o.NodeSuspicionWindow <= 0 {
+		return DefaultNodeSuspicionWindow
+	}
+	return o.NodeSuspicionWindow
+}
+
 // Build assembles a ClusterSnapshot from the cluster through a read-only
 // client. It never writes, and it degrades per-object rather than failing
 // wholesale wherever one broken object should not blind the caretaker (model
 // resolution); only the core lists (nodes, pods, InferenceServices) are
 // load-bearing enough to fail the build.
 func Build(ctx context.Context, r client.Reader, opts Options) (*ClusterSnapshot, error) {
+	timestamp := opts.now()
 	s := &ClusterSnapshot{
-		Timestamp:         opts.now(),
+		Timestamp:         timestamp,
 		Nodes:             map[string]*Node{},
 		Workloads:         map[types.NamespacedName]*Workload{},
 		Models:            map[ModelKey]*ModelAvailability{},
@@ -96,7 +107,7 @@ func Build(ctx context.Context, r client.Reader, opts Options) (*ClusterSnapshot
 	}
 	for i := range nodeList.Items {
 		node := &nodeList.Items[i]
-		s.Nodes[node.Name] = buildNode(node, &opts)
+		s.Nodes[node.Name] = buildNode(node, &opts, timestamp)
 	}
 
 	var podList corev1.PodList
@@ -144,7 +155,7 @@ func Build(ctx context.Context, r client.Reader, opts Options) (*ClusterSnapshot
 	return s, nil
 }
 
-func buildNode(node *corev1.Node, opts *Options) *Node {
+func buildNode(node *corev1.Node, opts *Options, timestamp time.Time) *Node {
 	resource, total := NodeGPUAllocatable(node)
 	n := &Node{
 		Name:              node.Name,
@@ -167,20 +178,12 @@ func buildNode(node *corev1.Node, opts *Options) *Node {
 			break
 		}
 	}
-	triggers := opts.triggerConditions()
-	for _, cond := range node.Status.Conditions {
-		if cond.Status != corev1.ConditionTrue {
-			continue
-		}
-		for _, trigger := range triggers {
-			if string(cond.Type) == trigger {
-				n.Unhealthy = true
-				n.UnhealthyConditions = append(n.UnhealthyConditions, trigger)
-				break
-			}
-		}
-	}
-	sort.Strings(n.UnhealthyConditions)
+	n.Health = observeNodeHealth(
+		node.Status.Conditions,
+		opts.triggerConditions(),
+		timestamp,
+		opts.nodeSuspicionWindow(),
+	)
 	return n
 }
 

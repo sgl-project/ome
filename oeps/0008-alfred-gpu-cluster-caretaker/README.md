@@ -236,7 +236,7 @@ At the 2026-09-07 baseline, the source tree has the following status:
 | Observation and configuration | Implemented | Every replica builds snapshots and publishes gauges; configuration hot-reloads with last-known-good fallback. |
 | Defragmentation Policy #1 | Partially implemented | Scoring, candidate generation, arbitration, and reporting run; placement feasibility is not yet scheduler-complete. |
 | Arbiter and Reporter | Partially implemented | Core admission gates and outputs exist; positive-benefit/regression admission and dispatch/outcome-fed ledger state are not connected. |
-| Node-Health Policy #2 | Not implemented | Node conditions only exclude unhealthy nodes as defrag targets and enqueue a coalesced early decision request. That request now forces a serialized snapshot refresh before policy evaluation without moving the regular decision deadline; no evacuation candidates or remediation signals are produced. |
+| Node-Health Policy #2 | Foundation implemented | Snapshots retain configured failure-condition status and transition time as `Clear`, `Suspect`, `Unknown`, or `Unhealthy`; every non-clear state is excluded from defrag targets and surge headroom. Condition-change requests force a serialized fresh snapshot without moving the regular decision deadline. No evacuation candidates or remediation signals are produced. |
 | Dispatcher | Not implemented | Alfred does not patch migration-request annotations and its current ClusterRole grants no InferenceService write. Both modes report Arbiter-admitted candidates as `withheld`: `RecommendOnly` in recommend-only mode and `DispatcherUnavailable` in execute mode. |
 | OMENative state | Implemented | Alfred validates dense `InferenceReplica.Status.InstanceStatuses` directly for stable Instance identity and lifecycle state, reads `Status.Migrations`, and joins live Pods by Instance index and incarnation for physical placement and readiness. Compatibility-only ready, scheduled, and nodes fields are not source-of-truth inputs. |
 | OMENative executor readiness | Not implemented | No capability producer or Alfred reader ships in the current implementation. The target design requires a fresh OMENative capability Lease; its producer, reader, and just-in-time pre-dispatch check are deferred with the Dispatcher. |
@@ -734,9 +734,11 @@ which has a broken NVLink; NCCL fails.
 unhealthy nodes are excluded from placement hints during Candidate generation.
 This is also exactly why **Node-Health Evacuation is a first-class policy** rather
 than an afterthought — the same health signal that excludes a node as a *target*
-also makes it a *source* to evacuate. Post-migration, if a migrated workload fails
-within a window, Alfred marks the node suspect and backs off from it. Mitigation,
-not full fix: a fault that is invisible to the node condition can still bite.
+also makes it a *source* to evacuate. If a configured failure condition later
+trips or becomes unknown, a refreshed snapshot quarantines the node. Workload
+failure alone does not mark a node suspect; correlating migration outcomes needs
+the later durable outcome/evacuation record. Mitigation, not full fix: a fault
+that is invisible to the node condition can still bite.
 
 **Risk: conflict with HPA / scheduler / other controllers.**
 *Mitigation:* the snapshot records active HPA scaling and the Arbiter defers
@@ -1082,7 +1084,7 @@ Each Candidate carries `HintTargetNodes`: a ranked, *advisory* list of nodes the
      evaluated soundly, the Candidate becomes advisory instead of receiving a
      speculative target hint.
    - **Model not available** — storage-aware, switching on `ModelAvailability.Backend`. *Per-node models*: the target must have the model ready, per `BaseModel.Status.NodesReady` or the node label `models.ome.io/{ns}.basemodel.{name}=Ready` (OEP-0007 Q-017) — migrating to a node that must first pull a multi-hundred-GB model defeats the purpose, and the pod's own readiness `nodeSelector` would block the placement anyway. *PVC-backed models*: `NodesReady` is intentionally empty and must **not** be used as a filter; the target set is the nodes that can mount the volume — for RWX/ROX storage, any node satisfying the PVC's CSI topology, with no model pull ever needed. *RWO (and RWOP) PVCs pin the workload*: the volume attaches to one node at a time and the source pod still holds it while a surge replacement starts, so no surge-shaped mechanism can run — the candidate is downgraded to advisory with reason `VolumePinned`.
-   - **Unhealthy or cordoned**: excluded. Excluding unhealthy nodes from placement is existing defragmentation behavior — and it is the seam Policy #2 builds on: a node Policy #1 already refuses as a *target* is exactly the kind of node Policy #2 will reason about as a *source* to drain. Nodes inside their post-evacuation **suspicion window** are excluded too, even after the condition clears (see Policy #2's "stay suspicious" rule). (Mechanism for Policy #2 in its own section.)
+   - **Health-quarantined or cordoned**: excluded. `Unhealthy`, `Unknown`, and recovery-window `Suspect` states all make capacity unusable for target hints. An `Unhealthy` node that Policy #1 refuses as a target is the source Policy #2 will consider draining; `Unknown` and `Suspect` alone do not authorize evacuation. (Mechanism for Policy #2 in its own section.)
    - **CA scale-down in progress**: a node with `scale-down-disabled` being processed is excluded, so Alfred and the cluster-autoscaler do not fight over it.
    - **Spot / preemptible**: excluded from targets by default (see the spot/preemptible section) — moving a workload onto a node that can vanish is a poor trade.
 3. **Rank** by a bin-packing heuristic whose direction depends on the goal: prefer partially-filled nodes when the goal is to consolidate, or prefer empty nodes when the goal is to free contiguous capacity elsewhere.
@@ -1210,12 +1212,16 @@ cloud provider, or the cluster autoscaler — see the anticipated objection belo
    nodes") literally true while still making the bad node *actionable*.
 4. Node health is a small state machine, not a boolean. A configured condition
    at `True` makes the node unhealthy and evacuation-eligible. `Unknown`
-   quarantines the node as a target and emits a remediation signal, but does not
-   authorize migration. A transition to `False` after an incident enters the
-   suspicion window; only an expired suspicion window is clear. Condition
-   transition time is retained so this state is reconstructible after restart.
-   *Rationale:* treating `Unknown` as healthy is unsafe, while treating it as
-   sufficient evidence for disruption is also unsafe.
+   quarantines the node as a target and will make Policy #2 emit a remediation
+   signal, but does not authorize migration. A current `False` condition with a
+   recent `LastTransitionTime` enters a recovery suspicion window; only an
+   expired window is clear. A missing transition time is `Unknown`. This
+   reconstruction conservatively includes a newly initialized `False`
+   condition and cannot prove that a prior incident or Alfred evacuation
+   occurred. *Rationale:* treating inconclusive evidence as healthy is unsafe,
+   while treating it as sufficient evidence for disruption is also unsafe.
+   `policies.nodeHealth.enabled` controls candidate and signal production, not
+   this global target-safety quarantine.
 5. A condition-change early tick refreshes the snapshot before policy
    evaluation. Refresh, publication, and evaluation are serialized; a failed
    refresh skips the early decision. An early pass does not postpone the regular
@@ -1258,14 +1264,15 @@ b) **Signal.** Return, alongside the evacuation Candidates, one advisory
    result as the complete desired signal set, so cleared nodes remove stale
    records and repeated observations do not spam Events.
 
-c) **Stay suspicious.** An evacuated node stays excluded from every policy's
-   *target* hints for `nodeSuspicionWindowMinutes` (default 30) — even after
-   the condition clears. *Failure mode this guards:* a flapping node becomes a
-   pump — condition clears, defrag consolidates workloads onto the newly
-   "empty" node, condition trips, Alfred evacuates again. The per-workload
-   cooldown never prevented this (it only stops the *evacuated* workloads from
-   returning; other workloads could still be packed onto the flapper); the
-   suspicion window does.
+c) **Stay suspicious during condition recovery.** A configured failure
+   condition that is currently `False` keeps the node excluded from every
+   policy's *target* hints until `LastTransitionTime +
+   nodeSuspicionWindowMinutes` (default 30). This reconstructible guard prevents
+   a freshly cleared node from immediately becoming a placement target. It
+   depends on the condition producer retaining the `False` row and transition
+   time; deleting the condition removes that evidence. It neither proves that
+   Alfred evacuated the node nor replaces the durable per-node evacuation
+   record that prevents repeated waves across condition flaps.
 
 The only genuinely new behavior versus Policy #1 is the **trigger** (a node
 condition, not a fragmentation score), the **remediation Event**, and the
@@ -1519,7 +1526,7 @@ config.yaml: |
       triggerConditions: [GpuUnhealthy]
       signalOnly: false            # true = signal only, never dispatch
       healthCooldownFloorMinutes: 5   # per-workload cooldown floor for NodeUnhealthy candidates
-      nodeSuspicionWindowMinutes: 30  # evacuated nodes stay out of target hints, even after the condition clears
+      nodeSuspicionWindowMinutes: 30  # recently cleared failure conditions quarantine targets during recovery
 
   # Per-workload defaults
   defaultMovable: true
@@ -2439,8 +2446,9 @@ following behavior end to end:
 10. **Rate limiting**: 10 candidates; only 3 migrations in-flight.
 11. **Policy hot reload**: update ConfigMap; Alfred reloads without restart.
 12. **Leader election**: 3 replicas; kill leader; new leader elected within 20s.
-13. **Post-migration health monitoring**: migration succeeds but target GPU
-    fails within window; Alfred marks node suspect, backs off.
+13. **Post-migration health monitoring**: migration succeeds and the target's
+    configured failure condition trips; Alfred quarantines the node, while the
+    future durable per-node evacuation record prevents repeated migration waves.
 14. **HPA coexistence**: HPA scaling the target ISVC; Alfred defers.
 15. **CA coexistence**: node marked `scale-down-disabled`; excluded from hints.
 16. **OMENative-unavailable degraded mode**: stop the controller while leaving
@@ -2655,8 +2663,8 @@ engine must not preclude them.
 - 2026-08-16: Cooldown made class-aware: health-evacuation candidates use a
   5-minute floor instead of the 30-minute per-workload cooldown (audited via
   `CooldownOverriddenForEvacuation`); flap protection restated on the per-node
-  evacuation record; a post-evacuation node-suspicion window keeps drained
-  nodes out of target hints even after the condition clears; per-node mutual
+  evacuation record; a condition-recovery suspicion window keeps recently
+  cleared nodes out of target hints; per-node mutual
   exclusion and the per-node cooldown scoped to *targets*, so a failing node
   can drain multiple workloads per cycle; within-class ordering of evacuation
   candidates defined (feasible first, higher priority first, smaller footprint
@@ -2684,6 +2692,12 @@ engine must not preclude them.
   a serialized snapshot refresh before policy evaluation without moving the
   regular decision cadence. Current implementation gaps (Node-Health
   evacuation, Dispatcher, and executor readiness) are recorded explicitly.
+- 2026-09-07: Node-health snapshots now retain configured failure-condition
+  status and transition time and reconstruct `Clear`, `Suspect`, `Unknown`, or
+  `Unhealthy` from one snapshot timestamp. Every non-clear state is excluded
+  from defrag targets and surge headroom. `Suspect` is a condition-recovery
+  quarantine, not proof of evacuation; evacuation candidates, remediation
+  signals, and the durable one-wave record remain deferred.
 - TBD: Complete Alpha implementation (capability Lease, Policy #2, Dispatcher,
   and outcome-fed safety ledger).
 - TBD: First Beta user.

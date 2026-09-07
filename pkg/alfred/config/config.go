@@ -114,18 +114,20 @@ type Scoring struct {
 
 // NodeHealth is Policy #2's block.
 type NodeHealth struct {
+	// Enabled controls Policy #2 candidate and signal production. Structured
+	// observation and target quarantine remain global placement safety.
 	Enabled        *bool  `json:"enabled"`
 	Aggressiveness string `json:"aggressiveness"`
-	// TriggerConditions are the node conditions that trigger evacuation;
-	// consumed from existing signals, never detected by Alfred.
+	// TriggerConditions are failure-condition types whose True status triggers
+	// evacuation; consumed from existing signals, never detected by Alfred.
 	TriggerConditions []string `json:"triggerConditions"`
 	// SignalOnly emits the remediation signal but never evacuates.
 	SignalOnly bool `json:"signalOnly"`
 	// HealthCooldownFloorMinutes is the per-workload cooldown floor for
 	// NodeUnhealthy candidates (instead of the standard cooldown).
 	HealthCooldownFloorMinutes int `json:"healthCooldownFloorMinutes"`
-	// NodeSuspicionWindowMinutes keeps evacuated nodes out of target
-	// hints even after the condition clears.
+	// NodeSuspicionWindowMinutes keeps nodes with a recently cleared failure
+	// condition out of target hints during recovery.
 	NodeSuspicionWindowMinutes int `json:"nodeSuspicionWindowMinutes"`
 }
 

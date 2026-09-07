@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -51,6 +52,43 @@ type OMENativeExecutorState struct {
 	Reason      string
 }
 
+// NodeHealthState is Alfred's placement-safety view of configured node
+// failure conditions.
+type NodeHealthState string
+
+const (
+	// NodeHealthClear means no configured condition currently quarantines the
+	// node.
+	NodeHealthClear NodeHealthState = "Clear"
+	// NodeHealthSuspect means a configured failure condition recently cleared,
+	// but its recovery-quarantine window has not elapsed.
+	NodeHealthSuspect NodeHealthState = "Suspect"
+	// NodeHealthUnknown means configured health evidence is inconclusive or
+	// malformed. The node is quarantined as a target but is not known unhealthy.
+	NodeHealthUnknown NodeHealthState = "Unknown"
+	// NodeHealthUnhealthy means at least one configured failure condition is
+	// currently True.
+	NodeHealthUnhealthy NodeHealthState = "Unhealthy"
+)
+
+// NodeHealthObservation is the reconstructible health state for one snapshot.
+// Conditions contains only configured failure conditions from the current Node
+// object; Alfred retains no cross-snapshot health history here.
+type NodeHealthObservation struct {
+	State      NodeHealthState
+	Conditions []NodeConditionObservation
+	// SuspectUntil is non-nil only while State is NodeHealthSuspect.
+	SuspectUntil *time.Time
+}
+
+// NodeConditionObservation retains the current status and transition time of
+// one configured failure condition.
+type NodeConditionObservation struct {
+	Type               corev1.NodeConditionType
+	Status             corev1.ConditionStatus
+	LastTransitionTime time.Time
+}
+
 // Node is one node's physical GPU state plus the placement-relevant flags
 // policies filter on.
 type Node struct {
@@ -84,11 +122,9 @@ type Node struct {
 	// treated as free yet.
 	TerminatingGPUs int64
 
-	// Unhealthy is set when any configured trigger condition (default
-	// GpuUnhealthy) is True on the node.
-	Unhealthy bool
-	// UnhealthyConditions lists which trigger conditions were True.
-	UnhealthyConditions []string
+	// Health is derived from configured failure conditions and their transition
+	// times. Quarantined states must not be used as placement targets.
+	Health NodeHealthObservation
 	// Cordoned mirrors spec.unschedulable.
 	Cordoned bool
 	// ScaleDownDisabled mirrors the cluster-autoscaler
@@ -100,12 +136,6 @@ type Node struct {
 	// Preemptible is set when the node matches a configured
 	// spot/preemptible label.
 	Preemptible bool
-	// Suspect is set by the engine for nodes inside their post-evacuation
-	// suspicion window; such nodes are excluded from every policy's
-	// target hints even after the health condition clears. The builder
-	// always leaves it false.
-	Suspect bool
-
 	// OMEPods are the OME-managed GPU pods bound to this node.
 	OMEPods []PodInfo
 	// OtherOccupants are non-OME GPU pods (notebooks, batch jobs, ...):

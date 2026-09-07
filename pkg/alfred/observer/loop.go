@@ -95,10 +95,11 @@ func (l *Loop) Refresh(ctx context.Context) error {
 	cfg := l.Store.Get()
 
 	opts := snapshot.Options{
-		TriggerConditions: cfg.Policies.NodeHealth.TriggerConditions,
-		PreemptibleLabels: cfg.SpotPolicy.PreemptibleLabels,
-		DefaultMovable:    cfg.DefaultMovable,
-		Now:               l.Now,
+		TriggerConditions:   cfg.Policies.NodeHealth.TriggerConditions,
+		NodeSuspicionWindow: cfg.NodeSuspicionWindow(),
+		PreemptibleLabels:   cfg.SpotPolicy.PreemptibleLabels,
+		DefaultMovable:      cfg.DefaultMovable,
+		Now:                 l.Now,
 	}
 	if l.OMENativeExecutor != nil {
 		opts.OMENativeExecutor = l.OMENativeExecutor(ctx)
@@ -151,7 +152,7 @@ func (l *Loop) publish(snap *snapshot.ClusterSnapshot, cfg *config.Config) {
 	for _, pool := range snap.GPUPools() {
 		var headroom int64
 		for _, node := range snap.PoolNodes(pool) {
-			if node.Cordoned || node.Unhealthy || node.ScaleDownMarked || node.Suspect {
+			if node.Cordoned || node.Health.Quarantined() || node.ScaleDownMarked {
 				continue
 			}
 			if node.FreeGPUs > headroom {

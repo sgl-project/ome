@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/ome/pkg/alfred/snapshot"
@@ -16,6 +17,8 @@ func TestSnapshotBuilder(t *testing.T) {
 		WithNode("node1", "h100", 8).
 		WithNode("node2", "h100", 8, NodeUnhealthy()).
 		WithNode("node3", "a100", 4, NodeCordoned(), NodePreemptible()).
+		WithNode("node4", "h100", 8, NodeUnknown()).
+		WithNode("node5", "h100", 8, NodeSuspect()).
 		WithInstance("prod/svc-a", v1beta1.EngineComponent, constants.RawDeployment, "node1", 2).
 		WithMultiPodInstance("prod/svc-b", v1beta1.EngineComponent, constants.OMENative, 8, "node1", "node2").
 		WithOtherOccupant("node2", 3).
@@ -28,11 +31,24 @@ func TestSnapshotBuilder(t *testing.T) {
 		t.Fatalf("node1: allocated=%d free=%d, want 10/0 (floored)", node1.AllocatedGPUs, node1.FreeGPUs)
 	}
 	node2 := snap.Nodes["node2"]
-	if node2.AllocatedGPUs != 11 || node2.FreeGPUs != 0 || !node2.Unhealthy {
+	if node2.AllocatedGPUs != 11 || node2.FreeGPUs != 0 || node2.Health.State != snapshot.NodeHealthUnhealthy {
 		t.Fatalf("node2: %+v", node2)
 	}
 	if !snap.Nodes["node3"].Cordoned || !snap.Nodes["node3"].Preemptible {
 		t.Fatalf("node3 flags: %+v", snap.Nodes["node3"])
+	}
+	if got := snap.Nodes["node4"].Health; got.State != snapshot.NodeHealthUnknown || !got.Quarantined() ||
+		len(got.Conditions) != 1 || got.Conditions[0].Type != "GpuUnhealthy" ||
+		got.Conditions[0].Status != corev1.ConditionUnknown ||
+		!got.Conditions[0].LastTransitionTime.Equal(ReferenceTime) {
+		t.Fatalf("node4 health: %+v", got)
+	}
+	if got := snap.Nodes["node5"].Health; got.State != snapshot.NodeHealthSuspect ||
+		got.SuspectUntil == nil || !got.SuspectUntil.Equal(ReferenceTime.Add(snapshot.DefaultNodeSuspicionWindow)) ||
+		!got.Quarantined() || len(got.Conditions) != 1 ||
+		got.Conditions[0].Type != "GpuUnhealthy" || got.Conditions[0].Status != corev1.ConditionFalse ||
+		!got.Conditions[0].LastTransitionTime.Equal(ReferenceTime) {
+		t.Fatalf("node5 health: %+v", got)
 	}
 
 	svcA := snap.Workloads[types.NamespacedName{Namespace: "prod", Name: "svc-a"}]
@@ -64,6 +80,20 @@ func TestSnapshotBuilder(t *testing.T) {
 	}
 	if got := snap.PendingPods[0].PendingSince; !got.Equal(ReferenceTime.Add(-20 * time.Minute)) {
 		t.Fatalf("pending age: %v", got)
+	}
+}
+
+func TestNodeUnhealthyReplacesPriorHealthObservation(t *testing.T) {
+	snap := NewSnapshot().
+		WithNode("node1", "h100", 8, NodeSuspect(), NodeUnhealthy()).
+		Build()
+
+	got := snap.Nodes["node1"].Health
+	if got.State != snapshot.NodeHealthUnhealthy || got.SuspectUntil != nil ||
+		len(got.Conditions) != 1 || got.Conditions[0].Type != "GpuUnhealthy" ||
+		got.Conditions[0].Status != corev1.ConditionTrue ||
+		!got.Conditions[0].LastTransitionTime.Equal(ReferenceTime) {
+		t.Fatalf("composed health = %+v, want a fresh unhealthy observation", got)
 	}
 }
 

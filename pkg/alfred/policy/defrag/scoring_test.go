@@ -168,6 +168,29 @@ func TestUnschedulableFreeCapacityIsAMirage(t *testing.T) {
 	almost(t, "Frag(8)", fragOf(t, cs, 8), 1.0)
 }
 
+func TestNodeSchedulableByHealthState(t *testing.T) {
+	tests := []struct {
+		name  string
+		state snapshot.NodeHealthState
+		want  bool
+	}{
+		{name: "zero value", want: true},
+		{name: "clear", state: snapshot.NodeHealthClear, want: true},
+		{name: "suspect", state: snapshot.NodeHealthSuspect, want: false},
+		{name: "unknown", state: snapshot.NodeHealthUnknown, want: false},
+		{name: "unhealthy", state: snapshot.NodeHealthUnhealthy, want: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			node := &snapshot.Node{Health: snapshot.NodeHealthObservation{State: test.state}}
+			if got := nodeSchedulable(node, false); got != test.want {
+				t.Errorf("nodeSchedulable() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
 // pinScenario: node1 holds a movable-looking 1-GPU workload (7 free); node2
 // holds a 7-GPU immovable occupant (1 free). Consolidating the small pod
 // into node2's hole frees a full 8-GPU node — exactly what the repack must

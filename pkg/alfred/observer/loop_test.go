@@ -142,6 +142,111 @@ func TestRunOncePublishesSnapshotGauges(t *testing.T) {
 	}
 }
 
+func TestRefreshWiresNodeSuspicionWindow(t *testing.T) {
+	if got := config.Default().NodeSuspicionWindow(); got != snapshot.DefaultNodeSuspicionWindow {
+		t.Fatalf("config default window = %v, snapshot default = %v", got, snapshot.DefaultNodeSuspicionWindow)
+	}
+	loop, _ := newTestLoop(t)
+	base, ok := loop.Reader.(client.WithWatch)
+	if !ok {
+		t.Fatalf("test reader type = %T, want client.WithWatch", loop.Reader)
+	}
+	transitioned := loopNow.Add(-10 * time.Minute)
+	loop.Reader = interceptor.NewClient(base, interceptor.Funcs{
+		List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+			if err := c.List(ctx, list, opts...); err != nil {
+				return err
+			}
+			nodes, ok := list.(*corev1.NodeList)
+			if !ok {
+				return nil
+			}
+			for i := range nodes.Items {
+				nodes.Items[i].Status.Conditions = []corev1.NodeCondition{
+					{
+						Type:               "GpuUnhealthy",
+						Status:             corev1.ConditionTrue,
+						LastTransitionTime: metav1.NewTime(transitioned),
+					},
+					{
+						Type:               "AcceleratorDegraded",
+						Status:             corev1.ConditionFalse,
+						LastTransitionTime: metav1.NewTime(transitioned),
+					},
+				}
+			}
+			return nil
+		},
+	})
+
+	if outcome, err := loop.Store.Update([]byte(`
+schemaVersion: 1
+policies:
+  nodeHealth:
+    enabled: false
+    triggerConditions: [AcceleratorDegraded]
+    nodeSuspicionWindowMinutes: 5
+`)); err != nil || outcome != config.OutcomeSuccess {
+		t.Fatalf("configure five-minute window: outcome=%q error=%v", outcome, err)
+	}
+	if err := loop.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	if got := loop.Latest().Nodes["node1"].Health; got.State != snapshot.NodeHealthClear ||
+		len(got.Conditions) != 1 || got.Conditions[0].Type != "AcceleratorDegraded" ||
+		got.Conditions[0].Status != corev1.ConditionFalse {
+		t.Fatalf("five-minute window health = %+v, want Clear", got)
+	}
+
+	if outcome, err := loop.Store.Update([]byte(`
+schemaVersion: 1
+policies:
+  nodeHealth:
+    enabled: false
+    triggerConditions: [AcceleratorDegraded]
+    nodeSuspicionWindowMinutes: 15
+`)); err != nil || outcome != config.OutcomeSuccess {
+		t.Fatalf("configure fifteen-minute window: outcome=%q error=%v", outcome, err)
+	}
+	if err := loop.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	wantUntil := transitioned.Add(15 * time.Minute)
+	if got := loop.Latest().Nodes["node1"].Health; got.State != snapshot.NodeHealthSuspect ||
+		got.SuspectUntil == nil || !got.SuspectUntil.Equal(wantUntil) ||
+		len(got.Conditions) != 1 || got.Conditions[0].Type != "AcceleratorDegraded" ||
+		got.Conditions[0].Status != corev1.ConditionFalse {
+		t.Fatalf("fifteen-minute window health = %+v, want Suspect until %v", got, wantUntil)
+	}
+}
+
+func TestPublishSurgeHeadroomExcludesQuarantinedHealth(t *testing.T) {
+	loop, m := newTestLoop(t)
+	snap := &snapshot.ClusterSnapshot{Nodes: map[string]*snapshot.Node{
+		"clear": {
+			Name: "clear", GPUPool: "h100", TotalGPUs: 8, FreeGPUs: 2,
+			Health: snapshot.NodeHealthObservation{State: snapshot.NodeHealthClear},
+		},
+		"suspect": {
+			Name: "suspect", GPUPool: "h100", TotalGPUs: 8, FreeGPUs: 6,
+			Health: snapshot.NodeHealthObservation{State: snapshot.NodeHealthSuspect},
+		},
+		"unknown": {
+			Name: "unknown", GPUPool: "h100", TotalGPUs: 8, FreeGPUs: 7,
+			Health: snapshot.NodeHealthObservation{State: snapshot.NodeHealthUnknown},
+		},
+		"unhealthy": {
+			Name: "unhealthy", GPUPool: "h100", TotalGPUs: 8, FreeGPUs: 8,
+			Health: snapshot.NodeHealthObservation{State: snapshot.NodeHealthUnhealthy},
+		},
+	}}
+
+	loop.publish(snap, config.Default())
+	if got := promtestutil.ToFloat64(m.SurgeHeadroomGPUs.WithLabelValues("h100")); got != 2 {
+		t.Fatalf("surge headroom = %v, want 2 from the only clear node", got)
+	}
+}
+
 func TestRunOnceInvokesScorerHook(t *testing.T) {
 	loop, _ := newTestLoop(t)
 
