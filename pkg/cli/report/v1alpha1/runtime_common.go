@@ -262,7 +262,7 @@ type RuntimeSourceReference struct {
 type runtimeContent[T any] interface {
 	Content[T]
 	runtimeReportKind() string
-	RuntimeEffectiveContent | RuntimeHistoryContent
+	RuntimeEffectiveContent | RuntimeHistoryContent | RuntimeTreeContent
 }
 
 // RuntimeEnvelope carries the fields shared by runtime reports. It is kept
@@ -347,7 +347,15 @@ func runtimeSourceLess(a, b RuntimeSourceReference) bool {
 
 // Table returns the human-readable view of the canonical typed content.
 func (e RuntimeEnvelope[T]) Table() report.Table {
-	return e.Content.Table()
+	canonical := e.Canonical()
+	if content, ok := any(canonical.Content).(runtimeWarningTable); ok {
+		return content.tableWithWarnings(canonical.Warnings)
+	}
+	return canonical.Content.Table()
+}
+
+type runtimeWarningTable interface {
+	tableWithWarnings([]RuntimeWarning) report.Table
 }
 
 // RuntimeObjectReference is an allowlisted runtime object identity.
