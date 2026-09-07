@@ -51,8 +51,8 @@ type Decision struct {
 	// Reason is the rejection code; empty when admitted.
 	Reason string
 	// Target is the claimed placement for an admitted candidate: the
-	// first feasible hint net of claims, or empty for an eviction
-	// expected to reuse its source.
+	// first feasible hint net of claims, or empty for a future delegated
+	// free-before-place action.
 	Target string
 	// CooldownOverridden marks a health evacuation admitted under the
 	// health floor while the standard per-workload window was still
@@ -300,8 +300,9 @@ func (st *admitState) decide(c policy.Candidate) Decision {
 // candidate's exhaustive placement targets when supplied, or its reporting
 // hints for compatibility with other policies. Those targets are already
 // schedulable- and model-filtered by the policy on this same snapshot. Surge
-// shapes must fit while the source still holds its GPUs; eviction needs no
-// headroom and may reuse its source.
+// shapes must fit while the source still holds its GPUs; a free-before-place
+// shape needs no surge headroom and may reuse its source. Alfred does not
+// itself evict pods.
 // It returns the primary target, the per-node GPUs the admission will claim,
 // and — when nothing fits a surge — a reason distinguishing *why*: a hint
 // under evacuation, a hint already landed on this cycle, or plain capacity.

@@ -3,11 +3,15 @@ package main
 import (
 	"flag"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	alfredconfig "sigs.k8s.io/ome/pkg/alfred/config"
 )
 
 func resetFlags(t *testing.T, args []string) {
@@ -67,6 +71,65 @@ func TestGetOptionsCustom(t *testing.T) {
 	}
 	if opts.namespace != "caretaker" || opts.configMapName != "my-config" || opts.configMapKey != "alfred.yaml" {
 		t.Fatalf("config source not parsed: %+v", opts)
+	}
+}
+
+func TestDecisionPolicies(t *testing.T) {
+	policies := decisionPolicies()
+	want := map[string]bool{"defragmentation": true, "nodehealth": true}
+	if len(policies) != len(want) {
+		t.Fatalf("decisionPolicies() returned %d policies, want %d", len(policies), len(want))
+	}
+	for _, policy := range policies {
+		name := policy.Name()
+		if !want[name] {
+			t.Fatalf("decisionPolicies() returned unexpected or duplicate policy %q", name)
+		}
+		delete(want, name)
+	}
+	if len(want) != 0 {
+		t.Fatalf("decisionPolicies() missing policies: %v", want)
+	}
+}
+
+func TestOEPConfigExampleLoadsStrictly(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve main test path")
+	}
+	readmePath := filepath.Join(filepath.Dir(thisFile), "..", "..", "oeps",
+		"0008-alfred-gpu-cluster-caretaker", "README.md")
+	raw, err := os.ReadFile(readmePath)
+	if err != nil {
+		t.Fatalf("read OEP-0008: %v", err)
+	}
+
+	const opening = "```yaml\nconfig.yaml: |\n"
+	start := strings.Index(string(raw), opening)
+	if start < 0 {
+		t.Fatalf("OEP-0008 runnable config example opening %q not found", opening)
+	}
+	body := string(raw)[start+len(opening):]
+	end := strings.Index(body, "\n```")
+	if end < 0 {
+		t.Fatal("OEP-0008 runnable config example closing fence not found")
+	}
+
+	var configYAML strings.Builder
+	for lineNumber, line := range strings.Split(body[:end], "\n") {
+		if line == "" {
+			configYAML.WriteByte('\n')
+			continue
+		}
+		if !strings.HasPrefix(line, "  ") {
+			t.Fatalf("OEP-0008 runnable config line %d is not indented beneath config.yaml: |: %q",
+				lineNumber+1, line)
+		}
+		configYAML.WriteString(strings.TrimPrefix(line, "  "))
+		configYAML.WriteByte('\n')
+	}
+	if _, err := alfredconfig.Load([]byte(configYAML.String())); err != nil {
+		t.Fatalf("OEP-0008 runnable config example is not valid under the strict schema: %v", err)
 	}
 }
 

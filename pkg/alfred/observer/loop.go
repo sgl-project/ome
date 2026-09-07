@@ -52,8 +52,10 @@ var _ manager.LeaderElectionRunnable = &Loop{}
 // flowing even while a replica is not leading.
 func (l *Loop) NeedLeaderElection() bool { return false }
 
-// Latest returns the most recent snapshot, or nil before the first pass. The
-// decision loop consumes this — at most one observation interval stale.
+// Latest returns the last successfully published snapshot, or nil before the
+// first successful pass. Repeated refresh failures can leave it older than one
+// observation interval; callers that may actuate must enforce their own
+// freshness bound.
 func (l *Loop) Latest() *snapshot.ClusterSnapshot {
 	return l.latest.Load()
 }

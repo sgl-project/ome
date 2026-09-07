@@ -13,7 +13,9 @@ approvers:
 # The target maturity stage in the current dev cycle for this OEP.
 stage: alpha
 
-# Metrics to monitor feature adoption and performance
+# Headline adoption/performance signals for the current reporting milestone.
+# This is not an exhaustive registry inventory; target-only or currently unused
+# series such as evacuations are documented in the OEP instead.
 metrics:
   - alfred_cluster_fragmentation_score
   - alfred_fragmentation_observed
@@ -21,3 +23,4 @@ metrics:
   - alfred_pending_pressure
   - alfred_recommendations_produced_total
   - alfred_lws_recommendations_total
+  - alfred_nodehealth_signals_total

@@ -1,8 +1,9 @@
 # Alfred, the GPU cluster caretaker (OEP-0008). Every replica runs the
 # read-only observation loop; only the leader decides and reports. Both modes
 # withhold admitted candidates until the Dispatcher and its admission guard
-# land together. Production runs three replicas — one is enough for a test
-# cluster, and leader election stays on so the deployed shape matches production.
+# land together. The current Kustomize bundle is a one-replica testing surface;
+# the target production chart will run three. Leader election stays on so the
+# controller behavior matches that target shape.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

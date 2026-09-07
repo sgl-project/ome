@@ -34,7 +34,7 @@ type DispatchRecord struct {
 	Workload types.NamespacedName
 	FromNode string
 	// Target is the claimed placement (first feasible hint at admission);
-	// empty for an eviction expected to reuse its source.
+	// empty for a future delegated free-before-place action.
 	Target string
 	// GPUs is the replacement footprint the migration will occupy on
 	// Target while in flight.
@@ -164,8 +164,8 @@ func (l *Ledger) DispatchesWithinHour(now time.Time) int {
 // of a drain is outflow, bounded by the in-flight cap instead.
 func (l *Ledger) NodeCooling(node string, window time.Duration, now time.Time) bool {
 	if node == "" {
-		// Eviction records carry an empty Target; an empty query must
-		// not match them.
+		// Free-before-place records carry an empty Target; an empty query
+		// must not match them.
 		return false
 	}
 	for _, rec := range l.dispatches {
