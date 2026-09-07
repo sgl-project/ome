@@ -14,11 +14,11 @@ import (
 )
 
 // EarlyTicker turns node-condition changes into supplemental decision passes
-// (earlyTickOn: [NodeConditionChange]): health evacuation starts within seconds
-// while defragmentation stays lazily periodic. The signal requests a fresh pass
-// from the non-reentrant loop without moving its regular cadence. It runs on
-// every replica — the channel is only consumed by the leader's decision loop,
-// and a non-leader's signals are cheap.
+// (earlyTickOn: [NodeConditionChange]): relevant condition changes prompt a
+// fresh policy evaluation while the regular cadence remains periodic. The
+// signal requests a fresh pass from the non-reentrant loop without moving its
+// regular cadence. It runs on every replica — the channel is only consumed by
+// the leader's decision loop, and a non-leader's signals are cheap.
 type EarlyTicker struct {
 	Cache ctrlcache.Cache
 	Store *config.Store

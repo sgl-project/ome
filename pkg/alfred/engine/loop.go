@@ -85,9 +85,10 @@ func (l *DecisionLoop) Start(ctx context.Context) error {
 			}
 			timer.Reset(l.Store.Get().DecisionLoopInterval.Duration)
 		case <-l.EarlyTick:
-			// The timer may have become ready at the same instant as the early
-			// signal. Drain it if so and count this as the regular pass; otherwise
-			// leave the still-running timer completely untouched.
+			// The timer may become ready either just before the early signal or
+			// while its refresh is in flight. Drain it in either case and count the
+			// fresh attempt as the regular pass; otherwise leave the still-running
+			// timer completely untouched.
 			regularDue := false
 			select {
 			case <-timer.C():
@@ -95,6 +96,13 @@ func (l *DecisionLoop) Start(ctx context.Context) error {
 			default:
 			}
 			l.runFreshDecisionLogged(ctx)
+			if !regularDue {
+				select {
+				case <-timer.C():
+					regularDue = true
+				default:
+				}
+			}
 			if regularDue {
 				timer.Reset(l.Store.Get().DecisionLoopInterval.Duration)
 			}

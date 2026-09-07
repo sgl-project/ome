@@ -11,6 +11,7 @@ import (
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/clock"
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"sigs.k8s.io/ome/pkg/alfred/config"
@@ -28,6 +29,42 @@ type stubSource struct {
 type latestOnlySource struct{ snap *snapshot.ClusterSnapshot }
 
 func (s *latestOnlySource) Latest() *snapshot.ClusterSnapshot { return s.snap }
+
+type notifyingClock struct {
+	clock.Clock
+	created chan<- time.Duration
+	resets  chan<- time.Duration
+	reads   chan<- struct{}
+}
+
+func (c *notifyingClock) NewTimer(d time.Duration) clock.Timer {
+	timer := c.Clock.NewTimer(d)
+	if c.created != nil {
+		c.created <- d
+	}
+	return &notifyingTimer{Timer: timer, resets: c.resets, reads: c.reads}
+}
+
+type notifyingTimer struct {
+	clock.Timer
+	resets chan<- time.Duration
+	reads  chan<- struct{}
+}
+
+func (t *notifyingTimer) C() <-chan time.Time {
+	if t.reads != nil {
+		t.reads <- struct{}{}
+	}
+	return t.Timer.C()
+}
+
+func (t *notifyingTimer) Reset(d time.Duration) bool {
+	active := t.Timer.Reset(d)
+	if t.resets != nil {
+		t.resets <- d
+	}
+	return active
+}
 
 func (s *stubSource) Latest() *snapshot.ClusterSnapshot {
 	if s.onLatest != nil {
@@ -251,18 +288,30 @@ func TestStartEarlyTickDoesNotResetRegularCadence(t *testing.T) {
 	loop, _, early := newTestLoop(t, scenario().Build(), p)
 	source := loop.Snapshots.(*stubSource)
 	fakeClock := clocktesting.NewFakeClock(testNow)
-	loop.timerClock = fakeClock
+	created := make(chan time.Duration, 1)
+	timerReads := make(chan struct{}, 8)
+	loop.timerClock = &notifyingClock{
+		Clock:   fakeClock,
+		created: created,
+		reads:   timerReads,
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- loop.Start(ctx) }()
 
 	waitForPolicyCalls(t, p, 1)
-	waitForFakeTimer(t, fakeClock)
+	receiveDuration(t, created, "regular timer creation")
 	fakeClock.Step(2 * time.Minute)
 	early <- struct{}{}
 	waitForPolicyCalls(t, p, 2)
 	if got := source.refreshed.Load(); got != 1 {
 		t.Fatalf("early refreshes = %d, want 1", got)
+	}
+	// Wait until the early branch has checked the timer before and after the
+	// refresh, then returned to the outer select. Advancing at policy evaluation
+	// alone can race the post-refresh drain and turn this into a coincident pass.
+	for range 4 {
+		receiveSignal(t, timerReads, "supplemental pass timer check")
 	}
 
 	// The original five-minute deadline remains at t=5m. Resetting it in the
@@ -299,6 +348,90 @@ func TestStartRegularTickReloadsInterval(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatalf("Start returned error on shutdown: %v", err)
+	}
+}
+
+func TestStartElapsedDeadlineDuringFailedEarlyRefreshSkipsStaleDecision(t *testing.T) {
+	advisory := cand("prod/b", "node3")
+	advisory.Executable = false
+	advisory.AdvisoryReason = policy.AdvisoryNoSurgeHeadroom
+	p := &stubPolicy{out: []policy.Candidate{advisory}}
+	loop, reporter, early := newTestLoop(t, scenario().Build(), p)
+	source := loop.Snapshots.(*stubSource)
+	refreshEntered := make(chan struct{})
+	releaseRefresh := make(chan struct{})
+	wantErr := errors.New("blocked early refresh failed")
+	source.refresh = func(ctx context.Context) error {
+		close(refreshEntered)
+		select {
+		case <-releaseRefresh:
+			return wantErr
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	fakeClock := clocktesting.NewFakeClock(testNow)
+	created := make(chan time.Duration, 1)
+	resets := make(chan time.Duration, 2)
+	loop.timerClock = &notifyingClock{
+		Clock:   fakeClock,
+		created: created,
+		resets:  resets,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- loop.Start(ctx) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Errorf("Start returned error on shutdown: %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Error("Start did not stop after cancellation")
+		}
+	})
+
+	if got := receiveDuration(t, created, "regular timer creation"); got != 5*time.Minute {
+		t.Fatalf("initial decision interval = %v, want 5m", got)
+	}
+	early <- struct{}{}
+	select {
+	case <-refreshEntered:
+	case <-time.After(time.Second):
+		t.Fatal("early refresh did not start")
+	}
+
+	// The regular deadline expires only after the early refresh is in flight.
+	// No second early signal is queued: this specifically exercises the timer
+	// that becomes ready while Refresh is blocked.
+	fakeClock.Step(5 * time.Minute)
+	close(releaseRefresh)
+	if got := receiveDuration(t, resets, "elapsed deadline reset"); got != 5*time.Minute {
+		t.Fatalf("reset decision interval = %v, want 5m", got)
+	}
+
+	produced := reporter.Metrics.RecommendationsProduced.WithLabelValues(
+		"defragmentation", "prod/b", "engine", policy.ReasonFragmentation, "false")
+	if got := atomic.LoadInt64(&p.calls); got != 1 {
+		t.Fatalf("policy evaluations after failed refresh = %d, want 1 initial evaluation", got)
+	}
+	if got := promtestutil.ToFloat64(produced); got != 1 {
+		t.Fatalf("reported cycles after failed refresh = %v, want 1 initial report", got)
+	}
+
+	// Consuming the elapsed deadline must reset, not shift or discard, cadence.
+	fakeClock.Step(5 * time.Minute)
+	if got := receiveDuration(t, resets, "next regular deadline reset"); got != 5*time.Minute {
+		t.Fatalf("next decision interval = %v, want 5m", got)
+	}
+	if got := atomic.LoadInt64(&p.calls); got != 2 {
+		t.Fatalf("policy evaluations after next regular deadline = %d, want 2", got)
+	}
+	if got := promtestutil.ToFloat64(produced); got != 2 {
+		t.Fatalf("reported cycles after next regular deadline = %v, want 2", got)
 	}
 }
 
@@ -441,5 +574,25 @@ func waitForFakeTimer(t *testing.T, fakeClock *clocktesting.FakeClock) {
 			t.Fatal("decision loop did not arm its regular timer")
 		}
 		time.Sleep(time.Millisecond)
+	}
+}
+
+func receiveDuration(t *testing.T, ch <-chan time.Duration, event string) time.Duration {
+	t.Helper()
+	select {
+	case duration := <-ch:
+		return duration
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for %s", event)
+		return 0
+	}
+}
+
+func receiveSignal(t *testing.T, ch <-chan struct{}, event string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for %s", event)
 	}
 }
