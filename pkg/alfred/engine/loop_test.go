@@ -439,7 +439,8 @@ func TestStartCoincidentRegularAndEarlyTickRefreshesOnce(t *testing.T) {
 	p := &stubPolicy{}
 	loop, _, early := newTestLoop(t, scenario().Build(), p)
 	fakeClock := clocktesting.NewFakeClock(testNow)
-	loop.timerClock = fakeClock
+	timerReads := make(chan struct{}, 8)
+	loop.timerClock = &notifyingClock{Clock: fakeClock, reads: timerReads}
 	wantErr := errors.New("coincident refresh failed")
 	firstRefreshEntered := make(chan struct{})
 	releaseFirstRefresh := make(chan struct{})
@@ -468,32 +469,38 @@ func TestStartCoincidentRegularAndEarlyTickRefreshesOnce(t *testing.T) {
 	go func() { done <- loop.Start(ctx) }()
 
 	waitForPolicyCalls(t, p, 1)
-	waitForFakeTimer(t, fakeClock)
+	receiveSignal(t, timerReads, "initial outer timer select")
 	early <- struct{}{}
 	select {
 	case <-firstRefreshEntered:
 	case <-time.After(time.Second):
 		t.Fatal("first early refresh did not start")
 	}
+	receiveSignal(t, timerReads, "first early pre-refresh timer check")
 
 	// Hold the first early pass so both the regular deadline and another
 	// coalesced early signal are pending when the loop returns to select.
 	early <- struct{}{}
 	fakeClock.Step(5 * time.Minute)
 	close(releaseFirstRefresh)
+	receiveSignal(t, timerReads, "first early post-refresh timer check")
+	receiveSignal(t, timerReads, "outer timer select after first early pass")
+	receiveSignal(t, timerReads, "second early pre-refresh timer check")
 	waitForPolicyCalls(t, p, 2)
 	select {
 	case <-secondRefresh:
 	case <-time.After(time.Second):
 		t.Fatal("coincident tick did not refresh")
 	}
+	receiveSignal(t, timerReads, "second early post-refresh timer check")
+	receiveSignal(t, timerReads, "final outer timer select")
 	if got := atomic.LoadInt64(&p.calls); got != 2 {
 		t.Fatalf("refresh failure allowed coincident decision: calls = %d, want 2", got)
 	}
 
-	// The failed coincident pass still consumed the regular deadline and reset
-	// the normal cadence. It must not immediately run a stale regular decision.
-	waitForFakeTimer(t, fakeClock)
+	// The first fresh pass consumed the coincident regular deadline and reset
+	// normal cadence before the queued second refresh failed. The failure must
+	// not immediately run a stale regular decision.
 	fakeClock.Step(5 * time.Minute)
 	waitForPolicyCalls(t, p, 3)
 
