@@ -486,7 +486,13 @@ func applyMigrationState(w *Workload, isvc *v1beta1.InferenceService) {
 	var rows []migrationRow
 	for _, component := range components {
 		state := w.Components[component]
-		if state == nil || state.IR == nil {
+		if state == nil {
+			continue
+		}
+		if state.IR == nil {
+			if state.DeploymentMode == constants.OMENative {
+				invalidateMigrationState(w, migrationStateReasonStatusInvalid)
+			}
 			continue
 		}
 		for i := range state.IR.Status.Migrations {

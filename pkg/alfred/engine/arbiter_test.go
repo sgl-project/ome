@@ -525,6 +525,27 @@ func TestArbiterEnforcesOptOutAndMalformedRequests(t *testing.T) {
 	}
 }
 
+func TestArbiterRejectsInvalidMigrationStateAfterMalformedGate(t *testing.T) {
+	cfg := config.Default()
+
+	invalid := scenario().ConfigureWorkload("prod/a", func(w *snapshot.Workload) {
+		w.MigrationStateValid = false
+	})
+	d := admit(t, &Arbiter{}, invalid.Build(), cfg, cand("prod/a", "node1"))[0]
+	if d.Admitted || d.Reason != "MigrationStateInvalid" {
+		t.Fatalf("invalid migration evidence must be rejected centrally: %+v", d)
+	}
+
+	malformed := scenario().ConfigureWorkload("prod/a", func(w *snapshot.Workload) {
+		w.MigrationStateValid = false
+		w.MalformedRequests = map[string]string{"bad-1": "bounded"}
+	})
+	d = admit(t, &Arbiter{}, malformed.Build(), cfg, cand("prod/a", "node1"))[0]
+	if d.Admitted || d.Reason != RejectMalformedRequest {
+		t.Fatalf("malformed request must retain its specific rejection: %+v", d)
+	}
+}
+
 // TestSurgeWithoutPodDetailStillClaims: a pluggable policy may declare a
 // footprint without per-pod GPU detail; the capacity gate must still run and
 // the admission must still claim its block.

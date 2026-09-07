@@ -12,21 +12,22 @@ import (
 // Rejection reason codes. The Reporter emits them verbatim as the `reason`
 // label of alfred_recommendations_rejected_total and in Events.
 const (
-	RejectCircuitBreakerOpen = "CircuitBreakerOpen"
-	RejectInstanceGone       = "InstanceGone"
-	RejectNotMovable         = "NotMovable"
-	RejectMalformedRequest   = "MalformedRequestPending"
-	RejectTerminating        = "InstanceTerminating"
-	RejectWorkloadBusy       = "WorkloadBusy"
-	RejectAutoscalerActive   = "AutoscalerActive"
-	RejectCooldown           = "Cooldown"
-	RejectPlacementCooldown  = "PlacementCooldown"
-	RejectNodeCooldown       = "NodeCooldown"
-	RejectTargetUnderEvac    = "TargetUnderEvacuation"
-	RejectTargetNodeBusy     = "TargetNodeBusy"
-	RejectNoCapacity         = "NoCapacity"
-	RejectInFlightCap        = "InFlightCap"
-	RejectHourlyCap          = "HourlyCap"
+	RejectCircuitBreakerOpen    = "CircuitBreakerOpen"
+	RejectInstanceGone          = "InstanceGone"
+	RejectNotMovable            = "NotMovable"
+	RejectMalformedRequest      = "MalformedRequestPending"
+	RejectMigrationStateInvalid = "MigrationStateInvalid"
+	RejectTerminating           = "InstanceTerminating"
+	RejectWorkloadBusy          = "WorkloadBusy"
+	RejectAutoscalerActive      = "AutoscalerActive"
+	RejectCooldown              = "Cooldown"
+	RejectPlacementCooldown     = "PlacementCooldown"
+	RejectNodeCooldown          = "NodeCooldown"
+	RejectTargetUnderEvac       = "TargetUnderEvacuation"
+	RejectTargetNodeBusy        = "TargetNodeBusy"
+	RejectNoCapacity            = "NoCapacity"
+	RejectInFlightCap           = "InFlightCap"
+	RejectHourlyCap             = "HourlyCap"
 )
 
 // AutoscalerIntent is the OEP-0013 read-only signal.
@@ -209,6 +210,9 @@ func (st *admitState) decide(c policy.Candidate) Decision {
 	}
 	if len(w.MalformedRequests) > 0 {
 		return Decision{Candidate: c, Reason: RejectMalformedRequest}
+	}
+	if !w.MigrationStateValid {
+		return Decision{Candidate: c, Reason: RejectMigrationStateInvalid}
 	}
 
 	// Terminating exclusion: action never while a pod is deleting.

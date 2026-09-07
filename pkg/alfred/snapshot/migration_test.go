@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/audit"
 )
 
@@ -346,6 +347,91 @@ func TestApplyMigrationStateOverlaysAuthoritativeIRStatus(t *testing.T) {
 			t.Fatalf("active ordering = %+v", workload.ActiveMigrations)
 		}
 	})
+}
+
+func TestApplyMigrationStateFailsClosedWhenOMENativeSiblingHasNoAcceptedIR(t *testing.T) {
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name       string
+		wantReason string
+		mutate     func(*omeNativeFixture, *v1beta1.InferenceReplica)
+	}{
+		{
+			name:       "missing sibling IR",
+			wantReason: observationReasonIRMissing,
+			mutate: func(f *omeNativeFixture, _ *v1beta1.InferenceReplica) {
+				f.extra = nil
+			},
+		},
+		{
+			name:       "duplicate sibling IR",
+			wantReason: observationReasonIRDuplicate,
+			mutate: func(f *omeNativeFixture, ir *v1beta1.InferenceReplica) {
+				duplicate := ir.DeepCopy()
+				duplicate.Name += "-duplicate"
+				duplicate.UID += "-duplicate"
+				f.extra = append(f.extra, duplicate)
+			},
+		},
+		{
+			name:       "bad-owner sibling IR",
+			wantReason: observationReasonIROwner,
+			mutate: func(_ *omeNativeFixture, ir *v1beta1.InferenceReplica) {
+				ir.OwnerReferences[0].UID = "wrong-isvc-uid"
+			},
+		},
+		{
+			name:       "stale sibling IR",
+			wantReason: observationReasonIRStale,
+			mutate: func(_ *omeNativeFixture, ir *v1beta1.InferenceReplica) {
+				ir.Status.ObservedGeneration--
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newOMENativeFixture()
+			decoderIR, _ := addOMENativeDecoder(fixture)
+			active := migrationStatus("active", v1beta1.MigrationTriggerManual, 3,
+				v1beta1.MigrationPhaseAccepted, now.Add(-2*time.Minute))
+			terminal := migrationStatus("terminal", v1beta1.MigrationTriggerManual, 3,
+				v1beta1.MigrationPhaseCompleted, now.Add(-4*time.Minute))
+			completed := metav1.NewTime(now.Add(-3 * time.Minute))
+			terminal.CompletedAt = &completed
+			fixture.ir.Status.Migrations = []v1beta1.MigrationStatus{active, terminal}
+			test.mutate(fixture, decoderIR)
+
+			workload := buildOMENativeFixtureWorkload(t, fixture)
+			sibling := workload.Components[v1beta1.DecoderComponent]
+			if sibling == nil || sibling.DeploymentMode != constants.OMENative || sibling.IR != nil ||
+				sibling.ObservationReason != test.wantReason {
+				t.Fatalf("unaccepted OMENative sibling = %+v, want reason %q", sibling, test.wantReason)
+			}
+			if workload.MigrationStateValid || workload.MigrationStateReason != migrationStateReasonStatusInvalid {
+				t.Fatalf("migration state = valid:%t reason:%q, want invalid status evidence",
+					workload.MigrationStateValid, workload.MigrationStateReason)
+			}
+			if len(workload.ActiveMigrations) != 1 || workload.ActiveMigrations[0].UUID != "active" {
+				t.Fatalf("accepted sibling active evidence = %+v, want active", workload.ActiveMigrations)
+			}
+			if workload.LastMigration == nil || !workload.LastMigration.Equal(completed.Time) {
+				t.Fatalf("accepted sibling terminal evidence = %v, want %v", workload.LastMigration, completed.Time)
+			}
+		})
+	}
+}
+
+func TestApplyMigrationStateAllowsNonOMENativeComponentWithoutIR(t *testing.T) {
+	workload := migrationTestWorkload()
+	workload.Components[v1beta1.EngineComponent].DeploymentMode = constants.RawDeployment
+
+	applyMigrationState(workload, &v1beta1.InferenceService{})
+
+	if !workload.MigrationStateValid || workload.MigrationStateReason != "" {
+		t.Fatalf("Raw component without IR invalidated migration state: valid:%t reason:%q",
+			workload.MigrationStateValid, workload.MigrationStateReason)
+	}
 }
 
 func TestApplyMigrationStateRejectsInvalidIRStatus(t *testing.T) {
