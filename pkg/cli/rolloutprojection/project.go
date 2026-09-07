@@ -56,14 +56,19 @@ func Project(
 		return reportv1alpha1.RolloutStatusReport{}, ErrSubjectUIDRequired
 	}
 
+	// Validate and project one rollout view: the active run's pinned plan when
+	// present, including an intentionally empty plan, and the live spec otherwise.
+	effectiveSpec := isvc.Spec
+	effectiveSpec.Rollout = omev1beta1.EffectiveRollout(isvc)
 	b := projector{
-		isvc:         isvc,
-		groupFor:     make(map[omev1beta1.ComponentType]int),
-		declared:     make(map[omev1beta1.ComponentType]struct{}),
-		issueKeys:    make(map[string]struct{}),
-		warningCodes: make(map[reportv1alpha1.WarningCode]struct{}),
+		isvc:          isvc,
+		effectiveSpec: &effectiveSpec,
+		groupFor:      make(map[omev1beta1.ComponentType]int),
+		declared:      make(map[omev1beta1.ComponentType]struct{}),
+		issueKeys:     make(map[string]struct{}),
+		warningCodes:  make(map[reportv1alpha1.WarningCode]struct{}),
 	}
-	if !validStoredRolloutSpec(&isvc.Spec) {
+	if !validStoredRolloutSpec(b.effectiveSpec) {
 		b.markMalformed(reportv1alpha1.RolloutIssueSpecMalformed, nil, "")
 	}
 	b.projectGroups()
@@ -151,17 +156,18 @@ func validStoredRolloutSpec(spec *omev1beta1.InferenceServiceSpec) bool {
 }
 
 type projector struct {
-	isvc         *omev1beta1.InferenceService
-	content      reportv1alpha1.RolloutStatusContent
-	groupFor     map[omev1beta1.ComponentType]int
-	declared     map[omev1beta1.ComponentType]struct{}
-	issueKeys    map[string]struct{}
-	warningCodes map[reportv1alpha1.WarningCode]struct{}
-	malformed    bool
+	isvc          *omev1beta1.InferenceService
+	effectiveSpec *omev1beta1.InferenceServiceSpec
+	content       reportv1alpha1.RolloutStatusContent
+	groupFor      map[omev1beta1.ComponentType]int
+	declared      map[omev1beta1.ComponentType]struct{}
+	issueKeys     map[string]struct{}
+	warningCodes  map[reportv1alpha1.WarningCode]struct{}
+	malformed     bool
 }
 
 func (b *projector) projectGroups() {
-	groups := b.isvc.Spec.GetRolloutGroups()
+	groups := b.effectiveSpec.GetRolloutGroups()
 	if len(groups) == 0 {
 		b.rejectUnexpectedComponentPhaseResidue()
 		if b.isvc.Status.Canary != nil {
@@ -882,7 +888,7 @@ func (b *projector) reportedState() reportv1alpha1.RolloutState {
 	if b.malformed {
 		return reportv1alpha1.RolloutStateUnknown
 	}
-	if len(b.isvc.Spec.GetRolloutGroups()) == 0 && !hasIndependentComponent(b.content.Components) {
+	if len(b.effectiveSpec.GetRolloutGroups()) == 0 && !hasIndependentComponent(b.content.Components) {
 		if b.provesNotConfigured() {
 			return reportv1alpha1.RolloutStateNotConfigured
 		}
@@ -918,12 +924,12 @@ func (b *projector) reportedState() reportv1alpha1.RolloutState {
 }
 
 func (b *projector) summaryDependsOnParentStatus() bool {
-	if len(b.isvc.Spec.GetRolloutGroups()) == 0 &&
+	if len(b.effectiveSpec.GetRolloutGroups()) == 0 &&
 		!hasIndependentComponent(b.content.Components) &&
 		!b.provesNotConfigured() {
 		return true
 	}
-	if len(b.isvc.Spec.GetRolloutGroups()) > 0 {
+	if len(b.effectiveSpec.GetRolloutGroups()) > 0 {
 		return true
 	}
 	return b.hasRolloutStatusResidue()
@@ -1008,7 +1014,7 @@ func (b *projector) normalEmptyCanarySecondary(component omev1beta1.ComponentTyp
 	if groupIndex == nil || component == "" {
 		return false
 	}
-	groups := b.isvc.Spec.GetRolloutGroups()
+	groups := b.effectiveSpec.GetRolloutGroups()
 	if *groupIndex < 0 || *groupIndex >= len(groups) || groups[*groupIndex].Canary == nil {
 		return false
 	}

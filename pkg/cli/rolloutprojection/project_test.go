@@ -109,6 +109,97 @@ func TestProjectCanaryProducesSafeFaithfulReport(t *testing.T) {
 	}
 }
 
+func TestProjectUsesPinnedCanaryPlanForPolicyOnlyLiveGroup(t *testing.T) {
+	isvc := activeCanaryInferenceService()
+	pinnedGroup := isvc.Spec.Rollout.Groups[0]
+	isvc.Spec.Rollout = &omev1beta1.RolloutSpec{Groups: []omev1beta1.RolloutGroup{{
+		Components: []omev1beta1.ComponentType{omev1beta1.EngineComponent},
+		PolicyRef: &omev1beta1.RolloutPolicyRef{
+			Name:        "guarded-canary",
+			Progression: omev1beta1.RolloutProgressionCanary,
+		},
+	}}}
+	isvc.Status.Rollout = &omev1beta1.RolloutStatus{ActiveRun: &omev1beta1.RolloutRun{
+		Plan: omev1beta1.RolloutRunPlan{Groups: []omev1beta1.RolloutRunGroup{{
+			Source: omev1beta1.RolloutPlanSourcePolicy,
+			PolicyRef: &omev1beta1.RolloutPolicyRef{
+				Name:        "guarded-canary",
+				Progression: omev1beta1.RolloutProgressionCanary,
+			},
+			Group: pinnedGroup,
+		}}},
+	}}
+
+	got, err := rolloutprojection.Project(isvc, fixedClock())
+	require.NoError(t, err)
+
+	require.Len(t, got.Content.Groups, 1)
+	assert.Equal(t, reportv1alpha1.RolloutStrategyCanary, got.Content.Groups[0].Strategy)
+	require.NotNil(t, got.Content.Groups[0].Step)
+	assert.Equal(t, int32(2), got.Content.Groups[0].Step.Total)
+	assert.Equal(t, "50%", got.Content.Groups[0].Step.Capacity)
+	assert.Equal(t, int32(50), got.Content.Groups[0].Step.TargetTraffic)
+	assertOnlyEpochBoundary(t, got, reportv1alpha1.RolloutStateInProgress)
+}
+
+func TestProjectKeepsPinnedPlanWhenLiveSpecDriftsMidRun(t *testing.T) {
+	isvc := activeCanaryInferenceService()
+	pinnedGroup := isvc.Spec.Rollout.Groups[0]
+	isvc.Status.Rollout = &omev1beta1.RolloutStatus{ActiveRun: &omev1beta1.RolloutRun{
+		Plan: omev1beta1.RolloutRunPlan{Groups: []omev1beta1.RolloutRunGroup{{
+			Source: omev1beta1.RolloutPlanSourceInline,
+			Group:  pinnedGroup,
+		}}},
+	}}
+	isvc.Spec.Rollout = &omev1beta1.RolloutSpec{Groups: []omev1beta1.RolloutGroup{{
+		Components: []omev1beta1.ComponentType{omev1beta1.EngineComponent},
+		Canary: &omev1beta1.GroupCanary{Steps: []omev1beta1.RolloutGroupStep{
+			{Capacity: intstr.FromString("25%"), Traffic: 10},
+			{Capacity: intstr.FromString("100%"), Traffic: 100},
+		}},
+	}}}
+
+	got, err := rolloutprojection.Project(isvc, fixedClock())
+	require.NoError(t, err)
+
+	require.Len(t, got.Content.Groups, 1)
+	require.NotNil(t, got.Content.Groups[0].Step)
+	assert.Equal(t, "50%", got.Content.Groups[0].Step.Capacity)
+	assert.Equal(t, int32(50), got.Content.Groups[0].Step.TargetTraffic)
+	assertOnlyEpochBoundary(t, got, reportv1alpha1.RolloutStateInProgress)
+}
+
+func TestProjectTreatsEmptyPinnedPlanAsAuthoritative(t *testing.T) {
+	isvc := activeCanaryInferenceService()
+	isvc.Status.Rollout = &omev1beta1.RolloutStatus{ActiveRun: &omev1beta1.RolloutRun{
+		Plan: omev1beta1.RolloutRunPlan{},
+	}}
+
+	got, err := rolloutprojection.Project(isvc, fixedClock())
+	require.NoError(t, err)
+
+	assert.Empty(t, got.Content.Groups)
+}
+
+func TestProjectValidatesPinnedPlanInsteadOfLiveSpec(t *testing.T) {
+	isvc := activeCanaryInferenceService()
+	pinnedGroup := isvc.Spec.Rollout.Groups[0]
+	pinnedGroup.Canary = &omev1beta1.GroupCanary{}
+	isvc.Status.Rollout = &omev1beta1.RolloutStatus{ActiveRun: &omev1beta1.RolloutRun{
+		Plan: omev1beta1.RolloutRunPlan{Groups: []omev1beta1.RolloutRunGroup{{
+			Source: omev1beta1.RolloutPlanSourceInline,
+			Group:  pinnedGroup,
+		}}},
+	}}
+
+	got, err := rolloutprojection.Project(isvc, fixedClock())
+	require.NoError(t, err)
+
+	assert.Contains(t, got.Content.Issues, reportv1alpha1.RolloutIssue{
+		Code: reportv1alpha1.RolloutIssueSpecMalformed,
+	})
+}
+
 func TestProjectMarksStatusDerivedSummaryEpochUnverifiable(t *testing.T) {
 	isvc := activeCanaryInferenceService()
 
