@@ -405,6 +405,7 @@ func TestProjectAcceptsEveryKnownSpecSource(t *testing.T) {
 		want reportv1alpha1.AutoscaleSpecSource
 	}{
 		{raw: "isvc", want: reportv1alpha1.AutoscaleSpecSourceISVC},
+		{raw: "policy", want: reportv1alpha1.AutoscaleSpecSourcePolicy},
 		{raw: "runtime", want: reportv1alpha1.AutoscaleSpecSourceRuntime},
 		{raw: "legacy", want: reportv1alpha1.AutoscaleSpecSourceLegacy},
 		{raw: "default", want: reportv1alpha1.AutoscaleSpecSourceDefault},
@@ -420,6 +421,20 @@ func TestProjectAcceptsEveryKnownSpecSource(t *testing.T) {
 			assert.NotContains(t, issueCodes(got.Content.Issues), reportv1alpha1.AutoscaleIssueSpecSourceInvalid)
 		})
 	}
+}
+
+func TestProjectPolicySpecSourceRemainsReported(t *testing.T) {
+	status := reportedHPA()
+	status.SpecSource = "policy"
+
+	got, err := Project(inferenceServiceWithAutoscaler(omev1beta1.EngineComponent, status), fixedClock())
+	require.NoError(t, err)
+	require.Len(t, got.Content.Components, 1)
+	assert.Equal(t, reportv1alpha1.AutoscaleComponentReported, got.Content.Components[0].State)
+	assert.Equal(t, reportv1alpha1.AutoscaleSpecSourcePolicy, got.Content.Components[0].SpecSource)
+	assert.NotContains(t, issueCodes(got.Content.Issues), reportv1alpha1.AutoscaleIssueSpecSourceInvalid)
+	assert.Equal(t, reportv1alpha1.AutoscaleStateReported, got.Content.Summary.State)
+	assert.Empty(t, got.Warnings)
 }
 
 func TestProjectExternalAndNoneRejectUnexpectedScalerEvidence(t *testing.T) {

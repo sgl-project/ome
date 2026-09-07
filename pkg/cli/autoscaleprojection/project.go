@@ -159,6 +159,8 @@ func projectComponent(
 	switch autoscaler.SpecSource {
 	case "isvc":
 		component.SpecSource = reportv1alpha1.AutoscaleSpecSourceISVC
+	case "policy":
+		component.SpecSource = reportv1alpha1.AutoscaleSpecSourcePolicy
 	case "runtime":
 		component.SpecSource = reportv1alpha1.AutoscaleSpecSourceRuntime
 	case "legacy":

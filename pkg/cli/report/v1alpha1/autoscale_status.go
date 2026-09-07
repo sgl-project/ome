@@ -58,6 +58,7 @@ type AutoscaleSpecSource string
 
 const (
 	AutoscaleSpecSourceISVC    AutoscaleSpecSource = "isvc"
+	AutoscaleSpecSourcePolicy  AutoscaleSpecSource = "policy"
 	AutoscaleSpecSourceRuntime AutoscaleSpecSource = "runtime"
 	AutoscaleSpecSourceLegacy  AutoscaleSpecSource = "legacy"
 	AutoscaleSpecSourceDefault AutoscaleSpecSource = "default"
