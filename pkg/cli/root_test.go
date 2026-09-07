@@ -34,6 +34,7 @@ func TestRootCommandTree(t *testing.T) {
 		"ome runtime",
 		"ome runtime effective",
 		"ome runtime explain",
+		"ome runtime history",
 		"ome status",
 		"ome version",
 	}
