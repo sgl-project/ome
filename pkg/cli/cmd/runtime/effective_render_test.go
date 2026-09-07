@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -262,6 +263,15 @@ type erroringRuntimeClient struct {
 	err error
 }
 
+type terminalRenderBuffer struct {
+	bytes.Buffer
+	width int
+}
+
+func (w *terminalRenderBuffer) TerminalWidth() (int, bool) {
+	return w.width, true
+}
+
 func (c erroringRuntimeClient) Get(
 	context.Context,
 	ctrlclient.ObjectKey,
@@ -505,6 +515,25 @@ warnings: []
 			assert.Equal(t, test.want, renderHealthyPinned(t, test.format))
 		})
 	}
+}
+
+func TestEffectiveTableAdaptsToTerminalWidth(t *testing.T) {
+	f, _ := healthyPinnedFactory(t)
+	out := &terminalRenderBuffer{width: 80}
+	var errOut bytes.Buffer
+	cmd := newEffectiveCmdWithDependencies(f, genericiooptions.IOStreams{
+		In: &bytes.Buffer{}, Out: out, ErrOut: &errOut,
+	}, fixedEffectiveDependencies())
+	cmd.SetArgs([]string{"service", "--ome-namespace", "control-plane"})
+
+	require.NoError(t, cmd.Execute())
+	require.Empty(t, errOut.String())
+	for _, line := range strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n") {
+		assert.LessOrEqual(t, len([]rune(line)), 80, "line %q", line)
+	}
+	assert.Contains(t, out.String(), "VIEW:")
+	assert.Contains(t, out.String(), "ClusterServingRuntime/cluster-runtime")
+	assert.Contains(t, out.String(), "ReportedTrue/RevisionMismatch")
 }
 
 // TestEffectiveStalePinnedExactFormats catches observedGeneration lag being

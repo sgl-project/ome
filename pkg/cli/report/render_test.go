@@ -25,6 +25,21 @@ func TestWriteTableUsesCanonicalTypedContent(t *testing.T) {
 	assert.Equal(t, []string{"z", "a"}, document.Content.Rows)
 }
 
+func TestWriteMachineFormatsIgnoreTerminalWidth(t *testing.T) {
+	document := reportEnvelope([]string{"a value that is deliberately wider than a tiny terminal"})
+
+	for _, format := range []report.Format{report.FormatJSON, report.FormatYAML} {
+		t.Run(string(format), func(t *testing.T) {
+			var regular bytes.Buffer
+			narrow := &narrowTerminalBuffer{width: 12}
+
+			require.NoError(t, report.Write(&regular, format, document))
+			require.NoError(t, report.Write(narrow, format, document))
+			assert.Equal(t, regular.String(), narrow.String())
+		})
+	}
+}
+
 func TestWriteEmptyFormatUsesDefaultTable(t *testing.T) {
 	var output bytes.Buffer
 
@@ -154,6 +169,15 @@ func (shortWriter) Write(value []byte) (int, error) {
 
 func (d unsupportedDocument) Canonical() unsupportedDocument {
 	return d
+}
+
+type narrowTerminalBuffer struct {
+	bytes.Buffer
+	width int
+}
+
+func (w *narrowTerminalBuffer) TerminalWidth() (int, bool) {
+	return w.width, true
 }
 
 func (unsupportedDocument) Table() report.Table {
