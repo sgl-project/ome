@@ -86,8 +86,12 @@ type Reporter struct {
 	// durable per-node records seed it after leader failover; persistence
 	// retries never roll it back, because doing so would replay Events and
 	// counters on every failed ConfigMap write.
-	nodeEpisodes       map[string]nodeEpisode
-	nodeEpisodesSeeded bool
+	nodeEpisodes map[string]nodeEpisode
+	// initializedNodeEpisodes records every node whose phase was initialized
+	// in this Reporter lifetime, from durable state when enabled or otherwise
+	// from local observation. Entries outlive active episodes so a node that
+	// leaves and re-enters the desired set cannot revive a stale record.
+	initializedNodeEpisodes map[string]struct{}
 }
 
 // cycleRecord is the JSON document written to the recommendations ConfigMap.
@@ -347,6 +351,7 @@ func (r *Reporter) reconcileNodeRemediations(
 				"node %s has no remaining OME GPU workloads and is ready for repair", node)
 		}
 		r.nodeEpisodes[node] = episode
+		r.markNodeEpisodeInitialized(node)
 		records[node] = remediationRecord(marker, workloads, occupantsPresent, episode, now)
 	}
 	return records, true
@@ -354,48 +359,62 @@ func (r *Reporter) reconcileNodeRemediations(
 
 // seedNodeEpisodes restores event phase from Alfred's durable node records so
 // a newly elected Reporter does not replay repair/drained signals. A failed
-// read is retried on the next cycle; locally observed phases always win. It
-// reports whether durable phase is known and lifecycle reconciliation is safe.
+// each newly encountered node is compared once, including nodes that first
+// appear after the initial pass. A failed read is retried on the next cycle;
+// locally observed phases always win. It reports whether durable phase is
+// known and lifecycle reconciliation is safe.
 func (r *Reporter) seedNodeEpisodes(
 	ctx context.Context,
 	name string,
 	desired map[string]*policy.NodeRemediation,
 ) bool {
-	if r.nodeEpisodesSeeded {
+	pending := make([]string, 0, len(desired))
+	for node := range desired {
+		if _, initialized := r.initializedNodeEpisodes[node]; !initialized {
+			pending = append(pending, node)
+		}
+	}
+	if len(pending) == 0 {
 		return true
 	}
+	sort.Strings(pending)
 	var cm corev1.ConfigMap
 	err := r.reader().Get(ctx, types.NamespacedName{Namespace: r.Namespace, Name: name}, &cm)
 	if apierrors.IsNotFound(err) {
-		r.nodeEpisodesSeeded = true
+		for _, node := range pending {
+			r.markNodeEpisodeInitialized(node)
+		}
 		return true
 	}
 	if err != nil {
 		r.Log.Error(err, "seed node remediation episodes")
 		return false
 	}
-	for node, marker := range desired {
+	for _, node := range pending {
+		marker := desired[node]
 		raw, ok := cm.Data[nodeRecordKey(node)]
-		if !ok {
-			continue
+		if ok {
+			var record nodeRemediationRecord
+			if json.Unmarshal([]byte(raw), &record) == nil {
+				if _, local := r.nodeEpisodes[node]; !local &&
+					record.SignaledAt != nil && recordCoversHealth(record, marker.Health) {
+					r.nodeEpisodes[node] = nodeEpisode{
+						signaledAt: cloneTime(record.SignaledAt),
+						drainedAt:  cloneTime(record.DrainedAt),
+					}
+				}
+			}
 		}
-		var record nodeRemediationRecord
-		if json.Unmarshal([]byte(raw), &record) != nil {
-			continue
-		}
-		if _, local := r.nodeEpisodes[node]; local {
-			continue
-		}
-		if record.SignaledAt == nil || !recordCoversHealth(record, marker.Health) {
-			continue
-		}
-		r.nodeEpisodes[node] = nodeEpisode{
-			signaledAt: cloneTime(record.SignaledAt),
-			drainedAt:  cloneTime(record.DrainedAt),
-		}
+		r.markNodeEpisodeInitialized(node)
 	}
-	r.nodeEpisodesSeeded = true
 	return true
+}
+
+func (r *Reporter) markNodeEpisodeInitialized(node string) {
+	if r.initializedNodeEpisodes == nil {
+		r.initializedNodeEpisodes = map[string]struct{}{}
+	}
+	r.initializedNodeEpisodes[node] = struct{}{}
 }
 
 // recordCoversHealth is deliberately conservative about failover dedup. A

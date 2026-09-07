@@ -796,6 +796,130 @@ func TestReportCycleSeedsNodeEpisodeAcrossReporterFailover(t *testing.T) {
 	}
 }
 
+func TestReportCycleSeedsNodeAppearingAfterInitialCycle(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	bSignaledAt := testNow.Add(-10 * time.Minute)
+	bTransitioned := testNow.Add(-time.Hour)
+	bRaw, err := json.Marshal(nodeRecordView{
+		State: snapshot.NodeHealthUnhealthy,
+		Conditions: []nodeConditionView{{
+			Type:               "GpuUnhealthy",
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: bTransitioned,
+		}},
+		Workloads:              []string{"prod/b"},
+		OMEGPUOccupantsPresent: true,
+		ObservedAt:             testNow.Add(-5 * time.Minute),
+		SignaledAt:             &bSignaledAt,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failUpdates := true
+	cl := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(recommendationsCM(map[string]string{nodeRecordKey("node-b"): string(bRaw)})).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+				if failUpdates {
+					return apierrors.NewForbidden(schema.GroupResource{Resource: "configmaps"}, obj.GetName(), errors.New("transient write failure"))
+				}
+				return c.Update(ctx, obj, opts...)
+			},
+		}).Build()
+	m := metrics.New(prometheus.NewRegistry())
+	recorder := &capturingRecorder{}
+	r := &Reporter{Client: cl, Recorder: recorder, Metrics: m, Log: logr.Discard(), Namespace: "ome"}
+	aTransitioned := testNow.Add(-30 * time.Minute)
+	a := remediationCandidate("node-a", snapshot.NodeHealthObservation{
+		State: snapshot.NodeHealthUnhealthy,
+		Conditions: []snapshot.NodeConditionObservation{{
+			Type:               "GpuUnhealthy",
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: aTransitioned,
+		}},
+	}, "prod/a")
+	b := remediationCandidate("node-b", snapshot.NodeHealthObservation{
+		State: snapshot.NodeHealthUnhealthy,
+		Conditions: []snapshot.NodeConditionObservation{{
+			Type:               "GpuUnhealthy",
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: bTransitioned,
+		}},
+	}, "prod/b")
+
+	// The first cycle seeds only node A. Its failed desired-state write leaves
+	// node B's matching durable record available when B first appears later.
+	r.ReportCycle(context.Background(), []policy.Candidate{a}, nil, config.Default(), testNow)
+	if got := recorder.count("NodeRepairNeeded"); got != 1 {
+		t.Fatalf("initial repair-needed events = %d, want 1: %+v", got, recorder.events)
+	}
+
+	failUpdates = false
+	r.ReportCycle(context.Background(), []policy.Candidate{a, b}, nil, config.Default(), testNow.Add(time.Minute))
+	if got := recorder.count("NodeRepairNeeded"); got != 1 {
+		t.Fatalf("late node replayed durable repair signal: count=%d events=%+v", got, recorder.events)
+	}
+	if got := promtestutil.ToFloat64(m.NodeHealthSignals.WithLabelValues("node-b", "NodeRepairNeeded")); got != 0 {
+		t.Fatalf("late node repair-needed signals = %v, want 0", got)
+	}
+}
+
+func TestReportCycleDoesNotSeedStaleRecordAfterDisabledPersistence(t *testing.T) {
+	transitioned := testNow.Add(-time.Hour)
+	staleSignaledAt := testNow.Add(-30 * time.Minute)
+	staleRaw, err := json.Marshal(nodeRecordView{
+		State: snapshot.NodeHealthUnhealthy,
+		Conditions: []nodeConditionView{{
+			Type:               "GpuUnhealthy",
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: transitioned,
+		}},
+		Workloads:              []string{"prod/a"},
+		OMEGPUOccupantsPresent: true,
+		ObservedAt:             testNow.Add(-20 * time.Minute),
+		SignaledAt:             &staleSignaledAt,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, m, _, cl := newTestReporter(t,
+		recommendationsCM(map[string]string{nodeRecordKey("node7"): string(staleRaw)}))
+	recorder := &capturingRecorder{}
+	r.Recorder = recorder
+	marker := remediationCandidate("node7", snapshot.NodeHealthObservation{
+		State: snapshot.NodeHealthUnhealthy,
+		Conditions: []snapshot.NodeConditionObservation{{
+			Type:               "GpuUnhealthy",
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: transitioned,
+		}},
+	}, "prod/a")
+	disabled := config.Default()
+	*disabled.RecommendationsConfigMapEnabled = false
+
+	// Persistence is disabled, so the local observation must win without
+	// consulting or replacing the stale durable record.
+	r.ReportCycle(context.Background(), []policy.Candidate{marker}, nil, disabled, testNow)
+	r.ReportCycle(context.Background(), nil, nil, disabled, testNow.Add(time.Minute))
+
+	// Re-entry is a fresh local episode. Enabling persistence must not revive
+	// the stale pre-disable phase merely because its condition evidence matches.
+	r.ReportCycle(context.Background(), []policy.Candidate{marker}, nil, config.Default(), testNow.Add(2*time.Minute))
+	if got := recorder.count("NodeRepairNeeded"); got != 2 {
+		t.Fatalf("fresh re-entry repair-needed events = %d, want 2: %+v", got, recorder.events)
+	}
+	if got := promtestutil.ToFloat64(m.NodeHealthSignals.WithLabelValues("node7", "NodeRepairNeeded")); got != 2 {
+		t.Fatalf("fresh re-entry repair-needed signals = %v, want 2", got)
+	}
+	got, ok := nodeRecord(t, cl, "node7")
+	if !ok || got.SignaledAt == nil || !got.SignaledAt.Equal(testNow.Add(2*time.Minute)) {
+		t.Fatalf("fresh re-entry record = %+v, present=%t", got, ok)
+	}
+}
+
 func TestReportCycleUsesValidNodeRecordKeyForMaximumNodeName(t *testing.T) {
 	node := strings.Join([]string{
 		strings.Repeat("n", 63),
