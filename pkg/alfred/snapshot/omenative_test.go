@@ -22,46 +22,21 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 )
 
-func TestBuildOMENativeDenseAndColumnarParity(t *testing.T) {
-	dense := newOMENativeFixture()
-	dense.ir.Status.InstanceStatuses[0].Operation = &v1beta1.InstanceOperation{ID: "op-3"}
+func TestBuildOMENativeCopiesDenseStatus(t *testing.T) {
+	fixture := newOMENativeFixture()
+	fixture.ir.Status.InstanceStatuses[0].Operation = &v1beta1.InstanceOperation{ID: "op-3"}
 
-	columnar := newOMENativeFixture()
-	encoding := v1beta1.InstanceStatusEncodingColumnarV2
-	admitted := "3"
-	columnar.ir.Status.InstanceStatuses = nil
-	columnar.ir.Status.InstanceStatusEncoding = &encoding
-	columnar.ir.Status.InstanceStatusColumns = &v1beta1.InstanceStatusColumns{
-		Members: "3",
-		Phases: []v1beta1.InstanceStatusPhaseGroup{{
-			Value: v1beta1.OMENativeInstanceReady, Indexes: "3",
-		}},
-		RunningRevisions:   []v1beta1.InstanceStatusStringGroup{{Value: "rev-a", Indexes: "3"}},
-		Incarnations:       []v1beta1.InstanceStatusInt64Group{{Value: 1, Indexes: "3"}},
-		PodCounts:          []v1beta1.InstanceStatusCountGroup{{Value: 1, Indexes: "3"}},
-		ServingPodCounts:   []v1beta1.InstanceStatusCountGroup{{Value: 1, Indexes: "3"}},
-		AvailablePodCounts: []v1beta1.InstanceStatusCountGroup{{Value: 1, Indexes: "3"}},
-		Admitted:           &admitted,
-		Entries: []v1beta1.InstanceStatusColumnEntry{{
-			Index: 3, Operation: &v1beta1.InstanceOperation{ID: "op-3"},
-		}},
+	component := buildOMENativeFixture(t, fixture)
+	if !component.ObservationValid {
+		t.Fatalf("observation invalid: %q", component.ObservationReason)
 	}
-
-	denseComponent := buildOMENativeFixture(t, dense)
-	columnarComponent := buildOMENativeFixture(t, columnar)
-	if !denseComponent.ObservationValid || !columnarComponent.ObservationValid {
-		t.Fatalf("observations invalid: dense=%q columnar=%q", denseComponent.ObservationReason, columnarComponent.ObservationReason)
-	}
-	if !denseComponent.StatusFresh || !columnarComponent.StatusFresh {
+	if !component.StatusFresh {
 		t.Fatal("fresh IR statuses must be marked fresh")
 	}
-	if denseComponent.IR == nil || columnarComponent.IR == nil {
+	if component.IR == nil {
 		t.Fatal("accepted components must retain the source IR")
 	}
-	if !reflect.DeepEqual(denseComponent.Instances, columnarComponent.Instances) {
-		t.Fatalf("DenseV1 and ColumnarV2 differ:\ndense=%#v\ncolumnar=%#v", denseComponent.Instances, columnarComponent.Instances)
-	}
-	instance := denseComponent.Instances[0]
+	instance := component.Instances[0]
 	if instance.Index != 3 || instance.Incarnation != 1 || instance.Phase != v1beta1.OMENativeInstanceReady ||
 		instance.RunningRevision != "rev-a" || instance.DesiredPods != 1 || instance.ObservedPods != 1 ||
 		instance.ServingPods != 1 || instance.AvailablePods != 1 || instance.ReadyPods != 1 ||
@@ -69,7 +44,7 @@ func TestBuildOMENativeDenseAndColumnarParity(t *testing.T) {
 		t.Fatalf("normalized instance = %+v", instance)
 	}
 	instance.Operation.ID = "mutated"
-	if dense.ir.Status.InstanceStatuses[0].Operation.ID != "op-3" {
+	if fixture.ir.Status.InstanceStatuses[0].Operation.ID != "op-3" {
 		t.Fatal("snapshot operation aliases the source IR status")
 	}
 }
@@ -141,10 +116,6 @@ func TestBuildOMENativeRejectsInvalidIRAndPodEvidence(t *testing.T) {
 		{name: "wrong IR owner API version in same group", mutate: func(f *omeNativeFixture) {
 			f.ir.OwnerReferences[0].APIVersion = v1beta1.SchemeGroupVersion.Group + "/v1alpha1"
 		}},
-		{name: "invalid encoding", mutate: func(f *omeNativeFixture) {
-			encoding := v1beta1.InstanceStatusEncoding("FutureV3")
-			f.ir.Status.InstanceStatusEncoding = &encoding
-		}},
 		{name: "missing identity label", mutate: func(f *omeNativeFixture) { delete(f.pods[0].Labels, query.LabelPodOrdinal) }},
 		{name: "missing instance index", mutate: func(f *omeNativeFixture) { delete(f.pods[0].Labels, query.LabelInstanceIdx) }},
 		{name: "missing incarnation", mutate: func(f *omeNativeFixture) { delete(f.pods[0].Labels, query.LabelInstanceIncarnation) }},
@@ -180,7 +151,7 @@ func TestBuildOMENativeRejectsInvalidIRAndPodEvidence(t *testing.T) {
 		{name: "negative runner size", mutate: func(f *omeNativeFixture) { f.ir.Spec.Runners[0].Size = -1 }},
 		{name: "pod count mismatch", mutate: func(f *omeNativeFixture) { f.ir.Status.InstanceStatuses[0].PodCount = 2 }},
 		{name: "serving count mismatch", mutate: func(f *omeNativeFixture) { f.ir.Status.InstanceStatuses[0].ServingPodCount = 0 }},
-		{name: "available count mismatch", mutate: func(f *omeNativeFixture) { f.ir.Status.InstanceStatuses[0].AvailablePodCount = 0 }},
+		{name: "available count overflow", mutate: func(f *omeNativeFixture) { f.ir.Status.InstanceStatuses[0].AvailablePodCount = 2 }},
 		{name: "live readiness mismatch", mutate: func(f *omeNativeFixture) { f.pods[0].Status.Conditions = nil }},
 	}
 
@@ -190,6 +161,69 @@ func TestBuildOMENativeRejectsInvalidIRAndPodEvidence(t *testing.T) {
 			test.mutate(fixture)
 			component := buildOMENativeFixture(t, fixture)
 			assertInvalidOMENativeObservation(t, component)
+		})
+	}
+}
+
+func TestBuildOMENativeAllowsAvailabilityToDwellBelowReady(t *testing.T) {
+	fixture := newOMENativeFixture()
+	fixture.ir.Status.InstanceStatuses[0].AvailablePodCount = 0
+
+	component := buildOMENativeFixture(t, fixture)
+	if !component.ObservationValid {
+		t.Fatalf("minReadySeconds dwell invalidated observation: %q", component.ObservationReason)
+	}
+	if got := component.Instances[0].AvailablePods; got != 0 {
+		t.Fatalf("AvailablePods = %d, want 0 during dwell", got)
+	}
+}
+
+func TestBuildOMENativeRejectsMalformedDenseStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*omeNativeFixture)
+	}{
+		{name: "more than ten thousand rows", mutate: func(f *omeNativeFixture) {
+			f.ir.Status.InstanceStatuses = make([]v1beta1.OMENativeInstanceStatus, 10_001)
+		}},
+		{name: "duplicate index", mutate: func(f *omeNativeFixture) {
+			f.ir.Status.InstanceStatuses = append(f.ir.Status.InstanceStatuses, f.ir.Status.InstanceStatuses[0])
+		}},
+		{name: "negative index", mutate: func(f *omeNativeFixture) {
+			f.ir.Status.InstanceStatuses[0].Index = -1
+		}},
+		{name: "unknown phase", mutate: func(f *omeNativeFixture) {
+			f.ir.Status.InstanceStatuses[0].Phase = v1beta1.OMENativeInstancePhase("Unknown")
+		}},
+		{name: "negative incarnation", mutate: func(f *omeNativeFixture) {
+			f.ir.Status.InstanceStatuses[0].Incarnation = -1
+		}},
+		{name: "negative pod count", mutate: func(f *omeNativeFixture) {
+			f.ir.Status.InstanceStatuses[0].PodCount = -1
+		}},
+		{name: "negative serving count", mutate: func(f *omeNativeFixture) {
+			f.ir.Status.InstanceStatuses[0].ServingPodCount = -1
+		}},
+		{name: "negative available count", mutate: func(f *omeNativeFixture) {
+			f.ir.Status.InstanceStatuses[0].AvailablePodCount = -1
+		}},
+		{name: "negative active ordinal", mutate: func(f *omeNativeFixture) {
+			f.ir.Status.InstanceStatuses[0].ActiveOrdinal = -1
+		}},
+		{name: "active ordinal above one", mutate: func(f *omeNativeFixture) {
+			f.ir.Status.InstanceStatuses[0].ActiveOrdinal = 2
+		}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newOMENativeFixture()
+			test.mutate(fixture)
+
+			component := buildOMENativeFixture(t, fixture)
+			if component.ObservationValid || component.ObservationReason != observationReasonIRStatus {
+				t.Fatalf("malformed dense status accepted: %+v", component)
+			}
 		})
 	}
 }

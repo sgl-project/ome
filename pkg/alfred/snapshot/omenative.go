@@ -10,10 +10,10 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
-	"sigs.k8s.io/ome/pkg/instancestatus"
 )
 
 const (
+	maxDenseInstanceStatuses      = 10_000
 	observationReasonIRList       = "inference replica list unavailable"
 	observationReasonIRMissing    = "inference replica is missing"
 	observationReasonIRDuplicate  = "inference replica is duplicated"
@@ -219,15 +219,15 @@ func buildOMENativeComponent(
 		invalidateComponent(component, observationReasonRunnerLayout)
 		return component
 	}
-	normalized, err := instancestatus.Normalize(&ir.Status)
-	if err != nil {
+	rows, ok := validatedDenseInstanceStatuses(ir.Status.InstanceStatuses)
+	if !ok {
 		invalidateComponent(component, observationReasonIRStatus)
 		return component
 	}
 
-	rows := make(map[int32]*Instance, len(normalized.Rows))
-	for i := range normalized.Rows {
-		row := &normalized.Rows[i]
+	instancesByIndex := make(map[int32]*Instance, len(rows))
+	for i := range rows {
+		row := &rows[i]
 		instance := &Instance{
 			Index:            row.Index,
 			Incarnation:      row.Incarnation,
@@ -247,17 +247,17 @@ func buildOMENativeComponent(
 			instance.Operation = row.Operation.DeepCopy()
 		}
 		component.Instances = append(component.Instances, instance)
-		rows[row.Index] = instance
+		instancesByIndex[row.Index] = instance
 	}
 
-	seen := make(map[int32]map[podMemberKey]struct{}, len(rows))
+	seen := make(map[int32]map[podMemberKey]struct{}, len(instancesByIndex))
 	for _, pod := range pods {
 		identityValid := validPodIdentity(pod, ir.UID, isvc, componentType)
 		if !identityValid && (!pod.InstanceIndexPresent || !pod.InstanceIndexValid) {
 			invalidateComponent(component, observationReasonPodIdentity)
 			continue
 		}
-		instance, ok := rows[pod.InstanceIndex]
+		instance, ok := instancesByIndex[pod.InstanceIndex]
 		if !identityValid {
 			if ok {
 				invalidateInstance(component, instance, observationReasonPodIdentity)
@@ -295,16 +295,16 @@ func buildOMENativeComponent(
 		addPodToInstance(instance, pod)
 	}
 
-	for i := range normalized.Rows {
-		row := &normalized.Rows[i]
-		instance := rows[row.Index]
+	for i := range rows {
+		row := &rows[i]
+		instance := instancesByIndex[row.Index]
 		steady := instance.Phase == v1beta1.OMENativeInstanceReady && instance.Operation == nil
 		if steady && !steadyMembershipMatches(instance, layout, seen[instance.Index]) {
 			invalidateInstance(component, instance, observationReasonPodJoin)
 		}
 		if steady && (instance.StatusPods != layout.desired || instance.ObservedPods != layout.desired ||
 			instance.ReadyPods != layout.desired || row.ServingPodCount != layout.desired ||
-			row.AvailablePodCount != layout.desired) {
+			row.AvailablePodCount < 0 || row.AvailablePodCount > layout.desired) {
 			invalidateInstance(component, instance, observationReasonPodCounts)
 		}
 		sort.Slice(instance.Pods, func(i, j int) bool {
@@ -321,6 +321,42 @@ func buildOMENativeComponent(
 		component.ObservationValid = true
 	}
 	return component
+}
+
+func validatedDenseInstanceStatuses(source []v1beta1.OMENativeInstanceStatus) ([]v1beta1.OMENativeInstanceStatus, bool) {
+	if len(source) > maxDenseInstanceStatuses {
+		return nil, false
+	}
+	seen := make(map[int32]struct{}, len(source))
+	for i := range source {
+		row := &source[i]
+		if row.Index < 0 || !validOMENativeInstancePhase(row.Phase) || row.Incarnation < 0 ||
+			row.PodCount < 0 || row.ServingPodCount < 0 || row.AvailablePodCount < 0 ||
+			(row.ActiveOrdinal != 0 && row.ActiveOrdinal != 1) {
+			return nil, false
+		}
+		if _, duplicate := seen[row.Index]; duplicate {
+			return nil, false
+		}
+		seen[row.Index] = struct{}{}
+	}
+	return source, true
+}
+
+func validOMENativeInstancePhase(phase v1beta1.OMENativeInstancePhase) bool {
+	switch phase {
+	case v1beta1.OMENativeInstancePending,
+		v1beta1.OMENativeInstanceCreating,
+		v1beta1.OMENativeInstanceReady,
+		v1beta1.OMENativeInstanceUpdating,
+		v1beta1.OMENativeInstanceRestarting,
+		v1beta1.OMENativeInstanceMigrating,
+		v1beta1.OMENativeInstanceFailed,
+		v1beta1.OMENativeInstanceDeleting:
+		return true
+	default:
+		return false
+	}
 }
 
 func validInferenceReplicaOwner(owners []metav1.OwnerReference, isvc *v1beta1.InferenceService) bool {

@@ -372,8 +372,8 @@ func omenativeExecutionEligibility(snap *snapshot.ClusterSnapshot, cfg *config.C
 		inst.AvailablePods != inst.DesiredPods {
 		return policy.AdvisoryOMENativeStateIneligible
 	}
-	if inst.RunningRevision == "" || inst.TargetRevision == "" ||
-		inst.RunningRevision != inst.TargetRevision || inst.RunningRevision != status.CurrentRevision {
+	if inst.RunningRevision == "" || inst.RunningRevision != status.CurrentRevision ||
+		inst.TargetRevision != "" {
 		return policy.AdvisoryOMENativeStateIneligible
 	}
 	for i := range inst.Pods {

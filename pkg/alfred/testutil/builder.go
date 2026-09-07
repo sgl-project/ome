@@ -180,7 +180,6 @@ func (b *SnapshotBuilder) WithMultiPodInstance(workload string, ctype v1beta1.Co
 	}
 	if mode == constants.OMENative {
 		inst.RunningRevision = "revision-1"
-		inst.TargetRevision = "revision-1"
 	}
 	for i, nodeName := range nodes {
 		n := b.mustNode(nodeName)

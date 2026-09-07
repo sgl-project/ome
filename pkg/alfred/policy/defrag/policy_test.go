@@ -61,7 +61,7 @@ func makeOMENativeSteady(t *testing.T, snap *snapshot.ClusterSnapshot, workload 
 	for _, inst := range comp.Instances {
 		inst.Phase = v1beta1.OMENativeInstanceReady
 		inst.RunningRevision = revision
-		inst.TargetRevision = revision
+		inst.TargetRevision = ""
 		inst.Admitted = true
 		inst.DesiredPods = int32(len(inst.Pods))
 		inst.StatusPods = int32(len(inst.Pods))
@@ -685,6 +685,9 @@ func TestOMENativeEligibilityFailsClosed(t *testing.T) {
 		{name: "scale count mismatch", reason: omenativeStateIneligibleReason, mutate: func(s *snapshot.ClusterSnapshot) {
 			s.Workloads[types.NamespacedName{Namespace: "prod", Name: "mover"}].Components[v1beta1.EngineComponent].IR.Status.ReadyReplicas = 0
 		}},
+		{name: "top-level availability mismatch", reason: omenativeStateIneligibleReason, mutate: func(s *snapshot.ClusterSnapshot) {
+			s.Workloads[types.NamespacedName{Namespace: "prod", Name: "mover"}].Components[v1beta1.EngineComponent].IR.Status.AvailableReplicas = 0
+		}},
 		{name: "rollout revision mismatch", reason: omenativeStateIneligibleReason, mutate: func(s *snapshot.ClusterSnapshot) {
 			s.Workloads[types.NamespacedName{Namespace: "prod", Name: "mover"}].Components[v1beta1.EngineComponent].IR.Status.UpdateRevision = "revision-2"
 		}},
@@ -697,7 +700,13 @@ func TestOMENativeEligibilityFailsClosed(t *testing.T) {
 		{name: "instance readiness mismatch", reason: omenativeStateIneligibleReason, mutate: func(s *snapshot.ClusterSnapshot) {
 			s.Workloads[types.NamespacedName{Namespace: "prod", Name: "mover"}].Components[v1beta1.EngineComponent].Instances[0].ReadyPods = 0
 		}},
-		{name: "instance revision mismatch", reason: omenativeStateIneligibleReason, mutate: func(s *snapshot.ClusterSnapshot) {
+		{name: "instance availability mismatch", reason: omenativeStateIneligibleReason, mutate: func(s *snapshot.ClusterSnapshot) {
+			s.Workloads[types.NamespacedName{Namespace: "prod", Name: "mover"}].Components[v1beta1.EngineComponent].Instances[0].AvailablePods = 0
+		}},
+		{name: "running revision mismatch", reason: omenativeStateIneligibleReason, mutate: func(s *snapshot.ClusterSnapshot) {
+			s.Workloads[types.NamespacedName{Namespace: "prod", Name: "mover"}].Components[v1beta1.EngineComponent].Instances[0].RunningRevision = "revision-2"
+		}},
+		{name: "non-empty target revision", reason: omenativeStateIneligibleReason, mutate: func(s *snapshot.ClusterSnapshot) {
 			s.Workloads[types.NamespacedName{Namespace: "prod", Name: "mover"}].Components[v1beta1.EngineComponent].Instances[0].TargetRevision = "revision-2"
 		}},
 		{name: "active instance operation", reason: omenativeStateIneligibleReason, mutate: func(s *snapshot.ClusterSnapshot) {
