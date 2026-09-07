@@ -1,4 +1,5 @@
-// Package printers renders CLI output. Human-readable tables use tabwriter;
+// Package printers renders CLI output. Human-readable tables adapt to terminal
+// width and preserve the historical tabwriter layout when redirected;
 // -o json|yaml passes API objects through unmodified.
 package printers
 
@@ -6,8 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
-	"text/tabwriter"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,35 +21,41 @@ type Table struct {
 }
 
 func (t Table) Write(w io.Writer) error {
-	tw := tabwriter.NewWriter(w, 0, 8, 3, ' ', 0)
-	if _, err := fmt.Fprintln(tw, strings.Join(t.Headers, "\t")); err != nil {
-		return err
-	}
-	for _, row := range t.Rows {
-		if _, err := fmt.Fprintln(tw, strings.Join(row, "\t")); err != nil {
-			return err
-		}
-	}
-	return tw.Flush()
+	return writeTable(w, t.Headers, t.Rows, false)
+}
+
+// WriteSanitized writes the table while escaping control characters even when
+// output is redirected. Interactive terminal output is always sanitized.
+func (t Table) WriteSanitized(w io.Writer) error {
+	return writeTable(w, t.Headers, t.Rows, true)
 }
 
 // PrintObj writes obj to w in the requested format ("json" or "yaml").
 func PrintObj(obj runtime.Object, format string, w io.Writer) error {
+	var data []byte
+	var err error
 	switch format {
 	case "json":
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		return enc.Encode(obj)
-	case "yaml":
-		b, err := yaml.Marshal(obj)
-		if err != nil {
-			return err
+		data, err = json.MarshalIndent(obj, "", "  ")
+		if err == nil {
+			data = append(data, '\n')
 		}
-		_, err = w.Write(b)
-		return err
+	case "yaml":
+		data, err = yaml.Marshal(obj)
 	default:
 		return fmt.Errorf("unsupported output format %q (supported: json, yaml)", format)
 	}
+	if err != nil {
+		return err
+	}
+	written, err := w.Write(data)
+	if err != nil {
+		return err
+	}
+	if written != len(data) {
+		return io.ErrShortWrite
+	}
+	return nil
 }
 
 // Age renders a creation timestamp the way kubectl does (41d, 10m, ...).
