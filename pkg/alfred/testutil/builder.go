@@ -54,7 +54,7 @@ func NodeUnhealthy(conditions ...string) NodeOption {
 	}
 	sort.Strings(conditionTypes)
 	return func(n *snapshot.Node) {
-		n.Health.State = snapshot.NodeHealthUnhealthy
+		n.Health = snapshot.NodeHealthObservation{State: snapshot.NodeHealthUnhealthy}
 		for _, conditionType := range conditionTypes {
 			n.Health.Conditions = append(n.Health.Conditions, snapshot.NodeConditionObservation{
 				Type:               corev1.NodeConditionType(conditionType),

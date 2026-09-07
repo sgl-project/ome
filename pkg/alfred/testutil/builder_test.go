@@ -83,6 +83,20 @@ func TestSnapshotBuilder(t *testing.T) {
 	}
 }
 
+func TestNodeUnhealthyReplacesPriorHealthObservation(t *testing.T) {
+	snap := NewSnapshot().
+		WithNode("node1", "h100", 8, NodeSuspect(), NodeUnhealthy()).
+		Build()
+
+	got := snap.Nodes["node1"].Health
+	if got.State != snapshot.NodeHealthUnhealthy || got.SuspectUntil != nil ||
+		len(got.Conditions) != 1 || got.Conditions[0].Type != "GpuUnhealthy" ||
+		got.Conditions[0].Status != corev1.ConditionTrue ||
+		!got.Conditions[0].LastTransitionTime.Equal(ReferenceTime) {
+		t.Fatalf("composed health = %+v, want a fresh unhealthy observation", got)
+	}
+}
+
 func TestSnapshotBuilderStructuredExecutorAndInvalidObservation(t *testing.T) {
 	renewed := ReferenceTime.Add(-time.Minute)
 	snap := NewSnapshot().
