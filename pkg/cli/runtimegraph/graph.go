@@ -33,7 +33,11 @@ type Target struct {
 	Name      string
 }
 
-// Snapshot contains runtime objects collected by a caller.
+// Snapshot contains runtime objects collected by a caller. Build treats both
+// lists as authoritative: absence means a runtime is not present. Callers with
+// truncated or unavailable lists must preserve that incompleteness alongside
+// the projection instead of presenting absence-based fallbacks or issues as
+// definitive cluster state.
 type Snapshot struct {
 	ClusterServingRuntimes []omev1beta1.ClusterServingRuntime
 	ServingRuntimes        []omev1beta1.ServingRuntime
@@ -64,19 +68,51 @@ type Issue struct {
 	Path       []Identity `json:"path"`
 }
 
-// Projection is the graph view rooted at a target runtime. Ancestors are
-// ordered root first and exclude Target.
-type Projection struct {
-	Target      Runtime   `json:"target"`
-	Ancestors   []Runtime `json:"ancestors"`
-	Descendants []Subtree `json:"descendants"`
-	Issues      []Issue   `json:"issues"`
+// ResolutionMode identifies the lookup policy the controller keeps for an
+// entire inheritance walk.
+type ResolutionMode string
+
+const (
+	// ResolutionModeCluster resolves every parent as a
+	// ClusterServingRuntime.
+	ResolutionModeCluster ResolutionMode = "Cluster"
+	// ResolutionModeNamespaced resolves every parent as a ServingRuntime in
+	// Namespace first, then falls back to a ClusterServingRuntime.
+	ResolutionModeNamespaced ResolutionMode = "Namespaced"
+)
+
+// ResolutionContext is the fixed lookup context for one controller
+// inheritance walk. Namespace is empty for cluster-only resolution.
+type ResolutionContext struct {
+	Mode      ResolutionMode `json:"mode"`
+	Namespace string         `json:"namespace,omitempty"`
 }
 
-// Subtree is one node in the target's descendant tree.
-type Subtree struct {
-	Runtime  Runtime   `json:"runtime"`
-	Children []Subtree `json:"children"`
+// ResolutionPath is the exact bounded walk for one real runtime head.
+// Runtimes are ordered from the observed root or error boundary to Subject.
+// An unsuccessful walk retains every runtime visited before it stopped.
+type ResolutionPath struct {
+	Subject  Identity  `json:"subject"`
+	Runtimes []Runtime `json:"runtimes"`
+	Issue    *Issue    `json:"issue,omitempty"`
+}
+
+// ContextProjection groups real-head paths that visited Target under one
+// fixed controller lookup context. Paths are not merged: both namespace
+// shadowing and the maximum-depth budget can give the same runtime occurrence
+// different visible ancestors in different head walks.
+type ContextProjection struct {
+	Context ResolutionContext `json:"context"`
+	Paths   []ResolutionPath  `json:"paths"`
+}
+
+// Projection contains every real-head controller walk that visited Target.
+// A ServingRuntime target has one namespaced context. A
+// ClusterServingRuntime target always has its direct cluster context and may
+// also occur in namespaced contexts reached by ServingRuntime heads.
+type Projection struct {
+	Target   Identity            `json:"target"`
+	Contexts []ContextProjection `json:"contexts"`
 }
 
 var (
@@ -144,14 +180,12 @@ func (e *AmbiguousTargetError) Unwrap() error { return ErrTargetAmbiguous }
 // Graph is an immutable runtime index built from a snapshot.
 type Graph struct {
 	runtimes map[Identity]runtimeNode
-	children map[Identity][]Identity
+	heads    []Identity
 }
 
 type runtimeNode struct {
 	identity   Identity
 	parentName string
-	parent     Identity
-	hasParent  bool
 }
 
 // Build indexes a runtime snapshot.
@@ -183,10 +217,12 @@ func Build(snapshot Snapshot) (*Graph, error) {
 			identity: identity, parentName: object.Annotations[constants.RuntimeInheritFromAnnotationKey],
 		}
 	}
-	graph := &Graph{runtimes: runtimes, children: make(map[Identity][]Identity)}
-	graph.resolveParents()
-	graph.indexChildren()
-	return graph, nil
+	heads := make([]Identity, 0, len(runtimes))
+	for identity := range runtimes {
+		heads = append(heads, identity)
+	}
+	sort.Slice(heads, func(i, j int) bool { return identityLess(heads[i], heads[j]) })
+	return &Graph{runtimes: runtimes, heads: heads}, nil
 }
 
 // Project resolves target and returns its graph view.
@@ -197,6 +233,9 @@ func (g *Graph) Project(target Target) (Projection, error) {
 	if target.Kind == KindServingRuntime && target.Namespace == "" {
 		return Projection{}, fmt.Errorf("%w: namespace is required for ServingRuntime", ErrInvalidTarget)
 	}
+	if target.Kind == KindClusterServingRuntime && target.Namespace != "" {
+		return Projection{}, fmt.Errorf("%w: namespace is forbidden for ClusterServingRuntime", ErrInvalidTarget)
+	}
 	if target.Kind != "" && target.Kind != KindServingRuntime && target.Kind != KindClusterServingRuntime {
 		return Projection{}, fmt.Errorf("%w: unsupported kind %q", ErrInvalidTarget, target.Kind)
 	}
@@ -204,58 +243,157 @@ func (g *Graph) Project(target Target) (Projection, error) {
 	if err != nil {
 		return Projection{}, err
 	}
-	node, ok := g.runtimes[identity]
-	if !ok {
+	if _, ok := g.runtimes[identity]; !ok {
 		return Projection{}, &TargetNotFoundError{Target: target}
 	}
-	ancestors, issue := g.ancestorSpine(identity)
-	issues := make([]Issue, 0, 1)
-	if issue != nil {
-		issues = append(issues, *issue)
+
+	pathsByContext := make(map[ResolutionContext][]ResolutionPath)
+	for _, head := range g.heads {
+		context := resolutionContextForHead(head)
+		walk := g.resolveHead(head, context)
+		if !walk.visits(identity) {
+			continue
+		}
+		pathsByContext[context] = append(pathsByContext[context], walk.project())
 	}
-	return Projection{
-		Target: node.runtime(), Ancestors: ancestors,
-		Descendants: g.descendantSubtrees(identity, map[Identity]struct{}{identity: {}}),
-		Issues:      issues,
-	}, nil
+
+	contexts := make([]ResolutionContext, 0, len(pathsByContext))
+	for context := range pathsByContext {
+		contexts = append(contexts, context)
+	}
+	sort.Slice(contexts, func(i, j int) bool { return resolutionContextLess(contexts[i], contexts[j]) })
+	result := Projection{Target: identity, Contexts: make([]ContextProjection, 0, len(contexts))}
+	for _, context := range contexts {
+		paths := pathsByContext[context]
+		sort.Slice(paths, func(i, j int) bool {
+			leftTarget := paths[i].Subject == identity
+			rightTarget := paths[j].Subject == identity
+			if leftTarget != rightTarget {
+				return leftTarget
+			}
+			return identityLess(paths[i].Subject, paths[j].Subject)
+		})
+		result.Contexts = append(result.Contexts, ContextProjection{Context: context, Paths: paths})
+	}
+	return result, nil
 }
 
-func (g *Graph) ancestorSpine(subject Identity) ([]Runtime, *Issue) {
-	path := []Identity{subject}
-	visited := map[Identity]struct{}{subject: {}}
-	current := g.runtimes[subject]
-	for current.parentName != "" {
-		if len(path) >= constants.RuntimeInheritMaxDepth {
-			return reverseRuntimePath(g, path[1:]), &Issue{
-				Code: IssueMaxDepthExceeded, Subject: subject, ParentName: current.parentName,
-				Path: append([]Identity{}, path...),
-			}
-		}
-		if !current.hasParent {
-			return reverseRuntimePath(g, path[1:]), &Issue{
-				Code: IssueParentMissing, Subject: subject, ParentName: current.parentName,
-				Path: append([]Identity{}, path...),
-			}
-		}
-		if _, seen := visited[current.parent]; seen {
-			cyclePath := append(append([]Identity{}, path...), current.parent)
-			return reverseRuntimePath(g, path[1:]), &Issue{
-				Code: IssueCycleDetected, Subject: subject, ParentName: current.parentName, Path: cyclePath,
-			}
-		}
-		visited[current.parent] = struct{}{}
-		path = append(path, current.parent)
-		current = g.runtimes[current.parent]
-	}
-	return reverseRuntimePath(g, path[1:]), nil
+type resolvedHead struct {
+	subject            Identity
+	runtimesChildFirst []Runtime
+	issue              *Issue
 }
 
-func reverseRuntimePath(g *Graph, childFirst []Identity) []Runtime {
-	runtimes := make([]Runtime, len(childFirst))
-	for i := range childFirst {
-		runtimes[len(childFirst)-1-i] = g.runtimes[childFirst[i]].runtime()
+func (g *Graph) resolveHead(subject Identity, context ResolutionContext) resolvedHead {
+	start := g.runtimes[subject].runtime()
+	result := resolvedHead{subject: subject, runtimesChildFirst: []Runtime{start}}
+	visited := map[string]Identity{subject.Name: subject}
+
+	for {
+		currentIndex := len(result.runtimesChildFirst) - 1
+		current := result.runtimesChildFirst[currentIndex]
+		if current.ParentName == "" {
+			return result
+		}
+		path := runtimeIdentities(result.runtimesChildFirst)
+		if len(result.runtimesChildFirst) >= constants.RuntimeInheritMaxDepth {
+			result.issue = &Issue{
+				Code: IssueMaxDepthExceeded, Subject: subject,
+				ParentName: current.ParentName, Path: path,
+			}
+			return result
+		}
+		if closing, seen := visited[current.ParentName]; seen {
+			parent := closing
+			result.runtimesChildFirst[currentIndex].ResolvedParent = &parent
+			result.issue = &Issue{
+				Code: IssueCycleDetected, Subject: subject,
+				ParentName: current.ParentName, Path: append(path, closing),
+			}
+			return result
+		}
+		parent, found := g.lookupParent(context, current.ParentName)
+		if !found {
+			result.issue = &Issue{
+				Code: IssueParentMissing, Subject: subject,
+				ParentName: current.ParentName, Path: path,
+			}
+			return result
+		}
+		resolvedParent := parent
+		result.runtimesChildFirst[currentIndex].ResolvedParent = &resolvedParent
+		visited[parent.Name] = parent
+		result.runtimesChildFirst = append(result.runtimesChildFirst, g.runtimes[parent].runtime())
 	}
-	return runtimes
+}
+
+func (g *Graph) lookupParent(context ResolutionContext, name string) (Identity, bool) {
+	if context.Mode == ResolutionModeNamespaced {
+		namespaced := Identity{Kind: KindServingRuntime, Namespace: context.Namespace, Name: name}
+		if _, ok := g.runtimes[namespaced]; ok {
+			return namespaced, true
+		}
+	}
+	cluster := Identity{Kind: KindClusterServingRuntime, Name: name}
+	_, ok := g.runtimes[cluster]
+	return cluster, ok
+}
+
+func resolutionContextForHead(head Identity) ResolutionContext {
+	if head.Kind == KindServingRuntime {
+		return ResolutionContext{Mode: ResolutionModeNamespaced, Namespace: head.Namespace}
+	}
+	return ResolutionContext{Mode: ResolutionModeCluster}
+}
+
+func resolutionContextLess(left, right ResolutionContext) bool {
+	if left.Mode != right.Mode {
+		return left.Mode == ResolutionModeCluster
+	}
+	return left.Namespace < right.Namespace
+}
+
+func runtimeIdentities(runtimes []Runtime) []Identity {
+	result := make([]Identity, len(runtimes))
+	for i := range runtimes {
+		result[i] = runtimes[i].Identity
+	}
+	return result
+}
+
+func (r resolvedHead) visits(target Identity) bool {
+	for _, runtime := range r.runtimesChildFirst {
+		if runtime.Identity == target {
+			return true
+		}
+	}
+	return false
+}
+
+func (r resolvedHead) project() ResolutionPath {
+	runtimes := make([]Runtime, len(r.runtimesChildFirst))
+	for i := range r.runtimesChildFirst {
+		runtimes[len(r.runtimesChildFirst)-1-i] = copyRuntime(r.runtimesChildFirst[i])
+	}
+	return ResolutionPath{Subject: r.subject, Runtimes: runtimes, Issue: copyIssue(r.issue)}
+}
+
+func copyRuntime(runtime Runtime) Runtime {
+	result := runtime
+	if runtime.ResolvedParent != nil {
+		parent := *runtime.ResolvedParent
+		result.ResolvedParent = &parent
+	}
+	return result
+}
+
+func copyIssue(issue *Issue) *Issue {
+	if issue == nil {
+		return nil
+	}
+	result := *issue
+	result.Path = append([]Identity{}, issue.Path...)
+	return &result
 }
 
 func (g *Graph) resolveTarget(target Target) (Identity, error) {
@@ -283,61 +421,6 @@ func (g *Graph) resolveTarget(target Target) (Identity, error) {
 	return Identity{}, &TargetNotFoundError{Target: target}
 }
 
-func (g *Graph) resolveParents() {
-	for identity, node := range g.runtimes {
-		if node.parentName == "" {
-			continue
-		}
-		var parent Identity
-		if identity.Kind == KindClusterServingRuntime {
-			parent = Identity{Kind: KindClusterServingRuntime, Name: node.parentName}
-		} else {
-			parent = Identity{Kind: KindServingRuntime, Namespace: identity.Namespace, Name: node.parentName}
-			if _, ok := g.runtimes[parent]; !ok {
-				parent = Identity{Kind: KindClusterServingRuntime, Name: node.parentName}
-			}
-		}
-		if _, ok := g.runtimes[parent]; !ok {
-			continue
-		}
-		node.parent = parent
-		node.hasParent = true
-		g.runtimes[identity] = node
-	}
-}
-
-func (g *Graph) indexChildren() {
-	for identity, node := range g.runtimes {
-		if node.hasParent {
-			g.children[node.parent] = append(g.children[node.parent], identity)
-		}
-	}
-	for parent := range g.children {
-		sort.Slice(g.children[parent], func(i, j int) bool {
-			return identityLess(g.children[parent][i], g.children[parent][j])
-		})
-	}
-}
-
-func (g *Graph) descendantSubtrees(parent Identity, path map[Identity]struct{}) []Subtree {
-	result := make([]Subtree, 0, len(g.children[parent]))
-	for _, child := range g.children[parent] {
-		if _, seen := path[child]; seen {
-			continue
-		}
-		childPath := make(map[Identity]struct{}, len(path)+1)
-		for identity := range path {
-			childPath[identity] = struct{}{}
-		}
-		childPath[child] = struct{}{}
-		result = append(result, Subtree{
-			Runtime:  g.runtimes[child].runtime(),
-			Children: g.descendantSubtrees(child, childPath),
-		})
-	}
-	return result
-}
-
 func identityLess(left, right Identity) bool {
 	if left.Kind != right.Kind {
 		return left.Kind < right.Kind
@@ -356,10 +439,5 @@ func formatIdentity(identity Identity) string {
 }
 
 func (n runtimeNode) runtime() Runtime {
-	result := Runtime{Identity: n.identity, ParentName: n.parentName}
-	if n.hasParent {
-		parent := n.parent
-		result.ResolvedParent = &parent
-	}
-	return result
+	return Runtime{Identity: n.identity, ParentName: n.parentName}
 }

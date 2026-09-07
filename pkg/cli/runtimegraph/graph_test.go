@@ -49,17 +49,26 @@ func TestProjectResolvesNamespacedParentsBeforeClusterParents(t *testing.T) {
 	clusterFallback, err := graph.Project(Target{Kind: KindServingRuntime, Namespace: "team-b", Name: "child"})
 	require.NoError(t, err)
 
-	assert.Equal(t, Runtime{
-		Identity:       Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "child"},
-		ParentName:     "shared",
-		ResolvedParent: identityPointer(Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "shared"}),
-	}, local.Target)
-	assert.Equal(t, []Runtime{{
-		Identity: Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "shared"},
-	}}, local.Ancestors)
-	assert.Equal(t, []Runtime{{
-		Identity: Identity{Kind: KindClusterServingRuntime, Name: "shared"},
-	}}, clusterFallback.Ancestors)
+	assert.Equal(t, []Runtime{
+		{Identity: Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "shared"}},
+		{
+			Identity:   Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "child"},
+			ParentName: "shared",
+			ResolvedParent: identityPointer(Identity{
+				Kind: KindServingRuntime, Namespace: "team-a", Name: "shared",
+			}),
+		},
+	}, onlyPath(t, local).Runtimes)
+	assert.Equal(t, []Runtime{
+		{Identity: Identity{Kind: KindClusterServingRuntime, Name: "shared"}},
+		{
+			Identity:   Identity{Kind: KindServingRuntime, Namespace: "team-b", Name: "child"},
+			ParentName: "shared",
+			ResolvedParent: identityPointer(Identity{
+				Kind: KindClusterServingRuntime, Name: "shared",
+			}),
+		},
+	}, onlyPath(t, clusterFallback).Runtimes)
 }
 
 func TestProjectAcceptsFiveRuntimeChainAndRejectsSixthLevel(t *testing.T) {
@@ -84,15 +93,18 @@ func TestProjectAcceptsFiveRuntimeChainAndRejectsSixthLevel(t *testing.T) {
 		{Identity: Identity{Kind: KindClusterServingRuntime, Name: "level-2"}, ParentName: "level-1", ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "level-1"})},
 		{Identity: Identity{Kind: KindClusterServingRuntime, Name: "level-3"}, ParentName: "level-2", ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "level-2"})},
 		{Identity: Identity{Kind: KindClusterServingRuntime, Name: "level-4"}, ParentName: "level-3", ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "level-3"})},
-	}, five.Ancestors)
-	assert.Empty(t, five.Issues)
+		{Identity: Identity{Kind: KindClusterServingRuntime, Name: "level-5"}, ParentName: "level-4", ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "level-4"})},
+	}, pathForSubject(t, five, Identity{Kind: KindClusterServingRuntime, Name: "level-5"}).Runtimes)
+	assert.Nil(t, pathForSubject(t, five, Identity{Kind: KindClusterServingRuntime, Name: "level-5"}).Issue)
+	sixPath := onlyPath(t, six)
 	assert.Equal(t, []Runtime{
-		{Identity: Identity{Kind: KindClusterServingRuntime, Name: "level-2"}, ParentName: "level-1", ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "level-1"})},
+		{Identity: Identity{Kind: KindClusterServingRuntime, Name: "level-2"}, ParentName: "level-1"},
 		{Identity: Identity{Kind: KindClusterServingRuntime, Name: "level-3"}, ParentName: "level-2", ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "level-2"})},
 		{Identity: Identity{Kind: KindClusterServingRuntime, Name: "level-4"}, ParentName: "level-3", ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "level-3"})},
 		{Identity: Identity{Kind: KindClusterServingRuntime, Name: "level-5"}, ParentName: "level-4", ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "level-4"})},
-	}, six.Ancestors)
-	assert.Equal(t, []Issue{{
+		{Identity: Identity{Kind: KindClusterServingRuntime, Name: "level-6"}, ParentName: "level-5", ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "level-5"})},
+	}, sixPath.Runtimes)
+	assert.Equal(t, &Issue{
 		Code: IssueMaxDepthExceeded, Subject: Identity{Kind: KindClusterServingRuntime, Name: "level-6"},
 		ParentName: "level-1",
 		Path: []Identity{
@@ -102,7 +114,7 @@ func TestProjectAcceptsFiveRuntimeChainAndRejectsSixthLevel(t *testing.T) {
 			{Kind: KindClusterServingRuntime, Name: "level-3"},
 			{Kind: KindClusterServingRuntime, Name: "level-2"},
 		},
-	}}, six.Issues)
+	}, sixPath.Issue)
 }
 
 func TestProjectReportsMissingParentWithoutCrossNamespaceLookup(t *testing.T) {
@@ -116,13 +128,16 @@ func TestProjectReportsMissingParentWithoutCrossNamespaceLookup(t *testing.T) {
 	projection, err := graph.Project(Target{Kind: KindServingRuntime, Namespace: "team-a", Name: "child"})
 	require.NoError(t, err)
 
-	assert.Nil(t, projection.Target.ResolvedParent)
-	assert.Empty(t, projection.Ancestors)
-	assert.Equal(t, []Issue{{
+	path := onlyPath(t, projection)
+	assert.Equal(t, []Runtime{{
+		Identity:   Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "child"},
+		ParentName: "shared",
+	}}, path.Runtimes)
+	assert.Equal(t, &Issue{
 		Code: IssueParentMissing, Subject: Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "child"},
 		ParentName: "shared",
 		Path:       []Identity{{Kind: KindServingRuntime, Namespace: "team-a", Name: "child"}},
-	}}, projection.Issues)
+	}, path.Issue)
 }
 
 func TestProjectReportsSameScopeCycleByFullIdentity(t *testing.T) {
@@ -135,14 +150,26 @@ func TestProjectReportsSameScopeCycleByFullIdentity(t *testing.T) {
 	projection, err := graph.Project(Target{Kind: KindServingRuntime, Namespace: "team-a", Name: "runtime-a"})
 	require.NoError(t, err)
 
-	assert.Equal(t, []Runtime{{
-		Identity:   Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "runtime-b"},
-		ParentName: "runtime-a",
-		ResolvedParent: identityPointer(Identity{
-			Kind: KindServingRuntime, Namespace: "team-a", Name: "runtime-a",
-		}),
-	}}, projection.Ancestors)
-	assert.Equal(t, []Issue{{
+	path := pathForSubject(t, projection, Identity{
+		Kind: KindServingRuntime, Namespace: "team-a", Name: "runtime-a",
+	})
+	assert.Equal(t, []Runtime{
+		{
+			Identity:   Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "runtime-b"},
+			ParentName: "runtime-a",
+			ResolvedParent: identityPointer(Identity{
+				Kind: KindServingRuntime, Namespace: "team-a", Name: "runtime-a",
+			}),
+		},
+		{
+			Identity:   Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "runtime-a"},
+			ParentName: "runtime-b",
+			ResolvedParent: identityPointer(Identity{
+				Kind: KindServingRuntime, Namespace: "team-a", Name: "runtime-b",
+			}),
+		},
+	}, path.Runtimes)
+	assert.Equal(t, &Issue{
 		Code: IssueCycleDetected, Subject: Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "runtime-a"},
 		ParentName: "runtime-a",
 		Path: []Identity{
@@ -150,7 +177,7 @@ func TestProjectReportsSameScopeCycleByFullIdentity(t *testing.T) {
 			{Kind: KindServingRuntime, Namespace: "team-a", Name: "runtime-b"},
 			{Kind: KindServingRuntime, Namespace: "team-a", Name: "runtime-a"},
 		},
-	}}, projection.Issues)
+	}, path.Issue)
 }
 
 func TestProjectReportsCycleAfterCrossingFromNamespaceToCluster(t *testing.T) {
@@ -168,6 +195,7 @@ func TestProjectReportsCycleAfterCrossingFromNamespaceToCluster(t *testing.T) {
 	projection, err := graph.Project(Target{Kind: KindServingRuntime, Namespace: "team-a", Name: "entry"})
 	require.NoError(t, err)
 
+	path := onlyPath(t, projection)
 	assert.Equal(t, []Runtime{
 		{
 			Identity:       Identity{Kind: KindClusterServingRuntime, Name: "cluster-b"},
@@ -179,8 +207,13 @@ func TestProjectReportsCycleAfterCrossingFromNamespaceToCluster(t *testing.T) {
 			ParentName:     "cluster-b",
 			ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "cluster-b"}),
 		},
-	}, projection.Ancestors)
-	assert.Equal(t, []Issue{{
+		{
+			Identity:       Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "entry"},
+			ParentName:     "cluster-a",
+			ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "cluster-a"}),
+		},
+	}, path.Runtimes)
+	assert.Equal(t, &Issue{
 		Code: IssueCycleDetected, Subject: Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "entry"},
 		ParentName: "cluster-a",
 		Path: []Identity{
@@ -189,10 +222,10 @@ func TestProjectReportsCycleAfterCrossingFromNamespaceToCluster(t *testing.T) {
 			{Kind: KindClusterServingRuntime, Name: "cluster-b"},
 			{Kind: KindClusterServingRuntime, Name: "cluster-a"},
 		},
-	}}, projection.Issues)
+	}, path.Issue)
 }
 
-func TestProjectUsesFullIdentityForRepeatedNameAcrossScopes(t *testing.T) {
+func TestProjectUsesControllerNameCyclesForRepeatedNameAcrossScopes(t *testing.T) {
 	graph, err := Build(Snapshot{
 		ClusterServingRuntimes: []omev1beta1.ClusterServingRuntime{
 			clusterRuntime("same-name", ""),
@@ -209,18 +242,40 @@ func TestProjectUsesFullIdentityForRepeatedNameAcrossScopes(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	path := pathForSubject(t, projection, Identity{
+		Kind: KindServingRuntime, Namespace: "team-a", Name: "same-name",
+	})
 	assert.Equal(t, []Runtime{
-		{Identity: Identity{Kind: KindClusterServingRuntime, Name: "same-name"}},
 		{
-			Identity:       Identity{Kind: KindClusterServingRuntime, Name: "bridge"},
-			ParentName:     "same-name",
-			ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "same-name"}),
+			Identity:   Identity{Kind: KindClusterServingRuntime, Name: "bridge"},
+			ParentName: "same-name",
+			ResolvedParent: identityPointer(Identity{
+				Kind: KindServingRuntime, Namespace: "team-a", Name: "same-name",
+			}),
 		},
-	}, projection.Ancestors)
-	assert.Empty(t, projection.Issues)
+		{
+			Identity: Identity{
+				Kind: KindServingRuntime, Namespace: "team-a", Name: "same-name",
+			},
+			ParentName:     "bridge",
+			ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "bridge"}),
+		},
+	}, path.Runtimes)
+	assert.Equal(t, &Issue{
+		Code: IssueCycleDetected,
+		Subject: Identity{
+			Kind: KindServingRuntime, Namespace: "team-a", Name: "same-name",
+		},
+		ParentName: "same-name",
+		Path: []Identity{
+			{Kind: KindServingRuntime, Namespace: "team-a", Name: "same-name"},
+			{Kind: KindClusterServingRuntime, Name: "bridge"},
+			{Kind: KindServingRuntime, Namespace: "team-a", Name: "same-name"},
+		},
+	}, path.Issue)
 }
 
-func TestProjectBuildsDeterministicDescendantSubtree(t *testing.T) {
+func TestProjectBuildsDeterministicDependentPaths(t *testing.T) {
 	graph, err := Build(Snapshot{
 		ClusterServingRuntimes: []omev1beta1.ClusterServingRuntime{
 			clusterRuntime("root", ""),
@@ -237,39 +292,29 @@ func TestProjectBuildsDeterministicDescendantSubtree(t *testing.T) {
 	projection, err := graph.Project(Target{Kind: KindClusterServingRuntime, Name: "root"})
 	require.NoError(t, err)
 
-	assert.Equal(t, []Subtree{
+	assert.Equal(t, []ResolutionContext{
+		clusterContext(), namespacedContext("team-a"), namespacedContext("team-b"),
+	}, projectionContexts(projection))
+	assert.Equal(t, []Identity{
+		{Kind: KindClusterServingRuntime, Name: "root"},
+		{Kind: KindClusterServingRuntime, Name: "a-branch"},
+		{Kind: KindClusterServingRuntime, Name: "z-branch"},
+	}, contextPathSubjects(projection.Contexts[0]))
+	assert.Equal(t, []Runtime{
+		{Identity: Identity{Kind: KindClusterServingRuntime, Name: "root"}},
 		{
-			Runtime: Runtime{
-				Identity:       Identity{Kind: KindClusterServingRuntime, Name: "a-branch"},
-				ParentName:     "root",
-				ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "root"}),
-			},
-			Children: []Subtree{{
-				Runtime: Runtime{
-					Identity:       Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "leaf"},
-					ParentName:     "a-branch",
-					ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "a-branch"}),
-				},
-				Children: []Subtree{},
-			}},
+			Identity:       Identity{Kind: KindClusterServingRuntime, Name: "a-branch"},
+			ParentName:     "root",
+			ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "root"}),
 		},
 		{
-			Runtime: Runtime{
-				Identity:       Identity{Kind: KindClusterServingRuntime, Name: "z-branch"},
-				ParentName:     "root",
-				ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "root"}),
-			},
-			Children: []Subtree{},
+			Identity:   Identity{Kind: KindServingRuntime, Namespace: "team-a", Name: "leaf"},
+			ParentName: "a-branch",
+			ResolvedParent: identityPointer(Identity{
+				Kind: KindClusterServingRuntime, Name: "a-branch",
+			}),
 		},
-		{
-			Runtime: Runtime{
-				Identity:       Identity{Kind: KindServingRuntime, Namespace: "team-b", Name: "leaf"},
-				ParentName:     "root",
-				ResolvedParent: identityPointer(Identity{Kind: KindClusterServingRuntime, Name: "root"}),
-			},
-			Children: []Subtree{},
-		},
-	}, projection.Descendants)
+	}, projection.Contexts[1].Paths[0].Runtimes)
 }
 
 func TestClusterRuntimeParentNeverResolvesToNamespacedRuntime(t *testing.T) {
@@ -282,11 +327,17 @@ func TestClusterRuntimeParentNeverResolvesToNamespacedRuntime(t *testing.T) {
 	projection, err := graph.Project(Target{Kind: KindClusterServingRuntime, Name: "child"})
 	require.NoError(t, err)
 
-	assert.Equal(t, []Issue{{
+	path := onlyPath(t, projection)
+	assert.Equal(t, clusterContext(), projection.Contexts[0].Context)
+	assert.Equal(t, []Runtime{{
+		Identity:   Identity{Kind: KindClusterServingRuntime, Name: "child"},
+		ParentName: "parent",
+	}}, path.Runtimes)
+	assert.Equal(t, &Issue{
 		Code: IssueParentMissing, Subject: Identity{Kind: KindClusterServingRuntime, Name: "child"},
 		ParentName: "parent",
 		Path:       []Identity{{Kind: KindClusterServingRuntime, Name: "child"}},
-	}}, projection.Issues)
+	}, path.Issue)
 }
 
 func TestBuildRejectsDuplicateRuntimeIdentity(t *testing.T) {
@@ -350,7 +401,8 @@ func TestProjectReturnsTypedTargetErrors(t *testing.T) {
 		want   error
 	}{
 		{name: "name required", target: Target{}, want: ErrInvalidTarget},
-		{name: "namespace required", target: Target{Kind: KindServingRuntime, Name: "runtime"}, want: ErrInvalidTarget},
+		{name: "namespaced namespace required", target: Target{Kind: KindServingRuntime, Name: "runtime"}, want: ErrInvalidTarget},
+		{name: "cluster namespace forbidden", target: Target{Kind: KindClusterServingRuntime, Namespace: "team-a", Name: "runtime"}, want: ErrInvalidTarget},
 		{name: "kind rejected", target: Target{Kind: Kind("Other"), Name: "runtime"}, want: ErrInvalidTarget},
 		{name: "explicit target absent", target: Target{Kind: KindClusterServingRuntime, Name: "runtime"}, want: ErrTargetNotFound},
 		{name: "implicit target absent", target: Target{Namespace: "team-a", Name: "runtime"}, want: ErrTargetNotFound},
