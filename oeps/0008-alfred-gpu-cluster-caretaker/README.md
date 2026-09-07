@@ -236,7 +236,7 @@ At the 2026-09-07 baseline, the source tree has the following status:
 | Observation and configuration | Implemented | Every replica builds snapshots and publishes gauges; configuration hot-reloads with last-known-good fallback. |
 | Defragmentation Policy #1 | Partially implemented | Scoring, candidate generation, arbitration, and reporting run; placement feasibility is not yet scheduler-complete. |
 | Arbiter and Reporter | Partially implemented | Core admission gates and outputs exist; positive-benefit/regression admission and dispatch/outcome-fed ledger state are not connected. |
-| Node-Health Policy #2 | Not implemented | Node conditions only exclude unhealthy nodes as defrag targets and enqueue a coalesced early decision request. That request currently reads the latest cached snapshot without first refreshing it; no evacuation candidates or remediation signals are produced. |
+| Node-Health Policy #2 | Not implemented | Node conditions only exclude unhealthy nodes as defrag targets and enqueue a coalesced early decision request. That request now forces a serialized snapshot refresh before policy evaluation without moving the regular decision deadline; no evacuation candidates or remediation signals are produced. |
 | Dispatcher | Not implemented | Alfred does not patch migration-request annotations and its current ClusterRole grants no InferenceService write. Both modes report Arbiter-admitted candidates as `withheld`: `RecommendOnly` in recommend-only mode and `DispatcherUnavailable` in execute mode. |
 | OMENative state | Implemented | Alfred validates dense `InferenceReplica.Status.InstanceStatuses` directly for stable Instance identity and lifecycle state, reads `Status.Migrations`, and joins live Pods by Instance index and incarnation for physical placement and readiness. Compatibility-only ready, scheduled, and nodes fields are not source-of-truth inputs. |
 | OMENative executor readiness | Not implemented | No capability producer or Alfred reader ships in the current implementation. The target design requires a fresh OMENative capability Lease; its producer, reader, and just-in-time pre-dispatch check are deferred with the Dispatcher. |
@@ -2675,13 +2675,15 @@ engine must not preclude them.
   Request annotations are a mailbox and the workload audit ledger retains
   durable history. A fresh capability Lease, not CRD/status presence alone,
   proves executor availability. RawDeployment and LWS are advisory-only until
-  their lifecycle owner implements the request contract. Current implementation
-  gaps (Node-Health and Dispatcher) are recorded explicitly.
+  their lifecycle owner implements the request contract.
 - 2026-09-07: The checked OMENative snapshot is implemented against dense
   `InferenceReplica.Status.InstanceStatuses` directly. Live Pods remain the
   source of truth for placement and readiness; compatibility-only ready,
   scheduled, and nodes fields are ignored. RawDeployment candidates are
-  advisory-only in current policy code.
+  advisory-only in current policy code. Condition-change early passes now force
+  a serialized snapshot refresh before policy evaluation without moving the
+  regular decision cadence. Current implementation gaps (Node-Health
+  evacuation, Dispatcher, and executor readiness) are recorded explicitly.
 - TBD: Complete Alpha implementation (capability Lease, Policy #2, Dispatcher,
   and outcome-fed safety ledger).
 - TBD: First Beta user.
