@@ -23,7 +23,9 @@ rules:
       - alfred-config
       - alfred-recommendations
 
-  # Leader election — the alfred.ome.io Lease lives in Alfred's namespace.
+  # Leader election — update-only on the pre-created alfred.ome.io Lease.
   - apiGroups: [ "coordination.k8s.io" ]
     resources: [ "leases" ]
-    verbs: [ "create", "get", "update" ]
+    verbs: [ "get", "update" ]
+    resourceNames:
+      - alfred.ome.io

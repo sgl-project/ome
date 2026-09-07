@@ -24,9 +24,11 @@ import (
 // Candidate outcomes as recorded in the alfred-recommendations ConfigMap.
 const (
 	OutcomeAdvisory = "advisory"
+	// OutcomeAdmitted is reserved for a future Dispatcher-confirmed
+	// submission. Arbiter admission alone is reported as withheld.
 	OutcomeAdmitted = "admitted"
-	// OutcomeWithheld is an admitted candidate in recommend-only mode: the
-	// Arbiter would act, the Dispatcher never fires.
+	// OutcomeWithheld is an Arbiter-admitted candidate that has not been
+	// submitted by a Dispatcher.
 	OutcomeWithheld = "withheld"
 	OutcomeRejected = "rejected"
 )
@@ -88,6 +90,7 @@ type recommendationView struct {
 	Outcome        string   `json:"outcome"`
 	AdvisoryReason string   `json:"advisoryReason,omitempty"`
 	RejectReason   string   `json:"rejectReason,omitempty"`
+	WithholdReason string   `json:"withholdReason,omitempty"`
 	FromNode       string   `json:"fromNode,omitempty"`
 	Target         string   `json:"target,omitempty"`
 	HintTargets    []string `json:"hintTargets,omitempty"`
@@ -145,10 +148,8 @@ func (r *Reporter) ReportCycle(ctx context.Context, candidates []policy.Candidat
 			continue
 		}
 		if d.Admitted {
-			view.Outcome = OutcomeAdmitted
-			if cfg.Mode == config.ModeRecommendOnly {
-				view.Outcome = OutcomeWithheld
-			}
+			view.Outcome = OutcomeWithheld
+			view.WithholdReason, _ = withholdDetails(cfg.Mode)
 			view.Target = d.Target
 			view.CooldownOver = d.CooldownOverridden
 			r.reportAdmitted(c, d, cfg)
@@ -182,15 +183,12 @@ func (r *Reporter) reportAdmitted(c policy.Candidate, d Decision, cfg *config.Co
 	r.Metrics.RecommendationsAccepted.WithLabelValues(
 		c.Policy, c.Workload.String(), string(c.Component)).Inc()
 
-	reason, note := "RecommendationAdmitted", "will dispatch"
-	if cfg.Mode == config.ModeRecommendOnly {
-		reason, note = "RecommendationWithheld", "recommend-only: not dispatched"
-	}
+	_, note := withholdDetails(cfg.Mode)
 	target := d.Target
 	if target == "" {
 		target = "scheduler's choice"
 	}
-	r.event(c, corev1.EventTypeNormal, reason,
+	r.event(c, corev1.EventTypeNormal, "RecommendationWithheld",
 		"%s recommends migrating %s/%s instance %d off %s (target %s, score %.3f) — %s",
 		c.Policy, c.Workload.String(), c.Component, c.Instance, c.FromNode, target, c.Score, note)
 
@@ -200,6 +198,13 @@ func (r *Reporter) reportAdmitted(c policy.Candidate, d Decision, cfg *config.Co
 			"health evacuation of %s/%s admitted under the cooldown floor while the standard window was still running",
 			c.Workload.String(), c.Component)
 	}
+}
+
+func withholdDetails(mode string) (reason, note string) {
+	if mode == config.ModeRecommendOnly {
+		return "RecommendOnly", "recommend-only: not dispatched"
+	}
+	return "DispatcherUnavailable", "dispatcher unavailable: not dispatched"
 }
 
 // ReportOMENativeState emits the degraded-mode transition event: once on the

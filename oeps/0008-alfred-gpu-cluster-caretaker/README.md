@@ -178,14 +178,17 @@ Alfred runs two loops:
 - **Decision loop** (default 5m): hand the latest snapshot to every Policy,
   collect their Candidates, run the Arbiter to pick and order a set of
   Recommendations, publish every outcome through the Reporter (Events, decision
-  metrics, the optional recommendations ConfigMap), then let the Dispatcher
-  actuate the executable ones (subject to mode, cooldowns, and rate limits).
+  metrics, the optional recommendations ConfigMap). In the current
+  implementation both configured modes stop here; every Arbiter-admitted
+  Recommendation is reported as withheld until the Dispatcher and its admission
+  guard land together.
 
 The split matters for a concrete failure mode: if the decision loop is wedged,
 the observation loop keeps the snapshot gauges flowing, so an operator still
 *sees* fragmentation and health degrade even when Alfred is not deciding at all.
-(In `mode: recommend-only` the decision loop still runs — Policies, Arbiter, and
-Reporter keep publishing Recommendations; only the Dispatcher is off.)
+(In both `mode: recommend-only` and `mode: execute`, Policies, Arbiter, and
+Reporter keep publishing Recommendations, but the current implementation does
+not dispatch.)
 Observability is not coupled to actuation.
 
 **Supplemental early pass, not interruption.** The decision loop is
@@ -200,7 +203,7 @@ the loop sleeps; with it, health-reaction latency drops from minutes to
 seconds while defragmentation stays lazily periodic. (`earlyTickOn:
 [NodeConditionChange]`; an empty list disables the supplemental pass.)
 
-Alfred reads:
+Target Alfred reads:
 - Nodes (GPU capacity, allocation, conditions including `GpuUnhealthy`).
 - Pods (labeled by OME conventions).
 - InferenceServices.
@@ -211,7 +214,7 @@ Alfred reads:
 - PersistentVolumeClaims / PersistentVolumes (PVC-backed model topology).
 - Alfred's own ConfigMap for policy configuration.
 
-Alfred writes — and this list is exhaustive (see [the engine
+Target Alfred writes — and this list is exhaustive (see [the engine
 table](#the-engine-snapshot--policies--arbiter--dispatcher--reporter)):
 - Prometheus metrics (continuous).
 - K8s Events on InferenceServices and Nodes (recommendations, migrations,
@@ -221,12 +224,12 @@ table](#the-engine-snapshot--policies--arbiter--dispatcher--reporter)):
   single migration verb, and only for a deployment mode with a confirmed
   consumer).
 
-Everything else is read-only.
+Everything else in the target design is read-only.
 
 ### Implementation status and compatibility baseline
 
 This OEP is the target design, not a claim that every stage is implemented.
-At the 2026-08-31 baseline, the source tree has the following status:
+At the 2026-09-07 baseline, the source tree has the following status:
 
 | Area | Status | Current boundary |
 |------|--------|------------------|
@@ -234,10 +237,10 @@ At the 2026-08-31 baseline, the source tree has the following status:
 | Defragmentation Policy #1 | Partially implemented | Scoring, candidate generation, arbitration, and reporting run; placement feasibility is not yet scheduler-complete. |
 | Arbiter and Reporter | Partially implemented | Core admission gates and outputs exist; positive-benefit/regression admission and dispatch/outcome-fed ledger state are not connected. |
 | Node-Health Policy #2 | Not implemented | Node conditions only exclude unhealthy nodes as defrag targets and enqueue a coalesced early decision request. That request currently reads the latest cached snapshot without first refreshing it; no evacuation candidates or remediation signals are produced. |
-| Dispatcher | Not implemented | Alfred does not patch migration-request annotations. Current `mode: execute` reporting says "will dispatch" despite performing no write; that mode is unsupported and must fail closed to recommend-only until the Dispatcher and its guards land. |
-| OMENative state | Requires refresh | Current code collapses every non-Raw Component into synthetic Instance 0 and reads legacy ISVC migration history. Alfred must normalize `InferenceReplica.Status` for stable Instance identity, lifecycle state, and migrations, then join live Pods by Instance index and incarnation for physical placement and readiness. |
-| OMENative executor readiness | Not implemented | CRD discovery and current status do not prove the controller is still running. Alpha execution requires a fresh OMENative capability Lease; until that signal exists and Alfred consumes it, OMENative candidates remain advisory. |
-| RawDeployment execution | Deferred | Current policy classifies Raw candidates as executable, but neither an Alfred Dispatcher nor a Raw request consumer exists. The revised design requires Raw candidates to be advisory-only until both are implemented and tested. |
+| Dispatcher | Not implemented | Alfred does not patch migration-request annotations and its current ClusterRole grants no InferenceService write. Both modes report Arbiter-admitted candidates as `withheld`: `RecommendOnly` in recommend-only mode and `DispatcherUnavailable` in execute mode. |
+| OMENative state | Implemented | Alfred validates dense `InferenceReplica.Status.InstanceStatuses` directly for stable Instance identity and lifecycle state, reads `Status.Migrations`, and joins live Pods by Instance index and incarnation for physical placement and readiness. Compatibility-only ready, scheduled, and nodes fields are not source-of-truth inputs. |
+| OMENative executor readiness | Not implemented | No capability producer or Alfred reader ships in the current implementation. The target design requires a fresh OMENative capability Lease; its producer, reader, and just-in-time pre-dispatch check are deferred with the Dispatcher. |
+| RawDeployment execution | Advisory-only | Current policy reports each Raw Instance as a source-only advisory with `Executable=false`; neither an Alfred Dispatcher nor a Raw request consumer exists. Raw execution remains deferred until both are implemented and tested. |
 
 The remaining sections describe the target architecture unless they explicitly
 say "current implementation." The compatibility baseline for new work is the
@@ -414,9 +417,9 @@ and therefore Alfred — write to the wider cluster):
 | Target | Resource | Write | Writer | Why | New RBAC for Policy #2? |
 |--------|----------|-------|--------|-----|-------------------------|
 | Alfred namespace | ConfigMap (`alfred-recommendations`) | `get`, `update`, `patch`, `delete` | Reporter | Alfred's pre-created output | No |
-| Alfred namespace | Lease | Full read/write | engine (leader election) | Leader election | No |
+| Alfred namespace | Lease (`alfred.ome.io`) | named `get`, `update` | engine (leader election) | Pre-created, spec-less leader-election Lease | No |
 | Any namespace | Events (on ISVC **and** Node) | `create`, `patch` | Reporter | Surface recommendations, migrations, evacuation + repair signals | No — `events` already granted |
-| Any namespace | InferenceService annotations | `patch` (narrow to `ome.io/migration-request-v1-*`) | Dispatcher | OEP-0007 migration verb — the single executable contract for supported workload owners, defrag **and** evacuation | No — same annotation both policies |
+| Any namespace | InferenceService annotations | None currently; target `patch` is deferred | Dispatcher (future) | OEP-0007 migration verb after Dispatcher plus admission guard land | No — same future annotation for both policies |
 
 The load-bearing property: **Policy #2 (Node-Health Evacuation) introduces no new
 write contract.** It evacuates by reusing the same migration annotation the
@@ -807,7 +810,10 @@ in mind while reading — every "emit", "score", and "rank" below produces a
 
 - *Candidate*: a proposed move of one Component Instance — "Component X's Instance Y off Node Z" — carrying a *benefit score* (expected fragmentation improvement), a *cost score* (disruption risk), an `Executable` flag, and a ranked list of `HintTargetNodes`. A Candidate is a value, not an action; the Arbiter decides whether any Candidate is dispatched.
 - *Instance*: per the OEP-0007 hierarchy, a Component (router/engine/decoder) is a set of Instances; an Instance is the atomic unit Alfred reasons about and migrates. An OMENative Instance may contain one pod or an atomic multi-pod group. Its stable index, incarnation, and lifecycle state come from the owning `InferenceReplica.Status`, while live placement and readiness come from Pods joined by the `ome.io/instance-index` and `ome.io/instance-incarnation` labels — never from pod-name order. A RawDeployment Instance is a single pod (one replica of the component) and is advisory-only until a Raw migration consumer exists.
-- *Movable*: a workload Alfred is permitted to migrate. Default true; set false by the `alfred.ome.io/movable: "false"` annotation. A non-movable workload is excluded from candidate enumeration entirely — Policy #1 never produces a Candidate for it.
+- *Movable*: a workload Alfred is permitted to migrate automatically. Default
+  true; set false by the `alfred.ome.io/movable: "false"` annotation. A
+  non-movable workload is excluded from executable candidates, but a Policy may
+  still emit an advisory Candidate so the operator can see the opportunity.
 
 #### Observation layer
 
@@ -871,20 +877,20 @@ type WorkloadState struct {
 type ComponentState struct {
     DeploymentMode   string                      // OMENative, RawDeployment, MultiNode (LWS), etc.
     InferenceReplica *omev1beta1.InferenceReplica // OMENative source of truth
-    StatusFresh      bool                        // observedGeneration and encoding validated
-    Instances        []*InstanceState            // stable indexes from status
+    StatusFresh      bool                        // observedGeneration and dense status validated
+    Instances        []*InstanceState            // stable indexes from dense status
 }
 
 type InstanceState struct {
-    InstanceIndex    int32                       // stable index from normalized IR status
+    InstanceIndex    int32                       // stable index from dense IR status
     Incarnation      int64                       // status value; must match joined Pods
-    Phase            string                      // normalized IR status
-    RunningRevision  string                      // normalized IR status
-    Admitted         bool                        // normalized IR status
-    ActiveOrdinal    int32                       // normalized IR status
-    ServingPods      int32                       // normalized IR status
-    AvailablePods    int32                       // normalized IR status
-    OperationActive  bool                        // normalized IR status
+    Phase            string                      // validated dense IR status
+    RunningRevision  string                      // validated dense IR status
+    Admitted         bool                        // validated dense IR status
+    ActiveOrdinal    int32                       // validated dense IR status
+    ServingPods      int32                       // validated dense IR status
+    AvailablePods    int32                       // validated dense IR status
+    OperationActive  bool                        // validated dense IR status
     DesiredPods      int32                       // derived from the runner templates
     ObservedPods     int32                       // live Pods joined by index + incarnation
     ReadyPods        int32                       // derived from current live Pod conditions
@@ -914,19 +920,18 @@ The following properties of the read surface are load-bearing for later sections
 
 - **Non-OME GPU workloads count against capacity but are never candidates.** Kubeflow Notebook pods, generic Jobs, and any other non-OME GPU consumer appear in `NodeState.OtherOccupants` and are folded into `AllocatedGPUs` / `FreeGPUs` so the fragmentation score reflects reality. But Policy #1 enumerates candidates only from `WorkloadState` (i.e. OME InferenceServices). *Failure mode if we got this wrong:* if non-OME pods were invisible to scoring, Alfred would underestimate fragmentation and sit quiescent on a genuinely packed cluster; if they were eligible for migration, Alfred would try to evict a notebook it does not own. The snapshot threads the needle by counting them for scoring and excluding them from selection.
 - **OMENative state is a checked join, not either API alone.** The snapshot
-  decodes either DenseV1
-  `InstanceStatuses` or ColumnarV2 `InstanceStatusColumns`, preserving stable and
+  validates dense `Status.InstanceStatuses` directly, preserving stable and
   sparse Instance indexes, incarnation, lifecycle phase, operation, serving and
   available counts. It reads `Status.Migrations` for accepted and terminal
   migration work. Current Pods are then joined through the stable Instance index
   and incarnation labels to derive physical placement, GPU footprint, and live
-  readiness. For a single-pod Instance, normalized `ActiveOrdinal` selects the
+  readiness. For a single-pod Instance, validated `ActiveOrdinal` selects the
   canonical pod slot; for a multi-pod Instance, Alfred requires the complete
   runner/ordinal set described by the templates. An ambiguous or extra surge set
-  is busy, not steady. `ReadyPodCount` and `NodesOccupied` in Instance status are
-  retained compatibility fields and are not treated as persisted truth. An
+  is busy, not steady. Compatibility-only `ReadyPodCount`, `ScheduledPodCount`,
+  and `NodesOccupied` are not treated as persisted truth. An
   OMENative Candidate is executable only when both sides agree, status reflects the current
-  generation, the encoding is valid, migration policy permits the action, and
+  generation, the dense status is valid, migration policy permits the action, and
   the selected Instance is admitted, fully ready, available, and serving with no
   active lifecycle operation, rollout, scale transition, or migration. A
   missing/stale status, label mismatch, incomplete Pod set, or readiness
@@ -1554,15 +1559,16 @@ churning the cluster. So it can't.
 **Per-Policy enable + per-workload gating are orthogonal axes.** Disabling
 `policies.nodeHealth` stops the caretaker from proposing evacuations for anyone;
 annotating one workload `alfred.ome.io/movable: "false"` opts that workload out
-of *all* Policies. An operator needs both: cluster-wide "don't run node-health
-yet" and per-workload "never touch this one."
+of automatic action by *all* Policies; operator advisories may still be
+reported. An operator needs both: cluster-wide "don't run node-health yet" and
+per-workload "never touch this one."
 
 Per-workload overrides via InferenceService annotations:
 
 ```yaml
 metadata:
   annotations:
-    alfred.ome.io/movable: "false"                       # opt out of all policies
+    alfred.ome.io/movable: "false"                       # opt out of automatic action
     alfred.ome.io/priority: "0.3"                        # lower = more protected
     alfred.ome.io/cooldown-minutes: "60"                 # per-workload override
     alfred.ome.io/opt-out-reason: "critical production"  # operator note
@@ -1582,8 +1588,8 @@ it than to act on garbage.
 
 #### Opt-in / opt-out semantics
 
-Default: opt-in per `defaultMovable: true`. A workload is eligible for *any*
-Policy unless one of these holds:
+Default: opt-in per `defaultMovable: true`. A workload is eligible for
+executable action by *any* Policy unless one of these holds:
 
 - Annotation `alfred.ome.io/movable: "false"`.
 - The workload is in cooldown (per-workload or per-node).
@@ -1598,7 +1604,7 @@ Policy unless one of these holds:
 Operators preferring opt-in-only set `defaultMovable: false`; then a workload
 needs `alfred.ome.io/movable: "true"` explicitly. Rationale: a conservative
 cluster wants the caretaker silent until each workload owner has signed off,
-even at the cost of the caretaker doing nothing on day one.
+even at the cost of the caretaker taking no action on day one.
 
 ### Safety bounds
 
@@ -1917,6 +1923,10 @@ target Alpha prerequisite; because the current baseline does not publish or
 consume it, current Alfred must remain recommendation-only even when the CRD and
 apparently current status are present.
 
+The target Dispatcher must also perform a just-in-time capability check before
+each migration-request write; that check is deferred with the Dispatcher and is
+not part of the current implementation.
+
 The target Lease is namespaced, defaults to
 `ome/ome-inferencereplica-executor`, and carries
 `ome.io/migration-request-schema: v1`. Its holder identity names the active OME
@@ -1948,12 +1958,13 @@ Ships as:
 - Deployment: 3 replicas, leader election enabled.
 - ServiceAccount, namespace Role/RoleBinding, and ClusterRole/ClusterRoleBinding
   per [RBAC](#rbac) below.
+- A pre-created, spec-less `alfred.ome.io` leader-election Lease.
 - ConfigMap `alfred-config` with default values.
 
 The caretaker installs alongside OME (same Helm release) or independently; it is
 a separate Deployment, not embedded in the main OME manager, so it has an
-independent release cadence, failure domain, and resource footprint. Hard
-dependencies:
+independent release cadence, failure domain, and resource footprint. Target
+execution dependencies (current Alfred performs no execution):
 
 - OME `InferenceService` CRD installed.
 - A fresh, valid InferenceReplica status surface for OMENative execution
@@ -1968,6 +1979,10 @@ dependencies:
 - Lease duration: 15s
 - Renew deadline: 10s
 - Retry period: 2s
+
+The `alfred.ome.io` Lease is pre-created without a `spec`. Alfred's namespace
+Role grants only named `get` and `update` on that Lease; it cannot create Leases
+or access an unrelated Lease.
 
 Only the leader runs the decision loop — Policies, Arbiter, and Dispatchers — so
 exactly one replica is acting on the cluster at a time. All replicas run the
@@ -2030,16 +2045,11 @@ the eviction verb:
   resources: [events]
   verbs: [create, patch]
 
-# Leader election (Alfred namespace Role)
+# Leader election (Alfred namespace Role; Lease is pre-created without spec)
 - apiGroups: [coordination.k8s.io]
   resources: [leases]
-  verbs: [create, get, update]
-
-# OMENative executor capability (read-only, configured namespace)
-- apiGroups: [coordination.k8s.io]
-  resources: [leases]
-  resourceNames: [ome-inferencereplica-executor]
-  verbs: [get]
+  resourceNames: [alfred.ome.io]
+  verbs: [get, update]
 
 # OME CRDs (read)
 - apiGroups: [ome.io]
@@ -2054,10 +2064,8 @@ the eviction verb:
     - clusterbasemodels
   verbs: [get, list, watch]
 
-# OME InferenceService annotation patching (narrow contract)
-- apiGroups: [ome.io]
-  resources: [inferenceservices]
-  verbs: [patch]
+# No current InferenceService write rule. The Dispatcher and its admission
+# guard must land together before Alfred receives patch permission.
 ```
 
 The write contracts in detail — each is the *only* mutation the caretaker can
@@ -2069,11 +2077,11 @@ perform on that resource:
 | `pods` | get, list, watch | nothing — read-only | physical placement and current readiness; Alfred never performs pod-level lifecycle actions |
 | `persistentvolumeclaims`, `persistentvolumes` | get, list, watch | nothing — read-only | model-volume access modes and topology for placement feasibility |
 | `inferencereplicas` | get, list, watch | nothing — read-only | stable OMENative Instance identity, lifecycle state, and authoritative migration status |
-| OMENative capability `lease` | get | nothing — read-only | proves that a compatible InferenceReplica executor is currently enabled and renewing |
-| `inferenceservices` | patch | add/retry one `ome.io/migration-request-v1-*` annotation only | the consuming controller owns acknowledgement deletion; Alfred's patch must not touch spec, status, labels, finalizers, or other annotations (enforced cluster-side, below) |
+| OMENative capability `lease` | none currently; target `get` | nothing — read-only | target proof that a compatible InferenceReplica executor is currently enabled and renewing; producer and reader are not implemented |
+| `inferenceservices` | get, list, watch | nothing — read-only | target annotation patch is deferred until the Dispatcher and admission guard land together |
 | `configmaps` (named) | update, patch, delete | mutate only `alfred-config` / `alfred-recommendations` | the caretaker does not create ConfigMaps at runtime; Helm pre-creates them |
 | `events` | create, patch | emit observability events | events are the audit trail; no other side effect |
-| `leases` | create, get, update | leader-election Lease | standard controller pattern |
+| `leases` | named get, update | pre-created, spec-less `alfred.ome.io` leader-election Lease | no runtime create and no access to unrelated Leases |
 
 **Why the re-scope needs nothing new — and drops a verb.** Node-health
 evacuation could, in a naive design, demand `nodes` write (to cordon the failing
@@ -2087,21 +2095,22 @@ bounded the defragmenter's blast radius bounds the caretaker's even more
 tightly. The RBAC table above is the security contract; adding node-write or
 pod-write to it would be the moment the caretaker stops being safe-by-design.
 
-**Authorization boundary.** The dedicated Alfred service account is the only
-principal allowed to add or retry an OMENative migration request in v1. The
+**Target authorization boundary.** After Dispatcher work lands, the dedicated
+Alfred service account is the only principal allowed to add or retry an
+OMENative migration request in v1. The
 configured OME manager service account must be allowed to delete a request after
 the InferenceReplica controller has persisted its acknowledgement. No other
 principal may add, change, or delete a migration annotation, even if generic
 InferenceService patch RBAC exists.
 
-**RBAC invariant.** The caretaker's only allowed `patch` effect on
+**Target RBAC invariant.** The caretaker's only allowed `patch` effect on
 `InferenceService` is to add or retry one
 `ome.io/migration-request-v1-<uuid>` annotation. A retry may preserve or replace
 only that UUID's identical canonical payload; Alfred does not acknowledge its
 own request by deleting it. An internal patch-gateway helper guards this at
 runtime, but it is *not* the primary security boundary.
 
-**Mandatory cluster-side enforcement.** Execute mode requires a
+**Mandatory target cluster-side enforcement.** Execute mode requires a
 `ValidatingAdmissionPolicy` (K8s 1.30+) installed by the Helm chart. If the
 policy or binding is absent, the caretaker must refuse to start in
 `mode: execute` and fall back to recommend-only. The reference policy object
@@ -2369,12 +2378,14 @@ New unit coverage for the engine refactor:
    window is excluded from every policy's target hints. *Failure mode if
    absent:* workloads sit on failing GPUs waiting out a routine-optimization
    cooldown, or a flapping node pumps evacuate/refill cycles.
-10. **InferenceReplica normalization and eligibility.** Decode equivalent
-    DenseV1 and ColumnarV2 status into the same stable, sparse Instance set.
-    Join live Pods by Instance index and incarnation, and derive current
+10. **InferenceReplica validation and eligibility.** Validate dense
+    `Status.InstanceStatuses` directly into a stable, sparse Instance set.
+    Reject excessive cardinality, duplicate or negative indexes, unknown
+    phases, invalid ordinals, and negative counters. Join live Pods by Instance
+    index and incarnation, and derive current
     placement/readiness from those Pods rather than compatibility-only status
     fields. Verify single-pod `ActiveOrdinal` selection and complete multi-pod
-    runner membership. Reject stale generation, invalid encoding,
+    runner membership. Reject stale generation, invalid dense status,
     label/incarnation mismatch, incomplete Pods, paused or migration-disabled components,
     partially ready/serving Instances, active operations, and rollout/scale
     transitions as advisory-only.
@@ -2419,7 +2430,8 @@ following behavior end to end:
 6. **LWS recommendation-only**: LWS-backed workload; verify recommendation
    emitted but no migration request; event reflects `LWSMigrationUnsupported`.
 7. **Opt-out**: `alfred.ome.io/movable: "false"` excludes the workload from
-   candidates; event explains.
+   executable candidates; any Candidate still surfaced is advisory and its
+   event explains why Alfred will not act.
 8. **Per-workload cooldown**: execute a migration, verify no new attempt for
    the same workload within cooldown.
 9. **Maintenance window**: active window; Alfred continues recommending, does
@@ -2550,8 +2562,8 @@ the **OEP-0013 read-only seam**.
 
 - Unit tests ≥ 80% coverage, including the new `engine/arbiter`,
   `engine/reporter`, `policy/defrag`, and `policy/nodehealth` packages.
-- DenseV1 and ColumnarV2 OMENative status normalize to the same stable Instance
-  model; Pods join by stable index and incarnation for live readiness and
+- Dense `InferenceReplica.Status.InstanceStatuses` validates into the stable
+  Instance model; Pods join by stable index and incarnation for live readiness and
   placement; migration state and cooldowns reconstruct from
   `InferenceReplica.Status.Migrations` and the workload audit ledger across
   leader failover.
@@ -2665,9 +2677,13 @@ engine must not preclude them.
   proves executor availability. RawDeployment and LWS are advisory-only until
   their lifecycle owner implements the request contract. Current implementation
   gaps (Node-Health and Dispatcher) are recorded explicitly.
-- TBD: Complete Alpha implementation (checked InferenceReplica-plus-Pod
-  snapshot, capability Lease, Policy #2, Dispatcher, and outcome-fed safety
-  ledger).
+- 2026-09-07: The checked OMENative snapshot is implemented against dense
+  `InferenceReplica.Status.InstanceStatuses` directly. Live Pods remain the
+  source of truth for placement and readiness; compatibility-only ready,
+  scheduled, and nodes fields are ignored. RawDeployment candidates are
+  advisory-only in current policy code.
+- TBD: Complete Alpha implementation (capability Lease, Policy #2, Dispatcher,
+  and outcome-fed safety ledger).
 - TBD: First Beta user.
 - TBD: Beta (Policy #3 Descheduling).
 - TBD: GA.

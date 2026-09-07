@@ -1,0 +1,9 @@
+# Pre-created because Alfred's leader-election RBAC permits only get/update on
+# this exact name. Omitting spec lets client-go acquire it from an empty state.
+apiVersion: coordination.k8s.io/v1
+kind: Lease
+metadata:
+  name: alfred.ome.io
+  namespace: ome
+  labels:
+    app.kubernetes.io/component: "ome-alfred"
