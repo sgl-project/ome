@@ -178,14 +178,41 @@ func TestBuildOMENativeAllowsAvailabilityToDwellBelowReady(t *testing.T) {
 	}
 }
 
+func TestValidatedDenseInstanceStatusesCardinalityBoundaries(t *testing.T) {
+	tests := []struct {
+		name      string
+		rowCount  int
+		wantValid bool
+	}{
+		{name: "ten thousand rows", rowCount: 10_000, wantValid: true},
+		{name: "ten thousand and one rows", rowCount: 10_001, wantValid: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			rows := make([]v1beta1.OMENativeInstanceStatus, test.rowCount)
+			for i := range rows {
+				rows[i].Index = int32(i)
+				rows[i].Phase = v1beta1.OMENativeInstancePending
+			}
+
+			validated, valid := validatedDenseInstanceStatuses(rows)
+			if valid != test.wantValid {
+				t.Fatalf("validatedDenseInstanceStatuses(%d rows) valid = %t, want %t",
+					test.rowCount, valid, test.wantValid)
+			}
+			if valid && len(validated) != test.rowCount {
+				t.Fatalf("validated row count = %d, want %d", len(validated), test.rowCount)
+			}
+		})
+	}
+}
+
 func TestBuildOMENativeRejectsMalformedDenseStatus(t *testing.T) {
 	tests := []struct {
 		name   string
 		mutate func(*omeNativeFixture)
 	}{
-		{name: "more than ten thousand rows", mutate: func(f *omeNativeFixture) {
-			f.ir.Status.InstanceStatuses = make([]v1beta1.OMENativeInstanceStatus, 10_001)
-		}},
 		{name: "duplicate index", mutate: func(f *omeNativeFixture) {
 			f.ir.Status.InstanceStatuses = append(f.ir.Status.InstanceStatuses, f.ir.Status.InstanceStatuses[0])
 		}},
