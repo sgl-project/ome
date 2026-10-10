@@ -286,6 +286,9 @@ func preferSource(node, reason, currentNode, currentReason string) bool {
 	return node < currentNode
 }
 
+// classify turns one Instance on a flagged node into a finding: executable when
+// its execution surface and capacity allow a move, otherwise advisory with the
+// reason. It returns false for Instances the policy does not report.
 func classify(snap *snapshot.ClusterSnapshot, cfg *config.Config, w *snapshot.Workload,
 	comp *snapshot.Component, inst *snapshot.Instance, from, reason string) (policy.Candidate, bool) {
 
@@ -329,7 +332,16 @@ func classify(snap *snapshot.ClusterSnapshot, cfg *config.Config, w *snapshot.Wo
 		return candidate, true
 	}
 	if inst.TotalTPUs > 0 {
-		candidate.AdvisoryReason = policy.AdvisoryAcceleratorPlacementUnmodeled
+		// Surge planning models GPUs only. A TPU instance can move only onto a
+		// new OME-provisioned slice, which the slice scheduler places.
+		plan, reason := policy.PlanTPUSliceReplacement(snap, cfg, inst)
+		if reason != "" {
+			candidate.AdvisoryReason = reason
+			return candidate, true
+		}
+		candidate.SurgeShaped = true
+		candidate.Executable = true
+		candidate.TPUSlice = plan
 		return candidate, true
 	}
 
