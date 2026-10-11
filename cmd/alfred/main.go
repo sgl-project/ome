@@ -376,15 +376,26 @@ func podIdentity() string {
 // they enter the informer cache. Caching every pod in a large cluster is
 // Alfred's dominant memory cost; this keeps only scheduling-relevant state:
 // labels, node name, node selector, container resources, phase, conditions,
-// start/deletion timestamps.
+// start/deletion timestamps. A pod that requests TPUs also keeps the
+// slice-provisioning annotation and the required node affinity, which TPU
+// slice moves read.
 func podCacheTransform(obj interface{}) (interface{}, error) {
 	pod, ok := obj.(*corev1.Pod)
 	if !ok {
 		return obj, nil
 	}
 	controllerOwner := metav1.GetControllerOf(pod)
+	tpu := snapshot.PodTPURequest(pod) > 0
+	sliceProvisioning, hasSliceProvisioning := pod.Annotations[constants.TPUSliceProvisioningAnnotationKey]
+	var requiredNodeAffinity *corev1.NodeSelector
+	if a := pod.Spec.Affinity; tpu && a != nil && a.NodeAffinity != nil {
+		requiredNodeAffinity = a.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+	}
 	pod.ManagedFields = nil
 	pod.Annotations = nil
+	if tpu && hasSliceProvisioning {
+		pod.Annotations = map[string]string{constants.TPUSliceProvisioningAnnotationKey: sliceProvisioning}
+	}
 	if controllerOwner == nil {
 		pod.OwnerReferences = nil
 	} else {
@@ -414,6 +425,11 @@ func podCacheTransform(obj interface{}) (interface{}, error) {
 	pod.Spec.Volumes = nil
 	pod.Spec.ImagePullSecrets = nil
 	pod.Spec.Affinity = nil
+	if requiredNodeAffinity != nil {
+		pod.Spec.Affinity = &corev1.Affinity{NodeAffinity: &corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: requiredNodeAffinity,
+		}}
+	}
 	pod.Spec.Tolerations = nil
 
 	pod.Status.ContainerStatuses = nil
