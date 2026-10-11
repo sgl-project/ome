@@ -35,6 +35,10 @@ type Dispatcher struct {
 	Now       func() time.Time
 	Policies  []policy.Policy
 	Store     *config.Store
+	// MaintenanceFence, when set, withholds every submission while it returns
+	// an error: a replacement may land on any schedulable node, so moves wait
+	// until the nodes under cordon maintenance rules are cordoned.
+	MaintenanceFence func() error
 }
 
 func (d *Dispatcher) now() time.Time {
@@ -185,6 +189,9 @@ func (d *Dispatcher) executionEnabled(ctx context.Context, cfg *config.Config) e
 	}
 	if ctx.Err() != nil {
 		return fmt.Errorf("DispatchDeadline")
+	}
+	if d.MaintenanceFence != nil && d.MaintenanceFence() != nil {
+		return fmt.Errorf("MaintenanceCordonFailed")
 	}
 	if d.Guard == nil {
 		return fmt.Errorf("GuardUnavailable")
