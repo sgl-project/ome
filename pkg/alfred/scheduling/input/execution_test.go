@@ -83,3 +83,39 @@ func TestExecutionOverlayPreservesRequiredORTerms(t *testing.T) {
 		}
 	}
 }
+
+// TestExecutionSourcePodsAcceptOnlyInlineCSIVolumes checks a move onto a new TPU
+// slice accepts source Pods with a CSI inline volume, which binds no
+// PersistentVolume, but not PersistentVolumeClaims or generic ephemeral
+// volumes, and that a simulated move still rejects all three.
+func TestExecutionSourcePodsAcceptOnlyInlineCSIVolumes(t *testing.T) {
+	withVolume := func(volume corev1.Volume) (*Snapshot, Source) {
+		objects, source := validSingleSourceObjects()
+		for _, object := range objects {
+			switch o := object.(type) {
+			case *corev1.Node:
+				o.Labels[corev1.LabelHostname] = o.Name
+			case *corev1.Pod:
+				o.Spec.Volumes = append(o.Spec.Volumes, volume)
+			}
+		}
+		return captureSourceFixture(t, objects), source
+	}
+	csi := corev1.Volume{Name: "bucket", VolumeSource: corev1.VolumeSource{CSI: &corev1.CSIVolumeSource{Driver: "gcsfuse.csi.storage.gke.io"}}}
+	snap, source := withVolume(csi)
+	if pods, err := ExecutionSourcePods(snap, source, captureTime, time.Minute); err != nil || len(pods) == 0 {
+		t.Fatalf("a TPU slice move must accept a CSI inline volume: %v", err)
+	}
+	if _, err := BuildExecutionRequest(snap, source, testProfiles(false), "execution", nil, captureTime, time.Minute); err == nil {
+		t.Fatal("a simulated move must still reject a CSI inline volume")
+	}
+	for name, volume := range map[string]corev1.Volume{
+		"claim":     {Name: "data", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "data"}}},
+		"ephemeral": {Name: "scratch", VolumeSource: corev1.VolumeSource{Ephemeral: &corev1.EphemeralVolumeSource{}}},
+	} {
+		snap, source := withVolume(volume)
+		if _, err := ExecutionSourcePods(snap, source, captureTime, time.Minute); err == nil {
+			t.Fatalf("a TPU slice move must reject a %s volume, which may pin placement", name)
+		}
+	}
+}

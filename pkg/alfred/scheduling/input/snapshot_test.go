@@ -276,3 +276,65 @@ func TestCaptureIncludesSupportedObjectsAndSeparatePublicOwners(t *testing.T) {
 		t.Fatal("owner aliases reader input")
 	}
 }
+
+// TestCaptureSourceReadsOnlyTheSource checks the bounded capture holds the
+// source Instance's Pods, the PodGroup they name and the source Node, every
+// InferenceService and InferenceReplica, and nothing else.
+func TestCaptureSourceReadsOnlyTheSource(t *testing.T) {
+	podGroup := func(name, namespace string) *unstructured.Unstructured {
+		return &unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "scheduling.x-k8s.io/v1alpha1", "kind": "PodGroup",
+			"metadata": map[string]any{"name": name, "namespace": namespace, "uid": name + "-uid"},
+		}}
+	}
+	pod := func(name, namespace, isvc, instance string) *corev1.Pod {
+		meta := captureMeta(name)
+		meta.Namespace = namespace
+		meta.Labels = map[string]string{labelInferenceService: isvc, labelComponent: "engine", labelInstanceIndex: instance, labelPodGroup: isvc + "-" + instance}
+		return &corev1.Pod{ObjectMeta: meta}
+	}
+	other := captureMeta("other-isvc")
+	other.Namespace = "elsewhere"
+	objects := []client.Object{
+		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "source-node", UID: "source-node-uid", ResourceVersion: "7"}},
+		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "other-node", UID: "other-node-uid"}},
+		pod("source-0", "team", "isvc", "3"), pod("source-1", "team", "isvc", "3"),
+		pod("sibling-0", "team", "isvc", "4"), pod("neighbor-0", "team", "neighbor", "3"), pod("far-0", "elsewhere", "isvc", "3"),
+		podGroup("isvc-3", "team"), podGroup("isvc-4", "team"), podGroup("isvc-3", "elsewhere"),
+		&appsv1.ReplicaSet{ObjectMeta: captureMeta("rs")},
+		&v1beta1.InferenceService{ObjectMeta: captureMeta("isvc")},
+		&v1beta1.InferenceService{ObjectMeta: other},
+		&v1beta1.InferenceReplica{ObjectMeta: captureMeta("ir")},
+	}
+	source := Source{Namespace: "team", InferenceService: "isvc", Component: v1beta1.EngineComponent, Instance: 3, FromNode: "source-node"}
+	snap, err := CaptureSource(context.Background(), captureReader(t, objects...), source, func() time.Time { return captureTime })
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, raw := range snap.Objects {
+		var object struct {
+			Kind     string            `json:"kind"`
+			Metadata metav1.ObjectMeta `json:"metadata"`
+		}
+		if err := json.Unmarshal(raw.Raw, &object); err != nil {
+			t.Fatal(err)
+		}
+		got[object.Kind+"/"+object.Metadata.Namespace+"/"+object.Metadata.Name] = true
+	}
+	want := map[string]bool{"Node//source-node": true, "Pod/team/source-0": true, "Pod/team/source-1": true, "PodGroup/team/isvc-3": true}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("captured %v, want %v", got, want)
+	}
+	if len(snap.InferenceServices) != 2 || len(snap.InferenceReplicas) != 1 {
+		t.Fatalf("budgets need every owner: %d ISVC, %d IR", len(snap.InferenceServices), len(snap.InferenceReplicas))
+	}
+	if err := snap.Validate(captureTime, time.Minute); err != nil {
+		t.Fatalf("bounded capture must validate like a full one: %v", err)
+	}
+	missing := source
+	missing.FromNode = "gone"
+	if _, err := CaptureSource(context.Background(), captureReader(t, objects...), missing, func() time.Time { return captureTime }); err == nil {
+		t.Fatal("a missing source Node must fail the capture")
+	}
+}

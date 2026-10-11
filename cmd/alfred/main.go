@@ -326,7 +326,9 @@ func configureMigration(opts Options, reader client.Reader, cl client.Client, ob
 	}
 	admissionGuard := &guard.Guard{Reader: reader, Namespace: opts.namespace, ServiceAccount: opts.migrationServiceAccount}
 	dispatcher := &engine.Dispatcher{
-		Reader: reader, Client: cl, Simulator: decisions.Predictions.Simulator,
+		// cl reads through the manager's cache, so a move onto a new TPU slice
+		// replays the policy without listing every Pod from the API server.
+		Reader: reader, CacheReader: cl, Client: cl, Simulator: decisions.Predictions.Simulator,
 		Guard: admissionGuard.Check, Namespace: opts.namespace,
 		Options: engine.DispatchOptions{APIVersion: opts.migrationAPIVersion,
 			AcknowledgementTimeout: opts.migrationAckTimeout, FailureBackoff: opts.migrationFailureBackoff},

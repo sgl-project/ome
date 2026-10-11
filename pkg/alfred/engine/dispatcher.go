@@ -26,15 +26,20 @@ type DispatchOptions struct {
 // Dispatcher submits only public migration-v1 requests. One serial leader owns
 // Execute; the persisted write-ahead journal carries uncertainty across leaders.
 type Dispatcher struct {
-	Reader    client.Reader
-	Client    client.Client
-	Simulator scheduling.Simulator
-	Guard     func(context.Context) error
-	Namespace string
-	Options   DispatchOptions
-	Now       func() time.Time
-	Policies  []policy.Policy
-	Store     *config.Store
+	// Reader is lossless (manager.GetAPIReader()). CacheReader, when set,
+	// serves the policy replay of moves onto new TPU slices instead, so their
+	// preflight lists no Pod cluster-wide from the API server; it may be
+	// Alfred's transformed cache.
+	Reader      client.Reader
+	CacheReader client.Reader
+	Client      client.Client
+	Simulator   scheduling.Simulator
+	Guard       func(context.Context) error
+	Namespace   string
+	Options     DispatchOptions
+	Now         func() time.Time
+	Policies    []policy.Policy
+	Store       *config.Store
 	// MaintenanceFence, when set, withholds every submission while it returns
 	// an error: a replacement may land on any schedulable node, so moves wait
 	// until the nodes under cordon maintenance rules are cordoned.

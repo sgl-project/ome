@@ -32,7 +32,7 @@ func BuildExecutionRequest(s *Snapshot, source Source, profiles scheduling.Confi
 	if err != nil {
 		return scheduling.Request{}, err
 	}
-	state, err := resolveSource(s, source)
+	state, err := resolveSource(s, source, false)
 	if err != nil {
 		return scheduling.Request{}, err
 	}
@@ -105,7 +105,7 @@ func ExecutionSourcePods(s *Snapshot, source Source, now time.Time, maxAge time.
 	if err := validateSourceKey(source); err != nil {
 		return nil, err
 	}
-	state, err := resolveSource(s, source)
+	state, err := resolveSource(s, source, true)
 	if err != nil {
 		return nil, err
 	}
