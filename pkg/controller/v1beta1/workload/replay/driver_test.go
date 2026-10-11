@@ -261,3 +261,51 @@ timeline:
 		t.Fatalf("pod must read Terminating behind the finalizer: deletion=%v finalizers=%v", pod.DeletionTimestamp, pod.Finalizers)
 	}
 }
+
+// gangWithWindows is a one-Instance gang of a leader and two workers with
+// an availability window and a stuck-pod grace, so the view has every
+// value the reading needs to carry.
+const gangWithWindows = `
+scenario: gang-with-windows
+arrows: [T-empty-create]
+initial:
+  spec:
+    replicas: 1
+    workers: 2
+    minReadySeconds: 5
+    topologyKey: topology.example.com/fabric-domain
+    gangScheduling: true
+    schedulerName: gang-scheduler
+    image: registry.example.com/runtime:v1
+    instanceReadyTimeout: 30m
+  config:
+    requeueOperation: 5s
+    requeueGate: 3s
+    stuckPodGrace: 90s
+timeline:
+  - tick: 1
+`
+
+// TestObserverViewCarriesTheReadingsWindows proves the driver hands the
+// observer the pods per Instance, the availability window and the
+// stuck-pod grace the scenario configured.
+func TestObserverViewCarriesTheReadingsWindows(t *testing.T) {
+	scenario, err := Parse([]byte(gangWithWindows), Vocabulary{})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var views []TickView
+	opts := DefaultOptions()
+	opts.Observer = func(view TickView) { views = append(views, view) }
+	if trace, err := Run(context.Background(), scenario, opts); err != nil {
+		t.Fatalf("run: %v\ntrace:\n%s", err, trace)
+	}
+	if len(views) != 1 {
+		t.Fatalf("observed %d ticks, want 1", len(views))
+	}
+	view := views[0]
+	if view.Spec.PodsPerInstance != 3 || view.Spec.MinReadySeconds != 5 || view.StuckPodGrace != 90*time.Second {
+		t.Fatalf("view carries podsPerInstance=%d minReadySeconds=%d stuckPodGrace=%s; want 3, 5, 90s",
+			view.Spec.PodsPerInstance, view.Spec.MinReadySeconds, view.StuckPodGrace)
+	}
+}

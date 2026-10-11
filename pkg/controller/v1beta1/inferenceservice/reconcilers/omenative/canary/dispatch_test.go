@@ -2314,3 +2314,51 @@ func TestDispatch_RunReopenedWhileRollingBackArmsTheNewTarget(t *testing.T) {
 		t.Fatalf("the new target must serve its first step, got %+v phase=%q", cs, phaseOf(isvc))
 	}
 }
+
+// The marker is the record of a park with no stable revision to return to.
+// A status write that drops it leaves the rejected hash and the Failed
+// phase, which the executor reads as a revert in flight; the same pass finds
+// the stable revision still unretained and parks the unit again before
+// anything is flushed. The park survives the write; only its time is new.
+func TestDispatch_MissingStableParkSurvivesADroppedMarker(t *testing.T) {
+	isvc, c := missingStableFixture(t, "park-marker")
+	ctx := context.Background()
+	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, Now: time.Unix(1000, 0), ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
+	annotate(isvc, constants.RolloutRollbackAnnotation, "true")
+	if _, err := Dispatch(ctx, deps); err != nil {
+		t.Fatalf("Dispatch (park): %v", err)
+	}
+	delete(isvc.Annotations, constants.RolloutRollbackAnnotation)
+	cs := rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent)
+	if cs == nil || cs.Failed == nil || cs.Failed.Reason != v1beta1.CanaryFailureStableRevisionMissing {
+		t.Fatalf("setup: expected a StableRevisionMissing park, got %+v", cs)
+	}
+
+	// The marker leaves the record; the phase and the rejected hash stay.
+	cs.Failed = nil
+	deps.Now = deps.Now.Add(time.Minute)
+	out, err := Dispatch(ctx, deps)
+	if err != nil {
+		t.Fatalf("Dispatch (dropped marker): %v", err)
+	}
+	cs = rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent)
+	if cs == nil || cs.Failed == nil || cs.Failed.Reason != v1beta1.CanaryFailureStableRevisionMissing || cs.Failed.Time == nil || !cs.Failed.Time.Time.Equal(deps.Now) {
+		t.Fatalf("the pass must park the unit again, got %+v", cs)
+	}
+	if cs.RolledBackRevisionHash != "new" {
+		t.Errorf("the rejected hash must stay recorded, got %+v", cs)
+	}
+	if phaseOf(isvc) != v1beta1.RolloutPhaseFailed {
+		t.Errorf("phase %q, want Failed", phaseOf(isvc))
+	}
+	if len(out.Consume) != 0 {
+		t.Errorf("a pass that reads no request takes nothing, got %v", out.Consume)
+	}
+	got := &v1beta1.InferenceReplica{}
+	if err := c.Get(ctx, types.NamespacedName{Namespace: isvc.Namespace, Name: isvc.Name + "-engine"}, got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Spec.Pacing != nil && got.Spec.Pacing.RollbackToRevision != nil {
+		t.Errorf("no rollback target must be signaled when the stable revision is gone: %+v", got.Spec.Pacing)
+	}
+}

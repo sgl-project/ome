@@ -262,18 +262,23 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			defer func() { result = requeueBy(result, err, remaining) }()
 		}
 	}
-	// Unsupported member authority must hold before any reconciliation writes.
+	// A malformed or foreign execution policy ends the pass before any write.
+	// A placement mark without a policy does not: the hub has not granted
+	// authority yet, so the service keeps reconciling as a local service.
 	// Deletion still follows finalizer cleanup regardless of the stored policy.
+	var policy *v1beta1.PlacementExecutionPolicy
 	if isvc.DeletionTimestamp.IsZero() {
 		if err := validation.ValidatePlacementIntent(isvc); err != nil {
 			return ctrl.Result{}, err
 		}
-		policy, err := protocol.FromDerived(isvc)
-		if err != nil {
+		var err error
+		if policy, err = protocol.FromDerived(isvc); err != nil {
 			return ctrl.Result{}, err
 		}
 		if protocol.IsMember(isvc) && policy == nil {
-			return ctrl.Result{}, fmt.Errorf("placement-owned services require an execution policy")
+			if result, err := r.notePlacementExecutionPending(ctx, isvc); err != nil || !result.IsZero() {
+				return result, err
+			}
 		}
 	}
 	deployConfig, err := controllerconfig.NewDeployConfigCached(r.ConfigCache, r.Clientset)
@@ -285,7 +290,9 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// per-Component dispatch is resolved from the merged specs below.
 	deploymentMode := isvcutils.InferenceServiceDeploymentMode(isvc, constants.DeploymentModeType(deployConfig.DefaultDeploymentMode))
 	log.V(1).Info("InferenceService deployment mode resolved", "deploymentMode", deploymentMode)
-	placementMember := protocol.IsMember(isvc)
+	// The member rules apply only once the hub has granted an execution
+	// policy; until then the service is the local service it still is.
+	placementMember := protocol.IsMember(isvc) && policy != nil
 	if placementMember && isvc.DeletionTimestamp.IsZero() && deploymentMode == constants.VirtualDeployment {
 		return r.holdPlacementBackend(ctx, isvc, fmt.Errorf("multicluster placement requires OMENative; VirtualDeployment has no member admission or surge accounting"))
 	}

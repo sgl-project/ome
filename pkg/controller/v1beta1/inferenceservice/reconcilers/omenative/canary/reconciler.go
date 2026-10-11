@@ -297,10 +297,10 @@ func reconcile(ctx context.Context, in ReconcileInputs, take func(string)) (*Res
 	plan := g.Canary
 
 	cs := rollout.CanaryStatusFor(&in.ISVC.Status, in.Component)
-	// Status is an unvalidated subresource: clamp a negative step (an external
-	// write) before it can index plan.Steps.
+	// Status is an unvalidated subresource: a negative step is an external
+	// write, read back from the record before it can index plan.Steps.
 	if cs != nil && cs.CurrentStep < 0 {
-		cs.CurrentStep = 0
+		cs.CurrentStep = recoveredStep(cs, in.ISVC.Status.Components[in.Component].RolloutPhase, plan)
 	}
 
 	// Global pause (ome.io/rollout-paused): the operator held the rollout.
@@ -630,6 +630,12 @@ func pausedResult(in ReconcileInputs, cs *v1beta1.CanaryStatus, plan *v1beta1.Gr
 // roll and reads Stable at once, which also keeps a canary pod lost after
 // completion a workload repair, not a canary state.
 func finishCutover(in ReconcileInputs, cs *v1beta1.CanaryStatus) *Result {
+	// A unit that reads Stable at the sentinel has completed, and the
+	// completion dropped its pre-canary identity; one written onto the
+	// record since is dropped again, with no second completion edge.
+	if in.ISVC.Status.Components[in.Component].RolloutPhase == v1beta1.RolloutPhaseStable {
+		cs.StableRevisionHash = ""
+	}
 	if cs.StableRevisionHash == "" {
 		setPhase(in.ISVC, in.Component, v1beta1.RolloutPhaseStable)
 		return &Result{Active: false}
@@ -790,6 +796,25 @@ func groupRollingBack(in ReconcileInputs, primaryStable string) bool {
 		}
 	}
 	return false
+}
+
+// recoveredStep is the step a record with a negative index is read at. The
+// index is an external write, so the step is taken from what the record
+// says the rollout did: the step past the last (the done sentinel) once the
+// unit reads Stable, else the last step whose traffic weight the recorded
+// weight reached, step 0 when none. Reading lower would split traffic the
+// rollout already shifted or re-run a finished cutover.
+func recoveredStep(cs *v1beta1.CanaryStatus, phase v1beta1.RolloutPhase, plan *v1beta1.GroupCanary) int32 {
+	if phase == v1beta1.RolloutPhaseStable {
+		return int32(len(plan.Steps))
+	}
+	step := int32(0)
+	for i := range plan.Steps {
+		if plan.Steps[i].Traffic <= cs.ObservedTrafficWeight {
+			step = int32(i)
+		}
+	}
+	return step
 }
 
 // drainElapsed reports whether the ScaleDownDelaySeconds drain window has passed

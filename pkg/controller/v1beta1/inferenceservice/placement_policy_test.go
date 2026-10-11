@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
@@ -38,18 +39,19 @@ func TestPlacementPolicyPreflight(t *testing.T) {
 	for _, mode := range []constants.DeploymentModeType{constants.OMENative, constants.RawDeployment, constants.MultiNode, constants.VirtualDeployment} {
 		t.Run(string(mode), func(t *testing.T) {
 			for _, tt := range []struct {
-				name      string
-				origin    string
-				policy    string
-				deleting  bool
-				engine    bool
-				wantBlock bool
+				name        string
+				origin      string
+				policy      string
+				deleting    bool
+				engine      bool
+				wantBlock   bool
+				wantPending bool
 			}{
 				{name: "local service"},
 				{name: "local malformed annotation ignored", policy: "{"},
 				{name: "local future policy ignored", policy: `{"version":4}`},
 				{name: "local ignores demand inventory", policy: demand},
-				{name: "derived without policy", origin: "source-a", wantBlock: true},
+				{name: "derived without policy", origin: "source-a", wantPending: true},
 				{name: "supported policy", origin: "source-a", policy: policy},
 				{name: "malformed policy", origin: "source-a", policy: "{", wantBlock: true},
 				{name: "unknown version", origin: "source-a", policy: `{"version":4}`, wantBlock: true},
@@ -81,7 +83,7 @@ func TestPlacementPolicyPreflight(t *testing.T) {
 					}
 					writes := 0
 					reject := func() error { writes++; return errors.New("unexpected object write") }
-					cl := clientfake.NewClientBuilder().WithScheme(scheme).WithObjects(service).WithInterceptorFuncs(interceptor.Funcs{
+					cl := clientfake.NewClientBuilder().WithScheme(scheme).WithObjects(service).WithStatusSubresource(service).WithInterceptorFuncs(interceptor.Funcs{
 						Create: func(context.Context, client.WithWatch, client.Object, ...client.CreateOption) error { return reject() },
 						Update: func(context.Context, client.WithWatch, client.Object, ...client.UpdateOption) error { return reject() },
 						Patch: func(context.Context, client.WithWatch, client.Object, client.Patch, ...client.PatchOption) error {
@@ -120,6 +122,15 @@ func TestPlacementPolicyPreflight(t *testing.T) {
 					stored := &v1beta1.InferenceService{}
 					if err := cl.Get(t.Context(), client.ObjectKeyFromObject(service), stored); err != nil {
 						t.Fatal(err)
+					}
+					if tt.wantPending {
+						// Only the advisory condition is written; the service stays as it was.
+						condition := stored.Status.GetCondition(v1beta1.PlacementReplicaFloorsReady)
+						if condition == nil || condition.Status != corev1.ConditionUnknown || condition.Reason != "ExecutionPolicyPending" {
+							t.Fatalf("pending policy condition: %+v", condition)
+						}
+						stored.Status.Conditions = nil
+						before.ResourceVersion = stored.ResourceVersion
 					}
 					if diff := cmp.Diff(before, stored); diff != "" {
 						t.Fatalf("stored service (-want +got):\n%s", diff)

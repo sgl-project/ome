@@ -127,3 +127,19 @@ func TestManager_Connected(t *testing.T) {
 	names = m.Connected()
 	assert.Equal(t, []string{"b"}, names)
 }
+
+func TestManager_ConnectionPending(t *testing.T) {
+	m, _ := newTestManager()
+	assert.True(t, m.ConnectionPending("c1", ""), "nothing is decided before the controller reaches the cluster")
+	assert.True(t, m.ConnectionPending("c1", "uid-1"))
+
+	m.MarkConnectionDecided("c1", "uid-1")
+	assert.False(t, m.ConnectionPending("c1", ""))
+	assert.False(t, m.ConnectionPending("c1", "uid-1"))
+	assert.True(t, m.ConnectionPending("c1", "uid-2"), "a recreated registration waits for its own decision")
+	assert.True(t, m.ConnectionPending("c2", ""), "each cluster is decided on its own")
+
+	m.MarkConnectionDecided("c1", "")
+	assert.False(t, m.ConnectionPending("c1", ""), "a removed registration is decided")
+	assert.True(t, m.ConnectionPending("c1", "uid-1"))
+}

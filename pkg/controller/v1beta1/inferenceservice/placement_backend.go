@@ -22,18 +22,26 @@ func (r *InferenceServiceReconciler) holdPlacementBackend(ctx context.Context, s
 }
 
 func (r *InferenceServiceReconciler) holdPlacementCondition(ctx context.Context, service *v1beta1.InferenceService, condition apis.ConditionType, reason string, cause error) (ctrl.Result, error) {
-	base := service.DeepCopy()
-	placementBackendConditions.Manage(&service.Status).SetCondition(apis.Condition{
+	_, err := r.writePlacementCondition(ctx, service, apis.Condition{
 		Type: condition, Status: corev1.ConditionFalse, Reason: reason, Message: cause.Error(),
 	})
-	if equality.Semantic.DeepEqual(base.Status.Conditions, service.Status.Conditions) {
-		return ctrl.Result{}, nil
-	}
-	err := r.Status().Patch(ctx, service, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
 	if apierrors.IsConflict(err) {
 		return ctrl.Result{Requeue: true}, nil
 	}
-	return ctrl.Result{}, client.IgnoreNotFound(err)
+	return ctrl.Result{}, err
+}
+
+// writePlacementCondition persists one advisory condition and reports whether
+// a write landed. An unchanged condition costs no write; a service deleted
+// underneath the write is not an error.
+func (r *InferenceServiceReconciler) writePlacementCondition(ctx context.Context, service *v1beta1.InferenceService, condition apis.Condition) (bool, error) {
+	base := service.DeepCopy()
+	placementBackendConditions.Manage(&service.Status).SetCondition(condition)
+	if equality.Semantic.DeepEqual(base.Status.Conditions, service.Status.Conditions) {
+		return false, nil
+	}
+	err := r.Status().Patch(ctx, service, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
+	return err == nil, client.IgnoreNotFound(err)
 }
 
 func clearPlacementBackendHold(service *v1beta1.InferenceService) {

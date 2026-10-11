@@ -44,6 +44,9 @@ func (r *Reconciler) plannedTransport(ctx context.Context, name string, uid type
 	}
 	remote, ok := identified.ClientForUID(name, uid)
 	if !ok {
+		if r.connectionPending(name, uid) {
+			return nil, nil, fmt.Errorf("cluster %q: %w", name, errMemberConnectionPending)
+		}
 		return nil, nil, fmt.Errorf("cluster %q has no connection for its accepted UID", name)
 	}
 	direct, ok := workloadcluster.DirectClient(remote)

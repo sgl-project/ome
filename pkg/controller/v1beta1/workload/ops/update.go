@@ -1139,9 +1139,14 @@ func rolledSetPods(target string, pods []*corev1.Pod) []*corev1.Pod {
 // missing, terminal or still coming up. Nothing such a pod does lifts the
 // shortfall and no policy rebuilds it, so the Instance is not the roll's
 // open work: it holds no slot in either arm's budget and opens no floor
-// hold, as a dark Instance off the target holds none. The duration is how
-// long until a pod unready inside the grace reads dark, for the pass to
-// wake on; zero otherwise. No grace configured means no pod is ever dark.
+// hold, as a dark Instance off the target holds none. A pod whose
+// container the kubelet parked in a waiting state, or that has exited, is
+// never dark, whatever the date of its last crash against the row's Ready
+// anchor: the kubelet has named that failure, the escalation or the ladder
+// owns it, and the Instance keeps its slot until one of them moves it. The
+// duration is how long until a pod unready inside the grace reads dark,
+// for the pass to wake on; zero otherwise. No grace configured means no
+// pod is ever dark.
 func RolledInstanceDark(row *workload.InstanceStatus, target string, revisionBorn time.Time, pods []*corev1.Pod, desired, window int32, grace time.Duration, now time.Time) (bool, time.Duration) {
 	if row == nil || target == "" || row.RunningRevision != target || grace <= 0 {
 		return false, 0
@@ -1160,6 +1165,8 @@ func RolledInstanceDark(row *workload.InstanceStatus, target string, revisionBor
 	for _, pod := range own {
 		switch {
 		case podreadiness.ReadyAndServing(pod):
+		case !evidence.PodRunningNotReady(pod):
+			return false, 0
 		case evidence.PodUnreadyPastGrace(pod, now, grace):
 			dark = true
 		case evidence.UnreadyGraceLeft(pod, now, grace) > 0:

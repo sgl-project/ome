@@ -1,6 +1,8 @@
 package placement
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -9,6 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/placement/allocation"
@@ -346,6 +349,73 @@ func TestAllZeroFloorUnreadableHomesKeepPlaced(t *testing.T) {
 			}
 			if diff := cmp.Diff("AllocationConverged", recovered.Status.GetCondition(v1beta1.PlacementConverged).Reason); diff != "" {
 				t.Fatalf("readable pass did not reconverge (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+// TestAllZeroFloorHoldKeepsIdleHomesPlaced settles a member kept idle by a
+// zero minimum replica count as Placed, then makes every pass stop on a reason
+// it cannot act on: a move the zero minimums cannot carry, and a plan write
+// the store rejects. Each such pass carries the reason on the condition and
+// leaves the phase Placed, because nothing about the member's placement moved.
+func TestAllZeroFloorHoldKeepsIdleHomesPlaced(t *testing.T) {
+	selectHome := func(s *v1beta1.InferenceService, name string) {
+		s.Spec.Placement.ClusterAffinity = []v1beta1.ClusterAffinityTerm{{MatchFields: []v1beta1.ClusterSelectorRequirement{{Key: "metadata.name", Operator: corev1.NodeSelectorOpIn, Values: []string{name}}}}}
+	}
+	for _, tt := range []struct {
+		name       string
+		hold       func(*testing.T, *backendFixture, *v1beta1.InferenceService)
+		wantReason string
+	}{
+		{name: "move held on zero floors", wantReason: "PositiveFloorRequired", hold: func(_ *testing.T, _ *backendFixture, source *v1beta1.InferenceService) {
+			selectHome(source, "member-b")
+		}},
+		{name: "plan write rejected", wantReason: "PlanNotPersisted", hold: func(_ *testing.T, f *backendFixture, source *v1beta1.InferenceService) {
+			accepted := source.Status.Placement.Plan.ID
+			writer := f.reconciler.Client
+			f.reconciler.Client = interceptor.NewClient(writer.(client.WithWatch), interceptor.Funcs{SubResourceUpdate: func(ctx context.Context, c client.Client, name string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+				if written, ok := obj.(*v1beta1.InferenceService); ok && written.Status.Placement != nil && written.Status.Placement.Plan != nil && written.Status.Placement.Plan.ID != accepted {
+					return errors.New("plan write rejected")
+				}
+				return c.SubResource(name).Update(ctx, obj, opts...)
+			}})
+			source.Spec.Engine.MinReplicas = ptr.To(2)
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := allZeroFixture(t, false)
+			selectHome(f.source, "member-a")
+			if err := f.reconciler.Update(t.Context(), f.source); err != nil {
+				t.Fatal(err)
+			}
+			f.reconcile(t)
+			seedSingleAdmission(t, f, "member-a", declaredComponents(f.source)...)
+			acknowledgeSingleFloor(t, f, "member-a", 0)
+			stored := f.reconcile(t)
+			if diff := cmp.Diff(v1beta1.PlacementPhasePlaced, stored.Status.Placement.Phase); diff != "" {
+				t.Fatalf("idle home did not settle as Placed (-want +got):\n%s", diff)
+			}
+			if candidate := candidateOf(t, stored, "member-a"); candidate.AdmittedReplicas != 0 || candidate.AppliedPlanID != stored.Status.Placement.Plan.ID {
+				t.Fatalf("idle home is not an acknowledged zero floor: %+v", candidate)
+			}
+			source := stored.DeepCopy()
+			tt.hold(t, f, source)
+			source.Generation++
+			if err := f.reconciler.Update(t.Context(), source); err != nil {
+				t.Fatal(err)
+			}
+			for pass := range 3 {
+				got := f.reconcile(t)
+				if diff := cmp.Diff(tt.wantReason, got.Status.GetCondition(v1beta1.PlacementConverged).Reason); diff != "" {
+					t.Fatalf("pass %d hold reason (-want +got):\n%s", pass, diff)
+				}
+				if diff := cmp.Diff(stored.Status.Placement.Plan, got.Status.Placement.Plan); diff != "" {
+					t.Fatalf("pass %d changed the idle plan (-want +got):\n%s", pass, diff)
+				}
+				if diff := cmp.Diff(v1beta1.PlacementPhasePlaced, got.Status.Placement.Phase); diff != "" {
+					t.Fatalf("pass %d demoted the idle home while held (-want +got):\n%s", pass, diff)
+				}
 			}
 		})
 	}

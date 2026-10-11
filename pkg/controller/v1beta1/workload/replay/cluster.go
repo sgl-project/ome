@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	schedulingv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
 
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/drain"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 )
 
@@ -875,6 +876,32 @@ func (d *driver) setEndpointNow(ctx context.Context, serviceName, podName string
 		return d.cli.Create(ctx, slice)
 	}
 	return d.cli.Update(ctx, slice)
+}
+
+// routedRotation maps each pod name to the per-revision routed Service
+// whose EndpointSlice publishes it as an available endpoint, read the way
+// the engine reads rotation. The headless Service publishes every pod and
+// says nothing about traffic, so its slice is left out.
+func (d *driver) routedRotation(ctx context.Context) (map[string]string, error) {
+	slices := &discoveryv1.EndpointSliceList{}
+	if err := d.cli.List(ctx, slices, client.InNamespace(d.opts.Namespace)); err != nil {
+		return nil, fmt.Errorf("replay: list endpointslices for rotation: %w", err)
+	}
+	headless := query.HeadlessServiceName(d.opts.OwnerName, d.opts.Component)
+	routed := map[string]string{}
+	for i := range slices.Items {
+		service := slices.Items[i].Labels[discoveryv1.LabelServiceName]
+		if service == "" || service == headless {
+			continue
+		}
+		for _, ep := range slices.Items[i].Endpoints {
+			if ep.TargetRef == nil || !drain.EndpointAvailable(ep) {
+				continue
+			}
+			routed[ep.TargetRef.Name] = service
+		}
+	}
+	return routed, nil
 }
 
 func endpointName(ep discoveryv1.Endpoint) string {

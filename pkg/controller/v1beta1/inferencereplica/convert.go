@@ -601,10 +601,11 @@ func buildMutateInstance(writer statusWriter, reads client.Reader, ir *v1beta1.I
 				slot = &insts[pos]
 			}
 			w := v1beta1convert.InstanceStatusToWorkload(*slot)
+			read := w.Phase
 			if !mutate(&w) {
 				return nil
 			}
-			*slot = v1beta1convert.InstanceStatusFromWorkload(w)
+			*slot = encodeMutatedInstance(slot.Phase, read, w)
 			fresh.Status.InstanceStatuses = insts
 			if err := updateInferenceReplicaStatus(ctx, writer, fresh, source); err != nil {
 				if apierrors.IsNotFound(err) {
@@ -783,10 +784,11 @@ func buildApplyInstanceMutationsWithRetryBlockFromReader(writer statusWriter, re
 				if found {
 					previous = cloneWorkloadInstanceStatus(w)
 				}
+				read := w.Phase
 				if !m.Mutate(&w) {
 					continue
 				}
-				slot = v1beta1convert.InstanceStatusFromWorkload(w)
+				slot = encodeMutatedInstance(slot.Phase, read, w)
 				slots[m.Index] = slot
 				if _, seen := ordered[m.Index]; !seen {
 					order = append(order, m.Index)
@@ -961,6 +963,21 @@ func cloneWorkloadInstanceStatus(status workloadtypes.InstanceStatus) *workloadt
 	converted := v1beta1convert.InstanceStatusFromWorkload(status)
 	copy := v1beta1convert.InstanceStatusToWorkload(*converted.DeepCopy())
 	return &copy
+}
+
+// encodeMutatedInstance converts a mutated row back for the write. A
+// mutation that leaves the phase as it read it keeps the published phase:
+// the status publication writes Restarting over a settled Ready row whose
+// pod set serves nothing, and Ready over a settled Failed row whose pods on
+// its running revision serve beside a spent attempt at another; the engine
+// reads those rows as Ready and Failed, and only a mutation that moves the
+// phase overwrites the publication's reading.
+func encodeMutatedInstance(published v1beta1.OMENativeInstancePhase, read workloadtypes.InstancePhase, w workloadtypes.InstanceStatus) v1beta1.OMENativeInstanceStatus {
+	out := v1beta1convert.InstanceStatusFromWorkload(w)
+	if w.Phase == read {
+		out.Phase = published
+	}
+	return out
 }
 
 func instanceMutationPostconditionsHold(ir *v1beta1.InferenceReplica, mutations []workloadtypes.InstanceMutation) bool {

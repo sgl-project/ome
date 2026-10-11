@@ -2,6 +2,7 @@ package placement
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -171,6 +172,9 @@ func (r *Reconciler) observeHomeOnce(
 	if cl == nil {
 		remote, connected := r.Clusters.ClientFor(previous.Cluster)
 		if !connected {
+			if r.connectionPending(previous.Cluster, "") {
+				return unknown(fmt.Errorf("cluster %q: %w", previous.Cluster, errMemberConnectionPending))
+			}
 			return unknown(nil)
 		}
 		cl = remote

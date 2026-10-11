@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -53,6 +54,11 @@ func targetPodNameSet(targets []podTarget) map[string]struct{} {
 // own. A node that has stopped reporting emits no event, so a caller
 // whose pass has no poll of its own must fold it into its requeue, or
 // the sweep fires only when something unrelated wakes the owner.
+//
+// Every silent pod is visited whatever happened to the ones before it: a
+// gang whose members all sit on one dead node is freed as one set, so no
+// repair opens on a gang with a member still held. The errors are joined
+// and the pass fails on them after the sweep.
 func recoverUnknownPhaseTargets(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, idx int32, existing []*corev1.Pod, targets []podTarget) (bool, time.Time, error) {
 	quiet := evidence.SilentKubeletTargetPods(existing, targetPodNameSet(targets), input.ForceDelete)
 	if len(quiet) == 0 {
@@ -60,10 +66,13 @@ func recoverUnknownPhaseTargets(ctx context.Context, deps workload.Deps, input w
 	}
 	holding := false
 	var nextEvidenceAt time.Time
+	var errs []error
 	for _, pod := range quiet {
 		holds, at, err := sweepUnknownPhasePod(ctx, deps, input, pod, idx)
 		if err != nil {
-			return true, time.Time{}, fmt.Errorf("sweep unknown-phase pod %s: %w", pod.Name, err)
+			errs = append(errs, fmt.Errorf("sweep unknown-phase pod %s: %w", pod.Name, err))
+			holding = true
+			continue
 		}
 		if !holds {
 			continue
@@ -73,7 +82,19 @@ func recoverUnknownPhaseTargets(ctx context.Context, deps workload.Deps, input w
 			nextEvidenceAt = at
 		}
 	}
-	return holding, nextEvidenceAt, nil
+	return holding, nextEvidenceAt, errors.Join(errs...)
+}
+
+// occupiedTargets names every pod of a set as a target of the sweep. A
+// rebuild reuses each pod's stable name, so each one is a name it needs.
+func occupiedTargets(pods []*corev1.Pod) []podTarget {
+	targets := make([]podTarget, 0, len(pods))
+	for _, pod := range pods {
+		if pod != nil {
+			targets = append(targets, podTarget{Name: pod.Name})
+		}
+	}
+	return targets
 }
 
 // sweepUnknownPhasePod picks the arm of the force-delete sweep the pod's

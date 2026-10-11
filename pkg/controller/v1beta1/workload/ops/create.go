@@ -313,6 +313,16 @@ func createFilteredBatched(
 			}
 			continue
 		}
+		// Both rows of a migration pair are the migration record's while
+		// their pins stand: the drive moves them, and only the record's
+		// completion or expiry ends a pin. The pass neither refills nor
+		// promotes either row, whatever its pods report, and keeps its
+		// cadence so the record's deadline is met when no drive paces the
+		// pair.
+		if workload.Owner(observed) == workload.OwnerMigrate {
+			allReady = false
+			continue
+		}
 		desired := expectedPodNamesForInstance(input, plan, inst)
 		missing := missingPodTargets(desired, existing)
 		// An attempt that is fully materialized and runtime-ready is one

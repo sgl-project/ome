@@ -49,6 +49,7 @@ func TestPlacementBackendReconcile(t *testing.T) {
 		wantHold      bool
 		wantFloorHold bool
 		wantVirtual   bool
+		wantPending   bool
 		wantError     string
 	}{
 		{name: "native proceeds"},
@@ -118,13 +119,20 @@ func TestPlacementBackendReconcile(t *testing.T) {
 			delete(f.service.Annotations, constants.PlacementOriginUID)
 			f.service.Spec.DeploymentMode = ptr.To(constants.RawDeployment)
 		}},
-		{name: "origin label without execution holds", wantError: "require an execution policy", change: func(f *fixture) {
+		{name: "origin label without execution reconciles as local", wantPending: true, change: func(f *fixture) {
 			f.service.Annotations = nil
 			f.service.Labels = map[string]string{constants.PlacementOrigin: "source-a"}
 		}},
-		{name: "origin annotation without execution holds", wantError: "require an execution policy", change: func(f *fixture) {
+		{name: "origin annotation without execution reconciles as local", wantPending: true, change: func(f *fixture) {
 			delete(f.service.Annotations, constants.PlacementExecution)
-			f.service.Finalizers = nil
+		}},
+		{name: "origin mark without execution keeps a raw deployment local", wantPending: true, change: func(f *fixture) {
+			delete(f.service.Annotations, constants.PlacementExecution)
+			f.service.Spec.DeploymentMode = ptr.To(constants.RawDeployment)
+		}},
+		{name: "origin mark without execution keeps a multi-node deployment local", wantPending: true, change: func(f *fixture) {
+			delete(f.service.Annotations, constants.PlacementExecution)
+			f.service.Spec.DeploymentMode = ptr.To(constants.MultiNode)
 		}},
 		{name: "placement without the ClusterAffinity policy holds", wantError: "ClusterAffinity", change: func(f *fixture) {
 			f.service.Annotations = nil
@@ -214,7 +222,8 @@ func TestPlacementBackendReconcile(t *testing.T) {
 			if err := cl.Get(t.Context(), key, before); err != nil {
 				t.Fatal(err)
 			}
-			r := &InferenceServiceReconciler{Client: cl, APIReader: cl, Scheme: s, Log: logr.Discard(), Recorder: record.NewFakeRecorder(20), RuntimeSelector: runtimeselector.New(cl), Clientset: fake.NewClientset(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: constants.InferenceServiceConfigMapName, Namespace: constants.OMENamespace}, Data: map[string]string{"deploy": f.deploy}})}
+			recorder := record.NewFakeRecorder(20)
+			r := &InferenceServiceReconciler{Client: cl, APIReader: cl, Scheme: s, Log: logr.Discard(), Recorder: recorder, RuntimeSelector: runtimeselector.New(cl), Clientset: fake.NewClientset(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: constants.InferenceServiceConfigMapName, Namespace: constants.OMENamespace}, Data: map[string]string{"deploy": f.deploy}})}
 			_, err = r.Reconcile(t.Context(), ctrl.Request{NamespacedName: key})
 			wantWrites := 1
 			if tt.wantError != "" {
@@ -233,6 +242,13 @@ func TestPlacementBackendReconcile(t *testing.T) {
 			if diff := cmp.Diff(wantWrites, writes); diff != "" {
 				t.Fatalf("child writes (-want +got):\n%s", diff)
 			}
+			wantWarnings := 0
+			if tt.wantPending {
+				wantWarnings = 1
+			}
+			if diff := cmp.Diff(wantWarnings, pendingPolicyWarnings(recorder)); diff != "" {
+				t.Fatalf("pending policy warnings (-want +got):\n%s", diff)
+			}
 			stored := &v1beta1.InferenceService{}
 			if err := cl.Get(t.Context(), key, stored); err != nil {
 				t.Fatal(err)
@@ -247,13 +263,20 @@ func TestPlacementBackendReconcile(t *testing.T) {
 				t.Fatalf("unexpected backend condition: %+v", condition)
 			}
 			floorCondition := stored.Status.GetCondition(v1beta1.PlacementReplicaFloorsReady)
-			if tt.wantFloorHold {
+			switch {
+			case tt.wantFloorHold:
 				if floorCondition == nil || floorCondition.Status != corev1.ConditionFalse || floorCondition.Reason != "ReplicaFloorsMismatch" {
 					t.Fatalf("replica floor condition: %+v", floorCondition)
 				}
-				stored.Status.Conditions = slices.DeleteFunc(stored.Status.Conditions, func(c apis.Condition) bool { return c.Type == v1beta1.PlacementReplicaFloorsReady })
-			} else if floorCondition != nil {
+			case tt.wantPending:
+				if floorCondition == nil || floorCondition.Status != corev1.ConditionUnknown || floorCondition.Reason != "ExecutionPolicyPending" {
+					t.Fatalf("pending policy condition: %+v", floorCondition)
+				}
+			case floorCondition != nil:
 				t.Fatalf("unexpected replica floor condition: %+v", floorCondition)
+			}
+			if floorCondition != nil {
+				stored.Status.Conditions = slices.DeleteFunc(stored.Status.Conditions, func(c apis.Condition) bool { return c.Type == v1beta1.PlacementReplicaFloorsReady })
 			}
 			if !tt.wantVirtual {
 				before.ResourceVersion = stored.ResourceVersion
@@ -263,7 +286,33 @@ func TestPlacementBackendReconcile(t *testing.T) {
 			} else if got := stored.Status.GetCondition(apis.ConditionReady); got == nil || got.Reason != "VirtualDeployment" {
 				t.Fatalf("virtual status: %+v", got)
 			}
+			if tt.wantPending {
+				// The condition is already published: the next pass still
+				// reconciles as local and does not warn again.
+				if _, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: key}); !errors.Is(err, childWrite) {
+					t.Fatalf("second pass error = %v, want continuation to model configuration", err)
+				}
+				if diff := cmp.Diff(0, pendingPolicyWarnings(recorder)); diff != "" {
+					t.Fatalf("repeated pending policy warnings (-want +got):\n%s", diff)
+				}
+			}
 		})
+	}
+}
+
+// pendingPolicyWarnings drains the recorder and counts the warnings about a
+// marked service that has no execution policy yet.
+func pendingPolicyWarnings(recorder *record.FakeRecorder) int {
+	count := 0
+	for {
+		select {
+		case event := <-recorder.Events:
+			if strings.Contains(event, "PlacementExecutionPending") {
+				count++
+			}
+		default:
+			return count
+		}
 	}
 }
 

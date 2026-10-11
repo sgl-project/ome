@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/evidence"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/status"
@@ -3363,6 +3364,30 @@ func darkRunnerPod(name string, since time.Time) *corev1.Pod {
 	return pod
 }
 
+// crashLoopingRunnerPod is a promoted pod whose runner keeps exiting and
+// is parked in CrashLoopBackOff: one restart on its record, the last run
+// exited non-zero at lastCrash, ContainersReady and PodReady False from
+// then, the serving gate written at promotion still True.
+func crashLoopingRunnerPod(name string, lastCrash time.Time) *corev1.Pod {
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "prod"}}
+	pod.Status.Phase = corev1.PodRunning
+	pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+		Name: constants.MainContainerName, Ready: false, RestartCount: 1,
+		State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: evidence.ReasonCrashLoop}},
+		LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+			ExitCode: 1, Reason: "Error",
+			StartedAt:  metav1.NewTime(lastCrash.Add(-10 * time.Second)),
+			FinishedAt: metav1.NewTime(lastCrash),
+		}},
+	}}
+	pod.Status.Conditions = []corev1.PodCondition{
+		{Type: corev1.ContainersReady, Status: corev1.ConditionFalse, LastTransitionTime: metav1.NewTime(lastCrash)},
+		{Type: corev1.PodReady, Status: corev1.ConditionFalse, LastTransitionTime: metav1.NewTime(lastCrash)},
+		{Type: query.ServingConditionType, Status: corev1.ConditionTrue, LastTransitionTime: metav1.NewTime(lastCrash.Add(-time.Hour))},
+	}
+	return pod
+}
+
 // rotationRunnerPod is a promoted pod in rotation: Ready with the serving
 // gate True.
 func rotationRunnerPod(name string) *corev1.Pod {
@@ -3387,8 +3412,9 @@ func rotationRunnerPod(name string) *corev1.Pod {
 // Instance is dark for the roll and holds no slot. Inside the grace the
 // Instance still holds its slot and the reading says how long until it
 // reads dark. With no grace configured, with a runner restarted since
-// Ready (the ladder's shape), with a pod missing, terminal or never
-// promoted, off the target or mid-update, the Instance is not dark. A
+// Ready (the ladder's shape), with a runner parked in CrashLoopBackOff
+// whatever the date of its last crash, with a pod missing, terminal or
+// never promoted, off the target or mid-update, the Instance is not dark. A
 // gang reads every member: a dark worker beside a serving leader is dark,
 // a member inside the grace beside one past it is not yet.
 func TestRolledInstanceDark_ShortfallOfDarkPodsAloneIsNotTheRollsOpenWork(t *testing.T) {
@@ -3422,6 +3448,8 @@ func TestRolledInstanceDark_ShortfallOfDarkPodsAloneIsNotTheRollsOpenWork(t *tes
 			pods: []*corev1.Pod{dark("llama-70b-engine-0-0")}, desired: 1},
 		{name: "restarted since Ready and down", row: row(workload.InstancePhaseReady, target),
 			pods: []*corev1.Pod{restartedRunnerPod(readySince.Time, now.Add(-2*grace), false, true)}, desired: 1, grace: grace},
+		{name: "crash-looping, its last crash before the row entered Ready", row: row(workload.InstancePhaseReady, target),
+			pods: []*corev1.Pod{crashLoopingRunnerPod("llama-70b-engine-0-0", readySince.Add(-time.Second))}, desired: 1, grace: grace},
 		{name: "a pod short of the set", row: row(workload.InstancePhaseReady, target),
 			pods: []*corev1.Pod{dark("llama-70b-engine-0-0")}, desired: 2, grace: grace},
 		{name: "in rotation", row: row(workload.InstancePhaseReady, target),
@@ -3440,6 +3468,8 @@ func TestRolledInstanceDark_ShortfallOfDarkPodsAloneIsNotTheRollsOpenWork(t *tes
 			pods: []*corev1.Pod{dark("llama-70b-engine-0-0-leader"), never}, desired: 2, grace: grace},
 		{name: "gang: one member past the grace, one inside it", row: row(workload.InstancePhaseReady, target),
 			pods: []*corev1.Pod{dark("llama-70b-engine-0-0-leader"), inside("llama-70b-engine-0-0-worker")}, desired: 2, grace: grace, wait: 3 * grace / 4},
+		{name: "gang: leader crash-looping beside a dark worker", row: row(workload.InstancePhaseReady, target),
+			pods: []*corev1.Pod{crashLoopingRunnerPod("llama-70b-engine-0-0-leader", readySince.Add(-time.Second)), dark("llama-70b-engine-0-0-worker")}, desired: 2, grace: grace},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -3452,6 +3482,31 @@ func TestRolledInstanceDark_ShortfallOfDarkPodsAloneIsNotTheRollsOpenWork(t *tes
 				t.Fatal("a dark Instance is short of serving by the strict bar; the dark reading is the exception the roll takes")
 			}
 		})
+	}
+}
+
+// TestRolledInstanceDark_CrashLoopBeforeTheAnchorKeepsTheSlot pins the
+// reading of a promoted pod parked in CrashLoopBackOff whose last crash
+// predates the row's Ready anchor, the shape a promotion that observed a
+// brief Ready between two crashes leaves: the anchor does not read the
+// crash as the ladder's yet, and the roll must not read the pod as dark
+// either, so the Instance stays short of serving and holds its slot.
+func TestRolledInstanceDark_CrashLoopBeforeTheAnchorKeepsTheSlot(t *testing.T) {
+	const target = "llama-70b-engine-v2hash"
+	const grace = 10 * time.Second
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	readySince := metav1.NewTime(now.Add(-grace))
+	row := &workload.InstanceStatus{Index: 0, Phase: workload.InstancePhaseReady, RunningRevision: target, ReadySince: &readySince}
+	pods := []*corev1.Pod{crashLoopingRunnerPod("llama-70b-engine-0-0", readySince.Add(-time.Second))}
+	window := int32(grace / time.Second)
+	if RolledInstanceCrashed(row, target, time.Time{}, pods, window) {
+		t.Fatal("a crash dated before the anchor is not read as the ladder's; the slot must hold without it")
+	}
+	if dark, wait := RolledInstanceDark(row, target, time.Time{}, pods, 1, window, grace, now); dark || wait != 0 {
+		t.Fatalf("RolledInstanceDark = (%v, %s), want (false, 0): a pod parked in CrashLoopBackOff is never dark", dark, wait)
+	}
+	if notServing, _, _ := RolledInstanceNotServing(row, target, time.Time{}, pods, 1, window, now); !notServing {
+		t.Fatal("the Instance must stay short of serving and hold its slot")
 	}
 }
 

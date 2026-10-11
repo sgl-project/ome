@@ -410,6 +410,18 @@ func Restart(ctx context.Context, deps workload.Deps, input workload.ReconcileIn
 
 	// Phase A: drain + delete old pods.
 	if len(oldPods) > 0 {
+		// An old pod its kubelet has stopped reporting is not drained: no
+		// kubelet is there to honor a graceful delete, and a pod deleted
+		// that way holds its name for its whole grace before the sweep may
+		// act. The force-delete sweep frees it on node-death evidence, and
+		// the drain of the set waits while such a pod is still held.
+		holding, _, err := recoverUnknownPhaseTargets(ctx, deps, input, inst.Index, oldPods, occupiedTargets(oldPods))
+		if err != nil {
+			return false, fmt.Errorf("Restart: recover unknown-phase pods (instance=%d): %w", inst.Index, err)
+		}
+		if holding {
+			return false, nil
+		}
 		for _, pod := range oldPods {
 			if !podreadiness.IsServing(pod) {
 				continue

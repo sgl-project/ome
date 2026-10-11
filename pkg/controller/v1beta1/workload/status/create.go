@@ -57,8 +57,11 @@ func CreatingMutation(idx int32, incarnation int64, timeout time.Duration, targe
 }
 
 // StampReady idempotently moves the row to Phase=Ready and clears its
-// Operation. RunningRevision is left as it is: this is the promote for a
-// pod set whose revision the pass does not vouch for.
+// Operation and TargetRevision. RunningRevision is left as it is: this is
+// the promote for a pod set whose revision the pass does not vouch for. The
+// target revision goes with the attempt: a settled Ready row carries none,
+// which is what lets the status publication's Ready over a Failed row off
+// its running revision read as the publication's alone.
 func StampReady(ctx context.Context, input types.ReconcileInput, idx int32) error {
 	mutation := ReadyMutation(idx, input.Now())
 	return input.MutateInstance(ctx, mutation.Index, mutation.Mutate)
@@ -68,11 +71,12 @@ func StampReady(ctx context.Context, input types.ReconcileInput, idx int32) erro
 // alongside other rows in one batch.
 func ReadyMutation(idx int32, now time.Time) types.InstanceMutation {
 	return types.InstanceMutation{Index: idx, Mutate: func(s *types.InstanceStatus) bool {
-		if s.Phase == types.InstancePhaseReady && s.Operation == nil {
+		if s.Phase == types.InstancePhaseReady && s.Operation == nil && s.TargetRevision == "" {
 			return false
 		}
 		EnterReady(s, now)
 		s.Operation = nil
+		s.TargetRevision = ""
 		return true
 	}}
 }

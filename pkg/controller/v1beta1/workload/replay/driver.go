@@ -45,6 +45,10 @@ type Options struct {
 	Start time.Time
 	// ContainerName is the single container of the rendered template.
 	ContainerName string
+	// Observer, when set, receives a read-only view of every tick a pass
+	// ran in, after the pass and the deadline park/rearm step. It writes
+	// nothing, so a trace is the same with or without it.
+	Observer TickObserver
 }
 
 // DefaultOptions returns the fixture identities scenarios are written
@@ -145,6 +149,30 @@ type driver struct {
 	// rollbackImage pins the roll to the stored revision that image's
 	// template minted. Empty rolls toward the rendered template.
 	rollbackImage string
+	// tickHolds and tickCommits are the rollout holds the pass recorded and
+	// the row writes the store resolved in the current tick, kept for the
+	// observer.
+	tickHolds   []types.RolloutHold
+	tickCommits []RowCommit
+}
+
+// commitLog is the row sink the store writes through: every resolved write
+// is rendered into the trace and kept for the tick's observer.
+type commitLog struct {
+	d *driver
+}
+
+func (l *commitLog) RowCommitted(commit RowCommit) {
+	l.d.tickCommits = append(l.d.tickCommits, commit)
+	l.d.trace.RowCommitted(commit)
+}
+
+func (l *commitLog) RetryBlockCommitted(commit RetryBlockCommit) {
+	l.d.trace.RetryBlockCommitted(commit)
+}
+
+func (l *commitLog) StatusConflict(conflict StatusConflict) {
+	l.d.trace.StatusConflict(conflict)
 }
 
 func newDriver(ctx context.Context, s *Scenario, opts Options) (*driver, error) {
@@ -224,7 +252,7 @@ func newDriver(ctx context.Context, s *Scenario, opts Options) (*driver, error) 
 	if err != nil {
 		return nil, err
 	}
-	d.store = NewRowStore(rows, blocks, d.trace)
+	d.store = NewRowStore(rows, blocks, &commitLog{d: d})
 	d.store.SetOwner(d.owner.UID, d.owner.Generation)
 
 	if d.currentRevision, err = d.revisionFor(ctx, s.Initial.CurrentRevision); err != nil {
@@ -816,6 +844,7 @@ func (d *driver) applyPodStatus(ctx context.Context, name string, spec PodSpec) 
 func (d *driver) runTick(ctx context.Context, tick Tick) error {
 	d.trace.beginTick(tick.Tick, tick.Note)
 	d.store.BeginPass()
+	d.tickHolds, d.tickCommits = nil, nil
 	for _, ev := range tick.Events {
 		if err := d.apply(ctx, ev); err != nil {
 			return err
@@ -927,7 +956,63 @@ func (d *driver) runTick(ctx context.Context, tick Tick) error {
 		return fmt.Errorf("replay: tick %d: api.conflict armed for status write %v, but the pass made no such write", tick.Tick, unfired)
 	}
 	d.stalePass = false
+	if err := d.observe(ctx, tick.Tick, desired, input.StuckPodGrace); err != nil {
+		return err
+	}
 	return d.refreshStaleCache(ctx, tick.Tick)
+}
+
+// observe hands the tick's end state to the observer, when one is set. Pods
+// and rotation are read live, as the next pass will list them; the rows
+// carry the pod counts the publication after this pass wrote; the grace is
+// the one the pass's readers received.
+func (d *driver) observe(ctx context.Context, tick int, desired types.WorkloadDesiredSpec, stuckPodGrace time.Duration) error {
+	if d.opts.Observer == nil {
+		return nil
+	}
+	pods, err := d.podsByInstanceFrom(ctx, d.cli)
+	if err != nil {
+		return err
+	}
+	routed, err := d.routedRotation(ctx)
+	if err != nil {
+		return err
+	}
+	spec := TickSpec{
+		Replicas:        desired.Replicas,
+		PodsPerInstance: podsPerInstance(desired),
+		MinReadySeconds: desired.MinReadySeconds,
+		Paused:          desired.Paused,
+		Teardown:        d.teardown,
+	}
+	if strategy := desired.Lifecycle.UpdateStrategy; strategy != nil && strategy.RollingUpdate != nil {
+		spec.MaxUnavailable = strategy.RollingUpdate.MaxUnavailable
+		spec.MaxSurge = strategy.RollingUpdate.MaxSurge
+		spec.Partition = strategy.RollingUpdate.Partition
+	}
+	d.opts.Observer(TickView{
+		Tick:          tick,
+		Now:           d.clock.Now(),
+		Rows:          d.overlayPublished(d.store.Rows()),
+		RetryBlocks:   d.store.RetryBlocks(),
+		Pods:          pods,
+		Routed:        routed,
+		Holds:         append([]types.RolloutHold(nil), d.tickHolds...),
+		Commits:       append([]RowCommit(nil), d.tickCommits...),
+		Spec:          spec,
+		StuckPodGrace: stuckPodGrace,
+	})
+	return nil
+}
+
+// podsPerInstance is the pod count one Instance of the desired spec runs:
+// the sizes of its runners added up.
+func podsPerInstance(desired types.WorkloadDesiredSpec) int32 {
+	var n int32
+	for _, runner := range desired.Runners {
+		n += runner.Size
+	}
+	return n
 }
 
 // teardownOverdue reports whether the deleted owner has held its finalizer
@@ -1020,11 +1105,16 @@ func (d *driver) reconcileHeldDeadlines(ctx context.Context, input types.Reconci
 }
 
 // podsByInstance buckets the Component's pods by the Instance index they
-// are labelled with.
+// are labelled with, as the engine's cache lists them.
 func (d *driver) podsByInstance(ctx context.Context) (map[int32][]*corev1.Pod, error) {
-	pods, err := query.ListOMENativePodsByName(ctx, d.cachedClient(), d.opts.Namespace, d.opts.OwnerName, d.opts.Component, false)
+	return d.podsByInstanceFrom(ctx, d.cachedClient())
+}
+
+// podsByInstanceFrom is podsByInstance read through the given reader.
+func (d *driver) podsByInstanceFrom(ctx context.Context, reader client.Reader) (map[int32][]*corev1.Pod, error) {
+	pods, err := query.ListOMENativePodsByName(ctx, reader, d.opts.Namespace, d.opts.OwnerName, d.opts.Component, false)
 	if err != nil {
-		return nil, fmt.Errorf("replay: list pods for deadline parking: %w", err)
+		return nil, fmt.Errorf("replay: list pods by instance: %w", err)
 	}
 	byIndex := make(map[int32][]*corev1.Pod, len(pods))
 	for _, pod := range pods {
@@ -1194,6 +1284,7 @@ func (d *driver) wrapCallbacks(input *types.ReconcileInput) {
 			d.trace.callback("hold cleared")
 			return
 		}
+		d.tickHolds = append(d.tickHolds, *hold)
 		d.trace.callback("hold gate=%s target=%s reason=%s",
 			hold.Gate, hold.Target, d.norm.text(hold.Reason))
 	}
