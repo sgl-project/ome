@@ -38,10 +38,14 @@ func TestCreatingMutation_ClaimsOnceAndPinsAnUnpinnedAttempt(t *testing.T) {
 
 // The plain promote enters Ready once, clears the attempt and leaves the
 // running revision alone.
+// The promote clears the attempt and the target revision it was for; the
+// running revision stays as it was. A settled Ready row carries no target
+// revision, so the status publication's Ready over a Failed row off its
+// running revision is a shape no promote leaves.
 func TestStampReady_ClearsTheAttemptAndKeepsTheRevision(t *testing.T) {
 	now := time.Date(2026, time.September, 21, 0, 0, 0, 0, time.UTC)
 	w := newRowWriter(types.InstanceStatus{
-		Index: 0, Phase: types.InstancePhaseCreating, RunningRevision: "rev-old",
+		Index: 0, Phase: types.InstancePhaseCreating, RunningRevision: "rev-old", TargetRevision: "rev-new",
 		Operation: &types.InstanceOperation{ID: "create-0", Type: types.InstanceOperationCreate},
 	})
 	if err := StampReady(context.Background(), w.input(now), 0); err != nil {
@@ -49,8 +53,8 @@ func TestStampReady_ClearsTheAttemptAndKeepsTheRevision(t *testing.T) {
 	}
 	row := w.rows[0]
 	if row.Phase != types.InstancePhaseReady || row.Operation != nil || row.RunningRevision != "rev-old" ||
-		row.ReadySince == nil || !row.ReadySince.Time.Equal(now) {
-		t.Fatalf("row = %+v, want Ready since now on rev-old with no attempt", row)
+		row.TargetRevision != "" || row.ReadySince == nil || !row.ReadySince.Time.Equal(now) {
+		t.Fatalf("row = %+v, want Ready since now on rev-old with no attempt and no target revision", row)
 	}
 	writes := w.writes
 	if err := StampReady(context.Background(), w.input(now.Add(time.Minute)), 0); err != nil {

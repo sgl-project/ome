@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/escalation"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/evidence"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
@@ -3131,6 +3132,86 @@ func TestPlan_Update_DarkInstanceOnTheTargetHoldsNoSlot(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// crashLoopingEnginePod is an engine pod that was promoted and whose
+// runner keeps exiting: parked in CrashLoopBackOff with one restart on its
+// record, the last run exited non-zero at lastCrash, ContainersReady and
+// Ready False from then, the serving gate True.
+func crashLoopingEnginePod(idx int32, lastCrash time.Time) *corev1.Pod {
+	pod := unreadyEnginePod(idx, time.Since(lastCrash))
+	pod.Status.ContainerStatuses[0].RestartCount = 1
+	pod.Status.ContainerStatuses[0].State = corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: evidence.ReasonCrashLoop}}
+	pod.Status.ContainerStatuses[0].LastTerminationState = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+		ExitCode: 1, Reason: "Error",
+		StartedAt:  metav1.NewTime(lastCrash.Add(-10 * time.Second)),
+		FinishedAt: metav1.NewTime(lastCrash),
+	}}
+	return pod
+}
+
+// TestPlan_Update_CrashLoopingInstanceOnTheTargetHoldsItsSlot: an Instance
+// the roll already moved onto the target whose promoted pod is parked in
+// CrashLoopBackOff keeps its slot under a drain-first and a surge strategy
+// alike, even when its last crash predates the row's Ready anchor, the
+// shape a promotion that observed a brief Ready between two crashes
+// leaves. The pod has been unready for the stuck-pod grace, but a
+// container the kubelet parked is never a dark pod: the Instance is
+// listed among the rolled Instances the roll waits on, so the admission
+// charges the next fresh start against it.
+func TestPlan_Update_CrashLoopingInstanceOnTheTargetHoldsItsSlot(t *testing.T) {
+	target := updateTarget()
+	const grace = time.Minute
+	strategies := []struct {
+		name           string
+		strategy       types.UpdateStrategyType
+		surge, unavail int
+	}{
+		{"recreate", types.UpdateStrategyRecreatePod, 0, 1},
+		{"in-place", types.UpdateStrategyInPlaceIfPossible, 0, 1},
+		{"surge", types.UpdateStrategySurgeThenDrain, 1, 0},
+	}
+	for _, sc := range strategies {
+		t.Run(sc.name, func(t *testing.T) {
+			in := minimalInput(t)
+			forbidMutations(t, &in)
+			in.StuckPodGrace = grace
+			in.PassWake = &types.PassWake{}
+			in.DesiredSpec.Replicas = 2
+			readySince := metav1.NewTime(time.Now().Add(-2 * grace))
+			in.ObservedState.InstanceStatuses = []types.InstanceStatus{
+				{Index: 0, Incarnation: 1, Phase: types.InstancePhaseReady, PodCount: 1, ServingPodCount: 0, RunningRevision: target.Name, ReadySince: &readySince},
+				{Index: 1, Incarnation: 1, Phase: types.InstancePhaseReady, PodCount: 1, ServingPodCount: 1, RunningRevision: crashLoopRepairRevision},
+			}
+			plan := types.ComponentPlan{
+				Component: types.ComponentEngine,
+				Replicas:  2,
+				UpdateStrategy: types.UpdateStrategy{
+					Type:          sc.strategy,
+					RollingUpdate: &types.RollingUpdate{MaxSurge: intOrStringInt(sc.surge), MaxUnavailable: intOrStringInt(sc.unavail)},
+				},
+				Instances: []types.InstancePlan{
+					{Index: 0, Incarnation: 1, Runners: []types.RunnerPlan{{Name: "default", Size: 1}}},
+					{Index: 1, Incarnation: 1, Runners: []types.RunnerPlan{{Name: "default", Size: 1}}},
+				},
+			}
+			looping := crashLoopingEnginePod(0, readySince.Add(-time.Second))
+			looping.Labels[query.LabelRevisionHash] = query.RevisionFromName(target.Name).Hash()
+			// The running revision's template differs from the desired one
+			// by its image alone, the diff an in-place strategy keeps in place.
+			running := in.DesiredSpec.PodSpec.DeepCopy()
+			running.Containers[0].Image = "test:v0"
+			d := planTargetOrFail(t, in, plan, target, planSnapshotWithRevisions(in,
+				map[int32][]*corev1.Pod{0: {looping}, 1: {servingEnginePod(1)}}, map[string]*corev1.PodSpec{crashLoopRepairRevision: running}))
+			ua := findAction(d, workload.ActionUpdate)
+			if ua == nil {
+				t.Fatalf("the roll must list the fresh start on Instance 1 for the admission to charge; actions = %v", actionKinds(d))
+			}
+			if len(ua.Update.RolledNotServing) != 1 || ua.Update.RolledNotServing[0] != 0 {
+				t.Fatalf("rolledNotServing = %v, want Instance 0: a pod parked in CrashLoopBackOff on the target is never dark", ua.Update.RolledNotServing)
+			}
+		})
 	}
 }
 

@@ -2276,10 +2276,12 @@ func TestDeleteBatchOverdueDrainAnnouncesDeferredRows(t *testing.T) {
 // attempt that showed no failure, a failure on the pod the attempt
 // replaces, a row with no attempt, a bare surge target marker, and a
 // crash loop, which is not the revision's alone. A gang surge source the
-// wave retires is read through its replacement: the marker's pods in the
-// same wave, else the failure the escalation recorded on the source's
-// row, with the cause that record classifies to. A wave of two such rows
-// is one record.
+// wave retires is read through its replacement: a replacement already
+// promoted on the pinned revision ended a successful attempt, so the wave
+// records nothing whatever the source's row still carries; otherwise the
+// marker's pods in the same wave, else the failure the escalation
+// recorded on the source's row, with the cause that record classifies
+// to. A wave of two such rows is one record.
 func TestRetiredAttemptFailure_RecordsOnlyAnAttemptFailingOnItsOwn(t *testing.T) {
 	const running, target = "model-engine-f94dbfff", "model-engine-cf0e7843"
 	parked := func(index int32, revision, reason string) *corev1.Pod {
@@ -2321,10 +2323,27 @@ func TestRetiredAttemptFailure_RecordsOnlyAnAttemptFailingOnItsOwn(t *testing.T)
 		row.Operation.StartedAt = metav1.NewTime(since)
 		return row
 	}
+	// drainingSource is a source whose replacement already took over
+	// serving and had one member exit and be rebuilt: the member's clean
+	// exit is on the source row, dated inside the attempt, as the rebuild
+	// writes it.
+	recycled := &workload.InstanceTermination{PodName: "pod-2", ContainerName: "main", Reason: "Completed", Time: metav1.NewTime(attemptStart.Add(time.Minute))}
+	drainingSource := func() workload.InstanceStatus {
+		row := gangSourceSince(attemptStart, recycled)
+		row.Operation.Step = workload.UpdateStepSurgeDrain
+		row.Operation.RetryCount = 1
+		return row
+	}
+	// promotedReplacement is the surge index once the hand-over promoted
+	// it: Ready on the pinned revision with no operation left.
+	promotedReplacement := workload.InstanceStatus{Index: surgeIdx, Incarnation: 1, Phase: workload.InstancePhaseReady, RunningRevision: target}
 	cases := []struct {
 		name       string
 		candidates []deleteBatchCandidate
-		want       *status.AttemptFailure
+		// observed is the table the wave reads the source's replacement
+		// from; the candidates alone when empty.
+		observed []workload.InstanceStatus
+		want     *status.AttemptFailure
 	}{
 		{
 			name:       "a recreate parked in ImagePullBackOff",
@@ -2394,6 +2413,26 @@ func TestRetiredAttemptFailure_RecordsOnlyAnAttemptFailingOnItsOwn(t *testing.T)
 			want: &status.AttemptFailure{TargetRevision: target, Reason: "ErrImagePull", Cause: workload.CauseWorkload},
 		},
 		{
+			// The surge finished: the replacement is promoted and the source
+			// row, left standing while its resources finalize, is what the
+			// wave removes. The member's exit on the row is the rebuild's
+			// record, not a failure of the attempt.
+			name:       "a draining gang surge source retired after its replacement was promoted, with a recycled member on its row",
+			candidates: []deleteBatchCandidate{{status: drainingSource()}},
+			observed:   []workload.InstanceStatus{drainingSource(), promotedReplacement},
+		},
+		{
+			name:       "a failed gang surge source retired after its replacement was promoted, with the escalation's record on its row",
+			candidates: []deleteBatchCandidate{{status: gangSource(&workload.InstanceTermination{PodName: "pod-2", Reason: "ErrImagePull", Time: metav1.NewTime(attemptStart.Add(time.Minute))})}},
+			observed:   []workload.InstanceStatus{gangSource(nil), promotedReplacement},
+		},
+		{
+			name:       "a draining gang surge source whose replacement is not promoted records the member's exit",
+			candidates: []deleteBatchCandidate{{status: drainingSource()}},
+			observed:   []workload.InstanceStatus{drainingSource(), gangMarker()},
+			want:       &status.AttemptFailure{TargetRevision: target, Reason: "Completed", Cause: workload.CauseUnattributed},
+		},
+		{
 			name: "a failed gang surge source with no failure recorded anywhere",
 			candidates: []deleteBatchCandidate{
 				{status: gangSource(nil), pods: []*corev1.Pod{deleteFailurePod(0, true, "f94dbfff")}},
@@ -2425,7 +2464,11 @@ func TestRetiredAttemptFailure_RecordsOnlyAnAttemptFailingOnItsOwn(t *testing.T)
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := retiredAttemptFailure(tc.candidates)
+			observed := tc.observed
+			if observed == nil {
+				observed = candidateStatuses(tc.candidates)
+			}
+			got := retiredAttemptFailure(workload.WorkloadObservedState{InstanceStatuses: observed}, tc.candidates)
 			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
 				t.Fatalf("retiredAttemptFailure = %+v, want %+v", got, tc.want)
 			}

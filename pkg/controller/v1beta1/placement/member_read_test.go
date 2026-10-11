@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -15,12 +16,15 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	clocktesting "k8s.io/utils/clock/testing"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workloadcluster"
 )
 
@@ -146,7 +150,9 @@ func TestTransientMemberReadError(t *testing.T) {
 		{name: "not found", err: apierrors.NewNotFound(gr, "ir")},
 		{name: "forbidden", err: apierrors.NewForbidden(gr, "ir", errors.New("denied"))},
 		{name: "conflict", err: apierrors.NewConflict(gr, "ir", errors.New("changed"))},
+		{name: "first connection pending", err: fmt.Errorf("cluster %q: %w", "member-a", errMemberConnectionPending), want: true},
 		{name: "identity check", err: errors.New("cluster \"member-a\" registration identity changed")},
+		{name: "connection decided against", err: errors.New("cluster \"member-a\" has no connection for its accepted UID")},
 		{name: "cancelled", err: context.Canceled},
 		{name: "no error"},
 	} {
@@ -350,4 +356,128 @@ func TestReconcile_SplitUnreadableHomeKeepsReadyWithinTheGrace(t *testing.T) {
 	assert.Equal(t, int32(1), zc.ReadyReplicas, "an unreadable home keeps its routed count within the grace")
 	require.NotNil(t, zc.ObservationFailingSince)
 	assert.True(t, zc.ObservationFailingSince.Time.Equal(graceTestNow))
+}
+
+// connectingClusters hides one member until placement asks whether its
+// connection is still pending, as a registry does while its first connect
+// after a controller start is in flight. With pending set, that first connect
+// lands before the re-read.
+type connectingClusters struct {
+	fakeClusters
+	cluster string
+	pending bool
+
+	mu        sync.Mutex
+	connected bool
+	asked     int
+	lookups   int
+}
+
+func (c *connectingClusters) hidden(name string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if name != c.cluster {
+		return false
+	}
+	c.lookups++
+	return !c.connected
+}
+
+func (c *connectingClusters) ClientFor(name string) (workloadcluster.SelectivelyCachingClient, bool) {
+	if c.hidden(name) {
+		return nil, false
+	}
+	return c.fakeClusters.ClientFor(name)
+}
+
+func (c *connectingClusters) ClientForUID(name string, uid types.UID) (workloadcluster.SelectivelyCachingClient, bool) {
+	if c.hidden(name) {
+		return nil, false
+	}
+	return c.fakeClusters.ClientForUID(name, uid)
+}
+
+func (c *connectingClusters) ConnectionPending(name string, _ types.UID) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if name != c.cluster || c.connected {
+		return false
+	}
+	c.asked++
+	if c.pending {
+		c.connected = true
+	}
+	return c.pending
+}
+
+var pendingConnectionCases = []struct {
+	name        string
+	pending     bool
+	retry       MemberReadRetry
+	wantReread  bool
+	wantPending bool
+}{
+	{name: "a first connection still being made is read again", pending: true, retry: MemberReadRetry{MaxAttempts: 2, InitialBackoff: time.Millisecond, MaxBackoff: time.Millisecond}, wantReread: true},
+	{name: "a connection the registry decided against is not read again", retry: MemberReadRetry{MaxAttempts: 2, InitialBackoff: time.Millisecond, MaxBackoff: time.Millisecond}},
+	{name: "without retries a pending connection fails the read", pending: true, wantPending: true},
+}
+
+// connectingObservation builds a placer whose member-a is hidden behind
+// connectingClusters, over a member that serves one ready replica.
+func connectingObservation(t *testing.T, pending bool, retry MemberReadRetry) (*Reconciler, *connectingClusters, plannedObservationFixture) {
+	t.Helper()
+	f := observationFixture(t)
+	objects := append([]client.Object{}, f.extraObjects...)
+	objects = append(objects, f.member, f.resources.ir)
+	for i := range f.resources.pods {
+		objects = append(objects, &f.resources.pods[i])
+	}
+	scheme := testScheme(t)
+	worker := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).WithInterceptorFuncs(f.intercept).Build()
+	clusters := &connectingClusters{fakeClusters: fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{"member-a": workloadcluster.NewNeverCachingClient(worker)}}, cluster: "member-a", pending: pending}
+	r, _ := newPlacer(scheme, clusters, f.source, plannedTestRegistration())
+	r.InstanceStatusDecoder = irstatus.NewDecoder(f.decodeBound)
+	r.MemberReadRetry = retry
+	return r, clusters, f
+}
+
+func TestPlannedReadRetriesAPendingFirstConnection(t *testing.T) {
+	for _, tt := range pendingConnectionCases {
+		t.Run(tt.name, func(t *testing.T) {
+			r, clusters, f := connectingObservation(t, tt.pending, tt.retry)
+			got, err := r.observePlannedHome(t.Context(), f.source, f.source.Status.Placement.Candidates[0], f.components)
+			assert.Equal(t, 1, clusters.asked, "the first read found no connection and asked whether it was pending")
+			if tt.wantReread {
+				require.NoError(t, err)
+				assert.Equal(t, 2, clusters.lookups)
+				assert.True(t, got.Candidate.ObservationKnown)
+				return
+			}
+			require.Error(t, err)
+			assert.Equal(t, 1, clusters.lookups, "the member is read once")
+			assert.Equal(t, tt.wantPending, errors.Is(err, errMemberConnectionPending), "error: %v", err)
+			assert.False(t, got.Candidate.ObservationKnown)
+		})
+	}
+}
+
+func TestStandingReadRetriesAPendingFirstConnection(t *testing.T) {
+	for _, tt := range pendingConnectionCases {
+		t.Run(tt.name, func(t *testing.T) {
+			r, clusters, f := connectingObservation(t, tt.pending, tt.retry)
+			// Without an allocation the read finds its connection by cluster name.
+			previous := *f.source.Status.Placement.Candidates[0].DeepCopy()
+			previous.Allocation = nil
+			got := r.observeHome(t.Context(), f.source, previous, true)
+			assert.Equal(t, 1, clusters.asked, "the first read found no connection and asked whether it was pending")
+			if tt.wantReread {
+				assert.Equal(t, 2, clusters.lookups)
+				assert.NotEqual(t, homeUnknown, got.state, "error: %v", got.err)
+				return
+			}
+			assert.Equal(t, 1, clusters.lookups, "the member is read once")
+			assert.Equal(t, homeUnknown, got.state)
+			assert.Equal(t, tt.wantPending, errors.Is(got.err, errMemberConnectionPending), "error: %v", got.err)
+		})
+	}
 }

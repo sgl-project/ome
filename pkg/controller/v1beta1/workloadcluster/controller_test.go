@@ -393,3 +393,43 @@ func TestReconcile_DisconnectsManagerWhenDeleted(t *testing.T) {
 	_, ok := mgr.ClientFor("gone")
 	assert.False(t, ok, "a deleted WorkloadCluster must be disconnected")
 }
+
+// TestReconcile_DecidesConnectionWhetherOrNotItConnects: once the controller
+// has reconciled a registration, a missing connection is its decision, whether
+// the cluster connected, failed to connect, or was removed.
+func TestReconcile_DecidesConnectionWhetherOrNotItConnects(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		probe     func(context.Context, []byte) error
+		objects   bool
+		connected bool
+	}{
+		{name: "reachable", probe: func(context.Context, []byte) error { return nil }, objects: true, connected: true},
+		{name: "connection failed", probe: func(context.Context, []byte) error { return errors.New("dial tcp: timeout") }, objects: true},
+		{name: "registration deleted", probe: func(context.Context, []byte) error { return nil }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			s := scheme(t)
+			mgr := NewManager(s)
+			mgr.newClient = func(_ context.Context, raw []byte, _ *runtime.Scheme) (SelectivelyCachingClient, context.CancelFunc, error) {
+				return &stubClient{id: "c1"}, func() {}, nil
+			}
+			var objects []client.Object
+			if tt.objects {
+				objects = []client.Object{wcWithSecret("c1"), kcSecret(validKubeconfig)}
+			}
+			r, _ := newReconciler(s, tt.probe, objects...)
+			r.Manager = mgr
+			require.True(t, mgr.ConnectionPending("c1", ""))
+
+			_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "c1"}})
+			require.NoError(t, err)
+			_, ok := mgr.ClientFor("c1")
+			assert.Equal(t, tt.connected, ok)
+			assert.False(t, mgr.ConnectionPending("c1", ""))
+			if tt.objects {
+				assert.False(t, mgr.ConnectionPending("c1", "c1-uid"))
+			}
+		})
+	}
+}

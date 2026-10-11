@@ -10,6 +10,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/audit"
@@ -246,26 +247,32 @@ func reportFinalizerBlockedPod(ctx context.Context, deps workload.Deps, input wo
 // recordForceDeleteLedgerEntry persists the terminal ForceDelete audit
 // row for pod. RequestUUID carries the pod UID so the row is naturally
 // idempotent per pod object (UpsertEntry replaces on the same key).
+//
+// The ledger is one object per owner, written by every Component's pass,
+// so a write that loses the race is reloaded and retried rather than
+// failing the pass that already removed the pod.
 func recordForceDeleteLedgerEntry(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, pod *corev1.Pod, idx int32, outcome string) error {
 	owner := ledgerOwnerObject(input)
-	ledger, err := audit.LoadLedgerForOwner(ctx, deps.Reader(), owner)
-	if err != nil {
-		return fmt.Errorf("load audit ledger: %w", err)
-	}
 	now := input.Now().UTC().Format(time.RFC3339)
-	ledger.UpsertEntry(audit.Entry{
-		RequestUUID:    string(pod.UID),
-		Component:      string(input.Key.Component),
-		SourceInstance: idx,
-		Phase:          audit.PhaseCompleted,
-		Reason:         audit.ReasonForceDelete,
-		Outcome:        outcome,
-		FromNode:       pod.Spec.NodeName,
-		StartedAt:      now,
-		CompletedAt:    now,
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		ledger, err := audit.LoadLedgerForOwner(ctx, deps.Reader(), owner)
+		if err != nil {
+			return fmt.Errorf("load audit ledger: %w", err)
+		}
+		ledger.UpsertEntry(audit.Entry{
+			RequestUUID:    string(pod.UID),
+			Component:      string(input.Key.Component),
+			SourceInstance: idx,
+			Phase:          audit.PhaseCompleted,
+			Reason:         audit.ReasonForceDelete,
+			Outcome:        outcome,
+			FromNode:       pod.Spec.NodeName,
+			StartedAt:      now,
+			CompletedAt:    now,
+		})
+		if err := audit.PersistLedgerForOwner(ctx, deps.Client, owner, ledgerOwnerGVK(input), ledger); err != nil {
+			return fmt.Errorf("persist audit ledger: %w", err)
+		}
+		return nil
 	})
-	if err := audit.PersistLedgerForOwner(ctx, deps.Client, owner, ledgerOwnerGVK(input), ledger); err != nil {
-		return fmt.Errorf("persist audit ledger: %w", err)
-	}
-	return nil
 }

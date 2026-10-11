@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/v1beta1convert"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/escalation"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/evidence"
 	workloadops "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/ops"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
@@ -1882,6 +1883,105 @@ func darkSince(pod *corev1.Pod, at time.Time) {
 		{Type: corev1.ContainersReady, Status: corev1.ConditionFalse, LastTransitionTime: metav1.NewTime(at)},
 		{Type: corev1.PodReady, Status: corev1.ConditionFalse, LastTransitionTime: metav1.NewTime(at)},
 		{Type: query.ServingConditionType, Status: corev1.ConditionTrue, LastTransitionTime: metav1.NewTime(at.Add(-time.Hour))},
+	}
+}
+
+// crashLoopingSince marks pod Running with its runner parked in
+// CrashLoopBackOff: one restart on its record, the last run exited non-zero
+// at lastCrash, ContainersReady and PodReady False from then, the serving
+// gate written at promotion still True.
+func crashLoopingSince(pod *corev1.Pod, lastCrash time.Time) {
+	darkSince(pod, lastCrash)
+	pod.Status.ContainerStatuses[0].RestartCount = 1
+	pod.Status.ContainerStatuses[0].State = corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: evidence.ReasonCrashLoop}}
+	pod.Status.ContainerStatuses[0].LastTerminationState = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+		ExitCode: 1, Reason: "Error",
+		StartedAt:  metav1.NewTime(lastCrash.Add(-10 * time.Second)),
+		FinishedAt: metav1.NewTime(lastCrash),
+	}}
+}
+
+// TestReconcile_CrashLoopingRolledInstanceHoldsItsSlot pins the budget's
+// reading of an Instance the roll moved onto the target whose promoted pod
+// is parked in CrashLoopBackOff with its last crash dated before the row's
+// Ready anchor, under RecreatePod maxUnavailable 1: Instance 0 is Ready on
+// the target with that pod, Instance 1 Ready and serving on the prior
+// revision. The pod has been unready for the stuck-pod grace, but a
+// container the kubelet parked is never dark: Instance 0 keeps its slot,
+// the fresh start on Instance 1 is denied by a Budget hold naming
+// Instance 0, and Instance 1's pod stays in rotation. The same pod with
+// its runner running and failing readiness is dark, and the start on
+// Instance 1 is admitted past it.
+func TestReconcile_CrashLoopingRolledInstanceHoldsItsSlot(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	const grace = time.Minute
+	cases := []struct {
+		name  string
+		shape func(pod *corev1.Pod, since time.Time)
+		held  bool
+	}{
+		{name: "parked in CrashLoopBackOff, the slot holds", shape: crashLoopingSince, held: true},
+		{name: "running and failing readiness, the Instance is dark", shape: darkSince},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			readySince := now.Add(-2 * grace)
+			rows := []types.InstanceStatus{
+				{Index: 0, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: "llama-70b-engine-newtarget",
+					ReadySince: &metav1.Time{Time: readySince}, PodCount: 1, ServingPodCount: 0},
+				{Index: 1, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: "llama-70b-engine-priorrev",
+					PodCount: 1, ServingPodCount: 1},
+			}
+			promoted := liveEnginePod("llama-70b", "prod", 0, 0, "newtarget", readySince.Add(-time.Minute))
+			tc.shape(promoted, readySince.Add(-time.Second))
+			f := newTerminatingSurgeFixture(t, rows, []int32{0, 1}, []int32{1}, promoted)
+			f.plan.UpdateStrategy = types.UpdateStrategy{
+				Type:          types.UpdateStrategyRecreatePod,
+				RollingUpdate: &types.RollingUpdate{MaxSurge: intOrStringInt(0), MaxUnavailable: intOrStringInt(1)},
+			}
+			f.plan.RestartPolicy = types.RestartPolicyNone
+			f.in.StuckPodGrace = grace
+			// The roll is mid-way: the Component's current revision is still
+			// the prior one, so a pod parked on the target is not a wedge the
+			// restart pass repairs on the current revision.
+			f.in.ObservedState.CurrentRevision = "llama-70b-engine-priorrev"
+			source := servingEnginePod(1)
+			sourceLive := func() bool {
+				fresh := &corev1.Pod{}
+				err := f.c.Get(context.Background(), client.ObjectKeyFromObject(source), fresh)
+				if apierrors.IsNotFound(err) {
+					return false
+				}
+				if err != nil {
+					t.Fatalf("read the source: %v", err)
+				}
+				return fresh.DeletionTimestamp == nil
+			}
+
+			f.pass()
+
+			row := f.in.ObservedState.Instance(1)
+			if tc.held {
+				hold := f.lastHold()
+				if hold == nil || hold.Gate != types.RolloutHoldGateBudget || hold.Target != f.target.Name ||
+					!strings.Contains(hold.Reason, "unavailability budget 1 exhausted") || !holdNamesInstance(hold, 0) {
+					t.Fatalf("the start on Instance 1 must be denied by the Budget hold naming Instance 0, got %+v", hold)
+				}
+				if row == nil || row.Operation != nil {
+					t.Fatalf("Instance 1 must not start while Instance 0 holds the slot, got %+v", row)
+				}
+				if !sourceLive() {
+					t.Fatal("Instance 1's pod must stay while Instance 0 holds the slot")
+				}
+				return
+			}
+			if hold := f.lastHold(); hold != nil {
+				t.Fatalf("a dark Instance on the target holds nothing, got %+v", hold)
+			}
+			if row == nil || row.Operation == nil || row.Operation.Type != types.InstanceOperationUpdate {
+				t.Fatalf("the start on Instance 1 must be admitted past a dark Instance, got %+v", row)
+			}
+		})
 	}
 }
 

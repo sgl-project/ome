@@ -535,6 +535,7 @@ func (w *timedCanaryWire) rebuildInstance(t *testing.T, name string, index int32
 	}
 	w.mutateRow(t, index, func(row *v1beta1.OMENativeInstanceStatus) {
 		row.Phase = v1beta1.OMENativeInstanceRestarting
+		row.Operation = repairOperation(index)
 		row.Incarnation = 2
 		exit := int32(1)
 		row.LastFailure = &v1beta1.InstanceTermination{PodName: name, ContainerName: constants.MainContainerName,
@@ -691,6 +692,7 @@ func TestDispatch_DyingPodAndRebuildStampInOnePassIsOneDeath(t *testing.T) {
 	w.setRunner(t, "target-3", runnerDied(died), false)
 	w.mutateRow(t, 3, func(row *v1beta1.OMENativeInstanceStatus) {
 		row.Phase = v1beta1.OMENativeInstanceRestarting
+		row.Operation = repairOperation(3)
 		row.Incarnation = 2
 		exit := int32(1)
 		row.LastFailure = &v1beta1.InstanceTermination{PodName: "target-3", ContainerName: constants.MainContainerName,

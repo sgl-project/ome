@@ -4232,6 +4232,65 @@ func TestRestart_UnknownPhasePodOnLiveNodeIsNeverDeleted(t *testing.T) {
 	}
 }
 
+// TestRestart_SilentOldPodIsFreedBySweepNotDrained: an old pod of the set
+// Phase A drains whose kubelet has stopped reporting it is never deleted
+// gracefully, since no kubelet is there to honor a grace and the name
+// would stay held for the pod's whole grace. With a force-delete policy
+// configured and its node unreachable past the threshold, the sweep frees
+// the name with grace zero and the rebuild lands on a later pass; on a
+// node still posting Ready the pod is left where it is and the drain
+// waits for the kubelet.
+func TestRestart_SilentOldPodIsFreedBySweepNotDrained(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		node  *corev1.Node
+		freed bool
+	}{
+		{name: "node unreachable past the threshold", node: unknownNodeUnreachable("node-a", time.Hour), freed: true},
+		{name: "node posting Ready", node: unknownNodeReady("node-a")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetExpectations(t)
+			isvc, ir := isvcReadyAtIncarnation("llama-70b", "prod", 1)
+			restartingAtIncarnation(ir)
+			old := unknownPhasePod(podAtIncarnation(isvc, 0, 1, false, false), "node-a")
+			c := newFakeClient(t, isvc, ir, old, tc.node)
+			rec := record.NewFakeRecorder(16)
+			deps := workload.Deps{Client: c, Recorder: rec}
+
+			input := buildTestInput(isvc, c, workload.ComponentEngine)
+			input.ForceDelete = &workload.ForceDeletePolicy{
+				OverdueSlack:             2 * time.Minute,
+				NodeUnreachableThreshold: 5 * time.Minute,
+			}
+			plan := buildPlanSinglePodEngineForRestart(c, isvc)
+			done, err := ops.Restart(context.Background(), deps, input, plan, plan.Instances[0], nil, "pod lost")
+			if err != nil {
+				t.Fatalf("Restart: %v", err)
+			}
+			if done {
+				t.Fatalf("Restart must not complete while the old pod's name is held or being freed")
+			}
+			forceDeleted := countRejectionEvents(drainEvents(rec), workload.EventReasonPodForceDeleted)
+			if tc.freed {
+				if podExists(c, old) {
+					t.Fatalf("old pod %s must be force-deleted once its node is provably gone", old.Name)
+				}
+				if forceDeleted != 1 {
+					t.Fatalf("PodForceDeleted events: got %d want 1", forceDeleted)
+				}
+				return
+			}
+			if !podExists(c, old) {
+				t.Fatalf("old pod %s must not be deleted while its node posts Ready", old.Name)
+			}
+			if forceDeleted != 0 {
+				t.Fatalf("PodForceDeleted events: got %d want 0", forceDeleted)
+			}
+		})
+	}
+}
+
 // TestCreate_UnknownPhasePodRoutesToTheForceDeleteSweep: the create's
 // missing-pod diff reads an Unknown pod as present, so without this the
 // attempt polls a name no kubelet is reporting on until its deadline.

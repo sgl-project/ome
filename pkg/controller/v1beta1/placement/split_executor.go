@@ -460,7 +460,10 @@ func (r *Reconciler) writeSplitHold(ctx context.Context, source *v1beta1.Inferen
 		res.candidates = append(res.candidates, home.candidate)
 		res.ready = res.ready || home.serving
 		res.readinessUnknown = res.readinessUnknown || home.state == homeUnknown
-		if home.candidate.AdmittedReplicas > 0 {
+		// A pass that waits on a reason has not read the member inventory, so it
+		// cannot re-prove that a member kept idle by a zero minimum replica count is
+		// still placed. It keeps the Placed verdict the last readable pass reached.
+		if home.candidate.AdmittedReplicas > 0 || heldPlaced(source, name, home) {
 			res.phase = v1beta1.PlacementPhasePlaced
 		} else if res.phase == v1beta1.PlacementPhasePending {
 			res.phase = v1beta1.PlacementPhaseAdmitting
@@ -470,6 +473,22 @@ func (r *Reconciler) writeSplitHold(ctx context.Context, source *v1beta1.Inferen
 	result, err := r.writePlacement(ctx, source, res)
 	result.RequeueAfter = r.requeue()
 	return result, err
+}
+
+// heldPlaced keeps the Placed phase for a member whose minimum replica count is
+// zero while a pass waits on a reason: the last readable pass left the placement
+// Placed and the member still acknowledges the plan that stands.
+func heldPlaced(source *v1beta1.InferenceService, cluster string, home homeObservation) bool {
+	placement := source.Status.Placement
+	if home.terminal || placement == nil || placement.Plan == nil || placement.Phase != v1beta1.PlacementPhasePlaced {
+		return false
+	}
+	for _, candidate := range placement.Candidates {
+		if candidate.Cluster == cluster {
+			return candidate.Allocation != nil && zeroHomeFloor(candidate.Allocation.CurrentHome) && candidate.AppliedPlanID == placement.Plan.ID
+		}
+	}
+	return false
 }
 
 func splitProgressCondition(reason, message string) policyCondition {

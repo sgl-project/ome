@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -2334,6 +2335,72 @@ func TestCreate_PutsASourceBackIntoServiceByLiftingTheDrainHoldItsSurgeLeft(t *t
 			if s.Phase != wantPhase || s.Operation != nil || s.RunningRevision != running {
 				t.Fatalf("row after the pass: phase=%s running=%s op=%+v, want phase=%s on %s with no operation",
 					s.Phase, s.RunningRevision, s.Operation, wantPhase, running)
+			}
+		})
+	}
+}
+
+// A migration pair's two rows are the migration record's for as long as
+// their pins stand: the drive moves them, and only the record's completion
+// or expiry ends a pin. A migration mode set to Never plans no migrate
+// pass, so the Create pass is the first to meet the pair. It leaves both
+// rows as they are and writes nothing on their pods. Two shapes, the
+// source serving under its pin in both: the surge still coming up, and the
+// surge stamped Failed by the scheduler grace.
+func TestCreate_MigrationPairStandsUnderModeNever(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		failSurge bool
+	}{
+		{name: "surge pending"},
+		{name: "surge Failed under the scheduler grace", failSurge: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newSinglePodMigFixture(t)
+			const uuid = "mig-mode-never"
+			f.records = []workload.MigrationRecord{mkMigRecord(uuid, 0, "node-a")}
+			surgePods := driveToSurgePods(t, f, uuid, 1)
+			if tc.failSurge {
+				ir := f.getIR(t)
+				surge := migrationStatusByIndex(t, ir, 1)
+				surge.Phase = v1beta1.OMENativeInstanceFailed
+				surge.LastFailure = &v1beta1.InstanceTermination{PodName: surgePods[0].Name, Reason: "Unschedulable", Time: metav1.Now()}
+				if err := f.c.Status().Update(context.Background(), ir); err != nil {
+					t.Fatalf("seed Failed surge row: %v", err)
+				}
+			}
+			// The source pod is PodReady past any availability window, the
+			// shape the promote bar admits; the kubelet stand-in brings the
+			// surge pod's containers up.
+			legacyFoldServingIntoPodReady(t, f.c, migPodsForInstance(t, f, 0)[0], time.Now().Add(-time.Hour))
+			f.react(t)
+			before := f.getIR(t).Status.InstanceStatuses
+
+			// The plan keeps the surge index as the pair's protected index,
+			// as the engine's plan does, and the mode plans no migrate pass
+			// ahead of the Create pass.
+			plan := f.plan
+			plan.MigrationMode = workload.MigrationModeNever
+			plan.Instances = append(append([]workload.InstancePlan(nil), plan.Instances...),
+				workload.InstancePlan{Index: 1, Incarnation: 1, Runners: []workload.RunnerPlan{{Name: "default", Size: 1}}})
+			f.recorder = record.NewFakeRecorder(16)
+			legacyResetExpectations(t)
+			if _, err := Create(context.Background(), f.deps(), f.input(t), plan, f.target); err != nil {
+				t.Fatalf("create pass: %v", err)
+			}
+
+			after := f.getIR(t).Status.InstanceStatuses
+			if diff := cmp.Diff(before, after); diff != "" {
+				t.Errorf("the pair rows stand as they were (-before +after):\n%s", diff)
+			}
+			if pods := migPodsForInstance(t, f, 1); len(pods) != 1 || podreadiness.IsServing(pods[0]) {
+				t.Errorf("the surge pod's serving gate is the drive's to write; got %d pod(s), serving=%v",
+					len(pods), len(pods) == 1 && podreadiness.IsServing(pods[0]))
+			}
+			select {
+			case ev := <-f.recorder.Events:
+				t.Errorf("event recorded for a pair the record owns: %s", ev)
+			default:
 			}
 		})
 	}

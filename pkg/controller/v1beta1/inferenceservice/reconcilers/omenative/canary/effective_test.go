@@ -88,3 +88,71 @@ func TestReconcile_NoStableRevisionDoesNotArm(t *testing.T) {
 		t.Fatalf("phase = %q, want Stable", phaseOf(isvc))
 	}
 }
+
+// A negative step is an external write. The partition is read at the step
+// the record's own traffic places the ladder at: a drain whose 100% shift
+// is recorded keeps the final step's held floor, a unit that already read
+// Stable keeps the sentinel's release, and a split keeps its own step.
+func TestEffectivePartition_NegativeStepReadsTheRecord(t *testing.T) {
+	cases := []struct {
+		name   string
+		phase  v1beta1.RolloutPhase
+		weight int32
+		want   int32
+	}{
+		{"drain at 100%", v1beta1.RolloutPhasePromoting, 100, 1},
+		{"held final gate at 100%", v1beta1.RolloutPhasePaused, 100, 1},
+		{"completed cutover", v1beta1.RolloutPhaseStable, 100, 0},
+		{"first split", v1beta1.RolloutPhasePaused, 50, 4},
+		{"staging before any split", v1beta1.RolloutPhasePending, 0, 4},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			isvc := mixedUnitCanaryISVC(twoStep())
+			rollout.SetCanaryStatusFor(&isvc.Status, v1beta1.RouterComponent, &v1beta1.CanaryStatus{
+				CanaryRevisionHash:    "new",
+				StableRevisionHash:    "old",
+				CurrentStep:           -1,
+				ObservedTrafficWeight: c.weight,
+			})
+			setPhase(isvc, v1beta1.RouterComponent, c.phase)
+			for _, member := range []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent, v1beta1.RouterComponent} {
+				p, ok := EffectivePartition(isvc, rollout.Policies{}, member, 8)
+				if !ok || p == nil {
+					t.Fatalf("%s: expected a canary partition", member)
+				}
+				if *p != c.want {
+					t.Errorf("%s: partition %d, want %d", member, *p, c.want)
+				}
+			}
+		})
+	}
+}
+
+// A negative step reads back as the last step whose traffic weight the
+// record's weight reached, and as the sentinel once the unit read Stable.
+func TestRecoveredStep(t *testing.T) {
+	plan := &v1beta1.GroupCanary{Steps: threeStep()} // traffic 25, 50, 100
+	cases := []struct {
+		name   string
+		phase  v1beta1.RolloutPhase
+		weight int32
+		want   int32
+	}{
+		{"no traffic shifted yet", v1beta1.RolloutPhasePending, 0, 0},
+		{"first split", v1beta1.RolloutPhasePaused, 25, 0},
+		{"second split", v1beta1.RolloutPhasePaused, 50, 1},
+		{"weight between two steps", v1beta1.RolloutPhasePaused, 40, 0},
+		{"drain at 100%", v1beta1.RolloutPhasePromoting, 100, 2},
+		{"completed cutover", v1beta1.RolloutPhaseStable, 100, 3},
+		{"parked before any split", v1beta1.RolloutPhaseFailed, 0, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cs := &v1beta1.CanaryStatus{CurrentStep: -1, ObservedTrafficWeight: c.weight}
+			if got := recoveredStep(cs, c.phase, plan); got != c.want {
+				t.Errorf("step %d, want %d", got, c.want)
+			}
+		})
+	}
+}

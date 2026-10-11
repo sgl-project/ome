@@ -349,6 +349,33 @@ func DemotedReady(s *InstanceStatus) bool {
 	return s != nil && s.Operation == nil && s.Phase == InstancePhasePending && s.RunningRevision != ""
 }
 
+// FailedOffRunningRevision reports a settled Failed row that still runs a
+// revision and records a spent attempt at another: no operation, a
+// running revision, and a target revision other than it. A failed attempt
+// to replace the Instance's pods at a new revision leaves this shape, and
+// the pods it was to replace may still serve; the status publication reads
+// those pods and publishes Ready over the row while they serve.
+func FailedOffRunningRevision(s *InstanceStatus) bool {
+	return s != nil && s.Phase == InstancePhaseFailed && settledOffRunningRevision(s)
+}
+
+// PublishedReadyOffRunningRevision reports the shape only the status
+// publication writes: Ready with no operation and a target revision other
+// than the one the row runs. Every promote clears the target revision, so
+// the engine never leaves a settled Ready row off it; such a row is the
+// publication's reading of a FailedOffRunningRevision row whose source
+// serves, and the engine reads it as Failed.
+func PublishedReadyOffRunningRevision(s *InstanceStatus) bool {
+	return s != nil && s.Phase == InstancePhaseReady && settledOffRunningRevision(s)
+}
+
+// settledOffRunningRevision is the shape the two readings above share: no
+// operation, a revision the row ran, and a target revision other than it.
+func settledOffRunningRevision(s *InstanceStatus) bool {
+	return s.Operation == nil && s.RunningRevision != "" &&
+		s.TargetRevision != "" && s.TargetRevision != s.RunningRevision
+}
+
 // Interruptible reports whether the named event acts on this row
 // while its owner's step is still in flight, rather than waiting for the
 // step to reach a boundary.

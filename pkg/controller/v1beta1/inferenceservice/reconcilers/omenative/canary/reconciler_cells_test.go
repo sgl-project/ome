@@ -371,6 +371,20 @@ func fixtureServingManual(t *testing.T) (*v1beta1.InferenceService, ReconcileInp
 	return isvc, in
 }
 
+// fixtureServingSecond is the second split of a three-step manual ladder
+// serving under its hold: the first step's promote was applied and removed.
+func fixtureServingSecond(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc := pinActiveRun(canaryISVC(threeStep(), nil))
+	in := baseInputs(isvc, map[string]int32{"new": 2, "old": 2})
+	in.TargetID = "t1"
+	mustReconcile(t, isvc, in) // the first split serves under its manual hold
+	isvc.Annotations = map[string]string{constants.RolloutPromoteAnnotation: "new"}
+	mustReconcile(t, isvc, in) // the promote advances to step 1
+	delete(isvc.Annotations, constants.RolloutPromoteAnnotation)
+	mustReconcile(t, isvc, in) // the record clears; the second split serves
+	return isvc, in
+}
+
 func fixtureServingTimed(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
 	isvc := pinActiveRun(canaryISVC(twoStepTimed(time.Hour), nil))
 	in := baseInputs(isvc, map[string]int32{"new": 2, "old": 2})
@@ -1357,6 +1371,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Serving/record[stableEqualsCanary]", fixtureServingManual, evRecordStableEqualsCanary, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/Serving/record[noStable]", fixtureServingManual, evRecordNoStable, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/Serving/record[negativeStep]", fixtureServingManual, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[second]/record[negativeStep]", fixtureServingSecond, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
 		{"canary/Serving/record[failedPhaseNoMarker]", fixtureServingManual, evPhaseFailedNoMarker, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		// --- Serving/Timed: the same rows on the timed fixture, whose soak is
 		// the one input that differs; the soak keeps counting under a pause.
@@ -1490,6 +1505,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Draining/record[noTargetID]", fixtureDraining, evRecordNoTargetID, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining/record[stableEqualsCanary]", fixtureDraining, evRecordStableEqualsCanary, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining/record[noStable]", fixtureDraining, evRecordNoStable, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining/record[negativeStep]", fixtureDraining, evRecordNegativeStep, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining/record[failedPhaseNoMarker]", fixtureDraining, evPhaseFailedNoMarker, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
 		// --- Draining/Held: 100% behind a final gate. The gate opens on a
 		// promote, an elapsed soak or a baked pass and the drain follows; a
@@ -1537,6 +1553,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Draining[M]/record[noTargetID]", fixtureDrainingHeld, evRecordNoTargetID, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
 		{"canary/Draining[M]/record[stableEqualsCanary]", fixtureDrainingHeld, evRecordStableEqualsCanary, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
 		{"canary/Draining[M]/record[noStable]", fixtureDrainingHeld, evRecordNoStable, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
+		{"canary/Draining[M]/record[negativeStep]", fixtureDrainingHeld, evRecordNegativeStep, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
 		{"canary/Draining[M]/record[failedPhaseNoMarker]", fixtureDrainingHeld, evPhaseFailedNoMarker, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
 		// --- Draining/ShortInWindow: a canary pod lost inside the window. The
 		// drain runs on under every verb that opens no gate; the release is not
@@ -1567,6 +1584,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Draining[capacityShort,inWindow]/record[noTargetID]", fixtureDrainingShortInWindow, evRecordNoTargetID, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort,inWindow]/record[stableEqualsCanary]", fixtureDrainingShortInWindow, evRecordStableEqualsCanary, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort,inWindow]/record[noStable]", fixtureDrainingShortInWindow, evRecordNoStable, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[capacityShort,inWindow]/record[negativeStep]", fixtureDrainingShortInWindow, evRecordNegativeStep, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort,inWindow]/record[failedPhaseNoMarker]", fixtureDrainingShortInWindow, evPhaseFailedNoMarker, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
 		// --- Draining/ShortElapsed: the window elapsed with a canary pod
 		// missing; the release waits for the capacity with the stable instance
@@ -1589,6 +1607,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Draining[capacityShort]/record[noTargetID]", fixtureDrainingShort, evRecordNoTargetID, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort]/record[stableEqualsCanary]", fixtureDrainingShort, evRecordStableEqualsCanary, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort]/record[noStable]", fixtureDrainingShort, evRecordNoStable, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[capacityShort]/record[negativeStep]", fixtureDrainingShort, evRecordNegativeStep, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort]/record[failedPhaseNoMarker]", fixtureDrainingShort, evPhaseFailedNoMarker, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
 		// --- Done/Rolling: the sentinel with the released instance rolling. A
 		// done canary evaluates no gate, so verbs are left in place or consumed
@@ -1613,6 +1632,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Done[rolling]/record[noTargetID]", fixtureDoneRolling, evRecordNoTargetID, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
 		{"canary/Done[rolling]/record[stableEqualsCanary]", fixtureDoneRolling, evRecordStableEqualsCanary, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
 		{"canary/Done[rolling]/record[noStable]", fixtureDoneRolling, evRecordNoStable, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
+		{"canary/Done[rolling]/record[negativeStep]", fixtureDoneRolling, evRecordNegativeStep, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
 		{"canary/Done[rolling]/record[failedPhaseNoMarker]", fixtureDoneRolling, evPhaseFailedNoMarker, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 2, active: true}},
 		// --- Done: the completed cutover reads Stable and is inactive under
 		// everything but a retarget; the applied promote's copy is still taken.
@@ -1629,7 +1649,9 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Done/canaryRestarted", fixtureDone, evCanaryRestarted, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
 		{"canary/Done/canaryPodDeleted", fixtureDone, evDoneCanaryPodDeleted, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
 		{"canary/Done/record[noTargetID]", fixtureDone, evRecordNoTargetID, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
+		{"canary/Done/record[stableEqualsCanary]", fixtureDone, evRecordStableEqualsCanary, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
 		{"canary/Done/record[noStable]", fixtureDone, evRecordNoStable, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
+		{"canary/Done/record[negativeStep]", fixtureDone, evRecordNegativeStep, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
 		{"canary/Done/record[failedPhaseNoMarker]", fixtureDone, evPhaseFailedNoMarker, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 2, active: true}},
 		// --- RollingBack: the revert drains. The hold reads no promote and
 		// consumes no copy, a further request is inert, and the record is
@@ -1722,24 +1744,16 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Failed[stableMissing]/record[stableEqualsCanary]", fixtureFailedStableMissing, evRecordStableEqualsCanary, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed[stableMissing]/record[noStable]", fixtureFailedStableMissing, evRecordNoStable, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed[stableMissing]/record[negativeStep]", fixtureFailedStableMissing, evRecordNegativeStep, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
-		// --- Incomplete record shapes and repins the fixtures above do not drive:
-		// a negative step on a record past step 0 is clamped to 0, which
-		// re-runs step 0 as a live step; an equal pair at the sentinel is
-		// repaired and the cutover re-recorded; a phase-only Failed over a
-		// recorded rejection reads as the revert; a repin clamps the index
-		// under every hold without moving it, and done stays done.
-		{"canary/Draining/record[negativeStep]", fixtureDraining, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 0, active: true}},
+		// --- Repins the fixtures above do not exercise, and a phase-only Failed
+		// over a recorded rejection: a repin clamps the index under every
+		// hold without moving it, done stays done, and the record with a
+		// rejection and no marker reads as the revert, which the dispatch
+		// parks again when the stable revision is still unretained.
 		{"canary/Draining/repin[holdOrTighten]", fixtureDraining, evRepinShorter, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 0, active: true}},
-		{"canary/Draining[M]/record[negativeStep]", fixtureDrainingHeld, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 0, active: true}},
 		{"canary/Draining[M]/repin[holdOrTighten]", fixtureDrainingHeld, evRepinShorterHeld, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 0, active: true}},
-		{"canary/Draining[capacityShort,inWindow]/record[negativeStep]", fixtureDrainingShortInWindow, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 0, active: true}},
 		{"canary/Draining[capacityShort,inWindow]/repin[holdOrTighten]", fixtureDrainingShortInWindow, evRepinShorter, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 0, active: true}},
-		{"canary/Draining[capacityShort]/record[negativeStep]", fixtureDrainingShort, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 0, active: true}},
 		{"canary/Draining[capacityShort]/repin[holdOrTighten]", fixtureDrainingShort, evRepinShorter, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 0, active: true}},
-		{"canary/Done[rolling]/record[negativeStep]", fixtureDoneRolling, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 0, active: true}},
 		{"canary/Done[rolling]/repin[pastDone]", fixtureDoneRolling, evRepinPastDone, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 3, active: true}},
-		{"canary/Done/record[negativeStep]", fixtureDone, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 0, active: true}},
-		{"canary/Done/record[stableEqualsCanary]", fixtureDone, evRecordStableEqualsCanary, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2, active: true, complete: true}},
 		{"canary/Done/repin[pastDone]", fixtureDone, evRepinPastDone, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 3}},
 		{"canary/RollingBack/repin[holdOrTighten]", fixtureRollingBack, evRepinLonger, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
 		{"canary/RollingBack/repin[raise]", fixtureRollingBack, evRepinRaise, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},

@@ -621,9 +621,9 @@ func secondaryCapacityReady(ctx context.Context, reads client.Reader, isvc *v1be
 	idx := int32(0)
 	if cs := rollout.CanaryStatusFor(&isvc.Status, primary); cs != nil {
 		idx = cs.CurrentStep
-	}
-	if idx < 0 {
-		idx = 0
+		if idx < 0 {
+			idx = recoveredStep(cs, isvc.Status.Components[primary].RolloutPhase, plan)
+		}
 	}
 	if int(idx) >= len(plan.Steps) {
 		idx = int32(len(plan.Steps) - 1)

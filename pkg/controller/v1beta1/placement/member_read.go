@@ -9,11 +9,32 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	utilnet "k8s.io/apimachinery/pkg/util/net"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
+
+// errMemberConnectionPending marks a read that found no connection to a member
+// the cluster registry has not yet tried to connect since the controller
+// started. The connection usually appears within seconds, so the read is worth
+// repeating.
+var errMemberConnectionPending = errors.New("first connection since the controller started is still being made")
+
+// pendingConnections is implemented by a cluster registry that can tell a
+// connection it has not tried yet from one it decided against.
+type pendingConnections interface {
+	ConnectionPending(name string, uid types.UID) bool
+}
+
+// connectionPending reports whether a missing connection to the member may
+// still appear without any change to the member. An empty uid matches any
+// registration of that name.
+func (r *Reconciler) connectionPending(name string, uid types.UID) bool {
+	pending, ok := r.Clusters.(pendingConnections)
+	return ok && pending.ConnectionPending(name, uid)
+}
 
 // MemberReadRetry bounds the re-reads of a member after a transient failure
 // within one reconcile. MaxAttempts counts every read, the first one included,
@@ -63,12 +84,12 @@ func retryMemberRead[T any](ctx context.Context, r *Reconciler, cluster string, 
 
 // transientMemberReadError reports whether a failed member read may succeed
 // when repeated shortly: a timeout, a dropped or refused connection,
-// throttling, or a server-side failure.
+// throttling, a server-side failure, or a first connection still being made.
 func transientMemberReadError(err error) bool {
 	switch {
 	case err == nil:
 		return false
-	case errors.Is(err, context.DeadlineExceeded),
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, errMemberConnectionPending),
 		apierrors.IsTimeout(err), apierrors.IsServerTimeout(err), apierrors.IsTooManyRequests(err),
 		apierrors.IsInternalError(err), apierrors.IsServiceUnavailable(err), apierrors.IsUnexpectedServerError(err),
 		utilnet.IsConnectionReset(err), utilnet.IsConnectionRefused(err), utilnet.IsProbableEOF(err):

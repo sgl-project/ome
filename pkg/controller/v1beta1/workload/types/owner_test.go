@@ -425,3 +425,45 @@ func TestEndedByOwnershipVerdict_FailedRowKeepingTheEndedAttempt(t *testing.T) {
 		}
 	}
 }
+
+// The two readings of a settled row off the revision it runs: Failed is
+// the engine's shape after a replacement's attempt was disposed beside a
+// source that still runs, and Ready over that shape is the status
+// publication's alone. A row with an operation, one that never ran a
+// revision, one whose attempt was at the revision it runs, and one with no
+// target recorded are neither.
+func TestOffRunningRevision_TheEnginesFailedAndThePublicationsReady(t *testing.T) {
+	cases := []struct {
+		name          string
+		row           *InstanceStatus
+		failed, ready bool
+	}{
+		{"nil row", nil, false, false},
+		{"disposed attempt beside a running revision",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-b"}, true, false},
+		{"the publication's Ready over it",
+			&InstanceStatus{Phase: InstancePhaseReady, RunningRevision: "rev-a", TargetRevision: "rev-b"}, false, true},
+		{"a promoted row carries no target",
+			&InstanceStatus{Phase: InstancePhaseReady, RunningRevision: "rev-b"}, false, false},
+		{"a failure at the revision the row runs",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-a"}, false, false},
+		{"a row that never ran a revision",
+			&InstanceStatus{Phase: InstancePhaseFailed, TargetRevision: "rev-b"}, false, false},
+		{"a crash-loop park records no target",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a"}, false, false},
+		{"an attempt still on the row",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-b",
+				Operation: &InstanceOperation{Type: InstanceOperationUpdate, Step: UpdateStepSurge}}, false, false},
+		{"a roll in flight",
+			&InstanceStatus{Phase: InstancePhaseUpdating, RunningRevision: "rev-a", TargetRevision: "rev-b",
+				Operation: &InstanceOperation{Type: InstanceOperationUpdate, Step: UpdateStepSurge}}, false, false},
+	}
+	for _, tc := range cases {
+		if got := FailedOffRunningRevision(tc.row); got != tc.failed {
+			t.Errorf("%s: FailedOffRunningRevision = %v, want %v", tc.name, got, tc.failed)
+		}
+		if got := PublishedReadyOffRunningRevision(tc.row); got != tc.ready {
+			t.Errorf("%s: PublishedReadyOffRunningRevision = %v, want %v", tc.name, got, tc.ready)
+		}
+	}
+}
