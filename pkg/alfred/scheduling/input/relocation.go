@@ -190,7 +190,11 @@ func snapshotIdentities(objects []runtime.RawExtension) (map[string]bool, map[ty
 	return names, uids, nil
 }
 
-func rejectUnsupportedPodInputs(pod *corev1.Pod) error {
+// rejectUnsupportedPodInputs rejects Pod inputs the scheduler simulation cannot
+// model: dynamic resource claims and volumes. With inlineCSI, a CSI inline
+// volume is accepted; PersistentVolumeClaims and generic ephemeral volumes,
+// which bind PersistentVolumes that may constrain placement, never are.
+func rejectUnsupportedPodInputs(pod *corev1.Pod, inlineCSI bool) error {
 	if len(pod.Spec.ResourceClaims) != 0 {
 		return fmt.Errorf("source Pod uses unsupported dynamic resource claim")
 	}
@@ -206,7 +210,7 @@ func rejectUnsupportedPodInputs(pod *corev1.Pod) error {
 	}
 	for i := range pod.Spec.Volumes {
 		volume := &pod.Spec.Volumes[i]
-		if volume.PersistentVolumeClaim != nil || volume.Ephemeral != nil || volume.CSI != nil {
+		if volume.PersistentVolumeClaim != nil || volume.Ephemeral != nil || (volume.CSI != nil && !inlineCSI) {
 			return fmt.Errorf("source Pod uses unsupported storage volume %q", volume.Name)
 		}
 	}

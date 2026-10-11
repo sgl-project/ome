@@ -156,9 +156,10 @@ func TestConfigureMigrationReusesWorkerAndChecksGuard(t *testing.T) {
 	opts.simulationWorkers = "/etc/alfred/workers.json"
 	opts.migrationAckTimeout, opts.migrationFailureBackoff = 3*time.Minute, 7*time.Minute
 	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+	direct := fake.NewClientBuilder().WithScheme(scheme).Build()
 	observations := &observer.Loop{}
 	decisions := &engine.DecisionLoop{Store: config.NewStore(), Predictions: &engine.PredictionStage{Reader: cl, Simulator: &startupSimulator{}}}
-	if err := configureMigration(opts, cl, cl, observations, decisions); err != nil {
+	if err := configureMigration(opts, direct, cl, observations, decisions); err != nil {
 		t.Fatal(err)
 	}
 	compatibility := observations.OMENativeExecutor(context.Background())
@@ -166,8 +167,11 @@ func TestConfigureMigrationReusesWorkerAndChecksGuard(t *testing.T) {
 		t.Fatalf("operator compatibility must not claim a liveness observation: %+v", compatibility)
 	}
 	dispatcher, ok := decisions.Dispatcher.(*engine.Dispatcher)
-	if !ok || dispatcher.Reader != cl || dispatcher.Client != cl || dispatcher.Simulator != decisions.Predictions.Simulator || dispatcher.Store != decisions.Store {
+	if !ok || dispatcher.Reader != direct || dispatcher.Client != cl || dispatcher.Simulator != decisions.Predictions.Simulator || dispatcher.Store != decisions.Store {
 		t.Fatalf("dispatcher did not reuse the direct reader, worker and configuration: %+v", decisions.Dispatcher)
+	}
+	if dispatcher.CacheReader != cl {
+		t.Fatal("TPU slice moves must replay the policy through the cached client, not the direct reader")
 	}
 	if dispatcher.Namespace != "caretaker" || dispatcher.Options.APIVersion != "v1" || dispatcher.Options.AcknowledgementTimeout != 3*time.Minute || dispatcher.Options.FailureBackoff != 7*time.Minute {
 		t.Fatalf("dispatcher startup bounds or identity namespace changed: %+v", dispatcher)

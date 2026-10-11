@@ -36,6 +36,48 @@ func (d *Dispatcher) freshObservation(ctx context.Context, cfg *config.Config) (
 	return d.observationFrom(ctx, d.Reader, cfg)
 }
 
+// sliceObservation is the observation for replaying a move onto a new TPU
+// slice. The slice scheduler places the replacement, so its free-partition
+// check is advisory; the source identity is fenced by CaptureSource's lossless
+// reads instead.
+func (d *Dispatcher) sliceObservation(ctx context.Context, cfg *config.Config) (*snapshot.ClusterSnapshot, error) {
+	if d.CacheReader == nil {
+		return d.freshObservation(ctx, cfg)
+	}
+	return d.observationFrom(ctx, d.CacheReader, cfg)
+}
+
+// capturedOwners returns the candidate's InferenceService and InferenceReplica
+// from a lossless capture, or nils. predictionOwnersMatch has already tied
+// them to the observation by UID, generation and status.
+func capturedOwners(s *input.Snapshot, c policy.Candidate) (*v1beta1.InferenceService, *v1beta1.InferenceReplica) {
+	var owner *v1beta1.InferenceService
+	for i := range s.InferenceServices {
+		if x := &s.InferenceServices[i]; x.Namespace == c.Workload.Namespace && x.Name == c.Workload.Name {
+			owner = x
+		}
+	}
+	if owner == nil {
+		return nil, nil
+	}
+	for i := range s.InferenceReplicas {
+		x := &s.InferenceReplicas[i]
+		if x.Namespace == owner.Namespace && x.Spec.ParentRef != nil && x.Spec.ParentRef.Name == owner.Name && x.Spec.Component == c.Component {
+			return owner, x
+		}
+	}
+	return owner, nil
+}
+
+// captureFor returns the lossless capture a move needs: only the source for a
+// move onto a new TPU slice, the whole scheduling input otherwise.
+func (d *Dispatcher) captureFor(ctx context.Context, sliceMove bool, source input.Source) (*input.Snapshot, error) {
+	if sliceMove {
+		return input.CaptureSource(ctx, d.Reader, source, d.now)
+	}
+	return input.Capture(ctx, d.Reader, d.now)
+}
+
 func (d *Dispatcher) observationFrom(ctx context.Context, reader client.Reader, cfg *config.Config) (*snapshot.ClusterSnapshot, error) {
 	return snapshot.Build(ctx, reader, snapshot.Options{Now: d.now, DefaultMovable: cfg.DefaultMovable,
 		TriggerConditions: cfg.Policies.NodeHealth.TriggerConditions, PreemptibleLabels: cfg.SpotPolicy.PreemptibleLabels,
@@ -62,12 +104,22 @@ func (d *Dispatcher) freshCandidate(s *snapshot.ClusterSnapshot, c policy.Candid
 // evidence for the request, or the reason it is withheld.
 func (d *Dispatcher) preflight(ctx context.Context, observed *snapshot.ClusterSnapshot, c policy.Candidate, cfg *config.Config, arbiter *Arbiter, j *dispatchJournal, existing *dispatchEntry) (dispatchEvidence, string) {
 	var empty dispatchEvidence
-	fresh, err := d.freshObservation(ctx, cfg)
+	// A move onto a new OME-provisioned TPU slice is placed by the slice
+	// scheduler, not by a scheduler profile Alfred can simulate. It keeps every
+	// other check below; the policy replay re-checks capacity. It also skips
+	// the cluster-wide API reads, which do not fit a large cluster. A journaled
+	// retry carries no plan, but only a slice move records no targets.
+	sliceMove := c.TPUSlice != nil || (existing != nil && len(existing.Targets) == 0)
+	observe := d.freshObservation
+	if sliceMove {
+		observe = d.sliceObservation
+	}
+	fresh, err := observe(ctx, cfg)
 	if err != nil {
 		return empty, "ObservationUnavailable"
 	}
 	current, ok := d.freshCandidate(fresh, c, cfg)
-	if !ok {
+	if !ok || (current.TPUSlice != nil) != sliceMove {
 		return empty, "PolicyNoLongerEligible"
 	}
 	decisions := arbiter.Admit(fresh, []policy.Candidate{current}, cfg, d.now())
@@ -77,7 +129,8 @@ func (d *Dispatcher) preflight(ctx context.Context, observed *snapshot.ClusterSn
 		}
 		return empty, "NotAdmitted"
 	}
-	captured, err := input.Capture(ctx, d.Reader, d.now)
+	source := input.Source{Namespace: current.Workload.Namespace, InferenceService: current.Workload.Name, Component: current.Component, Instance: current.Instance, FromNode: current.FromNode}
+	captured, err := d.captureFor(ctx, sliceMove, source)
 	if err != nil {
 		return empty, "SnapshotUnavailable"
 	}
@@ -96,11 +149,6 @@ func (d *Dispatcher) preflight(ctx context.Context, observed *snapshot.ClusterSn
 		}
 		hints = req.HintTargetNodes
 	}
-	source := input.Source{Namespace: current.Workload.Namespace, InferenceService: current.Workload.Name, Component: current.Component, Instance: current.Instance, FromNode: current.FromNode}
-	// A move onto a new OME-provisioned TPU slice is placed by the slice
-	// scheduler, not by a scheduler profile Alfred can simulate. It keeps every
-	// other check below; the policy replay above already re-checked capacity.
-	sliceMove := current.TPUSlice != nil
 	var request scheduling.Request
 	var sourcePods []corev1.Pod
 	if sliceMove {
@@ -123,6 +171,13 @@ func (d *Dispatcher) preflight(ctx context.Context, observed *snapshot.ClusterSn
 	}
 	owner := fresh.Workloads[current.Workload].ISVC
 	ir := fresh.Workloads[current.Workload].Components[current.Component].IR
+	if sliceMove {
+		// The slice observation may lag; the submit-time fence compares the
+		// owner's ResourceVersion with a direct read, so use the lossless copies.
+		if owner, ir = capturedOwners(captured, current); owner == nil || ir == nil {
+			return empty, "SourceChanged"
+		}
+	}
 	// Select once so the pre/post-simulation comparison and any durable retry
 	// use the same algorithm. Never upgrade an existing intent's source fence.
 	fingerprintVersion := dispatchFingerprintSemantic
@@ -153,15 +208,15 @@ func (d *Dispatcher) preflight(ctx context.Context, observed *snapshot.ClusterSn
 	// Re-read after simulation: source identity and scheduling objects must still
 	// agree. Lists are not a transaction; the final owner CAS fences only the
 	// submission, not future consumer acceptance (v1 has no incarnation fence).
-	final, err := d.freshObservation(ctx, cfg)
+	final, err := observe(ctx, cfg)
 	if err != nil {
 		return empty, "ObservationUnavailable"
 	}
 	finalCandidate, ok := d.freshCandidate(final, current, cfg)
-	if !ok {
+	if !ok || (finalCandidate.TPUSlice != nil) != sliceMove {
 		return empty, "PolicyNoLongerEligible"
 	}
-	finalCapture, err := input.Capture(ctx, d.Reader, d.now)
+	finalCapture, err := d.captureFor(ctx, sliceMove, source)
 	if err != nil {
 		return empty, "SnapshotUnavailable"
 	}
@@ -181,6 +236,11 @@ func (d *Dispatcher) preflight(ctx context.Context, observed *snapshot.ClusterSn
 	}
 	finalOwner := final.Workloads[current.Workload].ISVC
 	finalIR := final.Workloads[current.Workload].Components[current.Component].IR
+	if sliceMove {
+		if finalOwner, finalIR = capturedOwners(finalCapture, current); finalOwner == nil || finalIR == nil {
+			return empty, "SourceChanged"
+		}
+	}
 	// A durable retry may cross a fully observed pause/release, but a single
 	// simulation attempt still requires stable owner/replica generations.
 	if finalOwner.Generation != owner.Generation || finalIR.Generation != ir.Generation {
