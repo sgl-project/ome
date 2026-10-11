@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 	"sigs.k8s.io/ome/pkg/alfred/engine"
 	"sigs.k8s.io/ome/pkg/alfred/observer"
 	"sigs.k8s.io/ome/pkg/alfred/scheduling"
+	"sigs.k8s.io/ome/pkg/alfred/snapshot"
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 func resetFlags(t *testing.T, args []string) {
@@ -336,6 +339,101 @@ func TestPodCacheTransformStripsNonControllerOwners(t *testing.T) {
 	}
 	if owners := out.(*corev1.Pod).OwnerReferences; len(owners) != 0 {
 		t.Fatalf("non-controller owners retained: %+v", owners)
+	}
+}
+
+// tpuSlicePod is a slice-provisioned pod that requests resourceName, with an
+// extra annotation and node affinity beyond what TPU slice moves read.
+func tpuSlicePod(resourceName corev1.ResourceName) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "prod",
+			Name:      "svc-engine-0",
+			Labels: map[string]string{
+				constants.InferenceServicePodLabelKey: "svc",
+				constants.OMEComponentLabel:           "engine",
+			},
+			Annotations: map[string]string{
+				constants.TPUSliceProvisioningAnnotationKey: "true",
+				"example.com/other":                         "x",
+			},
+		},
+		Spec: corev1.PodSpec{
+			NodeName:     "tpu-1",
+			NodeSelector: map[string]string{"cloud.google.com/gke-tpu-topology": "2x2x2"},
+			Affinity: &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{MatchExpressions: []corev1.NodeSelectorRequirement{
+							{Key: "topology.kubernetes.io/zone", Operator: corev1.NodeSelectorOpIn, Values: []string{"zone-a"}},
+						}}},
+					},
+					PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{{Weight: 1}},
+				},
+				PodAntiAffinity: &corev1.PodAntiAffinity{},
+			},
+			Containers: []corev1.Container{{Name: "main", Resources: corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{resourceName: resource.MustParse("4")},
+			}}},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+}
+
+// TestPodCacheTransformKeepsTPUSliceFields checks a TPU pod keeps only the
+// slice-provisioning annotation and the required node affinity, and other pods
+// keep neither.
+func TestPodCacheTransformKeepsTPUSliceFields(t *testing.T) {
+	source := tpuSlicePod("google.com/tpu")
+	out, err := podCacheTransform(source.DeepCopy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.(*corev1.Pod)
+	if want := map[string]string{constants.TPUSliceProvisioningAnnotationKey: "true"}; !reflect.DeepEqual(got.Annotations, want) {
+		t.Fatalf("annotations = %v, want %v", got.Annotations, want)
+	}
+	want := &corev1.Affinity{NodeAffinity: &corev1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: source.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+	}}
+	if !reflect.DeepEqual(got.Spec.Affinity, want) {
+		t.Fatalf("affinity = %+v, want only the required node affinity", got.Spec.Affinity)
+	}
+
+	bare := tpuSlicePod("google.com/tpu")
+	bare.Annotations, bare.Spec.Affinity = map[string]string{"example.com/other": "x"}, nil
+	if out, _ := podCacheTransform(bare); out.(*corev1.Pod).Annotations != nil || out.(*corev1.Pod).Spec.Affinity != nil {
+		t.Fatalf("a TPU pod without the fields must keep none: %+v", out)
+	}
+	if out, _ := podCacheTransform(tpuSlicePod("nvidia.com/gpu")); out.(*corev1.Pod).Annotations != nil || out.(*corev1.Pod).Spec.Affinity != nil {
+		t.Fatalf("a non-TPU pod must keep no annotation or affinity: %+v", out)
+	}
+}
+
+// TestCachedTPUPodStaysSliceProvisioned builds a snapshot from a pod after the
+// cache transform, as the live informer does, and checks the TPU slice fields
+// survive.
+func TestCachedTPUPodStaysSliceProvisioned(t *testing.T) {
+	source := tpuSlicePod("google.com/tpu")
+	cached, err := podCacheTransform(source.DeepCopy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "tpu-1"}}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(node, cached.(*corev1.Pod)).Build()
+	snap, err := snapshot.Build(context.Background(), cl, snapshot.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got *snapshot.PodInfo
+	for i := range snap.Nodes["tpu-1"].OMEPods {
+		if p := &snap.Nodes["tpu-1"].OMEPods[i]; p.Name == source.Name {
+			got = p
+		}
+	}
+	if got == nil || !got.TPUSliceProvisioned || got.NodeSelector["cloud.google.com/gke-tpu-topology"] != "2x2x2" ||
+		!reflect.DeepEqual(got.RequiredNodeAffinity, source.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution) {
+		t.Fatalf("cached TPU pod lost the fields TPU slice moves read: %+v", got)
 	}
 }
 
