@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/ome/pkg/alfred/policy"
 	"sigs.k8s.io/ome/pkg/alfred/policy/defrag"
 	"sigs.k8s.io/ome/pkg/alfred/policy/nodehealth"
+	"sigs.k8s.io/ome/pkg/alfred/scheduling"
 	"sigs.k8s.io/ome/pkg/alfred/scheduling/process"
 	"sigs.k8s.io/ome/pkg/alfred/snapshot"
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -113,7 +114,7 @@ func GetOptions() Options {
 		"Namespace holding Alfred's ConfigMaps and leader-election Lease.")
 	flag.StringVar(&opts.configMapName, "config-name", opts.configMapName, "Name of the Alfred configuration ConfigMap.")
 	flag.StringVar(&opts.configMapKey, "config-key", opts.configMapKey, "Key inside the ConfigMap holding config.yaml.")
-	flag.StringVar(&opts.simulationWorkers, "simulation-workers", "", "Absolute path to the trusted startup worker registry JSON; empty disables prediction.")
+	flag.StringVar(&opts.simulationWorkers, "simulation-workers", "", "Absolute path to the trusted startup worker registry JSON; empty disables prediction and dispatch of moves that need a simulation.")
 	flag.DurationVar(&opts.simulationTimeout, "simulation-timeout", opts.simulationTimeout, "Whole-process timeout per scheduler prediction (positive, at most 1m).")
 	flag.StringVar(&opts.migrationAPIVersion, "migration-api-version", "", "Operator-confirmed migration API compatibility (v1); empty disables migration dispatch.")
 	flag.StringVar(&opts.migrationServiceAccount, "migration-service-account", "", "Alfred service account name enforced by the migration admission guard; required with migration-api-version.")
@@ -308,9 +309,6 @@ func validateOptions(opts Options) error {
 	if !opts.enableLeaderElection {
 		return fmt.Errorf("migration dispatch requires leader election")
 	}
-	if opts.simulationWorkers == "" {
-		return fmt.Errorf("migration dispatch requires simulation-workers")
-	}
 	return nil
 }
 
@@ -321,14 +319,21 @@ func configureMigration(opts Options, reader client.Reader, cl client.Client, ob
 	if opts.migrationAPIVersion == "" {
 		return nil
 	}
-	if decisions.Predictions == nil || decisions.Predictions.Simulator == nil {
-		return fmt.Errorf("migration dispatch requires a successfully loaded simulation worker")
+	// Without simulation-workers, only moves that need no simulation (onto a
+	// new TPU slice) dispatch; the dispatcher withholds the others. Configured
+	// workers must have loaded.
+	var simulator scheduling.Simulator
+	if opts.simulationWorkers != "" {
+		if decisions.Predictions == nil || decisions.Predictions.Simulator == nil {
+			return fmt.Errorf("migration dispatch requires the configured simulation worker to load")
+		}
+		simulator = decisions.Predictions.Simulator
 	}
 	admissionGuard := &guard.Guard{Reader: reader, Namespace: opts.namespace, ServiceAccount: opts.migrationServiceAccount}
 	dispatcher := &engine.Dispatcher{
 		// cl reads through the manager's cache, so a move onto a new TPU slice
 		// replays the policy without listing every Pod from the API server.
-		Reader: reader, CacheReader: cl, Client: cl, Simulator: decisions.Predictions.Simulator,
+		Reader: reader, CacheReader: cl, Client: cl, Simulator: simulator,
 		Guard: admissionGuard.Check, Namespace: opts.namespace,
 		Options: engine.DispatchOptions{APIVersion: opts.migrationAPIVersion,
 			AcknowledgementTimeout: opts.migrationAckTimeout, FailureBackoff: opts.migrationFailureBackoff},

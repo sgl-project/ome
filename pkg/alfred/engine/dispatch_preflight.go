@@ -122,6 +122,9 @@ func (d *Dispatcher) preflight(ctx context.Context, observed *snapshot.ClusterSn
 	if !ok || (current.TPUSlice != nil) != sliceMove {
 		return empty, "PolicyNoLongerEligible"
 	}
+	if !sliceMove && d.Simulator == nil {
+		return empty, "SimulationUnavailable"
+	}
 	decisions := arbiter.Admit(fresh, []policy.Candidate{current}, cfg, d.now())
 	if len(decisions) != 1 || !decisions[0].Admitted {
 		if len(decisions) == 1 {

@@ -225,3 +225,28 @@ func TestTPUSliceMoveSubmitsWhenCacheLags(t *testing.T) {
 		t.Fatalf("a lagging cache must not withhold the TPU slice move: %+v patches=%d", got, cl.patches)
 	}
 }
+
+// TestDispatchWithoutSimulatorSubmitsOnlyTPUSliceMoves checks that without a
+// simulation worker a move onto a new TPU slice is still submitted, while a
+// move that needs a simulation is withheld on its own as SimulationUnavailable.
+func TestDispatchWithoutSimulatorSubmitsOnlyTPUSliceMoves(t *testing.T) {
+	for _, gang := range []bool{false, true} {
+		t.Run(map[bool]string{false: "single", true: "gang"}[gang], func(t *testing.T) {
+			d, cl, snap, c, cfg, a := dispatchFixture(t, gang)
+			c = tpuSliceCandidate(c)
+			d.Policies = []policy.Policy{&stubPolicy{out: []policy.Candidate{c}}}
+			d.Simulator, d.CacheReader = nil, cl.Client
+			_, decisions := d.Execute(context.Background(), snap, []policy.Candidate{c}, cfg, a)
+			if got := decisionFor(t, decisions, "prod/a"); got.DispatchStatus != "submitted" || cl.patches != 1 {
+				t.Fatalf("TPU slice move without a simulator was not submitted: %+v patches=%d", got, cl.patches)
+			}
+		})
+	}
+
+	d, cl, snap, c, cfg, a := dispatchFixture(t, false)
+	d.Simulator, d.CacheReader = nil, cl.Client
+	_, decisions := d.Execute(context.Background(), snap, []policy.Candidate{c}, cfg, a)
+	if got := decisionFor(t, decisions, "prod/a"); got.DispatchStatus != "withheld" || got.DispatchReason != "SimulationUnavailable" || cl.patches != 0 {
+		t.Fatalf("a move that needs a simulation must be withheld without a simulator: %+v patches=%d", got, cl.patches)
+	}
+}
