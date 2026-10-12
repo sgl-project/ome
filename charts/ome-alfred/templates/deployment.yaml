@@ -3,9 +3,6 @@
 {{- if ne .Values.migration.apiVersion "v1" }}
 {{- fail "migration.apiVersion must be v1 when enabled" }}
 {{- end }}
-{{- if not .Values.simulation.configMapName }}
-{{- fail "migration.apiVersion requires simulation.configMapName" }}
-{{- end }}
 {{- end }}
 # Alfred, the GPU cluster caretaker. Every replica runs the
 # read-only observation loop; only the leader decides and dispatches.

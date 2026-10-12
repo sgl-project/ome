@@ -96,7 +96,6 @@ func TestMigrationStartupRejectsUnsafeOptions(t *testing.T) {
 		{"unsupported API", func(o *Options) { o.migrationAPIVersion = "v2" }},
 		{"missing account", func(o *Options) { o.migrationServiceAccount = "" }},
 		{"invalid account", func(o *Options) { o.migrationServiceAccount = "Bad_Account" }},
-		{"missing worker", func(o *Options) { o.simulationWorkers = "" }},
 		{"leader election disabled", func(o *Options) { o.enableLeaderElection = false }},
 		{"zero acknowledgement timeout", func(o *Options) { o.migrationAckTimeout = 0 }},
 		{"negative acknowledgement timeout", func(o *Options) { o.migrationAckTimeout = -time.Second }},
@@ -116,6 +115,10 @@ func TestMigrationStartupRejectsUnsafeOptions(t *testing.T) {
 	valid.migrationAckTimeout, valid.migrationFailureBackoff = time.Hour, time.Hour
 	if err := validateOptions(valid); err != nil {
 		t.Fatalf("inclusive timeout limits rejected: %v", err)
+	}
+	valid.simulationWorkers = ""
+	if err := validateOptions(valid); err != nil {
+		t.Fatalf("dispatch without a simulation worker, for moves that need none, rejected: %v", err)
 	}
 }
 
@@ -146,6 +149,18 @@ func TestConfigureMigrationRequiresOptInAndLoadedWorker(t *testing.T) {
 	decisions.Predictions = &engine.PredictionStage{}
 	if err := configureMigration(opts, nil, nil, observations, decisions); err == nil {
 		t.Fatal("a prediction stage without its simulator must fail startup")
+	}
+
+	// Without configured workers, dispatch runs with no simulator: only moves
+	// onto a new TPU slice can be submitted.
+	opts.simulationWorkers = ""
+	decisions.Predictions = nil
+	if err := configureMigration(opts, nil, nil, observations, decisions); err != nil {
+		t.Fatalf("dispatch without a simulation worker rejected: %v", err)
+	}
+	dispatcher, ok := decisions.Dispatcher.(*engine.Dispatcher)
+	if !ok || dispatcher.Simulator != nil {
+		t.Fatalf("dispatcher must have no simulator without simulation-workers: %+v", decisions.Dispatcher)
 	}
 }
 

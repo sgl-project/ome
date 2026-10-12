@@ -1563,7 +1563,10 @@ No free partition gives the advisory `NoTPUSliceCapacity`.
 An executable TPU slice move names no target nodes and claims no GPUs. The
 dispatcher skips only the simulation: the fresh policy replay re-checks free
 capacity, and source identity, budgets, cooldowns, the admission guard and the
-write-ahead journal apply as for any other move. The free-partition count is an
+write-ahead journal apply as for any other move. So migration dispatch does not
+need a simulation worker for these moves: without `--simulation-workers`, Alfred
+dispatches TPU slice moves and withholds every move that needs a simulation as
+`SimulationUnavailable`. Configured workers must still load at startup. The free-partition count is an
 estimate, not a reservation. A slice created after the check, or a partition
 the slice scheduler rejects, can leave the replacement waiting until the
 owning controller's migration deadline restores the source.
@@ -2753,8 +2756,8 @@ New unit coverage for the engine refactor:
     profile; `ome-scheduler` and custom names select only their exact mappings;
     mixed names, missing templates, invalid profile identities, and a gang on a
     non-gang profile fail closed. With no worker registered, verify the preserved
-    advisory reason plus structured `SimulationUnavailable` diagnostics and no
-    dispatch path.
+    advisory reason plus structured `SimulationUnavailable` diagnostics, and that
+    only TPU slice moves, which need no simulation, reach dispatch.
 15. **Protocol result validation and no live writes.** Reject mismatched request,
     snapshot, or profile identities; partial/duplicate/foreign Pod placements;
     unknown or explicitly excluded nodes; and unsupported decisions. Worker tests must assert

@@ -22,7 +22,8 @@ data:
     # Fresh supplemental passes; never interrupt or postpone cadence ([] disables).
     earlyTickOn: [NodeConditionChange, NodeMaintenanceChange]
 
-    # Scheduler simulation is mandatory before execution. Profiles are keyed by
+    # A move Alfred places needs a scheduler simulation before execution; a move
+    # onto a new TPU slice needs none. Profiles are keyed by
     # the effective replacement Pod schedulerName. Workers are opt-in through
     # trusted startup configuration and only produce recommendations. Defaults
     # remain empty and no profile can enable migration execution.

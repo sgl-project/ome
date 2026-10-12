@@ -66,8 +66,10 @@ simulation:
   configMapName: ""
   timeout: 10s
 
-# Operator opt-in to the existing OME v1 migration API. Requires the exact
-# simulation worker configuration and a verified Kubernetes admission guard.
+# Operator opt-in to the existing OME v1 migration API. Requires a verified
+# Kubernetes admission guard. Without simulation.configMapName, only moves onto
+# a new TPU slice (tpuSliceMigrationEnabled), which need no scheduler
+# simulation, are dispatched; other moves are withheld.
 migration:
   apiVersion: ""
   acknowledgementTimeout: 2m
@@ -96,7 +98,8 @@ alfredConfig:
   observationLoopInterval: 30s
   earlyTickOn: [NodeConditionChange, NodeMaintenanceChange]
 
-  # Scheduler simulation is mandatory before execution. Profiles are keyed by
+  # A move Alfred places needs a scheduler simulation before execution; a move
+  # onto a new TPU slice needs none. Profiles are keyed by
   # the effective replacement Pod schedulerName. Execution also requires
   # migration.apiVersion=v1 and the verified admission guard. The shipped default
   # is intentionally empty. Copy the exact worker --print-profile identity:

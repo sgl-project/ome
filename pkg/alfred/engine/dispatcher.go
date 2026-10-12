@@ -33,13 +33,15 @@ type Dispatcher struct {
 	Reader      client.Reader
 	CacheReader client.Reader
 	Client      client.Client
-	Simulator   scheduling.Simulator
-	Guard       func(context.Context) error
-	Namespace   string
-	Options     DispatchOptions
-	Now         func() time.Time
-	Policies    []policy.Policy
-	Store       *config.Store
+	// Simulator is nil without a simulation worker; then only moves onto a new
+	// TPU slice, which need no simulation, can be submitted.
+	Simulator scheduling.Simulator
+	Guard     func(context.Context) error
+	Namespace string
+	Options   DispatchOptions
+	Now       func() time.Time
+	Policies  []policy.Policy
+	Store     *config.Store
 	// MaintenanceFence, when set, withholds every submission while it returns
 	// an error: a replacement may land on any schedulable node, so moves wait
 	// until the nodes under cordon maintenance rules are cordoned.
@@ -189,8 +191,8 @@ func (d *Dispatcher) executionEnabled(ctx context.Context, cfg *config.Config) e
 	if d.Store != nil && d.Store.Get() != cfg {
 		return fmt.Errorf("ConfigurationChanged")
 	}
-	if d.Simulator == nil || len(d.Policies) == 0 {
-		return fmt.Errorf("SimulationUnavailable")
+	if len(d.Policies) == 0 {
+		return fmt.Errorf("PolicyReplayUnavailable")
 	}
 	if ctx.Err() != nil {
 		return fmt.Errorf("DispatchDeadline")

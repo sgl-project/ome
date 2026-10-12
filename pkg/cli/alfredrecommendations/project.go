@@ -247,7 +247,8 @@ func validDispatchReason(value string) bool {
 		"OwnerUnavailable", "ReplicaUnavailable", "ReplicaIdentityChanged", "MigrationStatusInvalid",
 		"TerminalStatusObserved", "UUIDStatusObserved", "ConsumerDeadlineExceeded", "AcknowledgedStatusMissing",
 		"RequestPayloadChanged", "RequestAnnotationObserved", "AcknowledgementTimeout", "OwnerChanged",
-		"SubmissionPrepared", "RequestSubmitted", "SubmissionUncertain", "SubmissionJournalUncertain")
+		"SubmissionPrepared", "RequestSubmitted", "SubmissionUncertain", "SubmissionJournalUncertain",
+		"MaintenanceCordonFailed", "PolicyReplayUnavailable")
 }
 
 // Reject duplicate JSON members (including in ignored payloads), excessive
