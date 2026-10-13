@@ -419,3 +419,56 @@ func TestDirectDeleteRetainsFilesAndRemovesBookkeeping(t *testing.T) {
 		})
 	}
 }
+
+func TestModelDeletionPreservesActiveDescendantDownload(t *testing.T) {
+	g, task := newSelectiveDeletionGopher(t, "oci://n/ns/b/models/o/model")
+	target := *task.ClusterBaseModel.Spec.Storage.Path
+	protected := filepath.Join(target, "releases", "rev-002")
+	writer, download := newCancellationCoverageGopher(t, "oci://n/ns/b/models/o/revision")
+	writer.modelRootDir = g.modelRootDir
+	download.BaseModel.Spec.Storage.Path = stringPtr(protected)
+	g.baseModelLister.(*mockBaseModelLister).models = []*v1beta1.BaseModel{download.BaseModel}
+	started := make(chan context.Context, 1)
+	release := make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
+	done := make(chan error, 1)
+	go func() {
+		done <- runDirectTestDownload(writer, download, func(ctx context.Context, path string) error {
+			if err := os.MkdirAll(path, 0o755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(path, "partial"), []byte("partial"), 0o600); err != nil {
+				return err
+			}
+			started <- ctx
+			<-release
+			return os.WriteFile(filepath.Join(path, "weights"), []byte("complete"), 0o600)
+		})
+	}()
+	var writerCtx context.Context
+	select {
+	case writerCtx = <-started:
+	case err := <-done:
+		t.Fatalf("download returned before writing: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("download did not start")
+	}
+	removed := filepath.Join(target, "weights")
+	writeSelectiveDeletionFile(t, removed)
+	require.NoError(t, g.processTask(task))
+	require.NoError(t, writerCtx.Err())
+	require.FileExists(t, filepath.Join(protected, "partial"))
+	require.NoFileExists(t, removed)
+	lock, acquired, err := tryHfArtifactChildFileLock(hfArtifactTaskInput{
+		ModelStoreRoot: g.modelRootDir, ChildModelPath: protected,
+	})
+	require.NoError(t, err)
+	if acquired {
+		_ = lock.Close()
+	}
+	require.False(t, acquired, "parent cleanup must not unlink the active descendant lock")
+	unblock()
+	require.NoError(t, <-done)
+	require.FileExists(t, filepath.Join(protected, "weights"))
+}
