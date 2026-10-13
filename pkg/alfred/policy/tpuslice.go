@@ -23,8 +23,10 @@ type TPUSlicePlan struct {
 // the members disagree on topology, or no free partition of that topology
 // exists. A partition is free when it has at least one host per member pod
 // and every node carrying its id label is an acceptable destination, reports
-// the healthy partition state, holds no accelerator pod, and fits the member
-// pods' node selectors and required node affinity.
+// the healthy partition state, belongs to no slice, holds no accelerator pod,
+// and fits the member pods' node selectors and required node affinity. A
+// slice claims its hosts before its pods start, so an empty host can still be
+// taken.
 func PlanTPUSliceReplacement(snap *snapshot.ClusterSnapshot, cfg *config.Config, inst *snapshot.Instance) (*TPUSlicePlan, string) {
 	if snap == nil || cfg == nil || inst == nil {
 		return nil, AdvisoryAcceleratorPlacementUnmodeled
@@ -68,7 +70,7 @@ func PlanTPUSliceReplacement(snap *snapshot.ClusterSnapshot, cfg *config.Config,
 			continue
 		}
 		usable[id] = !node.UnavailableAsTarget() && node.Labels[stateLabel] == tc.HealthyState &&
-			!holdsAcceleratorPod(node) && fits(node)
+			node.Labels[tc.SliceLabel] == "" && !holdsAcceleratorPod(node) && fits(node)
 	}
 	count := 0
 	for id, ok := range usable {
