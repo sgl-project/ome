@@ -54,10 +54,13 @@ import (
 // did not run.
 //
 // Reads authoritative InferenceReplica status via the provided context and
-// reader. targetRevision is the ControllerRevision the Component's Instances
-// move to in this pass (the rollback revision while a rollback is pinned,
-// else the spec target); the pairing gate orients its cohort simulation by
-// that revision's protocol. recorder may be nil (the event is best-effort
+// reader. fromRevision is the ControllerRevision the Instance being started
+// runs now (its row's RunningRevision), the cohort the pairing gate charges
+// the start to; empty when the row records none. targetRevision is the
+// ControllerRevision the Component's Instances move to in this pass (the
+// rollback revision while a rollback is pinned, else the spec target); the
+// pairing gate orients its cohort simulation by that revision's protocol.
+// recorder may be nil (the event is best-effort
 // observability). defaults carries the operator-configured group fill-ins
 // (e.g. the ratio tolerance default) so the gates see the same resolved
 // groups as the coordination reconciler.
@@ -66,6 +69,7 @@ func EvaluateUpdateGate(
 	reads client.Reader,
 	isvc *v1beta1.InferenceService,
 	component v1beta1.ComponentType,
+	fromRevision string,
 	targetRevision *appsv1.ControllerRevision,
 	recorder record.EventRecorder,
 	defaults GroupDefaults,
@@ -88,7 +92,7 @@ func EvaluateUpdateGate(
 	// capacity flat (which is why CheckRatio bypasses it below) but still
 	// moves the instance across pairing cohorts — the exact transition the
 	// pair floor exists to pace.
-	if ok, reason := gateCtx.CheckPairing(strategy, inFlightSurge, inFlightUnavail); !ok {
+	if ok, reason := gateCtx.CheckPairing(fromRevision, strategy, inFlightSurge, inFlightUnavail); !ok {
 		return false, v1beta1.RolloutHoldGatePairing, reason
 	}
 

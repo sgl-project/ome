@@ -206,6 +206,11 @@ type ReconcileInput struct {
 	// waives its capacity checks for an in-place start therefore waives
 	// them only for a start that returns the same pod.
 	//
+	// fromRevision is the ControllerRevision the Instance runs now (its
+	// row's RunningRevision), so a gate that paces cohorts charges the
+	// start to the cohort the Instance actually leaves; empty when the row
+	// records none.
+	//
 	// allowed=false skips this Instance for this reconcile pass; the
 	// dispatcher emits a short requeue. inFlightSurge / inFlightUnavail
 	// are the dispatcher's within-pass counters so the gate can
@@ -215,7 +220,7 @@ type ReconcileInput struct {
 	// rather than parsing the message.
 	//
 	// Nil is treated as always-allowed.
-	UpdateGate func(strategy UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (allowed bool, gate RolloutHoldGate, denyReason string)
+	UpdateGate func(fromRevision string, strategy UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (allowed bool, gate RolloutHoldGate, denyReason string)
 
 	// PlanGate, when non-nil, is asked before every fresh Update start, the
 	// starts that skip UpdateGate included: it is the adapter's precondition

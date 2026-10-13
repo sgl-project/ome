@@ -5,17 +5,50 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 const testControlPlaneID = "cp-alpha"
+
+func TestRuntimeEventsEnqueueSourcesTargetingMember(t *testing.T) {
+	member := readyWC("member-a", map[string]string{"pool": "inference"})
+	explicit := srcISVC("pool=inference")
+	explicit.Name = "explicit-runtime"
+	automatic := explicit.DeepCopy()
+	automatic.Name, automatic.Spec.Runtime = "automatic-runtime", nil
+	other := srcISVC("pool=other")
+	other.Name = "other-member"
+	local := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "local-service", Namespace: explicit.Namespace}}
+	r := &Reconciler{Client: indexedPlacementClient(t, testScheme(t), member, explicit, automatic, other, local)}
+
+	for _, config := range RuntimeFunnelConfigs() {
+		// Shared parents and automatically selected runtimes have no source label.
+		remote := config.NewObject()
+		remote.SetName("shared-parent")
+		stub, ok := config.ResolveCluster(member.Name, remote)
+		require.True(t, ok)
+		q := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[ctrl.Request]())
+		t.Cleanup(q.ShutDown)
+		r.statusEventHandler(0).Generic(t.Context(), event.GenericEvent{Object: stub}, q)
+		require.Equal(t, 2, q.Len())
+		var got []client.ObjectKey
+		for q.Len() > 0 {
+			request, _ := q.Get()
+			got = append(got, request.NamespacedName)
+			q.Done(request)
+		}
+		require.ElementsMatch(t, []client.ObjectKey{client.ObjectKeyFromObject(explicit), client.ObjectKeyFromObject(automatic)}, got)
+	}
+}
 
 // derivedISVC builds a remote derived InferenceService carrying the given origin
 // and control-plane markers, for the resolver tests.

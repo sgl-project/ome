@@ -5,7 +5,6 @@ import (
 	"time"
 
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/clock"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -13,7 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/placement"
@@ -308,16 +306,7 @@ func setupMultiCluster(mgr manager.Manager, clientSet kubernetes.Interface, opti
 	clusterManager.SetExecCredentialPolicy(execPolicy)
 	clusterManager.SetClientTuning(w.clientTuning)
 	if w.cacheEnabled {
-		// Scope the cached derived-InferenceService informer to exactly the set the
-		// watch funnel watches and resolves: this control plane's deriveds (origin
-		// marker, control-plane-scoped when an identity is configured). Sharing one
-		// selector keeps the cache from holding another control plane's deriveds on
-		// a shared workload cluster and guarantees every object the funnel's cache
-		// handler resolves is actually cached.
-		clusterManager.SetCacheOptions(workloadcluster.CacheOptions{
-			CachedKinds:     sets.New(v1beta1.SchemeGroupVersion.WithKind("InferenceService").GroupKind()),
-			DefaultSelector: placement.FunnelConfigFor(options.placementControlPlaneID).WatchSelector,
-		})
+		clusterManager.SetCacheOptions(placement.MemberCacheOptions())
 	}
 	// Run the cluster Manager as a Runnable so it captures the controller-manager's
 	// long-lived context as the base for remote-client (and cache-informer)
@@ -384,7 +373,7 @@ func setupMultiCluster(mgr manager.Manager, clientSet kubernetes.Interface, opti
 		placement.WithStatusSafetyRequeue(w.statusSafetyRequeue),
 	}
 	if w.cacheEnabled {
-		for _, funnelCfg := range placement.StatusFunnelConfigsFor(options.placementControlPlaneID) {
+		for _, funnelCfg := range append(placement.StatusFunnelConfigsFor(options.placementControlPlaneID), placement.RuntimeFunnelConfigs()...) {
 			funnelCfg.ResyncInterval = w.funnelResyncInterval
 			funnelCfg.BufferSize = w.funnelBufferSize
 			funnel := workloadcluster.NewStatusFunnel(clusterManager, funnelCfg)

@@ -121,7 +121,7 @@ func pairingGateTo(t *testing.T, isvc *v1beta1.InferenceService, component v1bet
 func TestCheckPairing_InactivePaths(t *testing.T) {
 	// No rollout block at all: the shared prelude short-circuits.
 	gate := pairingGate(t, &v1beta1.InferenceService{}, v1beta1.EngineComponent)
-	if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
+	if ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
 		t.Errorf("no rollout block: denied (%s)", reason)
 	}
 
@@ -130,13 +130,13 @@ func TestCheckPairing_InactivePaths(t *testing.T) {
 	soloISVC.Spec.Rollout.Groups[0].Components = []v1beta1.ComponentType{v1beta1.EngineComponent}
 	pinActiveRun(soloISVC) // re-pin: the membership edit must be part of the pinned plan
 	gate = pairingGate(t, soloISVC, v1beta1.EngineComponent)
-	if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
+	if ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
 		t.Errorf("engine-only group: denied (%s)", reason)
 	}
 
 	// Group pairs but no protocol declared.
 	gate = pairingGate(t, pairingISVC(""), v1beta1.EngineComponent)
-	if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
+	if ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
 		t.Errorf("no protocol: denied (%s)", reason)
 	}
 
@@ -145,7 +145,7 @@ func TestCheckPairing_InactivePaths(t *testing.T) {
 	routerISVC.Spec.Rollout.Groups[0].Components = append(routerISVC.Spec.Rollout.Groups[0].Components, v1beta1.RouterComponent)
 	pinActiveRun(routerISVC) // re-pin: the membership edit must be part of the pinned plan
 	gate = pairingGate(t, routerISVC, v1beta1.RouterComponent)
-	if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
+	if ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
 		t.Errorf("router step: denied (%s)", reason)
 	}
 
@@ -157,7 +157,7 @@ func TestCheckPairing_InactivePaths(t *testing.T) {
 		pairingCR("prod", "llama", v1beta1.EngineComponent, "e1", "nixl-v2"),
 		pairingCR("prod", "llama", v1beta1.DecoderComponent, "d1", "nixl-v2"),
 	)
-	if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
+	if ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
 		t.Errorf("converged fleet: denied (%s)", reason)
 	}
 }
@@ -178,7 +178,7 @@ func TestCheckPairing_DeniesLastOldEngineUntilTargetDecoderServes(t *testing.T) 
 		pairingCR("prod", "llama", v1beta1.DecoderComponent, "da", "proto-a"),
 	}
 	gate := pairingGate(t, isvc, v1beta1.EngineComponent, objs...)
-	ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
 	if ok {
 		t.Fatalf("draining the last proto-a engine with no proto-b decoder must be denied")
 	}
@@ -191,7 +191,7 @@ func TestCheckPairing_DeniesLastOldEngineUntilTargetDecoderServes(t *testing.T) 
 	// drains — this asymmetry is what lets the transition make progress while
 	// the engine's last old instance is held.
 	gateDec := pairingGate(t, isvc, v1beta1.DecoderComponent, objs...)
-	if ok, reason := gateDec.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
+	if ok, reason := gateDec.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
 		t.Errorf("decoder surge pairs its replacement with the serving proto-b engine; want allow, got deny (%s)", reason)
 	}
 
@@ -205,7 +205,7 @@ func TestCheckPairing_DeniesLastOldEngineUntilTargetDecoderServes(t *testing.T) 
 		pairingCR("prod", "llama", v1beta1.DecoderComponent, "db", "proto-b"),
 	}
 	gate = pairingGate(t, isvc, v1beta1.EngineComponent, objsUnblocked...)
-	if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
+	if ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
 		t.Errorf("proto-b serves on both Components; step should be allowed: %s", reason)
 	}
 }
@@ -229,14 +229,14 @@ func TestCheckPairing_CreditDistinguishesSurgeFromRecreate(t *testing.T) {
 		pairingCR("prod", "llama", v1beta1.DecoderComponent, "db", "proto-b"),
 	}
 	gate := pairingGate(t, isvc, v1beta1.EngineComponent, objs...)
-	ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
 	if !ok {
 		t.Errorf("surge swaps the last engine to proto-b, pairable with db: %s", reason)
 	}
 	if reason != "" {
 		t.Errorf("surge must pass the ordinary simulation, not an escape: %s", reason)
 	}
-	ok, reason = gate.CheckPairing(workloadtypes.UpdateStrategyRecreatePod, 0, 0)
+	ok, reason = gate.CheckPairing("", workloadtypes.UpdateStrategyRecreatePod, 0, 0)
 	if !ok {
 		t.Errorf("recreate of the engine's last instance is its final hop; must be allowed: %s", reason)
 	}
@@ -261,7 +261,7 @@ func TestCheckPairing_WildcardPairsWithAnything(t *testing.T) {
 	gate := pairingGate(t, isvc, v1beta1.EngineComponent, objs...)
 	// Removing the proto-a engine leaves the wildcard engine, which pairs with
 	// the proto-a decoder; removing the wildcard leaves the proto-a pair.
-	if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
+	if ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
 		t.Errorf("wildcard engine keeps every step pairable: %s", reason)
 	}
 }
@@ -280,7 +280,7 @@ func TestCheckPairing_MutualWallAllows(t *testing.T) {
 	}
 	for _, comp := range []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent} {
 		gate := pairingGate(t, isvc, comp, objs...)
-		if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
+		if ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
 			t.Errorf("%s: 1x1 mutual wall must allow rather than deadlock: %s", comp, reason)
 		}
 	}
@@ -298,7 +298,7 @@ func TestCheckPairing_NoPairToProtectAllows(t *testing.T) {
 		pairingCR("prod", "llama", v1beta1.DecoderComponent, "da", "proto-a"),
 	}
 	gate := pairingGate(t, isvc, v1beta1.DecoderComponent, objs...)
-	if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategyRecreatePod, 0, 0); !ok {
+	if ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategyRecreatePod, 0, 0); !ok {
 		t.Errorf("no existing pair to protect; the decoder's move to proto-b is the only exit: %s", reason)
 	}
 }
@@ -319,11 +319,11 @@ func TestCheckPairing_InFlightStartsCharge(t *testing.T) {
 	gate := pairingGate(t, isvc, v1beta1.EngineComponent, objs...)
 	// Recreate with one drain already in flight this wake-up: both proto-a
 	// engines are gone in the projection and nothing replaces them — denied.
-	if ok, _ := gate.CheckPairing(workloadtypes.UpdateStrategyRecreatePod, 0, 1); ok {
+	if ok, _ := gate.CheckPairing("", workloadtypes.UpdateStrategyRecreatePod, 0, 1); ok {
 		t.Errorf("second same-pass recreate would empty the engine pool; must be denied")
 	}
 	// Surge in-flight carries its own replacement credit — allowed.
-	if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 1, 0); !ok {
+	if ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 1, 0); !ok {
 		t.Errorf("surge in-flight replaces what it drains: %s", reason)
 	}
 }
@@ -340,7 +340,7 @@ func TestCheckPairing_FailsClosed(t *testing.T) {
 		pairingCR("prod", "llama", v1beta1.DecoderComponent, "da", "proto-a"),
 	}
 	gate := pairingGate(t, isvc, v1beta1.EngineComponent, objs...)
-	ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
 	if ok {
 		t.Fatalf("missing CR behind a serving instance must fail closed")
 	}
@@ -358,7 +358,7 @@ func TestCheckPairing_FailsClosed(t *testing.T) {
 	}).Build()
 	gate = ResolveGateContext(context.Background(), failing, isvc, v1beta1.EngineComponent)
 	gate.TargetRevision = forwardTarget(isvc, v1beta1.EngineComponent)
-	ok, reason = gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	ok, reason = gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
 	if ok {
 		t.Fatalf("CR read error must fail closed")
 	}
@@ -368,7 +368,7 @@ func TestCheckPairing_FailsClosed(t *testing.T) {
 
 	// No roll target at all: the gate cannot orient the simulation.
 	gate = pairingGateTo(t, isvc, v1beta1.EngineComponent, nil, objs...)
-	ok, reason = gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	ok, reason = gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
 	if ok {
 		t.Fatalf("a step with no target revision must fail closed")
 	}
@@ -399,21 +399,21 @@ func TestCheckPairing_RevertMovesTowardTargetRevision(t *testing.T) {
 	}
 	for _, strategy := range []workloadtypes.UpdateStrategyType{workloadtypes.UpdateStrategySurgeThenDrain, workloadtypes.UpdateStrategyRecreatePod, workloadtypes.UpdateStrategyInPlaceIfPossible} {
 		gate := pairingGateTo(t, isvc, v1beta1.EngineComponent, stable, objs...)
-		if ok, reason := gate.CheckPairing(strategy, 0, 0); !ok {
+		if ok, reason := gate.CheckPairing("", strategy, 0, 0); !ok {
 			t.Errorf("%s: reverting the engine's proto-b instance toward the reverted decoder must be admitted: %s", strategy, reason)
 		}
 	}
 	// The peer, already entirely on the stable cohort, has nothing to move
 	// and is never held by the engine's transition.
 	gate := pairingGateTo(t, isvc, v1beta1.DecoderComponent, pairingCR("prod", "llama", v1beta1.DecoderComponent, "da", "proto-a"), objs...)
-	if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategyRecreatePod, 0, 0); !ok {
+	if ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategyRecreatePod, 0, 0); !ok {
 		t.Errorf("a fully reverted decoder step must be admitted: %s", reason)
 	}
 
 	// Mirror: the same fleet rolling forward to proto-b holds the last
 	// proto-a engine until a proto-b decoder serves.
 	forward := pairingGate(t, isvc, v1beta1.EngineComponent, objs...)
-	ok, reason := forward.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	ok, reason := forward.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
 	if ok {
 		t.Fatalf("forward roll: the last proto-a engine must be held until a proto-b decoder serves")
 	}
@@ -546,7 +546,7 @@ func TestCheckPairing_LastHopEscape_AsymmetricDecoder(t *testing.T) {
 		pairingCR("prod", "llama", v1beta1.DecoderComponent, "da", "proto-a"),
 	}
 	gate := pairingGate(t, isvc, v1beta1.DecoderComponent, objs...)
-	ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategyRecreatePod, 0, 0)
+	ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategyRecreatePod, 0, 0)
 	if !ok {
 		t.Fatalf("last decoder hop with engine target capacity must be allowed: %s", reason)
 	}
@@ -570,7 +570,7 @@ func TestCheckPairing_LastHopEscape_RequiresPeerTargetCapacity(t *testing.T) {
 		pairingCR("prod", "llama", v1beta1.DecoderComponent, "da", "proto-a"),
 	}
 	gate := pairingGate(t, isvc, v1beta1.DecoderComponent, objs...)
-	ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategyRecreatePod, 0, 0)
+	ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategyRecreatePod, 0, 0)
 	if ok {
 		t.Fatalf("single-replica decoder must be held until the engine stages target capacity")
 	}
@@ -603,7 +603,7 @@ func TestCheckPairing_AsymmetricTransitionReachability(t *testing.T) {
 		pairingIR("prod", "llama", v1beta1.DecoderComponent, servingInstances("llama", v1beta1.DecoderComponent, "da")),
 	)
 	gate := pairingGate(t, isvc, v1beta1.EngineComponent, objs...)
-	if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategyRecreatePod, 0, 0); !ok {
+	if ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategyRecreatePod, 0, 0); !ok {
 		t.Fatalf("state 1: engine's first old step must be allowed: %s", reason)
 	}
 
@@ -615,11 +615,11 @@ func TestCheckPairing_AsymmetricTransitionReachability(t *testing.T) {
 		pairingIR("prod", "llama", v1beta1.DecoderComponent, servingInstances("llama", v1beta1.DecoderComponent, "da")),
 	)
 	gate = pairingGate(t, isvc, v1beta1.EngineComponent, objs...)
-	if ok, _ := gate.CheckPairing(workloadtypes.UpdateStrategyRecreatePod, 0, 0); ok {
+	if ok, _ := gate.CheckPairing("", workloadtypes.UpdateStrategyRecreatePod, 0, 0); ok {
 		t.Fatalf("state 2: engine's last old step must be held until the decoder flips")
 	}
 	gate = pairingGate(t, isvc, v1beta1.DecoderComponent, objs...)
-	ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategyRecreatePod, 0, 0)
+	ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategyRecreatePod, 0, 0)
 	if !ok {
 		t.Fatalf("state 2: decoder's last hop must be allowed: %s", reason)
 	}
@@ -634,7 +634,99 @@ func TestCheckPairing_AsymmetricTransitionReachability(t *testing.T) {
 		pairingIR("prod", "llama", v1beta1.DecoderComponent, servingInstances("llama", v1beta1.DecoderComponent, "db")),
 	)
 	gate = pairingGate(t, isvc, v1beta1.EngineComponent, objs...)
-	if ok, reason := gate.CheckPairing(workloadtypes.UpdateStrategyRecreatePod, 0, 0); !ok {
+	if ok, reason := gate.CheckPairing("", workloadtypes.UpdateStrategyRecreatePod, 0, 0); !ok {
 		t.Fatalf("state 3: engine's final old step must be allowed: %s", reason)
+	}
+}
+
+// strandedIntermediateObjects is the fleet after a protocol bumped v1→v2 was
+// bumped again to v3 once one engine had moved: the engines run {v2, v1} and
+// the decoders {v1, v1}, all serving.
+func strandedIntermediateObjects() []client.Object {
+	return []client.Object{
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "e1", "nixl-v1"),
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "e2", "nixl-v2"),
+		pairingCR("prod", "llama", v1beta1.DecoderComponent, "d1", "nixl-v1"),
+		pairingIR("prod", "llama", v1beta1.EngineComponent, servingInstances("llama", v1beta1.EngineComponent, "e2", "e1")),
+		pairingIR("prod", "llama", v1beta1.DecoderComponent, servingInstances("llama", v1beta1.DecoderComponent, "d1", "d1")),
+	}
+}
+
+// TestCheckPairing_StrandedIntermediateCohortMoves pins the re-target over a
+// half-landed cohort. The engine on v2 has nothing to pair with and its move
+// to v3 keeps the (v1, v1) pair, so its step is allowed. The engine on v1 is
+// the last pairable engine: its step is held, and stays held once the v2
+// start is charged in flight. A start whose row records no revision, or
+// whose revision is gone, keeps the pessimistic reading: every old cohort is
+// simulated losing the instance and the step is held. A revision the gate
+// cannot read fails closed.
+func TestCheckPairing_StrandedIntermediateCohortMoves(t *testing.T) {
+	isvc := pairingISVC("nixl-v3")
+	objs := strandedIntermediateObjects()
+	fromV2, fromV1 := "llama-engine-e2", "llama-engine-e1"
+
+	gate := pairingGate(t, isvc, v1beta1.EngineComponent, objs...)
+	if ok, reason := gate.CheckPairing(fromV2, workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
+		t.Fatalf("the engine on the intermediate cohort must be allowed to move: %s", reason)
+	}
+	ok, reason := gate.CheckPairing(fromV1, workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	if ok {
+		t.Fatalf("the last pairable engine must be held until cohort nixl-v3 serves on both Components")
+	}
+	if !strings.Contains(reason, `cohort "nixl-v1"`) || !strings.Contains(reason, `cohort "nixl-v3" serves on both`) {
+		t.Errorf("the hold must name the cohort the instance leaves and the cohort it waits for: %s", reason)
+	}
+	if ok, _ := gate.CheckPairing(fromV1, workloadtypes.UpdateStrategySurgeThenDrain, 1, 0); ok {
+		t.Fatalf("the last pairable engine must stay held with the intermediate engine's start charged in flight")
+	}
+	if ok, _ := gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); ok {
+		t.Fatalf("a start with no recorded revision must keep the pessimistic reading and be held")
+	}
+	if ok, _ := gate.CheckPairing("llama-engine-gone", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); ok {
+		t.Fatalf("a start whose revision is gone must keep the pessimistic reading and be held")
+	}
+
+	gate = pairingGate(t, isvc, v1beta1.DecoderComponent, objs...)
+	if ok, reason := gate.CheckPairing("llama-decoder-d1", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
+		t.Fatalf("a decoder step keeps a (nixl-v1, nixl-v1) pair and must be allowed: %s", reason)
+	}
+
+	failing := fake.NewClientBuilder().WithScheme(pairingScheme(t)).WithObjects(objs...).WithInterceptorFuncs(interceptor.Funcs{
+		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if _, isCR := obj.(*appsv1.ControllerRevision); isCR && key.Name == "llama-engine-e3" {
+				return errors.New("apiserver unavailable")
+			}
+			return c.Get(ctx, key, obj, opts...)
+		},
+	}).Build()
+	gate = ResolveGateContext(context.Background(), failing, isvc, v1beta1.EngineComponent)
+	gate.TargetRevision = forwardTarget(isvc, v1beta1.EngineComponent)
+	ok, reason = gate.CheckPairing("llama-engine-e3", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	if ok {
+		t.Fatalf("a starting instance whose revision cannot be read must fail closed")
+	}
+	if !strings.Contains(reason, "failing closed") || !strings.Contains(reason, "starting engine instance") {
+		t.Errorf("reason should mark the starting instance's revision read as the fail-closed path: %s", reason)
+	}
+}
+
+// TestEvaluateUpdateGate_StrandedIntermediateCohortMoves walks the same
+// re-target through the full gate stack: the engine on the intermediate
+// cohort is admitted and the engine on the last pairable cohort is held by
+// the pairing gate.
+func TestEvaluateUpdateGate_StrandedIntermediateCohortMoves(t *testing.T) {
+	isvc := pairingISVC("nixl-v3")
+	c := fake.NewClientBuilder().WithScheme(pairingScheme(t)).WithObjects(strandedIntermediateObjects()...).Build()
+	target := forwardTarget(isvc, v1beta1.EngineComponent)
+
+	allowed, gate, reason := EvaluateUpdateGate(context.Background(), c, isvc, v1beta1.EngineComponent, "llama-engine-e2", target, nil, GroupDefaults{},
+		workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	if !allowed {
+		t.Fatalf("the engine on the intermediate cohort must be admitted, held by %s: %s", gate, reason)
+	}
+	allowed, gate, reason = EvaluateUpdateGate(context.Background(), c, isvc, v1beta1.EngineComponent, "llama-engine-e1", target, nil, GroupDefaults{},
+		workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	if allowed || gate != v1beta1.RolloutHoldGatePairing {
+		t.Fatalf("the last pairable engine = (%v, %q, %q), want the pairing hold", allowed, gate, reason)
 	}
 }

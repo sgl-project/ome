@@ -7,8 +7,10 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/evidence"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	types "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
@@ -649,5 +651,204 @@ timeline:
 	}
 	if cs := pod.Status.ContainerStatuses[0]; cs.RestartCount != 0 || cs.LastTerminationState.Terminated != nil {
 		t.Fatalf("a container that never restarted parks with an empty record, got restartCount=%d lastState=%+v", cs.RestartCount, cs.LastTerminationState)
+	}
+}
+
+// TestApplyRunningNotReadyIsWhatTheEvidenceReads pins the kubelet's report
+// of a pod that runs but fails its readiness probes against the engine's
+// own readers: the pod is in readiness limbo, dark once the grace has run,
+// the conditions carry the kubelet's reason and message, the serving gate
+// stays the controller's, and a pod that never served measures its grace
+// from its creation. The event refuses to run without a grace or a slack.
+func TestApplyRunningNotReadyIsWhatTheEvidenceReads(t *testing.T) {
+	const ready = `
+scenario: ready-pod
+arrows: [T-empty-create]
+initial:
+  spec: {replicas: 1, image: registry.example.com/runtime:v1}
+  config: {stuckPodGrace: 1m}
+  rows: [{index: 0, phase: Ready, runningRevision: current, readySince: 0s}]
+  pods:
+    - {index: 0, ready: true, serving: true, routed: true}
+    - {index: 0, ordinal: 1, phase: Pending}
+timeline:
+  - tick: 1
+`
+	ctx := context.Background()
+	d := mustDriver(t, ready)
+	served := &PodRef{Index: 0}
+	event := func(ref *PodRef, slack string) TimelineEvent {
+		return TimelineEvent{ID: "pod.runningNotReady", Variant: "source", Args: EventArgs{Pod: ref, Slack: slack}}
+	}
+	if _, err := applyRunningNotReady(ctx, d, event(served, "")); err == nil || !strings.Contains(err.Error(), "needs a slack") {
+		t.Fatalf("the slack is the scenario's to state: %v", err)
+	}
+	d.clock.Step(10 * time.Second)
+	regressedAt := d.clock.Now()
+	detail, err := applyRunningNotReady(ctx, d, event(served, "1s"))
+	if err != nil {
+		t.Fatalf("running not ready: %v", err)
+	}
+	pod, err := d.getPod(ctx, d.podName(*served))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !evidence.PodRunningNotReady(pod) {
+		t.Fatalf("the engine must read the pod as running but not ready: phase=%s conditions=%+v statuses=%+v", pod.Status.Phase, pod.Status.Conditions, pod.Status.ContainerStatuses)
+	}
+	if want := regressedAt.Add(time.Minute + time.Second); !d.clock.Now().Equal(want) {
+		t.Fatalf("the clock lands on the end of the grace plus the slack: got %v, want %v (%s)", d.clock.Now(), want, detail)
+	}
+	if !evidence.PodUnreadyPastGrace(pod, d.clock.Now(), time.Minute) || !evidence.ContainersUnreadyPastGrace(pod, d.clock.Now(), time.Minute) {
+		t.Fatalf("a served pod unready for the grace is dark to both readers: %+v", pod.Status.Conditions)
+	}
+	for _, condType := range []corev1.PodConditionType{corev1.ContainersReady, corev1.PodReady} {
+		cond := findCondition(pod, condType)
+		if cond == nil || cond.Status != corev1.ConditionFalse || cond.Reason != containersNotReadyReason || !strings.Contains(cond.Message, "[main]") {
+			t.Fatalf("%s must carry the kubelet's report, got %+v", condType, cond)
+		}
+		if !cond.LastTransitionTime.Time.Equal(regressedAt) {
+			t.Fatalf("%s transitioned at %v, want the regression instant %v", condType, cond.LastTransitionTime.Time, regressedAt)
+		}
+	}
+	if gate := findCondition(pod, query.ServingConditionType); gate == nil || gate.Status != corev1.ConditionTrue {
+		t.Fatalf("the serving gate is the controller's to write and stays True, got %+v", gate)
+	}
+	if cs := pod.Status.ContainerStatuses; len(cs) != 1 || cs[0].Ready || cs[0].State.Running == nil {
+		t.Fatalf("the container keeps running and reads not ready: %+v", cs)
+	}
+
+	// A pod that never served has held ContainersReady False since its
+	// creation, so its grace ran from there and has already elapsed.
+	never := &PodRef{Index: 0, Ordinal: 1}
+	before := d.clock.Now()
+	detail, err = applyRunningNotReady(ctx, d, event(never, "1s"))
+	if err != nil {
+		t.Fatalf("never served: %v", err)
+	}
+	if !strings.Contains(detail, "unreadySince=t+0s") || !strings.Contains(detail, "already-elapsed") || !d.clock.Now().Equal(before) {
+		t.Fatalf("a pod unready since its creation has had its grace: %s (clock %v, was %v)", detail, d.clock.Now(), before)
+	}
+	pod, err = d.getPod(ctx, d.podName(*never))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !evidence.PodRunningNotReady(pod) || !evidence.ContainersUnreadyPastGrace(pod, d.clock.Now(), time.Minute) {
+		t.Fatalf("the never-served pod reads running, not ready and past the grace: %+v", pod.Status)
+	}
+
+	d.cfg.StuckPodGrace = ""
+	if _, err := applyRunningNotReady(ctx, d, event(served, "1s")); err == nil || !strings.Contains(err.Error(), "config.stuckPodGrace is not set") {
+		t.Fatalf("no grace configured means no readiness grace runs: %v", err)
+	}
+}
+
+// TestApplyMinReadyLandsOnTheWindow pins the Ready window against the
+// promote bar's own reader: the clock lands where podreadiness.IsPodAvailable
+// stops holding the earliest Ready pod back, plus the slack; a Component
+// with no window and a set with no window running both refuse the event.
+func TestApplyMinReadyLandsOnTheWindow(t *testing.T) {
+	const windowed = `
+scenario: windowed
+arrows: [T-empty-create]
+initial:
+  spec: {replicas: 2, image: registry.example.com/runtime:v1, minReadySeconds: 60}
+  rows:
+    - {index: 0, phase: Ready, runningRevision: current, readySince: 0s}
+    - {index: 1, phase: Ready, runningRevision: current, readySince: 0s}
+  pods:
+    - {index: 0, ready: true, serving: true, routed: true, readyAt: 30s}
+    - {index: 1, ready: true, serving: true, routed: true}
+timeline:
+  - tick: 1
+`
+	ctx := context.Background()
+	d := mustDriver(t, windowed)
+	event := TimelineEvent{ID: "timer.minReady", Args: EventArgs{Slack: "1s"}}
+	detail, err := applyMinReady(ctx, d, event)
+	if err != nil {
+		t.Fatalf("minReady: %v", err)
+	}
+	if want := d.opts.Start.Add(61 * time.Second); !d.clock.Now().Equal(want) || !strings.Contains(detail, "pod=svc-a-engine-1-default-0") {
+		t.Fatalf("the earliest window ends on the pod Ready at the start: clock %v want %v (%s)", d.clock.Now(), want, detail)
+	}
+	pod, err := d.getPod(ctx, d.podName(PodRef{Index: 1}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if available, _ := podreadiness.IsPodAvailable(pod, 60, d.clock.Now()); !available {
+		t.Fatalf("the promote bar must read the pod Available once the clock has landed")
+	}
+	if detail, err = applyMinReady(ctx, d, event); err != nil || !strings.Contains(detail, "pod=svc-a-engine-0-default-0") {
+		t.Fatalf("the later window is next: %s %v", detail, err)
+	}
+	if _, err := applyMinReady(ctx, d, event); err == nil || !strings.Contains(err.Error(), "no Ready pod is inside") {
+		t.Fatalf("with every window elapsed nothing is running: %v", err)
+	}
+	d.spec.MinReadySeconds = 0
+	if _, err := applyMinReady(ctx, d, event); err == nil || !strings.Contains(err.Error(), "spec.minReadySeconds is not set") {
+		t.Fatalf("no window configured means no window runs: %v", err)
+	}
+}
+
+// TestApplyExpectationsTTLIsTheCachesOwnDeadline pins the expectation clock
+// against the engine's cache: the clock lands where the cache stops waiting
+// for a delete it never saw land, read through the cache's own Satisfied
+// and the instant the pass recorded it at, plus the slack; a cache that
+// waits for nothing, and a zero slack, refuse the event.
+func TestApplyExpectationsTTLIsTheCachesOwnDeadline(t *testing.T) {
+	const ready = `
+scenario: ready-pod
+arrows: [T-empty-create]
+initial:
+  spec: {replicas: 1, image: registry.example.com/runtime:v1}
+  rows: [{index: 0, phase: Ready, runningRevision: current, readySince: 0s}]
+  pods:
+    - {index: 0, ready: true, serving: true, routed: true}
+timeline:
+  - tick: 1
+`
+	ctx := context.Background()
+	d := mustDriver(t, ready)
+	event := TimelineEvent{ID: "timer.expectationsTTL", Args: EventArgs{Slack: "1s"}}
+	if _, err := applyExpectationsTTL(ctx, d, event); err == nil || !strings.Contains(err.Error(), "waits for nothing") {
+		t.Fatalf("a cache with nothing outstanding runs no clock: %v", err)
+	}
+	// A pass that deletes a pod the cluster keeps Terminating leaves the
+	// cache waiting on that Instance.
+	d.clock.Step(5 * time.Second)
+	d.notePassClock()
+	stamp := d.clock.Now()
+	d.expectations.ExpectDeletes(d.opts.Namespace, d.opts.OwnerName, d.opts.Component, 0, 1)
+	if _, err := applyExpectationsTTL(ctx, d, TimelineEvent{ID: "timer.expectationsTTL", Args: EventArgs{Slack: "0s"}}); err == nil || !strings.Contains(err.Error(), "positive slack") {
+		t.Fatalf("the cache stops waiting strictly after its deadline: %v", err)
+	}
+	detail, err := applyExpectationsTTL(ctx, d, event)
+	if err != nil {
+		t.Fatalf("expectationsTTL: %v", err)
+	}
+	if !strings.Contains(detail, "waiting=0") {
+		t.Fatalf("the detail names the Instance waited on: %s", detail)
+	}
+	deadline := d.clock.Now().Add(-time.Second)
+	if !deadline.After(stamp) {
+		t.Fatalf("the deadline lies after the pass that recorded the expectation: %v, pass at %v", deadline, stamp)
+	}
+	// An independent cache records the same expectation at the same instant:
+	// it still waits at the resolved deadline and not one nanosecond
+	// past it, so the instant is the cache's own and not the driver's.
+	clk := clocktesting.NewFakeClock(stamp)
+	cache := types.NewExpectationsWithClock(clk)
+	cache.ExpectDeletes(d.opts.Namespace, d.opts.OwnerName, d.opts.Component, 0, 1)
+	clk.SetTime(deadline)
+	if cache.Satisfied(d.opts.Namespace, d.opts.OwnerName, d.opts.Component, 0) {
+		t.Fatalf("the cache still waits at the deadline %v", deadline)
+	}
+	clk.SetTime(deadline.Add(time.Nanosecond))
+	if !cache.Satisfied(d.opts.Namespace, d.opts.OwnerName, d.opts.Component, 0) {
+		t.Fatalf("the cache stops waiting one nanosecond past the deadline %v", deadline)
+	}
+	if !d.expectations.Satisfied(d.opts.Namespace, d.opts.OwnerName, d.opts.Component, 0) {
+		t.Fatalf("the engine's own cache reads the expectation as satisfied at the landed clock")
 	}
 }

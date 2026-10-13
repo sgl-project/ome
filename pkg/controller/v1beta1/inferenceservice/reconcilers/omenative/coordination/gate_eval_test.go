@@ -70,14 +70,14 @@ func TestEvaluateUpdateGate_DarkRowConsultIsHeldWithoutAndWithARun(t *testing.T)
 	isvc.Status.Rollout = nil
 	client := fakeClientForISVC(isvc)
 
-	allowed, gate, reason := EvaluateUpdateGate(context.Background(), client, isvc, v1beta1.EngineComponent, forwardTarget(isvc, v1beta1.EngineComponent), nil, GroupDefaults{},
+	allowed, gate, reason := EvaluateUpdateGate(context.Background(), client, isvc, v1beta1.EngineComponent, "", forwardTarget(isvc, v1beta1.EngineComponent), nil, GroupDefaults{},
 		workloadtypes.UpdateStrategyRecreatePod, 0, 0)
 	if allowed || gate != v1beta1.RolloutHoldGatePlan {
 		t.Fatalf("dark row consult with no run open = (%v, %q, %q), want the plan hold", allowed, gate, reason)
 	}
 
 	pinActiveRun(isvc)
-	allowed, gate, reason = EvaluateUpdateGate(context.Background(), client, isvc, v1beta1.EngineComponent, forwardTarget(isvc, v1beta1.EngineComponent), nil, GroupDefaults{},
+	allowed, gate, reason = EvaluateUpdateGate(context.Background(), client, isvc, v1beta1.EngineComponent, "", forwardTarget(isvc, v1beta1.EngineComponent), nil, GroupDefaults{},
 		workloadtypes.UpdateStrategyRecreatePod, 0, 0)
 	if allowed || gate != v1beta1.RolloutHoldGateBudget {
 		t.Fatalf("dark row consult with a run open = (%v, %q, %q), want the unavailability budget denial", allowed, gate, reason)

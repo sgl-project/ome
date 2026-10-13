@@ -2,7 +2,10 @@ package workloadcluster
 
 import (
 	"context"
+	"encoding/pem"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -17,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
 	toolscache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -106,27 +110,24 @@ func TestBuildRemoteClient_NeverCachingWhenNoKinds(t *testing.T) {
 	assert.Error(t, err, "never-caching client must reject cache handlers")
 }
 
-// TestBuildRemoteClient_SelectivelyCachingWhenKinds: with CacheOptions naming a
-// cached kind, the builder constructs a selectively-caching client and returns a
-// real (non-nil) cancel that tears the background cache down. cache.New does not
-// dial the apiserver, so this is hermetic; cancel() stops the (idle) informers.
-func TestBuildRemoteClient_SelectivelyCachingWhenKinds(t *testing.T) {
+// A cached connection is unusable until its member API can initialize informers.
+func TestBuildRemoteClient_CacheRequiresReachableMember(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "member unavailable", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(server.Close)
 	m := NewManager(scheme(t))
-	sel := labels.SelectorFromSet(labels.Set{"ome.io/placement-origin": "x"})
-	m.SetCacheOptions(CacheOptions{CachedKinds: sets.New(isvcGK()), DefaultSelector: sel})
-
-	ctx, baseCancel := context.WithCancel(context.Background())
-	defer baseCancel()
-	cl, cancel, err := m.buildRemoteClient(ctx, []byte(validKubeconfigRealCA), m.scheme)
+	m.SetCacheOptions(CacheOptions{CachedKinds: sets.New(isvcGK())})
+	config, err := clientcmd.Load([]byte(validKubeconfigRealCA))
 	require.NoError(t, err)
-	require.NotNil(t, cl)
-	require.NotNil(t, cancel)
-	cancel() // tears the cache down; must not panic
-
-	// A selectively-caching client accepts a handler for a cached kind (it errors
-	// only for non-cached kinds); proving it is NOT the never-caching wrapper.
-	_, err = cl.AddCacheEventHandler(context.Background(), &corev1.Pod{}, nil)
-	assert.Error(t, err, "Pod is not a cached kind, so a handler for it must error")
+	config.Clusters["c"].Server = server.URL
+	config.Clusters["c"].CertificateAuthorityData = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
+	raw, err := clientcmd.Write(*config)
+	require.NoError(t, err)
+	cl, cancel, err := m.buildRemoteClient(t.Context(), raw, m.scheme)
+	require.ErrorContains(t, err, "registering informer")
+	require.Nil(t, cl)
+	require.Nil(t, cancel)
 }
 
 // TestBuildRemoteClient_CacheRejectsPods: configuring Pod as a cached kind is

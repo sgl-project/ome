@@ -95,7 +95,7 @@ func TestCoordinationGatesDecodeColumnarV2Identically(t *testing.T) {
 		verdict := func(reads client.Reader) gateVerdict {
 			gate := ResolveGateContext(ctx, reads, isvc, v1beta1.EngineComponent)
 			gate.TargetRevision = forwardTarget(isvc, v1beta1.EngineComponent)
-			allowed, reason := gate.CheckPairing(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+			allowed, reason := gate.CheckPairing("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
 			return gateVerdict{allowed, reason}
 		}
 		want, got := verdict(dense), verdict(columnar)

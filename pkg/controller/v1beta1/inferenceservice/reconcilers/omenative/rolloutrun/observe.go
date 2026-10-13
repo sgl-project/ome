@@ -287,7 +287,9 @@ func divergedMember(isvc *v1beta1.InferenceService, targets map[v1beta1.Componen
 // under a pinned run. A settled rolled-back hold is terminal, not
 // in-progress. The done sentinel is read against the effective body; a
 // group whose reference does not resolve has none, so any non-terminal
-// state counts and the open then parks on the reference.
+// state counts and the open then parks on the reference. The step is read
+// the way the canary executor reads it, so a negative step written onto a
+// unit that reads Stable is past the last step, not a step still to run.
 func canaryMidFlight(isvc *v1beta1.InferenceService, policies rollout.Policies) bool {
 	if isvc == nil || isvc.Spec.Rollout == nil {
 		return false
@@ -308,9 +310,16 @@ func canaryMidFlight(isvc *v1beta1.InferenceService, policies rollout.Policies) 
 		return revertInFlight(isvc, g)
 	}
 	if g != nil {
-		return int(cs.CurrentStep) < len(g.Canary.Steps)
+		return stepShortOfEnd(isvc, primary, cs, g.Canary.Steps)
 	}
 	return true
+}
+
+// stepShortOfEnd reports whether a unit's recorded step is below its plan's
+// last step, reading the step as the canary executor does: a negative step
+// is an external write, read back from the phase and the recorded weight.
+func stepShortOfEnd(isvc *v1beta1.InferenceService, primary v1beta1.ComponentType, cs *v1beta1.CanaryStatus, steps []v1beta1.RolloutGroupStep) bool {
+	return int(rollout.StepOf(cs, isvc.Status.Components[primary].RolloutPhase, steps)) < len(steps)
 }
 
 // declaredCanaryGroup is the first spec group declaring canary, by any form.
@@ -355,7 +364,7 @@ func unitLadderInFlight(isvc *v1beta1.InferenceService, g *v1beta1.RolloutGroup)
 	if cs.RolledBackRevisionHash != "" {
 		return revertInFlight(isvc, g)
 	}
-	return int(cs.CurrentStep) < len(g.Canary.Steps)
+	return stepShortOfEnd(isvc, primaryOfGroup(g), cs, g.Canary.Steps)
 }
 
 // derivedProvenance parses the derive-time plan-source annotation

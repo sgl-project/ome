@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/placement/allocation"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workloadcluster"
 	"sigs.k8s.io/ome/pkg/placement/protocol"
 )
 
@@ -32,7 +33,7 @@ type plannedHomeObservation struct {
 	Terminal          bool
 }
 
-// observePlannedHome reads a direct, identity-checked member inventory,
+// observePlannedHome combines the observed ISVC with a direct workload inventory,
 // re-reading it after a transient failure as MemberReadRetry allows. Component
 // requirements include every declared component, even before its IR exists.
 func (r *Reconciler) observePlannedHome(ctx context.Context, source *v1beta1.InferenceService, previous v1beta1.CandidatePlacement, components []v1beta1.ComponentType) (plannedHomeObservation, error) {
@@ -51,7 +52,7 @@ func (r *Reconciler) observePlannedHomeOnce(ctx context.Context, source *v1beta1
 	if source.UID == "" || source.Status.Placement.Plan.SourceUID != source.UID {
 		return out, fmt.Errorf("planned observation requires verified source identity")
 	}
-	cl, err := r.plannedClient(ctx, previous.Cluster, previous.Allocation.ClusterUID)
+	cl, transport, err := r.plannedTransport(ctx, previous.Cluster, previous.Allocation.ClusterUID)
 	if err != nil {
 		return out, err
 	}
@@ -187,6 +188,17 @@ func (r *Reconciler) observePlannedHomeOnce(ctx context.Context, source *v1beta1
 	}
 	if len(byOwner) > 0 {
 		return out, fmt.Errorf("member pods remain without identified live components")
+	}
+	if !memberExists && len(irs.Items) == 0 && len(pods.Items) == 0 {
+		// Absence can release allocation authority. A newly created service may
+		// still be missing from the cache before it creates any components.
+		direct, _ := workloadcluster.DirectClient(transport)
+		if err := direct.Get(ctx, client.ObjectKeyFromObject(source), &v1beta1.InferenceService{}); !apierrors.IsNotFound(err) {
+			if err != nil {
+				return out, err
+			}
+			return out, fmt.Errorf("%w: member service exists beyond the cached observation", workloadcluster.ErrMemberCacheUnavailable)
+		}
 	}
 	if memberExists {
 		out.Member = member

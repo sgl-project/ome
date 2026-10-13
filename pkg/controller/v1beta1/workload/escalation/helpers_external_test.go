@@ -83,7 +83,7 @@ func forbidMutations(t *testing.T, input *workloadtypes.ReconcileInput) {
 		t.Errorf("Plan must not call MutateRetryBlock (%s)", rev)
 		return nil
 	}
-	input.UpdateGate = func(_ workloadtypes.UpdateStrategyType, _, _ int32) (bool, workloadtypes.RolloutHoldGate, string) {
+	input.UpdateGate = func(_ string, _ workloadtypes.UpdateStrategyType, _, _ int32) (bool, workloadtypes.RolloutHoldGate, string) {
 		t.Error("Plan must not consult UpdateGate (Execute owns the consult)")
 		return true, "", ""
 	}

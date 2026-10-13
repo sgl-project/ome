@@ -77,17 +77,21 @@ func TestCompareReadings_CraftedPodsDisagreePerReader(t *testing.T) {
 		{
 			name: "the gate written this pass, PodReady not folded yet",
 			pod:  gateNotFoldedPod("p-0"),
-			want: []string{"fullyServing/query=true/reading=false"},
+			want: []string{"fullyServing/query=true/reading=false", "readyReplicas/status=true/reading=false[not-serving]",
+				"gateWritten/podreadiness=true/reading=false[not-folded]"},
 		},
 		{
 			name: "a terminal pod whose conditions still read healthy",
 			pod:  terminalPod("p-0"),
-			want: []string{"servingCount/status>reading", "podReadyAndServing/coordination=false/podreadiness=true"},
+			want: []string{"servingCount/status>reading", "readyCount/status>reading", "podCount/status>reading[terminal]",
+				"readyReplicas/status=true/reading=false[dead-pod]", "podReadyAndServing/coordination=false/podreadiness=true",
+				"podAvailable/podreadiness=true/reading=false[not-live]", "gateWritten/podreadiness=true/reading=false[not-live]"},
 		},
 		{
 			name: "the gate condition absent, PodReady true",
 			pod:  gateAbsentPod("p-0"),
-			want: []string{"podReadyAndServing/coordination=true/podreadiness=false"},
+			want: []string{"readyReplicas/status=true/reading=false[not-serving]", "promotable/query=true/reading=false[not-serving]",
+				"podReadyAndServing/coordination=true/podreadiness=false", "podAvailable/podreadiness=true/reading=false[not-serving]"},
 		},
 	}
 	for _, tc := range cases {
@@ -111,6 +115,40 @@ func TestCompareReadings_CraftedPodsDisagreePerReader(t *testing.T) {
 	}
 }
 
+// TestCompareReadings_HandsTheRowToTheComparison proves the readers of
+// the persisted serving and available counts are compared against the
+// row the view carries for the Instance, and that an Instance with a row
+// and no pods is left out.
+func TestCompareReadings_HandsTheRowToTheComparison(t *testing.T) {
+	failedRow := func(index, serving int32) types.InstanceStatus {
+		return types.InstanceStatus{Index: index, Phase: types.InstancePhaseFailed, PodCount: 1, ServingPodCount: serving}
+	}
+	view := TickView{
+		Now: traceStart.Add(time.Minute),
+		Rows: []types.InstanceStatus{
+			failedRow(0, 0),
+			{Index: 1, Phase: types.InstancePhaseReady, PodCount: 1, ServingPodCount: 1, AvailablePodCount: 1},
+			failedRow(2, 0),
+		},
+		Pods: map[int32][]*corev1.Pod{
+			0: {readablePod("p-0")},
+			1: {readablePod("p-1")},
+		},
+		Routed: map[string]string{"p-0": "svc-rev-a", "p-1": "svc-rev-a"},
+		Spec:   TickSpec{Replicas: 3, PodsPerInstance: 1},
+	}
+	got := CompareReadings(view)
+	want := []string{"recreateOfDarkRow/row=true/reading=false", "persistedServingCount/row<reading", "persistedAvailableCount/row<reading"}
+	if classes := readingClasses(got); !reflect.DeepEqual(classes, want) {
+		t.Fatalf("classes %v, want %v\n%+v", classes, want, got)
+	}
+	for _, f := range got {
+		if f.Index != 0 {
+			t.Fatalf("a finding on an Instance whose row and pods agree, or which has no pods: %+v", f)
+		}
+	}
+}
+
 // TestCompareReadings_ListsInstancesInOrder holds the findings to Instance
 // order, whatever order the pod map iterates in, with the reader named.
 func TestCompareReadings_ListsInstancesInOrder(t *testing.T) {
@@ -130,10 +168,12 @@ func TestCompareReadings_ListsInstancesInOrder(t *testing.T) {
 		indexes = append(indexes, f.Index)
 		readers = append(readers, f.Reader)
 	}
-	if want := []int32{2, 7, 7}; !reflect.DeepEqual(indexes, want) {
+	if want := []int32{2, 2, 2, 7, 7, 7, 7, 7, 7, 7}; !reflect.DeepEqual(indexes, want) {
 		t.Fatalf("indexes %v, want %v\n%+v", indexes, want, got)
 	}
-	if want := []string{compare.ReaderPodSetFullyServing, compare.ReaderCountServingPods, compare.ReaderPodReadyAndServing}; !reflect.DeepEqual(readers, want) {
+	if want := []string{compare.ReaderPodSetFullyServing, compare.ReaderReadyReplicas, compare.ReaderIsServing,
+		compare.ReaderCountServingPods, compare.ReaderCountReadyPods, compare.ReaderPodCount, compare.ReaderReadyReplicas,
+		compare.ReaderPodReadyAndServing, compare.ReaderIsPodAvailable, compare.ReaderIsServing}; !reflect.DeepEqual(readers, want) {
 		t.Fatalf("readers %v, want %v", readers, want)
 	}
 	if got := CompareReadings(TickView{}); got != nil {

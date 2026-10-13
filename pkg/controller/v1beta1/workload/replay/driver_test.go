@@ -286,6 +286,74 @@ timeline:
   - tick: 1
 `
 
+// publishedCreate is a cold create under a half-minute availability
+// window whose pod turns Ready a tick after it is made, enters rotation a
+// tick later and then ages past the window, so each counter the
+// publication writes can be read on consecutive passes.
+const publishedCreate = `
+scenario: published-create
+arrows: [T-empty-create]
+initial:
+  spec:
+    replicas: 1
+    image: registry.example.com/runtime:v1
+    minReadySeconds: 30
+    instanceReadyTimeout: 30m
+timeline:
+  - tick: 1
+  - tick: 2
+    events:
+      - pod.ready: {pod: {index: 0}}
+  - tick: 3
+    events:
+      - endpoint.rotationIn: {pod: {index: 0}}
+  - tick: 4
+    events:
+      - clock.advance: 30s
+`
+
+// TestObserverViewRowsCarryThePublishedCounters proves the rows the
+// observer sees carry the counters the status publication wrote from the
+// pod set each pass started from: no pod before the create lands, one pod
+// that does not serve yet in the pass that writes its gate, one serving
+// pod once the gate is in place, a pass behind the pods, and one
+// available pod only once it is in the headless Service's rotation and
+// has been Ready for the whole minReadySeconds window.
+func TestObserverViewRowsCarryThePublishedCounters(t *testing.T) {
+	scenario, err := Parse([]byte(publishedCreate), Vocabulary{})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var views []TickView
+	opts := DefaultOptions()
+	opts.Observer = func(view TickView) { views = append(views, view) }
+	if trace, err := Run(context.Background(), scenario, opts); err != nil {
+		t.Fatalf("run: %v\ntrace:\n%s", err, trace)
+	}
+	if len(views) != 4 {
+		t.Fatalf("observed %d ticks, want 4", len(views))
+	}
+	want := []publishedCounters{
+		{},
+		{podCount: 1},
+		{podCount: 1, servingPodCount: 1},
+		{podCount: 1, servingPodCount: 1, availablePodCount: 1},
+	}
+	for i, view := range views {
+		if len(view.Rows) != 1 {
+			t.Fatalf("tick %d: %d rows, want 1", view.Tick, len(view.Rows))
+		}
+		got := publishedCounters{
+			podCount:          view.Rows[0].PodCount,
+			servingPodCount:   view.Rows[0].ServingPodCount,
+			availablePodCount: view.Rows[0].AvailablePodCount,
+		}
+		if got != want[i] {
+			t.Fatalf("tick %d: row publishes %+v, want %+v", view.Tick, got, want[i])
+		}
+	}
+}
+
 // TestObserverViewCarriesTheReadingsWindows proves the driver hands the
 // observer the pods per Instance, the availability window and the
 // stuck-pod grace the scenario configured.

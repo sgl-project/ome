@@ -51,10 +51,8 @@ type CacheOptions struct {
 	// CachedKinds are the GroupKinds served from the background informer cache
 	// instead of live reads. Pods are rejected by NewSelectivelyCachingClient.
 	CachedKinds sets.Set[schema.GroupKind]
-	// DefaultSelector scopes every cached kind to a label selector (the
-	// placement-origin selector, so the cache holds only this control plane's
-	// derived objects — not every object of the kind on the remote cluster).
-	// Nil caches unfiltered.
+	// DefaultSelector optionally filters every cached kind. Nil includes shared
+	// objects and ownership collisions that an origin selector would hide.
 	DefaultSelector labels.Selector
 	// Indexes are field indexes registered on the cache before it starts.
 	Indexes []CacheIndexOption

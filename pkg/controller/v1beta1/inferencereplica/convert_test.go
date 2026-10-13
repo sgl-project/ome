@@ -1759,7 +1759,7 @@ func TestWireCoordinationGates_WiresSequentialGate(t *testing.T) {
 	g.Expect(input.DrainHolds).NotTo(gomega.BeNil(),
 		"a held drain must have a collector, or the gate holds without a RolloutHold")
 
-	allowed, gate, reason := input.UpdateGate(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	allowed, gate, reason := input.UpdateGate("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
 	g.Expect(allowed).To(gomega.BeFalse(),
 		"engine must be denied while decoder (first in Sequential Order) is in flight")
 	g.Expect(reason).To(gomega.ContainSubstring("Sequential waiting on decoder"))
@@ -1795,7 +1795,7 @@ func TestWireCoordinationGates_SequentialReleasesActiveComponent(t *testing.T) {
 	r.wireCoordinationGates(context.Background(), &input, engineIR, parent, coordination.GroupDefaults{}, specTargetRevision(engineIR))
 	g.Expect(input.UpdateGate).NotTo(gomega.BeNil())
 
-	allowed, _, _ := input.UpdateGate(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	allowed, _, _ := input.UpdateGate("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
 	g.Expect(allowed).To(gomega.BeTrue(),
 		"engine is the active Sequential Component once decoder converged; it must be allowed")
 }
@@ -1976,7 +1976,7 @@ func TestWireCoordinationGates_GateReadsFreshPeerStatus(t *testing.T) {
 	r.wireCoordinationGates(context.Background(), &input, engineIR, parent, coordination.GroupDefaults{}, specTargetRevision(engineIR))
 	g.Expect(input.UpdateGate).NotTo(gomega.BeNil())
 
-	allowed, gate, reason := input.UpdateGate(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	allowed, gate, reason := input.UpdateGate("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
 	g.Expect(allowed).To(gomega.BeFalse(),
 		"engine must be held while the decoder is genuinely behind (fresh decoder serving 3/4 → "+
 			"engine surge 5/3 = 1.667 out of band); got allowed — the gate read the stale parent "+
@@ -2008,7 +2008,7 @@ func TestWireCoordinationGates_GateFreshPeerReleasesWhenBalanced(t *testing.T) {
 	r.wireCoordinationGates(context.Background(), &input, engineIR, parent, coordination.GroupDefaults{}, specTargetRevision(engineIR))
 	g.Expect(input.UpdateGate).NotTo(gomega.BeNil())
 
-	allowed, _, reason := input.UpdateGate(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	allowed, _, reason := input.UpdateGate("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
 	g.Expect(allowed).To(gomega.BeTrue(),
 		"engine surge must be allowed once the decoder's FRESH status is balanced (4/4 → engine 5/4 = "+
 			"1.25 in band), even though the parent projection lags at 3/4: "+reason)
@@ -2040,11 +2040,11 @@ func TestWireCoordinationGates_RatioRecoveryStartsFromAuthoritativeZero(t *testi
 	r.wireCoordinationGates(context.Background(), &input, engineIR, parent, coordination.GroupDefaults{}, specTargetRevision(engineIR))
 	g.Expect(input.UpdateGate).NotTo(gomega.BeNil())
 
-	allowed, _, reason := input.UpdateGate(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	allowed, _, reason := input.UpdateGate("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
 	g.Expect(allowed).To(gomega.BeTrue(),
 		"positive authoritative shape at 0:0 serving must admit one recovery bootstrap: "+reason)
 
-	allowed, _, reason = input.UpdateGate(workloadtypes.UpdateStrategySurgeThenDrain, 1, 0)
+	allowed, _, reason = input.UpdateGate("", workloadtypes.UpdateStrategySurgeThenDrain, 1, 0)
 	g.Expect(allowed).To(gomega.BeFalse(),
 		"same-wakeup recovery must serialize per Component even when MaxSurge permits more: "+reason)
 }
@@ -2086,7 +2086,7 @@ func TestWireCoordinationGates_SequentialGateReadsFreshPeerStatus(t *testing.T) 
 	r.wireCoordinationGates(context.Background(), &input, engineIR, parent, coordination.GroupDefaults{}, specTargetRevision(engineIR))
 	g.Expect(input.UpdateGate).NotTo(gomega.BeNil())
 
-	allowed, _, reason := input.UpdateGate(workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	allowed, _, reason := input.UpdateGate("", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
 	g.Expect(allowed).To(gomega.BeFalse(),
 		"engine must wait while the decoder is genuinely still rolling (fresh decoder IR has "+
 			"UpdateRevision != CurrentRevision); got allowed — the gate read the stale parent "+
@@ -2245,7 +2245,7 @@ func TestWireCoordinationGates_GateUsesFreshIRStatus(t *testing.T) {
 	r.wireCoordinationGates(context.Background(), &input, engineIR, parent, coordination.GroupDefaults{}, specTargetRevision(engineIR))
 	g.Expect(input.UpdateGate).NotTo(gomega.BeNil())
 
-	allowed, _, reason := input.UpdateGate(workloadtypes.UpdateStrategyRecreatePod, 0, 0)
+	allowed, _, reason := input.UpdateGate("", workloadtypes.UpdateStrategyRecreatePod, 0, 0)
 	g.Expect(allowed).To(gomega.BeFalse(),
 		"with the IR's fresh status (engine serving 3/4 = one pod already out), the "+
 			"RatioBalanced tiebreaker must refuse a second drain; got allowed — the gate "+
@@ -2970,7 +2970,7 @@ func TestPlacementSurgeGate(t *testing.T) {
 				t.Fatalf("nil gate = %t, want %t", input.UpdateGate == nil, tt.wantNil)
 			}
 			if input.UpdateGate != nil {
-				allowed, gate, reason := input.UpdateGate(tt.strategy, 0, 0)
+				allowed, gate, reason := input.UpdateGate("", tt.strategy, 0, 0)
 				if diff := cmp.Diff(tt.wantAllow, allowed); diff != "" {
 					t.Errorf("allowed (-want +got):\n%s; reason: %s", diff, reason)
 				}

@@ -103,6 +103,7 @@ func TestDefaultOptions(t *testing.T) {
 	assert.False(t, opts.enableLeaderElection)
 	assert.False(t, opts.enableWebhook)
 	assert.Equal(t, ":8081", opts.probeAddr)
+	assert.Empty(t, opts.pprofAddr, "profiling stays off unless the chart asks for it")
 	assert.Equal(t, LeaderElectionNamespace, opts.leaderElectionNamespace)
 	// Multi-cluster topology/identity/security flag defaults (the tunables moved
 	// to the ConfigMap; these five stay flags).
@@ -154,6 +155,20 @@ func TestGetOptionsKubeAPIRateLimits(t *testing.T) {
 	o := GetOptions()
 	assert.Equal(t, 50.0, o.kubeAPIQPS)
 	assert.Equal(t, 100, o.kubeAPIBurst)
+}
+
+func TestGetOptionsPprofBindAddress(t *testing.T) {
+	oldArgs := os.Args
+	defer func() {
+		os.Args = oldArgs
+		flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	}()
+
+	flag.CommandLine = flag.NewFlagSet("cmd", flag.ExitOnError)
+	os.Args = []string{"cmd", "--pprof-bind-address=127.0.0.1:6060"}
+
+	o := GetOptions()
+	assert.Equal(t, "127.0.0.1:6060", o.pprofAddr)
 }
 
 func TestApplyKubeAPIRateLimits(t *testing.T) {

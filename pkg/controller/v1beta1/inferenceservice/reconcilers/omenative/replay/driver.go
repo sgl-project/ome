@@ -7,6 +7,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,6 +29,10 @@ type Options struct {
 	// Start is the instant the injected clock begins at and every trace
 	// timestamp is rendered relative to.
 	Start time.Time
+	// Observer, when set, receives a read-only view of every tick a pass
+	// ran in, after the pass. It writes nothing, so a trace is the same
+	// with or without it.
+	Observer TickObserver
 }
 
 // DefaultOptions returns the fixture identities scenarios are written
@@ -83,6 +88,9 @@ type driver struct {
 	// staleClaim is the stale-read variant staged for the next pass, checked
 	// against the live object and the snapshot when the pass begins.
 	staleClaim string
+	// tickRun is what the run layer did in the current pass, kept for the
+	// observer.
+	tickRun RunView
 }
 
 func newDriver(ctx context.Context, s *Scenario, opts Options) (*driver, error) {
@@ -505,6 +513,44 @@ func (d *driver) runTick(ctx context.Context, tick Tick) error {
 	if unfired := d.cluster.unfiredConflicts(); len(unfired) > 0 {
 		return fmt.Errorf("replay: tick %d: api.conflict armed for status write %v, but the pass made no such write", tick.Tick, unfired)
 	}
+	return d.observe(ctx, tick.Tick)
+}
+
+// observe hands the tick's end state to the observer, when one is set:
+// the service and the replicas as the apiserver holds them, every
+// Component's pods in name order, and the run layer's outcome.
+func (d *driver) observe(ctx context.Context, tick int) error {
+	if d.opts.Observer == nil {
+		return nil
+	}
+	isvc, err := d.liveService(ctx)
+	if err != nil {
+		return err
+	}
+	view := TickView{
+		Tick:     tick,
+		Now:      d.clock.Now(),
+		Service:  isvc,
+		Replicas: map[v1beta1.ComponentType]*v1beta1.InferenceReplica{},
+		Pods:     map[v1beta1.ComponentType][]*corev1.Pod{},
+		Run:      d.tickRun,
+	}
+	for _, c := range d.components() {
+		ir, err := d.replica(ctx, c)
+		if err != nil {
+			return err
+		}
+		view.Replicas[c] = ir
+		pods := &corev1.PodList{}
+		if err := d.cluster.cli.List(ctx, pods, client.InNamespace(d.opts.Namespace), client.MatchingLabels(d.selectorLabels(c))); err != nil {
+			return fmt.Errorf("replay: list pods of %s for the observer: %w", c, err)
+		}
+		sort.Slice(pods.Items, func(i, j int) bool { return pods.Items[i].Name < pods.Items[j].Name })
+		for i := range pods.Items {
+			view.Pods[c] = append(view.Pods[c], &pods.Items[i])
+		}
+	}
+	d.opts.Observer(view)
 	return nil
 }
 

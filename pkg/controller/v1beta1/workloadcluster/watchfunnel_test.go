@@ -257,10 +257,31 @@ func waitForHandler(t *testing.T, c *fakeWatchClient) toolscache.ResourceEventHa
 	return h
 }
 
-// TestFunnel_WatchClusterRegistersHandlerAndPushes drives the full per-cluster
-// path: establish the watch via the Manager, register the cache handler, then a
-// cache Add of an owned object resolves to its local key and lands on the
-// channel. A short-circuit establish backoff keeps the test fast.
+func TestFunnel_SharedDependencyEventsIdentifyMember(t *testing.T) {
+	remote := &fakeWatchClient{}
+	m := NewManager(runtime.NewScheme())
+	m.newClient = func(context.Context, []byte, *runtime.Scheme) (SelectivelyCachingClient, context.CancelFunc, error) {
+		return remote, func() {}, nil
+	}
+	require.NoError(t, m.Connect(t.Context(), "member-a", []byte("credentials")))
+	f := NewStatusFunnel(m, FunnelConfig{
+		NewObject: func() client.Object { return &corev1.ConfigMap{} },
+		ResolveCluster: func(cluster string, _ client.Object) (client.Object, bool) {
+			return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: cluster}}, true
+		},
+		BufferSize: 3,
+	})
+	_, generation, _ := m.clientForGeneration("member-a")
+	require.NoError(t, f.registerCacheHandler(t.Context(), "member-a", generation))
+	h := remote.getHandler()
+	object := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "shared-parent"}}
+	h.OnAdd(object, false)
+	h.OnUpdate(object, object.DeepCopy())
+	h.OnDelete(toolscache.DeletedFinalStateUnknown{Obj: object})
+	require.Equal(t, []string{"member-a", "member-a", "member-a"}, drainNames(f))
+}
+
+// Cached events resolve to local keys without opening a second network watch.
 func TestFunnel_WatchClusterRegistersHandlerAndPushes(t *testing.T) {
 	fc := &fakeWatchClient{}
 	m := NewManager(runtime.NewScheme())
@@ -278,18 +299,22 @@ func TestFunnel_WatchClusterRegistersHandlerAndPushes(t *testing.T) {
 	}
 
 	f := NewStatusFunnel(m, FunnelConfig{
-		NewList:    func() client.ObjectList { return &corev1.ConfigMapList{} },
-		NewObject:  func() client.Object { return &corev1.ConfigMap{} },
-		Resolve:    originResolver,
-		BufferSize: 4,
+		NewList:        func() client.ObjectList { return &corev1.ConfigMapList{} },
+		NewObject:      func() client.Object { return &corev1.ConfigMap{} },
+		Resolve:        originResolver,
+		BufferSize:     4,
+		ResyncInterval: 10 * time.Millisecond,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go f.watchCluster(ctx, "c1")
 
-	// Wait for the handler to be registered (establishment confirmed first).
+	// Registration uses the shared informer.
 	h := waitForHandler(t, fc)
+	fc.mu.Lock()
+	assert.Nil(t, fc.watcher, "cached events must share the informer watch")
+	fc.mu.Unlock()
 
 	// Drive an informer Add of an owned object through the handler.
 	h.OnAdd(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
@@ -324,10 +349,11 @@ func TestFunnel_WatchClusterRegistersHandlerAfterClientReplacement(t *testing.T)
 	require.NoError(t, m.Connect(context.Background(), "c1", []byte("A")))
 
 	f := NewStatusFunnel(m, FunnelConfig{
-		NewList:    func() client.ObjectList { return &corev1.ConfigMapList{} },
-		NewObject:  func() client.Object { return &corev1.ConfigMap{} },
-		Resolve:    originResolver,
-		BufferSize: 4,
+		NewList:        func() client.ObjectList { return &corev1.ConfigMapList{} },
+		NewObject:      func() client.Object { return &corev1.ConfigMap{} },
+		Resolve:        originResolver,
+		BufferSize:     4,
+		ResyncInterval: 10 * time.Millisecond,
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

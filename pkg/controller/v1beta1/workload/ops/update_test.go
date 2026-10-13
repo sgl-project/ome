@@ -3225,6 +3225,76 @@ func TestRolledInstanceNotServing_RestartedRunnerServesOnceItHoldsReadyForTheWin
 	}
 }
 
+// TestRolledInstanceNotServing_RebuiltSetIsReadByItsOwnServing pins the
+// roll's reading of a set built after the row entered Ready. A row
+// mid-rebuild keeps the ReadySince of the set it lost until the new set is
+// promoted, and a pod created after that time is a new pod, so the first
+// run of its container is no restart. The new set is read by its serving
+// state alone: not serving while a pod is not Ready, serving the moment
+// every pod is Ready and in rotation, whatever window a restarted pod would
+// still have to hold, and never crashed.
+func TestRolledInstanceNotServing_RebuiltSetIsReadByItsOwnServing(t *testing.T) {
+	const target = "llama-70b-engine-v2hash"
+	readySince := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	rebuiltAt := readySince.Add(2 * time.Minute)
+	restart := &workload.InstanceOperation{Type: workload.InstanceOperationRestart, Step: workload.RestartStepDrain}
+	row := &workload.InstanceStatus{Index: 0, Phase: workload.InstancePhaseRestarting, RunningRevision: target,
+		ReadySince: &metav1.Time{Time: readySince}, Operation: restart}
+	cases := []struct {
+		name   string
+		ready  bool
+		held   bool
+		reason string
+	}{
+		{name: "the rebuilt pod is not Ready yet", held: true, reason: "pod set not fully serving"},
+		{name: "the rebuilt pod is Ready and in rotation inside the window", ready: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pod := rebuiltRunnerPod(rebuiltAt, tc.ready)
+			now := rebuiltAt.Add(45 * time.Second)
+			held, _, reason := RolledInstanceNotServing(row, target, time.Time{}, []*corev1.Pod{pod}, 1, 30, now)
+			if held != tc.held {
+				t.Fatalf("RolledInstanceNotServing = (%v, %q), want held=%v", held, reason, tc.held)
+			}
+			if strings.Contains(reason, "restarted since Ready") {
+				t.Fatalf("a pod created after the row entered Ready is a new pod, never a restart; got %q", reason)
+			}
+			if !strings.Contains(reason, tc.reason) {
+				t.Fatalf("the reason must name %q, got %q", tc.reason, reason)
+			}
+			if RolledInstanceCrashed(row, target, time.Time{}, []*corev1.Pod{pod}, 30) {
+				t.Fatalf("a set built after the row entered Ready never reads as crashed")
+			}
+		})
+	}
+}
+
+// rebuiltRunnerPod is a pod created at createdAt whose runner container has
+// run once, from a few seconds after its creation, with no termination
+// behind it; ready says whether the pod is Ready. Its serving gate is set.
+func rebuiltRunnerPod(createdAt time.Time, ready bool) *corev1.Pod {
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name: "llama-70b-engine-0-0", Namespace: "prod", CreationTimestamp: metav1.NewTime(createdAt),
+	}}
+	pod.Status.Phase = corev1.PodRunning
+	pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+		Name: constants.MainContainerName, Ready: ready,
+		State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(createdAt.Add(5 * time.Second))}},
+	}}
+	status := corev1.ConditionFalse
+	if ready {
+		status = corev1.ConditionTrue
+	}
+	readyAt := metav1.NewTime(createdAt.Add(20 * time.Second))
+	pod.Status.Conditions = []corev1.PodCondition{
+		{Type: corev1.ContainersReady, Status: status, LastTransitionTime: readyAt},
+		{Type: corev1.PodReady, Status: status, LastTransitionTime: readyAt},
+		{Type: query.ServingConditionType, Status: corev1.ConditionTrue},
+	}
+	return pod
+}
+
 // TestRolledSetInRotation pins the serving half of the roll's reading of
 // a promoted set: in rotation when every live pod of the revision is
 // ContainersReady and serving, whatever window a pod that came back has

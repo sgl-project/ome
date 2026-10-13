@@ -14,6 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workloadcluster"
 )
 
 // errMemberConnectionPending marks a read that found no connection to a member
@@ -90,6 +91,7 @@ func transientMemberReadError(err error) bool {
 	case err == nil:
 		return false
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, errMemberConnectionPending),
+		errors.Is(err, workloadcluster.ErrMemberCacheUnavailable),
 		apierrors.IsTimeout(err), apierrors.IsServerTimeout(err), apierrors.IsTooManyRequests(err),
 		apierrors.IsInternalError(err), apierrors.IsServiceUnavailable(err), apierrors.IsUnexpectedServerError(err),
 		utilnet.IsConnectionReset(err), utilnet.IsConnectionRefused(err), utilnet.IsProbableEOF(err):

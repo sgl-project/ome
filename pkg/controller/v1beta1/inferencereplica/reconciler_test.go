@@ -2641,11 +2641,9 @@ func gangMigHasCond(p *corev1.Pod, ct corev1.PodConditionType, st corev1.Conditi
 	return false
 }
 
-// The walk also carries the migration tail's two terminal arrows, which
-// need the published pod counters the surge availability gate reads:
-// the surge promotes to Ready on the source's revision with its pin
-// cleared, and the drained source's row is then removed with the record
-// stamped Completed.
+// The walk also carries the migration tail to its end: the surge promotes
+// to Ready on the source's revision with its pin cleared, and the drained
+// source's row is then removed with the record stamped Completed.
 func TestReconcile_GangMigrationCompletesAfterSourcePlanRelease(t *testing.T) {
 	ir := baselineIR("llama-engine", "prod", 1)
 	ir.Spec.Runners = []v1beta1.Runner{

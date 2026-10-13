@@ -1265,7 +1265,7 @@ type recoveryHarness struct {
 	events   []string
 	// gate, when set, is the coordination UpdateGate the passes consult
 	// before a fresh start opens.
-	gate func(strategy workloadtypes.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, workloadtypes.RolloutHoldGate, string)
+	gate func(_ string, strategy workloadtypes.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, workloadtypes.RolloutHoldGate, string)
 	// planGate, when set, is the adapter's plan precondition the passes ask
 	// before any fresh start, the starts exempt from gate included.
 	planGate func() (bool, workloadtypes.RolloutHoldGate, string)
@@ -1410,6 +1410,10 @@ type recoveryHarness struct {
 	// workers run it as a sound image, the shape of a runner fault that
 	// lives in the leader's process alone.
 	crashLeaderOnly bool
+	// crashWorkerOnly confines a crash image to the workers of a gang: the
+	// leader runs it as a sound image and keeps serving, the shape of a
+	// runner fault that lives in a worker's process alone.
+	crashWorkerOnly bool
 	// holds records every rollout hold the update pass reported, in
 	// order; a pass that reported none appends nothing.
 	holds []workloadtypes.RolloutHold
@@ -1970,9 +1974,13 @@ func instanceIndexOf(pod *corev1.Pod) int32 {
 }
 
 // faultyImage is the image the crash model reads for pod: its spec image,
-// or none for a worker of a gang whose crash is the leader's alone.
+// or none for a worker of a gang whose crash is the leader's alone, or
+// for the leader of a gang whose crash is the workers' alone.
 func (h *recoveryHarness) faultyImage(pod *corev1.Pod) string {
 	if h.crashLeaderOnly && pod.Labels[query.LabelRunner] == workloadtypes.RunnerWorker {
+		return ""
+	}
+	if h.crashWorkerOnly && pod.Labels[query.LabelRunner] == workloadtypes.RunnerLeader {
 		return ""
 	}
 	return pod.Spec.Containers[0].Image
@@ -7549,7 +7557,9 @@ func nodeLossStories() []nodeLossStory {
 // node-b) and Instance 1 on nodes the failure never touches.
 func newNodeLossHarness(t *testing.T, story nodeLossStory, policy *workloadtypes.ForceDeletePolicy) *recoveryHarness {
 	t.Helper()
-	h := newRecoveryHarness(t, story.multiPod)
+	// The pods render the runner container, so the rebuilt set is read
+	// for restart evidence the way the restart pass and the roll read it.
+	h := newRecoveryHarnessFor(t, story.multiPod, constants.MainContainerName)
 	h.replicas = 2
 	restart := story.policy
 	h.lifecycle.RestartPolicy = &restart
@@ -7614,6 +7624,25 @@ func (h *recoveryHarness) requireNoGracefulDeleteOn(node string) {
 	}
 }
 
+// requireRebuiltSetNotReadAsRestarted fails when a pod of Instance idx
+// reads as restarted against the row's ReadySince: the row keeps the
+// ReadySince of the set it lost until the rebuilt set is promoted, and a
+// pod created after that time is a new pod whose first start is no restart.
+// Read this way, the rebuilt set would be drained and rebuilt once more.
+func (h *recoveryHarness) requireRebuiltSetNotReadAsRestarted(idx int32) {
+	h.t.Helper()
+	s := h.instance(idx)
+	if s == nil {
+		return
+	}
+	for _, pod := range h.podsOf(idx) {
+		if reason, restarted := workloadops.RunnerRestartedSinceReady(pod, s.ReadySince); restarted {
+			h.dumpState("rebuilt set read as restarted")
+			h.t.Fatalf("a pod of the rebuilt Instance %d reads as restarted against the ReadySince of the set it replaced: %s", idx, reason)
+		}
+	}
+}
+
 // servingElsewhere reports whether Instance 0 is Ready with no operation on
 // its running revision, every pod of it live, serving and PodReady on a
 // node other than the dead one.
@@ -7647,6 +7676,7 @@ func TestNodeLoss_ServingInstanceIsRebuiltElsewhereUnderTheForceDeletePolicy(t *
 			invariant := func() {
 				h.requirePeerInRotation(peer, peerIncarnation)
 				h.requireNoGracefulDeleteOn(nodeLossDeadNode)
+				h.requireRebuiltSetNotReadAsRestarted(0)
 			}
 
 			h.failNode(nodeLossDeadNode)
@@ -7771,7 +7801,9 @@ func (h *recoveryHarness) servingPodsOf(idx int32) int {
 // touches.
 func newWholeGangNodeLossHarness(t *testing.T, policy *workloadtypes.ForceDeletePolicy) *recoveryHarness {
 	t.Helper()
-	h := newRecoveryHarness(t, true)
+	// The pods render the runner container, so the rebuilt gang is read
+	// for restart evidence the way the restart pass and the roll read it.
+	h := newRecoveryHarnessFor(t, true, constants.MainContainerName)
 	restart := workloadtypes.RestartPolicyRecreateInstance
 	h.lifecycle.RestartPolicy = &restart
 	h.podGrace = 30 * time.Second
@@ -7852,6 +7884,7 @@ func TestNodeLoss_WholeGangOnTheDeadNodeIsRebuiltElsewhere(t *testing.T) {
 			invariant := func() {
 				h.requirePeerInRotation(peer, peerIncarnation)
 				h.requireNoGracefulDeleteOn(nodeLossDeadNode)
+				h.requireRebuiltSetNotReadAsRestarted(0)
 				if h.sawEvent(workloadtypes.EventReasonPodForceDeleted) {
 					if on := h.podsOnNode(nodeLossDeadNode); len(on) != 0 {
 						t.Fatalf("the sweep freed part of the gang and left %d pod(s) on %s", len(on), nodeLossDeadNode)
@@ -8132,7 +8165,10 @@ func TestScaleDown_RemovesTheInstanceOnACordonedNodeFirst(t *testing.T) {
 // serving count drops, the Component's serving replicas drop, its peers
 // are untouched, and nothing is rebuilt, because no restart policy frees
 // the names a dead node holds without a force-delete policy. Single pod
-// and gang, under both restart policies.
+// and gang, under both restart policies. A gang whose worker is on the
+// dead node still counts the members that serve; a gang whose leader is
+// on it serves nothing, whatever its workers read, and publishes no
+// serving pod at all.
 func TestNodeLoss_ServingFollowsThePodReadyCondition(t *testing.T) {
 	recreate := workloadtypes.RestartPolicyRecreateInstance
 	none := workloadtypes.RestartPolicyNone
@@ -8141,11 +8177,14 @@ func TestNodeLoss_ServingFollowsThePodReadyCondition(t *testing.T) {
 		multiPod bool
 		runner   string
 		policy   workloadtypes.RestartPolicy
+		// servesNothing: the lost pod is the Instance's routable one, so the
+		// Instance publishes no serving pod however many members still serve.
+		servesNothing bool
 	}{
-		{"single pod under policy None", false, "", none},
-		{"single pod under RecreateInstanceOnPodRestart", false, "", recreate},
-		{"gang worker under policy None", true, "worker", none},
-		{"gang leader under RecreateInstanceOnPodRestart", true, "leader", recreate},
+		{"single pod under policy None", false, "", none, true},
+		{"single pod under RecreateInstanceOnPodRestart", false, "", recreate, true},
+		{"gang worker under policy None", true, "worker", none, false},
+		{"gang leader under RecreateInstanceOnPodRestart", true, "leader", recreate, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -8174,11 +8213,15 @@ func TestNodeLoss_ServingFollowsThePodReadyCondition(t *testing.T) {
 			h.loseNodeUnder(0, tc.runner)
 			h.step()
 
+			wantServing := perInstance - 1
+			if tc.servesNothing {
+				wantServing = 0
+			}
 			requireServingDropped := func() {
 				t.Helper()
 				rows, counters := h.publication()
-				if got := h.publishedRow(rows, 0).ServingPodCount; got != perInstance-1 {
-					t.Fatalf("instance 0 serving pods = %d, want %d: the pod the control plane marked not Ready still counts as serving", got, perInstance-1)
+				if got := h.publishedRow(rows, 0).ServingPodCount; got != wantServing {
+					t.Fatalf("instance 0 serving pods = %d, want %d: the pod the control plane marked not Ready still counts as serving", got, wantServing)
 				}
 				if got := h.publishedRow(rows, 1).ServingPodCount; got != perInstance {
 					t.Fatalf("instance 1 serving pods = %d, want %d: the peer is untouched by the lost node", got, perInstance)
@@ -9641,7 +9684,7 @@ func TestMoveRequestedAsAGangPushLands_FollowsTheInstanceAndCompletes(t *testing
 			if story.grouped {
 				// A rolling group lets one surge of its Components be in
 				// flight at a time.
-				h.gate = func(_ workloadtypes.UpdateStrategyType, inFlightSurge, _ int32) (bool, workloadtypes.RolloutHoldGate, string) {
+				h.gate = func(_ string, _ workloadtypes.UpdateStrategyType, inFlightSurge, _ int32) (bool, workloadtypes.RolloutHoldGate, string) {
 					if inFlightSurge > 0 {
 						return false, workloadtypes.RolloutHoldGateBudget, "group surge budget 1 exhausted"
 					}
@@ -12015,18 +12058,22 @@ func drainFakeEvents(rec *record.FakeRecorder) []string {
 // the roll waits to take a parked gang, the gang serving again between
 // crashes returns its row to Ready in the pass that observes every member
 // serving, whichever pass each member came back in; the roll then takes
-// the gang as the serving Instance it is.
+// the gang as the serving Instance it is. The parked gang keeps serving
+// through its leader while its worker is down, so it waits its turn
+// behind the budget; a parked gang whose leader is down serves nothing
+// and is taken first instead
+// (TestCrashLoopAfterPromotion_ParkedGangWithItsLeaderDownIsRebuiltFirst).
 func TestCrashLoopAfterPromotion_ParkedGangFollowsItsSetThroughTheCorrectedRoll(t *testing.T) {
 	const replicas = 2
 	h := newRecoveryHarnessFor(t, true, constants.MainContainerName)
 	h.replicas = replicas
 	repair := workloadtypes.RestartPolicyRecreateInstance
 	h.lifecycle.RestartPolicy = &repair
-	// Only the leader dies, a few passes after it serves and inside a
-	// grace that outlives every pod; the worker stays up, so the gang is
-	// whole again in the pass its leader comes back.
+	// Only the worker dies, a few passes after it serves and inside a
+	// grace that outlives every pod; the leader stays up, so the gang is
+	// whole again in the pass its worker comes back.
 	h.crashAfterServed = 4
-	h.crashLeaderOnly = true
+	h.crashWorkerOnly = true
 	h.stuckGrace = 10 * time.Minute
 	h.stepCap = recoveryStepFloor
 	h.useRollingBudget(workloadtypes.UpdateStrategyRecreatePod)
@@ -12050,7 +12097,7 @@ func TestCrashLoopAfterPromotion_ParkedGangFollowsItsSetThroughTheCorrectedRoll(
 		}
 		return true
 	}
-	// The ladder holds and the second gang is parked with its leader down
+	// The ladder holds and the second gang is parked with its worker down
 	// while the first is settled on the crashing revision: the push lands
 	// on that shape, so the roll takes the first gang and the parked one
 	// waits behind the unavailability budget.
@@ -12088,6 +12135,97 @@ func TestCrashLoopAfterPromotion_ParkedGangFollowsItsSetThroughTheCorrectedRoll(
 	if !servedWhileParkedBehind {
 		h.dumpState("shape")
 		t.Fatalf("the parked gang never served again while the roll was on the other Instance; the story did not exercise the unpark")
+	}
+}
+
+// A parked gang whose leader is down serves nothing, however many workers
+// keep the gate: its row publishes no serving pod while the leader is
+// down. Once the corrected revision is pushed, the roll rebuilds that gang
+// first, without consulting the coordination gate for an outage the gate
+// already counts, and the gang that still serves follows within the
+// budget. Counting the gang's Ready worker as serving would put the gang's
+// own outage against its rebuild and, under maxUnavailable 1, deny the
+// only start that can end it on every pass.
+func TestCrashLoopAfterPromotion_ParkedGangWithItsLeaderDownIsRebuiltFirst(t *testing.T) {
+	const replicas = 2
+	h := newRecoveryHarnessFor(t, true, constants.MainContainerName)
+	h.replicas = replicas
+	repair := workloadtypes.RestartPolicyRecreateInstance
+	h.lifecycle.RestartPolicy = &repair
+	// Only the leader dies, a few passes after it serves and inside a
+	// grace that outlives every pod; the worker stays up and keeps the
+	// gate, so the gang holds a pod that is Ready while nobody can reach it.
+	h.crashAfterServed = 4
+	h.crashLeaderOnly = true
+	h.stuckGrace = 10 * time.Minute
+	h.stepCap = recoveryStepFloor
+	h.useRollingBudget(workloadtypes.UpdateStrategyRecreatePod)
+	if !h.run(60, func() bool { return h.settledOn(h.revV1, replicas) }) {
+		h.dumpState("initial create")
+		t.Fatalf("initial create never settled on v1 for %d gangs", replicas)
+	}
+
+	revCrash := h.crashRevision(flapAfterServingImage)
+	member := func(idx int32, runner string) *corev1.Pod {
+		for _, pod := range h.podsOf(idx) {
+			if pod.Labels[query.LabelRunner] == runner {
+				return pod
+			}
+		}
+		return nil
+	}
+	memberServes := func(idx int32, runner string) bool {
+		pod := member(idx, runner)
+		return pod != nil && podreadiness.IsContainersReady(pod) && podreadiness.IsServing(pod)
+	}
+	// The ladder holds, the first gang is settled on the crashing revision
+	// and the second is parked with its leader down and its worker serving.
+	parkedDark := func() bool {
+		first, second := h.instance(0), h.instance(1)
+		return h.heldOn(revCrash.Name) && first != nil && second != nil &&
+			first.RunningRevision == revCrash.Name && first.Operation == nil &&
+			second.RunningRevision == revCrash.Name && second.Operation == nil &&
+			second.Phase == workloadtypes.InstancePhaseFailed &&
+			!memberServes(1, workloadtypes.RunnerLeader) && memberServes(1, workloadtypes.RunnerWorker)
+	}
+	if !h.run(160, parkedDark) {
+		h.dumpState("parked gang")
+		t.Fatalf("the story never reached a held ladder with the second gang parked on %s with its leader down (held=%v, rows=%+v)", revCrash.Name, h.heldOn(revCrash.Name), h.irStatuses())
+	}
+	// From here the leader stays down: the gang keeps a Ready worker and
+	// nobody can reach it.
+	h.keepRunnerDown(member(1, workloadtypes.RunnerLeader))
+	h.step()
+	if !parkedDark() {
+		h.dumpState("leader down")
+		t.Fatalf("the parked gang did not keep its shape once its leader stayed down (rows=%+v)", h.irStatuses())
+	}
+	rows, _ := h.publication()
+	if got := h.publishedRow(rows, 1).ServingPodCount; got != 0 {
+		t.Fatalf("the parked gang publishes %d serving pod(s) with its leader down and its worker Ready; want 0: an Instance nobody can reach serves nothing", got)
+	}
+
+	// The coordination gate reads the Component's serving count: the parked
+	// gang is the one unavailable Instance maxUnavailable 1 allows.
+	consults := 0
+	h.gate = coordinationUnavailabilityGate(h, replicas, 1, &consults)
+	h.setTarget(h.revFixed, fixedImage)
+	updatingTo := func(idx int32, rev string) bool {
+		row := h.instance(idx)
+		return row != nil && row.Operation != nil && row.Operation.Type == workloadtypes.InstanceOperationUpdate && row.Operation.TargetRevision == rev
+	}
+	if !h.runWithInvariant(4, func() bool { return updatingTo(1, h.revFixed.Name) }, func() {
+		if first := h.instance(0); first != nil && first.Operation != nil && !updatingTo(1, h.revFixed.Name) {
+			h.dumpState("order")
+			t.Fatalf("the gang that still serves started its roll ahead of the gang nobody can reach: %+v", first.Operation)
+		}
+	}) {
+		h.dumpState("parked gang not rebuilt")
+		t.Fatalf("the parked gang with its leader down was not rebuilt in the first passes of the corrected roll: its own outage was counted against its rebuild (last hold %+v, rows=%+v)", h.lastHold(), h.irStatuses())
+	}
+	if !h.run(200, func() bool { return h.settledOn(h.revFixed, replicas) }) {
+		h.dumpState("corrected revision")
+		t.Fatalf("the corrected revision did not land on every gang")
 	}
 }
 

@@ -269,7 +269,9 @@ type InstanceStatus struct {
 	// ReadyPodCount counts pods reporting Ready=True.
 	ReadyPodCount int32
 	// ServingPodCount counts pods in rotation: Ready by the control plane
-	// AND serving=True on the controller-managed readiness gate.
+	// AND serving=True on the controller-managed readiness gate. An
+	// Instance with no routable serving pod serves nothing and publishes
+	// 0, whatever its workers read: a gang whose leader is gone counts 0.
 	ServingPodCount int32
 	// AvailablePodCount counts pods in rotation on the Component's
 	// headless Service that, when MinReadySeconds is set, have been Ready
@@ -370,11 +372,11 @@ type Key struct {
 // pods the Instance has, and how many of them are available.
 //
 // Both are written only by the adapter's status publication, never by a
-// pass, from the previous reconcile's pod observation. The replay driver
-// models the pod count the same way; the available count comes only from
-// the adapter, so a guard reading it is covered by a Go unit test rather
-// than a replay scenario. Reading them through one accessor is what marks
-// that at every site. A row the caller has not observed publishes nothing.
+// pass, from the previous reconcile's pod observation; the replay driver
+// runs the same publication after every pass and hands both counts to the
+// next one. Reading them through one accessor is what marks a guard that
+// trails the pods by one pass at every site. A row the caller has not
+// observed publishes nothing.
 func AdapterPublished(s *InstanceStatus) (pods, available int32) {
 	if s == nil {
 		return 0, 0

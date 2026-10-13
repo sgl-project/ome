@@ -249,8 +249,8 @@ func (r *Reconciler) wireCoordinationGates(ctx context.Context, input *workloadt
 		// The gates read peer Component status, which must be live:
 		// cross-Component coordination against a cache-lagged peer would
 		// admit a rollout the peer's real state forbids.
-		input.UpdateGate = func(strategy workloadtypes.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, workloadtypes.RolloutHoldGate, string) {
-			allowed, gate, reason := coordination.EvaluateUpdateGate(ctx, r.liveReader(), parent, ir.Spec.Component, target, r.Recorder, coordDefaults, strategy, inFlightSurge, inFlightUnavail)
+		input.UpdateGate = func(fromRevision string, strategy workloadtypes.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, workloadtypes.RolloutHoldGate, string) {
+			allowed, gate, reason := coordination.EvaluateUpdateGate(ctx, r.liveReader(), parent, ir.Spec.Component, fromRevision, target, r.Recorder, coordDefaults, strategy, inFlightSurge, inFlightUnavail)
 			return allowed, workloadtypes.RolloutHoldGate(gate), reason
 		}
 		// The pin alone, for the starts the workload admits without the
@@ -272,7 +272,7 @@ func (r *Reconciler) wireCoordinationGates(ctx context.Context, input *workloadt
 	}
 	if policy := ir.Spec.PlacementExecution; policy != nil {
 		coordinationGate := input.UpdateGate
-		input.UpdateGate = func(strategy workloadtypes.UpdateStrategyType, surge, unavailable int32) (bool, workloadtypes.RolloutHoldGate, string) {
+		input.UpdateGate = func(fromRevision string, strategy workloadtypes.UpdateStrategyType, surge, unavailable int32) (bool, workloadtypes.RolloutHoldGate, string) {
 			if err := protocol.Validate(policy); err != nil {
 				return false, workloadtypes.RolloutHoldGateBudget, err.Error()
 			}
@@ -280,7 +280,7 @@ func (r *Reconciler) wireCoordinationGates(ctx context.Context, input *workloadt
 				return false, workloadtypes.RolloutHoldGateBudget, "placement transition holds new member surge"
 			}
 			if coordinationGate != nil {
-				return coordinationGate(strategy, surge, unavailable)
+				return coordinationGate(fromRevision, strategy, surge, unavailable)
 			}
 			return true, "", ""
 		}

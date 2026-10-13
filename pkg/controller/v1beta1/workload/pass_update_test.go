@@ -739,7 +739,7 @@ func TestReconcile_GangInPlaceFallbackIsGatedAsRecreate(t *testing.T) {
 				RunningRevision: "llama-70b-engine-priorrev", PodCount: podCount, ServingPodCount: podCount,
 			}}
 			var consulted []types.UpdateStrategyType
-			in.UpdateGate = func(strategy types.UpdateStrategyType, _, _ int32) (bool, types.RolloutHoldGate, string) {
+			in.UpdateGate = func(_ string, strategy types.UpdateStrategyType, _, _ int32) (bool, types.RolloutHoldGate, string) {
 				consulted = append(consulted, strategy)
 				if strategy == types.UpdateStrategyInPlaceIfPossible || strategy == types.UpdateStrategyInPlaceOnly {
 					return true, "", ""
@@ -849,7 +849,7 @@ func TestReconcile_SinglePodInPlaceDiffIsGatedAsRecreate(t *testing.T) {
 				RunningRevision: runningName, PodCount: 1, ServingPodCount: 1,
 			}}
 			var consulted []types.UpdateStrategyType
-			in.UpdateGate = func(strategy types.UpdateStrategyType, _, _ int32) (bool, types.RolloutHoldGate, string) {
+			in.UpdateGate = func(_ string, strategy types.UpdateStrategyType, _, _ int32) (bool, types.RolloutHoldGate, string) {
 				consulted = append(consulted, strategy)
 				if strategy == types.UpdateStrategyInPlaceIfPossible || strategy == types.UpdateStrategyInPlaceOnly {
 					return true, "", ""
@@ -2089,5 +2089,50 @@ func TestReconcile_DarkRolledInstanceHoldsNoFloor(t *testing.T) {
 				t.Fatalf("an admitted drain must take the source out of rotation")
 			}
 		})
+	}
+}
+
+// TestReconcile_UpdateAdmissionConsultsTheGateWithTheRowRevision pins what
+// the admission tells the coordination gate about a fresh start: the
+// revision the Instance's row runs now. Two Instances on different
+// revisions each reach the gate under their own.
+func TestReconcile_UpdateAdmissionConsultsTheGateWithTheRowRevision(t *testing.T) {
+	scheme := makeScheme(t)
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	deps := types.Deps{Client: c}
+
+	in := minimalInput(t)
+	in.DesiredSpec.Replicas = 2
+	in.ObservedState.InstanceStatuses = []types.InstanceStatus{
+		{Index: 0, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: "llama-70b-engine-reva", PodCount: 1, ServingPodCount: 1},
+		{Index: 1, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: "llama-70b-engine-revb", PodCount: 1, ServingPodCount: 1},
+	}
+	var consulted []string
+	in.UpdateGate = func(fromRevision string, _ types.UpdateStrategyType, _, _ int32) (bool, types.RolloutHoldGate, string) {
+		consulted = append(consulted, fromRevision)
+		return false, types.RolloutHoldGateRatio, "projected serving ratio leaves the band"
+	}
+	plan := types.ComponentPlan{
+		Component: types.ComponentEngine,
+		Replicas:  2,
+		Instances: []types.InstancePlan{
+			{Index: 0, Incarnation: 1, Runners: []types.RunnerPlan{{Name: "default", Size: 1}}},
+			{Index: 1, Incarnation: 1, Runners: []types.RunnerPlan{{Name: "default", Size: 1}}},
+		},
+		UpdateStrategy: types.UpdateStrategy{
+			Type:          types.UpdateStrategySurgeThenDrain,
+			RollingUpdate: &types.RollingUpdate{MaxSurge: intOrStringInt(2), MaxUnavailable: intOrStringInt(0)},
+		},
+	}
+	target := &appsv1.ControllerRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "llama-70b-engine-newtarget", Namespace: "prod"},
+	}
+	if _, err := workload.Reconcile(context.Background(), deps, in, plan, target); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	slices.Sort(consulted)
+	want := []string{"llama-70b-engine-reva", "llama-70b-engine-revb"}
+	if !slices.Equal(consulted, want) {
+		t.Fatalf("gate consulted with %v, want each row's running revision %v", consulted, want)
 	}
 }

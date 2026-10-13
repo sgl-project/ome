@@ -445,6 +445,48 @@ func TestRepinCASAndClamp(t *testing.T) {
 	}
 }
 
+// A repin reads a rewritten step the way the canary executor does before it
+// clamps it into the new ladder: a unit that reads Stable with a negative
+// step finished under the old ladder and stays finished, so the repin cannot
+// restart it; a unit short of its end is placed at the last step its
+// recorded weight reached and then clamped, with the pre-step hold armed
+// when the clamped step would raise traffic.
+func TestARepinReadsARewrittenStepBeforeTheClamp(t *testing.T) {
+	repin := func(t *testing.T, phase v1beta1.RolloutPhase, weight int32, next *v1beta1.GroupCanary) *v1beta1.CanaryStatus {
+		t.Helper()
+		isvc := isvcFixture(v1beta1.RolloutGroup{
+			Components: []v1beta1.ComponentType{v1beta1.EngineComponent},
+			Canary:     canaryBody(10, 30, 100),
+		})
+		in := testInputs(t, isvc, irFixture(oldRev, newRev))
+		if _, err := Reconcile(context.Background(), in); err != nil {
+			t.Fatal(err)
+		}
+		setEngineUnit(isvc, phase, &v1beta1.CanaryStatus{CanaryRevisionHash: hashOf(t, newRev), CurrentStep: -1, ObservedTrafficWeight: weight})
+		isvc.Spec.Rollout.Groups[0].Canary = next
+		isvc.Annotations = map[string]string{constants.RolloutRepinAnnotation: "now"}
+		if _, err := Reconcile(context.Background(), in); err != nil {
+			t.Fatal(err)
+		}
+		if got := len(isvc.Status.Rollout.ActiveRun.Plan.Groups[0].Group.Canary.Steps); got != len(next.Steps) {
+			t.Fatalf("plan not replaced: %d steps pinned, want %d", got, len(next.Steps))
+		}
+		return isvc.Status.Components[v1beta1.EngineComponent].Canary
+	}
+	t.Run("finishedStaysFinished", func(t *testing.T) {
+		cs := repin(t, v1beta1.RolloutPhaseStable, 100, canaryBody(100))
+		if cs.CurrentStep != 1 || cs.PreStepHold {
+			t.Fatalf("clamp = step %d hold %v; want the new ladder's end with no hold", cs.CurrentStep, cs.PreStepHold)
+		}
+	})
+	t.Run("midLadderIsClampedWithAHold", func(t *testing.T) {
+		cs := repin(t, v1beta1.RolloutPhasePaused, 30, canaryBody(100))
+		if cs.CurrentStep != 0 || !cs.PreStepHold {
+			t.Fatalf("clamp = step %d hold %v; want step 0 with pre-step hold", cs.CurrentStep, cs.PreStepHold)
+		}
+	})
+}
+
 func TestResolutionViewPublishesShadowedRef(t *testing.T) {
 	policy := &v1beta1.RolloutPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "canary-std-v1", Namespace: "ns"},
@@ -1399,4 +1441,72 @@ func TestMidLadderRefCanaryIsAdopted(t *testing.T) {
 	if isvc.Status.Rollout == nil || isvc.Status.Rollout.ActiveRun == nil {
 		t.Fatal("run not pinned")
 	}
+}
+
+// A finished unit whose recorded step was rewritten below zero is still
+// finished. Status is a subresource nothing validates, so a hand edit or another
+// writer can leave a negative step on a unit that reads Stable
+// with its replica converged; the step is read back as past the last step,
+// the same reading the canary executor makes, so no run opens around it:
+// whether completion dropped the stable identity or a later write set it
+// equal to the canary hash, under an inline or a referenced plan, with or
+// without a closed run on file. A drain at 100% given the same write is
+// read at its last step, still in flight, and is adopted.
+func TestAFinishedCanaryWithANegativeStepOpensNoRun(t *testing.T) {
+	rewritten := func(stable string) *v1beta1.CanaryStatus {
+		return &v1beta1.CanaryStatus{CanaryRevisionHash: hashOf(t, newRev), StableRevisionHash: stable, CurrentStep: -1, ObservedTrafficWeight: 100}
+	}
+	cases := map[string]struct {
+		group  v1beta1.RolloutGroup
+		stable string
+		closed bool
+	}{
+		"Closed/inline/stableDropped":      {inlineCanary(), "", true},
+		"Closed/inline/stableEqualsCanary": {inlineCanary(), hashOf(t, newRev), true},
+		"Closed/ref/stableEqualsCanary":    {refCanary(policyName), hashOf(t, newRev), true},
+		"NoRun/inline/stableEqualsCanary":  {inlineCanary(), hashOf(t, newRev), false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			isvc := isvcFixture(tc.group)
+			setEngineUnit(isvc, v1beta1.RolloutPhaseStable, rewritten(tc.stable))
+			if tc.closed {
+				isvc.Status.Rollout = &v1beta1.RolloutStatus{LastRun: &v1beta1.RolloutRunRecord{Outcome: v1beta1.RolloutRunCompleted}}
+			}
+			objects := []runtime.Object{settledIR(newRev)}
+			if tc.group.PolicyRef != nil {
+				objects = append(objects, canaryPolicy(policyName))
+			}
+			for i := 0; i < 3; i++ {
+				if out := pass(t, isvc, objects...); out.Opened || out.Adopted || v1beta1.RolloutRunActive(isvc) {
+					t.Fatalf("pass %d opened a run around a finished unit: %+v %+v", i, out, isvc.Status.Rollout.ActiveRun)
+				}
+			}
+			requireNoRun(t, isvc, v1beta1.RolloutPlanReasonNoRun)
+			if tc.closed && (isvc.Status.Rollout.LastRun == nil || isvc.Status.Rollout.LastRun.Outcome != v1beta1.RolloutRunCompleted) {
+				t.Fatalf("the closed record was touched: %+v", isvc.Status.Rollout.LastRun)
+			}
+			if cs := isvc.Status.Components[v1beta1.EngineComponent].Canary; cs == nil || cs.CurrentStep != -1 {
+				t.Fatalf("the run layer rewrote the unit's record, which is the canary executor's: %+v", cs)
+			}
+		})
+	}
+	t.Run("Closed/drainIsAdopted", func(t *testing.T) {
+		isvc := isvcFixture(inlineCanary())
+		setEngineUnit(isvc, v1beta1.RolloutPhasePromoting, rewritten(hashOf(t, oldRev)))
+		isvc.Status.Rollout = &v1beta1.RolloutStatus{LastRun: &v1beta1.RolloutRunRecord{Outcome: v1beta1.RolloutRunSuperseded}}
+		if out := pass(t, isvc, stragglingIR(newRev)); !out.Opened || !out.Adopted {
+			t.Fatalf("outcome = %+v, want the drain adopted in place", out)
+		}
+	})
+	t.Run("Open/finishedUnitClosesTheRun", func(t *testing.T) {
+		isvc, _ := openInlineCanary(t)
+		setEngineUnit(isvc, v1beta1.RolloutPhaseStable, rewritten(""))
+		if out := pass(t, isvc, settledIR(newRev)); !out.StateChanged || v1beta1.RolloutRunActive(isvc) {
+			t.Fatalf("outcome = %+v active=%v, want the Completed close", out, v1beta1.RolloutRunActive(isvc))
+		}
+		if last := isvc.Status.Rollout.LastRun; last == nil || last.Outcome != v1beta1.RolloutRunCompleted {
+			t.Fatalf("lastRun = %+v, want Completed", last)
+		}
+	})
 }

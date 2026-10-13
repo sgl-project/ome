@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/reading"
@@ -48,9 +49,9 @@ func shape(name string, mods ...mod) *corev1.Pod {
 	return pod
 }
 
-// servingPod is the healthy shape: Running, every container ready, PodReady
-// and the serving gate True for an hour, on revision hashA as the default
-// runner of a single-pod Instance.
+// servingPod is the healthy shape: Running, its runner container ready,
+// PodReady and the serving gate True for an hour, on revision hashA as the
+// default runner of a single-pod Instance.
 func servingPod(name string) *corev1.Pod {
 	t := metav1.NewTime(now.Add(-time.Hour))
 	return &corev1.Pod{
@@ -73,7 +74,7 @@ func servingPod(name string) *corev1.Pod {
 				{Type: corev1.PodReady, Status: corev1.ConditionTrue, LastTransitionTime: t},
 			},
 			ContainerStatuses: []corev1.ContainerStatus{{
-				Name:  "main",
+				Name:  constants.MainContainerName,
 				Ready: true,
 				State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
 			}},
@@ -137,6 +138,18 @@ func gateHeldBy(writer, key string) mod {
 // lifecycle controller withdrew PodReady and left everything else.
 func nodeLost(pod *corev1.Pod) { setCondition(pod, corev1.PodReady, corev1.ConditionFalse, now) }
 
+// readySince is a serving pod whose PodReady condition turned True at the
+// given instant, so its availability window is measured from there.
+func readySince(at time.Time) mod {
+	return func(pod *corev1.Pod) {
+		for i := range pod.Status.Conditions {
+			if pod.Status.Conditions[i].Type == corev1.PodReady {
+				pod.Status.Conditions[i].LastTransitionTime = metav1.NewTime(at)
+			}
+		}
+	}
+}
+
 // Readiness shapes.
 
 // unreadySince is a promoted pod whose readiness probe stopped passing at
@@ -177,6 +190,44 @@ func terminating(pod *corev1.Pod) {
 }
 func pending(pod *corev1.Pod) {
 	pod.Status = corev1.PodStatus{Phase: corev1.PodPending}
+}
+
+// Restart shapes.
+
+// restartedAt is a pod whose runner container the kubelet restarted at the
+// given instant: its last run ended then and its current run began then.
+func restartedAt(at time.Time) mod {
+	return func(pod *corev1.Pod) {
+		cs := &pod.Status.ContainerStatuses[0]
+		cs.RestartCount++
+		cs.LastTerminationState = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+			ExitCode: 1, Reason: "Error", FinishedAt: metav1.NewTime(at),
+		}}
+		cs.State = corev1.ContainerState{Running: &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(at)}}
+	}
+}
+
+// exitedAt is a promoted pod whose runner container exited at the given
+// instant and has not been started again: readiness failed then, the gate
+// stays True.
+func exitedAt(at time.Time) mod {
+	return func(pod *corev1.Pod) {
+		unreadySince(at)(pod)
+		pod.Status.ContainerStatuses[0].State = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+			ExitCode: 1, Reason: "Error", FinishedAt: metav1.NewTime(at),
+		}}
+	}
+}
+
+// createdAt moves the pod's creation to the given instant.
+func createdAt(at time.Time) mod {
+	return func(pod *corev1.Pod) { pod.CreationTimestamp = metav1.NewTime(at) }
+}
+
+// containersUnready is a pod whose ContainersReady reads False while
+// PodReady and the gate still read True, a shape no kubelet writes.
+func containersUnready(pod *corev1.Pod) {
+	setCondition(pod, corev1.ContainersReady, corev1.ConditionFalse, now.Add(-2*time.Minute))
 }
 
 func pods(ps ...*corev1.Pod) []*corev1.Pod { return ps }

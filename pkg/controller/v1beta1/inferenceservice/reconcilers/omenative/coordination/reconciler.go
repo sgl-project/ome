@@ -224,8 +224,9 @@ func Reconcile(ctx context.Context, in ReconcileInputs) (*Result, error) {
 		// EnsurePerRevisionServices uses CreateOrUpdate, whose Gets are
 		// cache-served and cheap, and recreates a missing Service. Gating
 		// ensure on revision-set convergence would let a deleted Service
-		// stay gone and strand the HTTPRoute on a dead backend.
-		for hash := range perRevisionPods[c] {
+		// stay gone and strand the HTTPRoute on a dead backend. The revisions
+		// are walked in sorted order so a pass is repeatable.
+		for _, hash := range SortedRevisionHashes(perRevisionPods[c]) {
 			if hash == "" {
 				continue
 			}

@@ -227,3 +227,180 @@ func TestCheckSingleOwner(t *testing.T) {
 		})
 	}
 }
+
+// TestCheckSurgeCeiling holds the surge ceiling: live pods never exceed
+// replicas plus the resolved maxSurge, in pods of one Instance each, or
+// one replacement per Instance when the plan declares no maxSurge; a pod
+// being deleted or in a terminal phase holds no slot; a deleted owner
+// checks nothing.
+func TestCheckSurgeCeiling(t *testing.T) {
+	pod := func(name string) *corev1.Pod { return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name}} }
+	terminating := pod("p-0-old")
+	deletion := metav1.NewTime(traceStart)
+	terminating.DeletionTimestamp = &deletion
+	failed := pod("p-0-dead")
+	failed.Status.Phase = corev1.PodFailed
+	pinned := readyRow(1)
+	pinned.Phase = types.InstancePhaseFailed
+	pinned.Operation = &types.InstanceOperation{ID: "migrate-1-1", Type: types.InstanceOperationMigrate, Step: "CreateSurge"}
+	gangTarget := readyRow(1)
+	gangTarget.Phase = types.InstancePhaseCreating
+	gangTarget.Operation = &types.InstanceOperation{ID: "update-1-1", Type: types.InstanceOperationUpdate, Step: types.UpdateStepGangSurgeTarget}
+	cases := []struct {
+		name string
+		view TickView
+		want []string
+	}{
+		{
+			name: "a replacement inside the allowance",
+			view: TickView{
+				Spec: TickSpec{Replicas: 1, PodsPerInstance: 1, MaxSurge: intOrString("1")},
+				Rows: []types.InstanceStatus{readyRow(0), pinned},
+				Pods: map[int32][]*corev1.Pod{0: {pod("p-0")}, 1: {pod("p-1")}},
+			},
+		},
+		{
+			name: "a third pod beside a migration pair",
+			view: TickView{
+				Spec: TickSpec{Replicas: 1, PodsPerInstance: 1, MaxSurge: intOrString("1")},
+				Rows: []types.InstanceStatus{readyRow(0), pinned},
+				Pods: map[int32][]*corev1.Pod{0: {pod("p-0")}, 1: {pod("p-1")}, 2: {pod("p-2")}},
+			},
+			want: []string{"ceiling/live-pods-over[maxSurge][Failed,no-row]"},
+		},
+		{
+			name: "a deleting pod and a dead pod hold no slot",
+			view: TickView{
+				Spec: TickSpec{Replicas: 1, PodsPerInstance: 1, MaxSurge: intOrString("0")},
+				Rows: []types.InstanceStatus{readyRow(0)},
+				Pods: map[int32][]*corev1.Pod{0: {pod("p-0"), terminating, failed}},
+			},
+		},
+		{
+			name: "a gang counts its members",
+			view: TickView{
+				Spec: TickSpec{Replicas: 1, PodsPerInstance: 2, MaxSurge: intOrString("1")},
+				Rows: []types.InstanceStatus{readyRow(0), gangTarget},
+				Pods: map[int32][]*corev1.Pod{0: {pod("p-0-l"), pod("p-0-w")}, 1: {pod("p-1-l"), pod("p-1-w"), pod("p-1-w2")}},
+			},
+			want: []string{"ceiling/live-pods-over[maxSurge][Update/GangSurgeTarget]"},
+		},
+		{
+			name: "no maxSurge allows one replacement per Instance",
+			view: TickView{
+				Spec: TickSpec{Replicas: 1, PodsPerInstance: 1},
+				Rows: []types.InstanceStatus{readyRow(0), pinned},
+				Pods: map[int32][]*corev1.Pod{0: {pod("p-0")}, 1: {pod("p-1")}},
+			},
+		},
+		{
+			name: "no maxSurge and a third pod beside a migration pair",
+			view: TickView{
+				Spec: TickSpec{Replicas: 1, PodsPerInstance: 1},
+				Rows: []types.InstanceStatus{readyRow(0), pinned},
+				Pods: map[int32][]*corev1.Pod{0: {pod("p-0")}, 1: {pod("p-1")}, 2: {pod("p-2")}},
+			},
+			want: []string{"ceiling/live-pods-over[unbudgeted][Failed,no-row]"},
+		},
+		{
+			name: "a deleted owner checks nothing",
+			view: TickView{
+				Spec: TickSpec{Replicas: 1, PodsPerInstance: 1, MaxSurge: intOrString("0"), Teardown: true},
+				Rows: []types.InstanceStatus{readyRow(0)},
+				Pods: map[int32][]*corev1.Pod{0: {pod("p-0")}, 1: {pod("p-1")}},
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			expectClasses(t, CheckSurgeCeiling(tc.view), tc.want)
+		})
+	}
+}
+
+// TestCheckOwnership holds the ownership form of I5: one operation owner
+// per Instance per tick across its row, the retry record charged in the
+// same status write and its migration record; and a Migrate pin that is
+// dropped only in a pass that also writes the record it names.
+func TestCheckOwnership(t *testing.T) {
+	const uuid = "request-1"
+	surge := int32(1)
+	source := readyRow(0)
+	source.Phase = types.InstancePhaseMigrating
+	source.Operation = &types.InstanceOperation{ID: "migrate-0-1", Type: types.InstanceOperationMigrate, Step: "CreateSurge", RequestUUID: uuid, SurgeIndex: &surge}
+	sourceFailed := CloneRow(source)
+	sourceFailed.Phase = types.InstancePhaseFailed
+	released := readyRow(0)
+	draining := readyRow(0)
+	draining.Phase = types.InstancePhaseUpdating
+	draining.Operation = &types.InstanceOperation{ID: "update-0-1", Type: types.InstanceOperationUpdate, Step: types.UpdateStepSurgeDrain, TargetRevision: "rev-b"}
+	retired := CloneRow(draining)
+	retired.Phase = types.InstancePhaseDeleting
+	retired.Operation = &types.InstanceOperation{ID: "delete-0-1", Type: types.InstanceOperationDelete, Step: "Drain"}
+	created := readyRow(1)
+	created.Phase = types.InstancePhaseCreating
+	created.Operation = &types.InstanceOperation{ID: "create-1-1", Type: types.InstanceOperationCreate, Step: "CreatePods"}
+	open := types.MigrationRecord{RequestUUID: uuid, Phase: types.MigrationPhaseSurgePending, SourceInstance: 0, SurgeInstance: &surge}
+	closed := open
+	closed.Phase = types.MigrationPhaseFailed
+	commit := func(index int32, batch int, before, after *types.InstanceStatus) RowCommit {
+		return RowCommit{Index: index, Outcome: PreconditionOK, Batch: batch, Before: before, After: after}
+	}
+	block := func(batch int) RetryBlockCommit {
+		return RetryBlockCommit{TargetRevision: "rev-b", Disposition: RetryBlockPersisted, Batch: batch, After: &types.RetryBlock{TargetRevision: "rev-b", AttemptsStarted: 1}}
+	}
+	cases := []struct {
+		name string
+		view TickView
+		want []string
+	}{
+		{
+			name: "a scale-down charges the ladder of the attempt it retires",
+			view: TickView{Commits: []RowCommit{commit(0, 3, &draining, &retired)}, RetryCommits: []RetryBlockCommit{block(3)}},
+			want: []string{"I5/two-owners[Delete,Update][Update/SurgeDrain>Delete/Drain]"},
+		},
+		{
+			name: "a ladder write in another status write charges nothing here",
+			view: TickView{Commits: []RowCommit{commit(0, 3, &draining, &retired)}, RetryCommits: []RetryBlockCommit{block(4)}},
+		},
+		{
+			name: "the create pass fills a row the migration record names",
+			view: TickView{
+				Commits:         []RowCommit{commit(1, 1, nil, &created)},
+				MigrationWrites: []MigrationCommit{{RequestUUID: uuid, After: &open}},
+				Migrations:      []types.MigrationRecord{open},
+			},
+			want: []string{"I5/two-owners[Create,Migrate][Empty>Create/CreatePods]"},
+		},
+		{
+			name: "a pin dropped while its record stays open and unwritten",
+			view: TickView{Commits: []RowCommit{commit(0, 1, &source, &released)}, Migrations: []types.MigrationRecord{open}},
+			want: []string{"I5/pin-dropped-record-open[Migrate/CreateSurge>Ready]"},
+		},
+		{
+			name: "a pin dropped by the pass that closes the record",
+			view: TickView{
+				Commits:         []RowCommit{commit(0, 1, &source, &released)},
+				Migrations:      []types.MigrationRecord{closed},
+				MigrationWrites: []MigrationCommit{{RequestUUID: uuid, Before: &open, After: &closed}},
+			},
+		},
+		{
+			name: "a pin dropped after its record closed",
+			view: TickView{Commits: []RowCommit{commit(0, 1, &source, &released)}, Migrations: []types.MigrationRecord{closed}},
+		},
+		{
+			name: "a pin kept through a Failed stamp",
+			view: TickView{Commits: []RowCommit{commit(0, 1, &source, &sourceFailed)}, Migrations: []types.MigrationRecord{open}},
+		},
+		{
+			name: "a deleted owner's rows belong to the teardown",
+			view: TickView{Spec: TickSpec{Teardown: true}, Commits: []RowCommit{commit(0, 1, &source, nil)}, Migrations: []types.MigrationRecord{open}},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			expectClasses(t, CheckOwnership(tc.view), tc.want)
+		})
+	}
+}

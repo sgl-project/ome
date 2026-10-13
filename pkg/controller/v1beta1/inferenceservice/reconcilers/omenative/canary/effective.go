@@ -53,13 +53,10 @@ func EffectivePartition(isvc *v1beta1.InferenceService, policies rollout.Policie
 	}
 	idx := int32(0)
 	if cs != nil {
-		idx = cs.CurrentStep
 		// Status is an unvalidated subresource: a negative step is an
 		// external write, read back from the record before it can index
 		// plan.Steps.
-		if idx < 0 {
-			idx = recoveredStep(cs, isvc.Status.Components[rollout.PrimaryOf(g)].RolloutPhase, plan)
-		}
+		idx = rollout.StepOf(cs, isvc.Status.Components[rollout.PrimaryOf(g)].RolloutPhase, plan.Steps)
 	}
 	// Done sentinel (CurrentStep past the last step): hold NOTHING, the
 	// component rolls entirely onto the canary revision (partition 0). This

@@ -15,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	"knative.dev/pkg/apis"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -669,6 +668,7 @@ func TestReconcileSplitApplyErrorsKeepServingHealth(t *testing.T) {
 		wantInfos  []string
 	}{
 		{name: "write failure", failure: fmt.Errorf("member write unavailable"), wantReason: "MemberApplicationFailed", wantErrors: []string{"planned member application failed"}},
+		{name: "concurrent create", failure: apierrors.NewAlreadyExists(schema.GroupResource{Group: "ome.io", Resource: "inferenceservices"}, "service-a"), wantReason: "MemberApplicationPending", wantInfos: []string{"planned member application conflicted; retrying"}},
 		{name: "optimistic lock conflict", failure: conflict, wantReason: "MemberApplicationPending", wantInfos: []string{"planned member application conflicted; retrying"}},
 		{name: "wrapped optimistic lock conflict", failure: fmt.Errorf("member apply: %w", conflict), wantReason: "MemberApplicationPending", wantInfos: []string{"planned member application conflicted; retrying"}},
 	} {
@@ -752,9 +752,8 @@ func TestReconcileSplitConflictDoesNotHideWriteFailure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// The conflicting member's write is retried from a fresh read; the
-			// failing member's is not.
-			if diff := cmp.Diff(1+retry.DefaultRetry.Steps, attempts); diff != "" {
+			// Each member gets one write attempt per reconciliation.
+			if diff := cmp.Diff(2, attempts); diff != "" {
 				t.Fatalf("member attempts (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(time.Second, result.RequeueAfter); diff != "" {
