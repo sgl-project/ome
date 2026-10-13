@@ -177,6 +177,10 @@ type Reconciler struct {
 	MemberReadRetry MemberReadRetry
 	// ObservationClock dates failed reads and their grace; nil uses the system clock.
 	ObservationClock clock.PassiveClock
+	// RoutingDisabled reports that this installation runs no traffic routing, so
+	// no source has a TrafficMap. Placement then judges every source by member
+	// state alone, as it does a source that sets spec.routing.enabled to false.
+	RoutingDisabled bool
 
 	// DispatcherMode selects the fan-out BREADTH policy: AllAtOnce clones onto
 	// every matched candidate at once (the historical behavior); Incremental

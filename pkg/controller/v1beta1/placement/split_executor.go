@@ -287,9 +287,13 @@ func adoptedMemberFloor(member *v1beta1.InferenceService) (int32, error) {
 }
 
 func (r *Reconciler) observeSplitMembers(ctx context.Context, source *v1beta1.InferenceService, eligible []string) map[string]plannedHomeObservation {
-	trafficMap := &v1beta1.TrafficMap{}
-	if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(source), trafficMap); err != nil {
-		trafficMap = nil
+	routed := r.routesTraffic(source)
+	var trafficMap *v1beta1.TrafficMap
+	if routed {
+		trafficMap = &v1beta1.TrafficMap{}
+		if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(source), trafficMap); err != nil {
+			trafficMap = nil
+		}
 	}
 	out := map[string]plannedHomeObservation{}
 	settled := true
@@ -302,6 +306,15 @@ func (r *Reconciler) observeSplitMembers(ctx context.Context, source *v1beta1.In
 			r.Log.Error(err, "planned member observation failed", "cluster", candidate.Cluster)
 		}
 		observed.Home.Eligible = slices.Contains(eligible, candidate.Cluster)
+		if !routed {
+			// OME publishes no routing for this source, so no routing intent will
+			// ever appear. A home serves what its members report ready, and a
+			// requested drain has no OME-managed traffic to wait for.
+			observed.Home.Drained = candidate.Allocation.DrainRequested
+			observed.Home.Routable = !observed.Home.Drained && observed.Home.Ready > 0
+			out[candidate.Cluster] = observed
+			continue
+		}
 		known, routable, drained := plannedTrafficEvidence(source, trafficMap, observed.Candidate)
 		observed.Home.Routable, observed.Home.Drained = routable, drained
 		// Settled positive floors can release their pause without routing. Any
@@ -314,6 +327,15 @@ func (r *Reconciler) observeSplitMembers(ctx context.Context, source *v1beta1.In
 		out[candidate.Cluster] = observed
 	}
 	return out
+}
+
+// routesTraffic reports whether OME publishes routing for the source: routing
+// is enabled for the installation and the source does not opt out.
+func (r *Reconciler) routesTraffic(source *v1beta1.InferenceService) bool {
+	if r.RoutingDisabled {
+		return false
+	}
+	return source.Spec.Routing == nil || source.Spec.Routing.Enabled == nil || *source.Spec.Routing.Enabled
 }
 
 func advanceSplitPlan(source *v1beta1.InferenceService, observations map[string]plannedHomeObservation) (allocation.Step, error) {

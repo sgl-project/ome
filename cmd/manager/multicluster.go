@@ -405,6 +405,7 @@ func setupMultiCluster(mgr manager.Manager, clientSet kubernetes.Interface, opti
 		WinnerLostGracePeriod:   w.winnerLostGrace,
 		ObservationGrace:        w.observationGrace,
 		MemberReadRetry:         w.memberReadRetry,
+		RoutingDisabled:         !w.routing.IsEnabled(),
 		DispatcherMode:          w.dispatcherMode,
 		DispatcherStepSize:      w.dispatcherStepSize,
 		DispatcherRoundTimeout:  w.dispatcherRoundTimeout,

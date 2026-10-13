@@ -24,7 +24,10 @@ The probe is one of several **independent** inputs to a TrafficMap weight:
 - **The enable gate.** Routing itself is off by default (`routing.enabled` in
   the operator configuration); a service may opt out with
   `spec.routing.enabled: false`, but cannot opt in where the installation gate
-  is off.
+  is off. Without routing there is no TrafficMap, so placement moves and
+  resizes homes on member readiness alone and removes a drained home without
+  waiting for traffic to leave it. Whatever routes that service's traffic must
+  follow those changes.
 - **Readiness and capacity.** Without a probe, the health gate is simply
   `readyReplicas > 0`. A weight is proportional to
   `min(allocated, ready) × factor`, optionally lowered by the separate
