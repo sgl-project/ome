@@ -16,6 +16,7 @@ import (
 
 const (
 	topologyLabel = "cloud.google.com/gke-tpu-topology"
+	sliceLabel    = "cloud.google.com/gke-tpu-slice"
 	idLabel       = "cloud.google.com/gke-tpu-partition-2x2x2-id"
 	stateLabel    = "cloud.google.com/gke-tpu-partition-2x2x2-state"
 )
@@ -91,6 +92,10 @@ func TestPlanTPUSliceReplacementRejectsUnusablePartitions(t *testing.T) {
 			b.WithNode("o-a", "", 0, partition("p-o", "HEALTHY")).
 				WithNode("o-b", "", 0, partition("p-o", "HEALTHY")).
 				WithMultiPodTPUInstance("prod/other", v1beta1.EngineComponent, constants.OMENative, 4, "o-b")
+		}},
+		{"one host belongs to a slice whose pods have not started", func(b *testutil.SnapshotBuilder) {
+			b.WithNode("l-a", "", 0, partition("p-l", "HEALTHY")).
+				WithNode("l-b", "", 0, partition("p-l", "HEALTHY"), testutil.NodeLabels(map[string]string{sliceLabel: "other"}))
 		}},
 		{"no partition label", func(b *testutil.SnapshotBuilder) {
 			b.WithNode("n-a", "", 0).WithNode("n-b", "", 0)
