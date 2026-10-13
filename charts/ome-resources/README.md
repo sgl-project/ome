@@ -40,6 +40,7 @@ OME Resources and Controller
 | ome.controller.ingressGateway.pathTemplate | string | `""` |  |
 | ome.controller.ingressGateway.urlScheme | string | `"http"` |  |
 | ome.controller.nodeSelector | object | `{}` |  |
+| ome.controller.pprofBindAddress | string | `""` | Address the manager serves net/http/pprof on. Empty disables it. Bind to loopback, for example `127.0.0.1:6060`, so profiles are reachable only through `kubectl port-forward`. |
 | ome.controller.replicaCount | int | `3` |  |
 | ome.controller.resources.limits.cpu | int | `2` |  |
 | ome.controller.resources.limits.memory | string | `"4Gi"` |  |
