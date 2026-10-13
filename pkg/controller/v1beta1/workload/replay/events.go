@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"strconv"
@@ -15,10 +16,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	clocktesting "k8s.io/utils/clock/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/evidence"
 	workloadops "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/ops"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/revision"
 	types "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
@@ -54,6 +58,7 @@ func init() {
 		"pod.schedulingGated":      applySchedulingGated,
 		"pod.admitted":             applyAdmitted,
 		"pod.containerRestart":     applyContainerRestart,
+		"pod.runningNotReady":      applyRunningNotReady,
 		"endpoint.rotationIn":      applyRotation(true),
 		"endpoint.rotationOut":     applyRotation(false),
 		"api.quotaDenied":          applyRejection(quotaDenied, "create"),
@@ -80,6 +85,8 @@ func init() {
 		"config.changed":           applyConfigChanged,
 		"gang.podGroup":            applyPodGroup,
 		"timer.operationDeadline":  applyOperationDeadline,
+		"timer.minReady":           applyMinReady,
+		"timer.expectationsTTL":    applyExpectationsTTL,
 		"timer.stuckPodGrace":      applyStuckPodGrace,
 		"timer.retryAt":            applyRetryAt,
 		"timer.repairRetry":        applyRepairRetry,
@@ -639,6 +646,95 @@ func applyContainerRestart(ctx context.Context, d *driver, ev TimelineEvent) (st
 		return "", fmt.Errorf("replay: pod.containerRestart: pod %s reports no container %q to restart", name, container)
 	}
 	return "pod=" + name + " container=" + container + " reason=" + reason, nil
+}
+
+// containersNotReadyReason and containersNotReadyMessage are the reason and
+// message the kubelet writes on ContainersReady and Ready when a running
+// pod's containers fail their readiness probes; the message lists the
+// containers that are not ready.
+const (
+	containersNotReadyReason  = "ContainersNotReady"
+	containersNotReadyMessage = "containers with unready status: %s"
+)
+
+// applyRunningNotReady is a pod that runs but has not become Ready within
+// the stuck-pod grace: its containers are running and fail their readiness
+// probes, so the kubelet reports phase Running with ContainersReady and
+// Ready both False under reason ContainersNotReady, and every container
+// status Running with Ready false. A container's restart record stays as
+// the kubelet keeps it, and the serving gate stays the controller's.
+//
+// The grace is part of the event: a pod merely unready is
+// pod.containersNotReady. The clock therefore lands on the end of the pod's
+// readiness grace, read as the engine reads it (evidence.WaitingEpisodeStart,
+// the instant every grace reader measures from: the pod's creation, or the
+// moment its containers last stopped being ready, plus the configured
+// stuck-pod grace), plus the slack the scenario names. A kubelet reports
+// ContainersReady False with a pod's first status, so a pod that never
+// served has held it since its creation; only a pod that served transitions
+// now, and one already reported not ready keeps the instant it was.
+func applyRunningNotReady(ctx context.Context, d *driver, ev TimelineEvent) (string, error) {
+	ref, err := requirePod(ev)
+	if err != nil {
+		return "", err
+	}
+	if ev.Args.Slack == "" {
+		return "", fmt.Errorf("replay: pod.runningNotReady needs a slack: how far past the stuck-pod grace the pass observes the pod is the scenario's choice")
+	}
+	grace, err := ParseDuration("config.stuckPodGrace", d.cfg.StuckPodGrace)
+	if err != nil {
+		return "", err
+	}
+	if grace <= 0 {
+		return "", fmt.Errorf("replay: pod.runningNotReady: config.stuckPodGrace is not set, so no readiness grace runs; a pod merely unready is pod.containersNotReady")
+	}
+	name := d.podName(ref)
+	if err := d.patchPod(ctx, name, func(pod *corev1.Pod) {
+		notReadySince := d.clock.Now()
+		if !hasPodCondition(pod, corev1.ContainersReady) && !pod.CreationTimestamp.IsZero() {
+			notReadySince = pod.CreationTimestamp.Time
+		}
+		pod.Status.Phase = corev1.PodRunning
+		statuses := make([]corev1.ContainerStatus, 0, len(pod.Spec.Containers))
+		names := make([]string, 0, len(pod.Spec.Containers))
+		for _, c := range pod.Spec.Containers {
+			status := corev1.ContainerStatus{Name: c.Name, Image: c.Image}
+			for _, cs := range pod.Status.ContainerStatuses {
+				if cs.Name == c.Name {
+					status = cs
+					break
+				}
+			}
+			status.Ready = false
+			if status.State.Running == nil {
+				status.State = corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}
+			}
+			statuses = append(statuses, status)
+			names = append(names, c.Name)
+		}
+		pod.Status.ContainerStatuses = statuses
+		message := fmt.Sprintf(containersNotReadyMessage, names)
+		for _, condType := range []corev1.PodConditionType{corev1.ContainersReady, corev1.PodReady} {
+			setPodCondition(pod, condType, corev1.ConditionFalse, notReadySince)
+			cond := findCondition(pod, condType)
+			cond.Reason, cond.Message = containersNotReadyReason, message
+		}
+	}); err != nil {
+		return "", err
+	}
+	pod, err := d.getPod(ctx, name)
+	if err != nil {
+		return "", err
+	}
+	since := evidence.WaitingEpisodeStart(pod)
+	if since.IsZero() {
+		return "", fmt.Errorf("replay: pod.runningNotReady: pod %s carries no creation stamp, so no grace can be measured on it", name)
+	}
+	detail, err := d.advanceOnto("pod.runningNotReady", since.Add(grace), ev)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("pod=%s unreadySince=%s %s", name, d.norm.at(since), detail), nil
 }
 
 func applyUnschedulable(ctx context.Context, d *driver, ev TimelineEvent) (string, error) {
@@ -1339,6 +1435,185 @@ func applyOperationDeadline(_ context.Context, d *driver, ev TimelineEvent) (str
 		return "", fmt.Errorf("replay: timer.operationDeadline: no in-flight operation carries a deadline")
 	}
 	return d.advanceOnto("timer.operationDeadline", earliest, ev)
+}
+
+// applyMinReady advances the clock onto the earliest instant a Ready pod's
+// minReadySeconds window elapses, read as the promote bar reads it: the
+// plan's window applied to the pod's Ready condition through
+// podreadiness.IsPodAvailable, which is how long the pod must stay Ready
+// before it is Available. A pod on its way out runs no window that matters.
+func applyMinReady(ctx context.Context, d *driver, ev TimelineEvent) (string, error) {
+	desired, err := d.desiredSpec()
+	if err != nil {
+		return "", err
+	}
+	plan, err := workload.BuildPlan(d.opts.Component, desired, types.WorkloadObservedState{
+		InstanceStatuses: d.store.Rows(),
+		RetryBlocks:      d.store.RetryBlocks(),
+	})
+	if err != nil {
+		return "", fmt.Errorf("replay: timer.minReady: build plan: %w", err)
+	}
+	if plan.MinReadySeconds <= 0 {
+		return "", fmt.Errorf("replay: timer.minReady: spec.minReadySeconds is not set, so no Ready window runs")
+	}
+	pods, err := query.ListOMENativePodsByName(ctx, d.cli, d.opts.Namespace, d.opts.OwnerName, d.opts.Component, false)
+	if err != nil {
+		return "", fmt.Errorf("replay: timer.minReady: list pods: %w", err)
+	}
+	now := d.clock.Now()
+	var earliest time.Time
+	var name string
+	for _, pod := range pods {
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+		available, remaining := podreadiness.IsPodAvailable(pod, plan.MinReadySeconds, now)
+		if available || remaining <= 0 {
+			continue
+		}
+		due := now.Add(remaining)
+		if earliest.IsZero() || due.Before(earliest) {
+			earliest, name = due, pod.Name
+		}
+	}
+	if earliest.IsZero() {
+		return "", fmt.Errorf("replay: timer.minReady: no Ready pod is inside its minReadySeconds window, so no window is running")
+	}
+	detail, err := d.advanceOnto("timer.minReady", earliest, ev)
+	if err != nil {
+		return "", err
+	}
+	return "pod=" + name + " " + detail, nil
+}
+
+// applyExpectationsTTL advances the clock onto the instant the engine stops
+// waiting for a pod create or delete it issued but never saw land: the
+// deadline its expectation cache stamped when it recorded the write, which
+// is the pass's clock reading plus the cache's own time-to-live. The cache
+// keeps both to itself and reads them through one method, Satisfied, so the
+// driver asks that reader: which Instances it is still waiting on, with
+// the clock rewound to the run's start so the read moves nothing, and then,
+// at each pass instant plus the time-to-live in order, which of them it has
+// stopped waiting on. The first instant it has is the deadline, and the
+// cache drops the expectation there exactly as it would under the engine's
+// own read. Satisfied reads strictly after the deadline, so the slack is
+// positive.
+func applyExpectationsTTL(ctx context.Context, d *driver, ev TimelineEvent) (string, error) {
+	slack, err := ParseDuration("timer.expectationsTTL.slack", ev.Args.Slack)
+	if err != nil {
+		return "", err
+	}
+	if ev.Args.Slack == "" || slack <= 0 {
+		return "", fmt.Errorf("replay: timer.expectationsTTL needs a positive slack: the engine stops waiting strictly after the deadline, and how far past it the pass runs is the scenario's choice")
+	}
+	indices, err := d.instanceIndices(ctx)
+	if err != nil {
+		return "", err
+	}
+	now := d.clock.Now()
+	d.clock.SetTime(d.opts.Start)
+	var waiting []int32
+	for _, idx := range indices {
+		if !d.expectations.Satisfied(d.opts.Namespace, d.opts.OwnerName, d.opts.Component, idx) {
+			waiting = append(waiting, idx)
+		}
+	}
+	d.clock.SetTime(now)
+	if len(waiting) == 0 {
+		return "", fmt.Errorf("replay: timer.expectationsTTL: no pod create or delete is unobserved, so the engine waits for nothing and no expectation clock runs")
+	}
+	ttl, err := d.expectationsTTL()
+	if err != nil {
+		return "", err
+	}
+	for _, stamp := range d.passClocks {
+		deadline := stamp.Add(ttl)
+		d.clock.SetTime(deadline.Add(time.Nanosecond))
+		elapsed := false
+		for _, idx := range waiting {
+			if d.expectations.Satisfied(d.opts.Namespace, d.opts.OwnerName, d.opts.Component, idx) {
+				elapsed = true
+			}
+		}
+		d.clock.SetTime(now)
+		if !elapsed {
+			continue
+		}
+		detail, err := d.advanceOnto("timer.expectationsTTL", deadline, ev)
+		if err != nil {
+			return "", err
+		}
+		return "waiting=" + joinIndices(waiting) + " " + detail, nil
+	}
+	return "", fmt.Errorf("replay: timer.expectationsTTL: the engine is waiting on Instance(s) %s but no pass recorded the expectation", joinIndices(waiting))
+}
+
+// expectationsTTL is how long the engine's expectation cache waits for an
+// unobserved create or delete before it reads the expectation as satisfied.
+// The cache keeps that duration to itself and exposes one reader, so the
+// driver records one expectation on a scratch cache and finds the instant
+// that reader stops waiting: doubling the wait until it has, then halving
+// the gap down to the nanosecond. The result is the deadline itself, the
+// last instant the cache still waits.
+func (d *driver) expectationsTTL() (time.Duration, error) {
+	if d.ttl > 0 {
+		return d.ttl, nil
+	}
+	waits := func(after time.Duration) bool {
+		clk := clocktesting.NewFakeClock(d.opts.Start)
+		cache := types.NewExpectationsWithClock(clk)
+		cache.ExpectDeletes(d.opts.Namespace, d.opts.OwnerName, d.opts.Component, 0, 1)
+		clk.SetTime(d.opts.Start.Add(after))
+		return !cache.Satisfied(d.opts.Namespace, d.opts.OwnerName, d.opts.Component, 0)
+	}
+	lo, hi := time.Duration(0), time.Nanosecond
+	for waits(hi) {
+		if hi > math.MaxInt64/2 {
+			return 0, fmt.Errorf("replay: timer.expectationsTTL: the expectation cache never stops waiting")
+		}
+		lo, hi = hi, 2*hi
+	}
+	for hi-lo > time.Nanosecond {
+		mid := lo + (hi-lo)/2
+		if waits(mid) {
+			lo = mid
+		} else {
+			hi = mid
+		}
+	}
+	d.ttl = lo
+	return d.ttl, nil
+}
+
+// instanceIndices is every Instance index the run knows: the rows the
+// owner carries and the pods the cluster holds, in ascending order.
+func (d *driver) instanceIndices(ctx context.Context) ([]int32, error) {
+	seen := map[int32]bool{}
+	for _, row := range d.store.Rows() {
+		seen[row.Index] = true
+	}
+	byIndex, err := d.podsByInstanceFrom(ctx, d.cli)
+	if err != nil {
+		return nil, err
+	}
+	for idx := range byIndex {
+		seen[idx] = true
+	}
+	out := make([]int32, 0, len(seen))
+	for idx := range seen {
+		out = append(out, idx)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out, nil
+}
+
+func joinIndices(indices []int32) string {
+	parts := make([]string, 0, len(indices))
+	for _, idx := range indices {
+		parts = append(parts, fmt.Sprint(idx))
+	}
+	return strings.Join(parts, ",")
 }
 
 // applyStuckPodGrace advances the clock onto the earliest instant at which

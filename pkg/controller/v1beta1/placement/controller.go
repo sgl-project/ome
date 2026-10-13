@@ -609,23 +609,21 @@ func (r *Reconciler) derivedFor(src *v1beta1.InferenceService) (*v1beta1.Inferen
 	return d, nil
 }
 
-// applyDerived create-or-updates the derived ISVC `desired` on the target
-// cluster through direct, the member's uncached client. The remote input checks
-// run once, before the write window; the write itself re-reads the member and
-// repeats its ownership checks on every conflict.
-func (r *Reconciler) applyDerived(ctx context.Context, cluster string, direct client.Client, src, desired *v1beta1.InferenceService, existingOnly bool) error {
+// applyDerived validates observed member inputs before a conditional write.
+// Conflicts return to reconciliation so the member informer can catch up.
+func (r *Reconciler) applyDerived(ctx context.Context, cluster string, member client.Client, src, desired *v1beta1.InferenceService, existingOnly bool) error {
 	policy, err := protocol.FromDerived(desired)
 	if err != nil {
 		return err
 	}
-	standing, err := getMemberService(ctx, direct, client.ObjectKeyFromObject(desired))
+	standing, err := getMemberService(ctx, member, client.ObjectKeyFromObject(desired))
 	if err != nil {
 		return err
 	}
 	if err := r.authorizeMemberWrite(src, standing, policy, existingOnly); err != nil {
 		return err
 	}
-	backend, err := r.resolveStandingBackend(ctx, direct, desired, standing)
+	backend, err := r.resolveStandingBackend(ctx, member, desired, standing)
 	if err != nil {
 		return err
 	}
@@ -643,48 +641,45 @@ func (r *Reconciler) applyDerived(ctx context.Context, cluster string, direct cl
 	if err := r.checkBackendTransport(ctx, cluster); err != nil {
 		return err
 	}
-	// Before the wholesale re-stamp overwrites it, the live remote spec is the
-	// evidence for the FieldPruned detector: a member apiserver that pruned a
-	// stamped autoscalerPolicyRef reverts it here every pass.
-	if standing != nil {
-		r.observePolicyRefStamp(src, cluster, standing, desired)
+	applied, err := r.writeDerived(ctx, member, src, desired, standing, policy, existingOnly)
+	if err == nil {
+		r.observePolicyRefStamp(src, cluster, applied, desired)
 	}
-	return retry.OnError(retry.DefaultRetry, isMemberWriteRace, func() error {
-		return r.writeDerived(ctx, direct, src, desired, standing, policy, existingOnly)
-	})
+	return err
 }
 
-// writeDerived is one live read-check-write of the member service. The write's
-// resourceVersion precondition binds the ownership decision to the exact object
-// it replaces; verified is the instance the backend checks resolved against.
-func (r *Reconciler) writeDerived(ctx context.Context, direct client.Client, src, desired, verified *v1beta1.InferenceService, policy *v1beta1.PlacementExecutionPolicy, existingOnly bool) error {
+// writeDerived binds the ownership decision to the object's resourceVersion.
+// A stale cache cannot overwrite a member that changed after it was observed.
+func (r *Reconciler) writeDerived(ctx context.Context, member client.Client, src, desired, verified *v1beta1.InferenceService, policy *v1beta1.PlacementExecutionPolicy, existingOnly bool) (*v1beta1.InferenceService, error) {
 	key := client.ObjectKeyFromObject(desired)
-	target, err := getMemberService(ctx, direct, key)
+	target, err := getMemberService(ctx, member, key)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := r.authorizeMemberWrite(src, target, policy, existingOnly); err != nil {
-		return err
+		return nil, err
 	}
 	if (target == nil) != (verified == nil) || (target != nil && target.UID != verified.UID) {
-		return fmt.Errorf("member InferenceService %s was replaced after backend verification", key)
+		return nil, fmt.Errorf("member InferenceService %s was replaced after backend verification", key)
 	}
 	if target == nil {
 		if policy != nil {
-			if err := requireEmptyMemberInventory(ctx, direct, src); err != nil {
-				return err
+			if err := requireEmptyMemberInventory(ctx, member, src); err != nil {
+				return nil, err
 			}
 		}
 		target = &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace}}
 		stampDerived(target, desired)
-		return direct.Create(ctx, target)
+		err := member.Create(ctx, target)
+		return target, err
 	}
 	live := target.DeepCopy()
 	stampDerived(target, desired)
 	if equality.Semantic.DeepEqual(live, target) {
-		return nil
+		return target, nil
 	}
-	return direct.Update(ctx, target)
+	err = member.Update(ctx, target)
+	return target, err
 }
 
 // authorizeMemberWrite gates a write on the member service read just before it;
@@ -710,11 +705,10 @@ func (r *Reconciler) authorizeMemberWrite(src, target *v1beta1.InferenceService,
 func stampDerived(target, desired *v1beta1.InferenceService) {
 	target.Labels = mergeOwnedKeys(target.Labels, desired.Labels)
 	target.Annotations = mergeOwnedKeys(target.Annotations, desired.Annotations)
-	target.Spec = desired.Spec
+	target.Spec = *desired.Spec.DeepCopy()
 }
 
-// isMemberWriteRace reports a write that lost to a concurrent member change and
-// is retried from a fresh read.
+// isMemberWriteRace identifies concurrent writes that need another observation.
 func isMemberWriteRace(err error) bool {
 	return apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err)
 }
@@ -1172,24 +1166,31 @@ func (r *Reconciler) validateWiring() error {
 	return nil
 }
 
-// statusEventHandler enqueues the funnel-resolved local key with the configured
-// batch debounce. The event Object's namespace/name is the source ISVC key (the
-// funnel resolved it from the remote derived), so no remote/label work happens
-// here on the hot path.
+// statusEventHandler debounces member status and shared-runtime events. Runtime
+// events name a member; affected sources are resolved here from the hub cache.
 func (r *Reconciler) statusEventHandler(batchPeriod time.Duration) handler.EventHandler {
 	return handler.Funcs{
-		GenericFunc: func(_ context.Context, e event.GenericEvent, q workqueue.TypedRateLimitingInterface[ctrl.Request]) {
+		GenericFunc: func(ctx context.Context, e event.GenericEvent, q workqueue.TypedRateLimitingInterface[ctrl.Request]) {
 			if e.Object == nil {
 				return
 			}
-			req := ctrl.Request{NamespacedName: types.NamespacedName{
-				Namespace: e.Object.GetNamespace(),
-				Name:      e.Object.GetName(),
-			}}
-			if batchPeriod > 0 {
-				q.AddAfter(req, batchPeriod)
-			} else {
-				q.Add(req)
+			requests := []ctrl.Request{{NamespacedName: client.ObjectKeyFromObject(e.Object)}}
+			if _, sharedRuntime := e.Object.(*v1beta1.WorkloadCluster); sharedRuntime {
+				member := &v1beta1.WorkloadCluster{}
+				if err := r.Get(ctx, client.ObjectKeyFromObject(e.Object), member); err != nil {
+					if !apierrors.IsNotFound(err) {
+						r.Log.Error(err, "member runtime event: read cluster registration failed", "cluster", e.Object.GetName())
+					}
+					return
+				}
+				requests = r.isvcsForClusterChange(ctx, member)
+			}
+			for _, req := range requests {
+				if batchPeriod > 0 {
+					q.AddAfter(req, batchPeriod)
+				} else {
+					q.Add(req)
+				}
 			}
 		},
 	}

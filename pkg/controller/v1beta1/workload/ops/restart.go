@@ -356,13 +356,25 @@ func Restart(ctx context.Context, deps workload.Deps, input workload.ReconcileIn
 		// this row, and a pass that reaches it anyway leaves it parked.
 		return false, nil
 	default:
+		// The open of a repair reads the pod set live, as the trigger that
+		// selected the row did: the informer can lag the kubelet's report
+		// of the death, and the drain below deletes the pod with the only
+		// copy of it. The passes that drive an open repair keep the cached
+		// read.
+		openPods := pods
+		if wasNotRestarting {
+			openPods, err = query.LiveListPodsForInstance(ctx, deps.Reader(), input.Key.Namespace, input.Key.OwnerName, plan.Component, inst.Index)
+			if err != nil {
+				return false, fmt.Errorf("Restart: list pods to open the repair (instance=%d): %w", inst.Index, err)
+			}
+		}
 		// A crash of a promoted pod set is the failure of the attempt that
 		// promoted it, whatever trigger reads it: the running revision's
 		// retry ladder counts it, paces the rebuild, and parks the row
 		// Failed once it holds.
 		ladderRev := ""
 		if wasNotRestarting && observed != nil && observed.Phase == workload.InstancePhaseReady {
-			parked, rev, err := countCrashOnLadder(ctx, input, plan, inst, observed, pods)
+			parked, rev, err := countCrashOnLadder(ctx, input, plan, inst, observed, openPods)
 			if err != nil || parked {
 				return false, err
 			}
@@ -375,7 +387,7 @@ func Restart(ctx context.Context, deps workload.Deps, input workload.ReconcileIn
 		// finds nothing to capture and leaves any prior record intact.
 		var failure *workload.InstanceTermination
 		if wasNotRestarting {
-			failure = firstFailedPodTermination(pods, metav1.NewTime(input.Now()))
+			failure = firstFailedPodTermination(openPods, metav1.NewTime(input.Now()))
 		}
 		newInc, err = status.StampRestarting(ctx, input, inst.Index, reason, plan.InstanceReadyTimeout, failure)
 		if err != nil {
@@ -753,8 +765,11 @@ func rebuildFollowsTarget(input workload.ReconcileInput, plan workload.Component
 // restart is their recovery path and does not break the Instance's process
 // group. A nil readySince (Instance was last promoted before the field
 // existed) reports false; the anchor appears on the next Ready transition.
+// A pod created after readySince is not one of the pods that were Ready
+// then: its container's first run began after readySince by construction,
+// so it reports false too (podCreatedAfterReady).
 func RunnerRestartedSinceReady(pod *corev1.Pod, readySince *metav1.Time) (string, bool) {
-	if pod == nil || readySince == nil || readySince.IsZero() || pod.DeletionTimestamp != nil {
+	if pod == nil || readySince == nil || readySince.IsZero() || pod.DeletionTimestamp != nil || podCreatedAfterReady(pod, readySince) {
 		return "", false
 	}
 	for i := range pod.Status.ContainerStatuses {
@@ -785,9 +800,10 @@ func RunnerRestartedSinceReady(pod *corev1.Pod, readySince *metav1.Time) (string
 // restart before it. A container that keeps dying under load reads this
 // way from its second crash on; one the kubelet restarted once never
 // does, because the run that crashed is the run that was promoted. The
-// nil and zero readySince rules of RunnerRestartedSinceReady apply.
+// nil and zero readySince rules of RunnerRestartedSinceReady apply, and so
+// does its reading of a pod created after readySince.
 func RunnerRestartedAgainSinceReady(pod *corev1.Pod, readySince *metav1.Time) bool {
-	if pod == nil || readySince == nil || readySince.IsZero() || pod.DeletionTimestamp != nil {
+	if pod == nil || readySince == nil || readySince.IsZero() || pod.DeletionTimestamp != nil || podCreatedAfterReady(pod, readySince) {
 		return false
 	}
 	for i := range pod.Status.ContainerStatuses {
@@ -799,6 +815,15 @@ func RunnerRestartedAgainSinceReady(pod *corev1.Pod, readySince *metav1.Time) bo
 		return t != nil && t.StartedAt.After(readySince.Time)
 	}
 	return false
+}
+
+// podCreatedAfterReady reports whether pod was created after the Instance
+// entered Ready. readySince names the pods that were Ready at that time, so
+// a younger pod is a new pod, built after that set was lost or replaced: a
+// run of its container that began after readySince is its first run, not a
+// restart. A pod with no creation time recorded counts as one of that set.
+func podCreatedAfterReady(pod *corev1.Pod, readySince *metav1.Time) bool {
+	return !pod.CreationTimestamp.IsZero() && pod.CreationTimestamp.After(readySince.Time)
 }
 
 // Crash-loop repair: a wedge no other pass owns.

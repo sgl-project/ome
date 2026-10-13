@@ -1013,3 +1013,82 @@ func TestTakeInlineV1PublicationReadsReadyOverAFailedAttemptWhileTheSourceServes
 		}
 	})
 }
+
+// An Instance serves through its routable pod, and a Service never
+// publishes a gang's worker. A Failed gang whose leader is gone therefore
+// publishes no serving pod however many workers keep the gate, and the
+// dark-row rule (types.RecreateOfDarkRow) reads it as serving nothing:
+// rebuilding it takes nothing further offline. A Failed gang whose leader
+// serves beside a wedged worker publishes the members that serve, short of
+// its desired count, and is not dark. A whole gang publishes every member
+// and is the one serving Instance.
+func TestTakeInlineV1PublicationReadsAGangWithoutItsLeaderAsDark(t *testing.T) {
+	member := func(index int32, runner string, ordinal int, serving bool) *corev1.Pod {
+		pod := observationPod(fmt.Sprintf("engine-%d-%s-%d", index, runner, ordinal), fmt.Sprintf("node-%d-%d", index, ordinal), serving, serving, false)
+		pod.Labels = map[string]string{query.LabelRunner: runner}
+		return pod
+	}
+	gang := func(index int32, withLeader bool, servingWorkers, wedgedWorkers int) []*corev1.Pod {
+		var pods []*corev1.Pod
+		if withLeader {
+			pods = append(pods, member(index, types.RunnerLeader, 0, true))
+		}
+		for ordinal := 0; ordinal < servingWorkers+wedgedWorkers; ordinal++ {
+			pods = append(pods, member(index, types.RunnerWorker, ordinal, ordinal < servingWorkers))
+		}
+		return pods
+	}
+	rows := []types.InstanceStatus{
+		{Index: 0, Incarnation: 1, Phase: types.InstancePhaseFailed, RunningRevision: "rev-a"},
+		{Index: 1, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: "rev-a"},
+		{Index: 2, Incarnation: 1, Phase: types.InstancePhaseFailed, RunningRevision: "rev-a"},
+	}
+	byInstance := map[int32][]*corev1.Pod{
+		0: gang(0, false, 7, 0),
+		1: gang(1, true, 7, 0),
+		2: gang(2, true, 6, 1),
+	}
+	observation, err := workload.NewOwnedPublicationObservation(rows,
+		workload.NewCachedSelectorPodObservation(nil, byInstance), nil, status.AvailabilityWindow{})
+	if err != nil {
+		t.Fatalf("NewOwnedPublicationObservation: %v", err)
+	}
+	statuses, counters, err := observation.TakeInlineV1Publication(map[int32]int32{0: 8, 1: 8, 2: 8}, "rev-a")
+	if err != nil {
+		t.Fatalf("TakeInlineV1Publication: %v", err)
+	}
+
+	leaderGone := statuses[0]
+	if leaderGone.PodCount != 7 || leaderGone.ServingPodCount != 0 {
+		t.Errorf("gang without its leader publishes %d pod(s), %d serving; want 7 pods and none serving", leaderGone.PodCount, leaderGone.ServingPodCount)
+	}
+	if leaderGone.Phase != types.InstancePhaseFailed {
+		t.Errorf("gang without its leader publishes phase %s, want Failed", leaderGone.Phase)
+	}
+	if !types.RecreateOfDarkRow(&leaderGone, types.UpdateStrategyRecreatePod) {
+		t.Errorf("a Failed gang without its leader must read as dark: %d serving pod(s) published", leaderGone.ServingPodCount)
+	}
+
+	whole := statuses[1]
+	if whole.PodCount != 8 || whole.ServingPodCount != 8 {
+		t.Errorf("whole gang publishes %d pod(s), %d serving; want 8 pods, all serving", whole.PodCount, whole.ServingPodCount)
+	}
+	if whole.Phase != types.InstancePhaseReady {
+		t.Errorf("whole gang publishes phase %s, want Ready", whole.Phase)
+	}
+
+	wedgedWorker := statuses[2]
+	if wedgedWorker.PodCount != 8 || wedgedWorker.ServingPodCount != 7 {
+		t.Errorf("gang with a wedged worker publishes %d pod(s), %d serving; want 8 pods and the 7 that serve", wedgedWorker.PodCount, wedgedWorker.ServingPodCount)
+	}
+	if wedgedWorker.Phase != types.InstancePhaseFailed {
+		t.Errorf("gang with a wedged worker publishes phase %s, want Failed", wedgedWorker.Phase)
+	}
+	if types.RecreateOfDarkRow(&wedgedWorker, types.UpdateStrategyRecreatePod) {
+		t.Errorf("a Failed gang whose leader serves beside a wedged worker is not dark: %d serving pod(s) published", wedgedWorker.ServingPodCount)
+	}
+
+	if counters.ServingReplicas != 1 {
+		t.Errorf("ServingReplicas = %d, want 1: the whole gang serves, the other two are short of their desired count", counters.ServingReplicas)
+	}
+}

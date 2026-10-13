@@ -778,6 +778,9 @@ func TestInferenceReplicaStatusReadInventory(t *testing.T) {
 	// The InferenceService replay driver builds the dense rows its replica
 	// stand-in publishes.
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/replay/members.go", "driver.publish", accessCounts{writes: 1}, replicaControllerStandIn, rows)
+	// The same driver's run check reads the dense rows its stand-in published,
+	// on the replica it built itself.
+	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/replay/invariants.go", "CheckRunOpensOnChange", read(1), replicaControllerStandIn, rows)
 
 	inv := loadStatusInventory(t)
 	actual := map[fieldUse]accessCounts{}

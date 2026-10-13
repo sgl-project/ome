@@ -46,19 +46,25 @@ const (
 
 // RowCommit is one buffered InstanceStatus mutation as the store resolved
 // it. Before is nil when the row did not exist, After is nil when the row
-// was removed, and Outcome is the precondition verdict.
+// was removed, and Outcome is the precondition verdict. Batch numbers the
+// status write of the pass the commit landed in, so the commits of one
+// write carry one number and two writes never share one.
 type RowCommit struct {
 	Index   int32
 	Remove  bool
 	Outcome string
+	Batch   int
 	Before  *types.InstanceStatus
 	After   *types.InstanceStatus
 }
 
-// RetryBlockCommit is one resolved retry-block write.
+// RetryBlockCommit is one resolved retry-block write. Batch numbers the
+// status write as it does on a RowCommit, so the row commits of the same
+// write share it.
 type RetryBlockCommit struct {
 	TargetRevision string
 	Disposition    string
+	Batch          int
 	Before         *types.RetryBlock
 	After          *types.RetryBlock
 }
@@ -107,6 +113,9 @@ type RowStore struct {
 	// conflict names the write it answers.
 	writes    int
 	conflicts []*statusConflict
+	// batches numbers every status write of the pass, the direct row
+	// removals included, so a commit can name the write it landed in.
+	batches int
 }
 
 // NewRowStore seeds a store from the rows an owner already persists.
@@ -138,9 +147,11 @@ func (s *RowStore) RetryBlocks() []types.RetryBlock {
 	return append([]types.RetryBlock(nil), s.retryBlocks...)
 }
 
-// BeginPass resets the status-write count a conflict is armed against.
+// BeginPass resets the status-write count a conflict is armed against and
+// the batch numbering the commits carry.
 func (s *RowStore) BeginPass() {
 	s.writes = 0
+	s.batches = 0
 }
 
 // ArmConflict makes the apiserver answer the write-th status write of the
@@ -200,6 +211,7 @@ func (s *RowStore) RemoveInstance(_ context.Context, idx int32) (bool, error) {
 	if position < 0 {
 		return false, nil
 	}
+	s.batches++
 	before := CloneRow(s.rows[position])
 	s.rows = append(s.rows[:position], s.rows[position+1:]...)
 	s.emitRow(RowCommit{Index: idx, Remove: true, Outcome: PreconditionOK, Before: &before})
@@ -244,6 +256,7 @@ func (s *RowStore) ApplyInstanceMutationsWithRetryBlock(
 	// re-reads the owner and re-applies the whole batch, and the budget
 	// exhausted hands the conflict to the engine with nothing committed.
 	s.writes++
+	s.batches++
 	attempts := retry.DefaultRetry.Steps
 	for attempt := 1; attempt <= attempts; attempt++ {
 		if !s.conflictFor(s.writes) {
@@ -453,12 +466,14 @@ func (s *RowStore) rowCopy(idx int32) *types.InstanceStatus {
 }
 
 func (s *RowStore) emitRow(record RowCommit) {
+	record.Batch = s.batches
 	if s.sink != nil {
 		s.sink.RowCommitted(record)
 	}
 }
 
 func (s *RowStore) emitRetryBlock(record RetryBlockCommit) {
+	record.Batch = s.batches
 	if s.sink != nil {
 		s.sink.RetryBlockCommitted(record)
 	}

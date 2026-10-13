@@ -1,6 +1,7 @@
 package status_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/status"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
@@ -443,5 +445,93 @@ func TestWithdrawnRevisionAfter(t *testing.T) {
 					tc.before, tc.oldCurrent, tc.current, tc.update, got, tc.want)
 			}
 		})
+	}
+}
+
+// An Instance serves through its routable pod: the leader of a gang, or
+// the one pod of a single-pod Instance. A Service never publishes a
+// worker, so an Instance with no routable serving pod serves nothing,
+// whatever its workers read, and its serving count is 0. While the
+// routable pod serves, the count takes in every serving member: a whole
+// gang counts N and a gang with a worker gone counts N-1.
+func TestCountServingPods_ReadsAGangWithoutItsLeaderAsServingNothing(t *testing.T) {
+	servingPod := func(name, runner string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{query.LabelRunner: runner}},
+			Status: corev1.PodStatus{Conditions: []corev1.PodCondition{
+				{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				{Type: podreadiness.ConditionType, Status: corev1.ConditionTrue},
+			}},
+		}
+	}
+	// The pod's node died: the node lifecycle controller revoked PodReady
+	// while the containers and the gate keep their last values.
+	nodeLost := func(pod *corev1.Pod) *corev1.Pod {
+		for i := range pod.Status.Conditions {
+			if pod.Status.Conditions[i].Type == corev1.PodReady {
+				pod.Status.Conditions[i].Status = corev1.ConditionFalse
+			}
+		}
+		return pod
+	}
+	leaving := func(pod *corev1.Pod) *corev1.Pod {
+		now := metav1.Now()
+		pod.DeletionTimestamp = &now
+		return pod
+	}
+	leader := func() *corev1.Pod { return servingPod("engine-0-leader-0", types.RunnerLeader) }
+	workers := func(n int) []*corev1.Pod {
+		out := make([]*corev1.Pod, 0, n)
+		for i := 0; i < n; i++ {
+			out = append(out, servingPod(fmt.Sprintf("engine-0-worker-%d", i), types.RunnerWorker))
+		}
+		return out
+	}
+	withLeader := func(lead *corev1.Pod, workers []*corev1.Pod) []*corev1.Pod {
+		return append([]*corev1.Pod{lead}, workers...)
+	}
+	single := func() *corev1.Pod { return servingPod("engine-1-default-0", types.RunnerDefault) }
+
+	for _, tc := range []struct {
+		name string
+		pods []*corev1.Pod
+		want int32
+	}{
+		{name: "the whole gang counts every member", pods: withLeader(leader(), workers(7)), want: 8},
+		{name: "a worker gone leaves the rest counting", pods: withLeader(leader(), workers(6)), want: 7},
+		{name: "a worker's node died, the rest keep counting", pods: withLeader(leader(), append(workers(6), nodeLost(servingPod("engine-0-worker-6", types.RunnerWorker)))), want: 7},
+		{name: "the leader is gone and every worker keeps the gate", pods: workers(7), want: 0},
+		{name: "the leader's node died and every worker keeps the gate", pods: withLeader(nodeLost(leader()), workers(7)), want: 0},
+		{name: "the leader is being deleted and every worker keeps the gate", pods: withLeader(leaving(leader()), workers(7)), want: 0},
+		{name: "a single-pod Instance serves through its one pod", pods: []*corev1.Pod{single()}, want: 1},
+		{name: "a single-pod Instance whose node died serves nothing", pods: []*corev1.Pod{nodeLost(single())}, want: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := status.CountServingPods(tc.pods); got != tc.want {
+				t.Fatalf("CountServingPods = %d, want %d", got, tc.want)
+			}
+		})
+	}
+
+	// The counters an Instance publishes and the Component's count of
+	// serving Instances follow the same rule: a gang with its leader gone is
+	// as far out of rotation as one with no pod at all, and a gang with a
+	// worker gone is short of its desired count as before.
+	desired := map[int32]int32{0: 8}
+	servingInstances := func(c status.InstanceCounters) int32 {
+		return status.CountServingInstances([]types.InstanceStatus{{Index: 0, PodCount: c.PodCount, ServingPodCount: c.ServingPodCount}}, desired)
+	}
+	whole := status.CountersForInstance(withLeader(leader(), workers(7)), nil, status.AvailabilityWindow{})
+	if whole.PodCount != 8 || whole.ServingPodCount != 8 || servingInstances(whole) != 1 {
+		t.Fatalf("whole gang: %s, serving Instances %d; want pods=8 serving=8 and 1 serving Instance", whole, servingInstances(whole))
+	}
+	workerGone := status.CountersForInstance(withLeader(leader(), workers(6)), nil, status.AvailabilityWindow{})
+	if workerGone.PodCount != 7 || workerGone.ServingPodCount != 7 || servingInstances(workerGone) != 0 {
+		t.Fatalf("gang with a worker gone: %s, serving Instances %d; want pods=7 serving=7 and no serving Instance", workerGone, servingInstances(workerGone))
+	}
+	leaderGone := status.CountersForInstance(workers(7), nil, status.AvailabilityWindow{})
+	if leaderGone.PodCount != 7 || leaderGone.ServingPodCount != 0 || servingInstances(leaderGone) != 0 {
+		t.Fatalf("gang with its leader gone: %s, serving Instances %d; want pods=7 serving=0 and no serving Instance", leaderGone, servingInstances(leaderGone))
 	}
 }

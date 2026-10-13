@@ -54,6 +54,7 @@ func (d *driver) runPass(ctx context.Context) error {
 	var pending ctrl.Result
 	var policies rollout.Policies
 	var consume []string
+	d.tickRun = RunView{}
 	if isvc.Spec.Rollout != nil || isvc.Status.Rollout != nil {
 		d.stage = "run"
 		out, err := rolloutrun.Reconcile(ctx, rolloutrun.Inputs{
@@ -66,6 +67,7 @@ func (d *driver) runPass(ctx context.Context) error {
 			BoundProviders: d.boundProviders(),
 		})
 		d.traceRun(isvc, out, err)
+		d.tickRun = runViewOf(isvc, out)
 		if err != nil {
 			return d.endPass(ctrl.Result{}, err)
 		}
@@ -166,6 +168,16 @@ func (d *driver) runPass(ctx context.Context) error {
 		pending.Requeue = true
 	}
 	return d.endPass(pending, nil)
+}
+
+// runViewOf is the run layer's outcome as the observer receives it, with
+// the targets of a run the pass opened.
+func runViewOf(isvc *v1beta1.InferenceService, out rolloutrun.Outcome) RunView {
+	view := RunView{Ran: true, Opened: out.Opened, Adopted: out.Adopted}
+	if out.Opened && isvc.Status.Rollout != nil && isvc.Status.Rollout.ActiveRun != nil {
+		view.Targets = append([]v1beta1.RolloutRunTarget(nil), isvc.Status.Rollout.ActiveRun.TargetRevisions...)
+	}
+	return view
 }
 
 // endPass closes the pass in the trace. An engine error is the pass's

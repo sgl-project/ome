@@ -23,8 +23,8 @@ type identifiedClusterClients interface {
 // plannedClient binds both the registration and transport to the accepted UID.
 // A connection selected by name alone cannot authorize an allocation mutation.
 func (r *Reconciler) plannedClient(ctx context.Context, name string, uid types.UID) (client.WithWatch, error) {
-	direct, _, err := r.plannedTransport(ctx, name, uid)
-	return direct, err
+	member, _, err := r.plannedTransport(ctx, name, uid)
+	return member, err
 }
 
 func (r *Reconciler) plannedTransport(ctx context.Context, name string, uid types.UID) (client.WithWatch, workloadcluster.SelectivelyCachingClient, error) {
@@ -49,11 +49,11 @@ func (r *Reconciler) plannedTransport(ctx context.Context, name string, uid type
 		}
 		return nil, nil, fmt.Errorf("cluster %q has no connection for its accepted UID", name)
 	}
-	direct, ok := workloadcluster.DirectClient(remote)
+	_, ok = workloadcluster.DirectClient(remote)
 	if !ok {
-		return nil, nil, fmt.Errorf("cluster %q transport cannot provide direct observations", name)
+		return nil, nil, fmt.Errorf("cluster %q transport cannot provide member operations", name)
 	}
-	return direct, remote, nil
+	return remote, remote, nil
 }
 
 func (r *Reconciler) checkPlanCurrent(ctx context.Context, source *v1beta1.InferenceService) error {

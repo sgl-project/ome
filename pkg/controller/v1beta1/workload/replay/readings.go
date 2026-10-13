@@ -7,6 +7,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/reading"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/reading/compare"
+	types "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
 // ReadingFinding is one place where a reader the passes use and the one
@@ -19,7 +20,7 @@ type ReadingFinding struct {
 	// Class is the stable key a tally over recorded scenarios groups by:
 	// the question asked, the reader's side and what each side answered,
 	// with no number or name in it. Every question compare asks is about
-	// the Serving level or a verdict built on it.
+	// one of the reading's levels or a verdict built on them.
 	Class string
 	// Detail is the one-line account with the index, the names and the
 	// numbers.
@@ -31,16 +32,21 @@ type ReadingFinding struct {
 // disagree, in Instance order. The reading gets the pass's clock, the
 // Component's two windows and the routed rotation the view carries. The
 // replay runs one Component with no pairing protocol, so the Pairable
-// level reads as Serving. The rows are not handed to the comparison: the
-// driver publishes PodCount onto them and no serving count, so a reader
-// of the persisted serving count would be measured against the driver,
-// not against the pods.
+// level reads as Serving. Each Instance's row is handed to the comparison
+// with the serving count the publication after the pass wrote onto it,
+// so the readers of the persisted count are measured one pass behind the
+// pods, as the passes read them. An Instance with a row and no pods is
+// not compared: every question is about pods.
 func CompareReadings(view TickView) []ReadingFinding {
 	ctx := reading.Context{
 		Now:                view.Now,
 		AvailabilityWindow: time.Duration(view.Spec.MinReadySeconds) * time.Second,
 		UnreadyGrace:       view.StuckPodGrace,
 		Rotation:           rotationOf(view.Routed),
+	}
+	rows := make(map[int32]*types.InstanceStatus, len(view.Rows))
+	for i := range view.Rows {
+		rows[view.Rows[i].Index] = &view.Rows[i]
 	}
 	indexes := make([]int32, 0, len(view.Pods))
 	for index := range view.Pods {
@@ -49,7 +55,7 @@ func CompareReadings(view TickView) []ReadingFinding {
 	sort.Slice(indexes, func(i, j int) bool { return indexes[i] < indexes[j] })
 	var findings []ReadingFinding
 	for _, index := range indexes {
-		for _, d := range compare.Compare(view.Pods[index], view.Spec.PodsPerInstance, nil, ctx) {
+		for _, d := range compare.Compare(view.Pods[index], view.Spec.PodsPerInstance, rows[index], ctx) {
 			findings = append(findings, ReadingFinding{
 				Index:  index,
 				Reader: d.Reader,

@@ -91,7 +91,11 @@ func (r *Reconciler) reconcileSinglePlanned(ctx context.Context, source *v1beta1
 		err := r.placePlannedMember(cctx, accepted, candidate, winner != "")
 		cancel()
 		if err != nil {
-			r.Log.Error(err, "Single member application held", "cluster", candidate.Cluster)
+			if isMemberWriteRace(err) {
+				r.Log.V(1).Info("Single member application conflicted; retrying", "cluster", candidate.Cluster)
+			} else {
+				r.Log.Error(err, "Single member application held", "cluster", candidate.Cluster)
+			}
 			observations.refresh(ctx, r, accepted, candidate.Cluster)
 			continue
 		}

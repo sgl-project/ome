@@ -2,6 +2,7 @@ package workloadcluster
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -213,28 +214,19 @@ func newCachedTestClient(t *testing.T, cacheCtx context.Context) (*selectivelyCa
 	}, direct, cached
 }
 
-// A cached read against a torn-down cache must go direct. Routing it to the
-// cached reader is what wedges a reconcile: controller-runtime lazily creates
-// the informer, declines to start it because the cache is stopped, still
-// reports it as started, and then blocks in WaitForCacheSync on the CALLER's
-// context — which for a reconcile is the manager's, i.e. forever.
-func TestSelectivelyCachingClient_StoppedCacheReadsGoDirect(t *testing.T) {
-	cacheCtx, stopCache := context.WithCancel(context.Background())
+// A stopped cache must not return stale state or start a network read.
+func TestSelectivelyCachingClient_StoppedCacheIsUnavailable(t *testing.T) {
+	cacheCtx, stopCache := context.WithCancel(t.Context())
 	c, direct, cached := newCachedTestClient(t, cacheCtx)
 	stopCache()
-
-	if err := c.Get(context.Background(), client.ObjectKey{Name: "example"}, &v1beta1.InferenceService{}); err != nil {
+	if err := c.Get(t.Context(), client.ObjectKey{Name: "example"}, &v1beta1.InferenceService{}); !errors.Is(err, ErrMemberCacheUnavailable) {
 		t.Fatalf("Get on stopped cache: %v", err)
 	}
-	if err := c.List(context.Background(), &v1beta1.InferenceServiceList{}); err != nil {
+	if err := c.List(t.Context(), &v1beta1.InferenceServiceList{}); !errors.Is(err, ErrMemberCacheUnavailable) {
 		t.Fatalf("List on stopped cache: %v", err)
 	}
-
-	if direct.getCalls != 1 || direct.listCalls != 1 {
-		t.Fatalf("direct reads after cache stop: got Get=%d List=%d, want Get=1 List=1", direct.getCalls, direct.listCalls)
-	}
-	if cached.getCalls != 0 || cached.listCalls != 0 {
-		t.Fatalf("cached reads after cache stop: got Get=%d List=%d, want Get=0 List=0", cached.getCalls, cached.listCalls)
+	if direct.getCalls+direct.listCalls+cached.getCalls+cached.listCalls != 0 {
+		t.Fatal("unavailable cache must not read from either client")
 	}
 }
 
@@ -258,9 +250,7 @@ func TestSelectivelyCachingClient_LiveCacheReadsUseCache(t *testing.T) {
 	}
 }
 
-// A cached read already in flight when the cache is torn down must be released
-// and served directly, not left parked. This is the narrow window that the
-// servesFromCache pre-check alone cannot cover.
+// Teardown releases in-flight reads without falling back to network requests.
 func TestSelectivelyCachingClient_CacheTeardownReleasesInFlightRead(t *testing.T) {
 	cacheCtx, stopCache := context.WithCancel(context.Background())
 	direct := &recordingClient{WithWatch: fake.NewClientBuilder().Build()}
@@ -286,14 +276,14 @@ func TestSelectivelyCachingClient_CacheTeardownReleasesInFlightRead(t *testing.T
 
 	select {
 	case err := <-done:
-		if err != nil {
+		if !errors.Is(err, ErrMemberCacheUnavailable) {
 			t.Fatalf("in-flight read after cache teardown: %v", err)
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("in-flight cached read did not return after the cache was torn down")
 	}
-	if direct.getCalls != 1 {
-		t.Fatalf("direct Get after teardown: got %d, want 1", direct.getCalls)
+	if direct.getCalls != 0 {
+		t.Fatalf("direct Get after teardown: got %d, want 0", direct.getCalls)
 	}
 }
 

@@ -510,7 +510,7 @@ func closedOutcome(isvc *v1beta1.InferenceService, active *v1beta1.RolloutRun, t
 				}
 				return "", false
 			}
-			if int(cs.CurrentStep) < len(g.Canary.Steps) {
+			if stepShortOfEnd(isvc, primary, cs, g.Canary.Steps) {
 				return "", false
 			}
 			// The done sentinel releases the last held instance; the unit
@@ -707,10 +707,10 @@ func handleRepin(ctx context.Context, in Inputs, active *v1beta1.RolloutRun, now
 		return true, consumeAnnotation(ctx, in.Client, isvc, constants.RolloutRepinAnnotation)
 	}
 
-	oldStepCount := pinnedCanaryStepCount(active)
+	oldSteps := pinnedCanarySteps(active)
 	active.Plan = v1beta1.RolloutRunPlan{Groups: plan.groups}
 	active.PinnedAt = now
-	clampCanary(isvc, active, oldStepCount)
+	clampCanary(isvc, active, oldSteps)
 	recordRepin(isvc, true)
 	emit(in.Recorder, isvc, corev1.EventTypeNormal, EventPlanRepinned,
 		"run %s repinned: %s -> %s", active.RunID, oldDigest, fresh)
@@ -724,7 +724,7 @@ func handleRepin(ctx context.Context, in Inputs, active *v1beta1.RolloutRun, now
 // pause — so a bare index-clamp onto a higher-traffic step (always the case
 // when a shorter ladder clamps onto the final 100% step) would be immediate
 // exposure, not a hold.
-func clampCanary(isvc *v1beta1.InferenceService, active *v1beta1.RolloutRun, oldStepCount int) {
+func clampCanary(isvc *v1beta1.InferenceService, active *v1beta1.RolloutRun, oldSteps []v1beta1.RolloutGroupStep) {
 	for i := range active.Plan.Groups {
 		g := &active.Plan.Groups[i].Group
 		c := g.Canary
@@ -738,14 +738,15 @@ func clampCanary(isvc *v1beta1.InferenceService, active *v1beta1.RolloutRun, old
 		// Done stays done: a canary that finished under the OLD ladder must
 		// not be resurrected by a repin. Done is judged against the old
 		// plan's length — an in-flight index merely beyond the NEW ladder is
-		// the shrink case and clamps to the last step instead.
-		if oldStepCount > 0 && int(cs.CurrentStep) >= oldStepCount {
+		// the shrink case and clamps to the last step instead. A negative
+		// step is an external status write, read the way the canary executor
+		// reads it, against the ladder the unit ran under.
+		step := rollout.StepOf(cs, primaryPhase(isvc, g), oldSteps)
+		if len(oldSteps) > 0 && int(step) >= len(oldSteps) {
 			cs.CurrentStep = int32(len(c.Steps))
 			return
 		}
-		if cs.CurrentStep < 0 {
-			cs.CurrentStep = 0
-		}
+		cs.CurrentStep = step
 		if int(cs.CurrentStep) >= len(c.Steps) {
 			cs.CurrentStep = int32(len(c.Steps)) - 1
 		}
@@ -756,15 +757,15 @@ func clampCanary(isvc *v1beta1.InferenceService, active *v1beta1.RolloutRun, old
 	}
 }
 
-// pinnedCanaryStepCount is the pinned canary ladder's length, 0 when the
+// pinnedCanarySteps is the pinned canary ladder's steps, nil when the
 // pinned plan carries no canary group.
-func pinnedCanaryStepCount(active *v1beta1.RolloutRun) int {
+func pinnedCanarySteps(active *v1beta1.RolloutRun) []v1beta1.RolloutGroupStep {
 	for i := range active.Plan.Groups {
 		if c := active.Plan.Groups[i].Group.Canary; c != nil {
-			return len(c.Steps)
+			return c.Steps
 		}
 	}
-	return 0
+	return nil
 }
 
 func pinnedDigests(active *v1beta1.RolloutRun) []string {

@@ -177,7 +177,10 @@ func executeUpdatePass(ctx context.Context, deps types.Deps, input types.Reconci
 type updateAdmission struct {
 	selection *UpdateSelection
 	target    *appsv1.ControllerRevision
-	gate      func(strategy types.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, types.RolloutHoldGate, string)
+	// observed holds the rows the pass read; a start is consulted with the
+	// revision its row runs now.
+	observed types.WorkloadObservedState
+	gate     func(fromRevision string, strategy types.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, types.RolloutHoldGate, string)
 	// planGate is the adapter's plan precondition; planAsked and planHold
 	// keep its one verdict per pass, since the pin does not move within one.
 	planGate  func() (bool, types.RolloutHoldGate, string)
@@ -203,7 +206,16 @@ type updateAdmission struct {
 }
 
 func newUpdateAdmission(input types.ReconcileInput, selection *UpdateSelection, target *appsv1.ControllerRevision) *updateAdmission {
-	return &updateAdmission{selection: selection, target: target, gate: input.UpdateGate, planGate: input.PlanGate}
+	return &updateAdmission{selection: selection, target: target, observed: input.ObservedState, gate: input.UpdateGate, planGate: input.PlanGate}
+}
+
+// fromRevision is the ControllerRevision the candidate's row runs now, the
+// cohort a fresh start takes it out of; empty when the row records none.
+func (a *updateAdmission) fromRevision(item UpdateItem) string {
+	if row := a.observed.Instance(item.Instance.Index); row != nil {
+		return row.RunningRevision
+	}
+	return ""
 }
 
 func (a *updateAdmission) surge() bool {
@@ -248,9 +260,10 @@ func (a *updateAdmission) admit(ctx context.Context, plan types.ComponentPlan, i
 	// own recreate would double count and starve the recovery.
 	if a.gate != nil && !item.CoordGateExempt {
 		mechanism := a.mechanism(item)
-		if allowed, gate, reason := a.gate(mechanism, a.inFlightSurge, a.gateUnavail); !allowed {
+		from := a.fromRevision(item)
+		if allowed, gate, reason := a.gate(from, mechanism, a.inFlightSurge, a.gateUnavail); !allowed {
 			logf.FromContext(ctx).V(1).Info("update start denied by coordination gate",
-				"component", plan.Component, "instance", item.Instance.Index,
+				"component", plan.Component, "instance", item.Instance.Index, "from", from,
 				"target", a.target.Name, "gate", gate, "reason", reason, "mechanism", mechanism,
 				"inFlightSurge", a.inFlightSurge, "gateUnavail", a.gateUnavail)
 			return false, &types.RolloutHold{Gate: gate, Reason: reason, Target: a.target.Name}

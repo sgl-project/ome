@@ -148,8 +148,9 @@ func Dispatch(ctx context.Context, d DispatchDeps) (Outcome, error) {
 		// uses CreateOrUpdate, whose Gets are cache-served and cheap, and
 		// recreates a missing Service. Gating ensure on revision-set
 		// convergence would strand the weighted-route consumer on a
-		// dead backend.
-		for hash := range perRev[comp] {
+		// dead backend. The revisions are walked in sorted order so a pass
+		// is repeatable.
+		for _, hash := range coordination.SortedRevisionHashes(perRev[comp]) {
 			if hash == "" {
 				continue
 			}
@@ -620,10 +621,7 @@ func secondaryCapacityReady(ctx context.Context, reads client.Reader, isvc *v1be
 	plan := g.Canary
 	idx := int32(0)
 	if cs := rollout.CanaryStatusFor(&isvc.Status, primary); cs != nil {
-		idx = cs.CurrentStep
-		if idx < 0 {
-			idx = recoveredStep(cs, isvc.Status.Components[primary].RolloutPhase, plan)
-		}
+		idx = rollout.StepOf(cs, isvc.Status.Components[primary].RolloutPhase, plan.Steps)
 	}
 	if int(idx) >= len(plan.Steps) {
 		idx = int32(len(plan.Steps) - 1)

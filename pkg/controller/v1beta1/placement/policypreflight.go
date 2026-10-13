@@ -729,11 +729,8 @@ func liftCandidateAutoscaling(refs []componentPolicyRef, derived *v1beta1.Infere
 	return out, reported, failedClosed
 }
 
-// observePolicyRefStamp feeds the FieldPruned detector from the wholesale
-// re-stamp in applyDerived: when the pre-apply live remote object exists but
-// lacks a ref the desired derived spec carries, the member apiserver pruned the
-// field on the previous apply (old ISVC CRD — the one silent-mis-scale skew).
-// An intact live object resets the consecutive counter.
+// observePolicyRefStamp checks the successful write response for fields the API
+// discarded. Failed writes and stale pre-write observations cannot prove pruning.
 func (r *Reconciler) observePolicyRefStamp(src *v1beta1.InferenceService, cluster string, live, desired *v1beta1.InferenceService) {
 	if !hasPolicyRefs(desired) {
 		return

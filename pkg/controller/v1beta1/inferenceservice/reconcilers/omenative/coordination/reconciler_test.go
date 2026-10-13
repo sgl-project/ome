@@ -2812,3 +2812,69 @@ func TestReconcile_EachPassWritesThePhaseItsOwnReadComputed(t *testing.T) {
 	delete(isvc.Annotations, constants.PausedRolloutAnnotation)
 	pass("unpaused", v1beta1.CoordinationPhaseIdle)
 }
+
+// recordingServiceClient appends the name of every Service create to created,
+// in the order the pass issued it, and passes every call through.
+func recordingServiceClient(created *[]string, objs ...runtime.Object) client.Client {
+	scheme := runtime.NewScheme()
+	for _, add := range []func(*runtime.Scheme) error{corev1.AddToScheme, appsv1.AddToScheme, v1beta1.AddToScheme} {
+		if addErr := add(scheme); addErr != nil {
+			panic(addErr)
+		}
+	}
+	return fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objs...).WithInterceptorFuncs(interceptor.Funcs{
+		Create: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+			if svc, ok := obj.(*corev1.Service); ok {
+				*created = append(*created, svc.Name)
+			}
+			return cl.Create(ctx, obj, opts...)
+		},
+	}).Build()
+}
+
+// A pass that first sees a member on two revisions writes the two revisions'
+// Service pairs in ascending revision order, so every pass issues the same
+// create sequence and a create that fails always leaves the same revision
+// waiting for the next pass. The pass is repeated because a pass that picked
+// the order at random would still produce the sorted one about half the time.
+func TestReconcile_PerRevisionServicesAreWrittenInSortedRevisionOrder(t *testing.T) {
+	ctx := context.Background()
+	const passes = 32
+	want := strings.Join([]string{
+		PerRevisionServiceName("llama", v1beta1.EngineComponent, "aaaa"),
+		PerRevisionHeadlessServiceName("llama", v1beta1.EngineComponent, "aaaa"),
+		PerRevisionServiceName("llama", v1beta1.EngineComponent, "bbbb"),
+		PerRevisionHeadlessServiceName("llama", v1beta1.EngineComponent, "bbbb"),
+	}, " ")
+	orders := map[string]int{}
+	for i := 0; i < passes; i++ {
+		isvc := testOMENativeISVC()
+		isvc.Spec.Rollout = singleEngineGroup()
+		var created []string
+		c := recordingServiceClient(&created, rollingEngineIR(isvc),
+			buildPod(isvc, v1beta1.EngineComponent, "aaaa", 0),
+			buildPod(isvc, v1beta1.EngineComponent, "bbbb", 1))
+		if _, err := Reconcile(ctx, ReconcileInputs{
+			ISVC: isvc, Client: c, Reader: c, Now: time.Now(),
+			ComponentDeploymentModes: testOMENativeModes(v1beta1.EngineComponent),
+			ComponentRunnerPorts:     testComponentRunnerPorts(),
+		}); err != nil {
+			t.Fatalf("pass %d: %v", i, err)
+		}
+		orders[strings.Join(created, " ")]++
+	}
+	if len(orders) != 1 || orders[want] != passes {
+		t.Fatalf("every pass must create the per-revision Services in ascending revision order\nwant %d x %q\ngot  %v", passes, want, orders)
+	}
+}
+
+// SortedRevisionHashes returns the revision hashes of a per-revision pod-count
+// map in ascending order, and nothing for an empty map.
+func TestSortedRevisionHashes(t *testing.T) {
+	if got := SortedRevisionHashes(map[string]int32{"cccc": 1, "aaaa": 3, "bbbb": 0}); !reflect.DeepEqual(got, []string{"aaaa", "bbbb", "cccc"}) {
+		t.Fatalf("got %v want [aaaa bbbb cccc]", got)
+	}
+	if got := SortedRevisionHashes(nil); len(got) != 0 {
+		t.Fatalf("empty map: got %v want nothing", got)
+	}
+}

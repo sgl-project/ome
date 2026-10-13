@@ -92,14 +92,19 @@ var pairingComponents = []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1
 //
 // When active it simulates this step's end state against authoritative IR
 // status, instance-granular (a serving instance is one with
-// ServingPodCount>0): one serving instance of ctx.Component leaves its
-// current cohort. Surge and in-place strategies credit the target cohort with
-// the replacement — a SurgeThenDrain op only drains after its replacement is
+// ServingPodCount>0): the Instance being started leaves the cohort of
+// fromRevision, the ControllerRevision its row runs now. An Instance
+// stranded on an intermediate cohort that pairs with nothing may therefore
+// move on while its sibling on the last pairable cohort is held. An empty
+// fromRevision, or one whose ControllerRevision is gone, names no cohort, so
+// every old cohort is simulated losing the instance, the pessimistic
+// reading. Surge and in-place strategies credit the target cohort with the
+// replacement — a SurgeThenDrain op only drains after its replacement is
 // Ready, and an in-place op returns the same pod — while drain-first
 // strategies do not. In-place is NOT bypassed the way CheckRatio bypasses it:
 // its net capacity change is ~0, but the instance still crosses cohorts,
 // which is exactly what this gate paces. In-flight starts from the same
-// wake-up are charged pessimistically against the cohort under simulation.
+// wake-up are charged pessimistically against each cohort under simulation.
 //
 // Three liveness escapes keep the gate deadlock-free:
 //   - When no pairable pair exists BEFORE the step, there is nothing left to
@@ -125,7 +130,7 @@ var pairingComponents = []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1
 // or IR status or a serving instance's ControllerRevision cannot be read —
 // approving a cohort-draining step on unreadable protocol data is how the
 // last pair dies silently.
-func (ctx GateContext) CheckPairing(strategy workloadtypes.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (allowed bool, reason string) {
+func (ctx GateContext) CheckPairing(fromRevision string, strategy workloadtypes.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (allowed bool, reason string) {
 	if ctx.ShortCircuit {
 		return true, ctx.ShortReason
 	}
@@ -206,6 +211,22 @@ func (ctx GateContext) CheckPairing(strategy workloadtypes.UpdateStrategyType, i
 		credit = 1
 	}
 	peer := pairingPeer(component)
+	// The cohort the started instance leaves. A row that records no revision,
+	// or one whose revision is gone, names no cohort, and every old cohort is
+	// then simulated losing the instance.
+	fromProto, fromKnown := "", false
+	if fromRevision != "" {
+		p, ok := protoByRevision[fromRevision]
+		if !ok {
+			var gerr error
+			p, ok, gerr = pairingProtocolForRevisionName(ctx.Ctx, ctx.Reads, ctx.ISVC.Namespace, fromRevision)
+			if gerr != nil {
+				return false, fmt.Sprintf("pairing gate: cannot read revision %s of the starting %s instance, failing closed: %v",
+					fromRevision, component, gerr)
+			}
+		}
+		fromProto, fromKnown = p, ok
+	}
 	// In-flight fresh starts from this wake-up haven't reached IR status yet;
 	// charge them against the cohort under simulation (worst case they all
 	// came from it). Surge in-flights carry their own replacement credit.
@@ -214,8 +235,15 @@ func (ctx GateContext) CheckPairing(strategy workloadtypes.UpdateStrategyType, i
 		if proto == target || n <= 0 {
 			continue
 		}
+		loss := inFlightLoss
+		if !fromKnown || proto == fromProto {
+			loss++
+		}
+		if loss == 0 {
+			continue
+		}
 		sim := copyServing(serving)
-		sim[component][proto] -= 1 + inFlightLoss
+		sim[component][proto] -= loss
 		if sim[component][proto] < 0 {
 			sim[component][proto] = 0
 		}

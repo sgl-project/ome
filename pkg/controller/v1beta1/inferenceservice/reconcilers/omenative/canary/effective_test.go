@@ -128,31 +128,3 @@ func TestEffectivePartition_NegativeStepReadsTheRecord(t *testing.T) {
 		})
 	}
 }
-
-// A negative step reads back as the last step whose traffic weight the
-// record's weight reached, and as the sentinel once the unit read Stable.
-func TestRecoveredStep(t *testing.T) {
-	plan := &v1beta1.GroupCanary{Steps: threeStep()} // traffic 25, 50, 100
-	cases := []struct {
-		name   string
-		phase  v1beta1.RolloutPhase
-		weight int32
-		want   int32
-	}{
-		{"no traffic shifted yet", v1beta1.RolloutPhasePending, 0, 0},
-		{"first split", v1beta1.RolloutPhasePaused, 25, 0},
-		{"second split", v1beta1.RolloutPhasePaused, 50, 1},
-		{"weight between two steps", v1beta1.RolloutPhasePaused, 40, 0},
-		{"drain at 100%", v1beta1.RolloutPhasePromoting, 100, 2},
-		{"completed cutover", v1beta1.RolloutPhaseStable, 100, 3},
-		{"parked before any split", v1beta1.RolloutPhaseFailed, 0, 0},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			cs := &v1beta1.CanaryStatus{CurrentStep: -1, ObservedTrafficWeight: c.weight}
-			if got := recoveredStep(cs, c.phase, plan); got != c.want {
-				t.Errorf("step %d, want %d", got, c.want)
-			}
-		})
-	}
-}

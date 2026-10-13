@@ -11,25 +11,30 @@ import (
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/escalation"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	types "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
 // TickView is the read-only picture of one tick an observer receives once
-// the pass and the deadline park/rearm step have run. Rows and retry blocks
-// are copies; pods and endpoints are read live from the fake apiserver, as
-// the next pass will list them.
+// the pass and the deadline park/rearm step have run. Rows, retry blocks
+// and migration records are copies; pods and endpoints are read live from
+// the fake apiserver, as the next pass will list them.
 type TickView struct {
 	// Tick is the timeline tick the pass ran for.
 	Tick int
 	// Now is the injected clock after the tick's events.
 	Now time.Time
-	// Rows are the owner's rows after the pass, each carrying the PodCount
-	// the status publication wrote for the next pass to read: the count of
-	// the pod set the pass started from, before its own creates and
-	// deletes.
+	// Rows are the owner's rows after the pass, each carrying the PodCount,
+	// ServingPodCount and AvailablePodCount the status publication wrote
+	// for the next pass to read: counted over the pod set the pass started
+	// from, before its own creates, deletes and gate writes, against the
+	// rotation and the clock after the pass.
 	Rows []types.InstanceStatus
 	// RetryBlocks are the owner's per-revision retry blocks after the pass.
 	RetryBlocks []types.RetryBlock
+	// Migrations are the owner's migration records after the pass, in the
+	// order they were recorded.
+	Migrations []types.MigrationRecord
 	// Pods buckets the Component's pods by Instance index as the apiserver
 	// lists them after the pass, Terminating pods included.
 	Pods map[int32][]*corev1.Pod
@@ -43,11 +48,27 @@ type TickView struct {
 	// Commits are the row writes the store resolved during the tick, in
 	// commit order, rejected and no-change mutations included.
 	Commits []RowCommit
+	// RetryCommits are the retry-block writes the store resolved during
+	// the tick, in commit order.
+	RetryCommits []RetryBlockCommit
+	// MigrationWrites are the migration record writes the pass made during
+	// the tick, in order: every append, and every mutation that changed a
+	// record. A mutation that changed nothing is not listed.
+	MigrationWrites []MigrationCommit
 	// Spec is the desired spec the pass ran against.
 	Spec TickSpec
 	// StuckPodGrace is the configured grace a pod may fail its readiness
 	// for before the engine reads it as out of service.
 	StuckPodGrace time.Duration
+}
+
+// MigrationCommit is one migration record write as the driver applied it.
+// Before is nil for an append; both are copies.
+type MigrationCommit struct {
+	RequestUUID string
+	Appended    bool
+	Before      *types.MigrationRecord
+	After       *types.MigrationRecord
 }
 
 // TickSpec is the part of the desired spec the invariants and the reading
@@ -76,7 +97,8 @@ type TickObserver func(view TickView)
 
 // Finding is one invariant violation.
 type Finding struct {
-	// Invariant is the invariant's short id: I1, I3, I4 or I5.
+	// Invariant is the invariant's short id: I1, I3, I4, I5 or the surge
+	// ceiling's.
 	Invariant string
 	// Index is the Instance the finding is about, or ComponentWide when
 	// it is about the Component as a whole.
@@ -99,15 +121,18 @@ const (
 	InvariantBoundedWaits = "I3"
 	InvariantStatusTruth  = "I4"
 	InvariantSingleOwner  = "I5"
+	InvariantSurgeCeiling = "ceiling"
 )
 
 // CheckInvariants runs every invariant over one tick's view.
 func CheckInvariants(view TickView) []Finding {
 	var findings []Finding
 	findings = append(findings, CheckCapacity(view)...)
+	findings = append(findings, CheckSurgeCeiling(view)...)
 	findings = append(findings, CheckBoundedWaits(view)...)
 	findings = append(findings, CheckStatusTruth(view)...)
 	findings = append(findings, CheckSingleOwner(view)...)
+	findings = append(findings, CheckOwnership(view)...)
 	return findings
 }
 
@@ -179,6 +204,80 @@ func darkInstanceLabels(view TickView, servingByIndex map[int32]int32) string {
 	return joinSorted(labels)
 }
 
+// CheckSurgeCeiling is the surge ceiling: the Component never runs more
+// live pods than its desired set plus its surge allowance, counted in
+// pods of one Instance each. A pod is live when it exists, is not being
+// deleted and has not reached a terminal phase. The allowance is the
+// plan's maxSurge, resolved through the engine's own
+// PerComponentMaxSurgeBudget. A plan that declares no maxSurge caps
+// nothing at this layer, and the engine then admits at most one
+// replacement per Instance at a time, so the allowance is one Instance
+// per replica. A deleted owner is not checked. The class names the
+// allowance in force and the states of the Instances holding pods beyond
+// the desired set: an index past replicas, or more live pods than one
+// Instance runs.
+func CheckSurgeCeiling(view TickView) []Finding {
+	if view.Spec.Teardown || view.Spec.PodsPerInstance <= 0 {
+		return nil
+	}
+	rolling := &types.RollingUpdate{MaxSurge: view.Spec.MaxSurge}
+	allowance := escalation.PerComponentMaxSurgeBudget(rolling, view.Spec.Replicas)
+	bound := "maxSurge"
+	if allowance == escalation.BudgetNoLimit {
+		allowance, bound = view.Spec.Replicas, "unbudgeted"
+	}
+	ceiling := (view.Spec.Replicas + allowance) * view.Spec.PodsPerInstance
+	var live int32
+	liveByIndex := map[int32]int32{}
+	for index, pods := range view.Pods {
+		for _, pod := range pods {
+			if livePod(pod) {
+				live++
+				liveByIndex[index]++
+			}
+		}
+	}
+	if live <= ceiling {
+		return nil
+	}
+	return []Finding{{
+		Invariant: InvariantSurgeCeiling,
+		Index:     ComponentWide,
+		Class: fmt.Sprintf("%s/live-pods-over[%s][%s]", InvariantSurgeCeiling, bound,
+			surplusInstanceLabels(view, liveByIndex)),
+		Detail: fmt.Sprintf("%d live pod(s); the ceiling is %d (replicas %d plus a %s allowance of %d, %d pod(s) per Instance)",
+			live, ceiling, view.Spec.Replicas, bound, allowance, view.Spec.PodsPerInstance),
+	}}
+}
+
+// livePod reports whether a pod still holds a slot: it exists, no deletion
+// has been requested and the kubelet runs it, or will.
+func livePod(pod *corev1.Pod) bool {
+	return pod.DeletionTimestamp == nil && !query.IsTerminalPod(pod)
+}
+
+// surplusInstanceLabels names the states of the Instances that hold pods
+// beyond the desired set, sorted and deduplicated, with a marker for an
+// index that has pods and no row.
+func surplusInstanceLabels(view TickView, liveByIndex map[int32]int32) string {
+	rows := map[int32]*types.InstanceStatus{}
+	for i := range view.Rows {
+		rows[view.Rows[i].Index] = &view.Rows[i]
+	}
+	labels := map[string]struct{}{}
+	for index, live := range liveByIndex {
+		if index < view.Spec.Replicas && live <= view.Spec.PodsPerInstance {
+			continue
+		}
+		if row, ok := rows[index]; ok {
+			labels[stateLabel(row)] = struct{}{}
+		} else {
+			labels["no-row"] = struct{}{}
+		}
+	}
+	return joinSorted(labels)
+}
+
 // CheckBoundedWaits is invariant I3, bounded waits: an operation still in
 // flight past its deadline names what it waits on, or the pass recorded a
 // rollout hold for the Component. A settled row runs no clock, and a
@@ -212,7 +311,8 @@ func CheckBoundedWaits(view TickView) []Finding {
 // that is Ready and serving; a Failed row has none, unless its LastFailure
 // names a replacement attempt beside a serving source; and a row's
 // PodCount is the number of pods the apiserver lists for its Instance.
-// ServingPodCount is not published by the driver and is not compared.
+// The published ServingPodCount is set beside the reading of the pods by
+// CompareReadings, not here.
 func CheckStatusTruth(view TickView) []Finding {
 	var findings []Finding
 	for i := range view.Rows {
@@ -359,6 +459,169 @@ func CheckSingleOwner(view TickView) []Finding {
 		}
 	}
 	return findings
+}
+
+// CheckOwnership is the ownership form of invariant I5: within one tick,
+// an Instance's row, the retry record its attempt charges and the
+// migration record it is pinned to are written by one operation owner.
+// A row write belongs to the operation it leaves on the row, else to the
+// one it cleared. A retry-record write is charged to the Instances whose
+// row writes landed in the same status write, under the operation each
+// row carried before that write, which is the attempt the ladder counts.
+// A migration record write belongs to Migrate, on the record's source and
+// surge Instances. Two owners on one Instance in one tick is a finding.
+// The second finding is a row that drops its Migrate pin while the record
+// it names stays open and unwritten in the tick: a pinned row is the
+// record's to write, and the record closes in the same pass that frees
+// its rows. A deleted owner's rows all belong to the teardown.
+func CheckOwnership(view TickView) []Finding {
+	type track struct {
+		owners map[string]struct{}
+		path   []string
+	}
+	byIndex := map[int32]*track{}
+	var order []int32
+	claim := func(index int32, owner string) *track {
+		t := byIndex[index]
+		if t == nil {
+			t = &track{owners: map[string]struct{}{}}
+			byIndex[index] = t
+			order = append(order, index)
+		}
+		if owner != "" {
+			t.owners[owner] = struct{}{}
+		}
+		return t
+	}
+	for _, commit := range view.Commits {
+		if commit.Outcome != PreconditionOK {
+			continue
+		}
+		t := claim(commit.Index, writtenUnder(commit))
+		if len(t.path) == 0 {
+			t.path = append(t.path, stateLabel(commit.Before))
+		}
+		if identityChanged(commit.Before, commit.After) {
+			t.path = append(t.path, afterLabel(commit))
+		}
+	}
+	for _, block := range view.RetryCommits {
+		for _, commit := range view.Commits {
+			if commit.Outcome != PreconditionOK || commit.Batch != block.Batch {
+				continue
+			}
+			claim(commit.Index, chargedUnder(commit))
+		}
+	}
+	for _, write := range view.MigrationWrites {
+		for _, record := range []*types.MigrationRecord{write.Before, write.After} {
+			if record == nil {
+				continue
+			}
+			claim(record.SourceInstance, string(types.InstanceOperationMigrate))
+			if record.SurgeInstance != nil {
+				claim(*record.SurgeInstance, string(types.InstanceOperationMigrate))
+			}
+		}
+	}
+	var findings []Finding
+	for _, index := range order {
+		t := byIndex[index]
+		if len(t.owners) < 2 {
+			continue
+		}
+		path := strings.Join(t.path, ">")
+		if path == "" {
+			path = "no-row-write"
+		}
+		findings = append(findings, Finding{
+			Invariant: InvariantSingleOwner,
+			Index:     index,
+			Class:     fmt.Sprintf("%s/two-owners[%s][%s]", InvariantSingleOwner, joinSorted(t.owners), path),
+			Detail: fmt.Sprintf("index %d had its row or records written by operations %s in one tick (row: %s)",
+				index, joinSorted(t.owners), path),
+		})
+	}
+	if view.Spec.Teardown {
+		return findings
+	}
+	for _, commit := range view.Commits {
+		if commit.Outcome != PreconditionOK || !dropsMigratePin(commit) {
+			continue
+		}
+		record := openMigrationRecord(view, commit.Before.Operation.RequestUUID, commit.Index)
+		if record == nil || migrationWritten(view, record.RequestUUID) {
+			continue
+		}
+		findings = append(findings, Finding{
+			Invariant: InvariantSingleOwner,
+			Index:     commit.Index,
+			Class: fmt.Sprintf("%s/pin-dropped-record-open[%s>%s]", InvariantSingleOwner,
+				stateLabel(commit.Before), afterLabel(commit)),
+			Detail: fmt.Sprintf("index %d dropped its Migrate pin (%s > %s) while its migration record stays %s and no pass wrote it this tick",
+				commit.Index, stateLabel(commit.Before), afterLabel(commit), record.Phase),
+		})
+	}
+	return findings
+}
+
+// chargedUnder names the operation a retry-record charge in the same
+// status write counts against: the attempt the row carried before the
+// write, else the operation the write left on it.
+func chargedUnder(commit RowCommit) string {
+	if commit.Before != nil && commit.Before.Operation != nil {
+		return string(commit.Before.Operation.Type)
+	}
+	if commit.After != nil && commit.After.Operation != nil {
+		return string(commit.After.Operation.Type)
+	}
+	return ""
+}
+
+// dropsMigratePin reports whether a committed write takes a Migrate
+// operation off the row: the row is removed, left with no operation, or
+// handed to another operation type.
+func dropsMigratePin(commit RowCommit) bool {
+	before := commit.Before
+	if before == nil || before.Operation == nil || before.Operation.Type != types.InstanceOperationMigrate {
+		return false
+	}
+	after := commit.After
+	return commit.Remove || after == nil || after.Operation == nil || after.Operation.Type != types.InstanceOperationMigrate
+}
+
+// openMigrationRecord finds the migration record a pin names, by its
+// request id when the pin carries one and otherwise by the Instance,
+// provided the record is still open after the pass. A closed record, or
+// none, owns no row.
+func openMigrationRecord(view TickView, requestUUID string, index int32) *types.MigrationRecord {
+	for i := range view.Migrations {
+		record := &view.Migrations[i]
+		if record.Phase.Terminal() {
+			continue
+		}
+		if requestUUID != "" {
+			if record.RequestUUID == requestUUID {
+				return record
+			}
+			continue
+		}
+		if record.SourceInstance == index || (record.SurgeInstance != nil && *record.SurgeInstance == index) {
+			return record
+		}
+	}
+	return nil
+}
+
+// migrationWritten reports whether the pass wrote the record with the
+// given request id.
+func migrationWritten(view TickView, requestUUID string) bool {
+	for _, write := range view.MigrationWrites {
+		if write.RequestUUID == requestUUID {
+			return true
+		}
+	}
+	return false
 }
 
 // identityChanged reports whether a committed write moved the row's phase

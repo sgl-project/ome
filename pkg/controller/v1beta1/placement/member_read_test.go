@@ -138,6 +138,7 @@ func TestTransientMemberReadError(t *testing.T) {
 	}{
 		{name: "request deadline", err: &url.Error{Op: "Get", URL: "https://member.example", Err: context.DeadlineExceeded}, want: true},
 		{name: "wrapped deadline", err: fmt.Errorf("list pods: %w", context.DeadlineExceeded), want: true},
+		{name: "member informer unavailable", err: fmt.Errorf("read service: %w", workloadcluster.ErrMemberCacheUnavailable), want: true},
 		{name: "server timeout", err: apierrors.NewServerTimeout(gr, "list", 1), want: true},
 		{name: "gateway timeout", err: apierrors.NewTimeoutError("slow", 1), want: true},
 		{name: "throttled", err: apierrors.NewTooManyRequests("slow down", 1), want: true},
@@ -281,49 +282,70 @@ func TestAllTransientMemberReadFailureKeepsReadyWhenRetried(t *testing.T) {
 }
 
 func TestAllUnreadableHomeKeepsReadyUntilTheGraceEnds(t *testing.T) {
-	const replicas = 3
-	f, settled := settleAllServingHomes(t, replicas)
-	clock := clocktesting.NewFakePassiveClock(graceTestNow)
-	f.reconciler.ObservationClock = clock
-	f.reconciler.ObservationGrace = 10 * time.Second
-	f.reconciler.Requeue = time.Minute
-	before := candidateOf(t, settled, "member-a")
-	require.True(t, before.ObservationKnown)
-	require.Equal(t, int32(replicas), before.ReadyReplicas)
+	for _, informerFailure := range []bool{false, true} {
+		t.Run(fmt.Sprintf("informer=%t", informerFailure), func(t *testing.T) {
 
-	f.connections.m["member-a"] = unreadableAllMember(f, "member-a")
-	res, got := reconcileResult(t, f)
-	candidate := candidateOf(t, got, "member-a")
-	assert.False(t, candidate.ObservationKnown)
-	assert.Equal(t, int32(replicas), candidate.ReadyReplicas, "one failed read keeps the routed count")
-	require.NotNil(t, candidate.ObservationFailingSince)
-	assert.True(t, candidate.ObservationFailingSince.Time.Equal(graceTestNow))
-	assert.Equal(t, 10*time.Second, res.RequeueAfter, "the controller wakes when the grace ends")
-	if condition := got.Status.GetCondition(v1beta1.PlacementConverged); condition == nil || condition.Reason != "ObservationUnknown" {
-		t.Fatalf("an unreadable home must still hold the allocation: %+v", condition)
+			const replicas = 3
+			f, settled := settleAllServingHomes(t, replicas)
+			clock := clocktesting.NewFakePassiveClock(graceTestNow)
+			f.reconciler.ObservationClock = clock
+			f.reconciler.ObservationGrace = 10 * time.Second
+			f.reconciler.Requeue = time.Minute
+			before := candidateOf(t, settled, "member-a")
+			require.True(t, before.ObservationKnown)
+			require.Equal(t, int32(replicas), before.ReadyReplicas)
+
+			if informerFailure {
+				f.connections.m["member-a"] = workloadcluster.NewNeverCachingClient(interceptor.NewClient(f.workers["member-a"], interceptor.Funcs{
+					Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+						if _, ok := obj.(*v1beta1.InferenceService); ok {
+							return workloadcluster.ErrMemberCacheUnavailable
+						}
+						return cl.Get(ctx, key, obj, opts...)
+					},
+				}))
+			} else {
+				f.connections.m["member-a"] = unreadableAllMember(f, "member-a")
+			}
+			res, got := reconcileResult(t, f)
+			candidate := candidateOf(t, got, "member-a")
+			assert.False(t, candidate.ObservationKnown)
+			assert.Equal(t, int32(replicas), candidate.ReadyReplicas, "one failed read keeps the routed count")
+			require.NotNil(t, candidate.ObservationFailingSince)
+			assert.True(t, candidate.ObservationFailingSince.Time.Equal(graceTestNow))
+			assert.Equal(t, 10*time.Second, res.RequeueAfter, "the controller wakes when the grace ends")
+			wantReason := "ObservationUnknown"
+			if informerFailure {
+				wantReason = "AwaitingHomeInputs"
+			}
+			if condition := got.Status.GetCondition(v1beta1.PlacementConverged); condition == nil || condition.Reason != wantReason {
+				t.Fatalf("an unreadable home must still hold the allocation: %+v", condition)
+			}
+
+			// The grace is measured from the recorded first failure, not restarted.
+			clock.SetTime(graceTestNow.Add(4 * time.Second))
+			res, got = reconcileResult(t, f)
+			candidate = candidateOf(t, got, "member-a")
+			assert.Equal(t, int32(replicas), candidate.ReadyReplicas)
+			assert.True(t, candidate.ObservationFailingSince.Time.Equal(graceTestNow))
+			assert.Equal(t, 6*time.Second, res.RequeueAfter)
+
+			clock.SetTime(graceTestNow.Add(10 * time.Second))
+			res, got = reconcileResult(t, f)
+			candidate = candidateOf(t, got, "member-a")
+			assert.Zero(t, candidate.ReadyReplicas, "a home still unreadable after the grace stops receiving traffic")
+			assert.True(t, candidate.ObservationFailingSince.Time.Equal(graceTestNow))
+			assert.Equal(t, time.Minute, res.RequeueAfter, "no grace is left to wake for")
+
+			f.connections.m["member-a"] = workloadcluster.NewNeverCachingClient(f.workers["member-a"])
+			_, got = reconcileResult(t, f)
+			candidate = candidateOf(t, got, "member-a")
+			assert.True(t, candidate.ObservationKnown)
+			assert.Equal(t, int32(replicas), candidate.ReadyReplicas)
+			assert.Nil(t, candidate.ObservationFailingSince, "a successful read clears the failure time")
+
+		})
 	}
-
-	// The grace is measured from the recorded first failure, not restarted.
-	clock.SetTime(graceTestNow.Add(4 * time.Second))
-	res, got = reconcileResult(t, f)
-	candidate = candidateOf(t, got, "member-a")
-	assert.Equal(t, int32(replicas), candidate.ReadyReplicas)
-	assert.True(t, candidate.ObservationFailingSince.Time.Equal(graceTestNow))
-	assert.Equal(t, 6*time.Second, res.RequeueAfter)
-
-	clock.SetTime(graceTestNow.Add(10 * time.Second))
-	res, got = reconcileResult(t, f)
-	candidate = candidateOf(t, got, "member-a")
-	assert.Zero(t, candidate.ReadyReplicas, "a home still unreadable after the grace stops receiving traffic")
-	assert.True(t, candidate.ObservationFailingSince.Time.Equal(graceTestNow))
-	assert.Equal(t, time.Minute, res.RequeueAfter, "no grace is left to wake for")
-
-	f.connections.m["member-a"] = workloadcluster.NewNeverCachingClient(f.workers["member-a"])
-	_, got = reconcileResult(t, f)
-	candidate = candidateOf(t, got, "member-a")
-	assert.True(t, candidate.ObservationKnown)
-	assert.Equal(t, int32(replicas), candidate.ReadyReplicas)
-	assert.Nil(t, candidate.ObservationFailingSince, "a successful read clears the failure time")
 }
 
 func TestReconcile_SplitUnreadableHomeKeepsReadyWithinTheGrace(t *testing.T) {

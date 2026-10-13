@@ -442,6 +442,64 @@ func TestRestart_PodVanished_PreservesPriorLastFailure(t *testing.T) {
 	}
 }
 
+// A repair opened for a runner that restarted after Ready records the death
+// from the pod set read live, the read the trigger selected it on. The
+// informer can still show the runner's first run with its readiness gone
+// and no termination when the apiserver already shows the restart; a stamp
+// made from that stale read would open the repair with no failure record,
+// and the drain then deletes the pod with the only copy. The row's record
+// is what the roll's crash reading and a canary's timed soak anchor on.
+func TestRestart_CapturesLastFailureFromTheLiveRead(t *testing.T) {
+	resetExpectations(t)
+	isvc, ir := isvcReadyAtIncarnation("llama-70b", "prod", 1)
+	ir.Status.InstanceStatuses[0].RunningRevision = "llama-70b-engine-" + testRevisionHash
+	// Whole seconds: the record round-trips through the status at that grain.
+	readySince := metav1.NewTime(time.Now().Add(-40 * time.Second).Truncate(time.Second))
+	ir.Status.InstanceStatuses[0].ReadySince = &readySince
+	died := readySince.Add(10 * time.Second)
+
+	// The cache: the first run, readiness gone, nothing terminated yet.
+	cached := podForInstance(isvc, 0, false, true)
+	cached.Status.Phase = corev1.PodRunning
+	cached.Status.ContainerStatuses = []corev1.ContainerStatus{
+		runnerStatus(constants.MainContainerName, readySince.Add(-30*time.Second), nil),
+	}
+	// The apiserver: the kubelet restarted the runner and kept the death.
+	live := cached.DeepCopy()
+	live.Status.ContainerStatuses = []corev1.ContainerStatus{
+		runnerStatus(constants.MainContainerName, died.Add(2*time.Second), &corev1.ContainerStateTerminated{
+			Reason:     "Error",
+			ExitCode:   1,
+			FinishedAt: metav1.NewTime(died),
+		}),
+	}
+	c := newFakeClient(t, isvc, ir, cached)
+	reads := newFakeClient(t, live)
+	input := buildTestInput(isvc, c, workload.ComponentEngine)
+	plan := buildPlanSinglePodEngineForRestart(c, isvc)
+
+	if _, err := ops.Restart(context.Background(), workload.Deps{Client: c, APIReader: reads}, input, plan, plan.Instances[0], nil, "runner restarted after Ready"); err != nil {
+		t.Fatalf("Restart: %v", err)
+	}
+
+	s := instanceStatusesOnIR(c, isvc, workload.ComponentEngine)[0]
+	if s.Phase != v1beta1.OMENativeInstanceRestarting {
+		t.Fatalf("Phase: got %q want Restarting", s.Phase)
+	}
+	if s.LastFailure == nil {
+		t.Fatalf("LastFailure: nil, want the death the trigger read recorded before the drain")
+	}
+	if s.LastFailure.PodName != cached.Name || s.LastFailure.ContainerName != constants.MainContainerName {
+		t.Errorf("LastFailure names %s/%s, want %s/%s", s.LastFailure.PodName, s.LastFailure.ContainerName, cached.Name, constants.MainContainerName)
+	}
+	if s.LastFailure.ExitCode == nil || *s.LastFailure.ExitCode != 1 {
+		t.Errorf("LastFailure.ExitCode: got %v want 1", s.LastFailure.ExitCode)
+	}
+	if !s.LastFailure.Time.Equal(&metav1.Time{Time: died}) {
+		t.Errorf("LastFailure.Time: got %v want the death at %v", s.LastFailure.Time, died)
+	}
+}
+
 // DetectRestartTrigger must return a rich, operator-readable reason for a
 // failed pod (container + terminated reason + exit code), not the bare
 // "pod X Failed" — and the Restart event carries it.
@@ -937,6 +995,70 @@ func TestDetectRestartTrigger_SidecarRestartIgnored(t *testing.T) {
 
 	if needs, reason := ops.DetectRestartTriggerWithPods(input, plan, plan.Instances[0], []*corev1.Pod{pod}); needs {
 		t.Fatalf("sidecar restart must not trigger a recycle; got reason %q", reason)
+	}
+}
+
+// A pod created after the row entered Ready is a new pod, not the pod the
+// row promoted, so the first run of its container is no restart. A gang
+// freed from a dead node and rebuilt while the row still carries the
+// ReadySince of the set it lost is read by that rule, in both shapes, and
+// is not rebuilt a second time for its own first start; a runner restarted
+// after Ready inside a pod that predates it still triggers.
+func TestDetectRestartTrigger_PodCreatedAfterReadyIsNotARestart(t *testing.T) {
+	readySince := metav1.NewTime(time.Now().Add(-time.Hour))
+	rebuiltAt := readySince.Add(10 * time.Minute)
+	shapes := []struct {
+		name string
+		gang bool
+	}{{"single pod", false}, {"gang", true}}
+	for _, shape := range shapes {
+		t.Run(shape.name, func(t *testing.T) {
+			resetExpectations(t)
+			incarnation := int64(1)
+			if shape.gang {
+				incarnation = 2
+			}
+			isvc, ir := isvcReadyAtIncarnation("llama-70b", "prod", incarnation)
+			ir.Status.InstanceStatuses[0].ReadySince = &readySince
+			c := newFakeClient(t, isvc, ir)
+			input := buildTestInput(isvc, c, workload.ComponentEngine)
+			var plan workload.ComponentPlan
+			var pods []*corev1.Pod
+			if shape.gang {
+				plan = buildPlanGangEngine(workload.RestartPolicyRecreateInstance)
+				pods = []*corev1.Pod{
+					gangPod(isvc, 0, "leader", 0, incarnation, true, true),
+					gangPod(isvc, 0, "worker", 0, incarnation, true, true),
+				}
+			} else {
+				plan = buildPlanSinglePodEngineForRestart(c, isvc)
+				pods = []*corev1.Pod{podForInstance(isvc, 0, true, true)}
+			}
+			for _, pod := range pods {
+				pod.CreationTimestamp = metav1.NewTime(rebuiltAt)
+				pod.Status.Phase = corev1.PodRunning
+				pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+					runnerStatus(constants.MainContainerName, rebuiltAt.Add(30*time.Second), nil),
+				}
+			}
+			if needs, reason := ops.DetectRestartTriggerWithPods(input, plan, plan.Instances[0], pods); needs {
+				t.Fatalf("a pod created after the row entered Ready is a new pod, not a restart; got reason %q", reason)
+			}
+
+			// The same set created before Ready, its runner restarted after
+			// Ready: the repair the policy promises.
+			for _, pod := range pods {
+				pod.CreationTimestamp = metav1.NewTime(readySince.Add(-10 * time.Minute))
+				pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+					runnerStatus(constants.MainContainerName, readySince.Add(10*time.Minute), &corev1.ContainerStateTerminated{
+						Reason: "Error", ExitCode: 1, FinishedAt: metav1.NewTime(readySince.Add(9 * time.Minute)),
+					}),
+				}
+			}
+			if needs, _ := ops.DetectRestartTriggerWithPods(input, plan, plan.Instances[0], pods); !needs {
+				t.Fatalf("a runner restarted after Ready inside a pod that predates it must still trigger")
+			}
+		})
 	}
 }
 

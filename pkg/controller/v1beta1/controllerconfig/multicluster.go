@@ -52,10 +52,10 @@ type WorkloadClusterConfig struct {
 	ClientBurst int     `json:"clientBurst,omitempty"`
 	// PerCallTimeout bounds one remote request. Empty leaves no client-level timeout.
 	PerCallTimeout string `json:"perCallTimeout,omitempty"`
-	// CacheEnabled serves cross-cluster derived-InferenceService reads from a
-	// per-cluster informer cache instead of live apiserver reads, and is the
-	// prerequisite event source for the status watch funnel. False (the default)
-	// keeps reads live and the funnel off.
+	// CacheEnabled serves member InferenceService, ServingRuntime, and
+	// ClusterServingRuntime reads from per-cluster informers. The cache includes
+	// shared runtimes and foreign services so ownership collisions remain visible.
+	// False keeps reads live and disables the member event funnels.
 	CacheEnabled bool `json:"cacheEnabled,omitempty"`
 	// HealthInterval is the re-probe cadence for an otherwise-idle WorkloadCluster.
 	HealthInterval string `json:"healthInterval,omitempty"`

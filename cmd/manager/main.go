@@ -159,6 +159,9 @@ type Options struct {
 	enableWebhook           bool
 	probeAddr               string
 	leaderElectionNamespace string
+	// pprofAddr serves net/http/pprof for profiling a live manager. Empty
+	// disables it; the chart supplies the address.
+	pprofAddr string
 	// Timing of the leader election loop. Supplied by the chart, because the
 	// margin a leader needs depends on the apiserver latency of the cluster.
 	leaderElectionTiming        leaderelection.Timing
@@ -242,6 +245,8 @@ func GetOptions() Options {
 	opts.leaderElectionTiming.BindFlags(flag.CommandLine)
 	flag.BoolVar(&opts.enableWebhook, "webhook", opts.enableWebhook, "Enable the webhook server.")
 	flag.StringVar(&opts.probeAddr, "health-probe-addr", opts.probeAddr, "The address the probe endpoint binds to.")
+	flag.StringVar(&opts.pprofAddr, "pprof-bind-address", opts.pprofAddr, "The address the pprof endpoint binds to, "+
+		"for example 127.0.0.1:6060 to reach it only through kubectl port-forward. Empty or 0 disables it.")
 	flag.IntVar(&opts.runtimeRevisionRetention, "runtime-revision-retention", opts.runtimeRevisionRetention,
 		"Max OME-owned ControllerRevisions to keep per source runtime (older ones GC after the grace period if unreferenced).")
 	flag.DurationVar(&opts.runtimeRevisionGracePeriod, "runtime-revision-grace-period", opts.runtimeRevisionGracePeriod,
@@ -372,6 +377,7 @@ func main() {
 	// Create a new Cmd to provide shared dependencies and start components
 	setupLog.Info("Initializing controller manager",
 		"metricsAddr", options.metricsAddr,
+		"pprofAddr", options.pprofAddr,
 		"webhookPort", options.webhookPort,
 		"leaderElection", options.enableLeaderElection)
 
@@ -427,6 +433,7 @@ func main() {
 		LeaderElectionID:        LeaderLockName,
 		LeaderElectionNamespace: options.leaderElectionNamespace,
 		HealthProbeBindAddress:  options.probeAddr,
+		PprofBindAddress:        options.pprofAddr,
 		// Recorders handed out by the manager share the configured budget.
 		EventBroadcaster: newEventBroadcaster(eventRecorderSettings), //nolint:staticcheck // the manager-owned recorders must share the configured per-object event budget
 	}

@@ -252,8 +252,11 @@ func (m *Manager) connect(ctx context.Context, name string, uid types.UID, raw [
 
 	m.mu.RLock()
 	if cur, ok := m.conns[name]; ok && cur.configHash == hash && cur.clusterUID == uid {
-		m.mu.RUnlock()
-		return nil
+		stopped, hasCache := cur.client.(interface{ cacheStopped() bool })
+		if !hasCache || !stopped.cacheStopped() {
+			m.mu.RUnlock()
+			return nil
+		}
 	}
 	m.mu.RUnlock()
 

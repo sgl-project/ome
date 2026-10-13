@@ -78,6 +78,25 @@ func StateOf(cs *v1beta1.CanaryStatus, phase v1beta1.RolloutPhase, stepCount int
 	}
 }
 
+// StepOf is the step a unit's record is read at. A negative index is an external
+// status write and reads as past the last step once the unit is Stable, else as
+// the last step the recorded traffic weight reached: nothing already done re-runs.
+func StepOf(cs *v1beta1.CanaryStatus, phase v1beta1.RolloutPhase, steps []v1beta1.RolloutGroupStep) int32 {
+	if cs.CurrentStep >= 0 {
+		return cs.CurrentStep
+	}
+	if phase == v1beta1.RolloutPhaseStable {
+		return int32(len(steps))
+	}
+	step := int32(0)
+	for i := range steps {
+		if steps[i].Traffic <= cs.ObservedTrafficWeight {
+			step = int32(i)
+		}
+	}
+	return step
+}
+
 // Terminal reports the two parked states an operator must act on.
 func (s CanaryState) Terminal() bool {
 	return s == CanaryStateFailed || s == CanaryStateRolledBack

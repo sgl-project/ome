@@ -60,25 +60,33 @@ func CountReadyPods(pods []*corev1.Pod) int32 {
 	return n
 }
 
-// CountServingPods counts pods in their Service's rotation: Ready by the
-// control plane, carrying the controller's serving gate
-// (podreadiness.ReadyAndServing), and not terminating. This is the count
-// MaxUnavailable budgets in coordination/ratio.go gate against; it drops
-// when the controller takes a pod out of rotation (in-place update drain,
-// recreate Phase A), when the node under a pod stops reporting, whatever
-// the stale container statuses say, and when a pod is deleted: a
-// terminating pod keeps its conditions until its containers stop, but the
-// EndpointSlice controller has already taken it out of every Service's
-// ready endpoints, so it serves nothing new.
+// CountServingPods counts an Instance's pods in their Service's rotation:
+// Ready by the control plane, carrying the controller's serving gate
+// (podreadiness.ReadyAndServing), and not terminating. An Instance with no
+// routable serving pod serves nothing, whatever its workers read, and
+// counts 0: a Service publishes the leader of a gang and never a worker
+// (query.RoutedRunner), so a gang whose leader is gone is out of rotation
+// however many workers keep the gate, while a gang whose leader serves
+// counts every serving member. This is the count MaxUnavailable budgets in
+// coordination/ratio.go gate against; it drops when the controller takes a
+// pod out of rotation (in-place update drain, recreate Phase A), when the
+// node under a pod stops reporting, whatever the stale container statuses
+// say, and when a pod is deleted: a terminating pod keeps its conditions
+// until its containers stop, but the EndpointSlice controller has already
+// taken it out of every Service's ready endpoints, so it serves nothing
+// new.
 func CountServingPods(pods []*corev1.Pod) int32 {
 	var n int32
+	routable := false
 	for _, p := range pods {
-		if p == nil || p.DeletionTimestamp != nil {
+		if p == nil || p.DeletionTimestamp != nil || !podreadiness.ReadyAndServing(p) {
 			continue
 		}
-		if podreadiness.ReadyAndServing(p) {
-			n++
-		}
+		n++
+		routable = routable || query.RoutedRunner(p)
+	}
+	if !routable {
+		return 0
 	}
 	return n
 }

@@ -471,7 +471,7 @@ func TestReconcile_PerComponentMaxSurge_NilDefersToGroupGate(t *testing.T) {
 	}
 	// Per-Component RollingUpdate left nil (BudgetNoLimit). The group
 	// gate should be the only constraint.
-	in.UpdateGate = func(_ types.UpdateStrategyType, _, _ int32) (bool, types.RolloutHoldGate, string) {
+	in.UpdateGate = func(_ string, _ types.UpdateStrategyType, _, _ int32) (bool, types.RolloutHoldGate, string) {
 		return false, types.RolloutHoldGateBudget, "group gate denies"
 	}
 	mutatedIndices := map[int32]int{}
@@ -636,7 +636,7 @@ func TestReconcile_FailedRestart_RecreateBypassesCoordGate(t *testing.T) {
 	// 1 + delta + 1 = 2 > 1 and is denied — the double count under
 	// test.
 	var gateDeltas []int32
-	in.UpdateGate = func(_ types.UpdateStrategyType, _, inFlightUnavail int32) (bool, types.RolloutHoldGate, string) {
+	in.UpdateGate = func(_ string, _ types.UpdateStrategyType, _, inFlightUnavail int32) (bool, types.RolloutHoldGate, string) {
 		gateDeltas = append(gateDeltas, inFlightUnavail)
 		const desired, serving, budget = 2, 1, 1
 		if desired-serving+inFlightUnavail+1 > budget {
@@ -724,7 +724,7 @@ func TestReconcile_FailedRestart_RecreateAnswersThePlanGate(t *testing.T) {
 		return nil
 	}
 	gateConsults, planConsults := 0, 0
-	in.UpdateGate = func(types.UpdateStrategyType, int32, int32) (bool, types.RolloutHoldGate, string) {
+	in.UpdateGate = func(string, types.UpdateStrategyType, int32, int32) (bool, types.RolloutHoldGate, string) {
 		gateConsults++
 		return true, "", ""
 	}

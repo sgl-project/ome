@@ -559,7 +559,7 @@ func TestReconcile_CrashLoopRepair_ServingGangIsNotPutToTheGate(t *testing.T) {
 	ctx := context.Background()
 	in, plan, pods := gangCrashLoopFixture(t, 2, nil, 0, 1)
 	consults := 0
-	in.UpdateGate = func(workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string) {
+	in.UpdateGate = func(string, workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string) {
 		consults++
 		return false, workloadtypes.RolloutHoldGateRatio, "peer Component is behind"
 	}
@@ -653,7 +653,7 @@ func TestReconcile_CrashLoopRepair_DarkRepairIsChargedToNeitherLayer(t *testing.
 	one := intstr.FromInt32(1)
 	in, plan, pods := gangCrashLoopFixture(t, 2, &one, 1)
 	consults := 0
-	in.UpdateGate = func(workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string) {
+	in.UpdateGate = func(string, workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string) {
 		consults++
 		return true, "", ""
 	}
@@ -702,13 +702,13 @@ func TestReconcile_CrashLoopRepair_DarkRowOpensUnderTheRealGateStack(t *testing.
 			in.OwnerObject, in.EventTarget = isvc, isvc
 			objects := append([]client.Object{isvc, publishedEngineReplica(in, 2, 1)}, pods...)
 			c := fake.NewClientBuilder().WithScheme(makeScheme(t)).WithObjects(objects...).Build()
-			gate := func(strategy workloadtypes.UpdateStrategyType, surge, unavail int32) (bool, workloadtypes.RolloutHoldGate, string) {
-				allowed, held, reason := coordination.EvaluateUpdateGate(ctx, c, isvc, v1beta1.EngineComponent, crashLoopRepairTarget(), nil, coordination.GroupDefaults{}, strategy, surge, unavail)
+			gate := func(from string, strategy workloadtypes.UpdateStrategyType, surge, unavail int32) (bool, workloadtypes.RolloutHoldGate, string) {
+				allowed, held, reason := coordination.EvaluateUpdateGate(ctx, c, isvc, v1beta1.EngineComponent, from, crashLoopRepairTarget(), nil, coordination.GroupDefaults{}, strategy, surge, unavail)
 				return allowed, workloadtypes.RolloutHoldGate(held), reason
 			}
 			// The stack's own answer to the dark row's recreate is a hold,
 			// which is why the admission must not ask it.
-			if allowed, held, reason := gate(workloadtypes.UpdateStrategyRecreatePod, 0, 0); allowed || held != workloadtypes.RolloutHoldGate(tc.heldBy) {
+			if allowed, held, reason := gate("", workloadtypes.UpdateStrategyRecreatePod, 0, 0); allowed || held != workloadtypes.RolloutHoldGate(tc.heldBy) {
 				t.Fatalf("gate stack asked about the dark row = (%v, %s, %q), want a %s hold", allowed, held, reason, tc.heldBy)
 			}
 			in.UpdateGate = gate
@@ -1319,7 +1319,7 @@ func TestReconcile_OffTargetCrash_StartIsAdmittedLikeAnyOther(t *testing.T) {
 		t.Run(string(sc.strategy), func(t *testing.T) {
 			h := offTargetCrashHarness(t, false, sc.strategy, sc.surge, sc.unavail, workloadtypes.RestartPolicyNone, replicas)
 			consults := 0
-			h.gate = func(strategy workloadtypes.UpdateStrategyType, _, _ int32) (bool, workloadtypes.RolloutHoldGate, string) {
+			h.gate = func(_ string, strategy workloadtypes.UpdateStrategyType, _, _ int32) (bool, workloadtypes.RolloutHoldGate, string) {
 				if strategy != sc.strategy {
 					t.Errorf("gate consulted with mechanism %q, want %q", strategy, sc.strategy)
 				}
@@ -1366,8 +1366,8 @@ func assertNoRepairHeld(t *testing.T, rec *record.FakeRecorder) {
 // group has no run open: every consult is held on the plan gate, which is
 // what the gate stack answers until a run pins the group's plan. consults
 // counts the calls.
-func planHoldGate(consults *int) func(workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string) {
-	return func(workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string) {
+func planHoldGate(consults *int) func(string, workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string) {
+	return func(string, workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string) {
 		*consults++
 		return false, workloadtypes.RolloutHoldGate(v1beta1.RolloutHoldGatePlan), "rollout plan not pinned: no active run for this rollout group"
 	}
@@ -1498,8 +1498,8 @@ func (h *recoveryHarness) instanceInRotation(idx int32) bool {
 // already open, and a drain-first start is admitted while that count, plus
 // the starts this pass has opened, plus this one, stays within
 // maxUnavailable. A surge start never reaches it.
-func coordinationUnavailabilityGate(h *recoveryHarness, replicas, maxUnavailable int32, consults *int) func(workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string) {
-	return func(strategy workloadtypes.UpdateStrategyType, _, inFlightUnavail int32) (bool, workloadtypes.RolloutHoldGate, string) {
+func coordinationUnavailabilityGate(h *recoveryHarness, replicas, maxUnavailable int32, consults *int) func(string, workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string) {
+	return func(_ string, strategy workloadtypes.UpdateStrategyType, _, inFlightUnavail int32) (bool, workloadtypes.RolloutHoldGate, string) {
 		h.t.Helper()
 		*consults++
 		if strategy == workloadtypes.UpdateStrategySurgeThenDrain {
@@ -2211,9 +2211,9 @@ func TestHeldRevision_StaysHeldWhenItsCauseHeals(t *testing.T) {
 // the group's unavailability gate once a run is.
 var steadyStateGroupGates = []struct {
 	name  string
-	build func(h *recoveryHarness, replicas, maxUnavailable int32, consults *int) func(workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string)
+	build func(h *recoveryHarness, replicas, maxUnavailable int32, consults *int) func(string, workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string)
 }{
-	{"no run open", func(_ *recoveryHarness, _, _ int32, consults *int) func(workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string) {
+	{"no run open", func(_ *recoveryHarness, _, _ int32, consults *int) func(string, workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string) {
 		return planHoldGate(consults)
 	}},
 	{"run open", coordinationUnavailabilityGate},
@@ -2707,9 +2707,9 @@ func (h *recoveryHarness) instanceServes(idx int32) bool {
 // drain-first start while the Instances not serving, plus the starts this
 // pass opened, plus this one, stay within maxUnavailable; an in-place
 // start returns the same pod and is waived. consults counts the calls.
-func rollingGroupGate(h *recoveryHarness, replicas, maxSurge, maxUnavailable int32, consults *int) func(workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string) {
+func rollingGroupGate(h *recoveryHarness, replicas, maxSurge, maxUnavailable int32, consults *int) func(string, workloadtypes.UpdateStrategyType, int32, int32) (bool, workloadtypes.RolloutHoldGate, string) {
 	drainFirst := coordinationUnavailabilityGate(h, replicas, maxUnavailable, consults)
-	return func(strategy workloadtypes.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, workloadtypes.RolloutHoldGate, string) {
+	return func(_ string, strategy workloadtypes.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, workloadtypes.RolloutHoldGate, string) {
 		switch strategy {
 		case workloadtypes.UpdateStrategySurgeThenDrain:
 			*consults++
@@ -2722,7 +2722,7 @@ func rollingGroupGate(h *recoveryHarness, replicas, maxSurge, maxUnavailable int
 			*consults++
 			return true, "", ""
 		default:
-			return drainFirst(strategy, inFlightSurge, inFlightUnavail)
+			return drainFirst("", strategy, inFlightSurge, inFlightUnavail)
 		}
 	}
 }
@@ -3574,8 +3574,8 @@ func TestReconcile_GangWithParkedWorker_LandsTheFixInsideTheGroupBudget(t *testi
 					h := offTargetCrashHarness(t, true, sc.strategy, sc.surge, sc.unavail, policy, replicas)
 					consults, denials := 0, 0
 					groupGate := rollingGroupGate(h, replicas, sc.surge, sc.unavail, &consults)
-					h.gate = func(strategy workloadtypes.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, workloadtypes.RolloutHoldGate, string) {
-						allowed, gate, reason := groupGate(strategy, inFlightSurge, inFlightUnavail)
+					h.gate = func(from string, strategy workloadtypes.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, workloadtypes.RolloutHoldGate, string) {
+						allowed, gate, reason := groupGate(from, strategy, inFlightSurge, inFlightUnavail)
 						if !allowed {
 							denials++
 						}

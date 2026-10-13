@@ -297,12 +297,15 @@ func InFlight(s *InstanceStatus) bool {
 
 // RecreateOfDarkRow reports a fresh update start that takes nothing
 // further offline: a Failed row with no serving pod, recreated in place
-// on a non-surge strategy. The coordination gate already counts its
-// outage in its serving-based unavailability, so this start skips the
-// gate consult; a surge strategy keeps it, because its gate counts surge
-// pods and the recreate genuinely adds one. A Ready row is dark on pod
-// evidence rather than on the published counter (evidence.PodSetServesNothing),
-// because the counter trails the pods by a pass.
+// on a non-surge strategy. A gang whose leader is gone publishes no
+// serving pod however many workers keep the gate, since an Instance with
+// no routable serving pod serves nothing. The coordination gate already
+// counts its outage in its serving-based unavailability, so this start
+// skips the gate consult; a surge strategy keeps it, because its gate
+// counts surge pods and the recreate genuinely adds one. A Ready row is
+// dark on pod evidence rather than on the published counter
+// (evidence.PodSetServesNothing), because the counter trails the pods by
+// a pass.
 func RecreateOfDarkRow(s *InstanceStatus, strategy UpdateStrategyType) bool {
 	return s != nil && !UpdateContinuation(s) &&
 		strategy != UpdateStrategySurgeThenDrain &&

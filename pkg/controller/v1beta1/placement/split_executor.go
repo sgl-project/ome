@@ -11,7 +11,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"knative.dev/pkg/apis"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -188,7 +187,7 @@ func (r *Reconciler) executePlannedAllocation(ctx context.Context, source *v1bet
 		}
 		cancel()
 		if err != nil {
-			if apierrors.IsConflict(err) {
+			if isMemberWriteRace(err) {
 				if step.Reason != "MemberApplicationFailed" {
 					step.Reason = "MemberApplicationPending"
 				}

@@ -46,6 +46,28 @@ func TestManager_ReconnectOnlyOnConfigChange(t *testing.T) {
 	assert.Equal(t, "B", got.(*stubClient).id)
 }
 
+func TestManager_ReplacesStoppedCacheWithUnchangedCredentials(t *testing.T) {
+	m := NewManager(runtime.NewScheme())
+	var builds int
+	var stop context.CancelFunc
+	m.newClient = func(ctx context.Context, _ []byte, _ *runtime.Scheme) (SelectivelyCachingClient, context.CancelFunc, error) {
+		builds++
+		cacheCtx, cancel := context.WithCancel(ctx)
+		stop = cancel
+		return &selectivelyCachingClient{cacheCtx: cacheCtx}, cancel, nil
+	}
+	require.NoError(t, m.Connect(t.Context(), "member-a", []byte("credentials")))
+	old, ok := m.ClientFor("member-a")
+	require.True(t, ok)
+	stop()
+	require.NoError(t, m.Connect(t.Context(), "member-a", []byte("credentials")))
+	t.Cleanup(stop)
+	current, ok := m.ClientFor("member-a")
+	require.True(t, ok)
+	require.NotSame(t, old, current)
+	require.Equal(t, 2, builds)
+}
+
 func TestManager_Disconnect(t *testing.T) {
 	m, canceled := newTestManager()
 	require.NoError(t, m.Connect(context.Background(), "c1", []byte("A")))

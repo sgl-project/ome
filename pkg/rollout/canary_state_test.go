@@ -40,6 +40,35 @@ func TestStateOf(t *testing.T) {
 	}
 }
 
+func TestStepOf(t *testing.T) {
+	steps := []v1beta1.RolloutGroupStep{{Traffic: 25}, {Traffic: 50}, {Traffic: 100}}
+	for _, tc := range []struct {
+		name   string
+		step   int32
+		phase  v1beta1.RolloutPhase
+		weight int32
+		want   int32
+	}{
+		{"a recorded step is kept", 1, v1beta1.RolloutPhasePaused, 50, 1},
+		{"the done sentinel is kept", 3, v1beta1.RolloutPhaseStable, 100, 3},
+		{"no traffic shifted yet", -1, v1beta1.RolloutPhasePending, 0, 0},
+		{"first split", -1, v1beta1.RolloutPhasePaused, 25, 0},
+		{"second split", -1, v1beta1.RolloutPhasePaused, 50, 1},
+		{"weight between two steps", -1, v1beta1.RolloutPhasePaused, 40, 0},
+		{"drain at 100%", -1, v1beta1.RolloutPhasePromoting, 100, 2},
+		{"completed cutover", -1, v1beta1.RolloutPhaseStable, 100, 3},
+		{"completed cutover with no weight recorded", -1, v1beta1.RolloutPhaseStable, 0, 3},
+		{"parked before any split", -1, v1beta1.RolloutPhaseFailed, 0, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cs := &v1beta1.CanaryStatus{CurrentStep: tc.step, ObservedTrafficWeight: tc.weight}
+			if got := StepOf(cs, tc.phase, steps); got != tc.want {
+				t.Fatalf("StepOf = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCanaryStateTerminal(t *testing.T) {
 	for s, want := range map[CanaryState]bool{
 		CanaryStateFailed: true, CanaryStateRolledBack: true,

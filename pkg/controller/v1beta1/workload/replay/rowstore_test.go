@@ -353,3 +353,44 @@ func TestConflictRetriesLikeTheAdapter(t *testing.T) {
 		t.Fatalf("reporting forgets the armed conflicts: %v", unfired)
 	}
 }
+
+// TestRowStoreNumbersEachStatusWrite pins the batch number a commit
+// carries: every status write of the pass has its own, a row commit and
+// the retry-block commit of one write share it, a direct removal is a
+// write of its own, and the numbering restarts with the pass.
+func TestRowStoreNumbersEachStatusWrite(t *testing.T) {
+	ctx := context.Background()
+	sink := &recordingSink{}
+	store := replay.NewRowStore([]types.InstanceStatus{{Index: 0, Phase: types.InstancePhaseReady}}, nil, sink)
+	store.BeginPass()
+	if err := store.MutateInstance(ctx, 1, setPhase(types.InstancePhaseCreating)); err != nil {
+		t.Fatalf("mutate: %v", err)
+	}
+	charge := func(b *types.RetryBlock) types.RetryBlockDisposition {
+		b.AttemptsStarted++
+		return types.RetryBlockPersist
+	}
+	if err := store.ApplyInstanceMutationsWithRetryBlock(ctx, []types.InstanceMutation{{Index: 0, Mutate: setPhase(types.InstancePhaseDeleting)}}, "rev-b", charge); err != nil {
+		t.Fatalf("apply with retry block: %v", err)
+	}
+	if _, err := store.RemoveInstance(ctx, 1); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	var got []int
+	for _, c := range sink.rows {
+		got = append(got, c.Batch)
+	}
+	if want := []int{1, 2, 3}; len(got) != 3 || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Fatalf("row batches = %v, want %v", got, want)
+	}
+	if len(sink.blocks) != 1 || sink.blocks[0].Batch != 2 {
+		t.Fatalf("retry-block commit = %+v, want batch 2", sink.blocks)
+	}
+	store.BeginPass()
+	if err := store.MutateInstance(ctx, 0, setPhase(types.InstancePhaseReady)); err != nil {
+		t.Fatalf("mutate: %v", err)
+	}
+	if last := sink.rows[len(sink.rows)-1]; last.Batch != 1 {
+		t.Fatalf("first commit of the next pass carries batch %d, want 1", last.Batch)
+	}
+}

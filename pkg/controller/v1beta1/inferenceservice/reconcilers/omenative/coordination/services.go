@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -102,6 +103,23 @@ func PerRevisionServiceNames(prefix string, component v1beta1.ComponentType, rev
 		RoutingName:  PerRevisionServiceName(prefix, component, revisionHash),
 		HeadlessName: PerRevisionHeadlessServiceName(prefix, component, revisionHash),
 	}
+}
+
+// SortedRevisionHashes returns the revision hashes of a per-revision pod-count
+// map in ascending order. Every writer of per-revision Services walks the
+// revisions in this order, so a pass is repeatable: two passes over the same
+// revisions issue the same writes, and a write that fails leaves the same
+// revision waiting for the next pass.
+func SortedRevisionHashes(byHash map[string]int32) []string {
+	if len(byHash) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(byHash))
+	for hash := range byHash {
+		out = append(out, hash)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // BuildPerRevisionRoutingService produces the ClusterIP per-revision

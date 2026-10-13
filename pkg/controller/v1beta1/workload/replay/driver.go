@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/revision"
 	workloadservice "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/service"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/status"
 	types "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -122,10 +123,10 @@ type driver struct {
 	terminating map[string]*podTeardown
 	// migrations is the owner's persisted status.migrations list.
 	migrations []types.MigrationRecord
-	// published is the pod count per row the status publication wrote from
-	// the previous pass's observation; the engine reads it as PodCount at
-	// the start of the next pass.
-	published map[int32]int32
+	// published is what the status publication after the previous pass
+	// wrote onto each row from that pass's pod observation; the engine
+	// reads it on the rows at the start of the next pass.
+	published map[int32]publishedCounters
 	// migrationRequests counts the requests the scenario has made, so an
 	// unnamed one gets a stable identity.
 	migrationRequests int
@@ -149,11 +150,20 @@ type driver struct {
 	// rollbackImage pins the roll to the stored revision that image's
 	// template minted. Empty rolls toward the rendered template.
 	rollbackImage string
-	// tickHolds and tickCommits are the rollout holds the pass recorded and
-	// the row writes the store resolved in the current tick, kept for the
+	// tickHolds, tickCommits, tickRetryCommits and tickMigrationWrites are
+	// the rollout holds the pass recorded and the row, retry-block and
+	// migration record writes resolved in the current tick, kept for the
 	// observer.
-	tickHolds   []types.RolloutHold
-	tickCommits []RowCommit
+	tickHolds           []types.RolloutHold
+	tickCommits         []RowCommit
+	tickRetryCommits    []RetryBlockCommit
+	tickMigrationWrites []MigrationCommit
+	// passClocks is the clock reading of every pass that ran, in order:
+	// the instants the engine can have stamped an expectation at, since
+	// the clock does not move inside a pass. ttl is the expectation
+	// cache's time-to-live once a scenario has asked for it.
+	passClocks []time.Time
+	ttl        time.Duration
 }
 
 // commitLog is the row sink the store writes through: every resolved write
@@ -168,6 +178,7 @@ func (l *commitLog) RowCommitted(commit RowCommit) {
 }
 
 func (l *commitLog) RetryBlockCommitted(commit RetryBlockCommit) {
+	l.d.tickRetryCommits = append(l.d.tickRetryCommits, commit)
 	l.d.trace.RetryBlockCommitted(commit)
 }
 
@@ -844,7 +855,7 @@ func (d *driver) applyPodStatus(ctx context.Context, name string, spec PodSpec) 
 func (d *driver) runTick(ctx context.Context, tick Tick) error {
 	d.trace.beginTick(tick.Tick, tick.Note)
 	d.store.BeginPass()
-	d.tickHolds, d.tickCommits = nil, nil
+	d.tickHolds, d.tickCommits, d.tickRetryCommits, d.tickMigrationWrites = nil, nil, nil, nil
 	for _, ev := range tick.Events {
 		if err := d.apply(ctx, ev); err != nil {
 			return err
@@ -900,7 +911,7 @@ func (d *driver) runTick(ctx context.Context, tick Tick) error {
 		target = pinned
 	}
 
-	rows, publishing, err := d.publishedRows(ctx)
+	rows, podObservation, err := d.publishedRows(ctx)
 	if err != nil {
 		return err
 	}
@@ -941,11 +952,15 @@ func (d *driver) runTick(ctx context.Context, tick Tick) error {
 		}
 		input.ObservedState.InstanceStatuses = d.overlayPublished(d.store.Rows())
 	}
+	d.notePassClock()
 	result, rerr := workload.Reconcile(ctx, deps, input, plan, target)
 	d.trace.emit("pass result=%s", renderResult(result, rerr))
-	// The status publication that follows the pass writes this pass's pod
-	// counts, which the next pass reads.
-	d.published = publishing
+	// The status publication that follows the pass counts this pass's pod
+	// observation onto the rows the pass left; the next pass reads those
+	// counters.
+	if d.published, err = d.publish(ctx, podObservation, plan, specTarget); err != nil {
+		return err
+	}
 	// The status-aggregate pass runs after the dispatcher on every
 	// reconcile: it parks the deadline of an Instance held by admission or
 	// by an external wait, and rearms one that has been released.
@@ -962,10 +977,21 @@ func (d *driver) runTick(ctx context.Context, tick Tick) error {
 	return d.refreshStaleCache(ctx, tick.Tick)
 }
 
+// notePassClock records the instant a pass runs at, once per distinct
+// reading, for the expectation deadlines a later tick resolves.
+func (d *driver) notePassClock() {
+	now := d.clock.Now()
+	if n := len(d.passClocks); n > 0 && d.passClocks[n-1].Equal(now) {
+		return
+	}
+	d.passClocks = append(d.passClocks, now)
+}
+
 // observe hands the tick's end state to the observer, when one is set. Pods
 // and rotation are read live, as the next pass will list them; the rows
-// carry the pod counts the publication after this pass wrote; the grace is
-// the one the pass's readers received.
+// carry the counters the publication after this pass wrote; the migration
+// records are copies of the owner's list; the grace is the one the pass's
+// readers received.
 func (d *driver) observe(ctx context.Context, tick int, desired types.WorkloadDesiredSpec, stuckPodGrace time.Duration) error {
 	if d.opts.Observer == nil {
 		return nil
@@ -990,17 +1016,24 @@ func (d *driver) observe(ctx context.Context, tick int, desired types.WorkloadDe
 		spec.MaxSurge = strategy.RollingUpdate.MaxSurge
 		spec.Partition = strategy.RollingUpdate.Partition
 	}
+	migrations := make([]types.MigrationRecord, 0, len(d.migrations))
+	for _, record := range d.migrations {
+		migrations = append(migrations, cloneMigrationRecord(record))
+	}
 	d.opts.Observer(TickView{
-		Tick:          tick,
-		Now:           d.clock.Now(),
-		Rows:          d.overlayPublished(d.store.Rows()),
-		RetryBlocks:   d.store.RetryBlocks(),
-		Pods:          pods,
-		Routed:        routed,
-		Holds:         append([]types.RolloutHold(nil), d.tickHolds...),
-		Commits:       append([]RowCommit(nil), d.tickCommits...),
-		Spec:          spec,
-		StuckPodGrace: stuckPodGrace,
+		Tick:            tick,
+		Now:             d.clock.Now(),
+		Rows:            d.overlayPublished(d.store.Rows()),
+		RetryBlocks:     d.store.RetryBlocks(),
+		Migrations:      migrations,
+		Pods:            pods,
+		Routed:          routed,
+		Holds:           append([]types.RolloutHold(nil), d.tickHolds...),
+		Commits:         append([]RowCommit(nil), d.tickCommits...),
+		RetryCommits:    append([]RetryBlockCommit(nil), d.tickRetryCommits...),
+		MigrationWrites: append([]MigrationCommit(nil), d.tickMigrationWrites...),
+		Spec:            spec,
+		StuckPodGrace:   stuckPodGrace,
 	})
 	return nil
 }
@@ -1127,28 +1160,80 @@ func (d *driver) podsByInstanceFrom(ctx context.Context, reader client.Reader) (
 	return byIndex, nil
 }
 
-// publishedRows is the engine's row observation for this pass: the store's
-// rows carrying the pod count the status publication wrote from the
-// previous pass's observation, as the adapter's rollup hands it to the next
-// reconcile. It also returns this pass's counts, which the publication
-// after the pass writes.
-func (d *driver) publishedRows(ctx context.Context) ([]types.InstanceStatus, map[int32]int32, error) {
-	byIndex, err := d.podsByInstance(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	publishing := make(map[int32]int32, len(byIndex))
-	for index, pods := range byIndex {
-		publishing[index] = int32(len(pods))
-	}
-	return d.overlayPublished(d.store.Rows()), publishing, nil
+// publishedCounters are the counters of a row's status publication that a
+// pass reads back: how many pods the Instance had, how many of them
+// served, PodReady with the serving gate and not being deleted, and how
+// many were available, in the headless Service's rotation and, under a
+// positive minReadySeconds window, Ready for at least that long. The
+// publication writes more onto a row (the ready and scheduled counts, the
+// admitted flag, the nodes occupied); no pass reads those.
+type publishedCounters struct {
+	podCount          int32
+	servingPodCount   int32
+	availablePodCount int32
 }
 
-// overlayPublished writes the published pod counts onto a row observation;
+// publishedRows is the engine's row observation for this pass: the store's
+// rows carrying the counters the status publication wrote from the
+// previous pass's pod observation, as the adapter's rollup hands them to
+// the next reconcile. It also returns this pass's pod observation, the
+// selector-scoped cache read the publication after the pass counts from.
+func (d *driver) publishedRows(ctx context.Context) ([]types.InstanceStatus, workload.PodObservation, error) {
+	pods, err := query.ListOMENativePodsByName(ctx, d.cachedClient(), d.opts.Namespace, d.opts.OwnerName, d.opts.Component, false)
+	if err != nil {
+		return nil, workload.PodObservation{}, fmt.Errorf("replay: list pods for the publication: %w", err)
+	}
+	return d.overlayPublished(d.store.Rows()), workload.NewCachedSelectorPodObservation(pods, nil), nil
+}
+
+// publish runs the adapter's status publication over the pass's pod
+// observation and keeps the counters it wrote onto each row, which the
+// next pass reads. The publisher is the product's own
+// (workload.ComponentObservation.TakeInlineV1Publication), fed what the
+// adapter feeds it: the rows the pass left, the headless Service's
+// rotation and the Component's availability window. A published counter
+// is therefore the number the adapter would persist, never a formula of
+// the driver's. The phase the publication projects is not kept: the
+// store holds the engine's phase, which the engine reads back from the
+// published one.
+func (d *driver) publish(ctx context.Context, pods workload.PodObservation, plan types.ComponentPlan, target *appsv1.ControllerRevision) (map[int32]publishedCounters, error) {
+	headless := query.HeadlessServiceName(d.opts.OwnerName, d.opts.Component)
+	availableByPod, err := status.AvailablePodSet(ctx, d.cachedClient(), d.opts.Namespace, headless)
+	if err != nil {
+		return nil, fmt.Errorf("replay: publication rotation: %w", err)
+	}
+	observation, err := workload.NewOwnedPublicationObservation(d.store.Rows(), pods, availableByPod,
+		status.AvailabilityWindow{MinReadySeconds: plan.MinReadySeconds, Now: d.clock.Now()})
+	if err != nil {
+		return nil, fmt.Errorf("replay: build publication observation: %w", err)
+	}
+	var targetName string
+	if target != nil {
+		targetName = target.Name
+	}
+	rows, _, err := observation.TakeInlineV1Publication(status.DesiredPodCountByInstance(plan), targetName)
+	if err != nil {
+		return nil, fmt.Errorf("replay: consume publication observation: %w", err)
+	}
+	published := make(map[int32]publishedCounters, len(rows))
+	for i := range rows {
+		published[rows[i].Index] = publishedCounters{
+			podCount:          rows[i].PodCount,
+			servingPodCount:   rows[i].ServingPodCount,
+			availablePodCount: rows[i].AvailablePodCount,
+		}
+	}
+	return published, nil
+}
+
+// overlayPublished writes the published counters onto a row observation;
 // the store's rows carry none, so nothing is rendered for them.
 func (d *driver) overlayPublished(rows []types.InstanceStatus) []types.InstanceStatus {
 	for i := range rows {
-		rows[i].PodCount = d.published[rows[i].Index]
+		counters := d.published[rows[i].Index]
+		rows[i].PodCount = counters.podCount
+		rows[i].ServingPodCount = counters.servingPodCount
+		rows[i].AvailablePodCount = counters.availablePodCount
 	}
 	return rows
 }
@@ -1313,6 +1398,8 @@ func (d *driver) wrapCallbacks(input *types.ReconcileInput) {
 			return nil
 		}
 		d.migrations[position] = next
+		was, is := cloneMigrationRecord(before), cloneMigrationRecord(next)
+		d.tickMigrationWrites = append(d.tickMigrationWrites, MigrationCommit{RequestUUID: requestUUID, Before: &was, After: &is})
 		d.trace.callback("migration uuid=%s write %s", d.norm.uid(requestUUID), d.migrationDiff(&before, &next))
 		return nil
 	}
@@ -1324,10 +1411,12 @@ func (d *driver) wrapCallbacks(input *types.ReconcileInput) {
 			}
 		}
 		d.migrations = append(d.migrations, rec)
+		is := cloneMigrationRecord(rec)
+		d.tickMigrationWrites = append(d.tickMigrationWrites, MigrationCommit{RequestUUID: rec.RequestUUID, Appended: true, After: &is})
 		d.trace.callback("migration uuid=%s append %s", d.norm.uid(rec.RequestUUID), d.migrationDiff(nil, &rec))
 		return nil
 	}
-	input.UpdateGate = func(strategy types.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, types.RolloutHoldGate, string) {
+	input.UpdateGate = func(_ string, strategy types.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, types.RolloutHoldGate, string) {
 		d.trace.callback("gate consult strategy=%s surge=%d unavail=%d verdict=allow", strategy, inFlightSurge, inFlightUnavail)
 		return true, "", ""
 	}
