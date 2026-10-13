@@ -83,6 +83,9 @@ spec:
         {{- if .Values.ome.controller.kubeAPIBurst }}
         - "--kube-api-burst={{ .Values.ome.controller.kubeAPIBurst }}"
         {{- end }}
+        {{- with .Values.ome.controller.pprofBindAddress }}
+        - "--pprof-bind-address={{ . }}"
+        {{- end }}
         {{- with .Values.ome.controller.leaderElection }}
         {{- if and .leaseDuration .renewDeadline .retryPeriod }}
         - "--leader-elect-lease-duration={{ .leaseDuration }}"

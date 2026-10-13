@@ -83,7 +83,7 @@ ome:
         clientQPS: 0             # steady-state QPS to each remote apiserver (0 => client-go default)
         clientBurst: 0           # burst over clientQPS (0 => client-go default)
         perCallTimeout: ""       # per-request timeout ("" => none)
-        cacheEnabled: false      # serve cross-cluster reads from an informer cache; prerequisite for the funnel
+        cacheEnabled: false      # cache member ISVCs and both runtime kinds, including objects without placement labels
         healthInterval: ""       # re-probe cadence for an otherwise-idle WorkloadCluster
         connectionGrace: ""      # transient-failure grace before a reachable cluster is disconnected
         eventsBatchPeriod: ""    # debounce for a rotated-kubeconfig Secret's key-update burst
@@ -356,6 +356,11 @@ ome:
     # the controller log.
     kubeAPIQPS: 100
     kubeAPIBurst: 200
+    # Address the manager serves net/http/pprof on, for profiling a live
+    # controller. Empty disables it. Bind to loopback (for example
+    # 127.0.0.1:6060) so the profiles are reachable only through
+    # kubectl port-forward, never through a Service.
+    pprofBindAddress: ""
     # Timing of the leader election loop. Source of truth for these values (the
     # OME binary has NO built-in default; omitting any one of the three falls
     # back to controller-runtime's 15s/10s/2s). The three are rendered only as a

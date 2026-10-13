@@ -62,6 +62,15 @@ grep -Fq 'helm.sh/chart: ome-resources-0.1.0' <<<"${controller}" ||
   fail "controller chart version label was not rendered"
 grep -Fq 'app.kubernetes.io/version: "1.16.0"' <<<"${controller}" ||
   fail "controller app version label was not rendered"
+if grep -Fq -- '--pprof-bind-address' <<<"${controller}"; then
+  fail "the controller serves pprof without pprofBindAddress set"
+fi
+pprof_controller="$("${helm_bin}" template ome-resources "${chart_dir}" \
+  --namespace ome \
+  --set ome.controller.pprofBindAddress=127.0.0.1:6060 \
+  --show-only templates/ome-controller/deployment.yaml)"
+grep -Fq -- '- "--pprof-bind-address=127.0.0.1:6060"' <<<"${pprof_controller}" ||
+  fail "pprofBindAddress was not passed to the controller"
 grep -Fq '"scaleUpPodBatchSize":100' <<<"${controller_config}" ||
   fail "default OMENative scale-up Pod batch size was not rendered"
 grep -Fq '"scaleDownPodBatchSize":100' <<<"${controller_config}" ||
