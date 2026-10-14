@@ -862,18 +862,21 @@ func (d *driver) runTick(ctx context.Context, tick Tick) error {
 		}
 	}
 	// The adapter's teardown pass checks the deadline before it dispatches
-	// anything, and once the owner is gone no pass runs at all.
+	// anything, and once the owner is gone a reconcile finds no object and
+	// runs no pass. Both ticks are still handed to the observer: the rows
+	// are the slots the owner left empty, and an event staged in such a
+	// tick is one the table says lands on an Empty row.
 	if d.ownerGone {
 		d.trace.callback("owner gone; nothing reconciles")
 		d.trace.emit("pass result=none")
-		return nil
+		return d.observeWithoutPass(ctx, tick.Tick)
 	}
 	overdue, err := d.teardownOverdue()
 	if err != nil {
 		return err
 	}
 	if overdue {
-		return d.releaseTeardown(ctx)
+		return d.releaseTeardown(ctx, tick.Tick)
 	}
 
 	desired, err := d.desiredSpec()
@@ -1066,12 +1069,16 @@ func (d *driver) teardownOverdue() (bool, error) {
 // emits when it releases a deleted owner's finalizer past its deadline.
 const teardownDeadlineExceeded = "TeardownDeadlineExceeded"
 
-// releaseTeardown is the adapter's deadline release: a Warning naming the
-// pods that survive, then the finalizer lifted, which deletes the owner
-// object and every row it carried in one stroke. The pods stay, left to
-// background GC the fake apiserver does not run.
-func (d *driver) releaseTeardown(ctx context.Context) error {
-	pods, err := query.ListOMENativePodsByName(ctx, d.cli, d.opts.Namespace, d.opts.OwnerName, d.opts.Component, false)
+// releaseTeardown is the adapter's deadline release, in the adapter's
+// order: the Component's pods listed through the live reader for the
+// Warning's count, the Warning itself, then the finalizer lifted, which
+// deletes the owner object and every row and retry block it carried in
+// one stroke. The store records each row's removal, so the trace shows
+// the state every row left from and the observer sees the move into
+// Empty. The pods stay, left to background GC the fake apiserver does not
+// run.
+func (d *driver) releaseTeardown(ctx context.Context, tick int) error {
+	pods, err := query.LiveListPodsForComponent(ctx, d.cli, d.opts.Namespace, d.opts.OwnerName, d.opts.Component)
 	if err != nil {
 		return fmt.Errorf("replay: list pods for the teardown release: %w", err)
 	}
@@ -1082,7 +1089,26 @@ func (d *driver) releaseTeardown(ctx context.Context) error {
 	d.trace.callback("owner deleted rows=%d", len(removed))
 	d.ownerGone = true
 	d.trace.emit("pass result=none")
-	return nil
+	return d.observeWithoutPass(ctx, tick)
+}
+
+// observeWithoutPass hands the observer a tick in which no workload pass
+// ran: the one that released the owner past its teardown deadline, and
+// every tick after it. The view is read the way a pass's is, from the
+// spec the scenario holds and the pods the fake apiserver still lists.
+func (d *driver) observeWithoutPass(ctx context.Context, tick int) error {
+	if d.opts.Observer == nil {
+		return nil
+	}
+	desired, err := d.desiredSpec()
+	if err != nil {
+		return err
+	}
+	stuckPodGrace, err := ParseDuration("config.stuckPodGrace", d.cfg.StuckPodGrace)
+	if err != nil {
+		return err
+	}
+	return d.observe(ctx, tick, desired, stuckPodGrace)
 }
 
 // reconcileHeldDeadlines is the adapter's deadline park/rearm step. An

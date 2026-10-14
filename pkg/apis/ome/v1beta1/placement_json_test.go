@@ -17,6 +17,9 @@ func TestPlacementJSONPreservesExplicitRestrictions(t *testing.T) {
 		{name: "null affinity", data: `{"policy":"ClusterAffinity","mode":"Single","clusterAffinity":null}`, want: `{"policy":"ClusterAffinity","mode":"Single","clusterAffinity":[]}`},
 		{name: "omitted packing", data: `{"policy":"ClusterAffinity","mode":"Split","split":{"replicas":3}}`, want: `{"policy":"ClusterAffinity","mode":"Split","split":{"replicas":3}}`, affinityNil: true},
 		{name: "explicit surge zero", data: `{"policy":"ClusterAffinity","mode":"Split","maxSurge":0}`, want: `{"policy":"ClusterAffinity","mode":"Split","maxSurge":0}`, affinityNil: true},
+		{name: "per-component terms", data: `{"policy":"ComponentAffinity","mode":"Split","componentAffinity":{"engine":[{"weight":2,"matchFields":[{"key":"metadata.name","operator":"In","values":["cluster-a"]}]}]}}`, want: `{"policy":"ComponentAffinity","mode":"Split","componentAffinity":{"engine":[{"weight":2,"matchFields":[{"key":"metadata.name","operator":"In","values":["cluster-a"]}]}]}}`, affinityNil: true},
+		{name: "null per-component terms", data: `{"policy":"ComponentAffinity","mode":"Split","componentAffinity":null}`, want: `{"policy":"ComponentAffinity","mode":"Split","componentAffinity":{}}`, affinityNil: true},
+		{name: "unreadable affinity object", data: `{"policy":"ClusterAffinity","mode":"Split","clusterAffinity":{"engine":[{"matchFields":[{"key":"metadata.name","operator":"In","values":["cluster-a"]}]}]},"split":{"replicas":4}}`, want: `{"policy":"ClusterAffinity","mode":"Split","clusterAffinity":[],"split":{"replicas":4}}`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var placement PlacementSpec

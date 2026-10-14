@@ -8,23 +8,46 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	workload "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
+type listSelectorReader struct {
+	client.Reader
+	selectors []string
+}
+
+func (r *listSelectorReader) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	listOptions := (&client.ListOptions{}).ApplyOptions(opts)
+	if listOptions.LabelSelector != nil {
+		r.selectors = append(r.selectors, listOptions.LabelSelector.String())
+	}
+	return r.Reader.List(ctx, list, opts...)
+}
+
 func TestLiveListPodsForInstance_FiltersByIndex(t *testing.T) {
 	pod0 := newDiscoverPod("p-0", 0, 1, false)
 	pod1 := newDiscoverPod("p-1", 1, 1, false)
-	c := newDiscoverTestClient(t, pod0, pod1)
+	reader := &listSelectorReader{Reader: newDiscoverTestClient(t, pod0, pod1)}
 
-	got, err := LiveListPodsForInstance(context.Background(), c, "ns", "isvc", workload.ComponentEngine, 0)
+	got, err := LiveListPodsForInstance(context.Background(), reader, "ns", "isvc", workload.ComponentEngine, 0)
 	if err != nil {
 		t.Fatalf("LiveListPodsForInstance: %v", err)
 	}
 	if len(got) != 1 || got[0].Name != "p-0" {
 		t.Errorf("expected only p-0; got %v", podNames(got))
+	}
+	wantSelector := labels.SelectorFromSet(labels.Set{
+		constants.InferenceServicePodLabelKey: "isvc",
+		constants.OMEComponentLabel:           string(workload.ComponentEngine),
+		LabelManagedBy:                        ManagedByOMENative,
+		LabelInstanceIdx:                      "0",
+	}).String()
+	if len(reader.selectors) != 1 || reader.selectors[0] != wantSelector {
+		t.Errorf("List selectors = %v, want [%s]", reader.selectors, wantSelector)
 	}
 }
 
@@ -266,6 +289,14 @@ func promotePod(name string, containersReady bool, readyAt time.Time) *corev1.Po
 	return pod
 }
 
+// containersUpThenReadyPod is promotePod with the ContainersReady condition
+// dated containersAt, so the two readiness clocks differ.
+func containersUpThenReadyPod(name string, containersAt, readyAt time.Time) *corev1.Pod {
+	pod := promotePod(name, true, readyAt)
+	pod.Status.Conditions[0].LastTransitionTime = metav1.NewTime(containersAt)
+	return pod
+}
+
 // TestPodSetPromotable covers the one bar every Ready stamp shares:
 // ContainersReady alone is below it, PodReady past the minReadySeconds
 // window clears it, and a set still inside the window reports the
@@ -417,6 +448,27 @@ func TestPodSetPromotable(t *testing.T) {
 			pods:            []*corev1.Pod{promotePod("a", true, promoteNow.Add(-20*time.Second))},
 			minReadySeconds: 20,
 			want:            true,
+		},
+		{
+			// Containers up for an hour, PodReady for two seconds: the window
+			// runs from the Ready condition's transition, not from ContainersReady.
+			name:            "the window runs from PodReady, not from ContainersReady",
+			pods:            []*corev1.Pod{containersUpThenReadyPod("a", promoteNow.Add(-time.Hour), promoteNow.Add(-2*time.Second))},
+			minReadySeconds: 20,
+			want:            false,
+			wantWait:        18 * time.Second,
+		},
+		{
+			// A gang's window runs from the member that turned Ready last,
+			// whatever its containers' age.
+			name: "a gang's window runs from its last member's PodReady",
+			pods: []*corev1.Pod{
+				containersUpThenReadyPod("leader", promoteNow.Add(-time.Hour), promoteNow.Add(-25*time.Second)),
+				containersUpThenReadyPod("worker", promoteNow.Add(-time.Hour), promoteNow.Add(-5*time.Second)),
+			},
+			minReadySeconds: 20,
+			want:            false,
+			wantWait:        15 * time.Second,
 		},
 		{
 			name: "one pod short of PodReady holds the whole set with no remainder",

@@ -50,3 +50,36 @@ type ClusterSelectorRequirement struct {
 	// +kubebuilder:validation:MaxItems=64
 	Values []string `json:"values,omitempty"`
 }
+
+// ComponentClusterAffinity holds one affinity term list per component. Every
+// listed component must match the same clusters. In Split, each list's weights
+// set that component's shares; in Single and All the lists only select.
+// +structType=atomic
+// +kubebuilder:validation:MinProperties=1
+type ComponentClusterAffinity struct {
+	// Engine selects clusters for the engine and, in Split, weights its shares.
+	// It is required when the service declares an engine.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=64
+	Engine []ClusterAffinityTerm `json:"engine,omitempty"`
+
+	// Decoder selects clusters for the decoder and, in Split, weights its shares
+	// over the clusters that hold engine replicas. It is required when the
+	// service declares a decoder.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=64
+	Decoder []ClusterAffinityTerm `json:"decoder,omitempty"`
+
+	// Router selects clusters for the router. In Split, it divides
+	// router.minReplicas across the clusters that hold engine replicas; without
+	// it, each such cluster runs the full router policy.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=64
+	Router []ClusterAffinityTerm `json:"router,omitempty"`
+}

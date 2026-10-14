@@ -48,11 +48,19 @@ type ReconcileInputs struct {
 	// values. Empty pairs with anything.
 	CanaryPairingProtocol string
 	StablePairingProtocol string
-	// ReadyCanaryInstances is the count of complete PodReady target Instances,
-	// resolved from the IR's runner topology. nil uses PerRevisionPods.
+	// ReadyCanaryInstances is the count of complete target Instances whose
+	// pods are available: PodReady with the serving gate and, under the
+	// Component's minReadySeconds, Ready for at least that long, resolved
+	// from the IR's runner topology. nil uses PerRevisionPods.
 	ReadyCanaryInstances *int32
-	DesiredReplicas      int32
-	PerRevisionPods      map[string]int32
+	// CapacityWindowWait is how long until the soonest canary pod still
+	// inside the Component's minReadySeconds window has held Ready for it,
+	// zero when none is waiting. The crossing raises no watch event, so a
+	// capacity wait short on the window alone wakes for it when it comes
+	// before the step cadence.
+	CapacityWindowWait time.Duration
+	DesiredReplicas    int32
+	PerRevisionPods    map[string]int32
 	// GroupTotalPerRevisionPods counts every pod of every configured member
 	// of the canary group per revision hash, ready or not, keyed by
 	// Component (primary included). A revert is complete when the rejected
@@ -82,7 +90,7 @@ type ReconcileInputs struct {
 	CanaryRestartedAt time.Time
 	// SecondaryCapacityReady is true when every NON-primary component's canary
 	// Instances have reached that component's step newCount. The primary uses its
-	// exact complete-PodReady target Instance count. Single-component canaries
+	// exact available target Instance count. Single-component canaries
 	// pass true.
 	SecondaryCapacityReady bool
 	// Secondaries carries each NON-primary member's revision pair and pairing
@@ -140,9 +148,9 @@ type MemberRevisions struct {
 	StableRevisionHash    string
 	CanaryPairingProtocol string
 	StablePairingProtocol string
-	// ReadyCanaryCapacity is the member's Ready capacity on its target
-	// revision, as the capacity gate counts it; above zero, the target's
-	// pods have reached Ready.
+	// ReadyCanaryCapacity is the member's available capacity on its target
+	// revision, as the capacity gate counts it; above zero, a target pod
+	// has held Ready for the member's minReadySeconds.
 	ReadyCanaryCapacity int32
 	// DesiredReplicas is the member's steady instance count, the capacity
 	// its target must reach before the cutover is complete.
@@ -210,6 +218,16 @@ func groupRetargeted(isvc *v1beta1.InferenceService, group *v1beta1.RolloutGroup
 
 func readyCanaryCapacity(in ReconcileInputs) int32 {
 	return readyCapacityCount(in.PerRevisionPods[in.CanaryRevisionHash], in.ReadyCanaryInstances)
+}
+
+// capacityWake is the wait of a pass whose capacity gate holds: the step
+// cadence, or the moment the soonest canary pod clears its availability
+// window when that comes first, since the crossing raises no watch event.
+func capacityWake(in ReconcileInputs) time.Duration {
+	if in.CapacityWindowWait > 0 && (in.Requeue <= 0 || in.CapacityWindowWait < in.Requeue) {
+		return in.CapacityWindowWait
+	}
+	return in.Requeue
 }
 
 // stepSampler is the analysis-sampling seam the executor calls. Production wires
@@ -435,10 +453,10 @@ func reconcile(ctx context.Context, in ReconcileInputs, take func(string)) (*Res
 		if state == rollout.CanaryStateServing || state == rollout.CanaryStatePreHold {
 			// A split that was serving keeps its phase and its recorded
 			// weight through a dip; the gate only keeps the step from moving.
-			return (&Result{Active: true, Partition: partition}).wake(in.Requeue), nil
+			return (&Result{Active: true, Partition: partition}).wake(capacityWake(in)), nil
 		}
 		setPhase(in.ISVC, in.Component, v1beta1.RolloutPhasePending)
-		return (&Result{Active: true, Partition: partition}).wake(in.Requeue), nil
+		return (&Result{Active: true, Partition: partition}).wake(capacityWake(in)), nil
 	}
 	if !capacityShort {
 		cs.CapacityWaitSince = nil
@@ -642,7 +660,7 @@ func finishCutover(in ReconcileInputs, cs *v1beta1.CanaryStatus) *Result {
 	}
 	if !cutoverComplete(in) {
 		setPhase(in.ISVC, in.Component, v1beta1.RolloutPhasePromoting)
-		return (&Result{Active: true, Partition: 0}).wake(in.Requeue)
+		return (&Result{Active: true, Partition: 0}).wake(capacityWake(in))
 	}
 	// Every member's target owns its traffic now; the pre-canary stable is
 	// the revision each superseded.

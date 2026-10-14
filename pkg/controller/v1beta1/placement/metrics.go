@@ -37,7 +37,17 @@ var (
 
 	placementCandidateReady = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ome_isvc_placement_candidate_ready_replicas",
-		Help: "Replicas serving traffic on this candidate cluster. In Split mode this is the weight an external LB uses to split traffic across homes.",
+		Help: "Ready replica count saved in candidate status. This is an input to traffic weighting and may retain the last successful count during observation grace.",
+	}, []string{"namespace", "isvc", "cluster"})
+
+	placementCandidateObservationKnown = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ome_isvc_placement_candidate_observation_known",
+		Help: "Whether the saved member observation is known (1) or unknown (0). A ready count can remain positive during observation grace.",
+	}, []string{"namespace", "isvc", "cluster"})
+
+	placementCandidateObservationFailingSince = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ome_isvc_placement_candidate_observation_failing_since_timestamp_seconds",
+		Help: "Unix timestamp of the observation failure recorded in candidate status, or 0 when no failure is recorded.",
 	}, []string{"namespace", "isvc", "cluster"})
 
 	// Policy is spec-derived, not status-derived: it answers "what was asked
@@ -62,6 +72,7 @@ func init() {
 	ctrlmetrics.Registry.MustRegister(
 		placementPhase, placementWinner, placementCandidate,
 		placementCandidateAdmitted, placementCandidateReady,
+		placementCandidateObservationKnown, placementCandidateObservationFailingSince,
 		placementPolicyInfo, placementSplitReplicas,
 		placementSplitMaxPerCluster,
 	)
@@ -91,11 +102,13 @@ func recordPlacement(isvc *v1beta1.InferenceService, res placementResult) {
 		placementWinner.WithLabelValues(ns, name, res.winner).Set(1)
 	}
 
-	// Candidates: reset all three vectors so a cluster dropped from the race
-	// (loser sweep) stops reporting.
+	// Remove every candidate series before recording the saved candidates, so
+	// clusters removed from placement stop reporting.
 	placementCandidate.DeletePartialMatch(match)
 	placementCandidateAdmitted.DeletePartialMatch(match)
 	placementCandidateReady.DeletePartialMatch(match)
+	placementCandidateObservationKnown.DeletePartialMatch(match)
+	placementCandidateObservationFailingSince.DeletePartialMatch(match)
 	for _, c := range res.candidates {
 		if c.Cluster == "" {
 			continue
@@ -103,6 +116,16 @@ func recordPlacement(isvc *v1beta1.InferenceService, res placementResult) {
 		placementCandidate.WithLabelValues(ns, name, c.Cluster, string(c.Phase)).Set(1)
 		placementCandidateAdmitted.WithLabelValues(ns, name, c.Cluster).Set(float64(c.AdmittedReplicas))
 		placementCandidateReady.WithLabelValues(ns, name, c.Cluster).Set(float64(c.ReadyReplicas))
+		known := float64(0)
+		if c.ObservationKnown {
+			known = 1
+		}
+		placementCandidateObservationKnown.WithLabelValues(ns, name, c.Cluster).Set(known)
+		failingSince := float64(0)
+		if c.ObservationFailingSince != nil {
+			failingSince = float64(c.ObservationFailingSince.Unix())
+		}
+		placementCandidateObservationFailingSince.WithLabelValues(ns, name, c.Cluster).Set(failingSince)
 	}
 
 	recordPolicy(isvc)
@@ -147,6 +170,8 @@ func DeleteForISVC(namespace, isvc string) {
 	placementCandidate.DeletePartialMatch(match)
 	placementCandidateAdmitted.DeletePartialMatch(match)
 	placementCandidateReady.DeletePartialMatch(match)
+	placementCandidateObservationKnown.DeletePartialMatch(match)
+	placementCandidateObservationFailingSince.DeletePartialMatch(match)
 	placementPolicyInfo.DeletePartialMatch(match)
 	placementSplitReplicas.DeletePartialMatch(match)
 	placementSplitMaxPerCluster.DeletePartialMatch(match)

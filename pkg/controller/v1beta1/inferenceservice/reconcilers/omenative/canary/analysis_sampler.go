@@ -21,64 +21,121 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination"
 )
 
-// buildSampleRequest snapshots everything the background eval needs to query one
-// step's analysis WITHOUT touching the live InferenceService — the reconcile owns
-// it, so a goroutine reading it would race. It resolves the source address, bearer
-// token, headers, and template context up front; the eval then only performs the
-// HTTP query. The address is the canary's own ServerAddress when set, else the
-// operator-configured bundled address; an empty address means "no source" and the
-// eval's query reads inconclusive.
-func buildSampleRequest(ctx context.Context, in ReconcileInputs, a *v1beta1.RolloutAnalysis, step int32) (SampleRequest, error) {
-	addr := in.BundledPrometheusAddress
-	var token string
-	var headers map[string]string
-	var authRef *corev1.SecretKeySelector
-	if src := in.Prometheus; src != nil { // canary-level shared source
-		if src.ServerAddress != "" {
-			addr = src.ServerAddress
-		}
-		// Clone the map: src.Headers points into the live ISVC spec, and the result
-		// is read by the background eval goroutine. A reference copy would hand a
-		// spec-owned map to another goroutine, breaking the snapshot invariant.
-		headers = maps.Clone(src.Headers)
-		if src.AuthRef != nil {
-			authRef = src.AuthRef
-			t, err := resolveBearerToken(ctx, in.Reader, in.ISVC.Namespace, src.AuthRef)
-			if err != nil {
-				return SampleRequest{}, fmt.Errorf("resolve bearer token: %w", err)
-			}
-			token = t
-		}
+// sampledMember is one member of the unit the analysis gate reads: the
+// Component whose canary pods the queries name, and its revision pair.
+type sampledMember struct {
+	component  v1beta1.ComponentType
+	canaryHash string
+	stableHash string
+}
+
+// primaryMember is the unit's primary as the gate reads it: the Component
+// that carries the record, on the revision pair the executor was handed.
+func primaryMember(in ReconcileInputs) sampledMember {
+	return sampledMember{component: in.Component, canaryHash: in.CanaryRevisionHash, stableHash: in.StableRevisionHash}
+}
+
+// sampledMembers lists the members the gate samples, each on its own canary
+// revision: the primary first, then each secondary in name order. A member
+// is read when the pinned run moved it to a new revision. A member the run
+// left alone serves its stable revision on its target, so a sample of it
+// would grade the revision the unit keeps, not the one it brings in; it is
+// not read, and on a push that moved only a secondary the primary is not
+// read either. A secondary is read only once the executor observed a target
+// distinct from its stable revision, the pair its traffic is written on. A
+// run that recorded no target for a member is read as having moved it, as
+// the crash reading does.
+func sampledMembers(in ReconcileInputs) []sampledMember {
+	var out []sampledMember
+	if memberRetargeted(in.ISVC, in.Component) {
+		out = append(out, primaryMember(in))
 	}
-	// The per-revision Services the queries name carry the Component's
-	// replica prefix, like every per-revision object of the Component.
-	prefix := irprojector.RoleReplicaPrefix(in.ISVC, in.Component)
+	for _, c := range slices.Sorted(maps.Keys(in.Secondaries)) {
+		m := in.Secondaries[c]
+		if m.CanaryRevisionHash == "" || m.CanaryRevisionHash == m.StableRevisionHash || !memberRetargeted(in.ISVC, c) {
+			continue
+		}
+		out = append(out, sampledMember{component: c, canaryHash: m.CanaryRevisionHash, stableHash: m.StableRevisionHash})
+	}
+	return out
+}
+
+// sampleSource is the metrics source one evaluation queries, resolved once
+// and shared by every member's request: the address, the bearer token and
+// headers, and the auth Secret reference the fingerprint names. The address
+// is the canary's own ServerAddress when set, else the operator-configured
+// bundled address; an empty address means "no source" and the eval's query
+// reads inconclusive.
+type sampleSource struct {
+	address string
+	token   string
+	headers map[string]string
+	authRef *corev1.SecretKeySelector
+}
+
+// resolveSampleSource resolves the source the canary group declares, reading
+// the bearer token through the live API reader. Nothing it returns points
+// into the live InferenceService: the headers are cloned out of the spec,
+// because the background eval goroutine reads the result while the
+// reconcile owns the object.
+func resolveSampleSource(ctx context.Context, in ReconcileInputs) (sampleSource, error) {
+	src := sampleSource{address: in.BundledPrometheusAddress}
+	p := in.Prometheus // canary-level shared source
+	if p == nil {
+		return src, nil
+	}
+	if p.ServerAddress != "" {
+		src.address = p.ServerAddress
+	}
+	src.headers = maps.Clone(p.Headers)
+	if p.AuthRef != nil {
+		src.authRef = p.AuthRef
+		t, err := resolveBearerToken(ctx, in.Reader, in.ISVC.Namespace, p.AuthRef)
+		if err != nil {
+			return sampleSource{}, fmt.Errorf("resolve bearer token: %w", err)
+		}
+		src.token = t
+	}
+	return src, nil
+}
+
+// buildSampleRequest snapshots everything the background eval needs to query
+// one step's analysis for one member WITHOUT touching the live
+// InferenceService — the reconcile owns it, so a goroutine reading it would
+// race. The source is resolved up front; the eval then only performs the
+// HTTP query. The request is keyed by the member and its own canary
+// revision, so each member's sample is cached and deduplicated on its own,
+// and its template names the member's per-revision Services.
+func buildSampleRequest(in ReconcileInputs, src sampleSource, m sampledMember, a *v1beta1.RolloutAnalysis, step int32) SampleRequest {
+	// The per-revision Services the queries name carry the member's replica
+	// prefix, like every per-revision object of the Component.
+	prefix := irprojector.RoleReplicaPrefix(in.ISVC, m.component)
 	return SampleRequest{
 		Key: SampleKey{
 			Namespace: in.ISVC.Namespace,
 			ISVCName:  in.ISVC.Name,
-			Component: string(in.Component),
-			Revision:  in.CanaryRevisionHash,
+			Component: string(m.component),
+			Revision:  m.canaryHash,
 			Step:      step,
-			PlanHash:  analysisFingerprint(a, addr, headers, authRef, token),
+			PlanHash:  analysisFingerprint(a, src.address, src.headers, src.authRef, src.token),
 		},
-		ServerAddress: addr,
-		BearerToken:   token,
-		Headers:       headers,
+		ServerAddress: src.address,
+		BearerToken:   src.token,
+		Headers:       src.headers,
 		TemplateContext: analysis.TemplateContext{
 			Namespace:      in.ISVC.Namespace,
 			ISVCName:       in.ISVC.Name,
-			Component:      string(in.Component),
-			CanaryService:  coordination.PerRevisionServiceName(prefix, in.Component, in.CanaryRevisionHash),
-			StableService:  coordination.PerRevisionServiceName(prefix, in.Component, in.StableRevisionHash),
-			CanaryRevision: in.CanaryRevisionHash,
-			StableRevision: in.StableRevisionHash,
+			Component:      string(m.component),
+			CanaryService:  coordination.PerRevisionServiceName(prefix, m.component, m.canaryHash),
+			StableService:  coordination.PerRevisionServiceName(prefix, m.component, m.stableHash),
+			CanaryRevision: m.canaryHash,
+			StableRevision: m.stableHash,
 		},
 		// DeepCopy so the background eval never reads through a pointer into the live
 		// spec (the reconcile owns it).
 		Analysis:     a.DeepCopy(),
 		QueryTimeout: in.QueryTimeout,
-	}, nil
+	}
 }
 
 // analysisFingerprint is a SHA-256 identity of one effective analysis request:

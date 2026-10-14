@@ -125,14 +125,8 @@ func (r *Reconciler) unknownCandidate(isvc *v1beta1.InferenceService, previous v
 	if candidate.ObservationFailingSince == nil {
 		since := metav1.NewTime(now).Rfc3339Copy()
 		candidate.ObservationFailingSince = &since
-		// A home that was already unknown but has no stored start cannot have its
-		// grace measured, for example when the stored CRD lacks the field, so it
-		// gets none rather than a grace that restarts on every pass.
-		if !previous.ObservationKnown {
-			candidate.ReadyReplicas = 0
-		}
 	}
-	if !now.Before(candidate.ObservationFailingSince.Add(r.ObservationGrace)) {
+	if !now.Before(candidate.ObservationFailingSince.Add(r.observationGrace())) {
 		candidate.ReadyReplicas = 0
 	}
 	if !hasPolicyRefs(isvc) {
@@ -142,6 +136,43 @@ func (r *Reconciler) unknownCandidate(isvc *v1beta1.InferenceService, previous v
 		candidate.Rollout = nil
 	}
 	return candidate
+}
+
+// observationGrace is the configured grace, or none while status writes show
+// that the stored CRD drops observationFailingSince. Without the stored start
+// every pass would begin a fresh grace, and a home whose reads keep failing
+// would never lose its ready count.
+func (r *Reconciler) observationGrace() time.Duration {
+	if r.failingSinceDropped.Load() {
+		return 0
+	}
+	return r.ObservationGrace
+}
+
+// noteFailingSinceStored compares the candidates a status write sent with the
+// ones the API server stored. A failure start that was sent but not stored
+// means the CRD lacks the field; one that was stored means it has it again.
+func (r *Reconciler) noteFailingSinceStored(sent, stored []v1beta1.CandidatePlacement) {
+	kept := map[string]bool{}
+	for _, candidate := range stored {
+		if candidate.ObservationFailingSince != nil {
+			kept[candidate.Cluster] = true
+		}
+	}
+	for _, candidate := range sent {
+		if candidate.ObservationFailingSince == nil {
+			continue
+		}
+		dropped := !kept[candidate.Cluster]
+		if r.failingSinceDropped.Swap(dropped) != dropped {
+			if dropped {
+				r.Log.Info("the stored InferenceService CRD drops observationFailingSince; failed member reads get no grace until it is updated", "cluster", candidate.Cluster)
+			} else {
+				r.Log.Info("the stored InferenceService CRD keeps observationFailingSince; failed member reads get their grace again")
+			}
+		}
+		return
+	}
 }
 
 // graceWake collects, over one reconcile, the earliest time a written home
@@ -157,7 +188,8 @@ type graceWakeKey struct{}
 // count if reads still fail.
 func (r *Reconciler) noteGraceEnds(ctx context.Context, candidates []v1beta1.CandidatePlacement) {
 	wake, _ := ctx.Value(graceWakeKey{}).(*graceWake)
-	if wake == nil || r.ObservationGrace <= 0 {
+	grace := r.observationGrace()
+	if wake == nil || grace <= 0 {
 		return
 	}
 	now := r.observationNow()
@@ -165,8 +197,16 @@ func (r *Reconciler) noteGraceEnds(ctx context.Context, candidates []v1beta1.Can
 		if candidate.ObservationKnown || candidate.ObservationFailingSince == nil {
 			continue
 		}
-		end := candidate.ObservationFailingSince.Add(r.ObservationGrace)
-		if end.After(now) && (wake.at.IsZero() || end.Before(wake.at)) {
+		end := candidate.ObservationFailingSince.Add(grace)
+		if !end.After(now) {
+			// The grace ended during this pass after the count was kept: wake
+			// at once so the next pass withdraws it.
+			if candidate.ReadyReplicas <= 0 {
+				continue
+			}
+			end = now
+		}
+		if wake.at.IsZero() || end.Before(wake.at) {
 			wake.at = end
 		}
 	}

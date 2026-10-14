@@ -2,11 +2,13 @@ package replay_test
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"testing"
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferencereplica"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/replay"
+	types "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
 // coldCreate is the smallest scenario that exercises every layer of the
@@ -180,19 +182,26 @@ timeline:
 
 // TestRunReleasesTheOwnerPastItsTeardownDeadline pins the driver's
 // stand-in for the adapter's deadline release: the Warning carries the
-// adapter's reason, the owner goes with every row it carried, and a later
-// pass finds nothing left to act on.
+// adapter's reason, every row the owner carried is recorded leaving from
+// the state it was in (the pass that observed the deletion had already
+// stamped the row Deleting), the owner goes with them, and a later pass
+// finds nothing left to act on. Both ticks reach the observer: the
+// release with the removals as its commits and no row left, the later one
+// with no row and no commit.
 func TestRunReleasesTheOwnerPastItsTeardownDeadline(t *testing.T) {
 	scenario, err := replay.Parse([]byte(deletedPastDeadline), replay.Vocabulary{})
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	trace, err := replay.Run(context.Background(), scenario, replay.Options{})
+	views := map[int]replay.TickView{}
+	observe := func(view replay.TickView) { views[view.Tick] = view }
+	trace, err := replay.Run(context.Background(), scenario, replay.Options{Observer: observe})
 	if err != nil {
 		t.Fatalf("run: %v\ntrace:\n%s", err, trace)
 	}
 	for _, want := range []string{
 		"tick=2 event Warning " + inferencereplica.ReasonTeardownDeadlineExceeded + " teardown deadline 10m exceeded (1 owned pod(s) observed",
+		"tick=2 row=0 remove incarnation=1 phase=Deleting",
 		"tick=2 owner deleted rows=1",
 		"tick=2 pass result=none",
 		"tick=3 owner gone; nothing reconciles",
@@ -201,7 +210,44 @@ func TestRunReleasesTheOwnerPastItsTeardownDeadline(t *testing.T) {
 			t.Fatalf("trace missing %q:\n%s", want, trace)
 		}
 	}
+	if strings.Index(trace, "tick=2 row=0 remove") > strings.Index(trace, "tick=2 owner deleted") {
+		t.Fatalf("the row's removal is part of the owner's deletion and reads before it:\n%s", trace)
+	}
 	if strings.Contains(trace, "tick=3 row=") || strings.Contains(trace, "tick=3 pod ") {
 		t.Fatalf("a pass after the release must act on nothing:\n%s", trace)
 	}
+
+	release, ok := views[2]
+	if !ok {
+		t.Fatalf("the release tick was not handed to the observer; ticks seen: %v", tickNumbers(views))
+	}
+	if len(release.Commits) != 1 {
+		t.Fatalf("release commits = %+v, want the one row's removal", release.Commits)
+	}
+	removal := release.Commits[0]
+	switch {
+	case !removal.Remove || removal.Outcome != replay.PreconditionOK || removal.After != nil:
+		t.Fatalf("release commit = %+v, want a committed removal", removal)
+	case removal.Before == nil || removal.Index != 0 || removal.Before.Phase != types.InstancePhaseDeleting:
+		t.Fatalf("release commit before = %+v, want the Deleting row at index 0", removal.Before)
+	}
+	if len(release.Rows) != 0 || !release.Spec.Teardown {
+		t.Fatalf("release view rows = %+v teardown = %v, want no row left of a deleted owner", release.Rows, release.Spec.Teardown)
+	}
+	after, ok := views[3]
+	if !ok {
+		t.Fatalf("the tick after the release was not handed to the observer; ticks seen: %v", tickNumbers(views))
+	}
+	if len(after.Rows) != 0 || len(after.Commits) != 0 || !after.Spec.Teardown {
+		t.Fatalf("view after the release: rows = %+v commits = %+v teardown = %v, want nothing to act on", after.Rows, after.Commits, after.Spec.Teardown)
+	}
+}
+
+func tickNumbers(views map[int]replay.TickView) []int {
+	ticks := make([]int, 0, len(views))
+	for tick := range views {
+		ticks = append(ticks, tick)
+	}
+	sort.Ints(ticks)
+	return ticks
 }

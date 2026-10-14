@@ -34,14 +34,10 @@ import (
 	workloadtypes "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
-// TestReconcile_RestartPass_OneLiveListForManyInstances pins the restart
-// pass's read cost: it does a SINGLE live pod List for the
-// whole Component and buckets by Instance index, not one live List per
-// Instance. With three healthy Ready instances under the gang-default
-// RecreateInstance policy, the live APIReader must see exactly one
-// PodList call from the restart pass (the update / create passes read
-// the cached Client, not the live reader).
-func TestReconcile_RestartPass_OneLiveListForManyInstances(t *testing.T) {
+// TestReconcile_RestartPass_HealthyRecreatePolicyNeedsNoLiveList pins the
+// healthy-path read cost. The cached observation proves there is no candidate,
+// so even RecreateInstance policy does not consult the live APIReader.
+func TestReconcile_RestartPass_HealthyRecreatePolicyNeedsNoLiveList(t *testing.T) {
 	scheme := makeScheme(t)
 	isvc := &v1beta1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{Name: "llama-70b", Namespace: "prod", UID: "uid-1"},
@@ -52,12 +48,6 @@ func TestReconcile_RestartPass_OneLiveListForManyInstances(t *testing.T) {
 		enginePod(isvc.Name, isvc.Namespace, 1),
 		enginePod(isvc.Name, isvc.Namespace, 2),
 	}
-	// The restart pass reads the LIVE reader (APIReader), which has no Pod
-	// field index — liveBucketPods calls ListOMENativePodsByName with
-	// useIndex=false, so it goes straight to the label selector (ONE List).
-	// No index registration here: the live path never probes MatchingFields,
-	// so the assertion measures the per-Component-vs-per-Instance list count
-	// without any index-fallback noise.
 	c := fake.NewClientBuilder().WithScheme(scheme).
 		WithStatusSubresource(&v1beta1.InferenceService{}).
 		WithObjects(pods...).Build()
@@ -84,11 +74,8 @@ func TestReconcile_RestartPass_OneLiveListForManyInstances(t *testing.T) {
 	if _, err := workload.Reconcile(context.Background(), deps, in, plan, nil); err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	// The live reader is used ONLY by the restart pass here (no restart
-	// fires, so no destructive live ops run). It must list once, not once
-	// per Instance.
-	if counter.podListCalls != 1 {
-		t.Errorf("restart pass must issue exactly 1 live pod List for 3 instances, got %d", counter.podListCalls)
+	if counter.podListCalls != 0 {
+		t.Errorf("healthy restart screen issued %d live pod Lists, want 0", counter.podListCalls)
 	}
 }
 
@@ -111,7 +98,8 @@ func TestReconcile_RestartPass_PerInstanceSemanticsPreserved(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).
 		WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}).
 		WithObjects(objs...).Build()
-	deps := workloadtypes.Deps{Client: c, APIReader: c}
+	counter := &listCountingReader{Reader: c}
+	deps := workloadtypes.Deps{Client: c, APIReader: counter}
 
 	in := minimalInput(t)
 	in.ObservedState.InstanceStatuses = []workloadtypes.InstanceStatus{
@@ -138,6 +126,12 @@ func TestReconcile_RestartPass_PerInstanceSemanticsPreserved(t *testing.T) {
 	if result.RequeueAfter == 0 {
 		t.Errorf("a restart in flight must requeue; got %+v", result)
 	}
+	if counter.podListCalls != 1 {
+		t.Errorf("restart must reuse one Component-wide authoritative snapshot; got %d Pod Lists", counter.podListCalls)
+	}
+	if counter.podListItems != 3 {
+		t.Errorf("live Pod Lists returned %d objects, want the 3 Component pods once", counter.podListItems)
+	}
 
 	fresh := &v1beta1.InferenceService{}
 	if err := c.Get(context.Background(), client.ObjectKeyFromObject(isvc), fresh); err != nil {
@@ -155,6 +149,102 @@ func TestReconcile_RestartPass_PerInstanceSemanticsPreserved(t *testing.T) {
 		if s != nil && s.Phase == v1beta1.OMENativeInstanceRestarting {
 			t.Errorf("healthy index %d must NOT be restarting; got %+v", idx, s)
 		}
+	}
+}
+
+// The authoritative decision snapshot is the restart pass's only live Pod
+// read, regardless of how many Instances it selects.
+func TestReconcile_RestartPass_ReusesOneAuthoritativeSnapshot(t *testing.T) {
+	const replicas int32 = 3
+	scheme := makeScheme(t)
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "llama-70b", Namespace: "prod", UID: "uid-1"},
+	}
+	objects := []client.Object{isvc}
+	in := minimalInput(t)
+	plan := workloadtypes.ComponentPlan{
+		Component:     workloadtypes.ComponentEngine,
+		Replicas:      replicas,
+		RestartPolicy: workloadtypes.RestartPolicyRecreateInstance,
+	}
+	for idx := int32(0); idx < replicas; idx++ {
+		objects = append(objects, failedEnginePod(isvc.Name, isvc.Namespace, idx))
+		in.ObservedState.InstanceStatuses = append(in.ObservedState.InstanceStatuses, workloadtypes.InstanceStatus{
+			Index: idx, Incarnation: 1, Phase: workloadtypes.InstancePhaseReady,
+		})
+		plan.Instances = append(plan.Instances, workloadtypes.InstancePlan{
+			Index: idx, Incarnation: 1, Runners: []workloadtypes.RunnerPlan{{Name: "default", Size: 1}},
+		})
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}).
+		WithObjects(objects...).Build()
+	counter := &listCountingReader{Reader: c}
+	in.MutateInstance = roundTripMutateInstance(c, isvc, workloadtypes.ComponentEngine)
+
+	if _, err := workload.Reconcile(context.Background(), workloadtypes.Deps{
+		Client: c, APIReader: counter, Expectations: workloadtypes.NewExpectations(),
+	}, in, plan, nil); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if counter.podListCalls != 1 {
+		t.Errorf("Pod List calls = %d, want one Component-wide decision snapshot", counter.podListCalls)
+	}
+	if want := int(replicas); counter.podListItems != want {
+		t.Errorf("Pod List objects = %d, want %d Component pods returned once", counter.podListItems, replicas)
+	}
+}
+
+// A repair opens on the pod read its decision was made on. The informer still
+// shows the pod Failed with no container exit, while the API server already
+// holds the exit. One Pod List serves both the decision and the record, and
+// the row's failure record carries the exit the drain is about to delete.
+func TestReconcile_RestartPass_RecordsTheDeathFromTheDecisionRead(t *testing.T) {
+	scheme := makeScheme(t)
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "llama-70b", Namespace: "prod", UID: "uid-1"},
+	}
+	cached := failedEnginePod(isvc.Name, isvc.Namespace, 0)
+	live := cached.DeepCopy()
+	live.Status.ContainerStatuses = []corev1.ContainerStatus{{
+		Name: "main",
+		State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+			Reason: "OOMKilled", ExitCode: 137,
+		}},
+	}}
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}).
+		WithObjects(isvc, cached).Build()
+	apiServer := fake.NewClientBuilder().WithScheme(scheme).WithObjects(live).Build()
+	counter := &listCountingReader{Reader: apiServer}
+	deps := workloadtypes.Deps{Client: c, APIReader: counter}
+
+	in := minimalInput(t)
+	in.ObservedState.InstanceStatuses = []workloadtypes.InstanceStatus{
+		{Index: 0, Incarnation: 1, Phase: workloadtypes.InstancePhaseReady},
+	}
+	in.MutateInstance = roundTripMutateInstance(c, isvc, workloadtypes.ComponentEngine)
+	plan := minimalPlan()
+	plan.RestartPolicy = workloadtypes.RestartPolicyRecreateInstance
+
+	if _, err := workload.Reconcile(context.Background(), deps, in, plan, nil); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if counter.podListCalls != 1 {
+		t.Errorf("Pod List calls = %d, want the one decision snapshot", counter.podListCalls)
+	}
+	s := instanceStatusByIndex(c, isvc, v1beta1.EngineComponent, 0)
+	if s == nil || s.Phase != v1beta1.OMENativeInstanceRestarting {
+		t.Fatalf("index 0 must flip to Restarting; got %+v", s)
+	}
+	if s.LastFailure == nil {
+		t.Fatalf("LastFailure: nil, want the exit the API server held when the repair opened")
+	}
+	if s.LastFailure.PodName != cached.Name || s.LastFailure.ContainerName != "main" {
+		t.Errorf("LastFailure names %s/%s, want %s/main", s.LastFailure.PodName, s.LastFailure.ContainerName, cached.Name)
+	}
+	if s.LastFailure.Reason != "OOMKilled" || s.LastFailure.ExitCode == nil || *s.LastFailure.ExitCode != 137 {
+		t.Errorf("LastFailure = %+v, want OOMKilled exit 137", s.LastFailure)
 	}
 }
 

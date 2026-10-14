@@ -39,18 +39,21 @@ import (
 // (ReconcileInput.UpdateGate): an in-place strategy that resolves to a
 // recreate on the Instance (a gang, or a single-pod diff beyond container
 // images) arrives as RecreatePod, so an in-place value here is a start
-// that patches the same pod. In-place starts (InPlaceIfPossible / InPlaceOnly) skip
-// CheckRatio entirely. For in-place the drain is paired 1:1 with a
-// same-pod return (mark-not-ready -> patch -> mark-ready), so the net
-// capacity change is ~0; running the gate would project a -1 loss that
-// misrepresents that transient as permanent and indefinitely over-blocks
+// that patches the same pod. In-place starts (InPlaceIfPossible / InPlaceOnly)
+// consult only the new-revision lockstep half of the ratio gate
+// (CheckRatioLockstep): the patched Instance moves to the new revision like
+// any other, so a Component already rolled further than its peer by more
+// than the tolerance waits. The serving-capacity band is waived for them:
+// the drain is paired 1:1 with a same-pod return (mark-not-ready -> patch
+// -> mark-ready), so the net capacity change is ~0; projecting a -1 loss
+// would misrepresent that transient as permanent and indefinitely over-block
 // the smaller Component of a ratio pair (e.g. the decoder in a 4:2
 // engine:decoder pair with 25% tolerance deadlocks because 4:1 = 4.0 sits
 // above the [1.5, 2.5] band). CheckUnavailability (called below for
 // non-surge strategies, which includes both in-place variants) already
 // governs concurrent disruption via the MaxUnavailable budget, so
 // RatioBalanced safety is preserved without the structural deadlock. The
-// RatioGateBypassed event + metric fire so operators see why the gate
+// RatioGateBypassed event + metric fire so operators see why the band
 // did not run.
 //
 // Reads authoritative InferenceReplica status via the provided context and
@@ -104,7 +107,8 @@ func EvaluateUpdateGate(
 		// not a -1 loss. Projecting -1 for a surge roll mis-models it and
 		// deadlocks symmetric RatioBalanced groups (both members denied at
 		// the start, neither can go first). Drain-first strategies (recreate)
-		// keep the honest -1.
+		// keep the honest -1. Both signs apply the new-revision lockstep
+		// before the band.
 		projDelta := int32(-1)
 		if strategy == workloadtypes.UpdateStrategySurgeThenDrain || strategy == "" {
 			projDelta = 1
@@ -113,10 +117,16 @@ func EvaluateUpdateGate(
 			return false, v1beta1.RolloutHoldGateRatio, reason
 		}
 	} else {
+		// A same-pod start keeps its serving capacity, so only the
+		// new-revision lockstep is consulted; the band waiver is recorded
+		// once the start is admitted.
+		if ok, reason := gateCtx.CheckRatioLockstep(); !ok {
+			return false, v1beta1.RolloutHoldGateRatio, reason
+		}
 		RecordRatioGateBypassed(string(component), string(strategy))
 		if recorder != nil && isvc != nil {
 			recorder.Eventf(isvc, corev1.EventTypeNormal, EventReasonRatioGateBypassed,
-				"RatioGateBypassed: Component=%s, Strategy=%s. RatioBalanced is bypassed for in-place strategies because the drain is paired 1:1 with a same-pod return. Per-Component pacing (CoordinationPacing.PerComponent) still governs concurrent disruption.",
+				"RatioGateBypassed: Component=%s, Strategy=%s. The RatioBalanced serving-capacity band is waived for an in-place start because the drain is paired 1:1 with a same-pod return; the new-revision lockstep still applies, and per-Component pacing (CoordinationPacing.PerComponent) still governs concurrent disruption.",
 				component, strategy)
 		}
 	}

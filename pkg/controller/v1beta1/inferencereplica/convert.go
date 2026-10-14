@@ -968,10 +968,11 @@ func cloneWorkloadInstanceStatus(status workloadtypes.InstanceStatus) *workloadt
 // encodeMutatedInstance converts a mutated row back for the write. A
 // mutation that leaves the phase as it read it keeps the published phase:
 // the status publication writes Restarting over a settled Ready row whose
-// pod set serves nothing, and Ready over a settled Failed row whose pods on
-// its running revision serve beside a spent attempt at another; the engine
-// reads those rows as Ready and Failed, and only a mutation that moves the
-// phase overwrites the publication's reading.
+// pod set serves nothing, and Ready over a Failed row whose pods on its
+// running revision serve beside an attempt at another, spent or still kept
+// at its surge step; the engine reads those rows as Ready and Failed, and
+// only a mutation that moves the phase overwrites the publication's
+// reading.
 func encodeMutatedInstance(published v1beta1.OMENativeInstancePhase, read workloadtypes.InstancePhase, w workloadtypes.InstanceStatus) v1beta1.OMENativeInstanceStatus {
 	out := v1beta1convert.InstanceStatusFromWorkload(w)
 	if w.Phase == read {

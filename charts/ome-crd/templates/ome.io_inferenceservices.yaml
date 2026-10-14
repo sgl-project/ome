@@ -222,6 +222,231 @@ spec:
                     nullable: true
                     type: array
                     x-kubernetes-list-type: atomic
+                  componentAffinity:
+                    minProperties: 1
+                    nullable: true
+                    properties:
+                      decoder:
+                        items:
+                          properties:
+                            matchExpressions:
+                              items:
+                                properties:
+                                  key:
+                                    minLength: 1
+                                    type: string
+                                  operator:
+                                    enum:
+                                    - In
+                                    - NotIn
+                                    - Exists
+                                    - DoesNotExist
+                                    - Gt
+                                    - Lt
+                                    type: string
+                                  values:
+                                    items:
+                                      type: string
+                                    maxItems: 64
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              maxItems: 64
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            matchFields:
+                              items:
+                                properties:
+                                  key:
+                                    minLength: 1
+                                    type: string
+                                  operator:
+                                    enum:
+                                    - In
+                                    - NotIn
+                                    - Exists
+                                    - DoesNotExist
+                                    - Gt
+                                    - Lt
+                                    type: string
+                                  values:
+                                    items:
+                                      type: string
+                                    maxItems: 64
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              maxItems: 64
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            weight:
+                              format: int32
+                              minimum: 1
+                              type: integer
+                          type: object
+                          x-kubernetes-validations:
+                          - message: a cluster affinity term must contain a requirement
+                            rule: (has(self.matchExpressions) && size(self.matchExpressions)
+                              > 0) || (has(self.matchFields) && size(self.matchFields)
+                              > 0)
+                        maxItems: 64
+                        minItems: 1
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      engine:
+                        items:
+                          properties:
+                            matchExpressions:
+                              items:
+                                properties:
+                                  key:
+                                    minLength: 1
+                                    type: string
+                                  operator:
+                                    enum:
+                                    - In
+                                    - NotIn
+                                    - Exists
+                                    - DoesNotExist
+                                    - Gt
+                                    - Lt
+                                    type: string
+                                  values:
+                                    items:
+                                      type: string
+                                    maxItems: 64
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              maxItems: 64
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            matchFields:
+                              items:
+                                properties:
+                                  key:
+                                    minLength: 1
+                                    type: string
+                                  operator:
+                                    enum:
+                                    - In
+                                    - NotIn
+                                    - Exists
+                                    - DoesNotExist
+                                    - Gt
+                                    - Lt
+                                    type: string
+                                  values:
+                                    items:
+                                      type: string
+                                    maxItems: 64
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              maxItems: 64
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            weight:
+                              format: int32
+                              minimum: 1
+                              type: integer
+                          type: object
+                          x-kubernetes-validations:
+                          - message: a cluster affinity term must contain a requirement
+                            rule: (has(self.matchExpressions) && size(self.matchExpressions)
+                              > 0) || (has(self.matchFields) && size(self.matchFields)
+                              > 0)
+                        maxItems: 64
+                        minItems: 1
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      router:
+                        items:
+                          properties:
+                            matchExpressions:
+                              items:
+                                properties:
+                                  key:
+                                    minLength: 1
+                                    type: string
+                                  operator:
+                                    enum:
+                                    - In
+                                    - NotIn
+                                    - Exists
+                                    - DoesNotExist
+                                    - Gt
+                                    - Lt
+                                    type: string
+                                  values:
+                                    items:
+                                      type: string
+                                    maxItems: 64
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              maxItems: 64
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            matchFields:
+                              items:
+                                properties:
+                                  key:
+                                    minLength: 1
+                                    type: string
+                                  operator:
+                                    enum:
+                                    - In
+                                    - NotIn
+                                    - Exists
+                                    - DoesNotExist
+                                    - Gt
+                                    - Lt
+                                    type: string
+                                  values:
+                                    items:
+                                      type: string
+                                    maxItems: 64
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              maxItems: 64
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            weight:
+                              format: int32
+                              minimum: 1
+                              type: integer
+                          type: object
+                          x-kubernetes-validations:
+                          - message: a cluster affinity term must contain a requirement
+                            rule: (has(self.matchExpressions) && size(self.matchExpressions)
+                              > 0) || (has(self.matchFields) && size(self.matchFields)
+                              > 0)
+                        maxItems: 64
+                        minItems: 1
+                        type: array
+                        x-kubernetes-list-type: atomic
+                    type: object
+                    x-kubernetes-map-type: atomic
                   maxSurge:
                     format: int32
                     minimum: 0
@@ -236,6 +461,7 @@ spec:
                   policy:
                     enum:
                     - ClusterAffinity
+                    - ComponentAffinity
                     type: string
                   replacementTimeout:
                     type: string
@@ -258,9 +484,18 @@ spec:
                 - policy
                 type: object
                 x-kubernetes-validations:
-                - message: replacementTimeout requires ClusterAffinity Single placement
+                - message: replacementTimeout requires Single placement
                   rule: '!has(self.replacementTimeout) || (has(self.policy) && self.policy
-                    == ''ClusterAffinity'' && has(self.mode) && self.mode == ''Single'')'
+                    in [''ClusterAffinity'', ''ComponentAffinity''] && has(self.mode)
+                    && self.mode == ''Single'')'
+                - message: componentAffinity is required by, and only valid with,
+                    the ComponentAffinity policy
+                  rule: has(self.componentAffinity) == (has(self.policy) && self.policy
+                    == 'ComponentAffinity')
+                - message: the ComponentAffinity policy reads componentAffinity, not
+                    clusterAffinity
+                  rule: '!has(self.policy) || self.policy != ''ComponentAffinity''
+                    || !has(self.clusterAffinity)'
               replicaRefs:
                 properties:
                   decoder:
@@ -1031,11 +1266,18 @@ spec:
                 type: integer
             type: object
             x-kubernetes-validations:
-            - message: ClusterAffinity placement policy cannot be removed; drain and
-                recreate the service to change placement ownership
+            - message: the placement policy cannot be removed; drain and recreate
+                the service to change placement ownership
               rule: '!has(oldSelf.placement) || !has(oldSelf.placement.policy) ||
-                oldSelf.placement.policy != ''ClusterAffinity'' || (has(self.placement)
-                && has(self.placement.policy) && self.placement.policy == ''ClusterAffinity'')'
+                (has(self.placement) && has(self.placement.policy))'
+            - message: componentAffinity needs an entry for each declared engine and
+                decoder, and none for undeclared ones
+              rule: '!has(self.placement) || !has(self.placement.componentAffinity)
+                || (has(self.placement.componentAffinity.engine) == has(self.engine)
+                && has(self.placement.componentAffinity.decoder) == has(self.decoder))'
+            - message: componentAffinity.router requires a declared router
+              rule: '!has(self.placement) || !has(self.placement.componentAffinity)
+                || !has(self.placement.componentAffinity.router) || has(self.router)'
           status:
             properties:
               address:
@@ -1803,6 +2045,33 @@ spec:
                               type: object
                             clusterUID:
                               type: string
+                            componentMatches:
+                              items:
+                                properties:
+                                  component:
+                                    enum:
+                                    - engine
+                                    - decoder
+                                    - router
+                                    type: string
+                                  matchingTerms:
+                                    items:
+                                      format: int32
+                                      type: integer
+                                    type: array
+                                    x-kubernetes-list-type: set
+                                  weight:
+                                    format: int64
+                                    minimum: 0
+                                    type: integer
+                                required:
+                                - component
+                                type: object
+                              maxItems: 2
+                              type: array
+                              x-kubernetes-list-map-keys:
+                              - component
+                              x-kubernetes-list-type: map
                             currentHome:
                               properties:
                                 inputDigest:

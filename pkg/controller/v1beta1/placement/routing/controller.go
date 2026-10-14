@@ -78,17 +78,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		r.Prober.Forget(req.NamespacedName)
 		r.Capacity.Forget(req.NamespacedName)
 		deleteCapacityFallbackMetric(req.Namespace, req.Name)
+		deleteTrafficMapEntryMetrics(req.Namespace, req.Name)
 		return reapResult(r.reapSourceAbsentTrafficMap(ctx, req.NamespacedName))
 	}
 	if !isvc.DeletionTimestamp.IsZero() {
 		r.Prober.Forget(req.NamespacedName)
 		r.Capacity.Forget(req.NamespacedName)
 		deleteCapacityFallbackMetric(req.Namespace, req.Name)
+		deleteTrafficMapEntryMetrics(req.Namespace, req.Name)
 		return reapResult(r.reap(ctx, isvc))
 	}
 
-	if isvc.Status.Placement != nil && isvc.Status.Placement.Plan != nil && !isvc.Spec.Placement.UsesClusterAffinity() {
-		return ctrl.Result{}, fmt.Errorf("an accepted placement plan requires spec.placement.policy: ClusterAffinity")
+	if isvc.Status.Placement != nil && isvc.Status.Placement.Plan != nil && !isvc.Spec.Placement.UsesAffinityPolicy() {
+		return ctrl.Result{}, fmt.Errorf("an accepted placement plan requires spec.placement.policy ClusterAffinity or ComponentAffinity")
 	}
 
 	// A TrafficMap-backed publisher uses its finalizer as the teardown handshake:
@@ -97,6 +99,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		r.Prober.Forget(req.NamespacedName)
 		r.Capacity.Forget(req.NamespacedName)
 		deleteCapacityFallbackMetric(req.Namespace, req.Name)
+		deleteTrafficMapEntryMetrics(req.Namespace, req.Name)
 		return reapResult(r.reap(ctx, isvc))
 	}
 
@@ -275,6 +278,7 @@ func (r *Reconciler) ownedTrafficMap(
 // as a spurious reconcile error.
 func (r *Reconciler) apply(ctx context.Context, isvc *v1beta1.InferenceService, spec v1beta1.TrafficMapSpec) error {
 	var op controllerutil.OperationResult
+	var persisted *v1beta1.TrafficMap
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		tm := &v1beta1.TrafficMap{ObjectMeta: metav1.ObjectMeta{Name: isvc.Name, Namespace: isvc.Namespace}}
 		var err error
@@ -305,10 +309,14 @@ func (r *Reconciler) apply(ctx context.Context, isvc *v1beta1.InferenceService, 
 			tm.Spec = spec
 			return nil
 		})
+		if err == nil {
+			persisted = tm
+		}
 		return err
 	}); err != nil {
 		return err
 	}
+	recordTrafficMapEntryMetrics(isvc.Namespace, isvc.Name, persisted.Spec)
 	if op != controllerutil.OperationResultNone {
 		r.Log.Info("trafficmap generated", "isvc", client.ObjectKeyFromObject(isvc).String(),
 			"op", op, "mode", spec.Mode, "homes", len(spec.Entries))
@@ -869,7 +877,7 @@ var routingTableChange = predicate.Funcs{
 		if placementcontroller.IsPlacementEligible(oldISVC) != placementcontroller.IsPlacementEligible(newISVC) {
 			return true
 		}
-		if routingOptedOut(oldISVC) != routingOptedOut(newISVC) {
+		if placementcontroller.RoutingOptedOut(oldISVC) != placementcontroller.RoutingOptedOut(newISVC) {
 			return true
 		}
 		if !equality.Semantic.DeepEqual(routingProbeSpec(oldISVC), routingProbeSpec(newISVC)) {
@@ -912,12 +920,7 @@ var trafficMapRoutingChange = predicate.Funcs{
 }
 
 func routingEnabled(config Config, isvc *v1beta1.InferenceService) bool {
-	return config.IsEnabled() && !routingOptedOut(isvc)
-}
-
-func routingOptedOut(isvc *v1beta1.InferenceService) bool {
-	return isvc != nil && isvc.Spec.Routing != nil &&
-		isvc.Spec.Routing.Enabled != nil && !*isvc.Spec.Routing.Enabled
+	return config.IsEnabled() && !placementcontroller.RoutingOptedOut(isvc)
 }
 
 func routingProbeSpec(isvc *v1beta1.InferenceService) *v1beta1.RoutingProbeSpec {

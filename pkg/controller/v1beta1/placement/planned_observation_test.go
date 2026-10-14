@@ -175,6 +175,15 @@ func TestObservePlannedHome(t *testing.T) {
 			f.extraObjects = f.decoderTwin(f.resources.ir.Spec.PlacementExecution, 2)
 			f.components = append(f.components, v1beta1.DecoderComponent)
 		}, want: result{Home: allocation.Home{Known: true, Occupied: 1}}},
+		{name: "a restarting decoder leaves an admitted home ready", edit: func(f *plannedObservationFixture) {
+			// This one-engine home owes three decoders, has admitted all three,
+			// and one of them is not ready yet.
+			f.source.Spec.Decoder = &v1beta1.DecoderSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: ptr.To(6)}}
+			decoder := f.decoderTwin(f.resources.ir.Spec.PlacementExecution, 3)
+			decoder[0].(*v1beta1.InferenceReplica).Status.ReadyReplicas = 2
+			f.extraObjects = decoder
+			f.components = append(f.components, v1beta1.DecoderComponent)
+		}, want: result{Home: allocation.Home{Known: true, Applied: true, Occupied: 1}, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
 		{name: "columnar component acknowledges pause", edit: func(f *plannedObservationFixture) {
 			f.resources.ir = columnarTwin(t, f.resources.ir)
 			f.decodeBound = 1
@@ -381,12 +390,15 @@ func (f *plannedObservationFixture) decoderTwin(policy *v1beta1.PlacementExecuti
 	ir.UID, ir.Name, ir.Spec.Component = "decoder-uid", "service-decoder", v1beta1.DecoderComponent
 	ir.Spec.Replicas, ir.Spec.PlacementReplicaLimit = ptr.To(replicas), ptr.To(replicas)
 	ir.Spec.PlacementExecution = policy.DeepCopy()
-	ir.Status.ReadyReplicas = 2
-	second := ir.Status.InstanceStatuses[0]
-	second.Index = 1
-	ir.Status.InstanceStatuses = append(ir.Status.InstanceStatuses, second)
+	ir.Status.ReadyReplicas = replicas
+	first := ir.Status.InstanceStatuses[0]
+	for index := int32(1); index < replicas; index++ {
+		next := first
+		next.Index = index
+		ir.Status.InstanceStatuses = append(ir.Status.InstanceStatuses, next)
+	}
 	out := []client.Object{ir}
-	for index := range 2 {
+	for index := range int(replicas) {
 		pod := f.resources.pods[0].DeepCopy()
 		pod.Name, pod.UID, pod.OwnerReferences[0].UID = fmt.Sprintf("decoder-%d", index), types.UID(fmt.Sprintf("decoder-pod-%d", index)), ir.UID
 		pod.Labels[query.LabelInstanceIdx] = strconv.Itoa(index)

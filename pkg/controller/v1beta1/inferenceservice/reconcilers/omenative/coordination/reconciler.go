@@ -413,8 +413,10 @@ func collectOMENativeComponents(modes map[v1beta1.ComponentType]constants.Deploy
 }
 
 // observePerRevisionPods returns per-revision pod counts and routing selector
-// capabilities. LeaderOnly requires an observed leader or worker runner;
-// PodOrdinal additionally requires every such pod to carry an ordinal label.
+// capabilities: every pod carrying a revision hash, the serving subset as
+// servingPodsByRevision counts it, and the selectors. LeaderOnly requires an
+// observed leader or worker runner; PodOrdinal additionally requires every
+// such pod to carry an ordinal label.
 //
 // The per-Component pod fetch routes through query.ListOMENativePodsByName so it
 // rides the OMENative Pod field index instead of scanning the whole informer
@@ -438,7 +440,6 @@ func observePerRevisionPods(ctx context.Context, reads client.Reader, isvc *v1be
 		}
 		observedPods[c] = pods
 		byHash := make(map[string]int32, 4)
-		readyByHash := make(map[string]int32, 4)
 		routingByHash := make(map[string]RevisionRoutingSelector, 4)
 		for _, pod := range pods {
 			hash := pod.Labels[query.LabelRevisionHash]
@@ -446,9 +447,6 @@ func observePerRevisionPods(ctx context.Context, reads client.Reader, isvc *v1be
 				continue
 			}
 			byHash[hash]++
-			if podReadyAndServing(pod) {
-				readyByHash[hash]++
-			}
 			selector := routingByHash[hash]
 			switch v1beta1.RunnerName(pod.Labels[query.LabelRunner]) {
 			case v1beta1.RunnerNameLeader, v1beta1.RunnerNameWorker:
@@ -463,7 +461,7 @@ func observePerRevisionPods(ctx context.Context, reads client.Reader, isvc *v1be
 			routingByHash[hash] = selector
 		}
 		total[c] = byHash
-		ready[c] = readyByHash
+		ready[c] = servingPodsByRevision(pods)
 		routing[c] = routingByHash
 	}
 	return total, ready, routing, observedPods, nil
@@ -492,6 +490,39 @@ func podReadyAndServing(pod *corev1.Pod) bool {
 		}
 	}
 	return false
+}
+
+// servingPodsByRevision counts, per revision hash, the pods that serve
+// traffic: podReadyAndServing holds and their Instance can be reached. A
+// routing Service publishes a gang's leader and never a worker
+// (query.RoutedRunner), so an Instance whose routed pod is gone or out of
+// rotation serves nothing and counts 0 however many of its workers still
+// pass readiness; a gang whose leader serves counts every serving member.
+// This is the count the Instance rows publish (workloadstatus.CountServingPods).
+// A revision with no serving pod has no entry, so both traffic writers
+// withhold its share and the revisions that serve carry it.
+func servingPodsByRevision(pods []*corev1.Pod) map[string]int32 {
+	type instance struct{ hash, index string }
+	serving := make(map[instance]int32)
+	routed := make(map[instance]bool)
+	for _, pod := range pods {
+		hash := pod.Labels[query.LabelRevisionHash]
+		if hash == "" || !podReadyAndServing(pod) {
+			continue
+		}
+		key := instance{hash: hash, index: pod.Labels[query.LabelInstanceIdx]}
+		serving[key]++
+		if query.RoutedRunner(pod) {
+			routed[key] = true
+		}
+	}
+	out := make(map[string]int32, 4)
+	for key, n := range serving {
+		if routed[key] {
+			out[key.hash] += n
+		}
+	}
+	return out
 }
 
 // dropCanaryOwned removes Components driven by a canary group from comps. Those

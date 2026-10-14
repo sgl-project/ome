@@ -246,6 +246,16 @@ func TestPrimaryUnitsFollowRatioFloors(t *testing.T) {
 			engineAdmitted: 7, engineReady: 5, wantAdmitted: 7, wantRdy: 5},
 		{name: "unknown floors are the minimum count", comps: pd, floors: nil,
 			engineAdmitted: 3, engineReady: 3, decoderAdmitted: 2, decoderReady: 1, wantAdmitted: 2, wantRdy: 1},
+		{name: "a decoder below its share leaves one ready unit", comps: pd, floors: map[v1beta1.ComponentType]int32{v1beta1.EngineComponent: 1, v1beta1.DecoderComponent: 3},
+			engineAdmitted: 1, engineReady: 1, decoderAdmitted: 3, decoderReady: 2, wantAdmitted: 1, wantRdy: 1},
+		{name: "a component with no ready instance leaves no ready unit", comps: pd, floors: map[v1beta1.ComponentType]int32{v1beta1.EngineComponent: 1, v1beta1.DecoderComponent: 3},
+			engineAdmitted: 1, engineReady: 1, decoderAdmitted: 3, decoderReady: 0, wantAdmitted: 1, wantRdy: 0},
+		{name: "a home short of a full admitted unit counts nothing ready", comps: pd, floors: map[v1beta1.ComponentType]int32{v1beta1.EngineComponent: 1, v1beta1.DecoderComponent: 3},
+			engineAdmitted: 1, engineReady: 1, decoderAdmitted: 2, decoderReady: 2, wantAdmitted: 0, wantRdy: 0},
+		{name: "readiness above one unit still rounds down", comps: pd, floors: map[v1beta1.ComponentType]int32{v1beta1.EngineComponent: 3, v1beta1.DecoderComponent: 9},
+			engineAdmitted: 3, engineReady: 3, decoderAdmitted: 9, decoderReady: 8, wantAdmitted: 3, wantRdy: 2},
+		{name: "a home without an engine instance is not lifted", comps: pd, floors: map[v1beta1.ComponentType]int32{v1beta1.EngineComponent: 0, v1beta1.DecoderComponent: 3},
+			engineAdmitted: 0, engineReady: 0, decoderAdmitted: 3, decoderReady: 3, wantAdmitted: 0, wantRdy: 0},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			statuses := map[v1beta1.ComponentType]*v1beta1.InferenceReplicaStatus{v1beta1.EngineComponent: status(v1beta1.EngineComponent, tt.engineAdmitted, tt.engineReady)}

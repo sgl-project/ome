@@ -43,7 +43,7 @@ func mustSecondaryReady(t *testing.T, ctx context.Context, reads client.Reader, 
 			}
 		}
 	}
-	ok, fresh, _, err := secondaryCapacityReady(ctx, reads, isvc, perRev, readyPerRev, observedPods, primary, rollout.CanaryGroup(isvc, rollout.Policies{}))
+	ok, fresh, _, _, err := secondaryCapacityReady(ctx, reads, isvc, perRev, readyPerRev, observedPods, primary, rollout.CanaryGroup(isvc, rollout.Policies{}), time.Unix(1000, 0))
 	if err != nil {
 		t.Fatalf("secondaryCapacityReady error: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestSecondaryCapacityReadyRequiresAuthoritativeIR(t *testing.T) {
 				objects = append(objects, tc.ir)
 			}
 			reads := fake.NewClientBuilder().WithScheme(canaryScheme(t)).WithRuntimeObjects(objects...).Build()
-			ready, fresh, _, err := secondaryCapacityReady(context.Background(), reads, isvc, perRev, perRev, nil, v1beta1.RouterComponent, rollout.CanaryGroup(isvc, rollout.Policies{}))
+			ready, fresh, _, _, err := secondaryCapacityReady(context.Background(), reads, isvc, perRev, perRev, nil, v1beta1.RouterComponent, rollout.CanaryGroup(isvc, rollout.Policies{}), time.Unix(1000, 0))
 			if err != nil {
 				t.Fatalf("secondaryCapacityReady: %v", err)
 			}
@@ -392,7 +392,7 @@ func TestReadyTargetInstanceCount(t *testing.T) {
 	}
 	assertCount := func(t *testing.T, observation observedCanaryRevisions, pods []*corev1.Pod, want int32) {
 		t.Helper()
-		got := observation.readyTargetInstanceCount(pods)
+		got, _ := observation.readyTargetInstanceCount(pods, time.Unix(1000, 0))
 		if got == nil || *got != want {
 			t.Fatalf("ready target Instances = %v, want %d", got, want)
 		}
@@ -2360,5 +2360,142 @@ func TestDispatch_MissingStableParkSurvivesADroppedMarker(t *testing.T) {
 	}
 	if got.Spec.Pacing != nil && got.Spec.Pacing.RollbackToRevision != nil {
 		t.Errorf("no rollback target must be signaled when the stable revision is gone: %+v", got.Spec.Pacing)
+	}
+}
+
+// TestReadyTargetInstanceCount_WindowRunsFromPodReady: under
+// minReadySeconds a target pod counts toward a step's capacity only once it
+// has held Ready for the window, measured from the Ready condition's
+// transition and never from ContainersReady. Containers up at T, the pod
+// Ready at T+60, window 30: nothing counts at T+30 or at T+60, and the
+// Instance counts at T+90. A gang counts once its last member has held
+// Ready for the window; a pod that was never Ready never counts.
+func TestReadyTargetInstanceCount_WindowRunsFromPodReady(t *testing.T) {
+	containersUp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	readyAt := containersUp.Add(60 * time.Second)
+	window := int32(30)
+	single := observedCanaryRevisions{
+		targetHash:      "target",
+		runners:         []v1beta1.Runner{{Name: v1beta1.RunnerNameDefault, Size: 1}},
+		minReadySeconds: window,
+		fromIR:          true,
+		statusFresh:     true,
+	}
+	noWindow := single
+	noWindow.minReadySeconds = 0
+	gang := single
+	gang.runners = []v1beta1.Runner{{Name: v1beta1.RunnerNameLeader, Size: 1}, {Name: v1beta1.RunnerNameWorker, Size: 1}}
+	// windowPod is a target pod of Instance 0 whose containers came up at
+	// containersUp and whose Ready condition turned True at ready; a zero
+	// ready leaves the pod not Ready.
+	windowPod := func(runner v1beta1.RunnerName, ready time.Time) *corev1.Pod {
+		pod := canaryRunnerPod("default", "svc", "engine", "target", "pod-0-"+string(runner), runner, "0")
+		pod.Labels[query.LabelInstanceIdx] = "0"
+		pod.Status.Conditions = []corev1.PodCondition{
+			{Type: corev1.ContainersReady, Status: corev1.ConditionTrue, LastTransitionTime: metav1.NewTime(containersUp)},
+			{Type: corev1.PodReady, Status: corev1.ConditionFalse, LastTransitionTime: metav1.NewTime(containersUp)},
+		}
+		if !ready.IsZero() {
+			pod.Status.Conditions[1] = corev1.PodCondition{Type: corev1.PodReady, Status: corev1.ConditionTrue, LastTransitionTime: metav1.NewTime(ready)}
+		}
+		return pod
+	}
+	gangPods := []*corev1.Pod{
+		windowPod(v1beta1.RunnerNameWorker, readyAt.Add(-20*time.Second)),
+		windowPod(v1beta1.RunnerNameLeader, readyAt),
+	}
+	cases := []struct {
+		name        string
+		observation observedCanaryRevisions
+		pods        []*corev1.Pod
+		now         time.Time
+		want        int32
+		wantWait    time.Duration
+	}{
+		{"containers up for the window but not yet Ready", single, []*corev1.Pod{windowPod(v1beta1.RunnerNameDefault, time.Time{})}, containersUp.Add(30 * time.Second), 0, 0},
+		{"Ready just now is inside the window", single, []*corev1.Pod{windowPod(v1beta1.RunnerNameDefault, readyAt)}, readyAt, 0, 30 * time.Second},
+		{"Ready for 2s is inside the window", single, []*corev1.Pod{windowPod(v1beta1.RunnerNameDefault, readyAt)}, readyAt.Add(2 * time.Second), 0, 28 * time.Second},
+		{"Ready for the window counts", single, []*corev1.Pod{windowPod(v1beta1.RunnerNameDefault, readyAt)}, readyAt.Add(30 * time.Second), 1, 0},
+		{"never Ready never counts", single, []*corev1.Pod{windowPod(v1beta1.RunnerNameDefault, time.Time{})}, readyAt.Add(30 * time.Second), 0, 0},
+		{"no window counts at Ready", noWindow, []*corev1.Pod{windowPod(v1beta1.RunnerNameDefault, readyAt)}, readyAt, 1, 0},
+		{"a gang waits for its last member", gang, gangPods, readyAt.Add(20 * time.Second), 0, 10 * time.Second},
+		{"a gang counts once its last member held the window", gang, gangPods, readyAt.Add(30 * time.Second), 1, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, wait := tc.observation.readyTargetInstanceCount(tc.pods, tc.now)
+			if got == nil {
+				t.Fatal("available target Instances = nil, want a count from an IR observation")
+			}
+			if *got != tc.want {
+				t.Fatalf("available target Instances = %d, want %d", *got, tc.want)
+			}
+			if wait != tc.wantWait {
+				t.Fatalf("wait until the next pod clears its window = %s, want %s", wait, tc.wantWait)
+			}
+		})
+	}
+}
+
+// TestSecondaryCapacityReady_WindowRunsFromPodReady: a secondary member's
+// capacity gate counts its canary pods on the same bar as the primary's:
+// Ready for the member's minReadySeconds, read off the member's
+// InferenceReplica. Two engine canary pods Ready for 2 seconds under a
+// 30-second window leave the step short, with the wait until they clear it;
+// Ready for the window, they fill it.
+func TestSecondaryCapacityReady_WindowRunsFromPodReady(t *testing.T) {
+	ns := "default"
+	n4 := 4
+	readyAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "pd"}}
+	isvc.Spec.Router = &v1beta1.RouterSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: &n4}}
+	isvc.Spec.Engine = &v1beta1.EngineSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: &n4}}
+	isvc.Spec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{{
+		Components: []v1beta1.ComponentType{v1beta1.RouterComponent, v1beta1.EngineComponent},
+		Canary: &v1beta1.GroupCanary{Steps: []v1beta1.RolloutGroupStep{
+			{Capacity: intstr.FromString("50%"), Traffic: 50},
+			{Capacity: intstr.FromString("100%"), Traffic: 100},
+		}},
+	}}}
+	engine := ir(ns, "pd", v1beta1.EngineComponent, "eng")
+	engine.Status.CurrentRevision = "pd-engine-engOld"
+	engine.Spec.MinReadySeconds = 30
+	reads := fake.NewClientBuilder().WithScheme(canaryScheme(t)).
+		WithStatusSubresource(&v1beta1.InferenceReplica{}).
+		WithRuntimeObjects(ir(ns, "pd", v1beta1.RouterComponent, "rtr"), engine).Build()
+	perRev := map[v1beta1.ComponentType]map[string]int32{
+		v1beta1.RouterComponent: {"rtr": 2},
+		v1beta1.EngineComponent: {"eng": 2, "engOld": 2},
+	}
+	readyPerRev := map[v1beta1.ComponentType]map[string]int32{
+		v1beta1.RouterComponent: {"rtr": 2},
+		v1beta1.EngineComponent: {"eng": 2},
+	}
+	observedPods := map[v1beta1.ComponentType][]*corev1.Pod{}
+	for index := 0; index < 2; index++ {
+		pod := canaryRunnerPod(ns, "pd", "engine", "eng", fmt.Sprintf("pd-engine-%d", index), v1beta1.RunnerNameDefault, "0")
+		pod.Labels[query.LabelInstanceIdx] = strconv.Itoa(index)
+		pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue, LastTransitionTime: metav1.NewTime(readyAt)}}
+		observedPods[v1beta1.EngineComponent] = append(observedPods[v1beta1.EngineComponent], pod)
+	}
+	group := rollout.CanaryGroup(isvc, rollout.Policies{})
+
+	ready, fresh, _, wait, err := secondaryCapacityReady(context.Background(), reads, isvc, perRev, readyPerRev, observedPods, v1beta1.RouterComponent, group, readyAt.Add(2*time.Second))
+	if err != nil || !fresh {
+		t.Fatalf("secondaryCapacityReady: fresh=%v err=%v", fresh, err)
+	}
+	if ready {
+		t.Fatal("engine canary pods Ready for 2s under a 30s window must leave the step short")
+	}
+	if wait != 28*time.Second {
+		t.Fatalf("wait until the pods clear their window = %s, want 28s", wait)
+	}
+
+	ready, fresh, _, wait, err = secondaryCapacityReady(context.Background(), reads, isvc, perRev, readyPerRev, observedPods, v1beta1.RouterComponent, group, readyAt.Add(30*time.Second))
+	if err != nil || !fresh {
+		t.Fatalf("secondaryCapacityReady: fresh=%v err=%v", fresh, err)
+	}
+	if !ready || wait != 0 {
+		t.Fatalf("engine canary pods Ready for the window must fill the step: ready=%v wait=%s", ready, wait)
 	}
 }

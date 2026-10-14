@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -728,5 +729,108 @@ func TestEvaluateUpdateGate_StrandedIntermediateCohortMoves(t *testing.T) {
 		workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
 	if allowed || gate != v1beta1.RolloutHoldGatePairing {
 		t.Fatalf("the last pairable engine = (%v, %q, %q), want the pairing hold", allowed, gate, reason)
+	}
+}
+
+// sizedPairingIR is pairingIR with the desired count, update strategy and
+// maxUnavailable budget the pairable floor is read from.
+func sizedPairingIR(namespace, isvcName string, component v1beta1.ComponentType, instances []v1beta1.OMENativeInstanceStatus, strategy v1beta1.UpdateStrategyType, replicas, maxUnavailable int) *v1beta1.InferenceReplica {
+	ir := pairingIR(namespace, isvcName, component, instances)
+	ir.Spec.Replicas = ptr.To(int32(replicas))
+	ir.Spec.Lifecycle = &v1beta1.LifecycleSpec{UpdateStrategy: &v1beta1.UpdateStrategy{
+		Type:          strategy,
+		RollingUpdate: &v1beta1.RollingUpdate{MaxUnavailable: ptr.To(intstr.FromInt(maxUnavailable))},
+	}}
+	return ir
+}
+
+// Two surging engines, none allowed out of pairing, and two decoders
+// recreated one at a time, halfway through a move from protocol a to b: one
+// engine and one decoder are on b, one of each still on a. Recreating the
+// last a decoder would leave the a engine without a partner, 1 of 2 under a
+// floor of 2, so the start is held until that engine has moved; the
+// engine's own surge start is admitted, because its source stays in
+// rotation until the drain-time gate lets it go.
+func TestCheckPairing_DrainFirstStartKeepsThePeerAboveItsFloor(t *testing.T) {
+	isvc := pairingISVC("proto-b")
+	crs := []client.Object{
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "ea", "proto-a"),
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "eb", "proto-b"),
+		pairingCR("prod", "llama", v1beta1.DecoderComponent, "da", "proto-a"),
+		pairingCR("prod", "llama", v1beta1.DecoderComponent, "db", "proto-b"),
+	}
+	decoders := sizedPairingIR("prod", "llama", v1beta1.DecoderComponent, servingInstances("llama", v1beta1.DecoderComponent, "db", "da"),
+		v1beta1.UpdateStrategyRecreatePod, 2, 1)
+	halfway := append(crs,
+		sizedPairingIR("prod", "llama", v1beta1.EngineComponent, servingInstances("llama", v1beta1.EngineComponent, "eb", "ea"),
+			v1beta1.UpdateStrategySurgeThenDrain, 2, 0),
+		decoders)
+
+	gate := pairingGate(t, isvc, v1beta1.DecoderComponent, halfway...)
+	ok, reason := gate.CheckPairing("llama-decoder-da", workloadtypes.UpdateStrategyRecreatePod, 0, 0)
+	if ok {
+		t.Fatalf("recreating the last proto-a decoder must wait while an engine still speaks only proto-a")
+	}
+	if !strings.Contains(reason, "below its floor") || !strings.Contains(reason, "engine with 1 pairable") {
+		t.Errorf("the hold must name the engine's shortfall against its floor: %s", reason)
+	}
+	gate = pairingGate(t, isvc, v1beta1.EngineComponent, halfway...)
+	if ok, reason := gate.CheckPairing("llama-engine-ea", workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !ok {
+		t.Fatalf("the engine's surge start keeps its source in rotation and must be admitted: %s", reason)
+	}
+
+	// With one engine allowed out of pairing the decoder's step goes.
+	budgeted := append(crs,
+		sizedPairingIR("prod", "llama", v1beta1.EngineComponent, servingInstances("llama", v1beta1.EngineComponent, "eb", "ea"),
+			v1beta1.UpdateStrategySurgeThenDrain, 2, 1),
+		decoders)
+	gate = pairingGate(t, isvc, v1beta1.DecoderComponent, budgeted...)
+	if ok, reason := gate.CheckPairing("llama-decoder-da", workloadtypes.UpdateStrategyRecreatePod, 0, 0); !ok {
+		t.Fatalf("one engine may be out of pairing under a budget of one: %s", reason)
+	}
+
+	// Both engines on b: nothing loses a partner and the last decoder moves.
+	moved := append(crs,
+		sizedPairingIR("prod", "llama", v1beta1.EngineComponent, servingInstances("llama", v1beta1.EngineComponent, "eb", "eb"),
+			v1beta1.UpdateStrategySurgeThenDrain, 2, 0),
+		decoders)
+	gate = pairingGate(t, isvc, v1beta1.DecoderComponent, moved...)
+	if ok, reason := gate.CheckPairing("llama-decoder-da", workloadtypes.UpdateStrategyRecreatePod, 0, 0); !ok {
+		t.Fatalf("with every engine on proto-b the last decoder's recreate must be admitted: %s", reason)
+	}
+}
+
+// Six engines relabelled in place one at a time and two surging decoders
+// none of which may be out of pairing. One engine already carries b while
+// both decoders still serve a: relabelling a second engine would leave the
+// engine with 4 of 6 pairable, under its floor of 5, so the step waits for
+// a b decoder; once one serves, the relabel is admitted.
+func TestCheckPairing_InPlaceStartKeepsItsOwnFloor(t *testing.T) {
+	isvc := pairingISVC("proto-b")
+	crs := []client.Object{
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "ea", "proto-a"),
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "eb", "proto-b"),
+		pairingCR("prod", "llama", v1beta1.DecoderComponent, "da", "proto-a"),
+		pairingCR("prod", "llama", v1beta1.DecoderComponent, "db", "proto-b"),
+	}
+	engines := sizedPairingIR("prod", "llama", v1beta1.EngineComponent, servingInstances("llama", v1beta1.EngineComponent, "eb", "ea", "ea", "ea", "ea", "ea"),
+		v1beta1.UpdateStrategyInPlaceIfPossible, 6, 1)
+
+	gate := pairingGate(t, isvc, v1beta1.EngineComponent, append(crs, engines,
+		sizedPairingIR("prod", "llama", v1beta1.DecoderComponent, servingInstances("llama", v1beta1.DecoderComponent, "da", "da"),
+			v1beta1.UpdateStrategySurgeThenDrain, 2, 0))...)
+	ok, reason := gate.CheckPairing("llama-engine-ea", workloadtypes.UpdateStrategyInPlaceIfPossible, 0, 0)
+	if ok {
+		t.Fatalf("a second in-place relabel with no proto-b decoder must wait")
+	}
+	if !strings.Contains(reason, "engine with 4 pairable") || !strings.Contains(reason, "floor of 5") {
+		t.Errorf("the hold must name the engine's shortfall against its floor: %s", reason)
+	}
+
+	gate = pairingGate(t, isvc, v1beta1.EngineComponent, append(crs, engines,
+		sizedPairingIR("prod", "llama", v1beta1.DecoderComponent, servingInstances("llama", v1beta1.DecoderComponent, "da", "db"),
+			v1beta1.UpdateStrategySurgeThenDrain, 2, 0))...)
+	if ok, reason := gate.CheckPairing("llama-engine-ea", workloadtypes.UpdateStrategyInPlaceIfPossible, 0, 0); !ok {
+		t.Fatalf("with a proto-b decoder serving the relabelled engines pair and the step is admitted: %s", reason)
 	}
 }

@@ -375,8 +375,44 @@ func PublishedReadyOffRunningRevision(s *InstanceStatus) bool {
 // settledOffRunningRevision is the shape the two readings above share: no
 // operation, a revision the row ran, and a target revision other than it.
 func settledOffRunningRevision(s *InstanceStatus) bool {
-	return s.Operation == nil && s.RunningRevision != "" &&
-		s.TargetRevision != "" && s.TargetRevision != s.RunningRevision
+	return s.Operation == nil && offRunningRevision(s)
+}
+
+// FailedKeepingSurgeOffRunningRevision reports a Failed row that still
+// keeps the surge attempt it failed at: an Update operation at the Surge
+// step, a revision the row runs, and a target revision other than it. The
+// escalation leaves the source of a gang surge in this shape while the
+// replacement gang is retired, and the pods the attempt was to replace may
+// still serve; the status publication reads those pods and publishes
+// Ready over the row while they serve.
+func FailedKeepingSurgeOffRunningRevision(s *InstanceStatus) bool {
+	return s != nil && s.Phase == InstancePhaseFailed && surgeKeptOffRunningRevision(s)
+}
+
+// PublishedReadyKeepingSurgeOffRunningRevision reports the shape only the
+// status publication writes: Ready with a surge attempt at a target
+// revision other than the one the row runs. No writer leaves Ready beside
+// an operation, so such a row is the publication's reading of a
+// FailedKeepingSurgeOffRunningRevision row whose source serves, and the
+// engine reads it as Failed.
+func PublishedReadyKeepingSurgeOffRunningRevision(s *InstanceStatus) bool {
+	return s != nil && s.Phase == InstancePhaseReady && surgeKeptOffRunningRevision(s)
+}
+
+// surgeKeptOffRunningRevision is the shape the two readings above share:
+// an Update attempt still at its Surge step, single-pod or gang, beside a
+// revision the row runs and a target revision other than it. A surge past
+// its drain hand-over has moved the Instance onto the replacement, so its
+// row is not read this way.
+func surgeKeptOffRunningRevision(s *InstanceStatus) bool {
+	return s.Operation != nil && s.Operation.Type == InstanceOperationUpdate &&
+		s.Operation.Step == UpdateStepSurge && offRunningRevision(s)
+}
+
+// offRunningRevision reports a row that ran a revision and records a
+// target other than it.
+func offRunningRevision(s *InstanceStatus) bool {
+	return s.RunningRevision != "" && s.TargetRevision != "" && s.TargetRevision != s.RunningRevision
 }
 
 // Interruptible reports whether the named event acts on this row

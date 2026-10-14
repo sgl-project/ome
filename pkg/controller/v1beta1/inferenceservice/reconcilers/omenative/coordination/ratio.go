@@ -30,10 +30,12 @@ type RatioState struct {
 	// NewPods maps Component → number of new-revision pods (i.e.,
 	// pods on the target ControllerRevision) as of this reconcile. The
 	// serving-capacity band projects against Serving (live traffic
-	// capacity), but the surge-path new-revision lockstep
-	// (outpacesPeerProgress) reads NewPods: under SurgeThenDrain serving
-	// holds at the original N for every Component, so only rollout
-	// progress can pace the leading Component.
+	// capacity), but the new-revision lockstep (outpacesPeerProgress)
+	// reads NewPods: a surge rotates its replacement in before the source
+	// drains, and a drain-first roll with a budget of one has its
+	// replacement back before the next drain, so serving holds at the
+	// original N for every Component under every strategy and only
+	// rollout progress can pace the leading Component.
 	NewPods map[v1beta1.ComponentType]int32
 
 	// Serving maps Component → number of pods CURRENTLY in the load
@@ -95,7 +97,9 @@ type RatioDecision struct {
 // Delta semantic: +N means "the action will INCREASE serving by N
 // pods for `component`" (surge a new ready pod). Negative deltas
 // (drain) go through the same band check via CheckRatioGate with
-// projection = current - 1.
+// projection = current - 1. Both directions apply the new-revision
+// lockstep first: a Component already rolled further than a still-rolling
+// peer by more than the band waits, whatever the step does to capacity.
 //
 // Math: the original prefill:decode (or any pair, largest original on
 // top) ratio is anchored at rollout start. After the proposed action,
@@ -133,6 +137,21 @@ func EvaluateSurge(pacing v1beta1.CoordinationPacing, state RatioState, componen
 	// reduction loop because a partial drain isn't a thing the
 	// dispatcher can act on (the unit of work is one pod).
 	if proposedDelta < 0 {
+		// New-revision lockstep, the same rule the surge path applies below.
+		// A drain that starts a replacement moves one more Instance to the
+		// new revision, and the serving band cannot see that progress: with
+		// a budget of one each drain projects N-1:N, inside any band wider
+		// than a pod, and the replacement is back before the next drain, so
+		// the band alone lets the fast Component finish its roll while its
+		// peer lags. The Component already running ahead of a peer by more
+		// than the band waits; the lagging one proceeds, so nothing deadlocks.
+		if outpacesPeerProgress(state.Original, state.NewPods, component, band) {
+			return RatioDecision{
+				AllowedSurgeDelta: 0,
+				SkewRejected:      true,
+				Reason:            "drain would outpace peer new-revision rollout past tolerance",
+			}
+		}
 		projected := projectedServing(baseline, component, proposedDelta)
 		if respectsBand(state.Original, projected, band) {
 			return RatioDecision{
@@ -183,19 +202,20 @@ func EvaluateSurge(pacing v1beta1.CoordinationPacing, state RatioState, componen
 			Reason:            "drain would skew cross-Component serving ratio past tolerance",
 		}
 	}
-	// New-revision lockstep. The serving-capacity band below is invariant
-	// under SurgeThenDrain — a surge rotates its replacement IN before the
-	// source drains OUT, so live serving stays at the original N:N for every
-	// Component the whole roll. That makes the capacity band (and its
-	// tiebreaker) authorize every surge and the gate never holds the leading
-	// Component: engine finishes its entire roll while decoder still lags,
-	// and their per-Instance readiness dips fall out of alignment, so the
-	// live ready-capacity ratio sits skewed (engine 2 : decoder 1) for the
-	// whole gap. Hold the Component whose new-revision rollout is already
-	// running ahead of a peer's: refuse to START another surge when this
-	// Component's rollout fraction already outpaces a peer's beyond the
-	// band. A Component that is level with (or behind) every peer always
-	// proceeds, so the pair advances in lockstep and never deadlocks.
+	// New-revision lockstep, the same rule the drain branch applies above.
+	// The serving-capacity band below is invariant under SurgeThenDrain — a
+	// surge rotates its replacement IN before the source drains OUT, so live
+	// serving stays at the original N:N for every Component the whole roll.
+	// That makes the capacity band (and its tiebreaker) authorize every surge
+	// and the gate never holds the leading Component: engine finishes its
+	// entire roll while decoder still lags, and their per-Instance readiness
+	// dips fall out of alignment, so the live ready-capacity ratio sits
+	// skewed (engine 2 : decoder 1) for the whole gap. Hold the Component
+	// whose new-revision rollout is already running ahead of a peer's:
+	// refuse to START another surge when this Component's rollout fraction
+	// already outpaces a peer's beyond the band. A Component that is level
+	// with (or behind) every peer always proceeds, so the pair advances in
+	// lockstep and never deadlocks.
 	if outpacesPeerProgress(state.Original, state.NewPods, component, band) {
 		return recoverySurgeFallback(state, baseline, component, RatioDecision{
 			AllowedSurgeDelta: 0,
@@ -293,13 +313,16 @@ func recoverySurgeAllowed(state RatioState, serving map[v1beta1.ComponentType]in
 
 // outpacesPeerProgress reports whether `component` is ALREADY rolling
 // ahead of a peer by more than the tolerance band — the signal to hold it
-// from starting yet another new-revision surge. It is the lockstep guard
-// the serving-capacity band cannot supply: under SurgeThenDrain live
-// serving holds at the original N for every Component (a surge rotates its
-// replacement IN before the source drains OUT), so the capacity math never
-// registers a skew and never paces the leading Component — engine outruns
-// decoder and the live ready-capacity ratio drifts off band for the whole
-// gap.
+// from starting yet another new-revision step, whatever the step does to
+// serving capacity: a surge, the drain that starts a replacement, or an
+// in-place patch of the same pod. It is the lockstep guard the
+// serving-capacity band cannot supply: live serving holds at the original N
+// for every Component under every strategy (a surge rotates its replacement
+// IN before the source drains OUT; a drain-first roll has its replacement
+// back before the next drain; an in-place patch returns the same pod), so
+// the capacity math never registers a skew and never paces the leading
+// Component — engine outruns decoder and the live ready-capacity ratio
+// drifts off band for the whole gap.
 //
 // Progress is measured as the rollout FRACTION new[c]/original[c] so the
 // guard is ratio-correct for asymmetric pairs (a 4:2 group rolls in step
@@ -307,19 +330,19 @@ func recoverySurgeAllowed(state RatioState, serving map[v1beta1.ComponentType]in
 // tolerance band is read as an allowed lead in fraction units, mirroring
 // the serving band's "± band of the starting ratio" semantic.
 //
-// The comparison is on CURRENT progress (before this surge), not projected:
-// surging advances in whole-Instance steps, so a Component leaving a tie
+// The comparison is on CURRENT progress (before this step), not projected:
+// a roll advances in whole-Instance steps, so a Component leaving a tie
 // unavoidably takes a transient one-Instance lead. Gating on the projected
-// post-surge lead would deny that first step and deadlock a roll that can
-// only proceed by surging (the same wedge the serving-side tiebreaker
-// exists to avoid). Gating on the CURRENT lead instead lets a level-or-
+// post-step lead would deny that first step and deadlock a roll that can
+// only proceed by stepping (the same wedge the serving-side tiebreakers
+// exist to avoid). Gating on the CURRENT lead instead lets a level-or-
 // behind Component take the minimal step, but holds a Component that is
 // already out front. Properties:
 //   - No deadlock: a Component level with or behind every still-rolling
 //     peer always proceeds, so the slowest peer is never blocked.
 //   - No false hold at the finish: a peer that has fully rolled does not
-//     constrain, so the trailing Component's final surges aren't blocked.
-//   - First surge always allowed: at 0 new : 0 new neither side leads.
+//     constrain, so the trailing Component's final steps aren't blocked.
+//   - First step always allowed: at 0 new : 0 new neither side leads.
 //
 // A Component alone in its group (no peer with positive original) is never
 // outpacing anyone — returns false. A nil newPods map reads as all-zero
@@ -348,6 +371,25 @@ func outpacesPeerProgress(original, newPods map[v1beta1.ComponentType]int32, com
 		}
 	}
 	return false
+}
+
+// LockstepHold answers the ratio gate for a step that leaves serving
+// capacity unchanged: an in-place patch returns the same pod, so there is
+// no capacity change to project against the band, but the Instance still
+// moves to the new revision, so the new-revision lockstep applies. It
+// reports held=true, with the operator-visible reason, when `component`
+// already runs ahead of a still-rolling peer by more than the tolerance.
+// The same preconditions as EvaluateSurge admit the step outright: a group
+// without RatioBalanced pacing, a single member, or no resolved tolerance.
+func LockstepHold(pacing v1beta1.CoordinationPacing, state RatioState, component v1beta1.ComponentType) (held bool, reason string) {
+	if pacing.Type != v1beta1.CoordinationPacingRatioBalanced || len(state.Original) <= 1 || pacing.RatioTolerancePercent == nil {
+		return false, ""
+	}
+	band := float64(*pacing.RatioTolerancePercent) / 100.0
+	if outpacesPeerProgress(state.Original, state.NewPods, component, band) {
+		return true, "in-place update would outpace peer new-revision rollout past tolerance"
+	}
+	return false, ""
 }
 
 // projectedServing clones the baseline serving map with component += delta.
@@ -581,19 +623,69 @@ func (ctx GateContext) CheckRatio(inFlightSurge, inFlightUnavail, projDelta int3
 	if ctx.ShortCircuit {
 		return true, ctx.ShortReason
 	}
+	state, decided, allowed, reason := ctx.ratioState(inFlightSurge, inFlightUnavail)
+	if decided {
+		return allowed, reason
+	}
+	// projDelta is the projected per-pod transient capacity change for THIS
+	// update step, set by the strategy-aware caller:
+	//   - SurgeThenDrain → +1: a new pod is created and goes Ready BEFORE
+	//     the old one drains, so the transient is +1 capacity.
+	//   - recreate / drain-first → -1: the old pod leaves rotation first,
+	//     so the transient is -1 capacity.
+	//
+	// Getting this sign right is load-bearing. A hardcoded -1 for a
+	// SurgeThenDrain roll mis-models the surge as a capacity loss: on a
+	// symmetric ratio (e.g. 4:4, tol 25% → band [0.75, 1.25]) a single -1
+	// projects max/min = 4/3 = 1.333 > 1.25, so BOTH members are denied at
+	// the start and neither can go first → permanent deadlock. With +1 the
+	// same roll projects 5/4 = 1.25 (in band) and proceeds.
+	decision := EvaluateSurge(ctx.Group.Pacing, state, ctx.Component, projDelta)
+	if decision.AllowedSurgeDelta != 0 {
+		return true, decision.Reason
+	}
+	return false, decision.Reason
+}
+
+// CheckRatioLockstep is the ratio gate for an in-place start, which keeps
+// the pod and so its serving capacity: the serving-capacity band is waived
+// (there is no capacity change to project, and projecting a -1 loss would
+// over-block the smaller Component of a pair for good) while the
+// new-revision lockstep still applies, since the patched Instance moves to
+// the new revision like any other. Same prelude and reads as CheckRatio.
+func (ctx GateContext) CheckRatioLockstep() (allowed bool, reason string) {
+	if ctx.ShortCircuit {
+		return true, ctx.ShortReason
+	}
+	state, decided, allowed, reason := ctx.ratioState(0, 0)
+	if decided {
+		return allowed, reason
+	}
+	if held, why := LockstepHold(ctx.Group.Pacing, state, ctx.Component); held {
+		return false, why
+	}
+	return true, "in-place update within new-revision lockstep; serving band waived for a same-pod return"
+}
+
+// ratioState reads the group's recorded anchor and every member's live
+// InferenceReplica status into the RatioState the pacing math evaluates.
+// decided is true when the prelude already answers the gate (no
+// RatioBalanced pacing, a single member, no anchor yet, or a failed read),
+// with allowed and reason set for the caller to return as they are.
+func (ctx GateContext) ratioState(inFlightSurge, inFlightUnavail int32) (state RatioState, decided bool, allowed bool, reason string) {
 	group := ctx.Group
 	isvc := ctx.ISVC
 	component := ctx.Component
 	if group.Pacing.Type != v1beta1.CoordinationPacingRatioBalanced {
-		return true, "not RatioBalanced pacing"
+		return RatioState{}, true, true, "not RatioBalanced pacing"
 	}
 	if len(group.Components) <= 1 {
-		return true, "single-component group"
+		return RatioState{}, true, true, "single-component group"
 	}
 
 	// Original is read from the recorded ObservedRatio. Live shape,
 	// serving, progress, and operations are read from authoritative IR status.
-	state := RatioState{
+	state = RatioState{
 		Original:         make(map[v1beta1.ComponentType]int32, len(group.Components)),
 		Current:          make(map[v1beta1.ComponentType]int32, len(group.Components)),
 		Desired:          make(map[v1beta1.ComponentType]int32, len(group.Components)),
@@ -615,7 +707,7 @@ func (ctx GateContext) CheckRatio(inFlightSurge, inFlightUnavail, projDelta int3
 	}
 	hasObservedRatio := groupStatus != nil && groupStatus.ObservedRatio != nil && len(groupStatus.ObservedRatio.Original) > 0
 	if !hasObservedRatio {
-		return true, "no ObservedRatio snapshot yet (first reconcile)"
+		return RatioState{}, true, true, "no ObservedRatio snapshot yet (first reconcile)"
 	}
 	recoveryObservable := true
 	for _, c := range group.Components {
@@ -632,7 +724,7 @@ func (ctx GateContext) CheckRatio(inFlightSurge, inFlightUnavail, projDelta int3
 		// cluster is unhealthy.
 		ir, _, err := irprojector.DecodedComponentIRFor(ctx.Ctx, ctx.Reads, isvc, c)
 		if err != nil {
-			return false, fmt.Sprintf("cannot read %s IR status, failing closed: %v", c, err)
+			return RatioState{}, true, false, fmt.Sprintf("cannot read %s IR status, failing closed: %v", c, err)
 		}
 		if ir == nil {
 			recoveryObservable = false
@@ -684,25 +776,7 @@ func (ctx GateContext) CheckRatio(inFlightSurge, inFlightUnavail, projDelta int3
 	if inFlightSurge > 0 {
 		state.InFlightSurge[component] += inFlightSurge
 	}
-
-	// projDelta is the projected per-pod transient capacity change for THIS
-	// update step, set by the strategy-aware caller:
-	//   - SurgeThenDrain → +1: a new pod is created and goes Ready BEFORE
-	//     the old one drains, so the transient is +1 capacity.
-	//   - recreate / drain-first → -1: the old pod leaves rotation first,
-	//     so the transient is -1 capacity.
-	//
-	// Getting this sign right is load-bearing. A hardcoded -1 for a
-	// SurgeThenDrain roll mis-models the surge as a capacity loss: on a
-	// symmetric ratio (e.g. 4:4, tol 25% → band [0.75, 1.25]) a single -1
-	// projects max/min = 4/3 = 1.333 > 1.25, so BOTH members are denied at
-	// the start and neither can go first → permanent deadlock. With +1 the
-	// same roll projects 5/4 = 1.25 (in band) and proceeds.
-	decision := EvaluateSurge(group.Pacing, state, component, projDelta)
-	if decision.AllowedSurgeDelta != 0 {
-		return true, decision.Reason
-	}
-	return false, decision.Reason
+	return state, false, true, ""
 }
 
 // CheckUnavailability is the consumer side of MaxUnavailable pacing.

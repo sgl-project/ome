@@ -77,6 +77,14 @@ var pairingComponents = []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1
 // no serving decoder yet; every serving engine then speaks a protocol no
 // serving decoder does and routing has no valid pair to place a request on.
 //
+// A step that takes its pod out of rotation at once (a drain-first recreate,
+// or an in-place patch that returns the pod on the new cohort) must also
+// keep both Components at their pairable floor: at least desired minus
+// maxUnavailable Instances with a serving pod that has a partner on the
+// other side (resolvePairFloor). A surge start takes nothing out of rotation,
+// so it answers the one-pair rule alone and the drain-time gate
+// (EvaluatePairingDrain) holds the floor when its source would leave.
+//
 // The target cohort is the protocol of ctx.TargetRevision, the revision the
 // Component's Instances move to in this pass — the rollback revision while a
 // rollback is pinned, else the spec target. A canary revert is therefore
@@ -153,6 +161,7 @@ func (ctx GateContext) CheckPairing(fromRevision string, strategy workloadtypes.
 	// status. An instance with no recorded RunningRevision predates revision
 	// tracking entirely and therefore predates pairing protocols: "".
 	serving := map[v1beta1.ComponentType]map[string]int32{}
+	replicas := map[v1beta1.ComponentType]*v1beta1.InferenceReplica{}
 	protoByRevision := map[string]string{}
 	transition := false
 	for _, comp := range pairingComponents {
@@ -164,6 +173,7 @@ func (ctx GateContext) CheckPairing(fromRevision string, strategy workloadtypes.
 		if ir == nil {
 			continue
 		}
+		replicas[comp] = ir
 		for i := range ir.Status.InstanceStatuses {
 			inst := &ir.Status.InstanceStatuses[i]
 			if inst.ServingPodCount <= 0 {
@@ -210,7 +220,15 @@ func (ctx GateContext) CheckPairing(fromRevision string, strategy workloadtypes.
 		workloadtypes.UpdateStrategyInPlaceIfPossible, workloadtypes.UpdateStrategyInPlaceOnly:
 		credit = 1
 	}
+	// A surge start leaves its source in rotation until the drain-time gate
+	// admits the drain; every other start takes the pod out now and answers
+	// the pairable floor here.
+	leavesRotationNow := strategy != workloadtypes.UpdateStrategySurgeThenDrain && strategy != ""
 	peer := pairingPeer(component)
+	floors := map[v1beta1.ComponentType]pairFloor{
+		component: resolvePairFloor(replicas[component], ctx.Group.Pacing),
+		peer:      resolvePairFloor(replicas[peer], ctx.Group.Pacing),
+	}
 	// The cohort the started instance leaves. A row that records no revision,
 	// or one whose revision is gone, names no cohort, and every old cohort is
 	// then simulated losing the instance.
@@ -249,6 +267,12 @@ func (ctx GateContext) CheckPairing(fromRevision string, strategy workloadtypes.
 		}
 		sim[component][target] += credit + inFlightSurge
 		if pairableServingPairExists(sim) {
+			if !leavesRotationNow {
+				continue
+			}
+			if held, reason := startBreaksPairFloor(serving, sim, component, peer, floors, target, proto); held {
+				return false, reason
+			}
 			continue
 		}
 		if mutualPairingWall(serving, component, peer, target) {
@@ -263,6 +287,28 @@ func (ctx GateContext) CheckPairing(fromRevision string, strategy workloadtypes.
 			target, component, proto, target)
 	}
 	return true, ""
+}
+
+// startBreaksPairFloor reports whether the simulated step pushes a pairing
+// Component below its pairable floor: fewer of its serving Instances have a
+// partner after the step than its floor allows, and fewer than before it. A
+// Component already short for another reason is not held on that shortfall.
+func startBreaksPairFloor(serving, sim map[v1beta1.ComponentType]map[string]int32, component, peer v1beta1.ComponentType, floors map[v1beta1.ComponentType]pairFloor, target, fromProto string) (bool, string) {
+	for _, side := range []v1beta1.ComponentType{peer, component} {
+		floor := floors[side]
+		if !floor.Applies() {
+			continue
+		}
+		other := pairingPeer(side)
+		before := pairableCohortCount(serving[side], serving[other])
+		after := pairableCohortCount(sim[side], sim[other])
+		if after >= floor.floor || after >= before {
+			continue
+		}
+		return true, fmt.Sprintf("pairing protocol transition to %q: updating a serving %s of cohort %q would leave the %s with %d pairable serving Instance(s), below its %s; holding until cohort %q serves on both Components",
+			target, component, fromProto, side, after, floor, target)
+	}
+	return false, ""
 }
 
 // targetPairingProtocol is the cohort protocol a step of this Component

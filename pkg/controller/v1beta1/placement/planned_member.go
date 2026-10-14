@@ -119,10 +119,12 @@ func checkPlannedAssignment(source *v1beta1.InferenceService, candidate v1beta1.
 // placePlannedOn stamps member execution authority before any component can
 // acknowledge it. The member's later IR observation is the application signal.
 func (r *Reconciler) placePlannedOn(ctx context.Context, source *v1beta1.InferenceService, candidate v1beta1.CandidatePlacement) error {
-	return r.placePlannedMember(ctx, source, candidate, false)
+	return r.placePlannedMember(ctx, source, candidate, false, nil)
 }
 
-func (r *Reconciler) placePlannedMember(ctx context.Context, source *v1beta1.InferenceService, candidate v1beta1.CandidatePlacement, existingOnly bool) error {
+// placePlannedMember applies the candidate's allocation. On a split home, holds
+// raise a component's apportioned floor while its replacements elsewhere start.
+func (r *Reconciler) placePlannedMember(ctx context.Context, source *v1beta1.InferenceService, candidate v1beta1.CandidatePlacement, existingOnly bool, holds map[v1beta1.ComponentType]int32) error {
 	if err := r.checkPlanCurrent(ctx, source); err != nil {
 		return err
 	}
@@ -149,6 +151,12 @@ func (r *Reconciler) placePlannedMember(ctx context.Context, source *v1beta1.Inf
 		bounds, err := splitPlannedBounds(source, source.Status.Placement.Candidates, candidate)
 		if err != nil {
 			return err
+		}
+		for component, floor := range holds {
+			if bound, ok := bounds[component]; ok && floor > bound.Floor {
+				bound.Floor = floor
+				bounds[component] = bound
+			}
 		}
 		setPlannedReplicas(desired, bounds)
 	} else if assignment.CurrentHome.InputDigest != source.Status.Placement.Plan.InputDigest || !equality.Semantic.DeepEqual(assignment.CurrentHome, assignment.DesiredHome) {

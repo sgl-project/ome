@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -20,21 +21,34 @@ import (
 
 // EvaluatePairingDrain is the drain-time half of the pair floor. A surge
 // update asks it right before its source leaves rotation, with the
-// replacement already serving, and the source stays in rotation in two
-// cases:
+// replacement already serving, and the source stays in rotation while any
+// of these holds:
 //   - the replacement cannot pair yet and the peer Component updates by
 //     SurgeThenDrain: no serving pod of the peer runs the target cohort (or
 //     the empty protocol, which pairs with anything), so retiring a source
 //     that does pair would trade serving capacity for none, and the peer's
 //     replacements come up without waiting on this drain, so the first one
 //     to serve releases the hold;
+//   - the drain would push the peer below its pairable floor: fewer than
+//     desired minus maxUnavailable of its Instances would keep a serving pod
+//     with a partner, because the pods leaving are the last partners of the
+//     peer's old-cohort Instances. Those Instances recover a partner on
+//     their own, through a replacement of their own in rotation or their
+//     own move, so the hold cannot deadlock;
+//   - the drain would push this Component below its own floor, because the
+//     replacement cannot pair yet, and the peer's new cohort is already
+//     coming up without this promote: the peer surges, or a pod of the
+//     target cohort already exists on it. A drain-first peer with no such
+//     pod gains its new cohort only by taking an old pod down, a step its
+//     start-time gate may admit only once this Component serves the target,
+//     so it is not waited on (the window is then the one a single-replica
+//     recreate costs without pairing);
 //   - the source is the last pod keeping any pairable engine+decoder pair
 //     alive.
 //
-// A drain-first or in-place peer is never waited on: its new cohort appears
-// only by leaving the old one, a step the start-time gate admits on this
-// Component's promoted state, so a hold here would wait on a step that waits
-// on this drain.
+// An Instance counts as pairable while any of its routable serving pods has
+// a partner, the surge replacement included from the moment it serves, so
+// an old pod whose replacement already pairs never costs its Instance.
 //
 // It reads pods, not InferenceReplica status: a single-pod surge keeps its
 // replacement inside the source's Instance until the promote, so only the
@@ -70,7 +84,19 @@ func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta
 		v1beta1.EngineComponent:  {},
 		v1beta1.DecoderComponent: {},
 	}
+	// instances lists, per Component and Instance, the cohorts of its
+	// routable serving pods; cohortPods counts every live routable pod by
+	// cohort, serving or not.
+	instances := map[v1beta1.ComponentType]map[string][]string{
+		v1beta1.EngineComponent:  {},
+		v1beta1.DecoderComponent: {},
+	}
+	cohortPods := map[v1beta1.ComponentType]map[string]int32{
+		v1beta1.EngineComponent:  {},
+		v1beta1.DecoderComponent: {},
+	}
 	protoByPod := map[string]string{}
+	instanceByPod := map[string]string{}
 	transition := false
 	for _, comp := range pairingComponents {
 		prefix := prefixFor(isvc, comp)
@@ -84,15 +110,19 @@ func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta
 		}
 		for i := range pods.Items {
 			pod := &pods.Items[i]
-			if pod.DeletionTimestamp != nil || !podreadiness.IsPodReady(pod) {
-				continue
-			}
-			if query.RoutedServiceForPod(prefix, workloadtypes.ComponentType(comp), pod) == "" {
+			if pod.DeletionTimestamp != nil || !query.RoutedRunner(pod) {
 				continue
 			}
 			proto := pod.Labels[query.LabelPairingProtocol]
+			cohortPods[comp][proto]++
+			if !podreadiness.IsPodReady(pod) || query.RoutedServiceForPod(prefix, workloadtypes.ComponentType(comp), pod) == "" {
+				continue
+			}
 			serving[comp][proto]++
+			key := instanceKeyForPod(pod)
+			instances[comp][key] = append(instances[comp][key], proto)
 			protoByPod[pod.Name] = proto
+			instanceByPod[pod.Name] = key
 			if proto != "" && proto != target {
 				transition = true
 			}
@@ -106,6 +136,7 @@ func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta
 	}
 
 	after := copyServing(serving)
+	afterInstances := copyInstances(instances)
 	leaving := map[string]struct{}{}
 	for _, name := range sourcePods {
 		proto, ok := protoByPod[name]
@@ -114,17 +145,45 @@ func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta
 		}
 		after[component][proto]--
 		leaving[proto] = struct{}{}
+		key := instanceByPod[name]
+		afterInstances[component][key] = withoutOneCohort(afterInstances[component][key], proto)
 	}
 	peer := pairingPeer(component)
-	if !pairsWithPeer(serving[peer], target) && anyPairsWithPeer(serving[peer], leaving) {
-		surges, err := peerSurges(ctx, reads, isvc, peer)
+
+	// Both pairing replicas, read once: the peer's update strategy and both
+	// sides' desired counts and budgets come from them. A missing replica
+	// leaves the one-pair rule; an unreadable one fails closed.
+	replicas := map[v1beta1.ComponentType]*v1beta1.InferenceReplica{}
+	for _, comp := range pairingComponents {
+		ir, err := irprojector.ComponentIRFor(ctx, reads, isvc, comp)
 		if err != nil {
-			return false, v1beta1.RolloutHoldGatePairing, fmt.Sprintf("pairing drain gate: cannot read the %s replica, failing closed: %v", peer, err)
+			return false, v1beta1.RolloutHoldGatePairing, fmt.Sprintf("pairing drain gate: cannot read the %s replica, failing closed: %v", comp, err)
 		}
-		if surges {
+		replicas[comp] = ir
+	}
+	peerSurges := surgeStrategy(replicas[peer])
+	replacementPairs := pairsWithPeer(serving[peer], target)
+	if !replacementPairs && anyPairsWithPeer(serving[peer], leaving) && peerSurges {
+		return false, v1beta1.RolloutHoldGatePairing, fmt.Sprintf(
+			"pairing protocol transition to %q: the replacement %s cannot pair because no serving %s runs cohort %q yet; holding the drain of the serving %s of cohort %s until one does",
+			target, component, peer, target, component, cohortList(leaving))
+	}
+	if floor := resolvePairFloor(replicas[peer], gateCtx.Group.Pacing); floor.Applies() {
+		before := pairableInstanceCount(instances[peer], serving[component])
+		left := pairableInstanceCount(afterInstances[peer], after[component])
+		if left < floor.floor && left < before {
 			return false, v1beta1.RolloutHoldGatePairing, fmt.Sprintf(
-				"pairing protocol transition to %q: the replacement %s cannot pair because no serving %s runs cohort %q yet; holding the drain of the serving %s of cohort %s until one does",
-				target, component, peer, target, component, cohortList(leaving))
+				"pairing protocol transition to %q: draining the serving %s pods of cohort %s would leave the %s with %d pairable serving Instance(s), below its %s; holding the drain until the %s Instances still on cohort %s have another partner or have moved",
+				target, component, cohortList(leaving), peer, left, floor, peer, cohortList(leaving))
+		}
+	}
+	if floor := resolvePairFloor(replicas[component], gateCtx.Group.Pacing); floor.Applies() && !replacementPairs && (peerSurges || cohortPods[peer][target] > 0) {
+		before := pairableInstanceCount(instances[component], serving[peer])
+		left := pairableInstanceCount(afterInstances[component], serving[peer])
+		if left < floor.floor && left < before {
+			return false, v1beta1.RolloutHoldGatePairing, fmt.Sprintf(
+				"pairing protocol transition to %q: the replacement %s cannot pair because no serving %s runs cohort %q yet, and retiring the serving %s of cohort %s would leave the %s with %d pairable serving Instance(s), below its %s; holding the drain until one does",
+				target, component, peer, target, component, cohortList(leaving), component, left, floor)
 		}
 	}
 	if pairableServingPairExists(after) {
@@ -135,22 +194,35 @@ func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta
 		target, component, cohortList(leaving), target)
 }
 
-// peerSurges reports whether the peer Component updates by SurgeThenDrain,
-// the one strategy whose new-cohort pods come up before any old pod leaves.
-// An unset strategy is that default; a missing replica reports false.
-func peerSurges(ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService, peer v1beta1.ComponentType) (bool, error) {
-	ir, err := irprojector.ComponentIRFor(ctx, reads, isvc, peer)
-	if err != nil || ir == nil {
-		return false, err
+// instanceKeyForPod names the Instance a pod belongs to, by its index label;
+// a pod without one stands alone.
+func instanceKeyForPod(pod *corev1.Pod) string {
+	if idx, ok := query.InstanceIdxFromLabels(pod); ok {
+		return strconv.Itoa(int(idx))
 	}
-	if ir.Spec.Lifecycle == nil || ir.Spec.Lifecycle.UpdateStrategy == nil {
-		return true, nil
+	return "pod/" + pod.Name
+}
+
+func copyInstances(in map[v1beta1.ComponentType]map[string][]string) map[v1beta1.ComponentType]map[string][]string {
+	out := make(map[v1beta1.ComponentType]map[string][]string, len(in))
+	for comp, byInstance := range in {
+		m := make(map[string][]string, len(byInstance))
+		for key, protos := range byInstance {
+			m[key] = append([]string(nil), protos...)
+		}
+		out[comp] = m
 	}
-	switch ir.Spec.Lifecycle.UpdateStrategy.Type {
-	case v1beta1.UpdateStrategySurgeThenDrain, "":
-		return true, nil
+	return out
+}
+
+// withoutOneCohort drops one entry of proto from an Instance's cohort list.
+func withoutOneCohort(protos []string, proto string) []string {
+	for i, p := range protos {
+		if p == proto {
+			return append(append([]string(nil), protos[:i]...), protos[i+1:]...)
+		}
 	}
-	return false, nil
+	return protos
 }
 
 // pairingPeer is the other pairing Component.

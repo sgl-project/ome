@@ -13,11 +13,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	clocktesting "k8s.io/utils/clock/testing"
+	"knative.dev/pkg/apis"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -176,6 +178,7 @@ func TestUnknownCandidateKeepsReadyWithinTheGrace(t *testing.T) {
 		name       string
 		grace      time.Duration
 		wasUnknown bool
+		dropped    bool
 		since      *metav1.Time
 		ready      int32
 		wantSince  *metav1.Time
@@ -188,12 +191,16 @@ func TestUnknownCandidateKeepsReadyWithinTheGrace(t *testing.T) {
 		{name: "grace has passed", grace: 5 * time.Minute, since: since(5 * time.Minute), ready: 4, wantSince: since(5 * time.Minute)},
 		{name: "no ready count stays at zero", grace: 5 * time.Minute, since: since(time.Minute), wantSince: since(time.Minute)},
 		{name: "grace unset withdraws at once", ready: 4, wantSince: since(0)},
-		// Without a stored start, a home that was already unknown cannot have its
-		// grace measured, so a grace that never ends is not granted.
-		{name: "already unknown without a stored start", grace: 5 * time.Minute, wasUnknown: true, ready: 4, wantSince: since(0)},
+		// A hold or a plan merge can carry a home forward as unknown without a
+		// failure start; its first failed read still starts a grace.
+		{name: "carried forward as unknown without a start", grace: 5 * time.Minute, wasUnknown: true, ready: 4, wantSince: since(0), wantReady: 4},
+		// A stored CRD that drops the start would restart the grace on every
+		// pass, so none is granted while it does.
+		{name: "stored CRD drops the start", grace: 5 * time.Minute, dropped: true, ready: 4, wantSince: since(0)},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &Reconciler{ObservationGrace: tt.grace, ObservationClock: clocktesting.NewFakePassiveClock(graceTestNow)}
+			r.failingSinceDropped.Store(tt.dropped)
 			in := *previous.DeepCopy()
 			in.ObservationKnown = !tt.wasUnknown
 			in.ObservationFailingSince, in.ReadyReplicas = tt.since, tt.ready
@@ -213,16 +220,18 @@ func TestGraceWakeRequeuesByTheEarliestGraceEnd(t *testing.T) {
 		ts := metav1.NewTime(graceTestNow.Add(-ago))
 		return v1beta1.CandidatePlacement{Cluster: cluster, ObservationFailingSince: &ts, ReadyReplicas: 2}
 	}
+	withdrawn := failing("member-c", 10*time.Minute)
+	withdrawn.ReadyReplicas = 0
 	candidates := []v1beta1.CandidatePlacement{
 		failing("member-a", time.Minute),
 		failing("member-b", 3*time.Minute),
-		failing("member-c", 10*time.Minute),
+		withdrawn,
 		{Cluster: "member-d", ObservationKnown: true, ReadyReplicas: 2},
 	}
 	r := &Reconciler{ObservationGrace: 5 * time.Minute, ObservationClock: clocktesting.NewFakePassiveClock(graceTestNow)}
 	wake := &graceWake{}
 	r.noteGraceEnds(context.WithValue(t.Context(), graceWakeKey{}, wake), candidates)
-	assert.Equal(t, graceTestNow.Add(2*time.Minute), wake.at, "member-b's grace ends first; member-c's has passed")
+	assert.Equal(t, graceTestNow.Add(2*time.Minute), wake.at, "member-b's grace ends first; member-c's passed and its count is gone")
 
 	assert.Equal(t, ctrl.Result{RequeueAfter: 2 * time.Minute}, r.wakeForGrace(ctrl.Result{RequeueAfter: 10 * time.Minute}, wake))
 	assert.Equal(t, ctrl.Result{RequeueAfter: 2 * time.Minute}, r.wakeForGrace(ctrl.Result{}, wake), "a pass that would not requeue still wakes for the grace")
@@ -232,6 +241,115 @@ func TestGraceWakeRequeuesByTheEarliestGraceEnd(t *testing.T) {
 	unset := &graceWake{}
 	(&Reconciler{}).noteGraceEnds(context.WithValue(t.Context(), graceWakeKey{}, unset), candidates)
 	assert.True(t, unset.at.IsZero(), "without a grace no count is retained to withdraw")
+
+	// The grace ran out during the pass after the count was kept, for example
+	// while a sibling member was being read: the next pass must come at once.
+	expired := &graceWake{}
+	r.noteGraceEnds(context.WithValue(t.Context(), graceWakeKey{}, expired), []v1beta1.CandidatePlacement{failing("member-a", 6*time.Minute)})
+	assert.Equal(t, graceTestNow, expired.at)
+	assert.Equal(t, ctrl.Result{RequeueAfter: time.Nanosecond}, r.wakeForGrace(ctrl.Result{RequeueAfter: time.Minute}, expired))
+}
+
+func TestNoteFailingSinceStored(t *testing.T) {
+	ts := metav1.NewTime(graceTestNow)
+	sent := []v1beta1.CandidatePlacement{
+		{Cluster: "member-a", ReadyReplicas: 2},
+		{Cluster: "member-b", ObservationFailingSince: &ts, ReadyReplicas: 2},
+	}
+	r := &Reconciler{ObservationGrace: 5 * time.Minute}
+
+	r.noteFailingSinceStored(sent, []v1beta1.CandidatePlacement{{Cluster: "member-a"}, {Cluster: "member-b"}})
+	assert.True(t, r.failingSinceDropped.Load(), "a sent start that did not come back means the CRD lacks the field")
+	assert.Zero(t, r.observationGrace())
+
+	r.noteFailingSinceStored(sent[:1], []v1beta1.CandidatePlacement{{Cluster: "member-a"}})
+	assert.True(t, r.failingSinceDropped.Load(), "a write that sends no start proves nothing either way")
+
+	r.noteFailingSinceStored(sent, []v1beta1.CandidatePlacement{{Cluster: "member-a"}, {Cluster: "member-b", ObservationFailingSince: &ts}})
+	assert.False(t, r.failingSinceDropped.Load(), "a stored start means the CRD has the field again")
+	assert.Equal(t, 5*time.Minute, r.observationGrace())
+}
+
+// ingressObservation builds a placer over member-a, which serves one ready
+// replica. Its ingress readiness is set, its InferenceReplica reads can be
+// made to fail, and its stored candidate is known with a ready count of 4.
+func ingressObservation(t *testing.T, ingressReady, replicaReadsFail bool) (*Reconciler, plannedObservationFixture) {
+	t.Helper()
+	f := observationFixture(t)
+	status := corev1.ConditionTrue
+	if !ingressReady {
+		status = corev1.ConditionFalse
+	}
+	f.member.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{Status: status})
+	if replicaReadsFail {
+		unavailable := apierrors.NewServiceUnavailable("member API server restarting")
+		f.intercept.List = func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+			if _, ok := list.(*v1beta1.InferenceReplicaList); ok {
+				return unavailable
+			}
+			return cl.List(ctx, list, opts...)
+		}
+		f.intercept.Get = func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if _, ok := obj.(*v1beta1.InferenceReplica); ok {
+				return unavailable
+			}
+			return cl.Get(ctx, key, obj, opts...)
+		}
+	}
+	objects := append([]client.Object{}, f.extraObjects...)
+	objects = append(objects, f.member, f.resources.ir)
+	for i := range f.resources.pods {
+		objects = append(objects, &f.resources.pods[i])
+	}
+	scheme := testScheme(t)
+	worker := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).WithInterceptorFuncs(f.intercept).Build()
+	clusters := identifiedTestClusters{fakeClusters: fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{"member-a": workloadcluster.NewNeverCachingClient(worker)}}, uid: "member-a-uid"}
+	r, _ := newPlacer(scheme, clusters, f.source, plannedTestRegistration())
+	r.InstanceStatusDecoder = irstatus.NewDecoder(f.decodeBound)
+	r.ObservationGrace = 5 * time.Minute
+	r.ObservationClock = clocktesting.NewFakePassiveClock(graceTestNow)
+	f.source.Status.Placement.Candidates[0].ObservationKnown = true
+	f.source.Status.Placement.Candidates[0].ReadyReplicas = 4
+	return r, f
+}
+
+func TestStandingReadMarksAReachedHomeKnown(t *testing.T) {
+	r, f := ingressObservation(t, true, false)
+	previous := *f.source.Status.Placement.Candidates[0].DeepCopy()
+	previous.ObservationKnown = false
+	home := r.observeHome(t.Context(), f.source, previous, true)
+	require.NoError(t, home.err)
+	assert.Equal(t, homePresent, home.state)
+	assert.True(t, home.candidate.ObservationKnown, "every path that writes a reached home, a hold included, must record it as known")
+}
+
+func TestUnreadableReplicasWithIngressNotReadyKeepNoCount(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		ingressReady bool
+		wantReady    int32
+	}{
+		{name: "ingress ready keeps the count for the grace", ingressReady: true, wantReady: 4},
+		{name: "ingress not ready withdraws the count", ingressReady: false, wantReady: 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Run("standing read", func(t *testing.T) {
+				r, f := ingressObservation(t, tt.ingressReady, true)
+				home := r.observeHome(t.Context(), f.source, f.source.Status.Placement.Candidates[0], true)
+				require.Error(t, home.err)
+				assert.Equal(t, homeUnknown, home.state)
+				assert.Equal(t, tt.wantReady, home.candidate.ReadyReplicas)
+				assert.NotNil(t, home.candidate.ObservationFailingSince)
+			})
+			t.Run("planned read", func(t *testing.T) {
+				r, f := ingressObservation(t, tt.ingressReady, true)
+				got, err := r.observePlannedHome(t.Context(), f.source, f.source.Status.Placement.Candidates[0], f.components)
+				require.Error(t, err)
+				assert.False(t, got.Candidate.ObservationKnown)
+				assert.Equal(t, tt.wantReady, got.Candidate.ReadyReplicas)
+			})
+		})
+	}
 }
 
 // failingAllMember fails the first failures inventory lists on one member
@@ -294,6 +412,7 @@ func TestAllUnreadableHomeKeepsReadyUntilTheGraceEnds(t *testing.T) {
 			before := candidateOf(t, settled, "member-a")
 			require.True(t, before.ObservationKnown)
 			require.Equal(t, int32(replicas), before.ReadyReplicas)
+			assertCandidateObservationMetrics(t, settled, "member-a", replicas, 1, 0)
 
 			if informerFailure {
 				f.connections.m["member-a"] = workloadcluster.NewNeverCachingClient(interceptor.NewClient(f.workers["member-a"], interceptor.Funcs{
@@ -314,6 +433,7 @@ func TestAllUnreadableHomeKeepsReadyUntilTheGraceEnds(t *testing.T) {
 			require.NotNil(t, candidate.ObservationFailingSince)
 			assert.True(t, candidate.ObservationFailingSince.Time.Equal(graceTestNow))
 			assert.Equal(t, 10*time.Second, res.RequeueAfter, "the controller wakes when the grace ends")
+			assertCandidateObservationMetrics(t, got, "member-a", replicas, 0, float64(graceTestNow.Unix()))
 			wantReason := "ObservationUnknown"
 			if informerFailure {
 				wantReason = "AwaitingHomeInputs"
@@ -329,6 +449,7 @@ func TestAllUnreadableHomeKeepsReadyUntilTheGraceEnds(t *testing.T) {
 			assert.Equal(t, int32(replicas), candidate.ReadyReplicas)
 			assert.True(t, candidate.ObservationFailingSince.Time.Equal(graceTestNow))
 			assert.Equal(t, 6*time.Second, res.RequeueAfter)
+			assertCandidateObservationMetrics(t, got, "member-a", replicas, 0, float64(graceTestNow.Unix()))
 
 			clock.SetTime(graceTestNow.Add(10 * time.Second))
 			res, got = reconcileResult(t, f)
@@ -336,6 +457,7 @@ func TestAllUnreadableHomeKeepsReadyUntilTheGraceEnds(t *testing.T) {
 			assert.Zero(t, candidate.ReadyReplicas, "a home still unreadable after the grace stops receiving traffic")
 			assert.True(t, candidate.ObservationFailingSince.Time.Equal(graceTestNow))
 			assert.Equal(t, time.Minute, res.RequeueAfter, "no grace is left to wake for")
+			assertCandidateObservationMetrics(t, got, "member-a", 0, 0, float64(graceTestNow.Unix()))
 
 			f.connections.m["member-a"] = workloadcluster.NewNeverCachingClient(f.workers["member-a"])
 			_, got = reconcileResult(t, f)
@@ -343,6 +465,7 @@ func TestAllUnreadableHomeKeepsReadyUntilTheGraceEnds(t *testing.T) {
 			assert.True(t, candidate.ObservationKnown)
 			assert.Equal(t, int32(replicas), candidate.ReadyReplicas)
 			assert.Nil(t, candidate.ObservationFailingSince, "a successful read clears the failure time")
+			assertCandidateObservationMetrics(t, got, "member-a", replicas, 1, 0)
 
 		})
 	}

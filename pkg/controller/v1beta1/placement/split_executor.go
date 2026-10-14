@@ -166,6 +166,15 @@ func (r *Reconciler) executePlannedAllocation(ctx context.Context, source *v1bet
 			}
 		}
 	}
+	// An apportionment error also fails each split home's placement below, while
+	// drains and deletions still proceed.
+	floorHolds, holdErr := splitSecondaryHolds(next, observations)
+	if holdErr != nil {
+		r.Log.V(1).Info("secondary floor holds unresolved", "error", holdErr.Error())
+	}
+	if len(floorHolds) > 0 && step.Reason == "" {
+		step.Reason, step.Message = "ReplacementNotReady", heldFloorsMessage(floorHolds)
+	}
 	for _, candidate := range next.Status.Placement.Candidates {
 		observed := observations[candidate.Cluster]
 		assignment := candidate.Allocation
@@ -177,7 +186,7 @@ func (r *Reconciler) executePlannedAllocation(ctx context.Context, source *v1bet
 		case next.Status.Placement.Plan.SingleMove != nil && next.Status.Placement.Plan.SingleMove.Selected == "" && assignment.RaceCandidate && assignment.CurrentReplicas == 0 && assignment.DesiredReplicas == 0 && assignment.DrainRequested:
 			err = r.deletePlannedRaceLoser(cctx, next, candidate)
 		case (assignment.CurrentReplicas > 0 || (assignment.CurrentHome != nil && !assignment.DrainRequested)) && observed.Home.Eligible:
-			err = r.placePlannedOn(cctx, next, candidate)
+			err = r.placePlannedMember(cctx, next, candidate, false, floorHolds[candidate.Cluster])
 		case assignment.CurrentReplicas == 0 && assignment.DrainRequested && observed.Home.Drained && !changed:
 			err = r.deletePlannedOn(cctx, next, candidate, true)
 		case observed.Member != nil:
@@ -287,9 +296,13 @@ func adoptedMemberFloor(member *v1beta1.InferenceService) (int32, error) {
 }
 
 func (r *Reconciler) observeSplitMembers(ctx context.Context, source *v1beta1.InferenceService, eligible []string) map[string]plannedHomeObservation {
-	trafficMap := &v1beta1.TrafficMap{}
-	if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(source), trafficMap); err != nil {
-		trafficMap = nil
+	routed := r.routesTraffic(source)
+	var trafficMap *v1beta1.TrafficMap
+	if routed {
+		trafficMap = &v1beta1.TrafficMap{}
+		if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(source), trafficMap); err != nil {
+			trafficMap = nil
+		}
 	}
 	out := map[string]plannedHomeObservation{}
 	settled := true
@@ -302,6 +315,15 @@ func (r *Reconciler) observeSplitMembers(ctx context.Context, source *v1beta1.In
 			r.Log.Error(err, "planned member observation failed", "cluster", candidate.Cluster)
 		}
 		observed.Home.Eligible = slices.Contains(eligible, candidate.Cluster)
+		if !routed {
+			// OME routes no traffic for this source, so it never gets a TrafficMap.
+			// A cluster serves what its pods report ready, and a cluster asked to
+			// drain has no OME-routed traffic to wait for.
+			observed.Home.Drained = candidate.Allocation.DrainRequested
+			observed.Home.Routable = !observed.Home.Drained && observed.Home.Ready > 0
+			out[candidate.Cluster] = observed
+			continue
+		}
 		known, routable, drained := plannedTrafficEvidence(source, trafficMap, observed.Candidate)
 		observed.Home.Routable, observed.Home.Drained = routable, drained
 		// Settled positive floors can release their pause without routing. Any
@@ -314,6 +336,12 @@ func (r *Reconciler) observeSplitMembers(ctx context.Context, source *v1beta1.In
 		out[candidate.Cluster] = observed
 	}
 	return out
+}
+
+// routesTraffic reports whether OME routes traffic for the source: routing is
+// on for the installation and the source does not turn it off.
+func (r *Reconciler) routesTraffic(source *v1beta1.InferenceService) bool {
+	return !r.RoutingDisabled && !RoutingOptedOut(source)
 }
 
 func advanceSplitPlan(source *v1beta1.InferenceService, observations map[string]plannedHomeObservation) (allocation.Step, error) {

@@ -2878,3 +2878,176 @@ func TestSortedRevisionHashes(t *testing.T) {
 		t.Fatalf("empty map: got %v want nothing", got)
 	}
 }
+
+// gangMemberPod builds one pod of a gang Instance: its runner, the ordinal
+// 0 of that runner, the Instance index, the serving gate True and PodReady
+// as serving says. The pod name carries the Instance and the runner's
+// place in it so two members never collide.
+func gangMemberPod(isvc *v1beta1.InferenceService, component v1beta1.ComponentType, revisionHash string, instance int, runner v1beta1.RunnerName, serving bool) *corev1.Pod {
+	place := 0
+	if runner == v1beta1.RunnerNameWorker {
+		place = 1
+	}
+	pod := buildRunnerPod(isvc, component, revisionHash, instance*10+place, runner, "0")
+	pod.Labels[query.LabelInstanceIdx] = strconv.Itoa(instance)
+	ready := corev1.ConditionTrue
+	if !serving {
+		ready = corev1.ConditionFalse
+	}
+	pod.Status.Conditions = []corev1.PodCondition{
+		{Type: corev1.PodReady, Status: ready},
+		{Type: podreadiness.ConditionType, Status: corev1.ConditionTrue},
+	}
+	return pod
+}
+
+// setPodReady flips one pod's PodReady condition in the client, the way the
+// node lifecycle controller or the kubelet does when a pod leaves or
+// re-enters rotation.
+func setPodReady(t *testing.T, c client.Client, name types.NamespacedName, ready bool) {
+	t.Helper()
+	pod := &corev1.Pod{}
+	if err := c.Get(context.Background(), name, pod); err != nil {
+		t.Fatalf("get pod %s: %v", name.Name, err)
+	}
+	status := corev1.ConditionFalse
+	if ready {
+		status = corev1.ConditionTrue
+	}
+	for i := range pod.Status.Conditions {
+		if pod.Status.Conditions[i].Type == corev1.PodReady {
+			pod.Status.Conditions[i].Status = status
+		}
+	}
+	if err := c.Status().Update(context.Background(), pod); err != nil {
+		t.Fatalf("update pod %s: %v", name.Name, err)
+	}
+}
+
+// expectTrafficSplit checks one Component's targets by revision hash and
+// percent: exactly the revisions in want, each at its share.
+func expectTrafficSplit(t *testing.T, step string, isvc *v1beta1.InferenceService, component v1beta1.ComponentType, want map[string]int32) {
+	t.Helper()
+	got := isvc.Status.Components[component].Traffic
+	if len(got) != len(want) {
+		t.Fatalf("%s: traffic = %+v, want shares on %v", step, got, want)
+	}
+	for _, target := range got {
+		hash := query.RevisionFromName(target.RevisionName).Hash()
+		percent, ok := want[hash]
+		if !ok {
+			t.Fatalf("%s: traffic names %q, want only %v: %+v", step, hash, want, got)
+		}
+		if target.Percent != percent {
+			t.Fatalf("%s: %s carries %d%%, want %d%%", step, hash, target.Percent, percent)
+		}
+	}
+}
+
+// TestObservePerRevisionPods_GangServesThroughItsLeader: a routing Service
+// publishes a gang's leader and never a worker, so an Instance serves
+// through its leader. A gang whose leader left readiness counts no serving
+// pod however its worker reads, a whole gang counts every member, and a
+// gang with a worker out counts the rest: the count the Instance rows
+// publish.
+func TestObservePerRevisionPods_GangServesThroughItsLeader(t *testing.T) {
+	isvc := testReconcilerISVC()
+	eng := v1beta1.EngineComponent
+	objs := []runtime.Object{
+		// Instance 0 on old: the leader is out, the worker still passes readiness.
+		gangMemberPod(isvc, eng, "old", 0, v1beta1.RunnerNameLeader, false),
+		gangMemberPod(isvc, eng, "old", 0, v1beta1.RunnerNameWorker, true),
+		// Instance 1 on new: the whole gang serves.
+		gangMemberPod(isvc, eng, "new", 1, v1beta1.RunnerNameLeader, true),
+		gangMemberPod(isvc, eng, "new", 1, v1beta1.RunnerNameWorker, true),
+		// Instance 2 on new: the worker is out, the leader serves.
+		gangMemberPod(isvc, eng, "new", 2, v1beta1.RunnerNameLeader, true),
+		gangMemberPod(isvc, eng, "new", 2, v1beta1.RunnerNameWorker, false),
+	}
+	total, ready, _, _, err := observePerRevisionPods(context.Background(), testClient(objs...), isvc, []v1beta1.ComponentType{eng}, true)
+	if err != nil {
+		t.Fatalf("observePerRevisionPods: %v", err)
+	}
+	if total[eng]["old"] != 2 || total[eng]["new"] != 4 {
+		t.Errorf("total = %v, want old 2 and new 4 (every pod counts)", total[eng])
+	}
+	if n, present := ready[eng]["old"]; present || n != 0 {
+		t.Errorf("ready[old] = %d (present %v), want no entry: a gang whose leader is out serves nothing", n, present)
+	}
+	if got := ready[eng]["new"]; got != 3 {
+		t.Errorf("ready[new] = %d, want 3: a whole gang of 2 and a gang serving through its leader alone", got)
+	}
+}
+
+// TestReconcile_TrafficFollowsTheServingGangs: two gang Instances on two
+// revisions share the traffic by their serving pods. While the old gang's
+// leader is out of rotation, its worker still Ready, the old revision has
+// no serving pod and the whole share rests on the new revision; the share
+// returns on the pass that sees the leader serve again. With no serving
+// pod on either revision there is nothing to move the share onto and the
+// split is left as it was.
+func TestReconcile_TrafficFollowsTheServingGangs(t *testing.T) {
+	isvc := testOMENativeISVC()
+	eng := v1beta1.EngineComponent
+	engineIR := &v1beta1.InferenceReplica{
+		ObjectMeta: metav1.ObjectMeta{Name: isvc.Name + "-engine", Namespace: isvc.Namespace},
+		Status:     v1beta1.InferenceReplicaStatus{UpdateRevision: isvc.Name + "-engine-new"},
+	}
+	oldLeader := gangMemberPod(isvc, eng, "old", 0, v1beta1.RunnerNameLeader, true)
+	newLeader := gangMemberPod(isvc, eng, "new", 1, v1beta1.RunnerNameLeader, true)
+	c := testClient(engineIR,
+		oldLeader, gangMemberPod(isvc, eng, "old", 0, v1beta1.RunnerNameWorker, true),
+		newLeader, gangMemberPod(isvc, eng, "new", 1, v1beta1.RunnerNameWorker, true))
+	reconcile := func(step string) {
+		t.Helper()
+		if _, err := Reconcile(context.Background(), ReconcileInputs{
+			ISVC: isvc, Client: c, Reader: c, Now: time.Now(), ComponentRunnerPorts: testComponentRunnerPorts(),
+			ComponentDeploymentModes: testOMENativeModes(eng),
+		}); err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+	}
+	oldLeaderKey := types.NamespacedName{Namespace: oldLeader.Namespace, Name: oldLeader.Name}
+	newLeaderKey := types.NamespacedName{Namespace: newLeader.Namespace, Name: newLeader.Name}
+
+	reconcile("both gangs serve")
+	expectTrafficSplit(t, "both gangs serve", isvc, eng, map[string]int32{"old": 50, "new": 50})
+
+	setPodReady(t, c, oldLeaderKey, false)
+	reconcile("the old gang's leader is out")
+	expectTrafficSplit(t, "the old gang's leader is out", isvc, eng, map[string]int32{"new": 100})
+
+	setPodReady(t, c, oldLeaderKey, true)
+	reconcile("the old gang's leader serves again")
+	expectTrafficSplit(t, "the old gang's leader serves again", isvc, eng, map[string]int32{"old": 50, "new": 50})
+
+	setPodReady(t, c, oldLeaderKey, false)
+	setPodReady(t, c, newLeaderKey, false)
+	reconcile("no leader serves")
+	expectTrafficSplit(t, "no leader serves", isvc, eng, map[string]int32{"old": 50, "new": 50})
+}
+
+// TestReconcile_TrafficStaysOnTheOnlyRevisionWhileItsGangIsDark: a
+// Component running one revision keeps its whole share on that revision
+// while its gang's leader is out; no other revision could carry it.
+func TestReconcile_TrafficStaysOnTheOnlyRevisionWhileItsGangIsDark(t *testing.T) {
+	isvc := testOMENativeISVC()
+	eng := v1beta1.EngineComponent
+	leader := gangMemberPod(isvc, eng, "only", 0, v1beta1.RunnerNameLeader, true)
+	c := testClient(leader, gangMemberPod(isvc, eng, "only", 0, v1beta1.RunnerNameWorker, true))
+	reconcile := func(step string) {
+		t.Helper()
+		if _, err := Reconcile(context.Background(), ReconcileInputs{
+			ISVC: isvc, Client: c, Reader: c, Now: time.Now(), ComponentRunnerPorts: testComponentRunnerPorts(),
+			ComponentDeploymentModes: testOMENativeModes(eng),
+		}); err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+	}
+	reconcile("the gang serves")
+	expectTrafficSplit(t, "the gang serves", isvc, eng, map[string]int32{"only": 100})
+
+	setPodReady(t, c, types.NamespacedName{Namespace: leader.Namespace, Name: leader.Name}, false)
+	reconcile("the leader is out")
+	expectTrafficSplit(t, "the leader is out", isvc, eng, map[string]int32{"only": 100})
+}

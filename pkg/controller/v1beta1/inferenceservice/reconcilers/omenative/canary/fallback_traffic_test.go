@@ -3,16 +3,20 @@ package canary
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/rollout"
 )
 
@@ -709,4 +713,78 @@ func TestMemberWeightsFallBack(t *testing.T) {
 	if w := memberWeights(MemberRevisions{CanaryRevisionHash: "decnew"}, 30, false, map[string]int32{"decold": 1}); len(w) != 1 || w[0].RevisionHash != "decnew" || w[0].Percent != 100 {
 		t.Fatalf("a member with no stable revision has nothing to fall back to, got %+v", w)
 	}
+}
+
+// A gang serves through its leader, the one pod its routing Service
+// publishes. Read from the pods by the dispatcher: the stable gang's leader
+// stops serving while its worker still passes readiness, so the stable
+// revision has no serving pod and the canary carries everything with the
+// step still held; the leader serving again restores the step's split.
+func TestDispatch_StableGangLosesItsLeaderWhileItsWorkerStillReads(t *testing.T) {
+	ns, name := "default", "gangfall"
+	eng := v1beta1.EngineComponent
+	n2 := 2
+	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name}}
+	isvc.Spec.Engine = &v1beta1.EngineSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: &n2}}
+	isvc.Spec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{{
+		Components: []v1beta1.ComponentType{eng},
+		Canary:     &v1beta1.GroupCanary{Steps: twoStep()},
+	}}}
+	pinActiveRun(isvc)
+	isvc.Status.Rollout.ActiveRun.TargetRevisions = []v1beta1.RolloutRunTarget{
+		{Component: eng, Revision: "new", StableRevision: "old"},
+	}
+	engineIR := ir(ns, name, eng, "new")
+	engineIR.Status.CurrentRevision = name + "-engine-old"
+	engineIR.Spec.Runners = []v1beta1.Runner{{Name: v1beta1.RunnerNameLeader, Size: 1}, {Name: v1beta1.RunnerNameWorker, Size: 1}}
+	member := func(hash string, index int, runner v1beta1.RunnerName) *corev1.Pod {
+		pod := canaryRunnerPod(ns, name, "engine", hash, fmt.Sprintf("%s-engine-%d-%s-0", name, index, runner), runner, "0")
+		pod.Labels[query.LabelInstanceIdx] = strconv.Itoa(index)
+		return pod
+	}
+	oldLeader := member("old", 0, v1beta1.RunnerNameLeader)
+	objs := []runtime.Object{isvc, engineIR,
+		canaryControllerRevision(ns, name, "engine", "old", 1),
+		canaryControllerRevision(ns, name, "engine", "new", 2),
+		oldLeader, member("old", 0, v1beta1.RunnerNameWorker),
+		member("new", 1, v1beta1.RunnerNameLeader), member("new", 1, v1beta1.RunnerNameWorker),
+	}
+	c := fake.NewClientBuilder().WithScheme(canaryScheme(t)).WithRuntimeObjects(objs...).Build()
+	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
+	dispatch := func(pass string) {
+		t.Helper()
+		if _, err := Dispatch(context.Background(), deps); err != nil {
+			t.Fatalf("Dispatch (%s): %v", pass, err)
+		}
+		if phase := isvc.Status.Components[eng].RolloutPhase; phase != v1beta1.RolloutPhasePaused {
+			t.Fatalf("%s: the step keeps its hold, got phase %q", pass, phase)
+		}
+	}
+	setLeaderReady := func(ready bool) {
+		t.Helper()
+		pod := &corev1.Pod{}
+		if err := c.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: oldLeader.Name}, pod); err != nil {
+			t.Fatal(err)
+		}
+		if ready {
+			readyAgain(pod)
+		} else {
+			notReady(pod)
+		}
+		if err := c.Status().Update(context.Background(), pod); err != nil {
+			t.Fatal(err)
+		}
+	}
+	half := map[string]trafficWant{"new": {percent: 50, latest: true}, "old": {percent: 50}}
+
+	dispatch("both gangs serve")
+	expectTargets(t, isvc, eng, half)
+
+	setLeaderReady(false)
+	dispatch("the stable gang's leader stops serving")
+	expectTargets(t, isvc, eng, map[string]trafficWant{"new": {percent: 100, latest: true}})
+
+	setLeaderReady(true)
+	dispatch("the leader serves again")
+	expectTargets(t, isvc, eng, half)
 }
