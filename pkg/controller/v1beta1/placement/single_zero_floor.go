@@ -86,7 +86,7 @@ func (r *Reconciler) refreshSingleMovementFloor(ctx context.Context, source *v1b
 		for _, target := range accepted.Status.Placement.Candidates {
 			if target.Cluster == winner {
 				cctx, cancel := context.WithTimeout(ctx, r.placeTimeout())
-				err = r.placePlannedMember(cctx, accepted, target, true)
+				err = r.placePlannedMember(cctx, accepted, target, true, nil)
 				cancel()
 				if err != nil {
 					result, writeErr := r.writeSplitHold(ctx, accepted, standing, "MemberApplicationFailed", err)

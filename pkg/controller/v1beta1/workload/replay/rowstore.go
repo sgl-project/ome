@@ -219,11 +219,24 @@ func (s *RowStore) RemoveInstance(_ context.Context, idx int32) (bool, error) {
 }
 
 // Purge is the owner object leaving the apiserver: every row and retry
-// block goes with it, outside any mutation batch, and the removed rows
-// are returned for the record.
+// block goes with it in one delete. Each removal is reported through the
+// sink as one batch, so a trace and an observer see the state every row
+// left from, and the removed rows are returned for the record.
 func (s *RowStore) Purge() []types.InstanceStatus {
-	removed := s.rows
+	removed, blocks := s.rows, s.retryBlocks
 	s.rows, s.retryBlocks = nil, nil
+	if len(removed) == 0 && len(blocks) == 0 {
+		return removed
+	}
+	s.batches++
+	for i := range removed {
+		before := CloneRow(removed[i])
+		s.emitRow(RowCommit{Index: removed[i].Index, Remove: true, Outcome: PreconditionOK, Before: &before})
+	}
+	for i := range blocks {
+		before := blocks[i]
+		s.emitRetryBlock(RetryBlockCommit{TargetRevision: blocks[i].TargetRevision, Disposition: RetryBlockRemoved, Before: &before})
+	}
 	return removed
 }
 

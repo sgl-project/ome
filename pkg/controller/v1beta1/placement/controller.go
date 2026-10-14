@@ -8,6 +8,7 @@ import (
 	"math"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -177,6 +178,13 @@ type Reconciler struct {
 	MemberReadRetry MemberReadRetry
 	// ObservationClock dates failed reads and their grace; nil uses the system clock.
 	ObservationClock clock.PassiveClock
+	// RoutingDisabled reports that this installation routes no traffic, so no
+	// source has a TrafficMap. Placement then decides from pod readiness alone,
+	// as it does for a source that sets spec.routing.enabled to false.
+	RoutingDisabled bool
+	// failingSinceDropped records that the last status write carrying a failure
+	// start came back without it, so the stored CRD lacks the field.
+	failingSinceDropped atomic.Bool
 
 	// DispatcherMode selects the fan-out BREADTH policy: AllAtOnce clones onto
 	// every matched candidate at once (the historical behavior); Incremental
@@ -296,6 +304,7 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	if err := r.Get(ctx, request.NamespacedName, isvc); err != nil {
 		if apierrors.IsNotFound(err) {
 			r.forgetCapacity(request.NamespacedName)
+			DeleteForISVC(request.Namespace, request.Name)
 			// Source already gone. The winner-lost grace marker is keyed by UID
 			// (unknown here) and is cleared in reconcileDelete once the finalizer
 			// runs; the worst case if that never ran is one stale map entry that
@@ -312,6 +321,7 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	// Only placement sources may acquire placement state or remote allocations.
 	if !IsPlacementEligible(isvc) {
 		r.forgetCapacity(request.NamespacedName)
+		DeleteForISVC(request.Namespace, request.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -322,6 +332,9 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	}
 	current := &v1beta1.InferenceService{}
 	if err := r.APIReader.Get(ctx, request.NamespacedName, current); err != nil {
+		if apierrors.IsNotFound(err) {
+			DeleteForISVC(request.Namespace, request.Name)
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	if !current.DeletionTimestamp.IsZero() {
@@ -329,6 +342,7 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	}
 	if !IsPlacementEligible(current) {
 		r.forgetCapacity(request.NamespacedName)
+		DeleteForISVC(request.Namespace, request.Name)
 		return ctrl.Result{}, nil
 	}
 	isvc = current
@@ -346,6 +360,11 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	// actuation without freezing the source's view of serving health.
 	observations := r.observeStandingHomes(ctx, isvc, clusters.Items)
 	if err := validation.ValidatePlacementIntent(isvc); err != nil {
+		return r.writeObservedPlacement(ctx, isvc, observations)
+	}
+	// Differing component matches keep the last accepted plan: standing homes
+	// keep serving and a new source waits.
+	if err := componentClustersDiffer(isvc, clusters.Items); err != nil {
 		return r.writeObservedPlacement(ctx, isvc, observations)
 	}
 	if isvc.Status.Placement != nil && isvc.Status.Placement.Plan != nil && isvc.Status.Placement.Plan.Mode != "" && placementMode(isvc) != isvc.Status.Placement.Plan.Mode {
@@ -519,7 +538,10 @@ func placementAdmittedReplicas(comps []v1beta1.ComponentType, statuses map[v1bet
 }
 
 // placementReadyReplicas is a home's ready count (the endpoint weight) in
-// primary units, with the same per-component coverage as admission.
+// primary units, with the same per-component coverage as admission. A home
+// that has admitted a full unit and has a ready instance of every required
+// component can still serve, so it counts at least one unit while a component
+// is below its share. The count never exceeds the admitted count.
 func placementReadyReplicas(comps []v1beta1.ComponentType, statuses map[v1beta1.ComponentType]*v1beta1.InferenceReplicaStatus, floors map[v1beta1.ComponentType]int32) int32 {
 	counts := make(map[v1beta1.ComponentType]int32, len(comps))
 	for _, c := range comps {
@@ -527,7 +549,11 @@ func placementReadyReplicas(comps []v1beta1.ComponentType, statuses map[v1beta1.
 			counts[c] = st.ReadyReplicas
 		}
 	}
-	return primaryUnits(comps, counts, floors)
+	units := primaryUnits(comps, counts, floors)
+	if units == 0 && everyRequiredComponentPresent(comps, counts, floors) && placementAdmittedReplicas(comps, statuses, floors) > 0 {
+		return 1
+	}
+	return units
 }
 
 func (r *Reconciler) deleteDerivedOnBounded(ctx context.Context, cluster string, isvc *v1beta1.InferenceService) error {
@@ -912,7 +938,7 @@ func (r *Reconciler) writePlacement(ctx context.Context, isvc *v1beta1.Inference
 		policyConds = append(policyConds, capacityFreshCondition("Unknown", "CapacityNotObserved", "Capacity inputs have not been verified in this reconcile"))
 	}
 	key := client.ObjectKeyFromObject(isvc)
-	var written []v1beta1.CandidatePlacement
+	var written, stored []v1beta1.CandidatePlacement
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		cur := &v1beta1.InferenceService{}
 		if err := r.APIReader.Get(ctx, key, cur); err != nil {
@@ -944,8 +970,19 @@ func (r *Reconciler) writePlacement(ctx context.Context, isvc *v1beta1.Inference
 		// for conflict-safe status persistence. A concurrent spec update must not
 		// be reported as observed until its own reconcile computes placement.
 		cur.Status.ObservedGeneration = isvc.Generation
-		written = cur.Status.Placement.Candidates
-		return r.Status().Update(ctx, cur)
+		written = make([]v1beta1.CandidatePlacement, len(cur.Status.Placement.Candidates))
+		for i := range cur.Status.Placement.Candidates {
+			written[i] = *cur.Status.Placement.Candidates[i].DeepCopy()
+		}
+		if err := r.Status().Update(ctx, cur); err != nil {
+			return err
+		}
+		stored = nil
+		if cur.Status.Placement != nil {
+			stored = cur.Status.Placement.Candidates
+			r.noteFailingSinceStored(written, stored)
+		}
+		return nil
 	})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -958,6 +995,7 @@ func (r *Reconciler) writePlacement(ctx context.Context, isvc *v1beta1.Inference
 	}
 	// Publish only after the status write landed, so the gauges never advertise
 	// a placement the API server rejected.
+	res.candidates = stored
 	recordPlacement(isvc, res)
 	r.noteGraceEnds(ctx, written)
 	return ctrl.Result{RequeueAfter: r.safetyRequeue()}, nil
@@ -1320,21 +1358,27 @@ func (r *Reconciler) isvcsForClusterChange(ctx context.Context, obj client.Objec
 }
 
 // clusterAffectsISVC reports whether a change to the named cluster can affect
-// this ISVC's placement: either the ISVC's selector matches the cluster's
-// selector set (it is/becomes a candidate), or the ISVC's status already
-// references the cluster (it is/was placed there and must re-evaluate if the
-// cluster is leaving the candidate set). A malformed selector is treated as
-// "affects" so reconcile can surface the malformed-selector status.
+// this ISVC's placement: either any of the ISVC's component selectors matches
+// the cluster's selector set (it is/becomes a candidate, or its components
+// now match differently), or the ISVC's status already references the cluster
+// (it is/was placed there and must re-evaluate if the cluster is leaving the
+// candidate set). A malformed selector is treated as "affects" so reconcile can
+// surface the malformed-selector status.
 func clusterAffectsISVC(isvc *v1beta1.InferenceService, clusterName string, clusterSelectorSet labels.Set) bool {
 	if isvcStatusReferencesCluster(isvc, clusterName) {
 		return true
 	}
-	selector, err := placementSelector(isvc)
+	selectors, err := componentSelectors(isvc)
 	if err != nil {
 		return true
 	}
-	_, matches := selector.Match(&v1beta1.WorkloadCluster{ObjectMeta: metav1.ObjectMeta{Name: clusterName, Labels: clusterSelectorSet}})
-	return matches
+	cluster := &v1beta1.WorkloadCluster{ObjectMeta: metav1.ObjectMeta{Name: clusterName, Labels: clusterSelectorSet}}
+	for _, selector := range selectors {
+		if _, matches := selector.Match(cluster); matches {
+			return true
+		}
+	}
+	return false
 }
 
 // isvcStatusReferencesCluster reports whether the ISVC's placement status names

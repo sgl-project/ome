@@ -3263,3 +3263,132 @@ func TestIRLabelSelectorStringMatchesOnePodPerInstance(t *testing.T) {
 		}
 	}
 }
+
+// A status row whose pods on the revision it runs serve never reads Failed
+// because the pods of its replacement crash, at any moment of the attempt.
+// Instance 0 runs revision A; the push to revision B builds a replacement
+// that crash-loops. On the first crash report the engine stamps the row
+// Failed and keeps the surge attempt (a gang keeps it until the replacement
+// gang is retired; a single-pod attempt is disposed in the same write).
+// Between attempts, and after the retries at revision B are used up and the
+// roll stops, the row is Ready on revision A again, or Failed with the spent
+// attempt recorded. In every
+// shape the published phase is Ready, the failure record stays, and the
+// replacement gang's own row, whose pods are the crashing ones, keeps
+// Failed.
+func TestAggregateAndWriteStatus_PublishesReadyOverASourceWhoseReplacementCrashLoops(t *testing.T) {
+	readySince := metav1.NewTime(time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC))
+	failedAt := metav1.NewTime(readySince.Add(10 * time.Minute))
+	slot := int32(2)
+	crash := func(pod string) *v1beta1.InstanceTermination {
+		return &v1beta1.InstanceTermination{PodName: pod, Reason: "CrashLoopBackOff", Time: failedAt}
+	}
+	surgeAttempt := func(step string, surgeIdx *int32) *v1beta1.InstanceOperation {
+		return &v1beta1.InstanceOperation{ID: "surge-0", Type: v1beta1.InstanceOperationUpdate, Step: step, TargetRevision: "rev-b", SurgeIndex: surgeIdx}
+	}
+	onRevision := func(pod *corev1.Pod, rev string) *corev1.Pod {
+		pod.Labels[query.LabelRevisionHash] = query.RevisionHashFromControllerRevisionName(rev)
+		return pod
+	}
+	tests := []struct {
+		name      string
+		runners   []workloadtypes.RunnerPlan
+		rows      []v1beta1.OMENativeInstanceStatus
+		pods      func(ir *v1beta1.InferenceReplica) []client.Object
+		wantRows  int
+		wantPhase map[int32]v1beta1.OMENativeInstancePhase
+	}{
+		{
+			name:    "gang: first crash report, the source keeps its surge attempt",
+			runners: []workloadtypes.RunnerPlan{{Name: "leader", Size: 1}, {Name: "worker", Size: 1}},
+			rows: []v1beta1.OMENativeInstanceStatus{
+				{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceFailed, RunningRevision: "rev-a", TargetRevision: "rev-b",
+					ReadySince: &readySince, Operation: surgeAttempt("Surge", &slot), LastFailure: crash("model-engine-2-leader-0")},
+				{Index: 1, Incarnation: 1, Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "rev-a", ReadySince: &readySince},
+				{Index: 2, Incarnation: 1, Phase: v1beta1.OMENativeInstanceFailed, TargetRevision: "rev-b",
+					Operation: surgeAttempt("GangSurgeTarget", nil), LastFailure: crash("model-engine-2-leader-0")},
+			},
+			pods: func(ir *v1beta1.InferenceReplica) []client.Object {
+				return []client.Object{
+					onRevision(podForIR(ir, 0, "leader", 0, true, true), "rev-a"), onRevision(podForIR(ir, 0, "worker", 0, true, true), "rev-a"),
+					onRevision(podForIR(ir, 1, "leader", 0, true, true), "rev-a"), onRevision(podForIR(ir, 1, "worker", 0, true, true), "rev-a"),
+					onRevision(podForIR(ir, 2, "leader", 0, false, false), "rev-b"),
+				}
+			},
+			wantRows:  3,
+			wantPhase: map[int32]v1beta1.OMENativeInstancePhase{0: v1beta1.OMENativeInstanceReady, 1: v1beta1.OMENativeInstanceReady, 2: v1beta1.OMENativeInstanceFailed},
+		},
+		{
+			name:    "gang: between attempts and after the hold, the source is back on its revision",
+			runners: []workloadtypes.RunnerPlan{{Name: "leader", Size: 1}, {Name: "worker", Size: 1}},
+			rows: []v1beta1.OMENativeInstanceStatus{
+				{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "rev-a",
+					ReadySince: &readySince, LastFailure: crash("model-engine-2-leader-0")},
+				{Index: 1, Incarnation: 1, Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "rev-a", ReadySince: &readySince},
+			},
+			pods: func(ir *v1beta1.InferenceReplica) []client.Object {
+				return []client.Object{
+					onRevision(podForIR(ir, 0, "leader", 0, true, true), "rev-a"), onRevision(podForIR(ir, 0, "worker", 0, true, true), "rev-a"),
+					onRevision(podForIR(ir, 1, "leader", 0, true, true), "rev-a"), onRevision(podForIR(ir, 1, "worker", 0, true, true), "rev-a"),
+				}
+			},
+			wantRows:  2,
+			wantPhase: map[int32]v1beta1.OMENativeInstancePhase{0: v1beta1.OMENativeInstanceReady, 1: v1beta1.OMENativeInstanceReady},
+		},
+		{
+			name:    "single pod: the disposed attempt beside the serving source, between attempts and after the hold",
+			runners: []workloadtypes.RunnerPlan{{Name: "default", Size: 1}},
+			rows: []v1beta1.OMENativeInstanceStatus{
+				{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceFailed, RunningRevision: "rev-a", TargetRevision: "rev-b",
+					ReadySince: &readySince, LastFailure: crash("model-engine-0-default-1")},
+				{Index: 1, Incarnation: 1, Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "rev-a", ReadySince: &readySince},
+			},
+			pods: func(ir *v1beta1.InferenceReplica) []client.Object {
+				return []client.Object{
+					onRevision(podForIR(ir, 0, "default", 0, true, true), "rev-a"), onRevision(podForIR(ir, 0, "default", 1, false, false), "rev-b"),
+					onRevision(podForIR(ir, 1, "default", 0, true, true), "rev-a"),
+				}
+			},
+			wantRows:  2,
+			wantPhase: map[int32]v1beta1.OMENativeInstancePhase{0: v1beta1.OMENativeInstanceReady, 1: v1beta1.OMENativeInstanceReady},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			ir := baselineIR("model-engine", "default", 2)
+			ir.Status.InstanceStatuses = test.rows
+			objs := append([]client.Object{ir}, test.pods(ir)...)
+			r, stored := newReconciler(t, objs...)
+			plan := workloadtypes.ComponentPlan{
+				Component: v1beta1convert.ComponentTypeToWorkload(ir.Spec.Component),
+				Replicas:  2,
+				Instances: []workloadtypes.InstancePlan{
+					{Index: 0, Incarnation: 1, Runners: test.runners},
+					{Index: 1, Incarnation: 1, Runners: test.runners},
+				},
+			}
+
+			g.Expect(writeStatus(r, ir, plan, nil, false, nil)).To(gomega.Succeed())
+			got := &v1beta1.InferenceReplica{}
+			g.Expect(stored.Get(context.Background(), client.ObjectKeyFromObject(ir), got)).To(gomega.Succeed())
+			g.Expect(got.Status.InstanceStatuses).To(gomega.HaveLen(test.wantRows))
+			for _, row := range got.Status.InstanceStatuses {
+				g.Expect(row.Phase).To(gomega.Equal(test.wantPhase[row.Index]), "instance %d", row.Index)
+			}
+			source := got.Status.InstanceStatuses[0]
+			g.Expect(source.LastFailure).NotTo(gomega.BeNil(), "the attempt's failure stays on the row")
+			g.Expect(source.LastFailure.Reason).To(gomega.Equal("CrashLoopBackOff"))
+			g.Expect(source.RunningRevision).To(gomega.Equal("rev-a"))
+			g.Expect(source.Operation).To(gomega.Equal(test.rows[0].Operation), "the attempt stays as the engine left it")
+			g.Expect(ir.Status.InstanceStatuses[0].Phase).To(gomega.Equal(v1beta1.OMENativeInstanceReady),
+				"the caller's snapshot mirrors the published phase")
+
+			steadyRV := got.ResourceVersion
+			g.Expect(writeStatus(r, got.DeepCopy(), plan, nil, false, nil)).To(gomega.Succeed())
+			steady := &v1beta1.InferenceReplica{}
+			g.Expect(stored.Get(context.Background(), client.ObjectKeyFromObject(ir), steady)).To(gomega.Succeed())
+			g.Expect(steady.ResourceVersion).To(gomega.Equal(steadyRV), "a steady publication performs no status write")
+		})
+	}
+}

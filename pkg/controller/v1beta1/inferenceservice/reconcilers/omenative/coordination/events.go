@@ -26,17 +26,17 @@ const (
 	EventReasonRatioSkewRejected = "RatioSkewRejected"
 
 	// EventReasonRatioGateBypassed fires when the OMENative ops
-	// dispatcher skips CheckRatioGate because the per-Instance update
-	// strategy is in-place (InPlaceIfPossible / InPlaceOnly). The
-	// gate's "-1" projection treats every drain as a permanent
-	// capacity loss, but an in-place drain is paired 1:1 with a
-	// same-pod return (mark-not-ready -> patch image -> mark-ready)
-	// so the net capacity change is ~0 and the gate's projection
-	// over-blocks the smaller Component of a ratio pair indefinitely.
-	// CheckUnavailabilityGate still governs concurrent disruption for
-	// the in-place case, so RatioBalanced safety is not lost --
-	// operators just see this event explaining why the gate did not
-	// fire.
+	// dispatcher admits an in-place start (InPlaceIfPossible /
+	// InPlaceOnly) past the RatioBalanced serving-capacity band without
+	// running it. The band's "-1" projection treats every drain as a
+	// permanent capacity loss, but an in-place drain is paired 1:1 with
+	// a same-pod return (mark-not-ready -> patch image -> mark-ready)
+	// so the net capacity change is ~0 and the projection would
+	// over-block the smaller Component of a ratio pair indefinitely.
+	// The new-revision lockstep half of the gate still runs for the
+	// start, and CheckUnavailabilityGate still governs concurrent
+	// disruption, so RatioBalanced safety is not lost -- operators just
+	// see this event explaining why the band did not fire.
 	EventReasonRatioGateBypassed = "RatioGateBypassed"
 
 	// EventReasonMixedPairingObserved fires when a RollingUpdate

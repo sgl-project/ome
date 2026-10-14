@@ -892,8 +892,9 @@ func TestTakeInlineV1PublicationReadsRestartingOverAPodSetNotServing(t *testing.
 // the running revision are read: a replacement crash-looping, or serving
 // between two crashes, beside the source changes nothing. A source that
 // stops serving reads Failed again. A Failed row that never ran a revision,
-// one whose attempt was at the revision it runs, and one still carrying an
-// operation keep Failed.
+// one whose attempt was at the revision it runs, and one whose surge is
+// past its drain hand-over keep Failed; a row still at its surge step is
+// read by TestTakeInlineV1PublicationReadsReadyOverASurgeSourceWhoseReplacementCrashes.
 func TestTakeInlineV1PublicationReadsReadyOverAFailedAttemptWhileTheSourceServes(t *testing.T) {
 	const runningRev, targetRev = "svc-engine-aaaaaaaa", "svc-engine-bbbbbbbb"
 	readySince := metav1.Unix(1700000000, 0)
@@ -912,7 +913,7 @@ func TestTakeInlineV1PublicationReadsReadyOverAFailedAttemptWhileTheSourceServes
 				ReadySince: &readySince, LastFailure: record("pod-3-0")},
 			{Index: 4, Incarnation: 1, Phase: types.InstancePhaseFailed, RunningRevision: runningRev, TargetRevision: targetRev,
 				ReadySince: &readySince, LastFailure: record(""),
-				Operation: &types.InstanceOperation{ID: "update-4", Type: types.InstanceOperationUpdate, Step: types.UpdateStepSurge, TargetRevision: targetRev}},
+				Operation: &types.InstanceOperation{ID: "update-4", Type: types.InstanceOperationUpdate, Step: types.UpdateStepSurgeDrain, TargetRevision: targetRev}},
 		}
 	}
 	desired := map[int32]int32{0: 1, 1: 2, 2: 1, 3: 1, 4: 2}
@@ -1005,11 +1006,136 @@ func TestTakeInlineV1PublicationReadsReadyOverAFailedAttemptWhileTheSourceServes
 		}
 	})
 
-	t.Run("a row still carrying its attempt keeps Failed", func(t *testing.T) {
+	t.Run("a row whose surge is past its drain hand-over keeps Failed", func(t *testing.T) {
 		leader := pod("pod-4-0-leader", runningRev, true, true)
 		worker := pod("pod-4-0-worker", runningRev, true, true)
 		if row := publish(t, map[int32][]*corev1.Pod{4: {leader, worker}})[4]; row.Phase != types.InstancePhaseFailed {
-			t.Errorf("gang surge source with its attempt kept = phase %s, want Failed", row.Phase)
+			t.Errorf("gang surge source at its drain step = phase %s, want Failed: the replacement had taken over", row.Phase)
+		}
+	})
+}
+
+// A Failed row that still keeps the surge attempt it failed at publishes
+// Ready while the pods on the revision it runs serve at the desired count:
+// the replacement crashed, the Instance did not. The escalation leaves the
+// source of a gang surge in this shape until the replacement gang is
+// retired; a single-pod source in the same shape reads the same. The
+// attempt stays on the row with its record, the revision it was for and the
+// ReadySince anchor, and the engine keeps reading the row as Failed
+// (v1beta1convert.InstanceStatusToWorkload). The replacement's own row,
+// which never ran a revision, keeps Failed. A source short of a serving
+// member or on its way out reads Failed, and so does a source whose
+// replacement took over and was then lost at the drain step.
+func TestTakeInlineV1PublicationReadsReadyOverASurgeSourceWhoseReplacementCrashes(t *testing.T) {
+	const runningRev, targetRev = "svc-engine-aaaaaaaa", "svc-engine-bbbbbbbb"
+	readySince := metav1.Unix(1700000000, 0)
+	failedAt := metav1.Unix(1700000600, 0)
+	gangSlot, drainSlot := int32(3), int32(4)
+	record := func(pod string) *types.InstanceTermination {
+		return &types.InstanceTermination{PodName: pod, Reason: "CrashLoopBackOff", Time: failedAt}
+	}
+	attempt := func(id, step string, surgeIdx *int32) *types.InstanceOperation {
+		return &types.InstanceOperation{ID: id, Type: types.InstanceOperationUpdate, Step: step, TargetRevision: targetRev, SurgeIndex: surgeIdx}
+	}
+	rows := func() []types.InstanceStatus {
+		return []types.InstanceStatus{
+			{Index: 0, Incarnation: 1, Phase: types.InstancePhaseFailed, RunningRevision: runningRev, TargetRevision: targetRev,
+				ReadySince: &readySince, LastFailure: record("pod-0-1"), Operation: attempt("update-0", types.UpdateStepSurge, nil)},
+			{Index: 1, Incarnation: 1, Phase: types.InstancePhaseFailed, RunningRevision: runningRev, TargetRevision: targetRev,
+				ReadySince: &readySince, LastFailure: record("pod-3-0-leader"), Operation: attempt("gangsurge-1", types.UpdateStepSurge, &gangSlot)},
+			{Index: 2, Incarnation: 1, Phase: types.InstancePhaseFailed, RunningRevision: runningRev, TargetRevision: targetRev,
+				ReadySince: &readySince, LastFailure: record(""), Operation: attempt("gangsurge-2", types.UpdateStepSurgeDrain, &drainSlot)},
+			{Index: 3, Incarnation: 1, Phase: types.InstancePhaseFailed, TargetRevision: targetRev,
+				LastFailure: record("pod-3-0-leader"), Operation: attempt("gangsurgetarget-3", types.UpdateStepGangSurgeTarget, nil)},
+		}
+	}
+	desired := map[int32]int32{0: 1, 1: 2, 2: 2, 3: 2}
+	publish := func(t *testing.T, byInstance map[int32][]*corev1.Pod) []types.InstanceStatus {
+		t.Helper()
+		observation, err := workload.NewOwnedPublicationObservation(
+			rows(), workload.NewCachedSelectorPodObservation(nil, byInstance), nil, status.AvailabilityWindow{})
+		if err != nil {
+			t.Fatalf("NewOwnedPublicationObservation: %v", err)
+		}
+		statuses, _, err := observation.TakeInlineV1Publication(desired, targetRev)
+		if err != nil {
+			t.Fatalf("TakeInlineV1Publication: %v", err)
+		}
+		return statuses
+	}
+	pod := func(name, rev string, ready, serving bool) *corev1.Pod {
+		p := observationPod(name, "node-"+name, ready, serving, false)
+		p.Labels = map[string]string{query.LabelRevisionHash: query.RevisionHashFromControllerRevisionName(rev)}
+		return p
+	}
+	leader := pod("pod-1-0-leader", runningRev, true, true)
+	worker := pod("pod-1-0-worker", runningRev, true, true)
+	crashingLeader := pod("pod-3-0-leader", targetRev, false, false)
+
+	t.Run("a single-pod source serving beside its crash-looping replacement publishes Ready", func(t *testing.T) {
+		source := pod("pod-0-0", runningRev, true, true)
+		crashing := pod("pod-0-1", targetRev, false, false)
+		row := publish(t, map[int32][]*corev1.Pod{0: {source, crashing}})[0]
+		if row.Phase != types.InstancePhaseReady || row.PodCount != 2 {
+			t.Fatalf("row = phase %s with %d pod(s), want Ready with two", row.Phase, row.PodCount)
+		}
+		if row.Operation == nil || row.Operation.Step != types.UpdateStepSurge || row.RunningRevision != runningRev || row.TargetRevision != targetRev {
+			t.Errorf("row = running %q target %q operation %+v, want the attempt and both revisions kept", row.RunningRevision, row.TargetRevision, row.Operation)
+		}
+		if row.LastFailure == nil || row.LastFailure.PodName != "pod-0-1" || !row.LastFailure.Time.Equal(&failedAt) {
+			t.Errorf("LastFailure = %+v, want the replacement's failure kept", row.LastFailure)
+		}
+		if row.ReadySince == nil || !row.ReadySince.Equal(&readySince) {
+			t.Errorf("ReadySince = %v, want the anchor preserved", row.ReadySince)
+		}
+	})
+
+	t.Run("a gang source serving beside its crash-looping replacement gang publishes Ready", func(t *testing.T) {
+		statuses := publish(t, map[int32][]*corev1.Pod{1: {leader, worker}, 3: {crashingLeader}})
+		if row := statuses[1]; row.Phase != types.InstancePhaseReady || row.PodCount != 2 {
+			t.Fatalf("source = phase %s with %d pod(s), want Ready with its two members", row.Phase, row.PodCount)
+		}
+		if row := statuses[1]; row.Operation == nil || row.Operation.SurgeIndex == nil || *row.Operation.SurgeIndex != gangSlot ||
+			row.LastFailure == nil || row.LastFailure.PodName != "pod-3-0-leader" {
+			t.Errorf("source = operation %+v failure %+v, want the surge attempt and the replacement's failure kept", row.Operation, row.LastFailure)
+		}
+		if row := statuses[3]; row.Phase != types.InstancePhaseFailed || row.PodCount != 1 {
+			t.Errorf("replacement's own row = phase %s with %d pod(s), want Failed: it never ran a revision", row.Phase, row.PodCount)
+		}
+	})
+
+	t.Run("a replacement serving between two crashes changes nothing", func(t *testing.T) {
+		between := pod("pod-3-0-leader", targetRev, true, true)
+		if row := publish(t, map[int32][]*corev1.Pod{1: {leader, worker}, 3: {between}})[1]; row.Phase != types.InstancePhaseReady {
+			t.Errorf("source serving beside a serving replacement = phase %s, want Ready", row.Phase)
+		}
+		workerDown := pod("pod-1-0-worker", runningRev, false, true)
+		if row := publish(t, map[int32][]*corev1.Pod{1: {leader, workerDown}, 3: {between}})[1]; row.Phase != types.InstancePhaseFailed {
+			t.Errorf("source down beside a serving replacement = phase %s, want Failed: the replacement is not the source", row.Phase)
+		}
+	})
+
+	t.Run("a source gang short of a serving member or on its way out reads Failed", func(t *testing.T) {
+		workerDown := pod("pod-1-0-worker", runningRev, false, true)
+		if row := publish(t, map[int32][]*corev1.Pod{1: {leader, workerDown}, 3: {crashingLeader}})[1]; row.Phase != types.InstancePhaseFailed {
+			t.Errorf("source gang short of a serving member = phase %s, want Failed", row.Phase)
+		}
+		leaving := pod("pod-1-0-leader", runningRev, true, true)
+		now := metav1.Now()
+		leaving.DeletionTimestamp = &now
+		if row := publish(t, map[int32][]*corev1.Pod{1: {leaving, worker}, 3: {crashingLeader}})[1]; row.Phase != types.InstancePhaseFailed {
+			t.Errorf("source member on its way out = phase %s, want Failed", row.Phase)
+		}
+		if row := publish(t, map[int32][]*corev1.Pod{3: {crashingLeader}})[1]; row.Phase != types.InstancePhaseFailed || row.PodCount != 0 {
+			t.Errorf("no source pods = phase %s with %d pod(s), want Failed with none", row.Phase, row.PodCount)
+		}
+	})
+
+	t.Run("a source whose replacement took over and was then lost keeps Failed", func(t *testing.T) {
+		drainingLeader := pod("pod-2-0-leader", runningRev, true, true)
+		drainingWorker := pod("pod-2-0-worker", runningRev, true, true)
+		if row := publish(t, map[int32][]*corev1.Pod{2: {drainingLeader, drainingWorker}})[2]; row.Phase != types.InstancePhaseFailed {
+			t.Errorf("source at the drain step = phase %s, want Failed: the replacement had taken over", row.Phase)
 		}
 	})
 }

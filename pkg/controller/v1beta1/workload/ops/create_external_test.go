@@ -339,6 +339,7 @@ func podForInstance(isvc *v1beta1.InferenceService, instanceIdx int32, ready, se
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      query.PodName(isvc.Name, workload.ComponentEngine, instanceIdx, "default", 0),
 			Namespace: isvc.Namespace,
+			UID:       types.UID(fmt.Sprintf("%s-engine-%d-uid", isvc.Name, instanceIdx)),
 			Labels:    labels,
 		},
 		Spec: corev1.PodSpec{

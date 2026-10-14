@@ -131,6 +131,11 @@ func (r *Reconciler) observeHome(
 		home := r.observeHomeOnce(attemptCtx, isvc, previous, known)
 		return home, home.err
 	})
+	// A read that reached the member is known on every path that writes it,
+	// including a hold, so the next failed read starts a grace.
+	if home.state == homePresent {
+		home.candidate.ObservationKnown = true
+	}
 	return home
 }
 
@@ -207,6 +212,11 @@ func (r *Reconciler) observeHomeOnce(
 		}
 		candidate.Autoscaling = nil
 		candidate.Rollout = nil
+		// The member's own status was read: an ingress it reports not ready
+		// means the home cannot serve, whatever ready count the grace keeps.
+		if !derived.Status.IsConditionReady(v1beta1.IngressReady) {
+			candidate.ReadyReplicas = 0
+		}
 		return homeObservation{
 			state: homeUnknown, candidate: candidate, err: err,
 		}
@@ -228,7 +238,7 @@ func (r *Reconciler) observeHomeOnce(
 		}
 		candidate.AdmittedReplicas = placementAdmittedReplicas(components, statuses, floors)
 		if derived.Status.IsConditionReady(v1beta1.IngressReady) {
-			candidate.ReadyReplicas = placementReadyReplicas(components, statuses, floors)
+			candidate.ReadyReplicas = placementReadyReplicas(components, statuses, servingFloors(isvc, floors))
 		}
 	}
 	return homeObservation{

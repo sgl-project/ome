@@ -1429,6 +1429,176 @@ func TestEvaluateUpdateGate_RatioBalancedHoldsLeadingComponent(t *testing.T) {
 	}
 }
 
+// mkRatioLockstepFixture is mkRatioProgressFixture with the group's
+// maxUnavailable set to one, the budget a drain-first or in-place roll
+// takes one pod at a time under: a step the ratio gate admits must also
+// pass the unavailability gate for a row to read "allowed" end to end.
+func mkRatioLockstepFixture(tol, origE, newE, origD, newD int32) *v1beta1.InferenceService {
+	isvc := mkRatioProgressFixture(tol, origE, newE, origD, newD)
+	mu := intstr.FromInt(1)
+	isvc.Spec.Rollout.Groups[0].RollingUpdate.MaxUnavailable = &mu
+	return pinActiveRun(isvc) // re-pin: the budget edit must be part of the pinned plan
+}
+
+// TestEvaluateUpdateGate_LockstepHoldsEveryStrategy pins the new-revision
+// lockstep on the drain-first and in-place paths, beside the surge path
+// TestEvaluateUpdateGate_RatioBalancedHoldsLeadingComponent covers. The
+// story: 8 engine and 8 decoder Instances in one RatioBalanced group with a
+// tolerance of 20 percent, both rolling one pod at a time; the engine's
+// replacements are Ready in seconds, the decoder's in minutes. Between two
+// steps serving is back at 8:8 for both Components, so the serving band
+// alone admits every engine step; only the lockstep can hold the engine
+// while the decoder lags. Each row reads "engine at newE/origE rolled,
+// decoder at newD/origD; may `comp` start its next step?" through the
+// production decision site, once per lifecycle strategy.
+func TestEvaluateUpdateGate_LockstepHoldsEveryStrategy(t *testing.T) {
+	eng, dec := v1beta1.EngineComponent, v1beta1.DecoderComponent
+	strategies := []workloadtypes.UpdateStrategyType{
+		workloadtypes.UpdateStrategyRecreatePod,
+		workloadtypes.UpdateStrategyInPlaceIfPossible,
+		workloadtypes.UpdateStrategyInPlaceOnly,
+		workloadtypes.UpdateStrategySurgeThenDrain,
+	}
+	cases := []struct {
+		name                     string
+		tol                      int32
+		origE, newE, origD, newD int32
+		comp                     v1beta1.ComponentType
+		wantAllowed              bool
+	}{
+		{ // The story's end state: the engine finished while the decoder is at 3 of 8.
+			name: "8:8 tol=20 engine 8 of 8 ahead of decoder 3 of 8 - engine held", tol: 20,
+			origE: 8, newE: 8, origD: 8, newD: 3, comp: eng, wantAllowed: false,
+		},
+		{ // The lagging decoder always proceeds, so the pair converges.
+			name: "8:8 tol=20 decoder 3 of 8 behind engine 8 of 8 - decoder proceeds", tol: 20,
+			origE: 8, newE: 8, origD: 8, newD: 3, comp: dec, wantAllowed: true,
+		},
+		{ // One step ahead (12.5 points) is inside a 20 percent band.
+			name: "8:8 tol=20 engine 4 of 8 vs decoder 3 of 8 - engine proceeds", tol: 20,
+			origE: 8, newE: 4, origD: 8, newD: 3, comp: eng, wantAllowed: true,
+		},
+		{ // Two steps ahead (25 points) is past it: the engine waits here.
+			name: "8:8 tol=20 engine 5 of 8 vs decoder 3 of 8 - engine held", tol: 20,
+			origE: 8, newE: 5, origD: 8, newD: 3, comp: eng, wantAllowed: false,
+		},
+		{ // Symmetric start: nobody leads, so either side may go first.
+			name: "8:8 tol=20 both at 0 of 8 - engine's first step allowed", tol: 20,
+			origE: 8, newE: 0, origD: 8, newD: 0, comp: eng, wantAllowed: true,
+		},
+		{
+			name: "8:8 tol=20 both at 0 of 8 - decoder's first step allowed", tol: 20,
+			origE: 8, newE: 0, origD: 8, newD: 0, comp: dec, wantAllowed: true,
+		},
+		{ // Asymmetric 4:2 rolls in FRACTION lockstep: 2 of 4 and 1 of 2 are level.
+			name: "4:2 tol=25 both at 50 percent - engine proceeds", tol: 25,
+			origE: 4, newE: 2, origD: 2, newD: 1, comp: eng, wantAllowed: true,
+		},
+		{
+			name: "4:2 tol=25 engine 50 percent ahead of decoder 0 - engine held", tol: 25,
+			origE: 4, newE: 2, origD: 2, newD: 0, comp: eng, wantAllowed: false,
+		},
+		{ // No false hold at the finish: a fully rolled peer stops pacing.
+			name: "8:8 tol=20 decoder done - engine's last step allowed", tol: 20,
+			origE: 8, newE: 7, origD: 8, newD: 8, comp: eng, wantAllowed: true,
+		},
+	}
+	for _, strategy := range strategies {
+		for _, tc := range cases {
+			t.Run(string(strategy)+"/"+tc.name, func(t *testing.T) {
+				isvc := mkRatioLockstepFixture(tc.tol, tc.origE, tc.newE, tc.origD, tc.newD)
+				client := fakeClientForISVC(isvc)
+				allowed, gate, reason := EvaluateUpdateGate(context.Background(), client, isvc, tc.comp, "", forwardTarget(isvc, tc.comp), nil, GroupDefaults{},
+					strategy, 0, 0)
+				if allowed != tc.wantAllowed {
+					t.Fatalf("allowed=%v want %v (gate=%q reason=%q)", allowed, tc.wantAllowed, gate, reason)
+				}
+				if allowed {
+					return
+				}
+				if gate != v1beta1.RolloutHoldGateRatio {
+					t.Errorf("hold gate=%q want %q (reason=%q)", gate, v1beta1.RolloutHoldGateRatio, reason)
+				}
+				if !strings.Contains(reason, "outpace") {
+					t.Errorf("the hold must name the lockstep (a lead past the peer's new-revision progress); got reason=%q", reason)
+				}
+			})
+		}
+	}
+}
+
+// TestEvaluateSurge_DrainLockstep pins the lockstep on the drain branch of
+// EvaluateSurge itself, with serving full on both sides (the picture
+// between two drain-first steps, which the band reads as balanced): the
+// Component ahead of its peer by more than the band is refused with the
+// lockstep reason before the band is consulted, the lagging peer's drain
+// is admitted by the band, and a fully rolled peer stops pacing.
+func TestEvaluateSurge_DrainLockstep(t *testing.T) {
+	eng, dec := v1beta1.EngineComponent, v1beta1.DecoderComponent
+	pacing := v1beta1.CoordinationPacing{
+		Type:                  v1beta1.CoordinationPacingRatioBalanced,
+		RatioTolerancePercent: int32Ptr(20),
+	}
+	state := func(newE, newD int32) RatioState {
+		return RatioState{
+			Original: map[v1beta1.ComponentType]int32{eng: 8, dec: 8},
+			Serving:  map[v1beta1.ComponentType]int32{eng: 8, dec: 8},
+			NewPods:  map[v1beta1.ComponentType]int32{eng: newE, dec: newD},
+		}
+	}
+	if d := EvaluateSurge(pacing, state(5, 3), eng, -1); d.AllowedSurgeDelta != 0 || !d.SkewRejected ||
+		d.Reason != "drain would outpace peer new-revision rollout past tolerance" {
+		t.Errorf("engine 5 of 8 against decoder 3 of 8 at tol 20 must be held by the lockstep; got %+v", d)
+	}
+	if d := EvaluateSurge(pacing, state(5, 3), dec, -1); d.AllowedSurgeDelta != -1 || d.Reason != "drain within tolerance" {
+		t.Errorf("the lagging decoder's drain must be admitted by the band; got %+v", d)
+	}
+	if d := EvaluateSurge(pacing, state(4, 3), eng, -1); d.AllowedSurgeDelta != -1 {
+		t.Errorf("engine one step ahead (4 of 8 against 3 of 8) is inside a 20 percent band; got %+v", d)
+	}
+	if d := EvaluateSurge(pacing, state(7, 8), eng, -1); d.AllowedSurgeDelta != -1 {
+		t.Errorf("a fully rolled decoder must not hold the engine's last drain; got %+v", d)
+	}
+}
+
+// TestLockstepHold pins the in-place consult: an in-place start keeps its
+// pod, so the serving band is waived, but the Instance still moves to the
+// new revision and the lockstep alone decides. The preconditions that admit
+// a step outright in EvaluateSurge admit it here too.
+func TestLockstepHold(t *testing.T) {
+	eng, dec := v1beta1.EngineComponent, v1beta1.DecoderComponent
+	ratio := v1beta1.CoordinationPacing{
+		Type:                  v1beta1.CoordinationPacingRatioBalanced,
+		RatioTolerancePercent: int32Ptr(20),
+	}
+	state := RatioState{
+		Original: map[v1beta1.ComponentType]int32{eng: 8, dec: 8},
+		Serving:  map[v1beta1.ComponentType]int32{eng: 8, dec: 8},
+		NewPods:  map[v1beta1.ComponentType]int32{eng: 5, dec: 3},
+	}
+	if held, reason := LockstepHold(ratio, state, eng); !held || !strings.Contains(reason, "outpace") {
+		t.Errorf("engine 5 of 8 against decoder 3 of 8 at tol 20 must be held; got held=%v reason=%q", held, reason)
+	}
+	if held, reason := LockstepHold(ratio, state, dec); held {
+		t.Errorf("the lagging decoder must proceed; got held reason=%q", reason)
+	}
+	perComponent := v1beta1.CoordinationPacing{Type: v1beta1.CoordinationPacingPerComponent}
+	if held, _ := LockstepHold(perComponent, state, eng); held {
+		t.Errorf("PerComponent pacing has no lockstep")
+	}
+	noTolerance := v1beta1.CoordinationPacing{Type: v1beta1.CoordinationPacingRatioBalanced}
+	if held, _ := LockstepHold(noTolerance, state, eng); held {
+		t.Errorf("no resolved tolerance means no band to hold on")
+	}
+	alone := RatioState{
+		Original: map[v1beta1.ComponentType]int32{eng: 8},
+		NewPods:  map[v1beta1.ComponentType]int32{eng: 5},
+	}
+	if held, _ := LockstepHold(ratio, alone, eng); held {
+		t.Errorf("a single-member group has no peer to outpace")
+	}
+}
+
 // TestEvaluateSurge_SurgeTiebreaker pins the surge-side tiebreaker. When the
 // band is narrower than one whole pod, a surge-first roll deadlocks because the
 // discrete (N+1):N step exceeds the band. A surge only ADDS capacity (it can

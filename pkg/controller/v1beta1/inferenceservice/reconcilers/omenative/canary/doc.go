@@ -13,5 +13,7 @@
 // while every other bumped Component stages its own canary capacity, and
 // every member publishes the step's traffic weights on its own revisions
 // (see dispatch.go) and its rolled-out revision fields at the ladder's
-// edges (see revisions.go).
+// edges (see revisions.go). The analysis gate samples every member the
+// push moved, each on its own canary revision, and a breach on any of them
+// is the unit's breach (see analysis_sampler.go and promotion.go).
 package canary

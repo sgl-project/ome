@@ -162,12 +162,15 @@ func evaluateStep(ctx context.Context, in ReconcileInputs, cs *v1beta1.CanarySta
 }
 
 // evaluateAnalysisStep runs the metric gate for one reconcile: warm up, throttle
-// to one evaluation per Interval, read a sample, then decide. Sampling is
-// non-blocking — a miss kicks a bounded background query (the slow Prometheus
-// call never runs on the reconcile goroutine) and holds; the sampler's completion
-// event, or the step requeue, re-reconciles to consume the result. A matching
-// promote overrides the gate; evaluateStep decides it first, and the gate
-// repeats the check so it stays whole for a direct caller.
+// to one evaluation per Interval, read one sample of every member the push
+// moved, then decide. Sampling is non-blocking — a miss kicks a bounded
+// background query (the slow Prometheus call never runs on the reconcile
+// goroutine) and holds; the sampler's completion event, or the step requeue,
+// re-reconciles to consume the result. The unit's sample is complete only
+// when every sampled member has a fresh result: a gate with no sample, or a
+// member still unread, never promotes. A matching promote overrides the gate;
+// evaluateStep decides it first, and the gate repeats the check so it stays
+// whole for a direct caller.
 func evaluateAnalysisStep(ctx context.Context, in ReconcileInputs, a *v1beta1.RolloutAnalysis, cs *v1beta1.CanaryStatus, step v1beta1.RolloutGroupStep) stepDecision {
 	if shouldAdvanceManual(in.ISVC, cs) {
 		return decAdvance
@@ -189,12 +192,18 @@ func evaluateAnalysisStep(ctx context.Context, in ReconcileInputs, a *v1beta1.Ro
 		// Misconfigured (no sampler wired): hold rather than advance ungated.
 		return decHold
 	}
-	req, err := buildSampleRequest(ctx, in, a, cs.CurrentStep)
+	// With no member on record as moved there is nothing whose canary pods a
+	// query could read, so there is no sample to decide on.
+	members := sampledMembers(in)
+	if len(members) == 0 {
+		return decHold
+	}
+	src, err := resolveSampleSource(ctx, in)
 	if err != nil {
 		// Source wiring failure (e.g. an unreadable auth secret) before any query:
 		// treat as inconclusive — hold, or roll back per OnInconclusive — never read
 		// it as a metric breach.
-		return consumeSample(in, cs, step, a, inconclusiveResult("auth", err.Error()), in.Now)
+		return consumeSample(in, cs, step, a, []memberSample{{component: in.Component, result: inconclusiveResult("auth", err.Error())}}, in.Now)
 	}
 	// `since` is the last consumed sample's produced time, so Get returns only a
 	// genuinely newer sample (and never re-counts one already consumed).
@@ -202,22 +211,77 @@ func evaluateAnalysisStep(ctx context.Context, in ReconcileInputs, a *v1beta1.Ro
 	if cs.LastEvaluationTime != nil {
 		since = cs.LastEvaluationTime.Time
 	}
-	res, producedAt, ok := in.Sampler.Get(req, since)
-	if !ok {
-		// No fresh sample yet — a background query was kicked (or is already in
-		// flight). Hold; a completion event or the step requeue re-reconciles.
+	samples := make([]memberSample, 0, len(members))
+	var at time.Time
+	for _, m := range members {
+		res, producedAt, ok := in.Sampler.Get(buildSampleRequest(in, src, m, a, cs.CurrentStep), since)
+		if !ok {
+			// No fresh sample for this member yet — a background query was
+			// kicked (or is already in flight). The other members are still
+			// read on this pass, so their queries run side by side.
+			continue
+		}
+		samples = append(samples, memberSample{component: m.component, result: res})
+		at = laterOf(at, producedAt)
+	}
+	if len(samples) < len(members) {
+		// Hold until every member has answered; a completion event or the
+		// step requeue re-reconciles.
 		return decHold
 	}
-	return consumeSample(in, cs, step, a, res, producedAt)
+	// The unit's sample is dated by its newest member sample, so no member's
+	// result reads as newer than the evaluation that consumed it.
+	return consumeSample(in, cs, step, a, samples, at)
 }
 
-// consumeSample records one analysis sample into status and decides the step's
-// fate: a breach accrues toward FailureLimit (cumulative per step, rollback at the
-// limit); a pass advances once the bake window (Pause.Duration) elapses; an
-// inconclusive sample holds, rolls back per OnInconclusive, or escalates to Failed
-// past the stall timeout. `at` is the sample's produced time (or now for a wiring
-// failure) and stamps the evaluation timestamps.
-func consumeSample(in ReconcileInputs, cs *v1beta1.CanaryStatus, step v1beta1.RolloutGroupStep, a *v1beta1.RolloutAnalysis, res analysis.Result, at time.Time) stepDecision {
+// memberSample is one member's result within the unit's sample.
+type memberSample struct {
+	component v1beta1.ComponentType
+	result    analysis.Result
+}
+
+// unitResult folds the sampled members' results into the unit's verdict with
+// the precedence one sample's metrics have: a breach on any member is the
+// unit's breach, else a member that could not be read leaves the unit
+// unreadable, else the unit passes. The primary's metrics keep their names;
+// a secondary's are keyed "<component>/<name>", so two members' results for
+// one metric stay distinct under the status list's name key and each entry
+// says which member it read.
+func unitResult(primary v1beta1.ComponentType, samples []memberSample) analysis.Result {
+	out := analysis.Result{Outcome: analysis.Pass}
+	for _, s := range samples {
+		switch s.result.Outcome {
+		case analysis.Fail:
+			out.Outcome = analysis.Fail
+		case analysis.Inconclusive:
+			if out.Outcome == analysis.Pass {
+				out.Outcome = analysis.Inconclusive
+			}
+		}
+		for _, m := range s.result.Metrics {
+			if s.component != primary {
+				m.Name = string(s.component) + "/" + m.Name
+			}
+			out.Metrics = append(out.Metrics, m)
+		}
+	}
+	return out
+}
+
+// consumeSample records one analysis sample of the unit, every sampled
+// member's result folded into one verdict, into status and decides the
+// step's fate: a breach accrues toward FailureLimit (cumulative per step,
+// rollback at the limit); a pass advances once the bake window
+// (Pause.Duration) elapses; an inconclusive sample holds, rolls back per
+// OnInconclusive, or escalates to Failed past the stall timeout. `at` is the
+// sample's produced time (or now for a wiring failure) and stamps the
+// evaluation timestamps. No sample is no verdict: nothing is stamped and the
+// step holds.
+func consumeSample(in ReconcileInputs, cs *v1beta1.CanaryStatus, step v1beta1.RolloutGroupStep, a *v1beta1.RolloutAnalysis, samples []memberSample, at time.Time) stepDecision {
+	if len(samples) == 0 {
+		return decHold
+	}
+	res := unitResult(in.Component, samples)
 	cs.LastEvaluationTime = &metav1.Time{Time: at}
 	cs.MetricResults = toStatusMetricResults(res.Metrics, at)
 	dec := decHold
@@ -245,7 +309,11 @@ func consumeSample(in ReconcileInputs, cs *v1beta1.CanaryStatus, step v1beta1.Ro
 			}
 		}
 	}
-	recordAnalysisSample(in.ISVC, in.Component, res, cs.AnalysisFailedChecks)
+	// Each member's own result is published under its Component, so the
+	// metrics name the member a value or a breach belongs to.
+	for _, s := range samples {
+		recordAnalysisSample(in.ISVC, s.component, s.result, cs.AnalysisFailedChecks)
+	}
 	if dec == decRollback {
 		recordRollback(in.ISVC, in.Component, "analysis")
 	}

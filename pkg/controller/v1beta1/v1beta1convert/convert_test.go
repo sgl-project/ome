@@ -449,12 +449,71 @@ func TestInstanceStatusToWorkload_PublishedReadyOffRunningRevisionReadsFailed(t 
 		"no target revision":        {Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "rev-1"},
 		"target is the running one": {Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "rev-1", TargetRevision: "rev-1"},
 		"never ran a revision":      {Phase: v1beta1.OMENativeInstanceReady, TargetRevision: "rev-2"},
-		"an operation owns the row": {Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "rev-1", TargetRevision: "rev-2",
-			Operation: &v1beta1.InstanceOperation{ID: "update-2", Type: v1beta1.InstanceOperationUpdate, Step: "Surge"}},
+		"a recreate attempt owns the row": {Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "rev-1", TargetRevision: "rev-2",
+			Operation: &v1beta1.InstanceOperation{ID: "update-2", Type: v1beta1.InstanceOperationUpdate, Step: "Drain"}},
 	}
 	for name, row := range asIs {
 		if got := InstanceStatusToWorkload(row); got.Phase != workloadtypes.InstancePhaseReady {
 			t.Errorf("%s: read as %s, want Ready", name, got.Phase)
+		}
+	}
+}
+
+// The status publication writes Ready over a Failed row that still keeps
+// the surge attempt it failed at while the pods on the revision it runs
+// serve. The engine reads that row as Failed: no writer leaves Ready beside
+// an operation, so the shape is the publication's. The attempt, the record,
+// the revisions and the anchor come through untouched, single-pod and gang
+// alike. A source past its drain hand-over, the replacement's own row, a
+// roll still Updating and a Ready row with no target revision read as they
+// are.
+func TestInstanceStatusToWorkload_PublishedReadyKeepingSurgeReadsFailed(t *testing.T) {
+	readySince := metav1.NewTime(time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC))
+	failedAt := metav1.NewTime(readySince.Add(10 * time.Minute))
+	slot := int32(2)
+	surge := func(step string, surgeIdx *int32) *v1beta1.InstanceOperation {
+		return &v1beta1.InstanceOperation{ID: "gangsurge-0", Type: v1beta1.InstanceOperationUpdate, Step: step, TargetRevision: "rev-2", SurgeIndex: surgeIdx}
+	}
+	for name, op := range map[string]*v1beta1.InstanceOperation{"gang": surge("Surge", &slot), "single-pod": surge("Surge", nil)} {
+		published := v1beta1.OMENativeInstanceStatus{
+			Index: 0, Incarnation: 3, Phase: v1beta1.OMENativeInstanceReady,
+			RunningRevision: "rev-1", TargetRevision: "rev-2", PodCount: 2, ReadySince: &readySince, Operation: op,
+			LastFailure: &v1beta1.InstanceTermination{PodName: "p-2-leader-0", Reason: "CrashLoopBackOff", Time: failedAt},
+		}
+		got := InstanceStatusToWorkload(published)
+		if got.Phase != workloadtypes.InstancePhaseFailed {
+			t.Fatalf("%s: published Ready keeping its surge read as phase %s, want Failed", name, got.Phase)
+		}
+		if got.Operation == nil || got.Operation.Step != workloadtypes.UpdateStepSurge || got.Operation.TargetRevision != "rev-2" ||
+			(op.SurgeIndex != nil) != (got.Operation.SurgeIndex != nil) {
+			t.Fatalf("%s: operation = %+v, want the surge attempt kept", name, got.Operation)
+		}
+		if got.RunningRevision != "rev-1" || got.TargetRevision != "rev-2" || got.Incarnation != 3 ||
+			got.ReadySince == nil || !got.ReadySince.Equal(&readySince) ||
+			got.LastFailure == nil || got.LastFailure.PodName != "p-2-leader-0" || !got.LastFailure.Time.Equal(&failedAt) {
+			t.Fatalf("%s: row = %+v, want revisions, anchor, incarnation and record kept", name, got)
+		}
+		if back := InstanceStatusFromWorkload(got); back.Phase != v1beta1.OMENativeInstanceFailed {
+			t.Fatalf("%s: the engine's shape encodes as %s, want Failed: only the publication writes Ready over it", name, back.Phase)
+		}
+	}
+
+	asIs := map[string]struct {
+		row  v1beta1.OMENativeInstanceStatus
+		want workloadtypes.InstancePhase
+	}{
+		"past the drain hand-over": {v1beta1.OMENativeInstanceStatus{Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "rev-1", TargetRevision: "rev-2",
+			Operation: surge("SurgeDrain", &slot)}, workloadtypes.InstancePhaseReady},
+		"the replacement's own row": {v1beta1.OMENativeInstanceStatus{Phase: v1beta1.OMENativeInstanceFailed, TargetRevision: "rev-2",
+			Operation: surge("GangSurgeTarget", nil)}, workloadtypes.InstancePhaseFailed},
+		"a roll still Updating": {v1beta1.OMENativeInstanceStatus{Phase: v1beta1.OMENativeInstanceUpdating, RunningRevision: "rev-1", TargetRevision: "rev-2",
+			Operation: surge("Surge", &slot)}, workloadtypes.InstancePhaseUpdating},
+		"no target revision": {v1beta1.OMENativeInstanceStatus{Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "rev-1",
+			Operation: surge("Surge", &slot)}, workloadtypes.InstancePhaseReady},
+	}
+	for name, tc := range asIs {
+		if got := InstanceStatusToWorkload(tc.row); got.Phase != tc.want {
+			t.Errorf("%s: read as %s, want %s", name, got.Phase, tc.want)
 		}
 	}
 }

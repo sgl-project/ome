@@ -394,3 +394,46 @@ func TestRowStoreNumbersEachStatusWrite(t *testing.T) {
 		t.Fatalf("first commit of the next pass carries batch %d, want 1", last.Batch)
 	}
 }
+
+// TestRowStorePurgeReportsEveryRemoval pins what the owner leaving the
+// apiserver reports: one removal per row carrying the state it left from,
+// one per retry block, all in one batch, and a store with nothing left. A
+// second purge finds nothing and reports nothing.
+func TestRowStorePurgeReportsEveryRemoval(t *testing.T) {
+	sink := &recordingSink{}
+	store := replay.NewRowStore(
+		[]types.InstanceStatus{{Index: 0, Phase: types.InstancePhaseReady}, {Index: 1, Phase: types.InstancePhaseCreating}},
+		[]types.RetryBlock{{TargetRevision: "rev-b", State: types.RetryBlockBackoff, AttemptsStarted: 1}},
+		sink)
+	removed := store.Purge()
+	if len(removed) != 2 || len(store.Rows()) != 0 || len(store.RetryBlocks()) != 0 {
+		t.Fatalf("purge removed %d rows, store keeps %d rows and %d retry blocks; want 2 removed and nothing kept",
+			len(removed), len(store.Rows()), len(store.RetryBlocks()))
+	}
+	if len(sink.rows) != 2 {
+		t.Fatalf("row commits = %+v, want one removal per row", sink.rows)
+	}
+	wantPhase := []types.InstancePhase{types.InstancePhaseReady, types.InstancePhaseCreating}
+	for i, c := range sink.rows {
+		switch {
+		case !c.Remove || c.Outcome != replay.PreconditionOK || c.After != nil:
+			t.Fatalf("row commit %d = %+v, want a committed removal", i, c)
+		case c.Before == nil || c.Before.Index != int32(i) || c.Before.Phase != wantPhase[i]:
+			t.Fatalf("row commit %d before = %+v, want index %d in phase %s", i, c.Before, i, wantPhase[i])
+		case c.Batch != sink.rows[0].Batch:
+			t.Fatalf("row commit %d landed in batch %d, want the one batch %d the purge is", i, c.Batch, sink.rows[0].Batch)
+		}
+	}
+	if len(sink.blocks) != 1 {
+		t.Fatalf("retry block commits = %+v, want the one block's removal", sink.blocks)
+	}
+	block := sink.blocks[0]
+	if block.Disposition != replay.RetryBlockRemoved || block.Before == nil || block.After != nil ||
+		block.TargetRevision != "rev-b" || block.Batch != sink.rows[0].Batch {
+		t.Fatalf("retry block commit = %+v, want rev-b removed in the purge's batch", block)
+	}
+	if again := store.Purge(); len(again) != 0 || len(sink.rows) != 2 || len(sink.blocks) != 1 {
+		t.Fatalf("a second purge removed %d rows and reported %d row and %d block commits in all; want nothing new",
+			len(again), len(sink.rows), len(sink.blocks))
+	}
+}

@@ -69,7 +69,9 @@ func DeriveISVC(src *v1beta1.InferenceService, controlPlaneID, localQueue string
 		delete(d.Annotations, k)
 	}
 	delete(d.Annotations, constants.PlacementPolicy)
-	if src.Spec.Placement.UsesClusterAffinity() {
+	// Members run the same protocol under either policy, so a member copy is
+	// identical whichever one the source selects.
+	if src.Spec.Placement.UsesAffinityPolicy() {
 		d.Annotations[constants.PlacementPolicy] = string(v1beta1.PlacementPolicyClusterAffinity)
 	}
 	for k := range d.Annotations {

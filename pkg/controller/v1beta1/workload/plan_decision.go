@@ -57,6 +57,11 @@ type RestartSelection struct {
 	Instance types.InstancePlan
 	Reason   string
 
+	// pods is this Instance's bucket from the authoritative, Component-wide
+	// decision snapshot. The executor treats the slice and Pods as immutable
+	// and reuses them for every restart phase in this pass.
+	pods []*corev1.Pod
+
 	// OpensRepair marks a selection that opens a fresh crash-loop repair
 	// this pass rather than driving one already in flight or recovering
 	// capacity already lost. The executor opens at most
@@ -586,20 +591,22 @@ func restartContinuations(input types.ReconcileInput, restarts []RestartSelectio
 // a paused Component keeps every repair, because the roll it would yield
 // to is the very thing the pause withholds.
 //
-// The live read is unconditional only under the policy whose triggers
-// fire on ordinary pod churn. The two policy-independent triggers are
-// rare, so for every other policy the cached view screens for a
-// candidate first and the live read confirms it; a healthy Component
-// therefore costs no extra live List per reconcile.
+// The cached view only screens for a candidate. One Component-wide live view
+// then confirms every selection and travels with the Decision into execution,
+// so a restart pass performs at most one authoritative Pod List regardless of
+// how many Instances it advances. Mutations after that observation remain
+// fenced by Pod UID and identity checks, and a create that races a same-name
+// occupant converges through AlreadyExists. A healthy Component costs no live
+// List under any policy. Under RecreateInstance, a failed cache read falls back
+// to the live view because that policy can select entirely from the
+// authoritative observation.
 func planRestartSelections(ctx context.Context, input types.ReconcileInput, plan types.ComponentPlan, target *appsv1.ControllerRevision, snapshot *ObservedSnapshot) ([]RestartSelection, error) {
-	if plan.RestartPolicy != types.RestartPolicyRecreateInstance {
-		cachedByInstance, err := snapshot.CachedPods(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("workload.Reconcile: list pods to screen the restart pass (component=%s): %w", plan.Component, err)
-		}
-		if !anyRestartTrigger(input, plan, target, cachedByInstance) {
-			return nil, nil
-		}
+	cachedByInstance, err := snapshot.CachedPods(ctx)
+	if err != nil && plan.RestartPolicy != types.RestartPolicyRecreateInstance {
+		return nil, fmt.Errorf("workload.Reconcile: list pods to screen the restart pass (component=%s): %w", plan.Component, err)
+	}
+	if err == nil && !anyRestartTrigger(input, plan, target, cachedByInstance) {
+		return nil, nil
 	}
 	liveByInstance, err := snapshot.LivePods(ctx)
 	if err != nil {
@@ -614,6 +621,7 @@ func planRestartSelections(ctx context.Context, input types.ReconcileInput, plan
 		restarts = append(restarts, RestartSelection{
 			Instance:            inst,
 			Reason:              reason,
+			pods:                liveByInstance[inst.Index],
 			OpensRepair:         workloadops.RestartOpensRepair(input, plan, inst, liveByInstance[inst.Index]),
 			OpensUnavailability: workloadops.RestartOpensUnavailability(input, plan, inst, liveByInstance[inst.Index]),
 			LadderRevision:      workloadops.RestartOpensLadderAttempt(input, plan, inst, liveByInstance[inst.Index]),

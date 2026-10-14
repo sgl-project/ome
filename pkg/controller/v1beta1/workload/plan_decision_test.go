@@ -694,6 +694,34 @@ func TestPlanObservationReadFailureFailsClosed(t *testing.T) {
 	}
 }
 
+func TestPlan_RecreatePolicyCacheFailureFallsBackToLive(t *testing.T) {
+	wantErr := errors.New("cached pod observation failed")
+	failingCache := fake.NewClientBuilder().WithScheme(makeScheme(t)).WithInterceptorFuncs(interceptor.Funcs{
+		List: func(_ context.Context, _ client.WithWatch, _ client.ObjectList, _ ...client.ListOption) error {
+			return wantErr
+		},
+	}).Build()
+	live := fake.NewClientBuilder().WithScheme(makeScheme(t)).Build()
+	input := minimalInput(t)
+	forbidMutations(t, &input)
+	input.ObservedState.InstanceStatuses = []types.InstanceStatus{{
+		Index: 0, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: "prior-revision",
+	}}
+	plan := minimalPlan()
+	plan.Paused = true
+	plan.RestartPolicy = types.RestartPolicyRecreateInstance
+	snapshot := workload.NewObservedSnapshot(types.Deps{Client: failingCache, APIReader: live}, input, plan.Component, input.ObservedState.InstanceStatuses)
+
+	decision, err := workload.Plan(context.Background(), input, plan, nil, snapshot)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	restart := findAction(decision, workload.ActionRestart)
+	if restart == nil || len(restart.Restarts) != 1 || restart.Restarts[0].Instance.Index != 0 {
+		t.Fatalf("restart selection = %+v, want the live pod-loss selection", restart)
+	}
+}
+
 // TestPlan_Update_SelectsTriggeredInstances asserts the update
 // selection: an Instance on a prior revision is a fresh start, a
 // mid-update Instance is a continuation, an Instance already on the

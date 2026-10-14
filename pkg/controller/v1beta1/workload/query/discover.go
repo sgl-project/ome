@@ -160,7 +160,7 @@ func RegisterOMENativePodIndex(ctx context.Context, indexer client.FieldIndexer)
 // LiveListPodsForInstance returns the pods matching the (component,
 // idx) tuple via the supplied live API reader. Use this from any
 // destructive code path — Delete, the zero-old-pods confirmation
-// between recreate/restart Phase A and Phase B, Migrate's
+// between recreate-update Phase A and Phase B, Migrate's
 // source-drain and source-delete steps — so the controller doesn't
 // act on a stale cache view that says "pods gone" while the API
 // server still holds them.
@@ -176,19 +176,19 @@ func RegisterOMENativePodIndex(ctx context.Context, indexer client.FieldIndexer)
 // keeps the leaf importable by both adapter paths without closing a
 // cycle. Adapters compose these from their own Deps + key.
 func LiveListPodsForInstance(ctx context.Context, reader client.Reader, namespace, isvcName string, component workload.ComponentType, idx int32) ([]*corev1.Pod, error) {
-	// Live API reader has no Pod field index — skip the doomed MatchingFields
-	// probe (useIndex=false) and go straight to the label selector.
-	pods, err := ListOMENativePodsByName(ctx, reader, namespace, isvcName, component, false)
-	if err != nil {
+	// The API-server selector includes the Instance index, so this read returns
+	// and decodes only the selected Instance's Pods.
+	pods := &corev1.PodList{}
+	sel := labels.SelectorFromSet(labels.Set{
+		constants.InferenceServicePodLabelKey: isvcName,
+		constants.OMEComponentLabel:           string(component),
+		LabelManagedBy:                        ManagedByOMENative,
+		LabelInstanceIdx:                      strconv.FormatInt(int64(idx), 10),
+	})
+	if err := reader.List(ctx, pods, client.InNamespace(namespace), client.MatchingLabelsSelector{Selector: sel}); err != nil {
 		return nil, err
 	}
-	out := make([]*corev1.Pod, 0, len(pods))
-	for _, pod := range pods {
-		if i, ok := InstanceIdxFromLabels(pod); ok && i == idx {
-			out = append(out, pod)
-		}
-	}
-	return out, nil
+	return collectPods(pods), nil
 }
 
 // LiveListPodsForComponent returns every pod the OMENative selector
@@ -518,7 +518,7 @@ func podSetAtBar(pods []*corev1.Pod, desired int32, bar func(*corev1.Pod) bool) 
 }
 
 // AllTerminating reports whether every pod in the slice carries a
-// DeletionTimestamp. Used by recreate / restart Phase B to allow
+// DeletionTimestamp. Used by recreate-update Phase B to allow
 // moving on to Create even when the API server hasn't fully GC'd
 // the previous incarnation's pods yet — terminating-but-not-yet-gone
 // is a safe state because the previous Delete call already issued
@@ -543,7 +543,7 @@ func AllTerminating(pods []*corev1.Pod) bool {
 // them.
 //
 // The boundary check between Phase A (drain + delete) and Phase B
-// (create) in recreate / restart ops. Without it, the cache may show
+// (create) in the recreate-update op. Without it, the cache may show
 // stale old pods that Phase A already deleted (blocking Phase B
 // indefinitely), or the cache may show zero pods while the API
 // server still holds them (letting Phase B issue a stable-name
@@ -559,7 +559,6 @@ func LiveOldPodsClearedForRecreate(ctx context.Context, reader client.Reader, na
 		return false, err
 	}
 	// Orphans don't block recreate — they aren't the prior incarnation.
-	// Restart's caller routes them through the FoundOrphan event path.
 	oldPods, _, _ := PartitionPodsByIncarnation(pods, currentInc)
 	return AllTerminating(oldPods), nil
 }

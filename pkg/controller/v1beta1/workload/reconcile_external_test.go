@@ -656,19 +656,20 @@ func enginePod(isvc, ns string, idx int32) *corev1.Pod {
 	}
 }
 
-// listCountingReader wraps a client.Reader and counts PodList List calls.
-// Used to prove the dispatcher's restart pass lists pods ONCE per
-// reconcile (via the live APIReader) instead of once per Instance.
+// listCountingReader wraps a client.Reader and records Pod List cost.
 type listCountingReader struct {
 	client.Reader
 	podListCalls int
+	podListItems int
 }
 
 func (r *listCountingReader) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-	if _, ok := list.(*corev1.PodList); ok {
+	err := r.Reader.List(ctx, list, opts...)
+	if pods, ok := list.(*corev1.PodList); ok {
 		r.podListCalls++
+		r.podListItems += len(pods.Items)
 	}
-	return r.Reader.List(ctx, list, opts...)
+	return err
 }
 
 // failedEnginePod is enginePod with Phase=Failed — a restart trigger.
@@ -4462,6 +4463,9 @@ func (h *admissionHarness) kubelet() {
 			continue
 		}
 		if pod.Status.Phase == "" {
+			if pod.UID == "" {
+				pod.UID = uuid.NewUUID()
+			}
 			pod.CreationTimestamp = metav1.NewTime(h.clk.Now())
 			if err := h.c.Update(h.ctx, pod); err != nil {
 				h.t.Fatalf("kubelet stamp creation %s: %v", pod.Name, err)
@@ -5126,6 +5130,7 @@ func TestExecuteErroredOpPassStillEscalatesExpiredDeadline(t *testing.T) {
 		return nil
 	}
 	plan := threeInstancePlan()
+	plan.RestartPolicy = workloadtypes.RestartPolicyRecreateInstance
 	c := fake.NewClientBuilder().WithScheme(makeScheme(t)).Build()
 	deps := workloadtypes.Deps{Client: c, APIReader: c, Expectations: workloadtypes.NewExpectations()}
 	snapshot := workload.SnapshotWithPodsForTest(in, nil)
@@ -5166,11 +5171,10 @@ func TestExecuteErroredOpPassStillEscalatesExpiredDeadline(t *testing.T) {
 	}
 }
 
-// TestExecuteErroredPodReadDoesNotFabricateStuckEvidence: the restart
-// pass fails because the Pod list failed, so the escalation pass reading
-// the same memoized source fails too, before it derives any evidence — a
-// read failure never invents a stuck pod — so nothing is stamped Failed,
-// and the joined error keeps the op error first.
+// TestExecuteErroredPodReadDoesNotFabricateStuckEvidence: a preplanned
+// restart consumes its decision snapshot without another Pod List. The
+// end-of-pass hold and escalation reads still fail before deriving any
+// evidence, so a read failure never invents a stuck pod or stamps Failed.
 func TestExecuteErroredPodReadDoesNotFabricateStuckEvidence(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)
@@ -5220,15 +5224,15 @@ func TestExecuteErroredPodReadDoesNotFabricateStuckEvidence(t *testing.T) {
 	_, err := workload.Execute(ctx, deps, in, plan, nil, snapshot, restartOnlyDecision(plan.Instances[1]))
 
 	if err == nil {
-		t.Fatal("the pass must report both the restart failure and the escalation read failure")
+		t.Fatal("the pass must report the hold and escalation read failures")
 	}
-	opFirst := strings.Index(err.Error(), "restart instance 1")
-	escalationSecond := strings.Index(err.Error(), "list pods for escalation pass")
-	if opFirst < 0 || escalationSecond < 0 {
-		t.Fatalf("joined error must name both failures; got %v", err)
+	if strings.Contains(err.Error(), "restart instance 1") {
+		t.Fatalf("execution must not issue another restart Pod read; got %v", err)
 	}
-	if opFirst > escalationSecond {
-		t.Fatalf("the op error must be reported first; got %v", err)
+	for _, want := range []string{"read NodeUnknown hold", "list pods for escalation pass"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("joined error must contain %q; got %v", want, err)
+		}
 	}
 	if got := store.status(0); got != nil && got.Phase == workloadtypes.InstancePhaseFailed {
 		t.Fatalf("a failed pod read must not stamp Failed: %+v", got)
@@ -5292,6 +5296,7 @@ func TestExecuteErroredSiblingKeepsRelocationFirstTry(t *testing.T) {
 	}
 	plan := minimalPlan()
 	plan.MigrationMode = workloadtypes.MigrationModeAuto
+	plan.RestartPolicy = workloadtypes.RestartPolicyRecreateInstance
 	plan.Instances = append(plan.Instances, workloadtypes.InstancePlan{
 		Index: 1, Incarnation: 1, Runners: []workloadtypes.RunnerPlan{{Name: "default", Size: 1}},
 	})

@@ -233,15 +233,20 @@ func TestReconcileMoveUsesRoutingIntent(t *testing.T) {
 		{name: "Single cancellation after original loss", mode: v1beta1.PlacementModeSingle, cancel: true, absent: true},
 	} {
 		for _, published := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/published=%t", tt.name, published), func(t *testing.T) { testMoveUsesRoutingIntent(t, tt.mode, tt.cancel, tt.absent, published) })
+			t.Run(fmt.Sprintf("%s/published=%t", tt.name, published), func(t *testing.T) { testMoveUsesRoutingIntent(t, tt.mode, tt.cancel, tt.absent, published, true) })
 		}
+		// Without OME routing the same move proceeds on member state alone.
+		t.Run(tt.name+"/routing disabled", func(t *testing.T) { testMoveUsesRoutingIntent(t, tt.mode, tt.cancel, tt.absent, false, false) })
 	}
 }
 
-func testMoveUsesRoutingIntent(t *testing.T, mode v1beta1.PlacementMode, cancelMove, absentOriginal, published bool) {
+func testMoveUsesRoutingIntent(t *testing.T, mode v1beta1.PlacementMode, cancelMove, absentOriginal, published, routed bool) {
 	fixture := observationFixture(t)
 	source := fixture.source
 	source.Namespace = "prod"
+	if !routed {
+		source.Spec.Routing = &v1beta1.RoutingSpec{Enabled: ptr.To(false)}
+	}
 	source.Spec.Placement.Split.Replicas = ptr.To[int32](1)
 	source.Spec.Placement.ClusterAffinity = testAffinity("target=true")
 	source.Status.Placement.Plan.PauseSurge = false
@@ -353,6 +358,9 @@ func testMoveUsesRoutingIntent(t *testing.T, mode v1beta1.PlacementMode, cancelM
 		}
 	}
 	publish := func(weights map[string]int32) {
+		if !routed {
+			return
+		}
 		live := readSource()
 		tm := &v1beta1.TrafficMap{}
 		err := root.Get(t.Context(), client.ObjectKeyFromObject(source), tm)
@@ -900,6 +908,66 @@ func TestSplitObservationWithoutPublication(t *testing.T) {
 				t.Errorf("completion (-want +got):\n%s; reason: %s", diff, step.Reason)
 			}
 		})
+	}
+}
+
+// TestSplitObservationWithoutRouting covers sources OME publishes no routing
+// for. No routing intent can ever appear, so member state alone decides what a
+// home serves, and a requested drain has no OME-managed traffic to wait for.
+func TestSplitObservationWithoutRouting(t *testing.T) {
+	type home struct {
+		Known, Routable, Drained bool
+	}
+	for _, tt := range []struct {
+		name   string
+		edit   func(*plannedObservationFixture)
+		want   home
+		target int32
+	}{
+		{name: "a serving home is routable", want: home{Known: true, Routable: true}, target: 1},
+		{name: "a changed target is not held for routing intent", edit: func(f *plannedObservationFixture) {
+			f.source.Status.Placement.Candidates[0].Allocation.DesiredReplicas = 2
+		}, want: home{Known: true, Routable: true}, target: 2},
+		{name: "a requested drain needs no routing intent", edit: func(f *plannedObservationFixture) {
+			f.source.Status.Placement.Candidates[0].Allocation.CurrentReplicas = 0
+			f.source.Status.Placement.Candidates[0].Allocation.DesiredReplicas = 0
+			f.source.Status.Placement.Candidates[0].Allocation.DrainRequested = true
+		}, want: home{Known: true, Drained: true}},
+		{name: "unverified inventory stays unknown", edit: func(f *plannedObservationFixture) { f.resources.pods[0].OwnerReferences = nil }, target: 1},
+	} {
+		for _, disabled := range []string{"source", "installation"} {
+			t.Run(fmt.Sprintf("%s/disabled by %s", tt.name, disabled), func(t *testing.T) {
+				f := observationFixture(t)
+				f.source.Status.Placement.Plan.AssignedReplicas = 1
+				f.source.Status.Placement.Plan.OriginalUnassignedReplicas = 1
+				if disabled == "source" {
+					f.source.Spec.Routing = &v1beta1.RoutingSpec{Enabled: ptr.To(false)}
+				}
+				if tt.edit != nil {
+					tt.edit(&f)
+				}
+				scheme := testScheme(t)
+				worker := fake.NewClientBuilder().WithScheme(scheme).WithObjects(f.member, f.resources.ir, &f.resources.pods[0]).Build()
+				clusters := identifiedTestClusters{fakeClusters: fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{"member-a": workloadcluster.NewNeverCachingClient(worker)}}, uid: "member-a-uid"}
+				r, _ := newPlacer(scheme, clusters, f.source, plannedTestRegistration())
+				r.RoutingDisabled = disabled == "installation"
+				observations := r.observeSplitMembers(t.Context(), f.source, []string{"member-a"})
+				observed := observations["member-a"].Home
+				if diff := cmp.Diff(tt.want, home{observed.Known, observed.Routable, observed.Drained}); diff != "" {
+					t.Errorf("home (-want +got):\n%s", diff)
+				}
+				step, err := advanceSplitPlan(f.source, observations)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if tt.want.Known && step.Reason == "ObservationUnknown" {
+					t.Errorf("observed home held for routing intent: %+v", step)
+				}
+				if diff := cmp.Diff(tt.target, step.Targets["member-a"]); diff != "" {
+					t.Errorf("target (-want +got):\n%s; reason: %s", diff, step.Reason)
+				}
+			})
+		}
 	}
 }
 

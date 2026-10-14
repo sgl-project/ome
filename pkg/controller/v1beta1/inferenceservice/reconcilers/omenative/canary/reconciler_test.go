@@ -2055,3 +2055,36 @@ func TestReconcile_PreStepHoldReleaseIsConsumedAfterTheFlush(t *testing.T) {
 		t.Fatalf("the release must record the applied promote: %+v", cs)
 	}
 }
+
+// TestReconcile_CapacityShortOnTheWindowWakesAtItsRemainder: a canary pod
+// crossing its minReadySeconds window raises no watch event, so a capacity
+// gate short on the window alone wakes when the soonest pod clears it,
+// unless the step cadence comes first.
+func TestReconcile_CapacityShortOnTheWindowWakesAtItsRemainder(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		windowWait time.Duration
+		want       time.Duration
+	}{
+		{"the window clears before the cadence", 7 * time.Second, 7 * time.Second},
+		{"the cadence comes first", 25 * time.Second, reconcileRequeue},
+		{"nothing waits on a window", 0, reconcileRequeue},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			isvc := canaryISVC(twoStep(), nil)
+			in := baseInputs(isvc, map[string]int32{"new": 2})
+			in.ReadyCanaryInstances = i32(0)
+			in.CapacityWindowWait = tc.windowWait
+			res, err := Reconcile(context.Background(), in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if phaseOf(isvc) != v1beta1.RolloutPhasePending {
+				t.Fatalf("phase = %q, want Pending while no canary Instance has held Ready for the window", phaseOf(isvc))
+			}
+			if res.RequeueAfter != tc.want {
+				t.Fatalf("RequeueAfter = %s, want %s", res.RequeueAfter, tc.want)
+			}
+		})
+	}
+}

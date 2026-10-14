@@ -31,6 +31,9 @@ type plannedHomeObservation struct {
 	IdleZeroFloor     bool
 	ScalingToZero     bool
 	Terminal          bool
+	// ComponentReady counts each scaled component's ready instances while the
+	// home can serve; it is empty otherwise.
+	ComponentReady map[v1beta1.ComponentType]int32
 }
 
 // observePlannedHome combines the observed ISVC with a direct workload inventory,
@@ -68,6 +71,11 @@ func (r *Reconciler) observePlannedHomeOnce(ctx context.Context, source *v1beta1
 	}
 	if memberExists {
 		out.Candidate.Endpoint = member.Status.URL.DeepCopy()
+		// The member's own status was read: an ingress it reports not ready
+		// means the home cannot serve, even if a later read fails.
+		if !member.Status.IsConditionReady(v1beta1.IngressReady) {
+			out.Candidate.ReadyReplicas = 0
+		}
 	}
 	irs := &v1beta1.InferenceReplicaList{}
 	selector := client.MatchingLabels{constants.InferenceServicePodLabelKey: source.Name}
@@ -266,7 +274,8 @@ func (r *Reconciler) observePlannedHomeOnce(ctx context.Context, source *v1beta1
 			out.Candidate.Endpoint = endpointFor(member).DeepCopy()
 		}
 		if member.Status.IsConditionReady(v1beta1.IngressReady) && allAdmitted && allServing {
-			out.Candidate.ReadyReplicas = placementReadyReplicas(scaled, statuses, floors)
+			out.Candidate.ReadyReplicas = placementReadyReplicas(scaled, statuses, servingFloors(source, floors))
+			out.ComponentReady = readyCounts
 		} else {
 			out.Home.Ready = 0
 		}

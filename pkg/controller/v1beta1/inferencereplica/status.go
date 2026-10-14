@@ -164,9 +164,11 @@ const (
 // the pods published beside it, so the phase never contradicts the
 // counters. A Ready row (workloadstatus.DemotableReady) reads Pending with
 // no pods and Restarting while its set serves nothing; a Failed row off the
-// revision it runs (workloadtypes.FailedOffRunningRevision) reads Ready
-// while the pods on that revision serve. A nil target leaves revision
-// pointers untouched while counters still publish.
+// revision it runs, its attempt spent (workloadtypes.FailedOffRunningRevision)
+// or still kept at its surge step
+// (workloadtypes.FailedKeepingSurgeOffRunningRevision), reads Ready while
+// the pods on that revision serve. A nil target leaves revision pointers
+// untouched while counters still publish.
 //
 // holdObserved/hold carry this pass's Update-pass rollout-hold verdict
 // (ReconcileInput.RecordRolloutHold): holdObserved is true when the Update

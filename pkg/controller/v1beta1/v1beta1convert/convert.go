@@ -320,18 +320,22 @@ func InstanceTerminationFromWorkload(w *workloadtypes.InstanceTermination) *v1be
 // The phase is read as the engine holds it. The status publication writes
 // Restarting over a settled Ready row whose pod set serves nothing; no
 // operation owns such a row, and the engine's state of it is Ready. It
-// writes Ready over a settled Failed row that still runs a revision and
-// records a spent attempt at another while the pods it runs serve; no
-// promote leaves a Ready row off its running revision, so that shape is
-// the publication's and the engine's state of it is Failed
-// (workloadtypes.PublishedReadyOffRunningRevision).
+// writes Ready over a Failed row that still runs a revision and records an
+// attempt at another while the pods it runs serve, whether the attempt is
+// spent or the row still keeps it at its surge step; no promote leaves a
+// Ready row off its running revision and no writer leaves Ready beside an
+// operation, so both shapes are the publication's and the engine's state
+// of them is Failed (workloadtypes.PublishedReadyOffRunningRevision,
+// workloadtypes.PublishedReadyKeepingSurgeOffRunningRevision).
 func InstanceStatusToWorkload(v v1beta1.OMENativeInstanceStatus) workloadtypes.InstanceStatus {
 	phase := InstancePhaseToWorkload(v.Phase)
 	if phase == workloadtypes.InstancePhaseRestarting && v.Operation == nil {
 		phase = workloadtypes.InstancePhaseReady
 	}
-	if v.Operation == nil && workloadtypes.PublishedReadyOffRunningRevision(&workloadtypes.InstanceStatus{
-		Phase: phase, RunningRevision: v.RunningRevision, TargetRevision: v.TargetRevision}) {
+	operation := InstanceOperationToWorkload(v.Operation)
+	published := &workloadtypes.InstanceStatus{
+		Phase: phase, RunningRevision: v.RunningRevision, TargetRevision: v.TargetRevision, Operation: operation}
+	if workloadtypes.PublishedReadyOffRunningRevision(published) || workloadtypes.PublishedReadyKeepingSurgeOffRunningRevision(published) {
 		phase = workloadtypes.InstancePhaseFailed
 	}
 	out := workloadtypes.InstanceStatus{
@@ -348,7 +352,7 @@ func InstanceStatusToWorkload(v v1beta1.OMENativeInstanceStatus) workloadtypes.I
 		Admitted:          v.Admitted,
 		ActiveOrdinal:     v.ActiveOrdinal,
 		ReadySince:        v.ReadySince.DeepCopy(),
-		Operation:         InstanceOperationToWorkload(v.Operation),
+		Operation:         operation,
 		LastFailure:       InstanceTerminationToWorkload(v.LastFailure),
 	}
 	if v.NodesOccupied != nil {

@@ -21,6 +21,9 @@ import (
 // drainPod builds a routable OMENative pod of one cohort: the labels Render
 // stamps, a revision hash (which is what makes it routable), and PodReady
 // when `ready`. runner "worker" makes it a gang worker, which never routes.
+// The Instance index and pod ordinal labels are read off a name of the form
+// `<prefix>-<component>-<index>-<runner>-<ordinal>`, the way Render names
+// pods; a name of another shape carries neither label.
 func drainPod(isvcName string, comp v1beta1.ComponentType, name, runner, proto string, ready bool) *corev1.Pod {
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
 		Namespace: "prod", Name: name,
@@ -32,6 +35,10 @@ func drainPod(isvcName string, comp v1beta1.ComponentType, name, runner, proto s
 			query.LabelRevisionHash:               "rev" + strings.ReplaceAll(proto, "-", ""),
 		},
 	}}
+	if parts := strings.Split(name, "-"); len(parts) >= 5 {
+		pod.Labels[query.LabelInstanceIdx] = parts[len(parts)-3]
+		pod.Labels[query.LabelPodOrdinal] = parts[len(parts)-1]
+	}
 	if proto != "" {
 		pod.Labels[query.LabelPairingProtocol] = proto
 	}

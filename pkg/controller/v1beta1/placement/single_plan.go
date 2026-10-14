@@ -88,7 +88,7 @@ func (r *Reconciler) reconcileSinglePlanned(ctx context.Context, source *v1beta1
 			continue
 		}
 		cctx, cancel := context.WithTimeout(ctx, r.placeTimeout())
-		err := r.placePlannedMember(cctx, accepted, candidate, winner != "")
+		err := r.placePlannedMember(cctx, accepted, candidate, winner != "", nil)
 		cancel()
 		if err != nil {
 			if isMemberWriteRace(err) {

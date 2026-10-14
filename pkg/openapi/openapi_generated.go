@@ -78,8 +78,10 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterSelectorRequirement":       schema_pkg_apis_ome_v1beta1_ClusterSelectorRequirement(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterServingRuntime":            schema_pkg_apis_ome_v1beta1_ClusterServingRuntime(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterServingRuntimeList":        schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAffinityMatch":           schema_pkg_apis_ome_v1beta1_ComponentAffinityMatch(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler":              schema_pkg_apis_ome_v1beta1_ComponentAutoscaler(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscalerStatus":        schema_pkg_apis_ome_v1beta1_ComponentAutoscalerStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentClusterAffinity":         schema_pkg_apis_ome_v1beta1_ComponentClusterAffinity(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentExtensionSpec":           schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":              schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentTrafficTarget":           schema_pkg_apis_ome_v1beta1_ComponentTrafficTarget(ref),
@@ -3366,6 +3368,28 @@ func schema_pkg_apis_ome_v1beta1_CandidateAllocationStatus(ref common.ReferenceC
 							Format:      "int64",
 						},
 					},
+					"componentMatches": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"component",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ComponentMatches records, under the ComponentAffinity policy, how each component other than the primary one matched this cluster. MatchingTerms and Weight hold the primary component's match. The accepted plan keeps them so that member floors never follow unaccepted label changes.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAffinityMatch"),
+									},
+								},
+							},
+						},
+					},
 					"capacity": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Capacity is the accepted hardware sample, when capacity determines weight.",
@@ -3405,7 +3429,7 @@ func schema_pkg_apis_ome_v1beta1_CandidateAllocationStatus(ref common.ReferenceC
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.MicroTime", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementCapacitySample", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementHomePolicy"},
+			"k8s.io/apimachinery/pkg/apis/meta/v1.MicroTime", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAffinityMatch", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementCapacitySample", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementHomePolicy"},
 	}
 }
 
@@ -4067,6 +4091,54 @@ func schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref common.ReferenceC
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_ComponentAffinityMatch(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ComponentAffinityMatch records how one component's own affinity terms matched a cluster.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"component": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"matchingTerms": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "MatchingTerms contains zero-based indexes into the component's terms.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: 0,
+										Type:    []string{"integer"},
+										Format:  "int32",
+									},
+								},
+							},
+						},
+					},
+					"weight": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Weight is the component's effective static weight, when applicable.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+				},
+				Required: []string{"component"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_ComponentAutoscaler(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -4190,6 +4262,83 @@ func schema_pkg_apis_ome_v1beta1_ComponentAutoscalerStatus(ref common.ReferenceC
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "k8s.io/apimachinery/pkg/apis/meta/v1.Time", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyProvenance", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ShadowedAutoscalerPolicy"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ComponentClusterAffinity(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ComponentClusterAffinity holds one affinity term list per component. Every listed component must match the same clusters. In Split, each list's weights set that component's shares; in Single and All the lists only select.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"engine": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Engine selects clusters for the engine and, in Split, weights its shares. It is required when the service declares an engine.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityTerm"),
+									},
+								},
+							},
+						},
+					},
+					"decoder": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Decoder selects clusters for the decoder and, in Split, weights its shares over the clusters that hold engine replicas. It is required when the service declares a decoder.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityTerm"),
+									},
+								},
+							},
+						},
+					},
+					"router": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Router selects clusters for the router. In Split, it divides router.minReplicas across the clusters that hold engine replicas; without it, each such cluster runs the full router policy.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityTerm"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			VendorExtensible: spec.VendorExtensible{
+				Extensions: spec.Extensions{
+					"x-kubernetes-map-type": "atomic",
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityTerm"},
 	}
 }
 
@@ -10668,7 +10817,7 @@ func schema_pkg_apis_ome_v1beta1_PlacementSpec(ref common.ReferenceCallback) com
 				Properties: map[string]spec.Schema{
 					"policy": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Policy selects ClusterAffinity matching and persisted allocation plans.",
+							Description: "Policy selects affinity matching and persisted allocation plans. ComponentAffinity reads per-component terms from componentAffinity.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -10689,7 +10838,7 @@ func schema_pkg_apis_ome_v1beta1_PlacementSpec(ref common.ReferenceCallback) com
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "ClusterAffinity ORs terms whose requirements are ANDed. Requires the ClusterAffinity policy; omission then matches every registration. An explicit empty or null list is invalid.",
+							Description: "ClusterAffinity ORs terms whose requirements are ANDed, for every component. Requires the ClusterAffinity policy; omission then matches every registration. An explicit empty or null list is invalid.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -10699,6 +10848,12 @@ func schema_pkg_apis_ome_v1beta1_PlacementSpec(ref common.ReferenceCallback) com
 									},
 								},
 							},
+						},
+					},
+					"componentAffinity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ComponentAffinity holds one affinity term list per component and requires the ComponentAffinity policy. Every component must match the same clusters; in Split, each component's weights set its own shares. An explicit null is invalid.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentClusterAffinity"),
 						},
 					},
 					"maxSurge": {
@@ -10725,7 +10880,7 @@ func schema_pkg_apis_ome_v1beta1_PlacementSpec(ref common.ReferenceCallback) com
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityTerm", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SplitSpec"},
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityTerm", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentClusterAffinity", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SplitSpec"},
 	}
 }
 

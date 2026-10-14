@@ -124,10 +124,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	return ctrl.Result{}, nil
 }
 
-func routingOptedOut(isvc *v1beta1.InferenceService) bool {
-	return isvc.Spec.Routing != nil && isvc.Spec.Routing.Enabled != nil && !*isvc.Spec.Routing.Enabled
-}
-
 // resolveTarget builds the publication Target from status.placement. ok is false
 // when the ISVC is not in a publishable state: not Placed, no winner cluster, no
 // addressable endpoint host yet, or no global host resolvable from config. In
@@ -406,7 +402,7 @@ var placementPublishChange = predicate.Funcs{
 		if placementcontroller.IsPlacementEligible(oldISVC) != placementcontroller.IsPlacementEligible(newISVC) {
 			return true
 		}
-		if routingOptedOut(oldISVC) != routingOptedOut(newISVC) {
+		if placementcontroller.RoutingOptedOut(oldISVC) != placementcontroller.RoutingOptedOut(newISVC) {
 			return true
 		}
 		if !placementEqual(oldISVC.Status.Placement, newISVC.Status.Placement) {

@@ -109,7 +109,7 @@ func (r *Reconciler) applyAllMovementFloors(ctx context.Context, source *v1beta1
 			continue
 		}
 		cctx, cancel := context.WithTimeout(ctx, r.placeTimeout())
-		err := r.placePlannedMember(cctx, accepted, candidate, true)
+		err := r.placePlannedMember(cctx, accepted, candidate, true, nil)
 		cancel()
 		if err != nil {
 			return r.writeSplitHold(ctx, accepted, standing, "MemberApplicationFailed", err)

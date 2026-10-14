@@ -467,3 +467,50 @@ func TestOffRunningRevision_TheEnginesFailedAndThePublicationsReady(t *testing.T
 		}
 	}
 }
+
+// The two readings of a row that keeps the surge attempt it failed at
+// beside the revision it runs: Failed is the engine's shape while the
+// replacement of a surge is retired, and Ready over that shape is the
+// status publication's alone. A row whose surge is past its drain
+// hand-over, the replacement's own row, a settled row, a roll in flight
+// and a recreate attempt are neither.
+func TestOffRunningRevisionKeepingSurge_TheEnginesFailedAndThePublicationsReady(t *testing.T) {
+	slot := int32(3)
+	surge := func(step string, surgeIdx *int32) *InstanceOperation {
+		return &InstanceOperation{Type: InstanceOperationUpdate, Step: step, TargetRevision: "rev-b", SurgeIndex: surgeIdx}
+	}
+	cases := []struct {
+		name          string
+		row           *InstanceStatus
+		failed, ready bool
+	}{
+		{"nil row", nil, false, false},
+		{"a gang source whose replacement crashed",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-b", Operation: surge(UpdateStepSurge, &slot)}, true, false},
+		{"a single-pod source whose replacement crashed",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-b", Operation: surge(UpdateStepSurge, nil)}, true, false},
+		{"the publication's Ready over it",
+			&InstanceStatus{Phase: InstancePhaseReady, RunningRevision: "rev-a", TargetRevision: "rev-b", Operation: surge(UpdateStepSurge, &slot)}, false, true},
+		{"a source past the drain hand-over",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-b", Operation: surge(UpdateStepSurgeDrain, &slot)}, false, false},
+		{"the replacement's own row never ran a revision",
+			&InstanceStatus{Phase: InstancePhaseFailed, TargetRevision: "rev-b", Operation: surge(UpdateStepGangSurgeTarget, nil)}, false, false},
+		{"a disposed attempt keeps no operation",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-b"}, false, false},
+		{"a roll in flight",
+			&InstanceStatus{Phase: InstancePhaseUpdating, RunningRevision: "rev-a", TargetRevision: "rev-b", Operation: surge(UpdateStepSurge, &slot)}, false, false},
+		{"a recreate attempt replaces the pods it runs",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-b",
+				Operation: &InstanceOperation{Type: InstanceOperationUpdate, Step: UpdateStepDrain, TargetRevision: "rev-b"}}, false, false},
+		{"a surge at the revision the row runs",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-a", Operation: surge(UpdateStepSurge, nil)}, false, false},
+	}
+	for _, tc := range cases {
+		if got := FailedKeepingSurgeOffRunningRevision(tc.row); got != tc.failed {
+			t.Errorf("%s: FailedKeepingSurgeOffRunningRevision = %v, want %v", tc.name, got, tc.failed)
+		}
+		if got := PublishedReadyKeepingSurgeOffRunningRevision(tc.row); got != tc.ready {
+			t.Errorf("%s: PublishedReadyKeepingSurgeOffRunningRevision = %v, want %v", tc.name, got, tc.ready)
+		}
+	}
+}

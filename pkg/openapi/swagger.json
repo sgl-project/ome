@@ -1763,6 +1763,18 @@
           "type": "string",
           "default": ""
         },
+        "componentMatches": {
+          "description": "ComponentMatches records, under the ComponentAffinity policy, how each component other than the primary one matched this cluster. MatchingTerms and Weight hold the primary component's match. The accepted plan keeps them so that member floors never follow unaccepted label changes.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.ComponentAffinityMatch"
+          },
+          "x-kubernetes-list-map-keys": [
+            "component"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
         "currentHome": {
           "description": "CurrentHome retains the full policy authorized at a home through draining.",
           "$ref": "#/definitions/v1beta1.PlacementHomePolicy"
@@ -2189,6 +2201,34 @@
         }
       }
     },
+    "v1beta1.ComponentAffinityMatch": {
+      "description": "ComponentAffinityMatch records how one component's own affinity terms matched a cluster.",
+      "type": "object",
+      "required": [
+        "component"
+      ],
+      "properties": {
+        "component": {
+          "type": "string",
+          "default": ""
+        },
+        "matchingTerms": {
+          "description": "MatchingTerms contains zero-based indexes into the component's terms.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
+          },
+          "x-kubernetes-list-type": "set"
+        },
+        "weight": {
+          "description": "Weight is the component's effective static weight, when applicable.",
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
     "v1beta1.ComponentAutoscaler": {
       "description": "ComponentAutoscaler configures the autoscaler for a single Component (engine / decoder / router). Takes priority over the legacy ome.io/autoscalerClass annotation for this Component, and is the only way to configure per-Component autoscaling on an InferenceService. Alpha. The API may change without notice.",
       "type": "object",
@@ -2262,6 +2302,40 @@
           "type": "string"
         }
       }
+    },
+    "v1beta1.ComponentClusterAffinity": {
+      "description": "ComponentClusterAffinity holds one affinity term list per component. Every listed component must match the same clusters. In Split, each list's weights set that component's shares; in Single and All the lists only select.",
+      "type": "object",
+      "properties": {
+        "decoder": {
+          "description": "Decoder selects clusters for the decoder and, in Split, weights its shares over the clusters that hold engine replicas. It is required when the service declares a decoder.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.ClusterAffinityTerm"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "engine": {
+          "description": "Engine selects clusters for the engine and, in Split, weights its shares. It is required when the service declares an engine.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.ClusterAffinityTerm"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "router": {
+          "description": "Router selects clusters for the router. In Split, it divides router.minReplicas across the clusters that hold engine replicas; without it, each such cluster runs the full router policy.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.ClusterAffinityTerm"
+          },
+          "x-kubernetes-list-type": "atomic"
+        }
+      },
+      "x-kubernetes-map-type": "atomic"
     },
     "v1beta1.ComponentExtensionSpec": {
       "description": "ComponentExtensionSpec defines the deployment configuration for a given InferenceService component",
@@ -6045,13 +6119,17 @@
       ],
       "properties": {
         "clusterAffinity": {
-          "description": "ClusterAffinity ORs terms whose requirements are ANDed. Requires the ClusterAffinity policy; omission then matches every registration. An explicit empty or null list is invalid.",
+          "description": "ClusterAffinity ORs terms whose requirements are ANDed, for every component. Requires the ClusterAffinity policy; omission then matches every registration. An explicit empty or null list is invalid.",
           "type": "array",
           "items": {
             "default": {},
             "$ref": "#/definitions/v1beta1.ClusterAffinityTerm"
           },
           "x-kubernetes-list-type": "atomic"
+        },
+        "componentAffinity": {
+          "description": "ComponentAffinity holds one affinity term list per component and requires the ComponentAffinity policy. Every component must match the same clusters; in Split, each component's weights set its own shares. An explicit null is invalid.",
+          "$ref": "#/definitions/v1beta1.ComponentClusterAffinity"
         },
         "maxSurge": {
           "description": "Deprecated: MaxSurge is ignored. A placement move may hold one extra full copy of the desired allocation; admission warns when this is set.",
@@ -6064,7 +6142,7 @@
           "default": ""
         },
         "policy": {
-          "description": "Policy selects ClusterAffinity matching and persisted allocation plans.",
+          "description": "Policy selects affinity matching and persisted allocation plans. ComponentAffinity reads per-component terms from componentAffinity.",
           "type": "string",
           "default": ""
         },

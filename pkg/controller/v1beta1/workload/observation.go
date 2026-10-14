@@ -283,15 +283,20 @@ type ComponentCounters struct {
 // again on its own once the set serves. A pod serving on its containers
 // before the kubelet folds the gate into PodReady serves.
 //
-// A settled Failed row that still runs a revision and records a spent
-// attempt at another (types.FailedOffRunningRevision) publishes Ready
-// while the pods on the revision it runs serve at the desired count: the
-// replacement failed, the Instance did not. The failure stays on the row,
-// its record, the revision the attempt was for and the ReadySince anchor,
-// the retry ladder and the budgets read the row as the engine does, Failed
-// (v1beta1convert.InstanceStatusToWorkload), and the row publishes Failed
-// again once the pods it runs stop serving. Pods on any other revision, a
-// replacement crash-looping or serving between two crashes, are not read.
+// A Failed row that still runs a revision and records an attempt at
+// another publishes Ready while the pods on the revision it runs serve at
+// the desired count: the replacement failed, the Instance did not. That
+// holds for a settled row whose attempt is spent
+// (types.FailedOffRunningRevision) and for a row that still keeps the
+// surge attempt it failed at (types.FailedKeepingSurgeOffRunningRevision),
+// the shape a gang surge's source has until its replacement gang is
+// retired, so the row reads the same at every moment of the attempt. The
+// failure stays on the row, its record, the attempt, the revision it was
+// for and the ReadySince anchor, the retry ladder and the budgets read the
+// row as the engine does, Failed (v1beta1convert.InstanceStatusToWorkload),
+// and the row publishes Failed again once the pods it runs stop serving.
+// Pods on any other revision, a replacement crash-looping or serving
+// between two crashes, are not read.
 func (o *ComponentObservation) TakeInlineV1Publication(desiredByIdx map[int32]int32, targetRevName string) ([]types.InstanceStatus, ComponentCounters, error) {
 	var counters ComponentCounters
 	target := query.RevisionFromName(targetRevName)
@@ -329,7 +334,7 @@ func (o *ComponentObservation) TakeInlineV1Publication(desiredByIdx map[int32]in
 			case !query.PodSetFullyServing(pods, desired):
 				row.Phase = types.InstancePhaseRestarting
 			}
-		case types.FailedOffRunningRevision(row):
+		case types.FailedOffRunningRevision(row), types.FailedKeepingSurgeOffRunningRevision(row):
 			if query.PodSetFullyServing(podsOnRevision(pods, row.RunningRevision), desired) {
 				row.Phase = types.InstancePhaseReady
 			}

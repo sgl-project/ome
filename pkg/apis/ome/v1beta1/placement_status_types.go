@@ -121,6 +121,15 @@ type CandidateAllocationStatus struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	Weight *int64 `json:"weight,omitempty"`
+	// ComponentMatches records, under the ComponentAffinity policy, how each
+	// component other than the primary one matched this cluster. MatchingTerms
+	// and Weight hold the primary component's match. The accepted plan keeps
+	// them so that member floors never follow unaccepted label changes.
+	// +optional
+	// +listType=map
+	// +listMapKey=component
+	// +kubebuilder:validation:MaxItems=2
+	ComponentMatches []ComponentAffinityMatch `json:"componentMatches,omitempty"`
 	// Capacity is the accepted hardware sample, when capacity determines weight.
 	// +optional
 	Capacity *PlacementCapacitySample `json:"capacity,omitempty"`
@@ -199,6 +208,21 @@ type PlacementExecutionPolicy struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=3
 	ReplicaFloors []PlacementComponentFloor `json:"replicaFloors,omitempty"`
+}
+
+// ComponentAffinityMatch records how one component's own affinity terms
+// matched a cluster.
+type ComponentAffinityMatch struct {
+	// +kubebuilder:validation:Enum=engine;decoder;router
+	Component ComponentType `json:"component"`
+	// MatchingTerms contains zero-based indexes into the component's terms.
+	// +optional
+	// +listType=set
+	MatchingTerms []int32 `json:"matchingTerms,omitempty"`
+	// Weight is the component's effective static weight, when applicable.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	Weight *int64 `json:"weight,omitempty"`
 }
 
 // PlacementComponentFloor records a resolved component's guaranteed count.

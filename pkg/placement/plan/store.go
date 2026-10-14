@@ -69,7 +69,7 @@ func (s Store) Persist(ctx context.Context, source *v1beta1.InferenceService, pr
 	if s.Client == nil || s.Reader == nil {
 		return nil, fmt.Errorf("placement plan store requires a client and direct reader")
 	}
-	if source == nil || source.UID == "" || source.Generation <= 0 || !source.Spec.Placement.UsesClusterAffinity() || !source.DeletionTimestamp.IsZero() {
+	if source == nil || source.UID == "" || source.Generation <= 0 || !source.Spec.Placement.UsesAffinityPolicy() || !source.DeletionTimestamp.IsZero() {
 		return nil, fmt.Errorf("placement plan requires an identified live source with typed intent")
 	}
 	if source.Labels[constants.PlacementOrigin] != "" || source.Annotations[constants.PlacementOriginUID] != "" {

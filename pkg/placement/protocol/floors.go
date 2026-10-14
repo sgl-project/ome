@@ -195,6 +195,67 @@ func ApportionReplicaFloors(primary v1beta1.ComponentType, primaryMinimum int32,
 	return out, nil
 }
 
+// ApportionWeightedReplicaFloor spreads one secondary component's minimum by
+// its own weights, over only the homes with a positive primary target. The
+// total follows the primary targets as in ApportionReplicaFloors. Every such
+// home receives at least one replica whenever the total is positive, and a
+// total below the number of those homes is an error. When none of those homes
+// carries a positive weight, the primary targets serve as the weights.
+func ApportionWeightedReplicaFloor(component v1beta1.ComponentType, primaryMinimum int32, targets map[string]int32, minimum int32, weights map[string]int64) (map[string]int32, error) {
+	if component != v1beta1.EngineComponent && component != v1beta1.DecoderComponent {
+		return nil, fmt.Errorf("placement cannot apportion component %q by weight", component)
+	}
+	if primaryMinimum <= 0 {
+		return nil, fmt.Errorf("placement primary minimum must be positive")
+	}
+	if minimum < 0 {
+		return nil, fmt.Errorf("placement %s minimum must be nonnegative", component)
+	}
+	var sum, weightSum int64
+	positive := 0
+	held := map[string]int64{}
+	hosts := map[string]int64{}
+	for name, target := range targets {
+		if name == "" || target < 0 {
+			return nil, fmt.Errorf("placement homes require a name and a nonnegative target")
+		}
+		sum += int64(target)
+		if target == 0 {
+			continue
+		}
+		positive++
+		hosts[name] = int64(target)
+		weight := weights[name]
+		if weight < 0 {
+			return nil, fmt.Errorf("placement %s weight for home %q must be nonnegative", component, name)
+		}
+		if weight > math.MaxInt64-weightSum {
+			return nil, fmt.Errorf("placement %s weights exceed int64", component)
+		}
+		held[name] = weight
+		weightSum += weight
+	}
+	total, err := ratioTotal(sum, minimum, primaryMinimum)
+	if err != nil {
+		return nil, fmt.Errorf("placement %s total: %w", component, err)
+	}
+	if total > 0 && int(total) < positive {
+		return nil, fmt.Errorf("%s minimum %d cannot give each of the %d homes holding the primary component at least one replica", component, total, positive)
+	}
+	if weightSum == 0 {
+		held = hosts
+	}
+	shares := largestRemainder(total, held)
+	if total > 0 {
+		liftZeroShares(shares, hosts)
+	}
+	out := make(map[string]int32, len(targets))
+	for name := range targets {
+		out[name] = shares[name]
+	}
+	return out, nil
+}
+
 // ratioTotal scales a component minimum from the fleet's primary minimum to
 // the primary replicas actually targeted, rounding up so the ratio stays a
 // floor. Targets at the fleet minimum keep the minimum exactly.

@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/rollout"
 	"sigs.k8s.io/ome/pkg/utils"
@@ -189,7 +190,7 @@ func Dispatch(ctx context.Context, d DispatchDeps) (Outcome, error) {
 		now = time.Now()
 	}
 
-	secondaryReady, secondaryFresh, secondaryObserved, err := secondaryCapacityReady(ctx, d.Reader, d.ISVC, perRev, readyRev, observedPods, primary, d.Group)
+	secondaryReady, secondaryFresh, secondaryObserved, secondaryWait, err := secondaryCapacityReady(ctx, d.Reader, d.ISVC, perRev, readyRev, observedPods, primary, d.Group, now)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -235,10 +236,11 @@ func Dispatch(ctx context.Context, d DispatchDeps) (Outcome, error) {
 		return Outcome{}, err
 	}
 	groupPods, groupStable := groupRollbackInputs(d.ISVC, d.Group, primary, perRev)
-	secondaries, err := secondaryRevisions(ctx, d.Client, d.ISVC, primary, d.Group, secondaryObserved, groupStable, readyRev, observedPods)
+	secondaries, err := secondaryRevisions(ctx, d.Client, d.ISVC, primary, d.Group, secondaryObserved, groupStable, readyRev, observedPods, now)
 	if err != nil {
 		return Outcome{}, err
 	}
+	readyInstances, windowWait := revisions.readyTargetInstanceCount(observedPods[primary], now)
 	res, err := Reconcile(ctx, ReconcileInputs{
 		Client:                    d.Client,
 		Reader:                    d.Reader,
@@ -251,7 +253,8 @@ func Dispatch(ctx context.Context, d DispatchDeps) (Outcome, error) {
 		StableRevisionHash:        stableHash,
 		CanaryPairingProtocol:     canaryProtocol,
 		StablePairingProtocol:     stableProtocol,
-		ReadyCanaryInstances:      revisions.readyTargetInstanceCount(observedPods[primary]),
+		ReadyCanaryInstances:      readyInstances,
+		CapacityWindowWait:        soonestWait(windowWait, secondaryWait),
 		DesiredReplicas:           componentReplicas(d.ISVC, primary),
 		PerRevisionPods:           readyRev[primary],
 		GroupTotalPerRevisionPods: groupPods,
@@ -492,17 +495,18 @@ func groupRollbackInputs(isvc *v1beta1.InferenceService, g *v1beta1.RolloutGroup
 // member's steady instance count is what that capacity must reach for the
 // cutover to be complete. The protocols come from the two ControllerRevisions
 // through the cached client, as the primary's do.
-func secondaryRevisions(ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService, primary v1beta1.ComponentType, g *v1beta1.RolloutGroup, observed map[v1beta1.ComponentType]observedCanaryRevisions, stable map[v1beta1.ComponentType]string, readyPerRev map[v1beta1.ComponentType]map[string]int32, observedPods map[v1beta1.ComponentType][]*corev1.Pod) (map[v1beta1.ComponentType]MemberRevisions, error) {
+func secondaryRevisions(ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService, primary v1beta1.ComponentType, g *v1beta1.RolloutGroup, observed map[v1beta1.ComponentType]observedCanaryRevisions, stable map[v1beta1.ComponentType]string, readyPerRev map[v1beta1.ComponentType]map[string]int32, observedPods map[v1beta1.ComponentType][]*corev1.Pod, now time.Time) (map[v1beta1.ComponentType]MemberRevisions, error) {
 	out := map[v1beta1.ComponentType]MemberRevisions{}
 	for _, comp := range configuredComponents(g) {
 		if comp == primary {
 			continue
 		}
 		target := observed[comp].targetHash
+		readyInstances, _ := observed[comp].readyTargetInstanceCount(observedPods[comp], now)
 		m := MemberRevisions{
 			CanaryRevisionHash:  target,
 			StableRevisionHash:  stable[comp],
-			ReadyCanaryCapacity: readyCapacityCount(readyPerRev[comp][target], observed[comp].readyTargetInstanceCount(observedPods[comp])),
+			ReadyCanaryCapacity: readyCapacityCount(readyPerRev[comp][target], readyInstances),
 			DesiredReplicas:     componentReplicas(isvc, comp),
 		}
 		prefix := irprojector.RoleReplicaPrefix(isvc, comp)
@@ -606,17 +610,21 @@ func configuredComponents(g *v1beta1.RolloutGroup) []v1beta1.ComponentType {
 // resolves to the only revision present — so there is nothing to stage and it is
 // treated as ready, rather than blocking the rollout forever.
 //
-// IR runner topology provides the gang-safe ready Instance count. readyPerRev
-// keeps ready Pods as a required capacity signal. perRev detects a live peer
-// revision while an equal current/target pair settles.
+// IR runner topology provides the gang-safe available Instance count: a
+// pod counts once it has held Ready for the member's minReadySeconds, as
+// readyTargetInstanceCount reads it. readyPerRev keeps ready Pods as a
+// required capacity signal. perRev detects a live peer revision while an
+// equal current/target pair settles.
 //
 // It also returns each secondary's observed revision pair, so the traffic
 // writer keys a member's targets to the very target its capacity was checked
-// against. The pair is complete only when the gate reports a fresh view.
-func secondaryCapacityReady(ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService, perRev, readyPerRev map[v1beta1.ComponentType]map[string]int32, observedPods map[v1beta1.ComponentType][]*corev1.Pod, primary v1beta1.ComponentType, g *v1beta1.RolloutGroup) (ready, fresh bool, observed map[v1beta1.ComponentType]observedCanaryRevisions, err error) {
+// against. The pair is complete only when the gate reports a fresh view. The
+// wait is how long until the soonest pod of a short member clears its
+// window, zero when no short member is waiting on one.
+func secondaryCapacityReady(ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService, perRev, readyPerRev map[v1beta1.ComponentType]map[string]int32, observedPods map[v1beta1.ComponentType][]*corev1.Pod, primary v1beta1.ComponentType, g *v1beta1.RolloutGroup, now time.Time) (ready, fresh bool, observed map[v1beta1.ComponentType]observedCanaryRevisions, wait time.Duration, err error) {
 	observed = map[v1beta1.ComponentType]observedCanaryRevisions{}
 	if g == nil || g.Canary == nil || len(g.Canary.Steps) == 0 {
-		return true, true, observed, nil
+		return true, true, observed, 0, nil
 	}
 	plan := g.Canary
 	idx := int32(0)
@@ -634,10 +642,10 @@ func secondaryCapacityReady(ctx context.Context, reads client.Reader, isvc *v1be
 		}
 		revisions, err := observeCanaryRevisions(ctx, reads, isvc, c)
 		if err != nil {
-			return false, false, observed, err
+			return false, false, observed, 0, err
 		}
 		if !revisions.statusFresh {
-			return false, false, observed, nil
+			return false, false, observed, 0, nil
 		}
 		observed[c] = revisions
 		secHash := revisions.targetHash
@@ -652,19 +660,35 @@ func secondaryCapacityReady(ctx context.Context, reads client.Reader, isvc *v1be
 			}
 			continue
 		}
-		readyInstances := revisions.readyTargetInstanceCount(observedPods[c])
+		readyInstances, windowWait := revisions.readyTargetInstanceCount(observedPods[c], now)
 		readyCapacity := readyCapacityCount(readyPerRev[c][secHash], readyInstances)
 		if readyCapacity < stepStagedCount(step, componentReplicas(isvc, c)) {
 			ready = false
+			wait = soonestWait(wait, windowWait)
 		}
 	}
-	return ready, true, observed, nil
+	return ready, true, observed, wait, nil
+}
+
+// soonestWait is the shorter of two waits; a zero wait is nothing waiting
+// and defers to the other.
+func soonestWait(a, b time.Duration) time.Duration {
+	switch {
+	case a <= 0:
+		return b
+	case b <= 0 || a <= b:
+		return a
+	}
+	return b
 }
 
 type observedCanaryRevisions struct {
 	currentHash string
 	targetHash  string
 	runners     []v1beta1.Runner
+	// minReadySeconds is the Component's availability window: a target pod
+	// counts toward a step's capacity only once it has held Ready for it.
+	minReadySeconds int32
 	// rows are the IR's per-Instance rows in the dense shape, the anchors
 	// the crash reading needs; empty when the observation is not an IR's.
 	rows        []v1beta1.OMENativeInstanceStatus
@@ -673,30 +697,43 @@ type observedCanaryRevisions struct {
 }
 
 // readyTargetInstanceCount counts target Instances whose complete declared
-// runner set is PodReady. Runner ordinals prevent duplicate Pods from filling a
+// runner set is available: every pod PodReady with the serving gate and,
+// under the Component's minReadySeconds, Ready for at least that long,
+// measured from the Ready condition's transition (podreadiness.IsPodAvailable),
+// never from ContainersReady. A pod Ready for less than the window does not
+// count, nor does one that was never Ready, so a gang counts once its last
+// member has held Ready for the window. The duration is how long until the
+// soonest pod still inside its window clears it, zero when none is waiting:
+// the crossing raises no watch event, so a gate short on the window alone
+// wakes for it. Runner ordinals prevent duplicate Pods from filling a
 // multi-pod gang's missing role. A non-IR observation returns nil.
-func (r observedCanaryRevisions) readyTargetInstanceCount(pods []*corev1.Pod) *int32 {
+func (r observedCanaryRevisions) readyTargetInstanceCount(pods []*corev1.Pod, now time.Time) (*int32, time.Duration) {
 	if !r.fromIR {
-		return nil
+		return nil, 0
 	}
 	ready := int32(0)
 	if r.targetHash == "" || len(r.runners) == 0 {
-		return &ready
+		return &ready, 0
 	}
 	required := make(map[v1beta1.RunnerName]int32, len(r.runners))
 	for _, runner := range r.runners {
 		if runner.Size < 1 {
-			return &ready
+			return &ready, 0
 		}
 		if _, duplicate := required[runner.Name]; duplicate {
-			return &ready
+			return &ready, 0
 		}
 		required[runner.Name] = runner.Size
 	}
 
+	var wait time.Duration
 	readyPods := make(map[int32]map[v1beta1.RunnerName]map[int32]struct{})
 	for _, pod := range pods {
 		if pod == nil || pod.Labels[query.LabelRevisionHash] != r.targetHash || !coordination.PodReadyAndServing(pod) {
+			continue
+		}
+		if available, remaining := podreadiness.IsPodAvailable(pod, r.minReadySeconds, now); !available {
+			wait = soonestWait(wait, remaining)
 			continue
 		}
 		index, ok := query.InstanceIdxFromLabels(pod)
@@ -735,7 +772,7 @@ func (r observedCanaryRevisions) readyTargetInstanceCount(pods []*corev1.Pod) *i
 			ready++
 		}
 	}
-	return &ready
+	return &ready, wait
 }
 
 // observeCanaryRevisions reads the current and target hashes from one IR
@@ -761,22 +798,24 @@ func observeCanaryRevisions(ctx context.Context, reads client.Reader, isvc *v1be
 			statusFresh := ir.Status.ObservedGeneration == ir.Generation
 			if !statusFresh {
 				return observedCanaryRevisions{
-					currentHash: currentHash,
-					targetHash:  targetHash,
-					runners:     ir.Spec.Runners,
-					rows:        ir.Status.InstanceStatuses,
-					fromIR:      true,
-					statusFresh: false,
+					currentHash:     currentHash,
+					targetHash:      targetHash,
+					runners:         ir.Spec.Runners,
+					minReadySeconds: ir.Spec.MinReadySeconds,
+					rows:            ir.Status.InstanceStatuses,
+					fromIR:          true,
+					statusFresh:     false,
 				}, nil
 			}
 			if targetHash != "" {
 				return observedCanaryRevisions{
-					currentHash: currentHash,
-					targetHash:  targetHash,
-					runners:     ir.Spec.Runners,
-					rows:        ir.Status.InstanceStatuses,
-					fromIR:      true,
-					statusFresh: true,
+					currentHash:     currentHash,
+					targetHash:      targetHash,
+					runners:         ir.Spec.Runners,
+					minReadySeconds: ir.Spec.MinReadySeconds,
+					rows:            ir.Status.InstanceStatuses,
+					fromIR:          true,
+					statusFresh:     true,
 				}, nil
 			}
 		case !apierrors.IsNotFound(err):

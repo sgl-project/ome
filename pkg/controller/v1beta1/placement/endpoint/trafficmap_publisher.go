@@ -515,7 +515,7 @@ func (r *TrafficMapPublisherReconciler) readTrafficMapOwner(
 
 func publisherOwnerActive(owner *v1beta1.InferenceService) bool {
 	return owner != nil && owner.DeletionTimestamp.IsZero() &&
-		placementcontroller.IsPlacementEligible(owner) && validation.ValidatePlacementIntent(owner) == nil && !routingOptedOut(owner)
+		placementcontroller.IsPlacementEligible(owner) && validation.ValidatePlacementIntent(owner) == nil && !placementcontroller.RoutingOptedOut(owner)
 }
 
 func (r *TrafficMapPublisherReconciler) validateLivePublisherOwner(

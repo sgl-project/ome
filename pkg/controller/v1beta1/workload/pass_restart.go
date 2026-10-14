@@ -46,6 +46,7 @@ func executeRestartPass(ctx context.Context, deps types.Deps, input types.Reconc
 	// Revisions whose retry ladder admitted a rebuild this pass: the
 	// ladder authorizes one attempt at a revision at a time.
 	ladderOpened := map[string]struct{}{}
+	restartBatch := workloadops.NewRestartBatch(deps, input)
 	for _, selection := range restarts {
 		if selection.OpensRepair && input.RepairBatchSize != nil && opened >= *input.RepairBatchSize {
 			logf.FromContext(ctx).V(1).Info("crash-loop repair waits for the next pass: repair batch full",
@@ -74,7 +75,12 @@ func executeRestartPass(ctx context.Context, deps types.Deps, input types.Reconc
 		if selection.OpensRepair {
 			opened++
 		}
-		done, restartErr := workloadops.Restart(ctx, deps, input, plan, selection.Instance, target, selection.Reason)
+		// The Component-wide force-delete sweep runs after planning and before
+		// this pass. Remove only the exact UIDs it successfully deleted from
+		// the decision snapshot, so a restart can rebuild those names in this
+		// pass without another API read.
+		pods := restartPodsAfterSweep(selection.pods, input.Swept)
+		done, restartErr := restartBatch.Advance(ctx, deps, input, plan, selection.Instance, target, selection.Reason, pods)
 		if restartErr != nil {
 			logf.FromContext(ctx).Error(restartErr, "restart pass: instance failed",
 				"component", plan.Component, "instance", selection.Instance.Index)
@@ -121,6 +127,26 @@ func executeRestartPass(ctx context.Context, deps types.Deps, input types.Reconc
 		return ctrl.Result{}, false, errors.Join(restartErrs...)
 	}
 	return ctrl.Result{}, false, nil
+}
+
+// restartPodsAfterSweep returns the decision bucket with Pods successfully
+// force-deleted earlier in this pass omitted. It preserves the original slice
+// when the sweep removed none, and never mutates the snapshot-owned slice.
+func restartPodsAfterSweep(pods []*corev1.Pod, swept *types.SweptPods) []*corev1.Pod {
+	for i, pod := range pods {
+		if pod == nil || !swept.Swept(pod.UID) {
+			continue
+		}
+		kept := make([]*corev1.Pod, 0, len(pods)-1)
+		kept = append(kept, pods[:i]...)
+		for _, candidate := range pods[i+1:] {
+			if candidate == nil || !swept.Swept(candidate.UID) {
+				kept = append(kept, candidate)
+			}
+		}
+		return kept
+	}
+	return pods
 }
 
 // planExcludingRestartSelections is the plan with the restarting

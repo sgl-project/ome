@@ -13,6 +13,8 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	clocktesting "k8s.io/utils/clock/testing"
 	"k8s.io/utils/ptr"
@@ -44,6 +46,7 @@ func isvcReadyAtIncarnation(name, ns string, incarnation int64) (*v1beta1.Infere
 // pods by this label.
 func podAtIncarnation(isvc *v1beta1.InferenceService, instanceIdx int32, incarnation int64, ready, serving bool) *corev1.Pod {
 	pod := podForInstance(isvc, instanceIdx, ready, serving)
+	pod.UID = k8stypes.UID(fmt.Sprintf("%s-%d-%d", isvc.Name, instanceIdx, incarnation))
 	pod.Labels[query.LabelInstanceIncarnation] = fmt.Sprintf("%d", incarnation)
 	return pod
 }
@@ -67,6 +70,36 @@ func sliceWithEndpoint(namespace, sliceName, serviceName string, pod *corev1.Pod
 			},
 		}},
 	}
+}
+
+type deleteOptionsRecordingClient struct {
+	client.Client
+	deletes   []*client.DeleteOptions
+	deleteErr error
+}
+
+func (c *deleteOptionsRecordingClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	c.deletes = append(c.deletes, (&client.DeleteOptions{}).ApplyOptions(opts))
+	if c.deleteErr != nil {
+		return c.deleteErr
+	}
+	return c.Client.Delete(ctx, obj, opts...)
+}
+
+type podListCountingClient struct {
+	client.Client
+	podLists           int
+	endpointSliceLists int
+}
+
+func (c *podListCountingClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	switch list.(type) {
+	case *corev1.PodList:
+		c.podLists++
+	case *discoveryv1.EndpointSliceList:
+		c.endpointSliceLists++
+	}
+	return c.Client.List(ctx, list, opts...)
 }
 
 // buildPlanSinglePodEngineForRestart is the per-Restart-test plan builder.
@@ -178,7 +211,8 @@ func TestRestart_DeletesOldPodOnceDrained(t *testing.T) {
 	}
 	pod := podAtIncarnation(isvc, 0, 1, true, false /* already drained */)
 	slice := sliceWithEndpoint("prod", "engine-svc-1", "llama-70b-engine-rev-"+testRevisionHash, pod, false /* Ready=false */)
-	c := newFakeClient(t, isvc, ir, pod, slice)
+	base := newFakeClient(t, isvc, ir, pod, slice)
+	c := &deleteOptionsRecordingClient{Client: base}
 	input := buildTestInput(isvc, c, workload.ComponentEngine)
 	plan := buildPlanSinglePodEngineForRestart(c, isvc)
 
@@ -197,6 +231,122 @@ func TestRestart_DeletesOldPodOnceDrained(t *testing.T) {
 	}
 	if workload.DefaultExpectations.Satisfied("prod", "llama-70b", workload.ComponentEngine, 0) {
 		t.Errorf("ExpectDeletes should record the in-flight delete")
+	}
+	if len(c.deletes) != 1 || c.deletes[0].Preconditions == nil || c.deletes[0].Preconditions.UID == nil || *c.deletes[0].Preconditions.UID != pod.UID {
+		t.Errorf("delete preconditions = %+v, want observed UID %q", c.deletes, pod.UID)
+	}
+}
+
+func TestRestart_DeleteRequiresObservedUID(t *testing.T) {
+	resetExpectations(t)
+	isvc, ir := isvcReadyAtIncarnation("llama-70b", "prod", 1)
+	ir.Status.InstanceStatuses[0] = v1beta1.OMENativeInstanceStatus{
+		Index: 0, Incarnation: 2, Phase: v1beta1.OMENativeInstanceRestarting,
+		Operation: &v1beta1.InstanceOperation{Type: v1beta1.InstanceOperationRestart, Step: "Drain", Reason: "x"},
+	}
+	pod := podAtIncarnation(isvc, 0, 1, true, false)
+	pod.UID = ""
+	serviceName := query.PerRevisionServiceName(isvc.Name, workload.ComponentEngine, testRevisionHash)
+	slice := sliceWithEndpoint(isvc.Namespace, "engine-svc-1", serviceName, pod, false)
+	base := newFakeClient(t, isvc, ir, pod, slice)
+	recording := &deleteOptionsRecordingClient{Client: base}
+	input := buildTestInput(isvc, recording, workload.ComponentEngine)
+	plan := buildPlanSinglePodEngineForRestart(recording, isvc)
+
+	_, err := ops.Restart(context.Background(), workload.Deps{Client: recording}, input, plan, plan.Instances[0], nil, "trigger")
+	if err == nil || !strings.Contains(err.Error(), "without an observed UID") {
+		t.Fatalf("Restart error = %v, want missing-UID failure", err)
+	}
+	if len(recording.deletes) != 0 {
+		t.Fatalf("missing-UID observation issued %d deletes, want 0", len(recording.deletes))
+	}
+	if err := base.Get(context.Background(), client.ObjectKeyFromObject(pod), &corev1.Pod{}); err != nil {
+		t.Fatalf("missing-UID Pod was deleted: %v", err)
+	}
+}
+
+func TestRestartBatch_UIDConflictPreservesSameNameReplacement(t *testing.T) {
+	resetExpectations(t)
+	isvc, ir := isvcReadyAtIncarnation("llama-70b", "prod", 1)
+	ir.Status.InstanceStatuses[0] = v1beta1.OMENativeInstanceStatus{
+		Index: 0, Incarnation: 2, Phase: v1beta1.OMENativeInstanceRestarting,
+		Operation: &v1beta1.InstanceOperation{Type: v1beta1.InstanceOperationRestart, Step: "Drain", Reason: "x"},
+	}
+	observed := podAtIncarnation(isvc, 0, 1, true, false)
+	replacement := observed.DeepCopy()
+	replacement.UID = "replacement-pod-uid"
+	serviceName := query.PerRevisionServiceName(isvc.Name, workload.ComponentEngine, testRevisionHash)
+	slice := sliceWithEndpoint(isvc.Namespace, "engine-svc-1", serviceName, replacement, false)
+	base := newFakeClient(t, isvc, ir, replacement, slice)
+	recording := &deleteOptionsRecordingClient{
+		Client: base,
+		deleteErr: apierrors.NewConflict(
+			schema.GroupResource{Resource: "pods"}, observed.Name, apierrors.NewBadRequest("UID precondition does not match")),
+	}
+	expectations := workload.NewExpectations()
+	deps := workload.Deps{Client: recording, Expectations: expectations}
+	input := buildTestInput(isvc, recording, workload.ComponentEngine)
+	plan := buildPlanSinglePodEngineForRestart(recording, isvc)
+	batch := ops.NewRestartBatch(deps, input)
+
+	done, err := batch.Advance(context.Background(), deps, input, plan, plan.Instances[0], nil, "trigger", []*corev1.Pod{observed})
+	if err != nil {
+		t.Fatalf("UID conflict must request a fresh observation: %v", err)
+	}
+	if done {
+		t.Fatal("UID conflict cannot complete the restart")
+	}
+	if len(recording.deletes) != 1 || recording.deletes[0].Preconditions == nil || recording.deletes[0].Preconditions.UID == nil || *recording.deletes[0].Preconditions.UID != observed.UID {
+		t.Fatalf("delete options = %v, want observed UID %q", recording.deletes, observed.UID)
+	}
+	if !expectations.Satisfied(input.Key.Namespace, input.Key.OwnerName, input.Key.Component, 0) {
+		t.Fatal("UID conflict must roll back the delete expectation")
+	}
+	fresh := &corev1.Pod{}
+	if err := base.Get(context.Background(), client.ObjectKeyFromObject(replacement), fresh); err != nil {
+		t.Fatalf("same-name replacement was deleted: %v", err)
+	}
+	if fresh.UID != replacement.UID {
+		t.Fatalf("stored Pod UID = %q, want replacement UID %q", fresh.UID, replacement.UID)
+	}
+}
+
+func TestRestartBatch_SharesDrainObservationAcrossInstances(t *testing.T) {
+	resetExpectations(t)
+	isvc := minimalISVC("llama-70b", "prod", 2)
+	restarting := func(index int32) v1beta1.OMENativeInstanceStatus {
+		return v1beta1.OMENativeInstanceStatus{
+			Index: index, Incarnation: 2, Phase: v1beta1.OMENativeInstanceRestarting,
+			Operation: &v1beta1.InstanceOperation{Type: v1beta1.InstanceOperationRestart, Step: "Drain", Reason: "x"},
+		}
+	}
+	ir := instanceIR(isvc, workload.ComponentEngine, restarting(0), restarting(1))
+	pod0 := podAtIncarnation(isvc, 0, 1, true, false)
+	pod1 := podAtIncarnation(isvc, 1, 1, true, false)
+	serviceName := query.PerRevisionServiceName(isvc.Name, workload.ComponentEngine, testRevisionHash)
+	slice := sliceWithEndpoint(isvc.Namespace, "engine-svc-1", serviceName, pod0, false)
+	base := newFakeClient(t, isvc, ir, pod0, pod1, slice)
+	c := &podListCountingClient{Client: base}
+	deps := workload.Deps{Client: c}
+	input := buildTestInput(isvc, c, workload.ComponentEngine)
+	plan := buildPlanSinglePodEngine(2)
+	plan.RestartPolicy = workload.RestartPolicyRecreateInstance
+	for i := range plan.Instances {
+		plan.Instances[i].Incarnation = 2
+	}
+	batch := ops.NewRestartBatch(deps, input)
+
+	for i, pod := range []*corev1.Pod{pod0, pod1} {
+		done, err := batch.Advance(context.Background(), deps, input, plan, plan.Instances[i], nil, "trigger", []*corev1.Pod{pod})
+		if err != nil {
+			t.Fatalf("Advance instance %d: %v", i, err)
+		}
+		if done {
+			t.Fatalf("Advance instance %d reported done after issuing delete", i)
+		}
+	}
+	if c.endpointSliceLists != 1 {
+		t.Errorf("EndpointSlice Lists = %d, want one shared observation for %q", c.endpointSliceLists, serviceName)
 	}
 }
 
@@ -246,7 +396,8 @@ func TestRestart_CreatesNewPodAtBumpedIncarnation(t *testing.T) {
 			Type: v1beta1.InstanceOperationRestart, Step: "Drain", Reason: "x",
 		},
 	}
-	c := newFakeClient(t, isvc, ir, fixtureRevision(t, isvc))
+	base := newFakeClient(t, isvc, ir, fixtureRevision(t, isvc))
+	c := &podListCountingClient{Client: base}
 	input := buildTestInput(isvc, c, workload.ComponentEngine)
 	plan := buildPlanSinglePodEngineForRestart(c, isvc)
 
@@ -256,6 +407,9 @@ func TestRestart_CreatesNewPodAtBumpedIncarnation(t *testing.T) {
 	}
 	if done {
 		t.Fatalf("expected done=false after creating new pod (not yet Ready)")
+	}
+	if c.podLists != 1 {
+		t.Errorf("restart Phase B used %d Pod Lists, want its one authoritative Instance observation", c.podLists)
 	}
 
 	pods := &corev1.PodList{}
