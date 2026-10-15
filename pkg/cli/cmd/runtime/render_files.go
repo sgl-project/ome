@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 
+	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -61,7 +62,11 @@ func (o *renderOptions) runFiles(ctx context.Context, f factory.Factory) error {
 	if err != nil {
 		return err
 	}
-	objects, err := o.readFileObjects(workloadNamespace)
+	inferenceServiceSchema, err := o.loadInferenceServiceStructuralSchema()
+	if err != nil {
+		return err
+	}
+	objects, err := o.readFileObjects(workloadNamespace, inferenceServiceSchema)
 	if err != nil {
 		return err
 	}
@@ -133,6 +138,8 @@ func (o *renderOptions) renderFileService(
 	}
 	sources := []renderedSource{{
 		Kind: "InferenceService", Name: isvc.Namespace + "/" + isvc.Name, Origin: renderOriginFile,
+	}, {
+		Kind: "CustomResourceDefinition", Name: o.inferenceServiceCRDPath, Origin: renderOriginFile,
 	}}
 	sources = append(sources, liveSources(live, renderOriginFile)...)
 	sources = append(sources, renderedSource{Kind: "ConfigMap", Name: o.deployConfigPath, Origin: renderOriginFile})
@@ -157,7 +164,10 @@ func fileWorkloadNamespace(f factory.Factory) (string, error) {
 // readFileObjects decodes every -f file. Namespaced objects without a
 // namespace get workloadNamespace, as kubectl apply does. An object defined
 // twice is ambiguous and fails.
-func (o *renderOptions) readFileObjects(workloadNamespace string) ([]fileObject, error) {
+func (o *renderOptions) readFileObjects(
+	workloadNamespace string,
+	inferenceServiceSchema *structuralschema.Structural,
+) ([]fileObject, error) {
 	var objects []fileObject
 	seen := map[string]string{}
 	for _, path := range o.filenames {
@@ -165,7 +175,7 @@ func (o *renderOptions) readFileObjects(workloadNamespace string) ([]fileObject,
 		if err != nil {
 			return nil, fmt.Errorf("read -f %s: %w", path, err)
 		}
-		decoded, err := o.decodeFileObjects(path, data, workloadNamespace)
+		decoded, err := o.decodeFileObjects(path, data, workloadNamespace, inferenceServiceSchema)
 		if err != nil {
 			return nil, err
 		}
@@ -181,7 +191,12 @@ func (o *renderOptions) readFileObjects(workloadNamespace string) ([]fileObject,
 	return objects, nil
 }
 
-func (o *renderOptions) decodeFileObjects(path string, data []byte, workloadNamespace string) ([]fileObject, error) {
+func (o *renderOptions) decodeFileObjects(
+	path string,
+	data []byte,
+	workloadNamespace string,
+	inferenceServiceSchema *structuralschema.Structural,
+) ([]fileObject, error) {
 	reader := utilyaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(data)))
 	var objects []fileObject
 	for {
@@ -200,6 +215,10 @@ func (o *renderOptions) decodeFileObjects(path string, data []byte, workloadName
 		}
 		if len(raw) == 0 || string(raw) == "null" {
 			continue
+		}
+		raw, err = defaultFileInferenceService(raw, inferenceServiceSchema)
+		if err != nil {
+			return nil, fmt.Errorf("-f %s: apply InferenceService CRD defaults: %w", path, err)
 		}
 		decoded, gvk, err := fileDecoder.Decode(raw, nil, nil)
 		if k8sruntime.IsNotRegisteredError(err) {

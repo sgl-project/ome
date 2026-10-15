@@ -22,6 +22,9 @@ sources:
 - kind: InferenceService
   name: team-a/service
   origin: File
+- kind: CustomResourceDefinition
+  name: isvc-crd.yaml
+  origin: File
 - kind: ClusterBaseModel
   name: llama
   origin: File

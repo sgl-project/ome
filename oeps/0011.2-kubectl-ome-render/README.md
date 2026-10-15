@@ -34,7 +34,9 @@
 engine, decoder, and router specs the InferenceService controller acts
 on: after runtime merge, deployment mode resolution, and the deploy
 defaults from the `inferenceservice-config` ConfigMap. Inputs come from
-the live cluster or from local manifest files.
+the live cluster or from local manifest files. File mode applies the
+`v1beta1` defaults from the supplied InferenceService CRD before rendering,
+matching the objects an API server would store.
 
 The controller builds these specs in memory on every reconcile and never
 stores them. `runtime effective` (OEP-0011.1) reruns the merge but prints
@@ -71,6 +73,11 @@ A component's spec comes from three sources:
 A change to any of them can change what runs, but there is no built-in
 way to preview the result.
 
+The API server also applies defaults from the installed InferenceService
+CRD before the controller sees an object. In file mode those defaults must
+come from the CRD rendered for the same OME revision; compiled Go defaults
+cannot represent a different revision's schema.
+
 ### Goals
 
 - Print the merged and defaulted component specs for one
@@ -80,6 +87,8 @@ way to preview the result.
 - Support the live and active (pinned) views of `runtime effective`.
 - Render fully offline from manifest files, so a preview can compare
   two Git revisions without cluster access.
+- Apply the matching CRD's structural-schema defaults in file mode, while
+  preserving explicit values such as `autoSync: false`.
 - In file mode, render every InferenceService in the files in one run,
   so a preview does not need to know in advance which services a change
   affects.
@@ -107,9 +116,11 @@ way to preview the result.
 | `-o yaml\|json` | `yaml` | Output encoding. No table form. |
 | `-f, --filename PATH` | none | Read the InferenceService, runtimes, and models from files. Repeatable. |
 | `--deploy-config PATH` | none | Read deploy defaults from a ConfigMap manifest. Required with `-f`. |
+| `--inference-service-crd PATH` | none | Read API defaults from an `inferenceservices.ome.io` CRD manifest. Required with `-f`. |
 | `--ome-namespace` | `ome` | Existing flag; where the live ConfigMap and ControllerRevisions are read. |
 
-With `-f` and `--deploy-config`, the command makes no API request.
+With `-f`, `--deploy-config`, and `--inference-service-crd`, the command
+makes no API request.
 
 `ISVC` is required in cluster mode. With `-f` and no `ISVC`, every
 InferenceService in the files is rendered; see
@@ -121,11 +132,12 @@ InferenceService in the files is rendered; see
 
 A pull request edits a ClusterServingRuntime's arguments. Its preview
 renders every InferenceService from the base and head revisions, with
-`-f` and `--deploy-config` pointing at the rendered manifests and no
-`ISVC` argument, and posts the diff. The preview never works out which
-services use the runtime: unaffected services render identically and
-drop out of the diff. The reviewer sees every affected component, and
-sees that a service which overrides the argument is unaffected.
+`-f`, `--deploy-config`, and `--inference-service-crd` pointing at the
+rendered manifests and no `ISVC` argument, and posts the diff. The preview
+never works out which services use the runtime: unaffected services render
+identically and drop out of the diff. The reviewer sees every affected
+component, and sees that a service which overrides the argument is
+unaffected.
 
 #### Check a Deploy Default Change Before Rollout
 
@@ -168,7 +180,9 @@ so they are easier to paste into a log by accident. Mitigations:
   invalid ConfigMap fails the command, as it fails the reconcile. There
   is no flag to skip defaults.
 - **Offline inputs differ from the cluster.** Mitigation: the output
-  lists every input with its origin, and a missing input is an error.
+  lists the rendered resource inputs with their origin, and a missing input
+  is an error. File mode requires the InferenceService CRD from the same OME
+  revision and uses Kubernetes' structural-schema defaulting implementation.
 
 ## Design Details
 
@@ -182,7 +196,11 @@ VirtualDeployment, resolves and pins the runtime, calls
 reruns everything but the first and last steps. `render` adds them:
 
 ```text
-inputs (cluster or files)
+file InferenceService
+  -> strict YAML-to-JSON decode
+  -> v1beta1 CRD structural-schema defaults
+  -> strict typed decode
+cluster InferenceService or defaulted file InferenceService
   -> runtime resolution and pin (pkg/cli/effective, existing)
   -> MergeEffectiveComponents (gains a *DeployConfig argument)
        -> MergeRuntimeSpecs + DetermineDeploymentModes
@@ -217,7 +235,14 @@ otherwise from `inferenceservice-config` in `--ome-namespace`.
 **File mode** (`-f`): the command keeps InferenceServices, runtimes,
 and models from the files and ignores other kinds with a notice.
 Runtime resolution uses the same lookup interface as cluster mode.
-`--deploy-config` is required; ConfigMaps in `-f` files are not used.
+`--deploy-config` and `--inference-service-crd` are required; ConfigMaps
+and CRDs in `-f` files are not used implicitly. The CRD path must contain
+exactly one `apiextensions.k8s.io/v1` namespaced
+`inferenceservices.ome.io` CRD with a served `v1beta1` structural schema.
+Its defaults are applied to each unstructured InferenceService before the
+existing strict typed decoder rejects unknown fields. Explicit fields are
+never overwritten. Each file-rendered object's `sources` records the CRD as
+`kind: CustomResourceDefinition`, with the supplied path and `origin: File`.
 `--view active` is rejected.
 
 Both modes parse deploy defaults with `controllerconfig.ParseDeployConfig`.
@@ -270,6 +295,10 @@ components:
   router: { ... }
 ```
 
+In file mode, `sources` also includes the `CustomResourceDefinition` path
+used for API defaults. Cluster mode is unchanged and does not read or report
+a CRD source.
+
 Output is deterministic (no resource versions, UIDs, or status), so two
 renders of the same inputs are byte-identical.
 
@@ -291,7 +320,8 @@ items:                          # sorted by namespace, then name
 | Rendered | `0` |
 | InferenceService, runtime, or pinned revision missing or unreadable | `1` |
 | Deploy defaults missing, Forbidden, or invalid | `1` |
-| `-f` without `--deploy-config`, `--view active` with `-f`, or ambiguous file input | `1` |
+| `-f` without `--deploy-config` or `--inference-service-crd`, `--view active` with `-f`, or ambiguous file input | `1` |
+| InferenceService CRD unreadable, malformed, mismatched, or without a structural `v1beta1` schema | `1` |
 | No `ISVC` without `-f`, or `-f` files with no InferenceService | `1` |
 | Any service fails while rendering every file InferenceService | `1` |
 
@@ -332,6 +362,9 @@ existing tests before accepting changes necessary for this enhancement.
 - Rendering every file InferenceService: a golden list across two
   namespaces; each item equals rendering that service by name; one
   failing service fails the run with nothing on stdout.
+- CRD defaulting: checked-in generated-schema defaults, explicit overrides,
+  a schema-default change, malformed and mismatched CRDs, retained strict
+  unknown-field rejection, and equality between file and cluster rendering.
 - Integration: TBD, possibly an envtest case comparing a reconciled
   workload's defaulted fields with `render` output.
 
@@ -354,6 +387,8 @@ existing tests before accepting changes necessary for this enhancement.
 - 2026-09-28: Provisional OEP-0011.2 created.
 - 2026-10-01: File mode renders every InferenceService when no `ISVC`
   is given.
+- 2026-10-15: File mode requires the matching InferenceService CRD and
+  applies its `v1beta1` structural-schema defaults before typed decoding.
 
 ## Drawbacks
 
@@ -361,6 +396,8 @@ existing tests before accepting changes necessary for this enhancement.
   callable from outside the manager.
 - A second, unredacted output path sits next to the allowlisted reports.
 - File mode duplicates some cluster lookup logic.
+- Offline callers must render and pass a roughly 1.5 MiB CRD alongside the
+  smaller deploy ConfigMap and workload manifests.
 
 ## Alternatives
 

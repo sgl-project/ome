@@ -86,14 +86,15 @@ type renderedComponent struct {
 
 type renderOptions struct {
 	genericiooptions.IOStreams
-	namespaceOptions *namespace.Options
-	limits           paging.Limits
-	readFile         func(string) ([]byte, error)
-	name             string
-	view             string
-	output           string
-	deployConfigPath string
-	filenames        []string
+	namespaceOptions        *namespace.Options
+	limits                  paging.Limits
+	readFile                func(string) ([]byte, error)
+	name                    string
+	view                    string
+	output                  string
+	deployConfigPath        string
+	inferenceServiceCRDPath string
+	filenames               []string
 }
 
 func newRenderCmd(f factory.Factory, streams genericiooptions.IOStreams) *cobra.Command {
@@ -123,10 +124,12 @@ to the defaults.
 
 -f reads the InferenceService, runtimes, and models from manifest files
 instead of the cluster, for example to diff two revisions of a GitOps
-repository. Other kinds are skipped with a notice. -f requires
---deploy-config, supports only --view live, and makes no API request.
-Objects without a namespace get the -n namespace. Without INFERENCESERVICE,
--f renders every InferenceService in the files, across namespaces, as one
+repository. Other kinds are skipped with a notice. -f requires both
+--deploy-config and --inference-service-crd, supports only --view live, and
+makes no API request. The v1beta1 schema from the CRD applies the same API
+server defaults to file InferenceServices before they are decoded. Objects
+without a namespace get the -n namespace. Without INFERENCESERVICE, -f
+renders every InferenceService in the files, across namespaces, as one
 RenderedInferenceServiceList; if any fails, nothing is printed.
 
 --view live merges the runtime as it is now; --view active merges the
@@ -145,8 +148,8 @@ cannot be applied.`,
 		Example: `  kubectl ome runtime render chat -n prod
   kubectl ome runtime render chat -n prod --view active -o json
   kubectl ome runtime render chat -n prod --deploy-config ./inferenceservice-config.yaml
-  kubectl ome runtime render chat -n prod -f service.yaml -f runtimes.yaml --deploy-config ./inferenceservice-config.yaml
-  kubectl ome runtime render -f services.yaml -f runtimes.yaml --deploy-config ./inferenceservice-config.yaml`,
+  kubectl ome runtime render chat -n prod -f service.yaml -f runtimes.yaml --deploy-config ./inferenceservice-config.yaml --inference-service-crd ./inferenceservice-crd.yaml
+  kubectl ome runtime render -f services.yaml -f runtimes.yaml --deploy-config ./inferenceservice-config.yaml --inference-service-crd ./inferenceservice-crd.yaml`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
@@ -162,6 +165,8 @@ cannot be applied.`,
 	cmd.Flags().StringVarP(&o.output, "output", "o", "yaml", "Output format: yaml or json")
 	cmd.Flags().StringVar(&o.deployConfigPath, "deploy-config", "",
 		"Read deploy defaults from an inferenceservice-config ConfigMap manifest instead of the cluster")
+	cmd.Flags().StringVar(&o.inferenceServiceCRDPath, "inference-service-crd", "",
+		"Read InferenceService API defaults from an inferenceservices.ome.io CRD manifest (required with -f)")
 	cmd.Flags().StringArrayVarP(&o.filenames, "filename", "f", nil,
 		"Read the InferenceService, runtimes, and models from manifest files instead of the cluster (repeatable)")
 	o.namespaceOptions.AddOMEFlags(cmd.Flags())
@@ -191,9 +196,14 @@ func (o *renderOptions) validate() error {
 		if o.deployConfigPath == "" {
 			return errors.New("-f requires --deploy-config")
 		}
+		if o.inferenceServiceCRDPath == "" {
+			return errors.New("-f requires --inference-service-crd")
+		}
 		if o.view == "active" {
 			return errors.New("--view active needs the cluster and cannot be used with -f")
 		}
+	} else if o.inferenceServiceCRDPath != "" {
+		return errors.New("--inference-service-crd can be used only with -f")
 	}
 	return nil
 }

@@ -220,15 +220,21 @@ diff before.yaml after.yaml
 
 With `-f` (repeatable), the service, runtimes, and models come from manifest
 files and the command makes no API request, so you can diff two revisions of a
-GitOps repository. `-f` requires `--deploy-config` and supports only
-`--view live`. Other kinds in the files are skipped with a notice on stderr,
-objects without a namespace get the `-n` namespace, and an object defined twice
-fails the command:
+GitOps repository. `-f` requires `--deploy-config` and
+`--inference-service-crd`, and supports only `--view live`. The CRD must be the
+`inferenceservices.ome.io` CRD rendered for the same OME revision; its
+`v1beta1` structural schema applies API-server defaults before strict decoding.
+Other kinds in the files are skipped with a notice on stderr, objects without a
+namespace get the `-n` namespace, and an object defined twice fails the command:
 
 ```sh
 kubectl ome runtime render chat -n team-a -f base/chat.yaml -f base/runtimes.yaml \
-  --deploy-config base/inferenceservice-config.yaml > before.yaml
+  --deploy-config base/inferenceservice-config.yaml \
+  --inference-service-crd base/inferenceservice-crd.yaml > before.yaml
 ```
+
+File-rendered output records that CRD path as a `CustomResourceDefinition`
+source with `origin: File`. Cluster-mode output does not add a CRD source.
 
 Without a service name, `-f` renders every InferenceService in the files,
 across namespaces, as one `RenderedInferenceServiceList` sorted by namespace
@@ -239,7 +245,8 @@ service:
 
 ```sh
 kubectl ome runtime render -f base/services.yaml -f base/runtimes.yaml \
-  --deploy-config base/inferenceservice-config.yaml > before.yaml
+  --deploy-config base/inferenceservice-config.yaml \
+  --inference-service-crd base/inferenceservice-crd.yaml > before.yaml
 ```
 
 Runtime history is retained evidence, not a complete audit log. Compact

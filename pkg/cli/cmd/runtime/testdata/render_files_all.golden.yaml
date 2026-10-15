@@ -22,6 +22,9 @@ items:
   - kind: InferenceService
     name: prod/chat
     origin: File
+  - kind: CustomResourceDefinition
+    name: isvc-crd.yaml
+    origin: File
   - kind: ClusterBaseModel
     name: llama
     origin: File
@@ -55,6 +58,9 @@ items:
   sources:
   - kind: InferenceService
     name: team-a/service
+    origin: File
+  - kind: CustomResourceDefinition
+    name: isvc-crd.yaml
     origin: File
   - kind: ClusterBaseModel
     name: llama
