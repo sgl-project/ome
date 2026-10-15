@@ -139,6 +139,11 @@ identically and drop out of the diff. The reviewer sees every affected
 component, and sees that a service which overrides the argument is
 unaffected.
 
+The matching CRD can come from `config/crd/full/ome.io_inferenceservices.yaml`
+after `make manifests`, or from the same revision's `ome-crd` chart with
+`helm template ome-crd ./charts/ome-crd --show-only
+templates/ome.io_inferenceservices.yaml`.
+
 #### Check a Deploy Default Change Before Rollout
 
 A platform team plans to set `updateStrategy.engine.maxSurge`. They

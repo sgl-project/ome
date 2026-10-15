@@ -233,6 +233,17 @@ kubectl ome runtime render chat -n team-a -f base/chat.yaml -f base/runtimes.yam
   --inference-service-crd base/inferenceservice-crd.yaml > before.yaml
 ```
 
+Create the CRD input from a checkout of the same OME revision. Repository
+development can run `make manifests` and use
+`config/crd/full/ome.io_inferenceservices.yaml`; revision-pinned automation can
+render the equivalent chart artifact:
+
+```sh
+helm template ome-crd ./charts/ome-crd \
+  --show-only templates/ome.io_inferenceservices.yaml \
+  > base/inferenceservice-crd.yaml
+```
+
 File-rendered output records that CRD path as a `CustomResourceDefinition`
 source with `origin: File`. Cluster-mode output does not add a CRD source.
 
