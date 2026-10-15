@@ -15,7 +15,9 @@
     {
       "kind": "ClusterServingRuntime",
       "name": "cluster-runtime",
-      "origin": "Cluster"
+      "origin": "Cluster",
+      "autoSync": false,
+      "revision": "cr-cluster-runtime-e0e2b0d6"
     },
     {
       "kind": "ControllerRevision",

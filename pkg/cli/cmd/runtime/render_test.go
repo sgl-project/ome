@@ -229,6 +229,12 @@ func TestRenderFailures(t *testing.T) {
 			contains: "want v1 ConfigMap",
 		},
 		{
+			name:     "InferenceService CRD in cluster mode",
+			setup:    func(t *testing.T) *acquisitionFactory { return renderFactory(t, false) },
+			args:     []string{"--inference-service-crd", "isvc-crd.yaml"},
+			contains: "--inference-service-crd can be used only with -f",
+		},
+		{
 			name:     "unknown view",
 			setup:    func(t *testing.T) *acquisitionFactory { return renderFactory(t, false) },
 			args:     []string{"--view", "desired"},

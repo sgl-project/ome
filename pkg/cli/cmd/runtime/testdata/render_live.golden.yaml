@@ -34,9 +34,11 @@ sources:
 - kind: InferenceService
   name: team-a/service
   origin: Cluster
-- kind: ClusterServingRuntime
+- autoSync: false
+  kind: ClusterServingRuntime
   name: cluster-runtime
   origin: Cluster
+  revision: cr-cluster-runtime-e0e2b0d6
 - kind: ConfigMap
   name: control-plane/inferenceservice-config
   origin: Cluster

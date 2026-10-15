@@ -22,10 +22,14 @@ items:
   - kind: InferenceService
     name: prod/chat
     origin: File
+  - kind: CustomResourceDefinition
+    name: isvc-crd.yaml
+    origin: File
   - kind: ClusterBaseModel
     name: llama
     origin: File
-  - kind: ServingRuntime
+  - autoSync: true
+    kind: ServingRuntime
     name: prod/vllm
     origin: File
   - kind: ConfigMap
@@ -56,10 +60,14 @@ items:
   - kind: InferenceService
     name: team-a/service
     origin: File
+  - kind: CustomResourceDefinition
+    name: isvc-crd.yaml
+    origin: File
   - kind: ClusterBaseModel
     name: llama
     origin: File
-  - kind: ServingRuntime
+  - autoSync: true
+    kind: ServingRuntime
     name: team-a/vllm
     origin: File
   - kind: ConfigMap

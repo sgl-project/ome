@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
@@ -25,6 +26,65 @@ data:
   deploy: |
     {"defaultDeploymentMode": "RawDeployment", "terminationGracePeriodSeconds": 45,
      "replicas": {"defaultMinReplicas": 2, "defaultMaxReplicas": {"engine": 6}}}
+`
+
+// renderFileInferenceServiceCRD is intentionally small. It exercises the
+// Kubernetes structural-schema defaulting path without making every command
+// test parse the 1.5 MiB generated CRD. A separate test below uses that file.
+const renderFileInferenceServiceCRD = `apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: inferenceservices.ome.io
+spec:
+  group: ome.io
+  names:
+    kind: InferenceService
+    plural: inferenceservices
+  scope: Namespaced
+  versions:
+  - name: v1beta1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            type: object
+            properties:
+              model:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  kind:
+                    type: string
+                    default: ClusterBaseModel
+                  apiGroup:
+                    type: string
+                    default: ome.io
+              runtime:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  kind:
+                    type: string
+                    default: ClusterServingRuntime
+                  apiGroup:
+                    type: string
+                    default: ome.io
+                  autoSync:
+                    type: boolean
+                    default: true
+                  revision:
+                    type: string
 `
 
 const renderFileService = `apiVersion: ome.io/v1beta1
@@ -76,6 +136,7 @@ metadata:
 func renderFiles(extra map[string]string) map[string]string {
 	files := map[string]string{
 		"deploy.yaml":   renderFileDeployConfig,
+		"isvc-crd.yaml": renderFileInferenceServiceCRD,
 		"service.yaml":  renderFileService,
 		"runtimes.yaml": renderFileRuntimes,
 	}
@@ -85,7 +146,10 @@ func renderFiles(extra map[string]string) map[string]string {
 	return files
 }
 
-var renderFileArgs = []string{"-f", "service.yaml", "-f", "runtimes.yaml", "--deploy-config", "deploy.yaml"}
+var renderFileArgs = []string{
+	"-f", "service.yaml", "-f", "runtimes.yaml",
+	"--deploy-config", "deploy.yaml", "--inference-service-crd", "isvc-crd.yaml",
+}
 
 func TestRenderFilesGoldenOutput(t *testing.T) {
 	f := renderFactory(t, false)
@@ -101,27 +165,70 @@ func TestRenderFilesGoldenOutput(t *testing.T) {
 	assert.Zero(t, f.omeGet+f.kubeGet+f.runtimeGet, "file mode must not construct API clients")
 }
 
-// TestRenderFilesMatchesClusterMode renders the healthy fixture from the
-// cluster and from its manifests; only the source origins may differ.
+func TestRenderFilesReportsRuntimeSyncIntent(t *testing.T) {
+	service := strings.Replace(renderFileService,
+		"    kind: ServingRuntime\n",
+		"    kind: ServingRuntime\n    autoSync: false\n    revision: runtime-revision\n", 1)
+
+	out, _, err := executeRenderStreams(t, renderFactory(t, false),
+		renderFiles(map[string]string{"service.yaml": service}),
+		append(renderFileArgs, "-o", "json")...)
+
+	require.NoError(t, err)
+	var rendered renderedInferenceService
+	require.NoError(t, json.Unmarshal([]byte(out), &rendered))
+	require.Len(t, rendered.Sources, 5)
+	runtimeSource := rendered.Sources[3]
+	assert.Equal(t, "ServingRuntime", runtimeSource.Kind)
+	require.NotNil(t, runtimeSource.AutoSync)
+	assert.False(t, *runtimeSource.AutoSync)
+	assert.Equal(t, "runtime-revision", runtimeSource.Revision)
+}
+
+// TestRenderFilesMatchesClusterMode uses a fake cluster fixture representing
+// an object already defaulted by its API server. Combined with the generated
+// CRD test, it verifies that file and cluster rendering choose the same
+// cluster-scoped runtime. The same-name namespaced runtime would win if
+// runtime.kind remained absent in file mode.
 func TestRenderFilesMatchesClusterMode(t *testing.T) {
-	f := renderFactory(t, false)
-	isvc, err := f.ome.OmeV1beta1().InferenceServices("team-a").Get(context.Background(), "service", metav1.GetOptions{})
+	clusterFactory := renderFactory(t, false)
+	isvc, err := clusterFactory.ome.OmeV1beta1().InferenceServices("team-a").Get(context.Background(), "service", metav1.GetOptions{})
 	require.NoError(t, err)
 	isvc.TypeMeta = metav1.TypeMeta{APIVersion: v1beta1.SchemeGroupVersion.String(), Kind: "InferenceService"}
 	runtimeObject := &v1beta1.ClusterServingRuntime{}
-	require.NoError(t, f.runtime.Get(context.Background(), ctrlclient.ObjectKey{Name: "cluster-runtime"}, runtimeObject))
+	require.NoError(t, clusterFactory.runtime.Get(context.Background(), ctrlclient.ObjectKey{Name: "cluster-runtime"}, runtimeObject))
 	runtimeObject.TypeMeta = metav1.TypeMeta{APIVersion: v1beta1.SchemeGroupVersion.String(), Kind: runtimeselector.KindClusterServingRuntime}
+	collision := &v1beta1.ServingRuntime{
+		TypeMeta:   metav1.TypeMeta{APIVersion: v1beta1.SchemeGroupVersion.String(), Kind: runtimeselector.KindServingRuntime},
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-runtime", Namespace: "team-a"},
+		Spec: v1beta1.ServingRuntimeSpec{EngineConfig: &v1beta1.EngineSpec{
+			Runner: &v1beta1.RunnerSpec{Container: corev1.Container{Name: "runner", Image: "wrong-collision-runtime:v1"}},
+		}},
+	}
+	require.NoError(t, clusterFactory.runtime.Create(context.Background(), collision.DeepCopy()))
+
+	// A live object has already received this CRD default. Omit it only from
+	// the file manifest so file mode must recover it from the generated CRD.
+	fileISVC := isvc.DeepCopy()
+	fileISVC.Spec.Runtime.Kind = nil
 	var manifests []string
-	for _, object := range []any{isvc, runtimeObject} {
+	for _, object := range []any{fileISVC, runtimeObject, collision} {
 		data, err := yaml.Marshal(object)
 		require.NoError(t, err)
 		manifests = append(manifests, string(data))
 	}
-	files := map[string]string{"all.yaml": strings.Join(manifests, "---\n"), "deploy.yaml": renderFileDeployConfig}
-
-	fromCluster, err := executeRender(t, renderFactory(t, false), nil, "-o", "json")
+	generatedCRD, err := readRenderFile(generatedInferenceServiceCRDPath())
 	require.NoError(t, err)
-	fromFiles, err := executeRender(t, f, files, "-f", "all.yaml", "--deploy-config", "deploy.yaml", "-o", "json")
+	files := map[string]string{
+		"all.yaml": strings.Join(manifests, "---\n"), "deploy.yaml": renderFileDeployConfig,
+		"isvc-crd.yaml": string(generatedCRD),
+	}
+
+	fromCluster, err := executeRender(t, clusterFactory, nil, "-o", "json")
+	require.NoError(t, err)
+	fileFactory := renderFactory(t, false)
+	fromFiles, err := executeRender(t, fileFactory, files, "-f", "all.yaml", "--deploy-config", "deploy.yaml",
+		"--inference-service-crd", "isvc-crd.yaml", "-o", "json")
 	require.NoError(t, err)
 
 	withoutSources := func(out string) map[string]any {
@@ -131,8 +238,11 @@ func TestRenderFilesMatchesClusterMode(t *testing.T) {
 		return rendered
 	}
 	assert.Equal(t, withoutSources(fromCluster), withoutSources(fromFiles))
+	assert.NotContains(t, fromFiles, "wrong-collision-runtime:v1")
 	assert.Contains(t, fromFiles, `"origin": "File"`)
+	assert.Contains(t, fromFiles, `"kind": "CustomResourceDefinition"`)
 	assert.NotContains(t, fromFiles, `"origin": "Cluster"`)
+	assert.NotContains(t, fromCluster, `"kind": "CustomResourceDefinition"`)
 }
 
 // TestRenderFilesUsesNamespaceFlag checks that -n selects the service and
@@ -241,6 +351,11 @@ func TestRenderFilesFailures(t *testing.T) {
 			contains: "-f requires --deploy-config",
 		},
 		{
+			name:     "missing InferenceService CRD",
+			args:     []string{"-f", "service.yaml", "--deploy-config", "deploy.yaml"},
+			contains: "-f requires --inference-service-crd",
+		},
+		{
 			name:     "active view",
 			args:     append([]string{"--view", "active"}, renderFileArgs...),
 			contains: "--view active needs the cluster and cannot be used with -f",
@@ -254,12 +369,12 @@ func TestRenderFilesFailures(t *testing.T) {
 		},
 		{
 			name:     "service not in files",
-			args:     []string{"-f", "runtimes.yaml", "--deploy-config", "deploy.yaml"},
+			args:     []string{"-f", "runtimes.yaml", "--deploy-config", "deploy.yaml", "--inference-service-crd", "isvc-crd.yaml"},
 			contains: "InferenceService team-a/service not found in -f files",
 		},
 		{
 			name:     "runtime not in files",
-			args:     []string{"-f", "service.yaml", "--deploy-config", "deploy.yaml"},
+			args:     []string{"-f", "service.yaml", "--deploy-config", "deploy.yaml", "--inference-service-crd", "isvc-crd.yaml"},
 			contains: "render live view: ",
 		},
 		{
