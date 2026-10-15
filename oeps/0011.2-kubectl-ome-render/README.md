@@ -287,6 +287,11 @@ sources:
   - kind: InferenceService
     name: prod/chat
     origin: Cluster             # Cluster or File
+  - kind: ClusterServingRuntime
+    name: shared-runtime
+    origin: Cluster
+    autoSync: false
+    revision: runtime-revision  # omitted when spec.runtime.revision is unset
   - kind: ConfigMap
     name: ome/inferenceservice-config
     origin: Cluster
@@ -300,9 +305,11 @@ components:
   router: { ... }
 ```
 
-In file mode, `sources` also includes the `CustomResourceDefinition` path
-used for API defaults. Cluster mode is unchanged and does not read or report
-a CRD source.
+The runtime source reports the resolved `autoSync` value and the requested
+`spec.runtime.revision` when set. In an Active view, the actual pinned snapshot
+remains a separate `ControllerRevision` source. In file mode, `sources` also
+includes the `CustomResourceDefinition` path used for API defaults. Cluster
+mode does not read or report a CRD source.
 
 Output is deterministic (no resource versions, UIDs, or status), so two
 renders of the same inputs are byte-identical.

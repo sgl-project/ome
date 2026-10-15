@@ -83,6 +83,8 @@ spec:
                   autoSync:
                     type: boolean
                     default: true
+                  revision:
+                    type: string
 `
 
 const renderFileService = `apiVersion: ome.io/v1beta1
@@ -161,6 +163,26 @@ func TestRenderFilesGoldenOutput(t *testing.T) {
 			"ignoring apps/v1 Deployment from runtimes.yaml: -f reads only InferenceServices, runtimes, and models\n",
 		errOut)
 	assert.Zero(t, f.omeGet+f.kubeGet+f.runtimeGet, "file mode must not construct API clients")
+}
+
+func TestRenderFilesReportsRuntimeSyncIntent(t *testing.T) {
+	service := strings.Replace(renderFileService,
+		"    kind: ServingRuntime\n",
+		"    kind: ServingRuntime\n    autoSync: false\n    revision: runtime-revision\n", 1)
+
+	out, _, err := executeRenderStreams(t, renderFactory(t, false),
+		renderFiles(map[string]string{"service.yaml": service}),
+		append(renderFileArgs, "-o", "json")...)
+
+	require.NoError(t, err)
+	var rendered renderedInferenceService
+	require.NoError(t, json.Unmarshal([]byte(out), &rendered))
+	require.Len(t, rendered.Sources, 5)
+	runtimeSource := rendered.Sources[3]
+	assert.Equal(t, "ServingRuntime", runtimeSource.Kind)
+	require.NotNil(t, runtimeSource.AutoSync)
+	assert.False(t, *runtimeSource.AutoSync)
+	assert.Equal(t, "runtime-revision", runtimeSource.Revision)
 }
 
 // TestRenderFilesMatchesClusterMode uses a fake cluster fixture representing

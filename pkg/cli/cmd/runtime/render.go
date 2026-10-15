@@ -67,9 +67,11 @@ type renderedMetadata struct {
 }
 
 type renderedSource struct {
-	Kind   string `json:"kind"`
-	Name   string `json:"name"`
-	Origin string `json:"origin"`
+	Kind     string `json:"kind"`
+	Name     string `json:"name"`
+	Origin   string `json:"origin"`
+	AutoSync *bool  `json:"autoSync,omitempty"`
+	Revision string `json:"revision,omitempty"`
 }
 
 type renderedComponents struct {
@@ -144,7 +146,8 @@ literal environment values and any credential placed inline in the
 InferenceService or runtime. Do not paste it into logs or tickets.
 
 The output is a cli.ome.io/v1alpha1 object for reading and diffing. It
-cannot be applied.`,
+cannot be applied. The runtime source reports its resolved autoSync value and
+the requested spec.runtime.revision when one is set.`,
 		Example: `  kubectl ome runtime render chat -n prod
   kubectl ome runtime render chat -n prod --view active -o json
   kubectl ome runtime render chat -n prod --deploy-config ./inferenceservice-config.yaml
@@ -236,8 +239,10 @@ func (o *renderOptions) run(ctx context.Context, f factory.Factory) error {
 		if err != nil {
 			return fmt.Errorf("render active view (pin state %s): %w", evidence.state.PinState, err)
 		}
+		autoSync := evidence.state.PinMode == effective.RuntimePinModeAutoSync
 		sources = append(sources, renderedSource{
 			Kind: active.RuntimeKind, Name: objectName(active.RuntimeNamespace, active.RuntimeName), Origin: renderOriginCluster,
+			AutoSync: &autoSync, Revision: evidence.state.RequestedRevisionName,
 		})
 		if active.Origin == effective.ConfigurationOriginControllerRevision {
 			sources = append(sources, renderedSource{
@@ -295,8 +300,10 @@ func liveSources(live *effective.LiveConfiguration, origin string) []renderedSou
 			Kind: live.Model.Kind, Name: objectName(live.Model.Namespace, live.Model.Name), Origin: origin,
 		})
 	}
+	autoSync := live.Runtime.AutoSync
 	return append(sources, renderedSource{
 		Kind: live.Runtime.Kind, Name: objectName(live.Runtime.Namespace, live.Runtime.Name), Origin: origin,
+		AutoSync: &autoSync, Revision: live.Runtime.RequestedRevision,
 	})
 }
 

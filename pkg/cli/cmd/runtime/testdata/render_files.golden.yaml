@@ -28,7 +28,8 @@ sources:
 - kind: ClusterBaseModel
   name: llama
   origin: File
-- kind: ServingRuntime
+- autoSync: true
+  kind: ServingRuntime
   name: team-a/vllm
   origin: File
 - kind: ConfigMap

@@ -209,8 +209,9 @@ from the `inferenceservice-config` ConfigMap in `--ome-namespace`, or from a
 ConfigMap manifest given with `--deploy-config`. A missing, forbidden, or
 invalid ConfigMap fails the command. Unlike the diagnostic reports, the output
 is not redacted: it can contain literal environment values and credentials
-placed inline in the service or runtime. Diff two renders to preview a runtime
-or deploy default change:
+placed inline in the service or runtime. The runtime entry in `sources` reports
+the resolved `autoSync` value and the requested `spec.runtime.revision` when
+set. Diff two renders to preview a runtime or deploy default change:
 
 ```sh
 kubectl ome runtime render chat -n team-a > before.yaml
