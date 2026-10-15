@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -15,6 +17,35 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	omefake "sigs.k8s.io/ome/pkg/client/clientset/versioned/fake"
 )
+
+// newDeleteConfirmationTestScout returns a Scout with a fast-retrying delete
+// queue and a buffered gopher channel.
+func newDeleteConfirmationTestScout(client *omefake.Clientset) (*Scout, chan *GopherTask) {
+	ch := make(chan *GopherTask, 1)
+	return &Scout{
+		ctx:         context.Background(),
+		gopherChan:  ch,
+		omeClient:   client,
+		deleteQueue: newDeleteConfirmationQueue(time.Millisecond, time.Millisecond),
+		logger:      zap.NewNop().Sugar(),
+	}, ch
+}
+
+// processNext runs one processNextDeleteConfirmation call and fails the test
+// instead of hanging when no item becomes ready.
+func processNext(t *testing.T, scout *Scout) bool {
+	t.Helper()
+	done := make(chan bool, 1)
+	go func() { done <- scout.processNextDeleteConfirmation() }()
+	select {
+	case ok := <-done:
+		return ok
+	case <-time.After(5 * time.Second):
+		scout.deleteQueue.ShutDown()
+		t.Fatal("no delete confirmation became ready")
+		return false
+	}
+}
 
 func TestOnModelDeleted_ConfirmsWithLiveRead(t *testing.T) {
 	const (
@@ -31,6 +62,7 @@ func TestOnModelDeleted_ConfirmsWithLiveRead(t *testing.T) {
 		liveMissing  bool
 		getErr       error
 		wantTasks    int
+		wantRequeue  bool
 	}{
 		{
 			name:      "object still exists with same UID",
@@ -54,9 +86,16 @@ func TestOnModelDeleted_ConfirmsWithLiveRead(t *testing.T) {
 			wantTasks:    1,
 		},
 		{
-			name:      "live read fails",
-			getErr:    fmt.Errorf("service unavailable"),
-			wantTasks: 0,
+			name:        "live read fails",
+			getErr:      fmt.Errorf("service unavailable"),
+			wantTasks:   0,
+			wantRequeue: true,
+		},
+		{
+			name:        "live read times out",
+			getErr:      context.DeadlineExceeded,
+			wantTasks:   0,
+			wantRequeue: true,
 		},
 	}
 
@@ -69,20 +108,28 @@ func TestOnModelDeleted_ConfirmsWithLiveRead(t *testing.T) {
 			}
 			return m
 		}
-		newScout := func(objects ...runtime.Object) (*Scout, chan *GopherTask) {
+		newClient := func(objects ...runtime.Object) *omefake.Clientset {
 			client := omefake.NewSimpleClientset(objects...)
 			if tt.getErr != nil {
 				client.PrependReactor("get", "*", func(k8stesting.Action) (bool, runtime.Object, error) {
 					return true, nil, tt.getErr
 				})
 			}
-			ch := make(chan *GopherTask, 1)
-			return &Scout{
-				ctx:        context.Background(),
-				gopherChan: ch,
-				omeClient:  client,
-				logger:     zap.NewNop().Sugar(),
-			}, ch
+			return client
+		}
+		// check runs the queued confirmation and verifies the outcome.
+		check := func(t *testing.T, client *omefake.Clientset, scout *Scout, ch chan *GopherTask, item deleteConfirmation) {
+			assert.Empty(t, client.Actions(), "informer callback must not call the API server")
+			assert.Equal(t, 1, scout.deleteQueue.Len())
+
+			require.True(t, processNext(t, scout))
+
+			assert.Len(t, ch, tt.wantTasks)
+			if tt.wantRequeue {
+				assert.Equal(t, 1, scout.deleteQueue.NumRequeues(item))
+			} else {
+				assert.Zero(t, scout.deleteQueue.NumRequeues(item))
+			}
 		}
 
 		t.Run("BaseModel/"+tt.name, func(t *testing.T) {
@@ -92,13 +139,15 @@ func TestOnModelDeleted_ConfirmsWithLiveRead(t *testing.T) {
 				live.Namespace = namespace
 				objects = append(objects, live)
 			}
-			scout, ch := newScout(objects...)
-
-			scout.onBaseModelDeleted(&v1beta1.BaseModel{
+			client := newClient(objects...)
+			scout, ch := newDeleteConfirmationTestScout(client)
+			deleted := &v1beta1.BaseModel{
 				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, UID: uid},
-			})
+			}
 
-			assert.Len(t, ch, tt.wantTasks)
+			scout.onBaseModelDeleted(deleted)
+
+			check(t, client, scout, ch, deleteConfirmation{baseModel: deleted})
 			if tt.wantTasks > 0 {
 				task := <-ch
 				assert.Equal(t, Delete, task.TaskType)
@@ -111,13 +160,15 @@ func TestOnModelDeleted_ConfirmsWithLiveRead(t *testing.T) {
 			if !tt.liveMissing {
 				objects = append(objects, &v1beta1.ClusterBaseModel{ObjectMeta: meta()})
 			}
-			scout, ch := newScout(objects...)
-
-			scout.onClusterBaseModelDeleted(&v1beta1.ClusterBaseModel{
+			client := newClient(objects...)
+			scout, ch := newDeleteConfirmationTestScout(client)
+			deleted := &v1beta1.ClusterBaseModel{
 				ObjectMeta: metav1.ObjectMeta{Name: name, UID: uid},
-			})
+			}
 
-			assert.Len(t, ch, tt.wantTasks)
+			scout.onClusterBaseModelDeleted(deleted)
+
+			check(t, client, scout, ch, deleteConfirmation{clusterBaseModel: deleted})
 			if tt.wantTasks > 0 {
 				task := <-ch
 				assert.Equal(t, Delete, task.TaskType)
@@ -125,4 +176,63 @@ func TestOnModelDeleted_ConfirmsWithLiveRead(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConfirmDelete_RetriesUntilReadSucceeds(t *testing.T) {
+	const failures = 2
+	client := omefake.NewSimpleClientset()
+	calls := 0
+	client.PrependReactor("get", "clusterbasemodels", func(k8stesting.Action) (bool, runtime.Object, error) {
+		calls++
+		if calls <= failures {
+			return true, nil, fmt.Errorf("connection refused")
+		}
+		return false, nil, nil // fall through to the tracker, which returns NotFound
+	})
+	scout, ch := newDeleteConfirmationTestScout(client)
+	deleted := &v1beta1.ClusterBaseModel{ObjectMeta: metav1.ObjectMeta{Name: "model", UID: "uid-1"}}
+	item := deleteConfirmation{clusterBaseModel: deleted}
+
+	scout.onClusterBaseModelDeleted(deleted)
+
+	for i := 1; i <= failures; i++ {
+		require.True(t, processNext(t, scout))
+		assert.Empty(t, ch)
+		assert.Equal(t, i, scout.deleteQueue.NumRequeues(item))
+	}
+	require.True(t, processNext(t, scout))
+
+	require.Len(t, ch, 1)
+	task := <-ch
+	assert.Equal(t, Delete, task.TaskType)
+	assert.Same(t, deleted, task.ClusterBaseModel)
+	assert.Zero(t, scout.deleteQueue.NumRequeues(item))
+	assert.Zero(t, scout.deleteQueue.Len())
+	assert.Equal(t, failures+1, calls)
+}
+
+func TestProcessNextDeleteConfirmation_StopsOnShutdown(t *testing.T) {
+	scout, ch := newDeleteConfirmationTestScout(omefake.NewSimpleClientset())
+	scout.onBaseModelDeleted(&v1beta1.BaseModel{ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "models"}})
+
+	scout.deleteQueue.ShutDown()
+
+	assert.False(t, processNext(t, scout))
+	assert.Empty(t, ch)
+}
+
+func TestGetWithTimeout_BoundsRead(t *testing.T) {
+	const timeout = 10 * time.Millisecond
+	var hadDeadline bool
+
+	start := time.Now()
+	_, err := getWithTimeout(context.Background(), timeout, func(ctx context.Context) (metav1.Object, error) {
+		_, hadDeadline = ctx.Deadline()
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+
+	assert.True(t, hadDeadline)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(t, time.Since(start), 5*time.Second)
 }
