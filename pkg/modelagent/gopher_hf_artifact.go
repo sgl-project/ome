@@ -33,7 +33,11 @@ func (s *Gopher) processHfOCIArtifact(ctx context.Context, task *GopherTask, spe
 	}
 	handler := s.sharedHfArtifactHandler()
 	key := s.configMapReconciler.getModelConfigMapKey(task.BaseModel, task.ClusterBaseModel)
-	if _, waiting, err := s.resumeHfArtifactChildDeletion(ctx, task, allowDownload); waiting || err != nil {
+	var next *hfArtifactTaskInput
+	if eligible {
+		next = &input
+	}
+	if _, waiting, err := s.reconcileHfArtifactCleanup(ctx, task, next, allowDownload); waiting || err != nil {
 		return true, waiting, err
 	}
 	stored, referenced, lookupErr := handler.repository.GetParentForChild(ctx, key)
@@ -349,8 +353,9 @@ func (s *Gopher) runHfArtifactDownload(ctx context.Context, task *GopherTask, in
 	if handler.childPathConflictsWithParent(input.ChildModelPath, input.Parent.LocalPath) {
 		return hfArtifactTaskResult{Outcome: hfArtifactTaskUseDefaultDownload}, nil
 	}
-	needsRepair := task.TaskType == DownloadOverride || (found && parent.Status != HfArtifactStatusUpdating &&
-		(parent.Status == HfArtifactStatusFailed || !handler.files.ParentReadyMarkerExists(parent)))
+	parentIdle := !parent.blocksNewOperation()
+	needsRepair := task.TaskType == DownloadOverride || (found && parentIdle &&
+		(parent.Status != HfArtifactStatusReady || !handler.files.ParentReadyMarkerExists(parent)))
 	startupValidation := s.hfArtifactStartup.needsValidation(input.Parent.Key)
 	if !allowDownload && (needsRepair || !found || startupValidation) {
 		s.demoteToNormalPriority(task)
@@ -391,7 +396,7 @@ func (s *Gopher) detachHfArtifactForDefaultDownload(ctx context.Context, task *G
 	if s.configMapReconciler == nil {
 		return false, nil
 	}
-	if _, waiting, err := s.resumeHfArtifactChildDeletion(ctx, task, allowDownload); waiting || err != nil {
+	if _, waiting, err := s.reconcileHfArtifactCleanup(ctx, task, nil, allowDownload); waiting || err != nil {
 		return waiting, err
 	}
 	handler := s.sharedHfArtifactHandler()
@@ -463,7 +468,7 @@ func (s *Gopher) processSharedHfArtifactDelete(ctx context.Context, task *Gopher
 		return true, false, nil
 	}
 	handler := s.sharedHfArtifactHandler()
-	if handled, waiting, err := s.resumeHfArtifactChildDeletion(ctx, task, true); handled || err != nil {
+	if handled, waiting, err := s.reconcileHfArtifactCleanup(ctx, task, nil, true); handled || err != nil {
 		return true, waiting, err
 	}
 	parent, found, err := handler.repository.GetParentForChild(ctx, key)
@@ -567,7 +572,7 @@ func (s *Gopher) releaseHfArtifactChild(ctx context.Context, input hfArtifactTas
 			return newHfArtifactRetryResult(input.Parent.Key, nil), nil
 		}
 		defer unlock()
-		if err := handler.retryPendingParentFailure(ctx, input.Parent.Key); err != nil {
+		if err := handler.retryPendingLockRelease(ctx, input.Parent.Key); err != nil {
 			return newHfArtifactRetryResult(input.Parent.Key, err), nil
 		}
 		current, found, err := handler.repository.GetParentForChild(ctx, input.ChildModelKey)
@@ -587,7 +592,7 @@ func (s *Gopher) releaseHfArtifactChild(ctx context.Context, input hfArtifactTas
 			return newHfArtifactRetryResult(current.Key, err), nil
 		}
 		input.Parent = current
-		if current.Status == HfArtifactStatusUpdating {
+		if current.blocksNewOperation() {
 			if !handler.files.ParentReadyMarkerMatchesLock(current) {
 				return newHfArtifactRetryResult(current.Key, nil), nil
 			}
@@ -605,7 +610,7 @@ func (s *Gopher) releaseHfArtifactChild(ctx context.Context, input hfArtifactTas
 			if input.Parent.Status == HfArtifactStatusReady && handler.files.ParentReadyMarkerExists(input.Parent) {
 				err = handler.repository.MarkReady(ctx, removed.Artifact)
 			} else {
-				err = handler.repository.MarkFailed(ctx, removed.Artifact)
+				err = handler.releaseParentDeletionLock(ctx, removed.Artifact, input.Parent.Status)
 			}
 		}
 		return hfArtifactTaskResult{Outcome: hfArtifactTaskDone}, err

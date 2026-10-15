@@ -11,7 +11,7 @@ import (
 	ktesting "k8s.io/client-go/testing"
 )
 
-func TestHfArtifactPendingFailureRetriesWithoutRestart(t *testing.T) {
+func TestHfArtifactPendingLockReleaseRetriesWithoutRestart(t *testing.T) {
 	repository, client := newTestHfArtifactRepository(t, map[string]string{})
 	h := newHfArtifactTaskHandler(repository)
 	input := testHfArtifactTaskInput(t, t.TempDir(), "model-1")
@@ -35,22 +35,22 @@ func TestHfArtifactPendingFailureRetriesWithoutRestart(t *testing.T) {
 	assert.Equal(t, HfArtifactStatusUpdating, parent.Status)
 	unavailable = false
 	require.NoError(t, runTestHfArtifactDownload(h, input))
-	_, pending := h.pendingFailures.Load(parent.Key)
+	_, pending := h.pendingLockReleases.Load(parent.Key)
 	assert.False(t, pending)
 }
 
-func TestHfArtifactPendingFailureCannotReleaseNewOwner(t *testing.T) {
+func TestHfArtifactPendingLockReleaseCannotReleaseNewOwner(t *testing.T) {
 	repository, _ := newTestHfArtifactRepository(t, map[string]string{})
 	h := newHfArtifactTaskHandler(repository)
 	input := testHfArtifactTaskInput(t, t.TempDir(), "model-1")
 	old, _, err := repository.TryAcquireLock(context.Background(), input.Parent)
 	require.NoError(t, err)
-	h.pendingFailures.Store(old.Key, &old)
+	h.pendingLockReleases.Store(old.Key, &old)
 	require.NoError(t, repository.MarkFailed(context.Background(), old))
 	current, acquired, err := repository.TryAcquireLock(context.Background(), input.Parent)
 	require.NoError(t, err)
 	require.True(t, acquired)
-	require.NoError(t, h.retryPendingParentFailure(context.Background(), old.Key))
+	require.NoError(t, h.retryPendingLockRelease(context.Background(), old.Key))
 	stored, found, err := repository.Get(context.Background(), input.Parent.Identity)
 	require.NoError(t, err)
 	require.True(t, found)

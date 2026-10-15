@@ -38,13 +38,14 @@ func TestRecoveryCoverageDownloadResumesAbandonedDeletion(t *testing.T) {
 			ctx := context.Background()
 			oldLock := pending.ParentLockID
 			require.NotEmpty(t, oldLock)
-			// A restarted agent releases the abandoned ConfigMap owner before
-			// a queued download discovers the interrupted deletion receipt.
+			// A restarted agent preserves the deletion owner so a queued
+			// download finishes its receipt before writing any new files.
 			require.NoError(t, newHfArtifactStartup(h).recover(ctx))
 			parent, _, err := h.repository.Get(ctx, input.Parent.Identity)
 			require.NoError(t, err)
-			require.Equal(t, HfArtifactStatusFailed, parent.Status)
-			var replacementLock string
+			require.Equal(t, HfArtifactStatusUpdating, parent.Status)
+			require.Equal(t, oldLock, parent.LockID)
+			replacementLock := oldLock
 			h.repository.configMaps.kubeClient.(*fake.Clientset).PrependReactor("update", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
 				cm := action.(ktesting.UpdateAction).GetObject().(*corev1.ConfigMap)
 				if raw, present := cm.Data[input.Parent.Key]; present {
@@ -76,7 +77,7 @@ func TestRecoveryCoverageDownloadResumesAbandonedDeletion(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, hfArtifactTaskRetry, result.Outcome)
 			require.NotEmpty(t, replacementLock)
-			assert.NotEqual(t, oldLock, replacementLock)
+			assert.Equal(t, oldLock, replacementLock)
 			assertChildPathMissing(t, input.ChildModelPath)
 			assert.NoDirExists(t, input.Parent.LocalPath)
 			pending, err = h.repository.pendingDeletion(ctx, input.ChildModelKey)
@@ -371,7 +372,7 @@ func TestRecoveryCoverageDeferredStartupRetriesAPIOutage(t *testing.T) {
 			assert.NotContains(t, startup.deferred, parent.Key)
 			stored, _, err := h.repository.Get(ctx, parent.Identity)
 			require.NoError(t, err)
-			assert.Equal(t, HfArtifactStatusFailed, stored.Status)
+			assert.Equal(t, HfArtifactStatusUpdating, stored.Status)
 			assert.Empty(t, stored.LockID)
 			assertChildSymlinkTarget(t, first.ChildModelPath, parent.LocalPath)
 		})

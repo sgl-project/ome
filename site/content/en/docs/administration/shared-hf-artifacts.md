@@ -184,8 +184,11 @@ prefixed `artifact.huggingface.`:
 }
 ```
 
-`status` is `Ready`, `Updating` (a download, repair, or deletion holds the
-parent lock), or `Failed`. `children` maps each consuming model to its
+`status` is `Ready`, `Updating`, or `Failed`. An `Updating` parent with a
+`lockId` is owned by a download, repair, or deletion. Without a `lockId`, it
+is interrupted work waiting for retry or cleanup; `lastCompletedLockId`
+records the released attempt. Cancellation does not mark the parent `Failed`.
+`children` maps each consuming model to its
 symlink path — this is the reference count. Individual models still report
 their own `Ready` status through the usual model entries and node labels.
 
@@ -204,7 +207,8 @@ Deleting one consumer never deletes files another consumer still uses:
    deleting the parent files — and before doing so it re-scans the model
    store directory for any remaining symlink that points into the parent,
    including links it has no record of. If it finds one, the files are
-   preserved.
+   preserved. Pending downloads that have not attached yet also protect the
+   parent from deletion.
 3. The symlink itself is kept when another live model resource still declares
    the same `path`, or when the deleted model carries the
    `models.ome/reserve-model-artifact: "true"` label.
@@ -212,6 +216,14 @@ Deleting one consumer never deletes files another consumer still uses:
 So in the example above, deleting `llama-3-1-8b-chatbot` removes its symlink
 and its reference; the parent copy stays for `llama-3-1-8b-instruct`.
 Deleting both removes the parent directory as well.
+
+The agent records each download's destination before writing files. If that
+consumer is removed or becomes ineligible before attachment, it converts the
+download intent into a deletion receipt. After a restart, a receipt matching
+the parent's deletion lock resumes cleanup, including when files were already
+removed but ConfigMap cleanup was interrupted. A new download waits for that
+deletion to finish. Other abandoned download or repair locks are released for
+retry; a matching ready marker completes the pending Ready update instead.
 
 ## When the agent falls back to a per-model copy
 

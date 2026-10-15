@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -77,9 +76,9 @@ type hfArtifactValidateFunc func(parentPath string) (bool, error)
 // hfArtifactTaskHandler coordinates local files and persisted relationships.
 // Those operations are separate; they are not one filesystem/ConfigMap transaction.
 type hfArtifactTaskHandler struct {
-	repository      *HfArtifactRepository
-	files           hfArtifactFiles
-	pendingFailures sync.Map // Parent key -> *HfArtifactEntry awaiting Failed publication.
+	repository          *HfArtifactRepository
+	files               hfArtifactFiles
+	pendingLockReleases sync.Map // Parent key -> *HfArtifactEntry with the desired lock-release status.
 	// updateChildStatuses optionally updates node labels. It must be idempotent:
 	// repair calls it before file writes and before publishing parent Ready,
 	// including retries of marker-backed completion.
@@ -147,30 +146,6 @@ func (input hfArtifactTaskInput) validateStoredChildPath(parent HfArtifactEntry)
 // only an absent path or an existing link to this parent is eligible for reuse.
 func (h *hfArtifactTaskHandler) childPathConflictsWithParent(childPath, parentPath string) bool {
 	return h.files.ChildPathExists(childPath) && !h.files.IsChildLinkedToParent(childPath, parentPath)
-}
-
-// markLockedParentFailed releases this owner's lock by publishing Failed.
-// If the state update fails, return Retry with both errors rather than hiding it.
-func (h *hfArtifactTaskHandler) markLockedParentFailed(
-	ctx context.Context,
-	parent HfArtifactEntry,
-	cause error,
-) (hfArtifactTaskResult, error) {
-	if err := h.markParentFailed(ctx, parent); err != nil {
-		return newHfArtifactRetryResult(parent.Key, errors.Join(cause, err)), nil
-	}
-	return hfArtifactTaskResult{}, cause
-}
-
-// A cancelled download must still release its lock, but cleanup is bounded.
-func (h *hfArtifactTaskHandler) markParentFailed(ctx context.Context, parent HfArtifactEntry) error {
-	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-	defer cancel()
-	err := h.repository.MarkFailed(cleanupCtx, parent)
-	if err != nil {
-		h.pendingFailures.Store(parent.Key, &parent)
-	}
-	return err
 }
 
 func newHfArtifactRetryResult(parentKey string, reason error) hfArtifactTaskResult {

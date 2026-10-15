@@ -92,7 +92,7 @@ func TestGopherHfArtifactReservedDeleteFinishesPendingParent(t *testing.T) {
 			if completed {
 				require.NoError(t, h.files.WriteParentReadyMarker(parent))
 			} else {
-				h.pendingFailures.Store(parent.Key, &parent)
+				h.pendingLockReleases.Store(parent.Key, &parent)
 			}
 			task.TaskType = Delete
 			task.BaseModel.Labels = map[string]string{constants.ReserveModelArtifact: "true"}
@@ -116,7 +116,7 @@ func TestGopherHfArtifactLookupFailureKeepsScheduledRetry(t *testing.T) {
 	parent, acquired, err := h.repository.TryAcquireLockForRepair(context.Background(), input.Parent)
 	require.NoError(t, err)
 	require.True(t, acquired)
-	h.pendingFailures.Store(parent.Key, &parent)
+	h.pendingLockReleases.Store(parent.Key, &parent)
 	client := h.repository.configMaps.kubeClient.(*fake.Clientset)
 	client.PrependReactor("get", "configmaps", func(ktesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("temporary API outage")
@@ -167,7 +167,7 @@ func TestHfArtifactStartupWaitsForOldProcessBeforeRecovery(t *testing.T) {
 	require.NoError(t, startup.recoverParent(context.Background(), parent.Key))
 	stored, _, err = repository.Get(context.Background(), parent.Identity)
 	require.NoError(t, err)
-	assert.Equal(t, HfArtifactStatusFailed, stored.Status)
+	assert.Equal(t, HfArtifactStatusUpdating, stored.Status)
 	assert.Empty(t, stored.LockID)
 }
 
@@ -207,7 +207,7 @@ func TestHfArtifactStartupRecoversOwnerStartedAfterSnapshot(t *testing.T) {
 			require.NoError(t, startup.recoverParent(ctx, parent.Key))
 			stored, _, err = repository.Get(ctx, parent.Identity)
 			require.NoError(t, err)
-			expectedStatus := HfArtifactStatusFailed
+			expectedStatus := HfArtifactStatusUpdating
 			if marker == "matching" {
 				expectedStatus = HfArtifactStatusReady
 			}
@@ -256,7 +256,7 @@ func TestHfArtifactStartupChecksNewParentAfterSnapshot(t *testing.T) {
 			stored, found, err := repository.Get(ctx, parent.Identity)
 			require.NoError(t, err)
 			require.True(t, found)
-			want := HfArtifactStatusFailed
+			want := HfArtifactStatusUpdating
 			if completed {
 				want = HfArtifactStatusReady
 			}
@@ -300,7 +300,7 @@ func TestHfArtifactStartupLockErrorRetainsValidation(t *testing.T) {
 }
 
 func TestHfArtifactStartupReceiptRecoveryRefreshesDeferredPath(t *testing.T) {
-	h, input, _ := newRecoveryCoveragePendingDeletion(t)
+	h, input, pending := newRecoveryCoveragePendingDeletion(t)
 	startup := newHfArtifactStartup(h)
 	// The identity moved again after a previous attempt cached another path.
 	other := testHfArtifactTaskInput(t, t.TempDir(), "other-child").Parent
@@ -311,8 +311,8 @@ func TestHfArtifactStartupReceiptRecoveryRefreshesDeferredPath(t *testing.T) {
 	parent, found, err := h.repository.Get(context.Background(), input.Parent.Identity)
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.Equal(t, HfArtifactStatusFailed, parent.Status)
-	assert.Empty(t, parent.LockID)
+	assert.Equal(t, HfArtifactStatusUpdating, parent.Status)
+	assert.Equal(t, pending.ParentLockID, parent.LockID)
 	assert.NotContains(t, startup.deferred, input.Parent.Key)
 }
 
@@ -386,7 +386,7 @@ func TestHfArtifactStartupRecoversUpdatingParent(t *testing.T) {
 			stored, found, err := repository.Get(context.Background(), parent.Identity)
 			require.NoError(t, err)
 			require.True(t, found)
-			want := HfArtifactStatusFailed
+			want := HfArtifactStatusUpdating
 			if marker == "matching" {
 				want = HfArtifactStatusReady
 			}

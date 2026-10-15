@@ -338,7 +338,7 @@ func Retry(attempts int, sleep time.Duration, f func() error) (err error) {
 		time.Sleep(sleep)
 	}
 
-	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
+	return fmt.Errorf("after %d attempts, last error: %w", attempts, err)
 }
 
 // CreateSymbolicLink ensures that childPath is a symbolic link pointing to parentPath,

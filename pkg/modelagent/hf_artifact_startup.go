@@ -3,6 +3,7 @@ package modelagent
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -51,8 +52,8 @@ func (s *hfArtifactStartup) recover(ctx context.Context) error {
 		if err == nil {
 			err = validateHfArtifactIdentityAndPath(parent)
 		}
-		if err == nil && parent.Status == HfArtifactStatusUpdating && parent.LockID == "" {
-			err = fmt.Errorf("Updating shared artifact has no lock owner")
+		if err == nil && parent.Status == HfArtifactStatusUpdating && parent.LockID == "" && parent.LastCompletedLockID == "" {
+			err = fmt.Errorf("Updating shared artifact has no lock owner or interrupted attempt")
 		}
 		if err != nil || !isValidHfArtifactStatus(parent.Status) {
 			if err == nil {
@@ -64,7 +65,7 @@ func (s *hfArtifactStartup) recover(ctx context.Context) error {
 			s.handler.repository.configMaps.logger.Warnf("Cannot recover shared artifact %s; preserving state for reconstruction: %v", key, err)
 			continue
 		}
-		if parent.Status == HfArtifactStatusUpdating {
+		if parent.Status == HfArtifactStatusUpdating && parent.LockID != "" {
 			unlock, acquired, err := s.handler.tryParentFileOperation(parent, hfArtifactParentStoreRoot(parent))
 			if err != nil {
 				s.deferred[key] = parent
@@ -91,8 +92,15 @@ func (s *hfArtifactStartup) recover(ctx context.Context) error {
 				err = s.handler.markParentReady(ctx, parent)
 				parent.Status = HfArtifactStatusReady
 			} else {
-				err = s.handler.repository.MarkFailed(ctx, parent)
-				parent.Status = HfArtifactStatusFailed
+				var invalid bool
+				invalid, err = s.recoverInterruptedParent(ctx, parent)
+				if invalid {
+					s.deferred[key] = parent
+					s.pending[key] = false
+					s.handler.repository.configMaps.logger.Warnf("Cannot recover shared artifact %s; preserving deletion ownership: %v", key, err)
+					unlock()
+					continue
+				}
 			}
 			unlock()
 			if err != nil {
@@ -141,11 +149,12 @@ func (s *hfArtifactStartup) recoverParentAtPath(ctx context.Context, key, path s
 		if path != "" && expected.LocalPath != path {
 			return nil
 		}
-		if expected.Status != HfArtifactStatusUpdating {
-			return nil
+		if expected.Status == HfArtifactStatusUpdating && expected.LockID == "" && expected.LastCompletedLockID == "" {
+			return fmt.Errorf("Updating shared artifact %s has no lock owner or interrupted attempt", key)
 		}
-		if expected.LockID == "" {
-			return fmt.Errorf("Updating shared artifact %s has no lock owner", key)
+		if expected.Status != HfArtifactStatusUpdating || expected.LockID == "" {
+			delete(s.deferred, key)
+			return nil
 		}
 		s.deferred[key] = expected
 	}
@@ -168,11 +177,11 @@ func (s *hfArtifactStartup) recoverParentAtPath(ctx context.Context, key, path s
 		s.deferred[key] = parent
 		return fmt.Errorf("startup parent %s path changed", key)
 	}
-	if found && parent.Status == HfArtifactStatusUpdating {
+	if found && parent.Status == HfArtifactStatusUpdating && parent.LockID != "" {
 		if s.handler.files.ParentReadyMarkerMatchesLock(parent) {
 			err = s.handler.markParentReady(ctx, parent)
 		} else {
-			err = s.handler.repository.MarkFailed(ctx, parent)
+			_, err = s.recoverInterruptedParent(ctx, parent)
 		}
 		if err != nil {
 			return err
@@ -180,6 +189,35 @@ func (s *hfArtifactStartup) recoverParentAtPath(ctx context.Context, key, path s
 	}
 	delete(s.deferred, key)
 	return nil
+}
+
+// The caller holds the parent filesystem lock, proving the old process no longer
+// writes files. A matching deletion receipt retains ownership until cleanup is
+// complete; other abandoned operations become retryable without publishing Failed.
+// Invalid persisted ownership is reported separately from API errors so startup
+// can isolate this identity while continuing to recover unrelated parents.
+func (s *hfArtifactStartup) recoverInterruptedParent(ctx context.Context, parent HfArtifactEntry) (invalid bool, err error) {
+	cm, err := s.handler.repository.configMaps.getConfigMap(ctx)
+	if err != nil {
+		return false, err
+	}
+	for key, raw := range cm.Data {
+		// Unrelated corrupt children must not block recovery of this identity.
+		if isHfArtifactConfigMapKey(key) || !strings.Contains(raw, parent.LockID) {
+			continue
+		}
+		child, err := existingModelEntry(cm.Data, key)
+		if err != nil {
+			return true, err
+		}
+		if pending := child.HfArtifactPendingDeletion; pending != nil && pending.ParentLockID == parent.LockID {
+			if pending.Identity != parent.Identity || pending.ParentPath != parent.LocalPath {
+				return true, fmt.Errorf("deletion owner for shared artifact %s has conflicting identity or path", parent.Key)
+			}
+			return false, nil
+		}
+	}
+	return false, s.handler.repository.MarkInterrupted(ctx, parent)
 }
 
 func (s *hfArtifactStartup) needsValidation(key string) bool {
