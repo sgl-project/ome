@@ -71,9 +71,12 @@ type Initial struct {
 	// CurrentRevision is the revision the owner reports as fully rolled
 	// out when the run starts, as a revision name (see RowSpec). Empty
 	// reads as the revision the initial spec renders.
-	CurrentRevision string    `json:"currentRevision,omitempty"`
-	Rows            []RowSpec `json:"rows,omitempty"`
-	Pods            []PodSpec `json:"pods,omitempty"`
+	CurrentRevision string `json:"currentRevision,omitempty"`
+	// RevisionsWithoutWidth mints the revisions the run starts on without a
+	// worker count, so a run can begin on a revision that records no width.
+	RevisionsWithoutWidth bool      `json:"revisionsWithoutWidth,omitempty"`
+	Rows                  []RowSpec `json:"rows,omitempty"`
+	Pods                  []PodSpec `json:"pods,omitempty"`
 	// RetryBlocks seeds the owner's per-revision retry authority.
 	RetryBlocks []RetryBlockSpec `json:"retryBlocks,omitempty"`
 	// Migrations seeds the owner's status.migrations records, which a

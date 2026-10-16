@@ -123,9 +123,21 @@ const (
 	RoutingAllFailedPolicyDrain RoutingAllFailedPolicy = "Drain"
 )
 
+// RoutingCapacityMode selects how endpoint capacity participates in routing.
+// +kubebuilder:validation:Enum=Ceiling;Reported
+type RoutingCapacityMode string
+
+const (
+	// RoutingCapacityModeCeiling limits replica-based capacity with a report.
+	RoutingCapacityModeCeiling RoutingCapacityMode = "Ceiling"
+	// RoutingCapacityModeReported uses a home's report as its capacity, and its
+	// replica count when it has no usable report.
+	RoutingCapacityModeReported RoutingCapacityMode = "Reported"
+)
+
 // RoutingCapacitySpec configures polling each serving home for its current
 // servable capacity.
-// +kubebuilder:validation:XValidation:rule="!(has(self.disabled) && self.disabled) || (!has(self.path) && !has(self.method) && !has(self.format) && !has(self.options) && !has(self.period) && !has(self.timeout) && !has(self.samples) && !has(self.quorum) && !has(self.maxAge))",message="disabled must not be combined with capacity configuration fields"
+// +kubebuilder:validation:XValidation:rule="!(has(self.disabled) && self.disabled) || (!has(self.path) && !has(self.method) && !has(self.format) && !has(self.mode) && !has(self.options) && !has(self.period) && !has(self.timeout) && !has(self.samples) && !has(self.quorum) && !has(self.maxAge))",message="disabled must not be combined with capacity configuration fields"
 // +kubebuilder:validation:XValidation:rule="(has(self.disabled) && self.disabled) || (has(self.path) && has(self.method) && has(self.format) && has(self.period) && has(self.timeout) && has(self.samples) && has(self.quorum) && has(self.maxAge))",message="an enabled capacity poll must specify path, method, format, period, timeout, samples, quorum, and maxAge"
 // +kubebuilder:validation:XValidation:rule="!has(self.period) || duration(self.period) > duration('0s')",message="period must be positive"
 // +kubebuilder:validation:XValidation:rule="!has(self.timeout) || duration(self.timeout) > duration('0s')",message="timeout must be positive"
@@ -133,6 +145,13 @@ const (
 // +kubebuilder:validation:XValidation:rule="!has(self.period) || !has(self.maxAge) || duration(self.maxAge) >= duration(self.period)",message="maxAge must be at least period"
 // +kubebuilder:validation:XValidation:rule="!has(self.samples) || !has(self.quorum) || self.quorum <= self.samples",message="quorum must not exceed samples"
 type RoutingCapacitySpec struct {
+	// Mode selects a replica ceiling or an authoritative reported weight.
+	// Unset preserves Ceiling. In Reported mode a home's accepted report is its
+	// capacity in replicas, neither capped by its replica count nor scaled by
+	// its capacity factor. A home without one keeps its replica-based weight.
+	// +optional
+	Mode RoutingCapacityMode `json:"mode,omitempty"`
+
 	// Disabled explicitly disables capacity polling. No other field may be set
 	// when true.
 	// +optional
@@ -172,7 +191,9 @@ type RoutingCapacitySpec struct {
 	// +optional
 	Samples int32 `json:"samples,omitempty"`
 
-	// Quorum is the number of readings required to corroborate a lower capacity.
+	// Quorum is the number of readings required before a report applies. In
+	// Ceiling mode they corroborate a lower capacity; in Reported mode the lower
+	// median of the window applies.
 	// +kubebuilder:validation:Minimum=1
 	// +optional
 	Quorum int32 `json:"quorum,omitempty"`

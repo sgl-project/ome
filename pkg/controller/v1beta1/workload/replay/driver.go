@@ -109,8 +109,15 @@ type driver struct {
 	// collisionCount salts the revision hash; the driver never bumps it,
 	// but the engine's hash inputs include it.
 	collisionCount *int32
+	// seedWithoutWidth mints the revisions the run starts on without a
+	// worker count, so the run begins on revisions that record no width; set
+	// while a scenario that asks for it seeds its rows and pods.
+	seedWithoutWidth bool
 
 	currentRevision string
+	// recordedTarget is the spec target the last tick reported as the
+	// owner's update revision, which is what the owner's status names.
+	recordedTarget string
 
 	// quiet suppresses effect recording while the driver itself is
 	// staging a scenario event.
@@ -255,6 +262,7 @@ func newDriver(ctx context.Context, s *Scenario, opts Options) (*driver, error) 
 	if err := d.seedMigrations(s.Initial.Migrations); err != nil {
 		return nil, err
 	}
+	d.seedWithoutWidth = s.Initial.RevisionsWithoutWidth
 	rows, err := d.seedRows(ctx, s.Initial.Rows)
 	if err != nil {
 		return nil, err
@@ -272,6 +280,7 @@ func newDriver(ctx context.Context, s *Scenario, opts Options) (*driver, error) 
 	if err := d.seedPods(ctx, s.Initial.Pods); err != nil {
 		return nil, err
 	}
+	d.seedWithoutWidth = false
 	for _, tick := range s.Timeline {
 		for _, ev := range tick.Events {
 			if ev.ID == "ctrl.staleRead" {
@@ -447,6 +456,37 @@ func (d *driver) desiredSpec() (types.WorkloadDesiredSpec, error) {
 	return desired, nil
 }
 
+// template is what the adapter hashes for an image: the leader template and
+// its metadata, and for a gang the worker template beside it, the topology
+// key and the worker count.
+func (d *driver) template(image string) revision.Template {
+	t := revision.Template{PodSpec: d.podTemplate(image), Meta: d.podMeta()}
+	if d.spec.Workers > 0 {
+		t.WorkerPodSpec = d.podTemplate(image)
+		t.TopologyKey = d.spec.TopologyKey
+		if !d.seedWithoutWidth {
+			t.WorkerSize = d.spec.Workers
+		}
+	}
+	return t
+}
+
+// observedWorkerWidth reads the worker count the seeded gangs run on a
+// revision, from the pods the fake cluster holds and only while a row is
+// Ready on it; before the rows are seeded nothing is observed.
+func (d *driver) observedWorkerWidth(ctx context.Context) func(string) (int32, bool) {
+	return func(revisionName string) (int32, bool) {
+		if d.store == nil || !revision.HasReadyRowOn(d.store.Rows(), revisionName) {
+			return 0, false
+		}
+		pods, err := query.ListOMENativePodsByName(ctx, d.cli, d.opts.Namespace, d.opts.OwnerName, d.opts.Component, false)
+		if err != nil {
+			return 0, false
+		}
+		return revision.ObservedWorkerWidth(d.store.Rows(), pods, revisionName)
+	}
+}
+
 // ensureRevision mints (or reuses) the ControllerRevision for an image,
 // exactly as the adapter does before every reconcile.
 func (d *driver) ensureRevision(ctx context.Context, image string) (*appsv1.ControllerRevision, error) {
@@ -455,9 +495,27 @@ func (d *driver) ensureRevision(ctx context.Context, image string) (*appsv1.Cont
 		Name:      d.opts.OwnerName + "-" + string(d.opts.Component),
 		Labels:    d.selectorLabels(),
 	}
-	target, collision, err := revision.EnsureControllerRevision(
+	tmpl := d.template(image)
+	hash, raw, err := revision.HashTemplate(tmpl, d.collisionCount, parentUID)
+	if err != nil {
+		return nil, fmt.Errorf("replay: hash revision: %w", err)
+	}
+	// As the adapter does: a revision minted without a width stays the
+	// target while its gangs run the desired width.
+	twin, _, err := revision.WidthFreeTwinOf(tmpl, d.collisionCount, parentUID)
+	if err != nil {
+		return nil, fmt.Errorf("replay: hash width-free revision: %w", err)
+	}
+	adopted, err := revision.AdoptRevisionWithoutWidth(ctx, d.cli, d.cli, d.owner, key, hash, twin, tmpl.WorkerSize, d.recordedTarget, d.observedWorkerWidth(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("replay: adopt revision minted without a width: %w", err)
+	}
+	if adopted != nil {
+		return adopted, nil
+	}
+	target, collision, err := revision.EnsureControllerRevisionFromHash(
 		ctx, d.cli, d.cli, d.owner, v1beta1.SchemeGroupVersion.WithKind("InferenceReplica"),
-		key, d.podTemplate(image), d.podMeta(), d.collisionCount, parentUID,
+		key, hash, raw,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("replay: ensure revision: %w", err)
@@ -887,6 +945,7 @@ func (d *driver) runTick(ctx context.Context, tick Tick) error {
 	if err != nil {
 		return err
 	}
+	d.recordedTarget = specTarget.Name
 	// An owner that never reported a rolled-out revision reports the one
 	// the first tick's spec renders, as a freshly created owner does.
 	if d.currentRevision == "" {
@@ -911,6 +970,9 @@ func (d *driver) runTick(ctx context.Context, tick Tick) error {
 		}
 		desired.PodSpec = payload.PodSpec
 		desired.WorkerPodSpec = payload.WorkerPodSpec
+		if payload.WorkerSize != nil {
+			desired.Runners = types.RunnersWithWorkerSize(desired.Runners, *payload.WorkerSize)
+		}
 		target = pinned
 	}
 
@@ -924,6 +986,13 @@ func (d *driver) runTick(ctx context.Context, tick Tick) error {
 		InstanceStatuses: rows,
 		RetryBlocks:      d.store.RetryBlocks(),
 		Migrations:       append([]types.MigrationRecord(nil), d.migrations...),
+	}
+	// As the adapter does: each Instance renders the width its own revision
+	// recorded, read from the revisions the rows reference beside the target.
+	observed.WorkerSizeByRevision, err = revision.WorkerSizesByRevision(ctx, d.cli, d.opts.Namespace,
+		revision.ReferencedRevisionNames(observed.InstanceStatuses, target.Name))
+	if err != nil {
+		return fmt.Errorf("replay: read revision widths: %w", err)
 	}
 	plan, err := workload.BuildPlan(d.opts.Component, desired, observed)
 	if err != nil {

@@ -115,6 +115,39 @@ type ComponentPlan struct {
 	// being rendered; Render stamps it as the ome.io/pairing-protocol label
 	// on every pod. Empty renders no label (pairs with anything).
 	PairingProtocol string
+
+	// Runners is the Runner layout the roll target renders: one default
+	// Runner, or a leader beside the desired worker count. An Instance
+	// rendered at another revision carries that revision's layout on its
+	// own entry (InstancePlan.Runners).
+	Runners []RunnerPlan
+
+	// WorkerSizeByRevision is the worker count each referenced revision was
+	// minted at (WorkloadObservedState.WorkerSizeByRevision). A revision
+	// absent here records no width and renders the desired one.
+	WorkerSizeByRevision map[string]int32
+}
+
+// RunnersFor returns the Runner layout Instance inst renders at revision
+// rev: the roll target's layout at the width rev recorded, when the plan
+// knows it, else as the target renders it. A plan built without a target
+// layout answers with the Instance's own entry.
+func (p ComponentPlan) RunnersFor(inst InstancePlan, rev string) []RunnerPlan {
+	base := p.Runners
+	if len(base) == 0 {
+		base = inst.Runners
+	}
+	out := append([]RunnerPlan(nil), base...)
+	size, known := p.WorkerSizeByRevision[rev]
+	if rev == "" || !known {
+		return out
+	}
+	for i := range out {
+		if out[i].Name == RunnerWorker {
+			out[i].Size = size
+		}
+	}
+	return out
 }
 
 // TopologyKeyForInstance returns the live-safe topology contract for an

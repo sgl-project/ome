@@ -122,6 +122,9 @@ func validateRoutingCapacity(capacity *v1beta1.RoutingCapacitySpec) error {
 		}
 		return nil
 	}
+	if capacity.Mode != "" && capacity.Mode != v1beta1.RoutingCapacityModeCeiling && capacity.Mode != v1beta1.RoutingCapacityModeReported {
+		return fmt.Errorf("spec.routing.capacity.mode %q must be Ceiling or Reported", capacity.Mode)
+	}
 	if capacity.Path == "" {
 		return fmt.Errorf("spec.routing.capacity.path is required")
 	}
@@ -176,7 +179,7 @@ func validateRoutingCapacity(capacity *v1beta1.RoutingCapacitySpec) error {
 }
 
 func routingCapacityHasOperationalFields(capacity *v1beta1.RoutingCapacitySpec) bool {
-	return capacity.Path != "" ||
+	return capacity.Mode != "" || capacity.Path != "" ||
 		capacity.Method != "" ||
 		capacity.Format != "" ||
 		len(capacity.Options) != 0 ||

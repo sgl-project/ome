@@ -3,6 +3,8 @@ package routing
 import (
 	"fmt"
 	"time"
+
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // Config holds the operator-supplied, config-driven inputs for the routing
@@ -22,8 +24,8 @@ type Config struct {
 	// installation cannot accidentally run an unbounded observer.
 	Observer ObserverConfig
 
-	// Probe configures the active end-to-end health probe. Zero-valued (no path)
-	// means no probing, and the health gate stays readyReplicas > 0.
+	// Probe configures end-to-end health checks. With no path, health depends
+	// only on the selected capacity mode.
 	Probe ProbeConfig
 
 	// Capacity configures endpoint-reported capacity. Zero-valued (no path)
@@ -343,8 +345,7 @@ func (p ProbeConfig) ClassifyStatus(code int) Verdict {
 	return VerdictInconclusive
 }
 
-// CapacityConfig configures polling a home for what it can currently serve,
-// applied as a CEILING on the control-plane plan.
+// CapacityConfig configures polling a home for its replica ceiling or weight.
 //
 // Like the probe, every field is operator-supplied with no in-code default, and
 // Path is the enable switch: without a target there is nothing to ask and the
@@ -352,6 +353,10 @@ func (p ProbeConfig) ClassifyStatus(code int) Verdict {
 //
 // +kubebuilder:object:generate=false
 type CapacityConfig struct {
+	// Mode selects whether reports cap replica counts or replace them. A home
+	// without a usable report keeps its replica count in either mode.
+	Mode v1beta1.RoutingCapacityMode
+
 	// Path is the capacity endpoint appended to each home's endpoint. Empty
 	// turns the input off.
 	Path string
@@ -376,7 +381,7 @@ type CapacityConfig struct {
 	// Timeout bounds a single capacity request.
 	Timeout time.Duration
 
-	// Samples is how many recent readings the applied ceiling is derived from.
+	// Samples is how many recent readings the accepted value is derived from.
 	//
 	// The control plane polls one address per home, so behind a load balancer
 	// successive polls may sample different reporters. Keeping only the latest
@@ -385,27 +390,26 @@ type CapacityConfig struct {
 	//
 	// The window smooths; it does not protect. A longer window delays recovery,
 	// because a low reading has to age out before the ceiling rises again.
-	// Outlier protection is Quorum's job.
+	// Outlier protection is Quorum's job for a ceiling, and the lower median's in
+	// Reported mode.
 	Samples int
 
 	// Quorum is how many readings in the window must corroborate a lower value
-	// before it is applied: the ceiling is the Quorum-th smallest reading, not
+	// before it is applied: the accepted value is the Quorum-th smallest reading, not
 	// the smallest.
 	//
-	// It tolerates Quorum-1 misbehaving reporters. That is the difference
-	// between believing a pessimist and believing a bug: one router that has
-	// lost its watch reports a near-zero figure, and a strict minimum would take
-	// it at face value and hold the home there for the whole window -- with a
-	// round-robin balancer and a window at least as long as the replica count,
-	// permanently. Requiring corroboration means a reporter can still always
-	// lower the ceiling; it just cannot do so alone.
+	// These are observations, not distinct reporters. One router can supply
+	// repeated readings, so the window does not establish reporter consensus.
 	//
 	// It is also the lag before a genuine drop is believed: Quorum polls.
+	//
+	// In Reported mode Quorum is only the minimum window size: the accepted
+	// value is the lower median of the window, because a report that is too high
+	// misroutes traffic as surely as one that is too low.
 	Quorum int
 
 	// MaxAge is the exclusive upper age bound for a report's observedAt stamp.
-	// At or beyond it the poller falls open to the plan, so a home whose reporter
-	// froze releases its ceiling instead of holding a stale one forever.
+	// Expired samples cannot constrain Ceiling mode or supply Reported weight.
 	MaxAge time.Duration
 }
 
@@ -422,6 +426,12 @@ func (c CapacityConfig) resolvedFormat() CapacityFormat {
 // Validate rejects a partially-configured capacity source, for the same reason
 // the probe does: half-configured reads as enabled while behaving arbitrarily.
 func (c CapacityConfig) Validate() error {
+	if c.Mode != "" && c.Mode != v1beta1.RoutingCapacityModeCeiling && c.Mode != v1beta1.RoutingCapacityModeReported {
+		return fmt.Errorf("routing.capacity.mode %q must be Ceiling or Reported", c.Mode)
+	}
+	if c.Mode == v1beta1.RoutingCapacityModeReported && !c.IsEnabled() {
+		return fmt.Errorf("routing.capacity.mode Reported requires capacity polling")
+	}
 	if !c.IsEnabled() {
 		return nil
 	}

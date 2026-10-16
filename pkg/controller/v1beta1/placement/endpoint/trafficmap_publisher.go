@@ -1094,6 +1094,11 @@ func trafficMapFallbackEligibilityWithAllHomesUnready(
 	if trafficMap == nil || owner == nil {
 		return false, false
 	}
+	if trafficMap.Spec.CapacityMode == v1beta1.RoutingCapacityModeReported {
+		// Source identity and generation are checked before publication. Replica
+		// or condition lag cannot extend a reported weight beyond the current table.
+		return false, true
+	}
 	if _, found := owner.Annotations[constants.TrafficDrainAnnotation]; found {
 		return false, true
 	}

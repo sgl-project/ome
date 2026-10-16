@@ -170,8 +170,9 @@ ome:
         #   allFailedPolicy: PreserveTraffic # set Drain to preserve all-zero weights
         capacity: {}
         # capacity polls each TrafficMap entry's client-facing endpoint for a
-        # reported servable count, applied only as a ceiling on planned capacity.
+        # replica ceiling or, in Reported mode, the home's capacity in replicas.
         # capacity:
+        #   mode: Ceiling # Reported uses the report uncapped; a home without one keeps its replica count
         #   path: /capacity
         #   method: GET
         #   format: Report

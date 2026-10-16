@@ -6,6 +6,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"sigs.k8s.io/ome/pkg/validation"
 )
 
 // validateMultiPodReadyPolicyNone rejects writes that put
@@ -87,10 +88,10 @@ func effectiveDeploymentModeForValidation(isvc *v1beta1.InferenceService) *const
 }
 
 // declaredMultiPod reports whether a Component declares a Leader+Worker pair
-// whose size is unset or positive; an unset size resolves to one worker at
-// reconcile time.
+// whose size is unset or positive; one definition serves every admission rule
+// that keys on a gang shape.
 func declaredMultiPod(leader *v1beta1.LeaderSpec, worker *v1beta1.WorkerSpec) bool {
-	return leader != nil && worker != nil && (worker.Size == nil || *worker.Size > 0)
+	return validation.DeclaredMultiPod(leader, worker)
 }
 
 // componentResolvesToOMENative reports whether a Component dispatches to

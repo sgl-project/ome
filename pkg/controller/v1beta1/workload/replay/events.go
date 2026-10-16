@@ -1038,7 +1038,7 @@ func applyAnnotationOnly(ctx context.Context, d *driver, ev TimelineEvent) (stri
 	if ev.Args.Labels == nil && ev.Args.Annotations == nil {
 		return "", fmt.Errorf("replay: spec.annotationOnly needs the template's new labels, annotations, or both")
 	}
-	before, _, err := revision.HashWithWorker(d.podTemplate(d.spec.Image), nil, d.podMeta(), d.collisionCount, parentUID)
+	before, _, err := revision.HashTemplate(d.template(d.spec.Image), d.collisionCount, parentUID)
 	if err != nil {
 		return "", fmt.Errorf("replay: hash the template before the edit: %w", err)
 	}
@@ -1049,7 +1049,7 @@ func applyAnnotationOnly(ctx context.Context, d *driver, ev TimelineEvent) (stri
 	if ev.Args.Annotations != nil {
 		d.spec.PodAnnotations = ev.Args.Annotations
 	}
-	after, _, err := revision.HashWithWorker(d.podTemplate(d.spec.Image), nil, d.podMeta(), d.collisionCount, parentUID)
+	after, _, err := revision.HashTemplate(d.template(d.spec.Image), d.collisionCount, parentUID)
 	if err != nil {
 		return "", fmt.Errorf("replay: hash the template after the edit: %w", err)
 	}
@@ -1155,9 +1155,11 @@ func applyTeardownDeadline(_ context.Context, d *driver, ev TimelineEvent) (stri
 	return d.advanceOnto("timer.teardownDeadline", d.teardownAt.Add(deadline), ev)
 }
 
-// applyGangWidth changes the per-Instance worker count without touching
-// the pod template, so the Instance's expected pod set moves at an
-// unchanged revision hash.
+// applyGangWidth changes the per-Instance worker count. The width is part
+// of the revision payload, so the edit mints a new revision like any
+// template change, and the hasher is the judge of that. A Component without
+// workers has no width: its first worker is a template change, staged as
+// spec.revision.
 func applyGangWidth(ctx context.Context, d *driver, ev TimelineEvent) (string, error) {
 	if ev.Args.To == nil {
 		return "", fmt.Errorf("replay: %s needs the new worker count", ev.Key())
@@ -1165,7 +1167,26 @@ func applyGangWidth(ctx context.Context, d *driver, ev TimelineEvent) (string, e
 	if *ev.Args.To < 1 {
 		return "", fmt.Errorf("replay: %s: a gang keeps at least one worker beside its leader", ev.Key())
 	}
+	if d.spec.Workers == 0 {
+		return "", fmt.Errorf("replay: %s: a Component without workers has no width; its first worker is a template change, stage it as spec.revision", ev.Key())
+	}
+	if *ev.Args.To == d.spec.Workers {
+		return "", fmt.Errorf("replay: %s: the width did not change (workers=%d)", ev.Key(), d.spec.Workers)
+	}
+	before, _, err := revision.HashTemplate(d.template(d.spec.Image), d.collisionCount, parentUID)
+	if err != nil {
+		return "", fmt.Errorf("replay: hash the template before the edit: %w", err)
+	}
+	previous := d.spec.Workers
 	d.spec.Workers = *ev.Args.To
+	after, _, err := revision.HashTemplate(d.template(d.spec.Image), d.collisionCount, parentUID)
+	if err != nil {
+		return "", fmt.Errorf("replay: hash the template after the edit: %w", err)
+	}
+	if after == before {
+		d.spec.Workers = previous
+		return "", fmt.Errorf("replay: %s: the edit left the revision hash at %s, so it is not a template change", ev.Key(), before)
+	}
 	if err := d.bumpGeneration(ctx); err != nil {
 		return "", err
 	}

@@ -453,11 +453,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// NewDeployConfig is called here only for its startup-time
-	// validation side effect — the ISVC reconciler re-fetches the
-	// config on every reconcile via its Clientset, so the parsed
-	// value is intentionally discarded.
-	if _, err := controllerconfig.NewDeployConfig(clientSet); err != nil {
+	// NewDeployConfig validates the deploy config at startup; the ISVC
+	// reconciler re-fetches it on every reconcile via its Clientset. The
+	// admission webhook keeps the startup copy's replica default, the fill
+	// the reconciler applies to a Component that sets no minReplicas, so a
+	// change lands on the next manager restart.
+	deployStartupConfig, err := controllerconfig.NewDeployConfig(clientSet)
+	if err != nil {
 		setupLog.Error(err, "Failed to initialize deployment configuration")
 		os.Exit(1)
 	}
@@ -555,6 +557,17 @@ func main() {
 		setupLog.Error(cfgErr, "Failed to load the rollout operator config; proceeding with no plan-size cap")
 	} else {
 		rolloutMaxPlanBytes = rolloutStartupConfig.MaxPinnedPlanBytes
+	}
+
+	// The ratio-tolerance default the admission drain-feasibility rule reads
+	// is operator config read once at startup, like the plan-size cap. Absent
+	// config leaves it nil: a group that omits its tolerance then rolls with
+	// no drift bound and admission does not judge it, never an in-code value.
+	var defaultRatioTolerancePercent *int32
+	if coordinationStartupConfig, cfgErr := controllerconfig.NewCoordinationConfig(clientSet); cfgErr != nil {
+		setupLog.Error(cfgErr, "Failed to load the coordination operator config; admission checks only explicit ratio tolerances")
+	} else {
+		defaultRatioTolerancePercent = coordinationStartupConfig.DefaultRatioTolerancePercent
 	}
 
 	// TPU slice provisioning config is read once at startup and shared by
@@ -867,6 +880,14 @@ func main() {
 					// both authoring paths are bounded by one knob).
 					RolloutPolicyEnabled: rolloutPolicyFound,
 					RolloutMaxPlanBytes:  rolloutMaxPlanBytes,
+					// The same tolerance default the rollout resolves a
+					// group's omitted maintainRatio.tolerance to, so the
+					// drain-feasibility rule judges the group as it will run.
+					DefaultRatioTolerancePercent: defaultRatioTolerancePercent,
+					// The replica fill the reconciler applies to a Component
+					// with no minReplicas, so a member with no replica fields
+					// is sized as the rollout will size it.
+					DefaultMinReplicas: deployStartupConfig.Replicas.Min(),
 					// Reject ome.io/btp.* (Envoy Gateway) when the active
 					// translator is Istio or Noop, and vice versa, at
 					// admission. Sourced from the same translator the

@@ -11,6 +11,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/placement"
@@ -93,6 +94,7 @@ func TestResolveMCWiringFullConfig(t *testing.T) {
 				"allFailedPolicy": "Drain"
 			},
 			"capacity": {
+				"mode": "Reported",
 				"path": "/capacity", "method": "GET", "format": "Report",
 				"samples": 20, "quorum": 3,
 				"period": "5s", "timeout": "2s", "maxAge": "30s"
@@ -152,6 +154,7 @@ func TestResolveMCWiringFullConfig(t *testing.T) {
 	assert.Equal(t, time.Second, w.routing.Observer.MinPeriod)
 	assert.Equal(t, 100, w.routing.Observer.MaxSamples)
 	assert.Equal(t, placementrouting.AllFailedPolicyDrain, w.routing.Probe.AllFailedPolicy)
+	assert.Equal(t, v1beta1.RoutingCapacityModeReported, w.routing.Capacity.Mode)
 	assert.Equal(t, "/capacity", w.routing.Capacity.Path)
 	assert.Equal(t, "GET", w.routing.Capacity.Method)
 	assert.Equal(t, placementrouting.FormatReport, w.routing.Capacity.Format)

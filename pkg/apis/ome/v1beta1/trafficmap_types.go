@@ -47,9 +47,9 @@ const (
 )
 
 // TrafficMapCapacityFallback is the condition type reporting whether one or
-// more homes are using the control-plane allocation because configured
-// endpoint capacity could not produce a usable ceiling. It is owned by the
-// routing controller.
+// more homes lack a current endpoint observation. Such a home uses the
+// control-plane allocation; in Reported mode it first keeps fresh samples
+// through a failed poll. It is owned by the routing controller.
 const TrafficMapCapacityFallback = "CapacityFallback"
 
 const (
@@ -90,7 +90,7 @@ const (
 	TrafficMapReasonEndpointCapacityFallback  = "EndpointCapacityUnavailable"
 )
 
-// CapacitySource names which input produced an entry's Allocated count.
+// CapacitySource names the authority for an entry's capacity.
 // +kubebuilder:validation:Enum=ControlPlane;Endpoint
 type CapacitySource string
 
@@ -99,9 +99,8 @@ const (
 	// own view — status.placement intersected with quota. The default.
 	CapacitySourceControlPlane CapacitySource = "ControlPlane"
 
-	// CapacitySourceEndpoint means the home reported a lower servable capacity
-	// than the plan and that report became Allocated. A reported value is only
-	// ever a ceiling, so this source implies Allocated is below the plan.
+	// CapacitySourceEndpoint means an endpoint report lowered Allocated in
+	// Ceiling mode, or is the sole capacity authority in Reported mode.
 	CapacitySourceEndpoint CapacitySource = "Endpoint"
 )
 
@@ -190,6 +189,12 @@ type TrafficMapSpec struct {
 	// +optional
 	Mode PlacementMode `json:"mode,omitempty"`
 
+	// CapacityMode identifies the capacity authority, even for an empty table.
+	// Reported disables retained-positive publication: replica status cannot
+	// override a current reported-capacity decision. Unset means Ceiling.
+	// +optional
+	CapacityMode RoutingCapacityMode `json:"capacityMode,omitempty"`
+
 	// Entries is the routing table: one entry per serving home, each with its
 	// endpoint, final apply-verbatim weight, and the capacity/health provenance
 	// of that weight. Consumers apply the weights directly — no gating, fallback,
@@ -237,8 +242,7 @@ type TrafficMapEntry struct {
 	// +optional
 	Healthy bool `json:"healthy"`
 
-	// Capacity is the provenance of Weight: weight is proportional to
-	// min(allocated, ready) * factor, then gated by the active probe.
+	// Capacity records the inputs to Weight under spec.capacityMode.
 	// +optional
 	Capacity *TrafficMapCapacity `json:"capacity,omitempty"`
 
@@ -300,34 +304,42 @@ type TrafficMapProbe struct {
 
 // TrafficMapCapacity records why an entry's weight is what it is.
 type TrafficMapCapacity struct {
-	// Allocated is the effective allocation ceiling for this home: the
-	// control-plane-admitted count, optionally lowered by a capacity report.
-	// Ready independently caps it when computing Weight.
+	// ReportedWeight is the accepted endpoint capacity in Reported mode, in
+	// replicas, and replaces the replica-based weight. Nil means no fresh
+	// quorum, so the entry weighs its replica count; zero means the reporter
+	// cannot serve traffic.
+	// +optional
+	ReportedWeight *resource.Quantity `json:"reportedWeight,omitempty"`
+
+	// Allocated is the admitted replica count. In Ceiling mode a report can
+	// lower it, and Ready independently caps it when computing Weight.
+	// It is diagnostic when ReportedWeight is set, including when it is zero.
 	// +optional
 	Allocated int32 `json:"allocated,omitempty"`
 
-	// Ready is the home's live ready-replica count. It caps Allocated when
-	// computing Weight; zero health-gates the entry to weight 0.
+	// Ready is the live ready-replica count. It caps Weight unless
+	// ReportedWeight is set.
 	// +optional
 	Ready int32 `json:"ready,omitempty"`
 
-	// Factor is the per-replica relative serving capacity of this home's
-	// accelerator (baseline "1", higher = faster), so heterogeneous hardware is
-	// weighted by capacity rather than raw replica count: weight is proportional
-	// to min(allocated, ready) * factor. Defaults to "1" (homogeneous) when unset — the
-	// multiplicative identity, i.e. no scaling. It is operator-supplied config,
-	// never derived from raw hardware FLOPS.
+	// Factor is the per-replica serving capacity of this home's accelerator
+	// (baseline "1", higher = faster), so heterogeneous hardware is weighted by
+	// capacity rather than raw replica count: weight is proportional to
+	// min(allocated, ready) * factor. Defaults to "1" (homogeneous) when unset —
+	// the multiplicative identity, i.e. no scaling. It is unset when
+	// ReportedWeight is, because the report already includes the hardware. It
+	// is operator-supplied config, never derived from raw hardware FLOPS.
 	// +optional
 	Factor *resource.Quantity `json:"factor,omitempty"`
 
-	// Source names which input produced Allocated. FallbackReason separately
-	// distinguishes an intentionally control-plane-only allocation from a
-	// configured endpoint source that could not supply a usable ceiling.
+	// Source names the capacity authority: Endpoint when a report lowered
+	// Allocated in Ceiling mode or ReportedWeight is set in Reported mode, and
+	// ControlPlane otherwise.
 	// +optional
 	// +kubebuilder:default=ControlPlane
 	Source CapacitySource `json:"source,omitempty"`
 
-	// Reported is the home's own servable-capacity figure, recorded whenever the
+	// Reported is the home's servable count in Ceiling mode, recorded whenever the
 	// endpoint source answered — including when it was at or above the plan and
 	// therefore did not lower Allocated. Keeping it visible in that case is what
 	// makes the ceiling auditable: Allocated alone cannot show that a report was
@@ -337,8 +349,9 @@ type TrafficMapCapacity struct {
 	Reported *int32 `json:"reported,omitempty"`
 
 	// FallbackReason explains why a configured endpoint capacity source did not
-	// produce an applied ceiling and the control-plane allocation was retained.
-	// Empty means capacity polling is disabled or its latest result was usable.
+	// produce a current observation. The entry keeps its replica-based weight;
+	// in Reported mode it first uses a fresh cached report. Empty means the
+	// latest result was usable or polling is disabled.
 	// +optional
 	FallbackReason string `json:"fallbackReason,omitempty"`
 }

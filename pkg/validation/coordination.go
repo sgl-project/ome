@@ -54,6 +54,14 @@ const (
 	// group advance together — so accepting it would promise a sequence
 	// that never happens.
 	ReasonOrderNotHonored = "OrderNotHonored"
+	// ReasonRatioDrainInfeasible flags a drain-first member of a maintainRatio
+	// group whose single drain the ratio check could never admit: it would
+	// empty the member's side, or move the pairwise serving ratio more than
+	// twice the tolerance from where the rollout started. Such a member never
+	// takes its first step, so the rollout would park for good. A group whose
+	// members all roll drain-first is paced by the batch step, which never
+	// consults the ratio check, so it is not flagged.
+	ReasonRatioDrainInfeasible = "RatioDrainInfeasible"
 )
 
 // ratioToleranceWarningThreshold is the upper bound the validator considers

@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"sort"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -88,6 +89,10 @@ type DataPayload struct {
 	// often single-pod). Omitted when unset so protocol-free revisions retain
 	// their canonical payload and hash.
 	PairingProtocol *string `json:"pairingProtocol,omitempty"`
+	// WorkerSize records the worker pods per Instance beside a worker template,
+	// so a width change mints a new revision and every reader renders the gang
+	// at the width its revision names. Absent on single-pod revisions.
+	WorkerSize *int32 `json:"workerSize,omitempty"`
 }
 
 // dataPayloadJSON is the wire shape DataPayload marshals to. It exists so the
@@ -101,6 +106,7 @@ type dataPayloadJSON struct {
 	WorkerPodSpec   *corev1.PodSpec   `json:"workerPodSpec,omitempty"`
 	TopologyKey     *string           `json:"topologyKey,omitempty"`
 	PairingProtocol *string           `json:"pairingProtocol,omitempty"`
+	WorkerSize      *int32            `json:"workerSize,omitempty"`
 }
 
 // templateMetaJSON is the pod-template metadata exactly as it is hashed: an
@@ -123,6 +129,7 @@ func (p DataPayload) MarshalJSON() ([]byte, error) {
 		WorkerPodSpec:   p.WorkerPodSpec,
 		TopologyKey:     p.TopologyKey,
 		PairingProtocol: p.PairingProtocol,
+		WorkerSize:      p.WorkerSize,
 	}
 	if p.PodMeta != nil {
 		out.PodMeta = &templateMetaJSON{
@@ -199,28 +206,74 @@ func HashWithWorkerAndTopology(template, workerSpec *corev1.PodSpec, templateMet
 // HashWithWorkerTopologyAndPairing extends HashWithWorkerAndTopology with the
 // P/D pairing protocol, so a protocol change mints a new revision for the
 // Component. Unlike topology, pairing applies to single-pod Components too. An
-// empty protocol preserves the protocol-free payload and hash.
+// empty protocol preserves the protocol-free payload and hash. No width is
+// recorded; a multi-pod caller passes its worker count through HashTemplate.
 func HashWithWorkerTopologyAndPairing(template, workerSpec *corev1.PodSpec, templateMeta *metav1.ObjectMeta, topologyKey, pairingProtocol string, collisionCount *int32, ownerUID types.UID) (string, []byte, error) {
-	if template == nil {
+	return HashTemplate(Template{
+		PodSpec:         template,
+		WorkerPodSpec:   workerSpec,
+		Meta:            templateMeta,
+		TopologyKey:     topologyKey,
+		PairingProtocol: pairingProtocol,
+	}, collisionCount, ownerUID)
+}
+
+// Template is everything a revision hashes: the pod templates, the
+// template metadata the user authored, and the gang shape they render in.
+type Template struct {
+	// PodSpec is the leader or single-pod template. Required.
+	PodSpec *corev1.PodSpec
+	// WorkerPodSpec is the worker template; nil for a single-pod Component.
+	WorkerPodSpec *corev1.PodSpec
+	// Meta is the pod-template labels and annotations; derived keys are
+	// dropped (TemplateMeta).
+	Meta *metav1.ObjectMeta
+	// TopologyKey is the gang co-location key; ignored without a worker
+	// template.
+	TopologyKey string
+	// PairingProtocol is the P/D wire-compatibility token; empty pairs with
+	// anything.
+	PairingProtocol string
+	// WorkerSize is the worker pods per Instance; recorded only beside a
+	// worker template and only when positive.
+	WorkerSize int32
+}
+
+// HashTemplate returns the deterministic hash that becomes the
+// ControllerRevision name suffix, plus the canonical bytes stored in
+// CR.Data.Raw. Every field a revision owns enters here, so a change to any
+// of them is a new revision; collisionCount and ownerUID salt the name as
+// Hash describes.
+func HashTemplate(t Template, collisionCount *int32, ownerUID types.UID) (string, []byte, error) {
+	if t.PodSpec == nil {
 		return "", nil, fmt.Errorf("nil pod template")
 	}
-	// Topology is meaningful only for a leader+worker workload. The public API
-	// documents it as ignored for single-pod Components, so it must not produce
-	// a phantom revision when no worker template exists.
+	// Topology and width describe a leader+worker gang. The public API
+	// documents topology as ignored for single-pod Components, and a
+	// Component without a worker template has no width, so neither may
+	// produce a phantom revision when no worker template exists.
 	var topologyKeyPayload *string
-	if workerSpec != nil && topologyKey != "" {
-		topologyKeyPayload = &topologyKey
+	if t.WorkerPodSpec != nil && t.TopologyKey != "" {
+		key := t.TopologyKey
+		topologyKeyPayload = &key
+	}
+	var workerSizePayload *int32
+	if t.WorkerPodSpec != nil && t.WorkerSize > 0 {
+		size := t.WorkerSize
+		workerSizePayload = &size
 	}
 	var pairingPayload *string
-	if pairingProtocol != "" {
-		pairingPayload = &pairingProtocol
+	if t.PairingProtocol != "" {
+		protocol := t.PairingProtocol
+		pairingPayload = &protocol
 	}
 	raw, err := json.Marshal(DataPayload{
-		PodSpec:         template,
-		PodMeta:         TemplateMeta(templateMeta),
-		WorkerPodSpec:   workerSpec,
+		PodSpec:         t.PodSpec,
+		PodMeta:         TemplateMeta(t.Meta),
+		WorkerPodSpec:   t.WorkerPodSpec,
 		TopologyKey:     topologyKeyPayload,
 		PairingProtocol: pairingPayload,
+		WorkerSize:      workerSizePayload,
 	})
 	if err != nil {
 		return "", nil, fmt.Errorf("marshal revision payload: %w", err)
@@ -445,10 +498,40 @@ func revisionAnnotations(raw []byte) map[string]string {
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil
 	}
-	if p.PairingProtocol == nil || *p.PairingProtocol == "" {
+	out := map[string]string{}
+	if p.PairingProtocol != nil && *p.PairingProtocol != "" {
+		out[query.LabelPairingProtocol] = *p.PairingProtocol
+	}
+	if p.WorkerSize != nil && *p.WorkerSize > 0 {
+		out[query.AnnotationWorkerSize] = strconv.FormatInt(int64(*p.WorkerSize), 10)
+	}
+	if len(out) == 0 {
 		return nil
 	}
-	return map[string]string{query.LabelPairingProtocol: *p.PairingProtocol}
+	return out
+}
+
+// WorkerSizeFromRevision returns the worker pods per Instance a
+// ControllerRevision was minted at: the ome.io/worker-size annotation
+// stamped at create, else the stored payload. ok is false when the
+// revision records no width — a single-pod revision, or a multi-pod revision
+// whose payload carries no worker count — and the caller renders the
+// desired width.
+func WorkerSizeFromRevision(cr *appsv1.ControllerRevision) (size int32, ok bool) {
+	if cr == nil {
+		return 0, false
+	}
+	if v, found := cr.Annotations[query.AnnotationWorkerSize]; found {
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err == nil && n > 0 {
+			return int32(n), true
+		}
+	}
+	p, err := PayloadFromControllerRevision(cr)
+	if err != nil || p == nil || p.WorkerSize == nil || *p.WorkerSize <= 0 {
+		return 0, false
+	}
+	return *p.WorkerSize, true
 }
 
 // PairingProtocolFromRevision returns the P/D pairing protocol a
@@ -826,4 +909,193 @@ func CollectLiveRevisionNames(current, update string, instances []workload.Insta
 		out = append(out, n)
 	}
 	return out
+}
+
+// ReferencedRevisionNames returns, sorted, every revision name the rows
+// record a pod set under: the revision each runs, converges to, or its
+// attempt pinned. except is left out; the roll target renders the desired
+// width and needs no lookup.
+func ReferencedRevisionNames(statuses []workload.InstanceStatus, except string) []string {
+	seen := map[string]struct{}{}
+	add := func(name string) {
+		if name != "" && name != except {
+			seen[name] = struct{}{}
+		}
+	}
+	for i := range statuses {
+		add(statuses[i].RunningRevision)
+		add(statuses[i].TargetRevision)
+		if statuses[i].Operation != nil {
+			add(statuses[i].Operation.TargetRevision)
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for name := range seen {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// WorkerSizesByRevision reads the worker pods per Instance each named
+// ControllerRevision was minted at. A revision that is gone, or that
+// records no width, is left out, so the Instances on it render the desired
+// width.
+func WorkerSizesByRevision(ctx context.Context, reads client.Reader, namespace string, names []string) (map[string]int32, error) {
+	if reads == nil || len(names) == 0 {
+		return nil, nil
+	}
+	out := map[string]int32{}
+	for _, name := range names {
+		cr := &appsv1.ControllerRevision{}
+		if err := reads.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, cr); err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			return nil, fmt.Errorf("read revision %s/%s: %w", namespace, name, err)
+		}
+		if size, ok := WorkerSizeFromRevision(cr); ok {
+			out[name] = size
+		}
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
+// HasReadyRowOn reports whether any Instance is recorded Ready on the
+// revision, so a width can be observed on its gangs at all.
+func HasReadyRowOn(rows []workload.InstanceStatus, revisionName string) bool {
+	for i := range rows {
+		if rows[i].Phase == workload.InstancePhaseReady && rows[i].RunningRevision == revisionName {
+			return true
+		}
+	}
+	return false
+}
+
+// ObservedWorkerWidth is the worker count the gangs on a revision run: the
+// most worker pods any Ready Instance recorded on it holds, counted from the
+// live pods that carry its hash. known is false when no Ready Instance on
+// the revision holds a worker pod, so nothing is observed.
+func ObservedWorkerWidth(rows []workload.InstanceStatus, pods []*corev1.Pod, revisionName string) (width int32, known bool) {
+	hash := query.RevisionFromName(revisionName).Hash()
+	ready := map[string]struct{}{}
+	for i := range rows {
+		if rows[i].Phase == workload.InstancePhaseReady && rows[i].RunningRevision == revisionName {
+			ready[strconv.FormatInt(int64(rows[i].Index), 10)] = struct{}{}
+		}
+	}
+	if len(ready) == 0 {
+		return 0, false
+	}
+	count := map[string]int32{}
+	for _, pod := range query.ExcludeTerminalPods(pods) {
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+		idx := pod.Labels[query.LabelInstanceIdx]
+		if _, ok := ready[idx]; !ok || pod.Labels[query.LabelRunner] != workload.RunnerWorker || pod.Labels[query.LabelRevisionHash] != hash {
+			continue
+		}
+		count[idx]++
+	}
+	for _, n := range count {
+		known = true
+		if n > width {
+			width = n
+		}
+	}
+	return width, known
+}
+
+// WidthFreeTwin names the revision the same templates hash to with no
+// worker count recorded: the hash and canonical bytes of the template
+// rendered without its width.
+type WidthFreeTwin struct {
+	Hash string
+	Raw  []byte
+}
+
+// WidthFreeTwinOf renders t without its worker count. ok is false when t
+// has no width, so no revision minted without one can stand in for it.
+func WidthFreeTwinOf(t Template, collisionCount *int32, ownerUID types.UID) (twin WidthFreeTwin, ok bool, err error) {
+	if t.WorkerPodSpec == nil || t.WorkerSize <= 0 {
+		return WidthFreeTwin{}, false, nil
+	}
+	free := t
+	free.WorkerSize = 0
+	hash, raw, err := HashTemplate(free, collisionCount, ownerUID)
+	if err != nil {
+		return WidthFreeTwin{}, false, err
+	}
+	return WidthFreeTwin{Hash: hash, Raw: raw}, true, nil
+}
+
+// AdoptRevisionWithoutWidth returns the ControllerRevision a multi-pod
+// Component keeps as its target instead of minting the hashed one: the
+// revision under the twin's name, when no revision exists under the hashed
+// name yet, the twin is this owner's and records exactly the width-free
+// rendering of the same templates, and the gangs on it run the desired
+// width (observed; nothing observed reads as the desired width). nil means
+// the caller mints as usual: a width the gangs do not run mints and rolls
+// them to it, and a template change mints a new name, so revisions minted
+// without a width phase out on their own.
+//
+// recordedTarget is the update revision the owner's status names. Once it
+// names the twin, the twin is confirmed from the cache alone and nothing is
+// read live; the live reads run only the first time, while the status still
+// names another revision.
+func AdoptRevisionWithoutWidth(ctx context.Context, cache, live client.Reader, owner client.Object, key Key, hash string, twin WidthFreeTwin, workerSize int32, recordedTarget string, observed func(revisionName string) (int32, bool)) (*appsv1.ControllerRevision, error) {
+	if twin.Hash == "" || workerSize <= 0 || owner == nil || cache == nil || live == nil {
+		return nil, nil
+	}
+	name := Name(key, twin.Hash)
+	twinKey := client.ObjectKey{Namespace: key.Namespace, Name: name}
+	keeps := func(cr *appsv1.ControllerRevision) bool {
+		if !controllerOwnedBy(cr.OwnerReferences, owner.GetUID()) || !bytes.Equal(cr.Data.Raw, twin.Raw) {
+			return false
+		}
+		if observed != nil {
+			if width, known := observed(name); known && width != workerSize {
+				return false
+			}
+		}
+		return true
+	}
+	if recordedTarget == name {
+		cached := &appsv1.ControllerRevision{}
+		err := cache.Get(ctx, twinKey, cached)
+		if err == nil {
+			if keeps(cached) {
+				return cached, nil
+			}
+			return nil, nil
+		}
+		if !apierrors.IsNotFound(err) {
+			return nil, fmt.Errorf("get ControllerRevision %s: %w", name, err)
+		}
+	}
+	hashedKey := client.ObjectKey{Namespace: key.Namespace, Name: Name(key, hash)}
+	for _, reads := range []client.Reader{cache, live} {
+		err := reads.Get(ctx, hashedKey, &appsv1.ControllerRevision{})
+		if err == nil {
+			return nil, nil
+		}
+		if !apierrors.IsNotFound(err) {
+			return nil, fmt.Errorf("get ControllerRevision %s: %w", hashedKey.Name, err)
+		}
+	}
+	candidate := &appsv1.ControllerRevision{}
+	if err := live.Get(ctx, twinKey, candidate); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get ControllerRevision %s: %w", name, err)
+	}
+	if !keeps(candidate) {
+		return nil, nil
+	}
+	return candidate, nil
 }

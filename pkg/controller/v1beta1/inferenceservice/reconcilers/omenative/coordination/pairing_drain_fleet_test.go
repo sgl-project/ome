@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -14,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	workloadtypes "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
 // fleetPods builds n routable pods of one Component and cohort, one per
@@ -153,39 +155,163 @@ func TestEvaluatePairingDrain_EmptyProtocolPeerPairsWithTheReplacement(t *testin
 	}
 }
 
-// The asymmetric shape: two surging engines and one drain-first decoder. The
-// decoder gains a v2 pod only by leaving v1, which the start-time gate admits
-// once a v2 engine has promoted. Waiting for a v2 decoder here would wait on
-// that promote, so the engine's drain proceeds under the last-pair rule.
-func TestEvaluatePairingDrain_DrainFirstPeerIsNotWaitedOn(t *testing.T) {
-	isvc := pairingISVC("v2")
-	objs := []client.Object{
-		replicaWith(isvc, v1beta1.EngineComponent, v1beta1.UpdateStrategySurgeThenDrain),
-		replicaWith(isvc, v1beta1.DecoderComponent, v1beta1.UpdateStrategyRecreatePod),
+// attemptRow is an Instance row carrying an Update attempt toward the named
+// revision at the given step, in the given phase; a settled row (no step)
+// carries no attempt and runs runningRev.
+func attemptRow(index int, phase v1beta1.OMENativeInstancePhase, runningRev, step, targetRev string) v1beta1.OMENativeInstanceStatus {
+	row := v1beta1.OMENativeInstanceStatus{Index: int32(index), Phase: phase, RunningRevision: runningRev, ServingPodCount: 1}
+	if step != "" {
+		row.ServingPodCount = 0
+		row.TargetRevision = targetRev
+		row.Operation = &v1beta1.InstanceOperation{Type: v1beta1.InstanceOperationUpdate, Step: step, TargetRevision: targetRev}
 	}
-	objs = append(objs, fleetPods(v1beta1.EngineComponent, 0, 2, 0, "v1", true)...)
-	objs = append(objs, fleetPods(v1beta1.EngineComponent, 0, 1, 1, "v2", true)...)
-	objs = append(objs, fleetPods(v1beta1.DecoderComponent, 0, 1, 0, "v1", true)...)
+	return row
+}
 
-	if allowed, _, reason := drainGate(t, isvc, v1beta1.EngineComponent, []string{"llama-engine-0-default-0"}, objs...); !allowed {
-		t.Fatalf("a drain-first decoder cannot come up before this engine promotes; the drain must proceed: %s", reason)
+// withRows gives a replica the Instance rows the drain gate reads attempts
+// from.
+func withRows(ir *v1beta1.InferenceReplica, rows ...v1beta1.OMENativeInstanceStatus) *v1beta1.InferenceReplica {
+	ir.Status.InstanceStatuses = rows
+	return ir
+}
+
+// Four surging engines, none allowed out of pairing, and four decoders
+// recreated one at a time, the decoder's pods slow to start. The first
+// engine's v2 replacement is Ready while the first decoder has taken its old
+// pod down and its new one does not exist yet. Promoting the engine now
+// would leave it with three of four engines pairable, under its floor of
+// four, so its drain waits on the decoder step already in flight: it goes
+// once that step's pod serves, and it goes when the step is parked or
+// failed, since nothing then brings the pod up. A budget of one lets the
+// engine promote ahead, and a decoder that has not started is not waited on.
+func TestEvaluatePairingDrain_DrainFirstPeerStepInFlightHoldsTheFloor(t *testing.T) {
+	isvc := pairingISVC("v2")
+	const v1Rev, v2Rev = "llama-decoder-v1", "llama-decoder-v2"
+	settled := []v1beta1.OMENativeInstanceStatus{
+		attemptRow(1, v1beta1.OMENativeInstanceReady, v1Rev, "", ""),
+		attemptRow(2, v1beta1.OMENativeInstanceReady, v1Rev, "", ""),
+		attemptRow(3, v1beta1.OMENativeInstanceReady, v1Rev, "", ""),
+	}
+	fleet := func(engineBudget int, first v1beta1.OMENativeInstanceStatus, firstPod []client.Object) []client.Object {
+		objs := []client.Object{
+			sizedReplica(isvc, v1beta1.EngineComponent, v1beta1.UpdateStrategySurgeThenDrain, 4, engineBudget),
+			withRows(sizedReplica(isvc, v1beta1.DecoderComponent, v1beta1.UpdateStrategyRecreatePod, 4, 1), append([]v1beta1.OMENativeInstanceStatus{first}, settled...)...),
+			pairingCR("prod", "llama", v1beta1.DecoderComponent, "v1", "v1"),
+			pairingCR("prod", "llama", v1beta1.DecoderComponent, "v2", "v2"),
+		}
+		objs = append(objs, fleetPods(v1beta1.EngineComponent, 0, 4, 0, "v1", true)...)
+		objs = append(objs, fleetPods(v1beta1.EngineComponent, 0, 1, 1, "v2", true)...)
+		objs = append(objs, fleetPods(v1beta1.DecoderComponent, 1, 3, 0, "v1", true)...)
+		return append(objs, firstPod...)
+	}
+	source := []string{"llama-engine-0-default-0"}
+	recreating := attemptRow(0, v1beta1.OMENativeInstanceUpdating, v1Rev, workloadtypes.UpdateStepDrain, v2Rev)
+	newPod := func(ready bool) []client.Object { return fleetPods(v1beta1.DecoderComponent, 0, 1, 0, "v2", ready) }
+
+	allowed, gate, reason := drainGate(t, isvc, v1beta1.EngineComponent, source, fleet(0, recreating, nil)...)
+	requireFloorHeld(t, allowed, gate, reason, "decoder step in flight with its new pod not created yet")
+	if !strings.Contains(reason, "cannot pair") {
+		t.Errorf("the hold must say the replacement cannot pair yet: %s", reason)
+	}
+	allowed, gate, reason = drainGate(t, isvc, v1beta1.EngineComponent, source, fleet(0, recreating, newPod(false))...)
+	requireFloorHeld(t, allowed, gate, reason, "decoder step in flight with its new pod still starting")
+	if allowed, _, reason := drainGate(t, isvc, v1beta1.EngineComponent, source, fleet(0, recreating, newPod(true))...); !allowed {
+		t.Fatalf("once the decoder's new pod serves v2 the replacement pairs and the drain proceeds: %s", reason)
+	}
+
+	// The escalation ends the attempt: parked with its pod set alive, failed
+	// with the attempt cleared, or failed with the attempt kept by the
+	// deadline backstop. None brings the pod up, so none is waited on.
+	parked := recreating
+	parked.Phase = v1beta1.OMENativeInstanceFailed
+	parked.Operation = &v1beta1.InstanceOperation{Type: v1beta1.InstanceOperationUpdate, Step: workloadtypes.UpdateStepParked, TargetRevision: v2Rev}
+	if allowed, _, reason := drainGate(t, isvc, v1beta1.EngineComponent, source, fleet(0, parked, newPod(false))...); !allowed {
+		t.Fatalf("a parked decoder step brings no pod up; the drain must proceed: %s", reason)
+	}
+	cleared := attemptRow(0, v1beta1.OMENativeInstanceFailed, v1Rev, "", "")
+	cleared.ServingPodCount = 0
+	if allowed, _, reason := drainGate(t, isvc, v1beta1.EngineComponent, source, fleet(0, cleared, nil)...); !allowed {
+		t.Fatalf("a failed decoder step with its attempt cleared is not waited on: %s", reason)
+	}
+	expired := recreating
+	expired.Phase = v1beta1.OMENativeInstanceFailed
+	if allowed, _, reason := drainGate(t, isvc, v1beta1.EngineComponent, source, fleet(0, expired, newPod(false))...); !allowed {
+		t.Fatalf("a decoder step failed by its deadline is not waited on: %s", reason)
+	}
+
+	// A budget of one lets the engine promote ahead of the decoder.
+	if allowed, _, reason := drainGate(t, isvc, v1beta1.EngineComponent, source, fleet(1, recreating, nil)...); !allowed {
+		t.Fatalf("one engine may be out of pairing under a budget of one: %s", reason)
+	}
+	// A decoder that has not opened its first step is not waited on.
+	idle := attemptRow(0, v1beta1.OMENativeInstanceReady, v1Rev, "", "")
+	if allowed, _, reason := drainGate(t, isvc, v1beta1.EngineComponent, source, fleet(0, idle, fleetPods(v1beta1.DecoderComponent, 0, 1, 0, "v1", true))...); !allowed {
+		t.Fatalf("with no decoder step in flight the last-pair rule alone applies: %s", reason)
 	}
 }
 
-// An in-place peer flips its own pods and is paced by the start-time gate
-// the same way; it is not waited on either.
-func TestEvaluatePairingDrain_InPlacePeerIsNotWaitedOn(t *testing.T) {
+// Two engines relabelled in place and two surging decoders, none allowed out
+// of pairing. The first decoder's v2 replacement is Ready while the first
+// engine's relabel is in flight: retiring the decoder's old pod would leave
+// one of two decoders pairable, under its floor of two, so the drain waits on
+// that relabel. A relabel that has not started, or one pinned to a revision
+// of another cohort, is not waited on.
+func TestEvaluatePairingDrain_InPlacePeerStepInFlightHoldsTheFloor(t *testing.T) {
+	isvc := pairingISVC("v2")
+	const v1Rev, v2Rev = "llama-engine-v1", "llama-engine-v2"
+	fleet := func(first v1beta1.OMENativeInstanceStatus) []client.Object {
+		objs := []client.Object{
+			withRows(sizedReplica(isvc, v1beta1.EngineComponent, v1beta1.UpdateStrategyInPlaceIfPossible, 2, 1),
+				first, attemptRow(1, v1beta1.OMENativeInstanceReady, v1Rev, "", "")),
+			sizedReplica(isvc, v1beta1.DecoderComponent, v1beta1.UpdateStrategySurgeThenDrain, 2, 0),
+			pairingCR("prod", "llama", v1beta1.EngineComponent, "v1", "v1"),
+			pairingCR("prod", "llama", v1beta1.EngineComponent, "v2", "v2"),
+		}
+		objs = append(objs, fleetPods(v1beta1.EngineComponent, 0, 2, 0, "v1", true)...)
+		objs = append(objs, fleetPods(v1beta1.DecoderComponent, 0, 2, 0, "v1", true)...)
+		return append(objs, fleetPods(v1beta1.DecoderComponent, 0, 1, 1, "v2", true)...)
+	}
+	source := []string{"llama-decoder-0-default-0"}
+
+	relabelling := attemptRow(0, v1beta1.OMENativeInstanceUpdating, v1Rev, workloadtypes.UpdateStepInPlace, v2Rev)
+	allowed, gate, reason := drainGate(t, isvc, v1beta1.DecoderComponent, source, fleet(relabelling)...)
+	requireFloorHeld(t, allowed, gate, reason, "engine relabel in flight with no v2 engine serving yet")
+
+	idle := attemptRow(0, v1beta1.OMENativeInstanceReady, v1Rev, "", "")
+	if allowed, _, reason := drainGate(t, isvc, v1beta1.DecoderComponent, source, fleet(idle)...); !allowed {
+		t.Fatalf("with no engine relabel in flight the drain proceeds: %s", reason)
+	}
+	elsewhere := attemptRow(0, v1beta1.OMENativeInstanceUpdating, v1Rev, workloadtypes.UpdateStepInPlace, v1Rev)
+	if allowed, _, reason := drainGate(t, isvc, v1beta1.DecoderComponent, source, fleet(elsewhere)...); !allowed {
+		t.Fatalf("a relabel toward another cohort brings no v2 pod up; the drain proceeds: %s", reason)
+	}
+}
+
+// The revision a peer's attempt is pinned to cannot be read: the gate fails
+// closed with a retryable Pairing hold rather than guess whether that
+// attempt brings the target cohort up.
+func TestEvaluatePairingDrain_FailsClosedWhenThePeerAttemptRevisionCannotBeRead(t *testing.T) {
 	isvc := pairingISVC("v2")
 	objs := []client.Object{
-		replicaWith(isvc, v1beta1.EngineComponent, v1beta1.UpdateStrategyInPlaceIfPossible),
-		replicaWith(isvc, v1beta1.DecoderComponent, v1beta1.UpdateStrategySurgeThenDrain),
+		sizedReplica(isvc, v1beta1.EngineComponent, v1beta1.UpdateStrategySurgeThenDrain, 2, 0),
+		withRows(sizedReplica(isvc, v1beta1.DecoderComponent, v1beta1.UpdateStrategyRecreatePod, 2, 1),
+			attemptRow(0, v1beta1.OMENativeInstanceUpdating, "llama-decoder-v1", workloadtypes.UpdateStepDrain, "llama-decoder-v2"),
+			attemptRow(1, v1beta1.OMENativeInstanceReady, "llama-decoder-v1", "", "")),
 	}
 	objs = append(objs, fleetPods(v1beta1.EngineComponent, 0, 2, 0, "v1", true)...)
-	objs = append(objs, fleetPods(v1beta1.DecoderComponent, 0, 2, 0, "v1", true)...)
-	objs = append(objs, fleetPods(v1beta1.DecoderComponent, 0, 1, 1, "v2", true)...)
-
-	if allowed, _, reason := drainGate(t, isvc, v1beta1.DecoderComponent, []string{"llama-decoder-0-default-0"}, objs...); !allowed {
-		t.Fatalf("an in-place engine is not waited on; the drain must proceed: %s", reason)
+	objs = append(objs, fleetPods(v1beta1.EngineComponent, 0, 1, 1, "v2", true)...)
+	objs = append(objs, fleetPods(v1beta1.DecoderComponent, 1, 1, 0, "v1", true)...)
+	c := fake.NewClientBuilder().WithScheme(drainScheme(t)).WithObjects(objs...).WithInterceptorFuncs(interceptor.Funcs{
+		Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if _, ok := obj.(*appsv1.ControllerRevision); ok {
+				return errors.New("apiserver unavailable")
+			}
+			return cl.Get(ctx, key, obj, opts...)
+		},
+	}).Build()
+	allowed, gate, reason := EvaluatePairingDrain(context.Background(), c, isvc, v1beta1.EngineComponent, forwardTarget(isvc, v1beta1.EngineComponent), GroupDefaults{}, []string{"llama-engine-0-default-0"})
+	if allowed || gate != v1beta1.RolloutHoldGatePairing || !strings.Contains(reason, "failing closed") {
+		t.Fatalf("an unreadable attempt revision must fail closed with a retryable Pairing hold: allowed=%v gate=%q reason=%s", allowed, gate, reason)
 	}
 }
 
@@ -311,13 +437,16 @@ func TestEvaluatePairingDrain_6P2D_LastOldDecoderWaitsUntilEveryOldEngineHasAPar
 // recreated one at a time. The first engine's v2 replacement is Ready while
 // the first decoder's v2 pod is still starting: promoting the engine now
 // would leave it with one of two engines pairable. Its drain waits for the
-// decoder pod that is already on its way; once that pod serves, it goes.
+// decoder step already in flight; once that step's pod serves, it goes.
 func TestEvaluatePairingDrain_SurgingEngineWaitsForTheDecoderAlreadyRecreating(t *testing.T) {
 	isvc := pairingISVC("v2")
 	fleet := func(engineBudget int, decoderReady bool) []client.Object {
 		objs := []client.Object{
 			sizedReplica(isvc, v1beta1.EngineComponent, v1beta1.UpdateStrategySurgeThenDrain, 2, engineBudget),
-			sizedReplica(isvc, v1beta1.DecoderComponent, v1beta1.UpdateStrategyRecreatePod, 2, 1),
+			withRows(sizedReplica(isvc, v1beta1.DecoderComponent, v1beta1.UpdateStrategyRecreatePod, 2, 1),
+				attemptRow(0, v1beta1.OMENativeInstanceUpdating, "llama-decoder-v1", workloadtypes.UpdateStepDrain, "llama-decoder-v2"),
+				attemptRow(1, v1beta1.OMENativeInstanceReady, "llama-decoder-v1", "", "")),
+			pairingCR("prod", "llama", v1beta1.DecoderComponent, "v2", "v2"),
 		}
 		objs = append(objs, fleetPods(v1beta1.EngineComponent, 0, 2, 0, "v1", true)...)
 		objs = append(objs, fleetPods(v1beta1.EngineComponent, 0, 1, 1, "v2", true)...)
@@ -340,18 +469,25 @@ func TestEvaluatePairingDrain_SurgingEngineWaitsForTheDecoderAlreadyRecreating(t
 		t.Fatalf("one engine may be out of pairing under a budget of one: %s", reason)
 	}
 
-	// A single drain-first decoder takes its only pod down only once an
-	// engine serves v2, so the engine is not held on it: the window is the
-	// one that decoder's recreate costs without pairing.
-	single := []client.Object{
-		sizedReplica(isvc, v1beta1.EngineComponent, v1beta1.UpdateStrategySurgeThenDrain, 2, 0),
-		sizedReplica(isvc, v1beta1.DecoderComponent, v1beta1.UpdateStrategyRecreatePod, 1, 1),
+	// A single drain-first decoder: while its only pod still serves and its
+	// step is in flight the engine waits, like above; once that pod is down
+	// no pair is left to protect and the engine's drain proceeds, the
+	// window that decoder's recreate costs without pairing.
+	single := func(decoderServing bool) []client.Object {
+		objs := []client.Object{
+			sizedReplica(isvc, v1beta1.EngineComponent, v1beta1.UpdateStrategySurgeThenDrain, 2, 0),
+			withRows(sizedReplica(isvc, v1beta1.DecoderComponent, v1beta1.UpdateStrategyRecreatePod, 1, 1),
+				attemptRow(0, v1beta1.OMENativeInstanceUpdating, "llama-decoder-v1", workloadtypes.UpdateStepDrain, "llama-decoder-v2")),
+			pairingCR("prod", "llama", v1beta1.DecoderComponent, "v2", "v2"),
+		}
+		objs = append(objs, fleetPods(v1beta1.EngineComponent, 0, 2, 0, "v1", true)...)
+		objs = append(objs, fleetPods(v1beta1.EngineComponent, 0, 1, 1, "v2", true)...)
+		return append(objs, fleetPods(v1beta1.DecoderComponent, 0, 1, 0, "v1", decoderServing)...)
 	}
-	single = append(single, fleetPods(v1beta1.EngineComponent, 0, 2, 0, "v1", true)...)
-	single = append(single, fleetPods(v1beta1.EngineComponent, 0, 1, 1, "v2", true)...)
-	single = append(single, fleetPods(v1beta1.DecoderComponent, 0, 1, 0, "v1", true)...)
-	if allowed, _, reason := drainGate(t, isvc, v1beta1.EngineComponent, source, single...); !allowed {
-		t.Fatalf("a lone drain-first decoder cannot move before this engine serves v2; the drain must proceed: %s", reason)
+	allowed, gate, reason = drainGate(t, isvc, v1beta1.EngineComponent, source, single(true)...)
+	requireFloorHeld(t, allowed, gate, reason, "lone decoder still serving with its step in flight")
+	if allowed, _, reason := drainGate(t, isvc, v1beta1.EngineComponent, source, single(false)...); !allowed {
+		t.Fatalf("with the lone decoder's pod down there is no pair to protect; the drain must proceed: %s", reason)
 	}
 }
 

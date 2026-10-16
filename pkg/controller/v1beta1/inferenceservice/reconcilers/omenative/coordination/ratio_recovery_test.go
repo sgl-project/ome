@@ -413,3 +413,184 @@ func TestCheckRatio_CapacityRecoveryDistinguishesDeficitFromScaleDown(t *testing
 		}
 	})
 }
+
+// mkScaleUpRatioState is the picture of a group scaled up while its roll
+// settles: 6 engines and 2 decoders behind 2 routers in one RatioBalanced
+// group, every member SurgeThenDrain, scaled to 7 engines and 3 decoders. The
+// new Instances do not serve yet, so the engine and the decoder each serve
+// fewer pods than they desire and read as recovery-eligible, while each still
+// serves its anchor count. The decoder has rolled 1 of its 2 anchor Instances,
+// the engine newE of its 6 and the routers newR of their 2.
+func mkScaleUpRatioState(newE, newR int32) RatioState {
+	eng, dec, rtr := v1beta1.EngineComponent, v1beta1.DecoderComponent, v1beta1.RouterComponent
+	return RatioState{
+		Original:         map[v1beta1.ComponentType]int32{eng: 6, dec: 2, rtr: 2},
+		Current:          map[v1beta1.ComponentType]int32{eng: 7, dec: 3, rtr: 2},
+		Desired:          map[v1beta1.ComponentType]int32{eng: 7, dec: 3, rtr: 2},
+		Serving:          map[v1beta1.ComponentType]int32{eng: 6, dec: 2, rtr: 2},
+		NewPods:          map[v1beta1.ComponentType]int32{eng: newE, dec: 1, rtr: newR},
+		RecoveryEligible: map[v1beta1.ComponentType]bool{eng: true, dec: true},
+		InFlightSurge:    map[v1beta1.ComponentType]int32{},
+	}
+}
+
+// TestEvaluateSurge_ScaleUpKeepsLockstepArmed pins that the recovery
+// fallback cannot disarm the new-revision lockstep. With the group scaled up
+// mid-roll every member is short of its desired count, but none has lost a
+// pod: each still serves its anchor count. The decoder's second surge (1 of
+// 2 rolled, the engine at 0 of 6, a lead of 50 points at a tolerance of 10)
+// is refused by the lockstep and stays refused through the fallback; the
+// engine, behind, proceeds; once the engine is level the decoder's surge is
+// admitted again, so the pair converges.
+func TestEvaluateSurge_ScaleUpKeepsLockstepArmed(t *testing.T) {
+	eng, dec := v1beta1.EngineComponent, v1beta1.DecoderComponent
+	pacing := v1beta1.CoordinationPacing{
+		Type:                  v1beta1.CoordinationPacingRatioBalanced,
+		RatioTolerancePercent: int32Ptr(10),
+	}
+	const lockstepReason = "surge would outpace peer new-revision rollout past tolerance"
+
+	if d := EvaluateSurge(pacing, mkScaleUpRatioState(0, 0), dec, 1); d.AllowedSurgeDelta != 0 || !d.SkewRejected || d.Reason != lockstepReason {
+		t.Fatalf("decoder 1 of 2 against engine 0 of 6 at tol 10 must stay held by the lockstep: %+v", d)
+	}
+	if d := EvaluateSurge(pacing, mkScaleUpRatioState(1, 1), dec, 1); d.AllowedSurgeDelta != 0 || d.Reason != lockstepReason {
+		t.Fatalf("decoder 1 of 2 against engine 1 of 6 (a lead of 33 points) must stay held: %+v", d)
+	}
+	if d := EvaluateSurge(pacing, mkScaleUpRatioState(0, 0), eng, 1); d.AllowedSurgeDelta != 1 {
+		t.Fatalf("the engine, behind, must proceed: %+v", d)
+	}
+	if d := EvaluateSurge(pacing, mkScaleUpRatioState(3, 1), dec, 1); d.AllowedSurgeDelta != 1 {
+		t.Fatalf("decoder 1 of 2 level with engine 3 of 6 and routers 1 of 2 must proceed again: %+v", d)
+	}
+	// The hold is the lockstep's, whatever the member's recovery standing:
+	// a surge the fallback could otherwise serialize is refused the same way.
+	state := mkScaleUpRatioState(0, 0)
+	state.InFlightSurge[dec] = 1
+	if d := EvaluateSurge(pacing, state, dec, 1); d.AllowedSurgeDelta != 0 || d.Reason != lockstepReason {
+		t.Fatalf("an in-flight surge changes nothing about the lockstep's hold: %+v", d)
+	}
+}
+
+// TestEvaluateSurge_LostServingPodRecovers pins what the fallback does: a
+// member that lost a serving pod on the running revision refills
+// it, with a level peer through the band's rejection and, below its anchor,
+// even while the lockstep would hold it. The same lead at the anchor count
+// stays held, so the anchor is the boundary.
+func TestEvaluateSurge_LostServingPodRecovers(t *testing.T) {
+	eng, dec := v1beta1.EngineComponent, v1beta1.DecoderComponent
+	pacing := func(tol int32) v1beta1.CoordinationPacing {
+		return v1beta1.CoordinationPacing{
+			Type:                  v1beta1.CoordinationPacingRatioBalanced,
+			RatioTolerancePercent: int32Ptr(tol),
+		}
+	}
+	state := func(servingE, desiredE, newE int32) RatioState {
+		return RatioState{
+			Original:         map[v1beta1.ComponentType]int32{eng: 8, dec: 8},
+			Current:          map[v1beta1.ComponentType]int32{eng: 8, dec: 8},
+			Desired:          map[v1beta1.ComponentType]int32{eng: desiredE, dec: 8},
+			Serving:          map[v1beta1.ComponentType]int32{eng: servingE, dec: 8},
+			NewPods:          map[v1beta1.ComponentType]int32{eng: newE, dec: 0},
+			RecoveryEligible: map[v1beta1.ComponentType]bool{eng: servingE < desiredE},
+			InFlightSurge:    map[v1beta1.ComponentType]int32{},
+		}
+	}
+	const recoveryReason = "capacity recovery advances a lagging Component"
+
+	// Four engine pods lost, nobody ahead: the band refuses 5:8 at tol 25 and
+	// the fallback refills.
+	if d := EvaluateSurge(pacing(25), state(4, 8, 0), eng, 1); d.AllowedSurgeDelta != 1 || d.Reason != recoveryReason {
+		t.Fatalf("an engine at 4 of 8 serving with a level peer must recover: %+v", d)
+	}
+	// Two engine pods lost while the engine is 3 of 8 rolled against a
+	// decoder at none: the lockstep would hold a lead of 37 points at tol 20,
+	// but the engine serves below its anchor, so the refill goes through.
+	if d := EvaluateSurge(pacing(20), state(6, 8, 3), eng, 1); d.AllowedSurgeDelta != 1 || d.Reason != recoveryReason {
+		t.Fatalf("an engine below its anchor must keep recovering past the lockstep: %+v", d)
+	}
+	// The same lead with every anchor pod serving and one more desired (a
+	// scale-up): nothing was lost, so the lockstep holds.
+	if d := EvaluateSurge(pacing(20), state(8, 9, 3), eng, 1); d.AllowedSurgeDelta != 0 || !d.SkewRejected {
+		t.Fatalf("an engine at its anchor count that only desires more must stay held: %+v", d)
+	}
+}
+
+// TestEvaluateSurge_ScaleUpWithNoRollingPeerSurgesFreely pins that the
+// rule only bites while a peer is still rolling: a member alone in its group
+// surges freely, and a member whose peer has finished its roll is admitted
+// by the surge tiebreaker.
+func TestEvaluateSurge_ScaleUpWithNoRollingPeerSurgesFreely(t *testing.T) {
+	eng, dec := v1beta1.EngineComponent, v1beta1.DecoderComponent
+	pacing := v1beta1.CoordinationPacing{
+		Type:                  v1beta1.CoordinationPacingRatioBalanced,
+		RatioTolerancePercent: int32Ptr(10),
+	}
+	alone := RatioState{
+		Original:         map[v1beta1.ComponentType]int32{eng: 6},
+		Current:          map[v1beta1.ComponentType]int32{eng: 7},
+		Desired:          map[v1beta1.ComponentType]int32{eng: 7},
+		Serving:          map[v1beta1.ComponentType]int32{eng: 6},
+		NewPods:          map[v1beta1.ComponentType]int32{eng: 4},
+		RecoveryEligible: map[v1beta1.ComponentType]bool{eng: true},
+	}
+	if d := EvaluateSurge(pacing, alone, eng, 1); d.AllowedSurgeDelta != 1 {
+		t.Fatalf("a single-member group scaled up mid-roll must keep surging: %+v", d)
+	}
+	finished := mkScaleUpRatioState(6, 2)
+	if d := EvaluateSurge(pacing, finished, dec, 1); d.AllowedSurgeDelta != 1 {
+		t.Fatalf("peers fully rolled no longer pace the decoder: %+v", d)
+	}
+}
+
+// mkScaleUpRatioFixture is the scale-up picture of mkScaleUpRatioState as the
+// production gate reads it: a three-member group whose anchor is 6:2:2, the
+// engine and the decoder desiring 7 and 3 with their new Instances not
+// serving yet, the decoder 1 of 2 rolled and the engine at none.
+func mkScaleUpRatioFixture() *v1beta1.InferenceService {
+	eng, dec, rtr := v1beta1.EngineComponent, v1beta1.DecoderComponent, v1beta1.RouterComponent
+	isvc := mkRatioProgressFixture(10, 6, 0, 2, 1)
+	isvc.Spec.Rollout.Groups[0].Components = append(isvc.Spec.Rollout.Groups[0].Components, rtr)
+	pinActiveRun(isvc) // re-pin: the third member must be part of the pinned plan
+	gs := &isvc.Status.RolloutCoordination.Groups[0]
+	gs.Components = append(gs.Components, rtr)
+	gs.ObservedRatio.Original[rtr] = 2
+	isvc.Status.Components[eng] = v1beta1.ComponentStatusSpec{Lifecycle: &v1beta1.LifecycleStatus{
+		Replicas: 7, ServingReplicas: 6, UpdatedReplicas: 0,
+	}}
+	isvc.Status.Components[dec] = v1beta1.ComponentStatusSpec{Lifecycle: &v1beta1.LifecycleStatus{
+		Replicas: 3, ServingReplicas: 2, UpdatedReplicas: 1,
+	}}
+	isvc.Status.Components[rtr] = v1beta1.ComponentStatusSpec{Lifecycle: &v1beta1.LifecycleStatus{
+		Replicas: 2, ServingReplicas: 2,
+	}}
+	return isvc
+}
+
+// TestEvaluateUpdateGate_ScaleUpKeepsLockstepArmed reads the scale-up picture
+// through the production decision site, where recovery eligibility is derived
+// from the authoritative InferenceReplica shape: the decoder's second surge
+// is held on gate Ratio by the lockstep, the engine proceeds, and a decoder
+// that really lost a pod is still refilled.
+func TestEvaluateUpdateGate_ScaleUpKeepsLockstepArmed(t *testing.T) {
+	eng, dec := v1beta1.EngineComponent, v1beta1.DecoderComponent
+	isvc := mkScaleUpRatioFixture()
+	client := fakeClientForISVC(isvc)
+	allowed, gate, reason := EvaluateUpdateGate(context.Background(), client, isvc, dec, "", forwardTarget(isvc, dec), nil, GroupDefaults{},
+		workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
+	if allowed || gate != v1beta1.RolloutHoldGateRatio || !strings.Contains(reason, "outpace") {
+		t.Fatalf("decoder 1 of 2 against engine 0 of 6 must be held on gate Ratio by the lockstep after the scale-up: allowed=%v gate=%q reason=%q", allowed, gate, reason)
+	}
+	if allowed, _, reason := EvaluateUpdateGate(context.Background(), client, isvc, eng, "", forwardTarget(isvc, eng), nil, GroupDefaults{},
+		workloadtypes.UpdateStrategySurgeThenDrain, 0, 0); !allowed {
+		t.Fatalf("the engine, behind, must proceed: %s", reason)
+	}
+
+	lost := mkScaleUpRatioFixture()
+	lost.Status.Components[dec] = v1beta1.ComponentStatusSpec{Lifecycle: &v1beta1.LifecycleStatus{
+		Replicas: 3, ServingReplicas: 1, UpdatedReplicas: 1,
+	}}
+	decoderCtx := ResolveGateContext(context.Background(), fakeClientForISVC(lost), lost, dec)
+	if allowed, reason := decoderCtx.CheckRatio(0, 0, +1); !allowed || !strings.Contains(reason, "capacity recovery") {
+		t.Fatalf("a decoder that lost a serving pod below its anchor must still be refilled: allowed=%v reason=%q", allowed, reason)
+	}
+}

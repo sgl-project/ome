@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
@@ -54,10 +55,16 @@ func TestComponentAffinityMatchesThePrimaryTerms(t *testing.T) {
 		{name: "Split matches the engine's clusters", source: func() *v1beta1.InferenceService {
 			return componentSource(v1beta1.PlacementModeSplit, v1beta1.ComponentClusterAffinity{Engine: testAffinity("accelerator=gpu-a"), Decoder: testAffinity("accelerator=gpu-a")}, false)
 		}, want: []string{"member-a", "member-b"}},
-		{name: "a Split router entry waits for controller support", source: func() *v1beta1.InferenceService {
+		{name: "a Split router entry needs a router minimum", source: func() *v1beta1.InferenceService {
 			gpuA := testAffinity("accelerator=gpu-a")
 			return componentSource(v1beta1.PlacementModeSplit, v1beta1.ComponentClusterAffinity{Engine: gpuA, Decoder: gpuA, Router: gpuA}, true)
-		}, wantErr: "componentAffinity.router is not implemented for Split modes"},
+		}, wantErr: "set a positive router.minReplicas"},
+		{name: "a Split router entry with a minimum matches the engine's clusters", source: func() *v1beta1.InferenceService {
+			gpuA := testAffinity("accelerator=gpu-a")
+			source := componentSource(v1beta1.PlacementModeSplit, v1beta1.ComponentClusterAffinity{Engine: gpuA, Decoder: gpuA, Router: gpuA}, true)
+			source.Spec.Router.MinReplicas = ptr.To(2)
+			return source
+		}, want: []string{"member-a", "member-b"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			got, _, err := MatchCandidates(tt.source(), componentFleet())

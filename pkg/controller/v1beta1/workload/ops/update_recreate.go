@@ -130,8 +130,10 @@ func recreateUpdate(ctx context.Context, deps workload.Deps, input workload.Reco
 		return false, nil
 	}
 
+	// The rebuild renders the roll target, at the width the target records.
 	newInst := inst
 	newInst.Incarnation = newInc
+	newInst.Runners = plan.RunnersFor(inst, target.Name)
 
 	desired := expectedPodNamesForInstance(input, plan, newInst)
 	// A rebuilt pod in a terminal phase — crashed, exited, evicted or

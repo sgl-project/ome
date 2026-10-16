@@ -28814,6 +28814,11 @@ spec:
                             - HEAD
                             - POST
                           type: string
+                        mode:
+                          enum:
+                            - Ceiling
+                            - Reported
+                          type: string
                         options:
                           additionalProperties:
                             type: string
@@ -28837,7 +28842,7 @@ spec:
                       type: object
                       x-kubernetes-validations:
                         - message: disabled must not be combined with capacity configuration fields
-                          rule: '!(has(self.disabled) && self.disabled) || (!has(self.path) && !has(self.method) && !has(self.format) && !has(self.options) && !has(self.period) && !has(self.timeout) && !has(self.samples) && !has(self.quorum) && !has(self.maxAge))'
+                          rule: '!(has(self.disabled) && self.disabled) || (!has(self.path) && !has(self.method) && !has(self.format) && !has(self.mode) && !has(self.options) && !has(self.period) && !has(self.timeout) && !has(self.samples) && !has(self.quorum) && !has(self.maxAge))'
                         - message: an enabled capacity poll must specify path, method, format, period, timeout, samples, quorum, and maxAge
                           rule: (has(self.disabled) && self.disabled) || (has(self.path) && has(self.method) && has(self.format) && has(self.period) && has(self.timeout) && has(self.samples) && has(self.quorum) && has(self.maxAge))
                         - message: period must be positive

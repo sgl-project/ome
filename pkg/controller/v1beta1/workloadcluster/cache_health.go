@@ -24,12 +24,33 @@ type cacheStream struct {
 	available  bool
 }
 
+// begin starts a LIST, whose result replaces the informer's store, so reads
+// fail until a watch opens.
 func (s *cacheStream) begin() uint64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.generation++
 	s.available = false
 	return s.generation
+}
+
+// resume starts a watch from the informer's last resource version. The store
+// is unchanged, so reads keep their current state until the watch opens or fails.
+func (s *cacheStream) resume() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.generation++
+	return s.generation
+}
+
+// expire fails reads after the given time unless a newer LIST or watch has
+// started by then. A non-positive time fails them at once.
+func (s *cacheStream) expire(generation uint64, after time.Duration) {
+	if after <= 0 {
+		s.set(generation, false)
+		return
+	}
+	time.AfterFunc(after, func() { s.set(generation, false) })
 }
 
 func (s *cacheStream) set(generation uint64, available bool) {
@@ -72,7 +93,7 @@ func (l *trackedListWatch) Watch(options metav1.ListOptions) (watch.Interface, e
 }
 
 func (l *trackedListWatch) WatchWithContext(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
-	generation := l.stream.begin()
+	generation := l.stream.resume()
 	watchCtx, cancel := context.WithCancel(ctx)
 	var timer *time.Timer
 	if l.watchEstablishTimeout > 0 {
@@ -86,6 +107,7 @@ func (l *trackedListWatch) WatchWithContext(ctx context.Context, options metav1.
 		err = watchCtx.Err()
 	}
 	if err != nil {
+		l.stream.set(generation, false)
 		cancel()
 		if w != nil {
 			w.Stop()
@@ -93,7 +115,7 @@ func (l *trackedListWatch) WatchWithContext(ctx context.Context, options metav1.
 		return nil, err
 	}
 	l.stream.set(generation, true)
-	tracked := &trackedWatch{Interface: &cancelOnStopWatcher{Interface: w, cancel: cancel}, results: make(chan watch.Event), done: make(chan struct{}), stream: l.stream, generation: generation}
+	tracked := &trackedWatch{Interface: &cancelOnStopWatcher{Interface: w, cancel: cancel}, results: make(chan watch.Event), done: make(chan struct{}), stream: l.stream, generation: generation, reopenTimeout: l.watchEstablishTimeout}
 	go tracked.run(watchCtx)
 	return tracked, nil
 }
@@ -112,13 +134,25 @@ type trackedWatch struct {
 	once       sync.Once
 	stream     *cacheStream
 	generation uint64
+	// reopenTimeout bounds how long reads keep their state after the server
+	// closes this watch, while the informer opens the next one.
+	reopenTimeout time.Duration
 }
 
 func (w *trackedWatch) ResultChan() <-chan watch.Event { return w.results }
 
-func (w *trackedWatch) Stop() {
+func (w *trackedWatch) Stop() { w.stop(false) }
+
+// stop ends the watch once. The server closes every watch at the timeout
+// client-go asks for and the informer reopens it, so a server close keeps
+// reads for up to reopenTimeout. Any other stop fails them at once.
+func (w *trackedWatch) stop(closedByServer bool) {
 	w.once.Do(func() {
-		w.stream.set(w.generation, false)
+		if closedByServer {
+			w.stream.expire(w.generation, w.reopenTimeout)
+		} else {
+			w.stream.set(w.generation, false)
+		}
 		close(w.done)
 		w.Interface.Stop()
 	})
@@ -135,6 +169,7 @@ func (w *trackedWatch) run(ctx context.Context) {
 			return
 		case event, ok := <-w.Interface.ResultChan():
 			if !ok {
+				w.stop(true)
 				return
 			}
 			if event.Type == watch.Error {

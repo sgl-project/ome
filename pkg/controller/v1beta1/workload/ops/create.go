@@ -283,13 +283,13 @@ func createFilteredBatched(
 	selectionClosed := false
 	heldByStep := canaryStepHeldIndices(input, plan, target)
 
-	for _, inst := range plan.Instances {
-		if !keep(inst.Index) {
+	for _, planned := range plan.Instances {
+		if !keep(planned.Index) {
 			continue
 		}
 		// A row the apiserver refused is left as the rejection left it
 		// until the revision in force admits a fresh attempt.
-		if parked, wait := rejectionParked(input, input.ObservedState.Instance(inst.Index)); parked {
+		if parked, wait := rejectionParked(input, input.ObservedState.Instance(planned.Index)); parked {
 			if wait > 0 && (retryBlockWait == 0 || wait < retryBlockWait) {
 				retryBlockWait = wait
 			}
@@ -298,11 +298,11 @@ func createFilteredBatched(
 		// A row keeping an attempt the gang verdict ended is not this
 		// pass's to build or promote: the roll replaces it at a corrective
 		// revision and the reset mailbox clears it.
-		if workload.EndedByOwnershipVerdict(input.ObservedState.Instance(inst.Index)) {
+		if workload.EndedByOwnershipVerdict(input.ObservedState.Instance(planned.Index)) {
 			continue
 		}
-		existing := byInstance[inst.Index]
-		observed := input.ObservedState.Instance(inst.Index)
+		existing := byInstance[planned.Index]
+		observed := input.ObservedState.Instance(planned.Index)
 		// A parked attempt whose set stands is the roll's: nothing of it is
 		// refilled or promoted here. The pass keeps its cadence while a
 		// pod of the set is still coming up, as for any index it is not
@@ -323,6 +323,12 @@ func createFilteredBatched(
 			allReady = false
 			continue
 		}
+		// The attempt renders one revision and is short of that revision's
+		// pod set: a gang refilled beside live pods keeps the width it runs,
+		// and one rebuilt at the target takes the target's.
+		rev := createRevision(input, planned.Index, existing, target, heldByStep[planned.Index])
+		inst := planned
+		inst.Runners = plan.RunnersFor(planned, rev)
 		desired := expectedPodNamesForInstance(input, plan, inst)
 		missing := missingPodTargets(desired, existing)
 		// An attempt that is fully materialized and runtime-ready is one
@@ -358,7 +364,6 @@ func createFilteredBatched(
 			continue
 		}
 		if len(missing) > 0 {
-			rev := createRevision(input, inst.Index, existing, target, heldByStep[inst.Index])
 			allowed, treatedReady, retryAfter := allowCreateForMissingInstance(input, plan, inst, existing, rev)
 			if retryAfter > 0 && (retryBlockWait == 0 || retryAfter < retryBlockWait) {
 				retryBlockWait = retryAfter

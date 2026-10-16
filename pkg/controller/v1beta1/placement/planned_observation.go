@@ -276,6 +276,9 @@ func (r *Reconciler) observePlannedHomeOnce(ctx context.Context, source *v1beta1
 		if member.Status.IsConditionReady(v1beta1.IngressReady) && allAdmitted && allServing {
 			out.Candidate.ReadyReplicas = placementReadyReplicas(scaled, statuses, servingFloors(source, floors))
 			out.ComponentReady = readyCounts
+			if count, divided := counts[v1beta1.RouterComponent]; divided && routerDivided(source) {
+				out.ComponentReady[v1beta1.RouterComponent] = count.Ready
+			}
 		} else {
 			out.Home.Ready = 0
 		}

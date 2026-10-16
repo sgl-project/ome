@@ -685,13 +685,12 @@ func isAutoscalerManaged(a *v1beta1.ComponentAutoscaler) bool {
 }
 
 // replicasFromComponentExt projects ComponentExtensionSpec.MinReplicas
-// into the IR Spec.Replicas pointer. Defaults to 1 when MinReplicas
-// is nil OR <= 0 — matches the workload-side projection
-// (core/params.go: replicasFromComponentExt) so the rendered Instance
-// count is consistent regardless of which adapter built the IR.
+// into the IR Spec.Replicas pointer. A nil or non-positive MinReplicas
+// projects the API default (constants.DefaultMinReplicas); the admission
+// rule that sizes a maintainRatio member reads an unset count the same way.
 func replicasFromComponentExt(c *v1beta1.ComponentExtensionSpec) *int32 {
 	if c == nil || c.MinReplicas == nil || *c.MinReplicas <= 0 {
-		one := int32(1)
+		one := int32(constants.DefaultMinReplicas)
 		return &one
 	}
 	r := int32(*c.MinReplicas)

@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/placement"
@@ -217,6 +218,7 @@ func resolveMCWiring(mc *controllerconfig.MultiClusterConfig) mcWiring {
 				AllFailedPolicy:  placementrouting.AllFailedPolicy(rt.Probe.AllFailedPolicy),
 			},
 			Capacity: placementrouting.CapacityConfig{
+				Mode:    v1beta1.RoutingCapacityMode(rt.Capacity.Mode),
 				Path:    rt.Capacity.Path,
 				Method:  rt.Capacity.Method,
 				Format:  placementrouting.CapacityFormat(rt.Capacity.Format),

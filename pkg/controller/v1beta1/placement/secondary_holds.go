@@ -3,6 +3,7 @@ package placement
 import (
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"strings"
 
@@ -82,7 +83,7 @@ func splitSecondaryHolds(source *v1beta1.InferenceService, observations map[stri
 		}
 		next := floorMap(floors)
 		observed := observations[candidate.Cluster]
-		applied := observedHomeFloors(observed.Member)
+		applied := memberFloors(observed.Member)
 		for component := range secondaries {
 			if homes[component] == nil {
 				homes[component] = map[string]secondaryHome{}
@@ -103,6 +104,18 @@ func splitSecondaryHolds(source *v1beta1.InferenceService, observations map[stri
 		}
 	}
 	return out, nil
+}
+
+// memberFloors reads the floors written on a member copy, including the router
+// floor that a divided router receives.
+func memberFloors(member *v1beta1.InferenceService) map[v1beta1.ComponentType]int32 {
+	floors := observedHomeFloors(member)
+	if member != nil && member.Spec.Router != nil {
+		if floor := member.Spec.Router.MinReplicas; floor != nil && *floor >= 0 && int64(*floor) <= math.MaxInt32 {
+			floors[v1beta1.RouterComponent] = int32(*floor)
+		}
+	}
+	return floors
 }
 
 // heldFloorsMessage names each held floor for the progress condition.

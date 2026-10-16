@@ -14656,9 +14656,10 @@ func (h *recoveryHarness) requireFreshWindow(before workloadtypes.InstanceOperat
 // The whole replacement gang is deleted after the hand-over, while the
 // source is out of rotation behind it. The loss closes the attempt: the
 // source is Failed with its surge kept and the pinned revision's ladder
-// counts the attempt. Once the ladder admits the next one, the gang is
-// rebuilt under a fresh deadline with the retry counted on the operation,
-// and the hand-over finishes on the pinned revision.
+// counts the attempt. The next pass rebuilds the gang at once under a
+// fresh deadline with the retry counted on the operation, without waiting
+// out the ladder's backoff, and the hand-over finishes on the pinned
+// revision.
 func TestGangSurgeAfterHandover_ReplacementLostIsRebuiltUnderAFreshDeadlineAndCounted(t *testing.T) {
 	h, surgeIdx := gangSurgeHandedOver(t)
 	before := *h.instance(0).Operation
@@ -14669,7 +14670,7 @@ func TestGangSurgeAfterHandover_ReplacementLostIsRebuiltUnderAFreshDeadlineAndCo
 
 	if !h.run(10, h.rearmedRebuild(1)) {
 		h.dumpState("never re-armed")
-		t.Fatalf("the ladder's backoff elapsed and the replacement was not rebuilt")
+		t.Fatalf("the replacement was not rebuilt after the loss")
 	}
 	h.requireFreshWindow(before)
 	if got := len(h.podsOf(surgeIdx)); got != 2 {
@@ -14687,9 +14688,8 @@ func TestGangSurgeAfterHandover_ReplacementLostIsRebuiltUnderAFreshDeadlineAndCo
 
 // One member of the replacement gang is deleted after the hand-over. The
 // loss closes the attempt as a whole loss does and counts it; the surviving
-// member keeps serving; once the ladder admits the next attempt the member
-// is rebuilt under a fresh deadline, and the hand-over finishes on the
-// pinned revision.
+// member keeps serving; the next pass rebuilds the member at once under a
+// fresh deadline, and the hand-over finishes on the pinned revision.
 func TestGangSurgeAfterHandover_LostMemberIsRebuiltUnderAFreshDeadlineAndCounted(t *testing.T) {
 	h, surgeIdx := gangSurgeHandedOver(t)
 	before := *h.instance(0).Operation
@@ -14704,7 +14704,7 @@ func TestGangSurgeAfterHandover_LostMemberIsRebuiltUnderAFreshDeadlineAndCounted
 
 	if !h.run(10, h.rearmedRebuild(1)) {
 		h.dumpState("never re-armed")
-		t.Fatalf("the ladder's backoff elapsed and the lost member was not rebuilt")
+		t.Fatalf("the lost member was not rebuilt after the loss")
 	}
 	h.requireFreshWindow(before)
 	pods := h.podsOf(surgeIdx)

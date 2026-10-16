@@ -158,6 +158,11 @@ type WorkloadObservedState struct {
 	// Instances before any other, and its wave admits them first. Nil
 	// means no Instance is known to sit on a cordoned node.
 	CordonedInstances map[int32]struct{}
+	// WorkerSizeByRevision is the worker pods per Instance each revision the
+	// rows reference was minted at, projected per reconcile by the adapter
+	// from the ControllerRevisions. A revision absent here records no width
+	// and renders the desired one.
+	WorkerSizeByRevision map[string]int32
 }
 
 // Instance returns the observed row at idx, or nil when the observation
@@ -249,4 +254,27 @@ type Runner struct {
 	Name string
 	// Size is the per-Instance pod count for this Runner.
 	Size int32
+}
+
+// WorkerSizeOf returns the worker Runner's pod count, or 0 when the layout
+// has no worker Runner (a single-pod Component).
+func WorkerSizeOf(runners []Runner) int32 {
+	for _, r := range runners {
+		if r.Name == RunnerWorker {
+			return r.Size
+		}
+	}
+	return 0
+}
+
+// RunnersWithWorkerSize returns a copy of runners with the worker Runner at
+// size; a layout without a worker Runner is returned unchanged.
+func RunnersWithWorkerSize(runners []Runner, size int32) []Runner {
+	out := append([]Runner(nil), runners...)
+	for i := range out {
+		if out[i].Name == RunnerWorker {
+			out[i].Size = size
+		}
+	}
+	return out
 }

@@ -218,20 +218,25 @@ type capacityPolicyOption struct {
 }
 
 type capacityPolicyDigestPayload struct {
-	Version            int                    `json:"version"`
-	Path               string                 `json:"path"`
-	Method             string                 `json:"method"`
-	Format             CapacityFormat         `json:"format"`
-	Options            []capacityPolicyOption `json:"options"`
-	PeriodNanoseconds  int64                  `json:"periodNanoseconds"`
-	TimeoutNanoseconds int64                  `json:"timeoutNanoseconds"`
-	Samples            int                    `json:"samples"`
-	Quorum             int                    `json:"quorum"`
-	MaxAgeNanoseconds  int64                  `json:"maxAgeNanoseconds"`
+	Mode               v1beta1.RoutingCapacityMode `json:"mode,omitempty"`
+	Version            int                         `json:"version"`
+	Path               string                      `json:"path"`
+	Method             string                      `json:"method"`
+	Format             CapacityFormat              `json:"format"`
+	Options            []capacityPolicyOption      `json:"options"`
+	PeriodNanoseconds  int64                       `json:"periodNanoseconds"`
+	TimeoutNanoseconds int64                       `json:"timeoutNanoseconds"`
+	Samples            int                         `json:"samples"`
+	Quorum             int                         `json:"quorum"`
+	MaxAgeNanoseconds  int64                       `json:"maxAgeNanoseconds"`
 }
 
 func capacityPolicyDigest(capacity CapacityConfig) (string, error) {
+	if capacity.Mode == v1beta1.RoutingCapacityModeCeiling {
+		capacity.Mode = ""
+	}
 	payload, err := json.Marshal(capacityPolicyDigestPayload{
+		Mode:               capacity.Mode,
 		Version:            1,
 		Path:               capacity.Path,
 		Method:             capacity.Method,
@@ -395,6 +400,7 @@ func probeConfigFromSpec(in *v1beta1.RoutingProbeSpec) ProbeConfig {
 
 func capacityConfigFromSpec(in *v1beta1.RoutingCapacitySpec) CapacityConfig {
 	return CapacityConfig{
+		Mode:    in.Mode,
 		Path:    in.Path,
 		Method:  in.Method,
 		Format:  CapacityFormat(in.Format),

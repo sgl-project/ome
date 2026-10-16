@@ -9204,7 +9204,7 @@ func schema_pkg_apis_ome_v1beta1_MaintainRatio(ref common.ReferenceCallback) com
 				Properties: map[string]spec.Schema{
 					"tolerance": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Tolerance is the maximum percentage drift from the starting ratio. A roll step that would exceed it is paused until the pools rebalance. An explicit 0 means zero drift. When omitted, the operator-configured default (the coordination block of the operator's ConfigMap) applies; if the operator configures no default either, the group rolls with no drift bound.",
+							Description: "Tolerance is the maximum percentage drift from the starting ratio. A roll step that would exceed it is paused until the pools rebalance. An explicit 0 means zero drift. When omitted, the operator-configured default (the coordination block of the operator's ConfigMap) applies; if the operator configures no default either, the group rolls with no drift bound. Admission rejects a drain-first member (RecreatePod, or an in-place strategy on multi-node gangs) whose single drain would empty its side or move the serving ratio more than twice the tolerance from the start, since such a member could never take its first step. A group whose members all roll drain-first is paced by the batch step instead: each member's drains are counted in batches of its maxUnavailable, and no member opens its next batch until every member's previous batch serves. The ratio band is not consulted for such a group, so admission admits it.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -13693,6 +13693,13 @@ func schema_pkg_apis_ome_v1beta1_RoutingCapacitySpec(ref common.ReferenceCallbac
 				Description: "RoutingCapacitySpec configures polling each serving home for its current servable capacity.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
+					"mode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Mode selects a replica ceiling or an authoritative reported weight. Unset preserves Ceiling. In Reported mode a home's accepted report is its capacity in replicas, neither capped by its replica count nor scaled by its capacity factor. A home without one keeps its replica-based weight.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"disabled": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Disabled explicitly disables capacity polling. No other field may be set when true.",
@@ -13758,7 +13765,7 @@ func schema_pkg_apis_ome_v1beta1_RoutingCapacitySpec(ref common.ReferenceCallbac
 					},
 					"quorum": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Quorum is the number of readings required to corroborate a lower capacity.",
+							Description: "Quorum is the number of readings required before a report applies. In Ceiling mode they corroborate a lower capacity; in Reported mode the lower median of the window applies.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -15540,43 +15547,49 @@ func schema_pkg_apis_ome_v1beta1_TrafficMapCapacity(ref common.ReferenceCallback
 				Description: "TrafficMapCapacity records why an entry's weight is what it is.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
+					"reportedWeight": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReportedWeight is the accepted endpoint capacity in Reported mode, in replicas, and replaces the replica-based weight. Nil means no fresh quorum, so the entry weighs its replica count; zero means the reporter cannot serve traffic.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
 					"allocated": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Allocated is the effective allocation ceiling for this home: the control-plane-admitted count, optionally lowered by a capacity report. Ready independently caps it when computing Weight.",
+							Description: "Allocated is the admitted replica count. In Ceiling mode a report can lower it, and Ready independently caps it when computing Weight. It is diagnostic when ReportedWeight is set, including when it is zero.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
 					},
 					"ready": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Ready is the home's live ready-replica count. It caps Allocated when computing Weight; zero health-gates the entry to weight 0.",
+							Description: "Ready is the live ready-replica count. It caps Weight unless ReportedWeight is set.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
 					},
 					"factor": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Factor is the per-replica relative serving capacity of this home's accelerator (baseline \"1\", higher = faster), so heterogeneous hardware is weighted by capacity rather than raw replica count: weight is proportional to min(allocated, ready) * factor. Defaults to \"1\" (homogeneous) when unset — the multiplicative identity, i.e. no scaling. It is operator-supplied config, never derived from raw hardware FLOPS.",
+							Description: "Factor is the per-replica serving capacity of this home's accelerator (baseline \"1\", higher = faster), so heterogeneous hardware is weighted by capacity rather than raw replica count: weight is proportional to min(allocated, ready) * factor. Defaults to \"1\" (homogeneous) when unset — the multiplicative identity, i.e. no scaling. It is unset when ReportedWeight is, because the report already includes the hardware. It is operator-supplied config, never derived from raw hardware FLOPS.",
 							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
 						},
 					},
 					"source": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Source names which input produced Allocated. FallbackReason separately distinguishes an intentionally control-plane-only allocation from a configured endpoint source that could not supply a usable ceiling.",
+							Description: "Source names the capacity authority: Endpoint when a report lowered Allocated in Ceiling mode or ReportedWeight is set in Reported mode, and ControlPlane otherwise.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"reported": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Reported is the home's own servable-capacity figure, recorded whenever the endpoint source answered — including when it was at or above the plan and therefore did not lower Allocated. Keeping it visible in that case is what makes the ceiling auditable: Allocated alone cannot show that a report was received and found non-binding.",
+							Description: "Reported is the home's servable count in Ceiling mode, recorded whenever the endpoint source answered — including when it was at or above the plan and therefore did not lower Allocated. Keeping it visible in that case is what makes the ceiling auditable: Allocated alone cannot show that a report was received and found non-binding.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
 					},
 					"fallbackReason": {
 						SchemaProps: spec.SchemaProps{
-							Description: "FallbackReason explains why a configured endpoint capacity source did not produce an applied ceiling and the control-plane allocation was retained. Empty means capacity polling is disabled or its latest result was usable.",
+							Description: "FallbackReason explains why a configured endpoint capacity source did not produce a current observation. The entry keeps its replica-based weight; in Reported mode it first uses a fresh cached report. Empty means the latest result was usable or polling is disabled.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -15628,7 +15641,7 @@ func schema_pkg_apis_ome_v1beta1_TrafficMapEntry(ref common.ReferenceCallback) c
 					},
 					"capacity": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Capacity is the provenance of Weight: weight is proportional to min(allocated, ready) * factor, then gated by the active probe.",
+							Description: "Capacity records the inputs to Weight under spec.capacityMode.",
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficMapCapacity"),
 						},
 					},
@@ -15989,6 +16002,13 @@ func schema_pkg_apis_ome_v1beta1_TrafficMapSpec(ref common.ReferenceCallback) co
 					"mode": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Mode mirrors the ISVC's spec.placement.mode (Single/All/Split) so a consumer can read the routing intent without reading the ISVC.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"capacityMode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CapacityMode identifies the capacity authority, even for an empty table. Reported disables retained-positive publication: replica status cannot override a current reported-capacity decision. Unset means Ceiling.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

@@ -215,6 +215,9 @@ type revisionHashEntry struct {
 	scopeUID               types.UID
 	hash                   string
 	raw                    []byte
+	// twin is the same templates rendered without their worker count, the
+	// name a revision minted without a width carries; zero without a width.
+	twin revision.WidthFreeTwin
 }
 
 type scaleDownSeriesIdentity struct {
@@ -555,6 +558,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 	// only now that it is resolved.
 	r.wireCoordinationGates(ctx, &input, ir, parent, coordDefaults, rollTarget)
 
+	// Each Instance renders the width its own revision recorded, so the plan
+	// reads the widths of the revisions the rows reference beside the target.
+	rollTargetName := ""
+	if rollTarget != nil {
+		rollTargetName = rollTarget.Name
+	}
+	widths, werr := revision.WorkerSizesByRevision(ctx, r.Client, ir.Namespace,
+		revision.ReferencedRevisionNames(input.ObservedState.InstanceStatuses, rollTargetName))
+	if werr != nil {
+		return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: read revision widths (ir=%s/%s): %w",
+			ir.Namespace, ir.Name, werr)
+	}
+	input.ObservedState.WorkerSizeByRevision = widths
 	plan, perr := workload.BuildPlan(v1beta1convert.ComponentTypeToWorkload(ir.Spec.Component), input.DesiredSpec, input.ObservedState)
 	if perr != nil {
 		return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: build plan (ir=%s/%s): %w",
@@ -1612,6 +1628,11 @@ func (r *Reconciler) applyRollbackPayload(ctx context.Context, ir *v1beta1.Infer
 	desired.PodSpec = payload.PodSpec
 	desired.WorkerPodSpec = payload.WorkerPodSpec
 	desired.PodTemplateObjectMeta = payload.PodMeta
+	// The width is revision-owned too: a stored revision's gang renders at
+	// the worker count it recorded.
+	if payload.WorkerSize != nil {
+		desired.Runners = workloadtypes.RunnersWithWorkerSize(desired.Runners, *payload.WorkerSize)
+	}
 	// The pairing protocol is revision-owned: pods rendered from a stored
 	// revision must carry that revision's protocol, not the current spec's,
 	// or a repaired old-cohort pod would be mislabeled into the new cohort.
@@ -1761,9 +1782,21 @@ func (r *Reconciler) ensureRevisionWithCollisionRetry(ctx context.Context, ir *v
 		return nil, err
 	}
 
-	hash, raw, err := r.revisionHash(ir, input, ir.Status.CollisionCount, scopeUID)
+	hash, raw, twin, err := r.revisionHashAndTwin(ir, input, ir.Status.CollisionCount, scopeUID)
 	if err != nil {
 		return nil, err
+	}
+	// A multi-pod revision that records no width stays the target while its
+	// gangs run the desired width, so a deploy rolls no gang whose template
+	// did not change.
+	adopted, err := revision.AdoptRevisionWithoutWidth(ctx, r.Client, r.APIReader, ir, revKey, hash,
+		twin, workloadtypes.WorkerSizeOf(input.DesiredSpec.Runners), ir.Status.UpdateRevision,
+		r.observedWorkerWidth(ctx, ir, input.ObservedState.InstanceStatuses))
+	if err != nil {
+		return nil, fmt.Errorf("adopt revision minted without a width: %w", err)
+	}
+	if adopted != nil {
+		return adopted, nil
 	}
 	target, collision, err := revision.EnsureControllerRevisionFromHash(
 		ctx, r.Client, r.APIReader,
@@ -1803,10 +1836,17 @@ func (r *Reconciler) ensureRevisionWithCollisionRetry(ctx context.Context, ir *v
 	return target, nil
 }
 
-// revisionHash memoizes the canonical revision payload. Generation covers spec-derived inputs;
-// the excluded annotation list, collision count, and scope UID cover the remaining hash inputs.
-// Cached raw bytes are immutable and only read by revision creation.
+// revisionHash is the memoized canonical revision payload; see revisionHashAndTwin.
 func (r *Reconciler) revisionHash(ir *v1beta1.InferenceReplica, input workloadtypes.ReconcileInput, collisionCount *int32, scopeUID types.UID) (string, []byte, error) {
+	hash, raw, _, err := r.revisionHashAndTwin(ir, input, collisionCount, scopeUID)
+	return hash, raw, err
+}
+
+// revisionHashAndTwin memoizes the canonical revision payload and its width-free twin.
+// Generation covers spec-derived inputs; the excluded annotation list, collision count, and
+// scope UID cover the remaining hash inputs. Cached raw bytes are immutable and only read by
+// revision creation.
+func (r *Reconciler) revisionHashAndTwin(ir *v1beta1.InferenceReplica, input workloadtypes.ReconcileInput, collisionCount *int32, scopeUID types.UID) (string, []byte, revision.WidthFreeTwin, error) {
 	cc := utils.DerefInt32(collisionCount)
 	cacheKey := client.ObjectKeyFromObject(ir)
 	excludedAnnotationKeys := ir.Annotations[constants.RevisionExcludedAnnotationKeysAnnotationKey]
@@ -1822,20 +1862,17 @@ func (r *Reconciler) revisionHash(ir *v1beta1.InferenceReplica, input workloadty
 		entry.excludedAnnotationKeys == excludedAnnotationKeys &&
 		entry.collisionCount == cc &&
 		entry.scopeUID == scopeUID {
-		return entry.hash, entry.raw, nil
+		return entry.hash, entry.raw, entry.twin, nil
 	}
 
-	// Hash a copy without the inherited object annotations while retaining them on rendered pods.
-	meta := stripExcludedAnnotations(input.DesiredSpec.PodTemplateObjectMeta, hashExcludedAnnotationKeys(ir))
-	hash, raw, err := revision.HashWithWorkerTopologyAndPairing(
-		input.DesiredSpec.PodSpec, input.DesiredSpec.WorkerPodSpec,
-		meta,
-		input.DesiredSpec.TopologyKey,
-		input.DesiredSpec.PairingProtocol,
-		collisionCount, scopeUID,
-	)
+	tmpl := r.revisionTemplate(ir, input)
+	hash, raw, err := revision.HashTemplate(tmpl, collisionCount, scopeUID)
 	if err != nil {
-		return "", nil, err
+		return "", nil, revision.WidthFreeTwin{}, err
+	}
+	twin, _, err := revision.WidthFreeTwinOf(tmpl, collisionCount, scopeUID)
+	if err != nil {
+		return "", nil, revision.WidthFreeTwin{}, err
 	}
 	if r.revisionHashCache == nil {
 		r.revisionHashCache = make(map[types.NamespacedName]revisionHashEntry)
@@ -1848,8 +1885,40 @@ func (r *Reconciler) revisionHash(ir *v1beta1.InferenceReplica, input workloadty
 		scopeUID:               scopeUID,
 		hash:                   hash,
 		raw:                    raw,
+		twin:                   twin,
 	}
-	return hash, raw, nil
+	return hash, raw, twin, nil
+}
+
+// revisionTemplate is what the replica's revision hashes: the rendered
+// templates, the template metadata without the inherited object annotations
+// (which rendered pods keep), the topology key, the pairing protocol and the
+// worker count.
+func (r *Reconciler) revisionTemplate(ir *v1beta1.InferenceReplica, input workloadtypes.ReconcileInput) revision.Template {
+	return revision.Template{
+		PodSpec:         input.DesiredSpec.PodSpec,
+		WorkerPodSpec:   input.DesiredSpec.WorkerPodSpec,
+		Meta:            stripExcludedAnnotations(input.DesiredSpec.PodTemplateObjectMeta, hashExcludedAnnotationKeys(ir)),
+		TopologyKey:     input.DesiredSpec.TopologyKey,
+		PairingProtocol: input.DesiredSpec.PairingProtocol,
+		WorkerSize:      workloadtypes.WorkerSizeOf(input.DesiredSpec.Runners),
+	}
+}
+
+// observedWorkerWidth reads the worker count the replica's gangs run on a
+// revision, from the cached pods, and only while a row is Ready on it; a
+// list that fails observes nothing, which keeps the target where it is.
+func (r *Reconciler) observedWorkerWidth(ctx context.Context, ir *v1beta1.InferenceReplica, rows []workloadtypes.InstanceStatus) func(string) (int32, bool) {
+	return func(revisionName string) (int32, bool) {
+		if !revision.HasReadyRowOn(rows, revisionName) {
+			return 0, false
+		}
+		pods, err := query.ListOMENativePodsByName(ctx, r.Client, ir.Namespace, ir.NamePrefix(), v1beta1convert.ComponentTypeToWorkload(ir.Spec.Component), false)
+		if err != nil {
+			return 0, false
+		}
+		return revision.ObservedWorkerWidth(rows, pods, revisionName)
+	}
 }
 
 // hashExcludedAnnotationKeys returns the pod-template annotation keys omitted

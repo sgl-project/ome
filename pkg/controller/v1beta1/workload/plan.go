@@ -27,7 +27,7 @@ func BuildPlan(component types.ComponentType, desired types.WorkloadDesiredSpec,
 		replicas = 1
 	}
 
-	workerSize := workerSizeFromRunners(desired.Runners)
+	workerSize := types.WorkerSizeOf(desired.Runners)
 
 	// Compute the plan's Instance index set. Existing InstanceStatus
 	// entries — including any migration-surge index above the replica
@@ -38,11 +38,14 @@ func BuildPlan(component types.ComponentType, desired types.WorkloadDesiredSpec,
 	indices := instancePlanIndices(observed.InstanceStatuses, replicas, observed.RetryBlocks, observed.CordonedInstances)
 	instances := make([]types.InstancePlan, len(indices))
 	runners := runnersForInstance(desired.MultiPod, workerSize)
+	layout := types.ComponentPlan{Runners: runners, WorkerSizeByRevision: observed.WorkerSizeByRevision}
 	for i, idx := range indices {
+		// An Instance renders the width its own revision recorded, so a gang
+		// settled on an older revision keeps its layout until the roll takes it.
 		instances[i] = types.InstancePlan{
 			Index:       idx,
 			Incarnation: incarnationForIndex(observed.InstanceStatuses, idx),
-			Runners:     append([]types.RunnerPlan(nil), runners...),
+			Runners:     layout.RunnersFor(types.InstancePlan{Runners: runners}, renderedRevision(observed, idx)),
 			// Relocation-directive memory: the adapter projects the
 			// per-instance node-exclusion list from the audit ledger;
 			// Render turns it into a required NotIn hostname term so
@@ -73,18 +76,37 @@ func BuildPlan(component types.ComponentType, desired types.WorkloadDesiredSpec,
 		TopologySpread:       desired.TopologySpread,
 		TopologySpreadKey:    desired.TopologySpreadKey,
 		PairingProtocol:      desired.PairingProtocol,
+		Runners:              runners,
+		WorkerSizeByRevision: observed.WorkerSizeByRevision,
 	}, nil
 }
 
-// workerSizeFromRunners returns the "worker" Runner size or 0 when no
-// worker Runner is present (single-pod Component).
-func workerSizeFromRunners(runners []types.Runner) int32 {
-	for _, r := range runners {
-		if r.Name == types.RunnerWorker {
-			return r.Size
-		}
+// renderedRevision names the revision the pods of the row at idx render
+// at: the revision it runs, else the one it converges to, else the one its
+// attempt pinned; a migration's surge marker renders its source's. Empty
+// when no row records one, which renders the roll target.
+func renderedRevision(observed types.WorkloadObservedState, idx int32) string {
+	row := observed.Instance(idx)
+	if row == nil {
+		return ""
 	}
-	return 0
+	if row.Phase == types.InstancePhaseCreating && row.Operation != nil &&
+		row.Operation.Type == types.InstanceOperationMigrate && row.Operation.SurgeIndex != nil {
+		if source := observed.Instance(*row.Operation.SurgeIndex); source != nil && source.Index != idx {
+			return source.RunningRevision
+		}
+		return ""
+	}
+	if row.RunningRevision != "" {
+		return row.RunningRevision
+	}
+	if row.TargetRevision != "" {
+		return row.TargetRevision
+	}
+	if row.Operation != nil {
+		return row.Operation.TargetRevision
+	}
+	return ""
 }
 
 // runnersForInstance returns the Runner layout for one Instance based

@@ -6,16 +6,17 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // CapacityFormat names the response shape a home's capacity endpoint answers
 // with.
 type CapacityFormat string
 
-// FormatReport is the built-in shape: an absolute servable count plus an
-// observedAt stamp the home sets itself. It is the only format this repository
-// guarantees and the one a producer should select unless it needs a different
-// shape.
+// FormatReport carries a whole replica count (servable) for Ceiling mode or a
+// replica weight that may be fractional (weight) for Reported mode, plus an
+// observedAt stamp the home sets itself.
 const FormatReport CapacityFormat = "Report"
 
 // CapacityFormatPlugin is one response shape the poller can read.
@@ -28,11 +29,9 @@ const FormatReport CapacityFormat = "Report"
 //
 // +kubebuilder:object:generate=false
 type CapacityFormatPlugin struct {
-	// Decode turns a response body into a report in servable units, or returns
-	// the reason the control-plane plan should stand instead. It must never
-	// return a report it is unsure of: a plausible wrong ceiling silently
-	// mis-weights a home, where falling open merely keeps the plan. The supplied
-	// config, including Options, is a private copy for this invocation.
+	// Decode returns capacity in replicas, whole for Ceiling mode and possibly
+	// fractional for Reported mode, or a failure reason.
+	// The supplied config, including Options, is a private copy for this call.
 	Decode func(body []byte, cfg CapacityConfig) (CapacityReport, string)
 
 	// Validate rejects a configuration this format cannot serve, at startup
@@ -40,9 +39,8 @@ type CapacityFormatPlugin struct {
 	Validate func(cfg CapacityConfig) error
 
 	// StampsOwnTime reports whether the producer timestamps its reading. When
-	// false the poller stamps at receipt, which makes MaxAge inert for this
-	// format: a home wedged while still answering holds its ceiling. Surfaced
-	// so an operator can see that trade rather than discover it.
+	// false, receipt time bounds retention after failures but cannot detect a
+	// frozen producer that keeps answering successfully.
 	StampsOwnTime bool
 }
 
@@ -113,13 +111,23 @@ func init() {
 }
 
 // decodeReport reads the built-in shape, which carries its own stamp.
-func decodeReport(body []byte, _ CapacityConfig) (CapacityReport, string) {
+func decodeReport(body []byte, cfg CapacityConfig) (CapacityReport, string) {
 	var wire struct {
 		Servable   *int32    `json:"servable"`
+		Weight     *float64  `json:"weight"`
 		ObservedAt time.Time `json:"observedAt"`
 	}
 	if err := json.Unmarshal(body, &wire); err != nil {
 		return CapacityReport{}, fmt.Sprintf("capacity response is not a valid report: %v", err)
+	}
+	if cfg.Mode == v1beta1.RoutingCapacityModeReported {
+		if wire.Weight == nil {
+			return CapacityReport{}, "capacity report has no weight"
+		}
+		if wire.ObservedAt.IsZero() {
+			return CapacityReport{}, "capacity report has no observedAt stamp"
+		}
+		return CapacityReport{Weight: wire.Weight, ObservedAt: wire.ObservedAt}, ""
 	}
 	if wire.Servable == nil {
 		return CapacityReport{}, "capacity report has no servable count"

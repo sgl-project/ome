@@ -48,6 +48,11 @@ spec:
             type: object
           spec:
             properties:
+              capacityMode:
+                enum:
+                - Ceiling
+                - Reported
+                type: string
               entries:
                 items:
                   properties:
@@ -71,6 +76,12 @@ spec:
                           format: int32
                           minimum: 0
                           type: integer
+                        reportedWeight:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
                         source:
                           default: ControlPlane
                           enum:

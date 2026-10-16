@@ -763,10 +763,12 @@ func planUpdateSelection(ctx context.Context, input types.ReconcileInput, plan t
 				"component", plan.Component, "instance", inst.Index, "target", target.Name)
 			continue
 		}
-		if notServing, wait, why := workloadops.RolledInstanceNotServing(input.ObservedState.Instance(inst.Index), target.Name, target.CreationTimestamp.Time, updateByInstance[inst.Index], inst.TotalPods(), provenWindow, input.Now()); notServing {
+		// The rolled set is read against the width the target records.
+		rolledPods := types.InstancePlan{Runners: plan.RunnersFor(inst, target.Name)}.TotalPods()
+		if notServing, wait, why := workloadops.RolledInstanceNotServing(input.ObservedState.Instance(inst.Index), target.Name, target.CreationTimestamp.Time, updateByInstance[inst.Index], rolledPods, provenWindow, input.Now()); notServing {
 			// A shortfall of dark pods alone is not the roll's open work:
 			// nothing those pods do lifts it, so the Instance holds no slot.
-			dark, graceLeft := workloadops.RolledInstanceDark(input.ObservedState.Instance(inst.Index), target.Name, target.CreationTimestamp.Time, updateByInstance[inst.Index], inst.TotalPods(), provenWindow, input.StuckPodGrace, input.Now())
+			dark, graceLeft := workloadops.RolledInstanceDark(input.ObservedState.Instance(inst.Index), target.Name, target.CreationTimestamp.Time, updateByInstance[inst.Index], rolledPods, provenWindow, input.StuckPodGrace, input.Now())
 			if dark {
 				logf.FromContext(ctx).V(1).Info("rolled Instance dark: not the roll's open work",
 					"component", plan.Component, "instance", inst.Index, "target", target.Name, "reason", why)
@@ -774,7 +776,7 @@ func planUpdateSelection(ctx context.Context, input types.ReconcileInput, plan t
 				selection.RolledNotServing = append(selection.RolledNotServing, inst.Index)
 				if workloadops.RolledInstanceCrashed(input.ObservedState.Instance(inst.Index), target.Name, target.CreationTimestamp.Time, updateByInstance[inst.Index], provenWindow) {
 					selection.CrashedNotServing = append(selection.CrashedNotServing, inst.Index)
-					if !workloadops.RolledSetInRotation(target.Name, updateByInstance[inst.Index], inst.TotalPods()) {
+					if !workloadops.RolledSetInRotation(target.Name, updateByInstance[inst.Index], rolledPods) {
 						selection.CrashedOutOfRotation = append(selection.CrashedOutOfRotation, inst.Index)
 					}
 				}

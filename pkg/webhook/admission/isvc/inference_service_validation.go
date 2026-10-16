@@ -83,6 +83,23 @@ type InferenceServiceValidator struct {
 	// the component fail-closed forever with no actor able to render it.
 	// Production wiring sets this from CRD discovery.
 	AutoscalerPolicyEnabled bool
+
+	// DefaultRatioTolerancePercent is the operator-configured fill for a
+	// rollout group that sets maintainRatio but omits its tolerance (the
+	// coordination block of the operator ConfigMap, read once at startup).
+	// The drain feasibility rule reads it so admission judges such a group
+	// against the same tolerance the rollout will run under. Nil means no
+	// default is configured: such a group rolls with no drift bound and the
+	// rule skips it.
+	DefaultRatioTolerancePercent *int32
+
+	// DefaultMinReplicas is the operator-configured fill for a Component
+	// that sets no minReplicas (the deploy.replicas block of the operator
+	// ConfigMap, read once at startup), the fill the reconciler applies
+	// before it sizes the Component. The drain feasibility rule sizes a
+	// member with no replica fields by it; nil means unconfigured, and such
+	// a member is sized at the API default of one.
+	DefaultMinReplicas *int
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-inferenceservice,mutating=false,failurePolicy=fail,groups=ome.io,resources=inferenceservices,versions=v1beta1,name=inferenceservice.ome-webhook-server.validator
@@ -450,8 +467,14 @@ func (v *InferenceServiceValidator) validateInferenceService(ctx context.Context
 	}
 
 	// Cross-Component rollout coordination: structural + RatioBalanced
-	// tolerance warning.
+	// tolerance warning. Runs on create and on update alike, so a scale or
+	// strategy change that leaves a maintainRatio group unable to start its
+	// drain-first member is refused the same way a fresh spec is.
 	if err := validation.ValidateCoordination(&isvc.Spec); err != nil {
+		return allWarnings, err
+	}
+	if err := validation.ValidateRatioDrainFeasibility(&isvc.Spec, validation.RatioDrainDefaults{
+		TolerancePercent: v.DefaultRatioTolerancePercent, MinReplicas: v.DefaultMinReplicas}); err != nil {
 		return allWarnings, err
 	}
 	if warning := validation.CoordinationRatioToleranceWarning(&isvc.Spec); warning != "" {
