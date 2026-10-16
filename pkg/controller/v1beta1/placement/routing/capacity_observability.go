@@ -16,7 +16,7 @@ import (
 // values from transport or decoder errors.
 var capacityFallbackHomes = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Name: "ome_trafficmap_capacity_fallback_homes",
-	Help: "Number of homes currently using control-plane allocation because configured endpoint capacity did not produce a usable ceiling.",
+	Help: "Number of homes lacking a current endpoint capacity observation.",
 }, []string{"namespace", "trafficmap"})
 
 func init() {
@@ -60,7 +60,7 @@ func capacityFallbackCondition(
 		condition.Status = metav1.ConditionTrue
 		condition.Reason = v1beta1.TrafficMapReasonEndpointCapacityFallback
 		condition.Message = fmt.Sprintf(
-			"%d of %d home(s) are using control-plane capacity; inspect spec.entries[].capacity.fallbackReason",
+			"%d of %d home(s) lack a current capacity observation; inspect spec.capacityMode and spec.entries[].capacity.fallbackReason",
 			fallbacks, len(spec.Entries),
 		)
 	}

@@ -23,11 +23,17 @@ import (
 // here — in the coordination package the IR path depends on — means
 // there is exactly one tested implementation.
 //
-// Gate order: pairing -> ratio -> surge | unavailability -> sequential.
-// First denial wins; later gates short-circuit. The caller reads the
-// allowed bit and may also surface gate + denyReason as a RolloutHold;
-// gate names Pairing, Ratio, Budget (surge or unavailability), or
-// Sequential accordingly.
+// Gate order: pairing -> batch step | ratio -> surge | unavailability ->
+// sequential. First denial wins; later gates short-circuit. The caller
+// reads the allowed bit and may also surface gate + denyReason as a
+// RolloutHold; gate names Pairing, Ratio (the batch step reports under
+// it), Budget (surge or unavailability), or Sequential accordingly.
+//
+// The batch step takes the ratio gate's place for a group whose members all
+// roll drain-first (readBatchStep): each member's drains are counted in
+// batches of its maxUnavailable and no member opens batch b+1 until every
+// member's batch b serves, which keeps the ratio at every step boundary
+// without the serving band.
 //
 // Ratio projection is strategy-aware (see the projDelta computation
 // below): SurgeThenDrain projects +1 (a Ready pod is added before the old
@@ -99,9 +105,23 @@ func EvaluateUpdateGate(
 		return false, v1beta1.RolloutHoldGatePairing, reason
 	}
 
+	// The batch step reads every member's replica; a read it cannot make
+	// fails closed like the other gates, under the gate name its hold uses.
+	batch, err := gateCtx.readBatchStep()
+	if err != nil {
+		return false, v1beta1.RolloutHoldGateRatio, err.Error()
+	}
+
 	inPlace := strategy == workloadtypes.UpdateStrategyInPlaceIfPossible ||
 		strategy == workloadtypes.UpdateStrategyInPlaceOnly
-	if !inPlace {
+	switch {
+	case batch.governs:
+		// Every member rolls drain-first, so the batch step is their
+		// lockstep and the serving band is not consulted for them.
+		if held, reason := batch.hold(); held {
+			return false, v1beta1.RolloutHoldGateRatio, reason
+		}
+	case !inPlace:
 		// Strategy-aware ratio projection. SurgeThenDrain adds a Ready pod
 		// (+1) BEFORE draining the old, so the transient is a capacity GAIN,
 		// not a -1 loss. Projecting -1 for a surge roll mis-models it and
@@ -116,7 +136,7 @@ func EvaluateUpdateGate(
 		if ok, reason := gateCtx.CheckRatio(inFlightSurge, inFlightUnavail, projDelta); !ok {
 			return false, v1beta1.RolloutHoldGateRatio, reason
 		}
-	} else {
+	default:
 		// A same-pod start keeps its serving capacity, so only the
 		// new-revision lockstep is consulted; the band waiver is recorded
 		// once the start is admitted.

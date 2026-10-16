@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -59,13 +60,11 @@ type Reconciler struct {
 	Log       logr.Logger
 	// Config gates generation. When disabled the controller reaps what it owns.
 	Config Config
-	// Prober supplies the optional end-to-end reachability verdict ANDed into
-	// each home's health gate. Nil, or configured off, means the gate stays
-	// readyReplicas > 0 and no entry carries probe provenance.
+	// Prober optionally gates capacity on end-to-end reachability. Nil or
+	// disabled leaves the selected capacity mode as the health source.
 	Prober *Prober
-	// Capacity supplies the optional home-reported ceiling on each home's
-	// planned allocation. Nil, or configured off, means the plan stands and
-	// every entry records CapacitySourceControlPlane.
+	// Capacity supplies endpoint ceilings or weights. A missing report uses
+	// replica counts in Ceiling mode and zero weight in Reported mode.
 	Capacity *CapacityPoller
 }
 
@@ -613,6 +612,10 @@ func buildSpec(
 		Mode:                   placementMode(isvc),
 		ObservedISVCGeneration: isvc.Generation,
 	}
+	useReportedWeight := capacityPolicy.IsEnabled() && capacityPolicy.Capacity.Mode == v1beta1.RoutingCapacityModeReported
+	if useReportedWeight {
+		empty.CapacityMode = v1beta1.RoutingCapacityModeReported
+	}
 	pl := isvc.Status.Placement
 	if pl != nil && pl.Plan != nil {
 		empty.PlacementPlanID = pl.Plan.ID
@@ -643,7 +646,20 @@ func buildSpec(
 			Ready:     c.ReadyReplicas,
 			Factor:    capacityFactor(isvc, c.Cluster),
 			Reachable: probe.Reachable(targets[i]),
-			Reported:  reported,
+		}
+		if useReportedWeight {
+			homes[i].Mode = v1beta1.RoutingCapacityModeReported
+			if reported != nil {
+				quantity, err := resource.ParseQuantity(strconv.FormatFloat(*reported, 'f', -1, 64))
+				if err == nil {
+					homes[i].ReportedWeight = &quantity
+				} else {
+					capacityFallbackReasons[i] = "reported capacity cannot be represented as a weight"
+				}
+			}
+		} else if reported != nil {
+			count := int32(*reported)
+			homes[i].Reported = &count
 		}
 	}
 	computedWeights := weights(homes, probeAllFailedPolicy(probePolicy))
@@ -658,11 +674,12 @@ func buildSpec(
 			// independent: a healthy home can have weight zero when its admitted or
 			// reported capacity is zero, while PreserveTraffic may ignore only a
 			// fleet-wide probe failure.
-			Healthy: c.ReadyReplicas > 0 && (homes[i].Reachable == nil || *homes[i].Reachable),
+			Healthy: homes[i].hasReadyCapacity() && (homes[i].Reachable == nil || *homes[i].Reachable),
 			Capacity: &v1beta1.TrafficMapCapacity{
+				ReportedWeight: homes[i].ReportedWeight,
 				Allocated:      homes[i].EffectiveAllocated(),
 				Ready:          c.ReadyReplicas,
-				Factor:         homes[i].Factor,
+				Factor:         homes[i].appliedFactor(),
 				Source:         allocationSource(homes[i]),
 				Reported:       homes[i].Reported,
 				FallbackReason: capacityFallbackReasons[i],
@@ -685,15 +702,16 @@ func buildSpec(
 		}
 	} else if manualDrainCausedAllZero {
 		reason = v1beta1.TrafficMapReasonTrafficDrain
-	} else if !slices.ContainsFunc(homes, func(h Home) bool { return h.Ready > 0 }) {
+	} else if !slices.ContainsFunc(homes, func(h Home) bool { return h.usesReportedWeight() || h.Ready > 0 }) {
 		reason = v1beta1.TrafficMapReasonAllHomesUnready
-	} else if !slices.ContainsFunc(homes, func(h Home) bool { return h.RoutableReplicas() > 0 }) {
+	} else if !slices.ContainsFunc(homes, func(h Home) bool { return h.capacityValue().Sign() > 0 }) {
 		reason = v1beta1.TrafficMapReasonNoRoutableCapacity
 	} else if allProbesFailed(homes) {
 		reason = v1beta1.TrafficMapReasonAllHomesProbeFailed
 	}
 	return v1beta1.TrafficMapSpec{
 		PlacementPlanID:        empty.PlacementPlanID,
+		CapacityMode:           empty.CapacityMode,
 		Service:                isvc.Name,
 		Mode:                   placementMode(isvc),
 		Entries:                entries,
@@ -757,11 +775,17 @@ func applyTrafficDrains(entries []v1beta1.TrafficMapEntry, overrides []trafficdr
 	return hadPositive && !slices.ContainsFunc(entries, func(e v1beta1.TrafficMapEntry) bool { return e.Weight > 0 })
 }
 
-// allocationSource names which input produced the entry's allocation. Endpoint
-// only when a report actually lowered the plan: a report that matched or
-// exceeded the plan left Allocated untouched, so claiming Endpoint there would
-// misattribute a control-plane number to the home.
+// allocationSource names the capacity authority. Ceiling mode records Endpoint
+// only when the report lowered Allocated. Reported mode records Endpoint when
+// the report is the home's capacity and ControlPlane when the home fell back to
+// its replica count.
 func allocationSource(h Home) v1beta1.CapacitySource {
+	if h.Mode == v1beta1.RoutingCapacityModeReported {
+		if h.usesReportedWeight() {
+			return v1beta1.CapacitySourceEndpoint
+		}
+		return v1beta1.CapacitySourceControlPlane
+	}
 	if h.Reported != nil && h.EffectiveAllocated() != h.Allocated {
 		return v1beta1.CapacitySourceEndpoint
 	}

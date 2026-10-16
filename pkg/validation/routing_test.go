@@ -147,6 +147,10 @@ func TestValidateRoutingCapacity(t *testing.T) {
 		wantContain string
 	}{
 		{name: "empty", mutate: func(c *v1beta1.RoutingCapacitySpec) { *c = v1beta1.RoutingCapacitySpec{} }, wantContain: "path is required"},
+		{name: "invalid mode", mutate: func(c *v1beta1.RoutingCapacitySpec) { c.Mode = "unknown" }, wantContain: "mode"},
+		{name: "disabled mode", mutate: func(c *v1beta1.RoutingCapacitySpec) {
+			*c = v1beta1.RoutingCapacitySpec{Disabled: true, Mode: v1beta1.RoutingCapacityModeReported}
+		}, wantContain: "disabled"},
 		{name: "relative path", mutate: func(c *v1beta1.RoutingCapacitySpec) { c.Path = "capacity" }, wantContain: "must begin"},
 		{name: "missing method", mutate: func(c *v1beta1.RoutingCapacitySpec) { c.Method = "" }, wantContain: "method is required"},
 		{name: "unsafe method", mutate: func(c *v1beta1.RoutingCapacitySpec) { c.Method = "CONNECT" }, wantContain: "must be GET, HEAD, or POST"},

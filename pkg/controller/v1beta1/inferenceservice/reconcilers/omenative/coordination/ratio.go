@@ -217,11 +217,19 @@ func EvaluateSurge(pacing v1beta1.CoordinationPacing, state RatioState, componen
 	// with (or behind) every peer always proceeds, so the pair advances in
 	// lockstep and never deadlocks.
 	if outpacesPeerProgress(state.Original, state.NewPods, component, band) {
-		return recoverySurgeFallback(state, baseline, component, RatioDecision{
+		held := RatioDecision{
 			AllowedSurgeDelta: 0,
 			SkewRejected:      true,
 			Reason:            "surge would outpace peer new-revision rollout past tolerance",
-		})
+		}
+		// Capacity recovery refills pods a Component has lost since the roll
+		// began; it never buys a lead over a still-rolling peer. A Component
+		// serving at least its anchor count has lost nothing, so a larger
+		// desired count alone (a scale-up mid-roll) leaves the hold in place.
+		if !servingBelowAnchor(state, baseline, component) {
+			return held
+		}
+		return recoverySurgeFallback(state, baseline, component, held)
 	}
 	for delta := proposedDelta; delta > 0; delta-- {
 		projected := projectedServing(baseline, component, delta)
@@ -269,6 +277,10 @@ func EvaluateSurge(pacing v1beta1.CoordinationPacing, state RatioState, componen
 
 // recoverySurgeFallback admits one capacity-restoring step only after the
 // ordinary positive-surge path rejects, preserving all existing approvals.
+// It refills a Component that serves fewer pods than its desired shape so a
+// roll cannot wedge below desired; the new-revision lockstep is consulted
+// before it and yields only to a Component that is also below its anchor
+// (servingBelowAnchor).
 func recoverySurgeFallback(state RatioState, serving map[v1beta1.ComponentType]int32, component v1beta1.ComponentType, rejected RatioDecision) RatioDecision {
 	if !state.RecoveryEligible[component] || state.InFlightSurge[component] > 0 ||
 		!recoverySurgeAllowed(state, serving, component) {
@@ -282,6 +294,16 @@ func recoverySurgeFallback(state RatioState, serving map[v1beta1.ComponentType]i
 		AllowedSurgeDelta: 1,
 		Reason:            reason,
 	}
+}
+
+// servingBelowAnchor reports whether component serves fewer pods than it did
+// when the roll began. The lockstep assumes serving holds at the anchor count
+// for every Component (see RatioState.NewPods), so a Component below its
+// anchor has lost capacity the recovery fallback may refill even while the
+// lockstep holds it; a Component at or above its anchor that still desires
+// more (a scale-up mid-roll) has lost nothing and keeps the hold.
+func servingBelowAnchor(state RatioState, serving map[v1beta1.ComponentType]int32, component v1beta1.ComponentType) bool {
+	return serving[component] < state.Original[component]
 }
 
 // recoverySurgeAllowed admits a step when the Component's serving/desired

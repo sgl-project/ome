@@ -37,12 +37,17 @@ import (
 //     own move, so the hold cannot deadlock;
 //   - the drain would push this Component below its own floor, because the
 //     replacement cannot pair yet, and the peer's new cohort is already
-//     coming up without this promote: the peer surges, or a pod of the
-//     target cohort already exists on it. A drain-first peer with no such
-//     pod gains its new cohort only by taking an old pod down, a step its
-//     start-time gate may admit only once this Component serves the target,
-//     so it is not waited on (the window is then the one a single-replica
-//     recreate costs without pairing);
+//     coming up without this promote: the peer surges, or an Instance of a
+//     drain-first or in-place peer is in an update attempt toward the
+//     target cohort (targetCohortComingUp). That attempt needs nothing from
+//     this drain: the start-time gate admits it on the replacement's
+//     serving capacity, so the first pod it brings into rotation releases
+//     the hold. An attempt the escalation has parked or failed is not
+//     coming up, so a first pod that never serves cannot hold this drain
+//     for good; the fresh attempt a retry opens arms the hold again. A
+//     drain-first peer that has not opened its first step is not waited on
+//     (the window is then the one a single-replica recreate costs without
+//     pairing);
 //   - the source is the last pod keeping any pairable engine+decoder pair
 //     alive.
 //
@@ -85,13 +90,8 @@ func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta
 		v1beta1.DecoderComponent: {},
 	}
 	// instances lists, per Component and Instance, the cohorts of its
-	// routable serving pods; cohortPods counts every live routable pod by
-	// cohort, serving or not.
+	// routable serving pods.
 	instances := map[v1beta1.ComponentType]map[string][]string{
-		v1beta1.EngineComponent:  {},
-		v1beta1.DecoderComponent: {},
-	}
-	cohortPods := map[v1beta1.ComponentType]map[string]int32{
 		v1beta1.EngineComponent:  {},
 		v1beta1.DecoderComponent: {},
 	}
@@ -114,7 +114,6 @@ func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta
 				continue
 			}
 			proto := pod.Labels[query.LabelPairingProtocol]
-			cohortPods[comp][proto]++
 			if !podreadiness.IsPodReady(pod) || query.RoutedServiceForPod(prefix, workloadtypes.ComponentType(comp), pod) == "" {
 				continue
 			}
@@ -150,18 +149,26 @@ func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta
 	}
 	peer := pairingPeer(component)
 
-	// Both pairing replicas, read once: the peer's update strategy and both
-	// sides' desired counts and budgets come from them. A missing replica
-	// leaves the one-pair rule; an unreadable one fails closed.
+	// Both pairing replicas, read once: the peer's update strategy, the
+	// attempts its Instances carry and both sides' desired counts and
+	// budgets come from them. A missing replica leaves the one-pair rule;
+	// an unreadable one fails closed.
 	replicas := map[v1beta1.ComponentType]*v1beta1.InferenceReplica{}
 	for _, comp := range pairingComponents {
-		ir, err := irprojector.ComponentIRFor(ctx, reads, isvc, comp)
+		ir, _, err := irprojector.DecodedComponentIRFor(ctx, reads, isvc, comp)
 		if err != nil {
 			return false, v1beta1.RolloutHoldGatePairing, fmt.Sprintf("pairing drain gate: cannot read the %s replica, failing closed: %v", comp, err)
 		}
 		replicas[comp] = ir
 	}
 	peerSurges := surgeStrategy(replicas[peer])
+	peerMoving := false
+	if !peerSurges {
+		var reason string
+		if peerMoving, reason = targetCohortComingUp(ctx, reads, isvc.Namespace, replicas[peer], target); reason != "" {
+			return false, v1beta1.RolloutHoldGatePairing, reason
+		}
+	}
 	replacementPairs := pairsWithPeer(serving[peer], target)
 	if !replacementPairs && anyPairsWithPeer(serving[peer], leaving) && peerSurges {
 		return false, v1beta1.RolloutHoldGatePairing, fmt.Sprintf(
@@ -177,7 +184,7 @@ func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta
 				target, component, cohortList(leaving), peer, left, floor, peer, cohortList(leaving))
 		}
 	}
-	if floor := resolvePairFloor(replicas[component], gateCtx.Group.Pacing); floor.Applies() && !replacementPairs && (peerSurges || cohortPods[peer][target] > 0) {
+	if floor := resolvePairFloor(replicas[component], gateCtx.Group.Pacing); floor.Applies() && !replacementPairs && (peerSurges || peerMoving) {
 		before := pairableInstanceCount(instances[component], serving[peer])
 		left := pairableInstanceCount(afterInstances[component], serving[peer])
 		if left < floor.floor && left < before {
@@ -192,6 +199,46 @@ func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta
 	return false, v1beta1.RolloutHoldGatePairing, fmt.Sprintf(
 		"pairing protocol transition to %q: draining the serving %s pods of cohort %s would leave no pairable serving engine+decoder pair; holding the drain until cohort %q serves on both Components",
 		target, component, cohortList(leaving), target)
+}
+
+// targetCohortComingUp reports whether a drain-first or in-place replica is
+// bringing a pod of the target cohort into rotation on its own: one of its
+// Instances is in an update attempt pinned to a revision of that cohort, or
+// of the empty protocol, which pairs with anything. A Failed Instance and a
+// parked attempt are not coming up: the escalation ended that attempt, and
+// the roll opens a fresh one over it when it retries. Fails closed (a
+// non-empty reason) when the revision such an attempt names cannot be read,
+// like the rest of the gate; a revision that is gone names no cohort.
+func targetCohortComingUp(ctx context.Context, reads client.Reader, namespace string, ir *v1beta1.InferenceReplica, target string) (bool, string) {
+	if ir == nil {
+		return false, ""
+	}
+	protoByRevision := map[string]string{}
+	for i := range ir.Status.InstanceStatuses {
+		row := &ir.Status.InstanceStatuses[i]
+		op := row.Operation
+		if row.Phase == v1beta1.OMENativeInstanceFailed || op == nil || op.Type != v1beta1.InstanceOperationUpdate ||
+			op.Step == workloadtypes.UpdateStepParked || op.TargetRevision == "" {
+			continue
+		}
+		proto, ok := protoByRevision[op.TargetRevision]
+		if !ok {
+			p, found, err := pairingProtocolForRevisionName(ctx, reads, namespace, op.TargetRevision)
+			if err != nil {
+				return false, fmt.Sprintf("pairing drain gate: cannot read revision %s of the %s attempt on instance %d, failing closed: %v",
+					op.TargetRevision, ir.Spec.Component, row.Index, err)
+			}
+			if !found {
+				continue
+			}
+			protoByRevision[op.TargetRevision] = p
+			proto = p
+		}
+		if proto == "" || proto == target {
+			return true, ""
+		}
+	}
+	return false, ""
 }
 
 // instanceKeyForPod names the Instance a pod belongs to, by its index label;

@@ -743,6 +743,8 @@ func TestInferenceReplicaStatusReadInventory(t *testing.T) {
 	// Remote readers: coordination and placement consume the object that
 	// irprojector.DecodedComponentIR(Status) returned.
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/pairing.go", "GateContext.CheckPairing", accessCounts{reads: 1, readWrites: 1}, decodedObjectRows, rows)
+	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/pairing_drain.go", "targetCohortComingUp", accessCounts{reads: 1, readWrites: 1}, decodedObjectRows, rows)
+	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/batch_step.go", "readBatchMember", accessCounts{reads: 1, readWrites: 1}, decodedObjectRows, rows)
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/ratio.go", "GateContext.ratioState", read(3), decodedObjectRows, rows)
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/ratio.go", "GateContext.CheckSurge", read(1), decodedObjectRows, rows)
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/sequential_gate.go", "observeSequentialComponentsForGate", read(1), decodedObjectRows, rows)

@@ -147,7 +147,12 @@ func recordCapacity(
 ) {
 	t.Helper()
 	target := targetForCandidate(isvc, &isvc.Status.Placement.Candidates[candidate], "")
-	require.True(t, capacity.record(target, policy, reported, reason))
+	var value *float64
+	if reported != nil {
+		v := float64(*reported)
+		value = &v
+	}
+	require.True(t, capacity.record(target, policy, value, reason))
 }
 
 func failingProbeState(
@@ -209,6 +214,7 @@ func controllerProbeSpec(config ProbeConfig) *v1beta1.RoutingProbeSpec {
 
 func controllerCapacitySpec(config CapacityConfig) *v1beta1.RoutingCapacitySpec {
 	return &v1beta1.RoutingCapacitySpec{
+		Mode:    config.Mode,
 		Path:    config.Path,
 		Method:  config.Method,
 		Format:  string(config.Format),
@@ -1829,7 +1835,7 @@ func TestReconcile_NotPlacedForgetsStaleCapacityTargets(t *testing.T) {
 	other.Name = "other-service"
 	other.UID = "other-uid"
 	otherTarget := targetForCandidate(other, &other.Status.Placement.Candidates[0], "")
-	otherReported := int32(2)
+	otherReported := float64(2)
 	require.True(t, capacity.record(otherTarget, policy, &otherReported, ""))
 
 	current := &v1beta1.InferenceService{}
@@ -1946,7 +1952,7 @@ func TestBuildSpec_ExpiresCapacityBeforeProjection(t *testing.T) {
 	target := targetForCandidate(isvc, &isvc.Status.Placement.Candidates[0], "")
 	reported := int32(2)
 	observedAt := capacityTestNow.Add(-capacityPolicy.Capacity.MaxAge + time.Second)
-	require.True(t, capacity.recordAt(target, capacityPolicy, &reported, observedAt, ""))
+	require.True(t, capacity.recordAt(target, capacityPolicy, k8sptr.To(float64(reported)), observedAt, ""))
 
 	spec, _, _ := buildSpec(isvc, ResolvedProbePolicy{}, capacityPolicy, nil, capacity)
 	require.Len(t, spec.Entries, 1)

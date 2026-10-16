@@ -529,8 +529,17 @@ func (b *RestartBatch) Advance(ctx context.Context, deps workload.Deps, input wo
 	// observation makes Create return AlreadyExists, which createMissingPods
 	// treats as benign convergence.
 	// Override Incarnation on the ad-hoc plan so Render stamps the new label.
+	// The rebuild renders one revision — the roll target when it follows it,
+	// else the revision the row records — and is short of that revision's
+	// pod set.
 	newInst := inst
 	newInst.Incarnation = newInc
+	followsTarget := rebuildFollowsTarget(input, plan, inst.Index, target, newPods)
+	if followsTarget {
+		newInst.Runners = plan.RunnersFor(inst, target.Name)
+	} else {
+		newInst.Runners = plan.RunnersFor(inst, rebuildRevision(input.ObservedState.Instance(inst.Index)))
+	}
 
 	desired := expectedPodNamesForInstance(input, plan, newInst)
 	// A new-incarnation pod that died (rejected at admission, evicted) is
@@ -578,7 +587,7 @@ func (b *RestartBatch) Advance(ctx context.Context, deps workload.Deps, input wo
 		// from Ready.
 		var tmpl podTemplate
 		found := true
-		if rebuildFollowsTarget(input, plan, inst.Index, target, newPods) {
+		if followsTarget {
 			if err := status.StampRestartRevision(ctx, input, inst.Index, target.Name); err != nil {
 				return false, fmt.Errorf("Restart: record rebuild revision (instance=%d): %w", inst.Index, err)
 			}

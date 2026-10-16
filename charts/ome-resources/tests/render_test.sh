@@ -937,6 +937,7 @@ routing_capacity_config="$("${helm_bin}" template ome-resources "${chart_dir}" \
   --show-only templates/ome-controller/configmap.yaml)"
 for expected in \
   '"path": "/capacity"' \
+  '"mode": ""' \
   '"method": "GET"' \
   '"format": "Report"' \
   '"options": {}' \
@@ -948,6 +949,14 @@ for expected in \
   grep -Fq "${expected}" <<<"${routing_capacity_config}" ||
     fail "routing capacity setting was not rendered: ${expected}"
 done
+
+routing_reported_config="$("${helm_bin}" template ome-resources "${chart_dir}" \
+  --namespace ome \
+  "${routing_capacity_args[@]}" \
+  --set-string ome.multicluster.config.routing.capacity.mode=Reported \
+  --show-only templates/ome-controller/configmap.yaml)"
+grep -Fq '"mode": "Reported"' <<<"${routing_reported_config}" ||
+  fail "routing reported capacity mode was not rendered"
 
 routing_capacity_controller="$("${helm_bin}" template ome-resources "${chart_dir}" \
   --namespace ome \

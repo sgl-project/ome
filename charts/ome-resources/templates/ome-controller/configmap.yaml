@@ -270,6 +270,7 @@ data:
           "allFailedPolicy": {{ .allFailedPolicy | quote }}
         }{{- end }}{{- with .Values.ome.multicluster.config.routing.capacity }},
         "capacity": {
+          "mode": {{ .mode | default "" | quote }},
           "path": {{ .path | quote }},
           "method": {{ .method | quote }},
           "format": {{ .format | default "" | quote }},

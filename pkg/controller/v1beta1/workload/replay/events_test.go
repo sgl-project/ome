@@ -852,3 +852,74 @@ timeline:
 		t.Fatalf("the engine's own cache reads the expectation as satisfied at the landed clock")
 	}
 }
+
+// TestApplyGangWidthIsARevisionChange pins the width edit against the
+// engine's own hashing: a worker count that moves mints a new revision, a
+// count that stays is refused, and a Component without workers has no width
+// to edit — a worker added to it is a template change, staged as
+// spec.revision.
+func TestApplyGangWidthIsARevisionChange(t *testing.T) {
+	const gang = `
+scenario: gang
+arrows: [T-empty-create]
+initial:
+  spec:
+    replicas: 1
+    workers: 1
+    topologyKey: topology.example.com/fabric-domain
+    image: registry.example.com/runtime:v1
+  rows: [{index: 0, phase: Ready, runningRevision: current, readySince: 0s}]
+  pods:
+    - {index: 0, runner: leader, ready: true, serving: true, routed: true}
+    - {index: 0, runner: worker, ready: true, serving: true}
+timeline:
+  - tick: 1
+`
+	ctx := context.Background()
+	d := mustDriver(t, gang)
+	before, err := d.revisionFor(ctx, "current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit := func(to int32) (string, error) {
+		return applyGangWidth(ctx, d, TimelineEvent{ID: "spec.gangWidth", Variant: "grow", Args: EventArgs{To: &to}})
+	}
+	detail, err := edit(2)
+	if err != nil || detail != "workers=2 generation=1" {
+		t.Fatalf("a width grow is a spec write: (%q, %v)", detail, err)
+	}
+	after, err := d.revisionFor(ctx, "current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after == before {
+		t.Fatalf("a width edit is a template change: the revision must move, both widths resolve to %s", before)
+	}
+	if _, err := edit(2); err == nil || !strings.Contains(err.Error(), "did not change") {
+		t.Fatalf("a width that stays is not an edit: %v", err)
+	}
+	if d.spec.Workers != 2 {
+		t.Fatalf("a refused edit must leave the template as it was: workers=%d", d.spec.Workers)
+	}
+
+	const single = `
+scenario: single
+arrows: [T-empty-create]
+initial:
+  spec:
+    replicas: 1
+    image: registry.example.com/runtime:v1
+  rows: [{index: 0, phase: Ready, runningRevision: current, readySince: 0s}]
+  pods: [{index: 0, ready: true, serving: true, routed: true}]
+timeline:
+  - tick: 1
+`
+	s := mustDriver(t, single)
+	one := int32(1)
+	if _, err := applyGangWidth(ctx, s, TimelineEvent{ID: "spec.gangWidth", Variant: "grow", Args: EventArgs{To: &one}}); err == nil || !strings.Contains(err.Error(), "spec.revision") {
+		t.Fatalf("a Component without workers has no width; the first worker is staged as spec.revision: %v", err)
+	}
+	if s.spec.Workers != 0 {
+		t.Fatalf("a refused edit must leave the template as it was: workers=%d", s.spec.Workers)
+	}
+}

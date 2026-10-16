@@ -1110,6 +1110,90 @@ func TestTrafficMapPublisherApplyCurrentClearsEmptyAndAllZeroPlans(t *testing.T)
 	}
 }
 
+func TestTrafficMapPublisherReportedWithdrawalUsesCurrentTable(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		mutate    func(*v1beta1.InferenceService, *v1beta1.TrafficMap)
+		empty     bool
+		wantApply bool
+	}{
+		{name: "replica status lags", wantApply: true, mutate: func(owner *v1beta1.InferenceService, _ *v1beta1.TrafficMap) {
+			owner.Status.ObservedGeneration--
+		}},
+		{name: "routing condition lags", wantApply: true, mutate: func(_ *v1beta1.InferenceService, trafficMap *v1beta1.TrafficMap) {
+			apimeta.FindStatusCondition(trafficMap.Status.Conditions, v1beta1.TrafficMapRoutable).ObservedGeneration--
+		}},
+		{name: "empty table", empty: true, wantApply: true, mutate: func(owner *v1beta1.InferenceService, trafficMap *v1beta1.TrafficMap) {
+			owner.Status.Placement = nil
+			owner.Status.ObservedGeneration--
+			trafficMap.Spec.Entries = nil
+			apimeta.FindStatusCondition(trafficMap.Status.Conditions, v1beta1.TrafficMapRoutable).Reason = v1beta1.TrafficMapReasonNotPlaced
+		}},
+		{name: "no addressable home", empty: true, wantApply: true, mutate: func(_ *v1beta1.InferenceService, trafficMap *v1beta1.TrafficMap) {
+			trafficMap.Spec.Entries = nil
+			apimeta.FindStatusCondition(trafficMap.Status.Conditions, v1beta1.TrafficMapRoutable).Reason = v1beta1.TrafficMapReasonNoAddressableHome
+		}},
+		{name: "ceiling mode still waits", mutate: func(owner *v1beta1.InferenceService, trafficMap *v1beta1.TrafficMap) {
+			trafficMap.Spec.CapacityMode = v1beta1.RoutingCapacityModeCeiling
+			owner.Status.ObservedGeneration--
+		}},
+		{name: "stale source generation still blocks", mutate: func(owner *v1beta1.InferenceService, _ *v1beta1.TrafficMap) {
+			owner.Generation++
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			owner, trafficMap := allHomesUnreadyPublisherObjects()
+			trafficMap.Spec.CapacityMode = v1beta1.RoutingCapacityModeReported
+			apimeta.FindStatusCondition(trafficMap.Status.Conditions, v1beta1.TrafficMapRoutable).Reason = v1beta1.TrafficMapReasonNoRoutableCapacity
+			trafficMap.Status.Publisher = &v1beta1.TrafficMapPublisherStatus{
+				PublisherName: "example-publisher", ClaimedTargets: []string{"target-a"},
+				LastPositive: &v1beta1.TrafficMapPublisherLastPositive{
+					TrafficMapGeneration: trafficMap.Generation - 1, ObservedISVCGeneration: owner.Generation,
+					PlanCompatibilityDigest: testPublisherDigest("a"),
+					Targets:                 []v1beta1.TrafficMapPublisherTarget{{Target: "target-a", Weight: 100}},
+				},
+			}
+			tc.mutate(owner, trafficMap)
+			claims := []string{"target-a"}
+			targets := []v1beta1.TrafficMapPublisherTarget{{Target: "target-a", Weight: 0}}
+			if tc.empty {
+				claims, targets = nil, nil
+			}
+			publisher := &fallbackTrafficMapPublisher{
+				recordingTrafficMapPublisher: &recordingTrafficMapPublisher{
+					name: "example-publisher", stateful: true, claims: claims,
+				},
+				capture: func(TrafficMapPublishPlan) (TrafficMapPublishPlanCapture, error) {
+					return TrafficMapPublishPlanCapture{
+						Targets:                 targets,
+						PlanCompatibilityDigest: testPublisherDigest("a"),
+						NoPositivePlanPolicy:    TrafficMapNoPositivePlanPolicyRetainLastPositive,
+					}, nil
+				},
+				replay: func(v1beta1.TrafficMapPublisherLastPositive) (TrafficMapPublishPlan, error) {
+					t.Fatal("reported zero cannot replay an earlier positive weight")
+					return nil, nil
+				},
+			}
+			reconciler, kubeClient := newTrafficMapPublisherReconciler(t, publisher, owner, trafficMap)
+			_, err := reconcileTrafficMapPublisher(t, reconciler, trafficMap)
+			require.NoError(t, err)
+			current := getPublisherTrafficMap(t, kubeClient, trafficMap)
+			if tc.wantApply {
+				wantEvents := []string{"apply"}
+				if tc.empty {
+					wantEvents = []string{"drain:target-a", "apply"}
+				}
+				assert.Equal(t, wantEvents, publisher.events)
+				assert.Nil(t, current.Status.Publisher.LastPositive)
+			} else {
+				assert.Empty(t, publisher.events)
+				assert.NotNil(t, current.Status.Publisher.LastPositive)
+			}
+		})
+	}
+}
+
 func TestTrafficMapPublisherReplaysNoAddressableHome(t *testing.T) {
 	owner, trafficMap := eligiblePlacementLossPublisherObjects()
 	owner.Status.Placement = &v1beta1.PlacementStatus{
@@ -3301,6 +3385,12 @@ func TestTrafficMapFallbackEligibilityAllHomesUnreadyExtension(t *testing.T) {
 		eligible bool
 		known    bool
 	}{
+		{
+			name: "reported mode cannot replay replica capacity", allow: true, known: true,
+			mutate: func(_ *v1beta1.InferenceService, trafficMap *v1beta1.TrafficMap) {
+				trafficMap.Spec.CapacityMode = v1beta1.RoutingCapacityModeReported
+			},
+		},
 		{name: "definitive all-homes-unready", allow: true, eligible: true, known: true},
 		{
 			name: "publisher does not opt in", known: true,

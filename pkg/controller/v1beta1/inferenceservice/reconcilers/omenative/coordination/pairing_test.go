@@ -834,3 +834,196 @@ func TestCheckPairing_InPlaceStartKeepsItsOwnFloor(t *testing.T) {
 		t.Fatalf("with a proto-b decoder serving the relabelled engines pair and the step is admitted: %s", reason)
 	}
 }
+
+// settledRow is a serving Instance row with no attempt, running hash.
+func settledRow(isvcName string, component v1beta1.ComponentType, index int, hash string) v1beta1.OMENativeInstanceStatus {
+	return v1beta1.OMENativeInstanceStatus{
+		Index:           int32(index),
+		Phase:           v1beta1.OMENativeInstanceReady,
+		RunningRevision: isvcName + "-" + string(component) + "-" + hash,
+		ServingPodCount: 1,
+	}
+}
+
+// surgingRow is the row of a single-pod Instance mid-surge: it runs
+// runningHash, its surge is pinned to targetHash at the given step, and
+// serving counts its pods in rotation (two once the replacement serves
+// beside the source).
+func surgingRow(isvcName string, component v1beta1.ComponentType, index int, runningHash, targetHash, step string, serving int32) v1beta1.OMENativeInstanceStatus {
+	target := isvcName + "-" + string(component) + "-" + targetHash
+	return v1beta1.OMENativeInstanceStatus{
+		Index:           int32(index),
+		Phase:           v1beta1.OMENativeInstanceUpdating,
+		RunningRevision: isvcName + "-" + string(component) + "-" + runningHash,
+		TargetRevision:  target,
+		ServingPodCount: serving,
+		Operation:       &v1beta1.InstanceOperation{Type: v1beta1.InstanceOperationUpdate, Step: step, TargetRevision: target},
+	}
+}
+
+// Two surging engines and one drain-first decoder. The first engine's
+// proto-b replacement serves beside its proto-a source, not yet promoted.
+// The decoder's only hop needs proto-b capacity on the engine: it is
+// admitted on the serving replacement, through the last-hop escape, while a
+// replacement not yet serving admits nothing. Past the hand-over the
+// replacement is the row's serving pod and counts the same way. A pinned
+// revision that is gone fails the gate closed, like any serving revision.
+func TestCheckPairing_ServingSurgeReplacementCountsForItsCohort(t *testing.T) {
+	isvc := pairingISVC("proto-b")
+	crs := []client.Object{
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "ea", "proto-a"),
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "eb", "proto-b"),
+		pairingCR("prod", "llama", v1beta1.DecoderComponent, "da", "proto-a"),
+	}
+	decoders := pairingIR("prod", "llama", v1beta1.DecoderComponent, servingInstances("llama", v1beta1.DecoderComponent, "da"))
+	engines := func(targetHash, step string, serving int32) *v1beta1.InferenceReplica {
+		return pairingIR("prod", "llama", v1beta1.EngineComponent, []v1beta1.OMENativeInstanceStatus{
+			surgingRow("llama", v1beta1.EngineComponent, 0, "ea", targetHash, step, serving),
+			settledRow("llama", v1beta1.EngineComponent, 1, "ea"),
+		})
+	}
+	decoderHop := func(engineRows *v1beta1.InferenceReplica) (bool, string) {
+		gate := pairingGate(t, isvc, v1beta1.DecoderComponent, append(crs, engineRows, decoders)...)
+		return gate.CheckPairing("llama-decoder-da", workloadtypes.UpdateStrategyRecreatePod, 0, 0)
+	}
+
+	ok, reason := decoderHop(engines("eb", workloadtypes.UpdateStepSurge, 2))
+	if !ok || !strings.Contains(reason, "last serving instance") {
+		t.Fatalf("a serving proto-b replacement must admit the decoder's last hop through the last-hop escape: ok=%v %s", ok, reason)
+	}
+	ok, reason = decoderHop(engines("eb", workloadtypes.UpdateStepSurge, 1))
+	if ok {
+		t.Fatalf("a replacement not yet serving stages no proto-b capacity; the decoder's hop must wait")
+	}
+	if !strings.Contains(reason, `"proto-a"`) {
+		t.Errorf("denial must name the dying cohort: %s", reason)
+	}
+	ok, reason = decoderHop(engines("eb", workloadtypes.UpdateStepSurgeDrain, 1))
+	if !ok || !strings.Contains(reason, "last serving instance") {
+		t.Fatalf("past the hand-over the replacement is the serving pod and counts for proto-b: ok=%v %s", ok, reason)
+	}
+	ok, reason = decoderHop(engines("gone", workloadtypes.UpdateStepSurge, 2))
+	if ok || !strings.Contains(reason, "not found, failing closed") {
+		t.Fatalf("a pinned revision that is gone must fail closed: ok=%v %s", ok, reason)
+	}
+}
+
+// The source of a surge in flight stays in rotation and keeps pairing. Two
+// surging engines, none allowed out of pairing, the first mid-surge from
+// proto-a to proto-b with both pods serving, the second still on proto-a;
+// two decoders, one on each cohort. Recreating the proto-a decoder would
+// leave both proto-a engine pods without a partner, one of two engines
+// pairable under a floor of two, so the step is held.
+func TestCheckPairing_SurgeSourceKeepsItsCohortBesideItsReplacement(t *testing.T) {
+	isvc := pairingISVC("proto-b")
+	objs := []client.Object{
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "ea", "proto-a"),
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "eb", "proto-b"),
+		pairingCR("prod", "llama", v1beta1.DecoderComponent, "da", "proto-a"),
+		pairingCR("prod", "llama", v1beta1.DecoderComponent, "db", "proto-b"),
+		sizedPairingIR("prod", "llama", v1beta1.EngineComponent, []v1beta1.OMENativeInstanceStatus{
+			surgingRow("llama", v1beta1.EngineComponent, 0, "ea", "eb", workloadtypes.UpdateStepSurge, 2),
+			settledRow("llama", v1beta1.EngineComponent, 1, "ea"),
+		}, v1beta1.UpdateStrategySurgeThenDrain, 2, 0),
+		sizedPairingIR("prod", "llama", v1beta1.DecoderComponent, servingInstances("llama", v1beta1.DecoderComponent, "db", "da"),
+			v1beta1.UpdateStrategyRecreatePod, 2, 1),
+	}
+	gate := pairingGate(t, isvc, v1beta1.DecoderComponent, objs...)
+	ok, reason := gate.CheckPairing("llama-decoder-da", workloadtypes.UpdateStrategyRecreatePod, 0, 0)
+	if ok {
+		t.Fatalf("recreating the last proto-a decoder must wait while every proto-a engine pod would lose its partner")
+	}
+	if !strings.Contains(reason, "below its floor") || !strings.Contains(reason, "engine with 1 pairable") {
+		t.Errorf("the hold must name the engine's shortfall against its floor: %s", reason)
+	}
+}
+
+// A gang surge's replacement is its own row, running nothing yet. While it
+// serves it counts for the cohort its surge is pinned to, so the lone
+// drain-first decoder's hop is admitted through the last-hop escape; a
+// replacement gang not yet serving leaves the 1x1 mutual wall, which admits
+// the hop as well.
+func TestCheckPairing_GangSurgeReplacementCountsForItsPinnedCohort(t *testing.T) {
+	isvc := pairingISVC("proto-b")
+	crs := []client.Object{
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "ea", "proto-a"),
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "eb", "proto-b"),
+		pairingCR("prod", "llama", v1beta1.DecoderComponent, "da", "proto-a"),
+	}
+	engines := func(replacementServing int32) *v1beta1.InferenceReplica {
+		surgeIdx := int32(1)
+		source := surgingRow("llama", v1beta1.EngineComponent, 0, "ea", "eb", workloadtypes.UpdateStepSurge, 8)
+		source.Operation.SurgeIndex = &surgeIdx
+		replacement := v1beta1.OMENativeInstanceStatus{
+			Index: 1, Phase: v1beta1.OMENativeInstanceCreating, TargetRevision: "llama-engine-eb", ServingPodCount: replacementServing,
+			Operation: &v1beta1.InstanceOperation{Type: v1beta1.InstanceOperationUpdate, Step: workloadtypes.UpdateStepGangSurgeTarget, TargetRevision: "llama-engine-eb"},
+		}
+		return pairingIR("prod", "llama", v1beta1.EngineComponent, []v1beta1.OMENativeInstanceStatus{source, replacement})
+	}
+	decoders := pairingIR("prod", "llama", v1beta1.DecoderComponent, servingInstances("llama", v1beta1.DecoderComponent, "da"))
+
+	gate := pairingGate(t, isvc, v1beta1.DecoderComponent, append(crs, engines(8), decoders)...)
+	ok, reason := gate.CheckPairing("llama-decoder-da", workloadtypes.UpdateStrategyRecreatePod, 0, 0)
+	if !ok || !strings.Contains(reason, "last serving instance") {
+		t.Fatalf("a serving replacement gang stages proto-b capacity; the decoder's hop goes through the last-hop escape: ok=%v %s", ok, reason)
+	}
+	gate = pairingGate(t, isvc, v1beta1.DecoderComponent, append(crs, engines(0), decoders)...)
+	ok, reason = gate.CheckPairing("llama-decoder-da", workloadtypes.UpdateStrategyRecreatePod, 0, 0)
+	if !ok || !strings.Contains(reason, "deadlocking") {
+		t.Fatalf("with the replacement gang not serving the 1x1 wall admits the hop: ok=%v %s", ok, reason)
+	}
+}
+
+// One surging engine beside one drain-first decoder: the decoder's hop is
+// admitted whether or not the engine's replacement serves yet, through the
+// last-hop escape once it does and through the mutual wall before, so the
+// engine's drain, which waits on the decoder's new pod, never waits on a
+// step that waits on it.
+func TestCheckPairing_OneByOneSurgeBesideDrainFirst_PeerStepAdmittedEitherWay(t *testing.T) {
+	isvc := pairingISVC("proto-b")
+	crs := []client.Object{
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "ea", "proto-a"),
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "eb", "proto-b"),
+		pairingCR("prod", "llama", v1beta1.DecoderComponent, "da", "proto-a"),
+	}
+	decoders := pairingIR("prod", "llama", v1beta1.DecoderComponent, servingInstances("llama", v1beta1.DecoderComponent, "da"))
+	for _, tc := range []struct {
+		serving int32
+		escape  string
+	}{{2, "last serving instance"}, {1, "deadlocking"}} {
+		engines := pairingIR("prod", "llama", v1beta1.EngineComponent, []v1beta1.OMENativeInstanceStatus{
+			surgingRow("llama", v1beta1.EngineComponent, 0, "ea", "eb", workloadtypes.UpdateStepSurge, tc.serving),
+		})
+		gate := pairingGate(t, isvc, v1beta1.DecoderComponent, append(crs, engines, decoders)...)
+		ok, reason := gate.CheckPairing("llama-decoder-da", workloadtypes.UpdateStrategyRecreatePod, 0, 0)
+		if !ok || !strings.Contains(reason, tc.escape) {
+			t.Fatalf("serving=%d: the decoder's hop must be admitted (%s): ok=%v %s", tc.serving, tc.escape, ok, reason)
+		}
+	}
+}
+
+// Six engines relabelled in place one at a time and two surging decoders
+// none of which may be out of pairing. One engine already carries proto-b;
+// the first decoder's proto-b replacement serves beside its source, not yet
+// promoted. The relabelled engines pair with that replacement, so the
+// second relabel is admitted where it waits while no proto-b decoder pod
+// serves.
+func TestCheckPairing_InPlaceStartSeesTheSurgingPeersServingReplacement(t *testing.T) {
+	isvc := pairingISVC("proto-b")
+	objs := []client.Object{
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "ea", "proto-a"),
+		pairingCR("prod", "llama", v1beta1.EngineComponent, "eb", "proto-b"),
+		pairingCR("prod", "llama", v1beta1.DecoderComponent, "da", "proto-a"),
+		pairingCR("prod", "llama", v1beta1.DecoderComponent, "db", "proto-b"),
+		sizedPairingIR("prod", "llama", v1beta1.EngineComponent, servingInstances("llama", v1beta1.EngineComponent, "eb", "ea", "ea", "ea", "ea", "ea"),
+			v1beta1.UpdateStrategyInPlaceIfPossible, 6, 1),
+		sizedPairingIR("prod", "llama", v1beta1.DecoderComponent, []v1beta1.OMENativeInstanceStatus{
+			surgingRow("llama", v1beta1.DecoderComponent, 0, "da", "db", workloadtypes.UpdateStepSurge, 2),
+			settledRow("llama", v1beta1.DecoderComponent, 1, "da"),
+		}, v1beta1.UpdateStrategySurgeThenDrain, 2, 0),
+	}
+	gate := pairingGate(t, isvc, v1beta1.EngineComponent, objs...)
+	if ok, reason := gate.CheckPairing("llama-engine-ea", workloadtypes.UpdateStrategyInPlaceIfPossible, 0, 0); !ok {
+		t.Fatalf("with a proto-b decoder replacement serving the relabelled engines pair and the step is admitted: %s", reason)
+	}
+}

@@ -40,8 +40,8 @@ func ValidatePlacement(spec *v1beta1.InferenceServiceSpec) error {
 	if err := validateSplit(p, split); err != nil {
 		return err
 	}
-	if p.UsesComponentAffinity() && split && p.ComponentAffinity.Router != nil {
-		return fmt.Errorf("spec.placement.componentAffinity.router is not implemented for Split modes by this controller yet; omit it to run the full router policy on every home")
+	if p.UsesComponentAffinity() && split && p.ComponentAffinity.Router != nil && spec.Router != nil && (spec.Router.MinReplicas == nil || *spec.Router.MinReplicas <= 0) {
+		return fmt.Errorf("spec.placement.componentAffinity.router divides router.minReplicas across homes in Split modes; set a positive router.minReplicas")
 	}
 	return nil
 }

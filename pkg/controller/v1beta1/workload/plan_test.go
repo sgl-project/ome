@@ -189,6 +189,7 @@ func TestBuildPlan_SinglePod_DefaultsFromDefaulter(t *testing.T) {
 		ReadyPolicy:          types.InstanceReadyPolicyNone,
 		InstanceReadyTimeout: 30 * time.Minute,
 		MigrationMode:        types.MigrationModeAuto,
+		Runners:              []types.RunnerPlan{{Name: "default", Size: 1}},
 	}
 	if diff := cmp.Diff(want, plan); diff != "" {
 		t.Fatalf("plan mismatch (-want +got):\n%s", diff)
@@ -1459,5 +1460,71 @@ func TestInstancePlanIndices_ShrinkingBudgetRetiresTheOpenRecreateFirst(t *testi
 	}
 	if diff := cmp.Diff([]int32{0, 1, 2}, instancePlanIndices(instances, 3, nil, nil)); diff != "" {
 		t.Fatalf("plan at the full count (-want +got):\n%s", diff)
+	}
+}
+
+// TestBuildPlan_InstanceKeepsTheWidthOfItsOwnRevision pins the plan's
+// layout rule: an Instance renders the width the revision it runs
+// recorded, so a gang settled on an older revision keeps its layout until
+// the roll takes it, while an index with no row, and a row converging to
+// the target, render the desired width.
+func TestBuildPlan_InstanceKeepsTheWidthOfItsOwnRevision(t *testing.T) {
+	desired := multiPodDesired(3, 2, types.Lifecycle{})
+	observed := types.WorkloadObservedState{
+		InstanceStatuses: []types.InstanceStatus{
+			{Index: 0, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: "svc-engine-old00000"},
+			{Index: 1, Incarnation: 1, Phase: types.InstancePhaseUpdating, RunningRevision: "svc-engine-old00000", TargetRevision: "svc-engine-new00000",
+				Operation: &types.InstanceOperation{Type: types.InstanceOperationUpdate, Step: types.UpdateStepDrain, TargetRevision: "svc-engine-new00000"}},
+		},
+		WorkerSizeByRevision: map[string]int32{"svc-engine-old00000": 4},
+	}
+	plan, err := BuildPlan(types.ComponentEngine, desired, observed)
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	widths := map[int32]int32{}
+	for _, inst := range plan.Instances {
+		widths[inst.Index] = inst.TotalPods()
+	}
+	if widths[0] != 5 {
+		t.Errorf("a Ready gang on the old revision keeps that revision's width: got %d pods want 5", widths[0])
+	}
+	if widths[1] != 5 {
+		t.Errorf("a recreating gang still renders its running revision's width on its entry: got %d pods want 5", widths[1])
+	}
+	if widths[2] != 3 {
+		t.Errorf("an index with no row renders the desired width: got %d pods want 3", widths[2])
+	}
+	if got := (types.InstancePlan{Runners: plan.Runners}).TotalPods(); got != 3 {
+		t.Errorf("the plan's target layout is the desired width: got %d pods want 3", got)
+	}
+	if got := (types.InstancePlan{Runners: plan.RunnersFor(plan.Instances[1], "svc-engine-new00000")}).TotalPods(); got != 3 {
+		t.Errorf("the recreate's rebuild renders the target's width: got %d pods want 3", got)
+	}
+}
+
+// TestBuildPlan_MigrationSurgeRendersTheSourceWidth pins that a migration's
+// surge marker, which records no revision of its own, renders its source's:
+// the surge is the source gang moved, at the width the source runs.
+func TestBuildPlan_MigrationSurgeRendersTheSourceWidth(t *testing.T) {
+	desired := multiPodDesired(1, 2, types.Lifecycle{})
+	surgeIdx, sourceIdx := int32(1), int32(0)
+	observed := types.WorkloadObservedState{
+		InstanceStatuses: []types.InstanceStatus{
+			{Index: 0, Incarnation: 1, Phase: types.InstancePhaseMigrating, RunningRevision: "svc-engine-old00000",
+				Operation: &types.InstanceOperation{Type: types.InstanceOperationMigrate, Step: "CreateSurge", RequestUUID: "u", SurgeIndex: &surgeIdx}},
+			{Index: 1, Incarnation: 1, Phase: types.InstancePhaseCreating,
+				Operation: &types.InstanceOperation{Type: types.InstanceOperationMigrate, Step: "CreateSurge", RequestUUID: "u", SurgeIndex: &sourceIdx}},
+		},
+		WorkerSizeByRevision: map[string]int32{"svc-engine-old00000": 4},
+	}
+	plan, err := BuildPlan(types.ComponentEngine, desired, observed)
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	for _, inst := range plan.Instances {
+		if got := inst.TotalPods(); got != 5 {
+			t.Errorf("Instance %d renders %d pods, want the source revision's 5", inst.Index, got)
+		}
 	}
 }

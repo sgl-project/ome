@@ -106,13 +106,18 @@ var pairingComponents = []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1
 // move on while its sibling on the last pairable cohort is held. An empty
 // fromRevision, or one whose ControllerRevision is gone, names no cohort, so
 // every old cohort is simulated losing the instance, the pessimistic
-// reading. Surge and in-place strategies credit the target cohort with the
-// replacement — a SurgeThenDrain op only drains after its replacement is
-// Ready, and an in-place op returns the same pod — while drain-first
-// strategies do not. In-place is NOT bypassed the way CheckRatio bypasses it:
-// its net capacity change is ~0, but the instance still crosses cohorts,
-// which is exactly what this gate paces. In-flight starts from the same
-// wake-up are charged pessimistically against each cohort under simulation.
+// reading. A surge in flight serves two cohorts at once: its source keeps
+// the running cohort and its replacement, once it serves, counts for the
+// cohort of the revision the surge is pinned to (servingRevisions), so a
+// peer's step sees that capacity before the promote and never waits on a
+// drain that waits on it. Surge and in-place strategies credit the target
+// cohort with the replacement — a SurgeThenDrain op only drains after its
+// replacement is Ready, and an in-place op returns the same pod — while
+// drain-first strategies do not. In-place is NOT bypassed the way CheckRatio
+// bypasses it: its net capacity change is ~0, but the instance still crosses
+// cohorts, which is exactly what this gate paces. In-flight starts from the
+// same wake-up are charged pessimistically against each cohort under
+// simulation.
 //
 // Three liveness escapes keep the gate deadlock-free:
 //   - When no pairable pair exists BEFORE the step, there is nothing left to
@@ -163,6 +168,27 @@ func (ctx GateContext) CheckPairing(fromRevision string, strategy workloadtypes.
 	serving := map[v1beta1.ComponentType]map[string]int32{}
 	replicas := map[v1beta1.ComponentType]*v1beta1.InferenceReplica{}
 	protoByRevision := map[string]string{}
+	// servingProtocol resolves the cohort of a revision a serving instance
+	// runs, once per revision. A revision that cannot be read, or is gone,
+	// fails the gate closed: retention protects every live revision, so a
+	// missing one behind a serving instance is an anomaly the gate must not
+	// guess about.
+	servingProtocol := func(revision string, comp v1beta1.ComponentType, index int32) (proto, reason string) {
+		if p, ok := protoByRevision[revision]; ok {
+			return p, ""
+		}
+		p, found, gerr := pairingProtocolForRevisionName(ctx.Ctx, ctx.Reads, ctx.ISVC.Namespace, revision)
+		if gerr != nil {
+			return "", fmt.Sprintf("pairing gate: cannot read revision %s for serving %s instance %d, failing closed: %v",
+				revision, comp, index, gerr)
+		}
+		if !found {
+			return "", fmt.Sprintf("pairing gate: revision %s for serving %s instance %d not found, failing closed",
+				revision, comp, index)
+		}
+		protoByRevision[revision] = p
+		return p, ""
+	}
 	transition := false
 	for _, comp := range pairingComponents {
 		serving[comp] = map[string]int32{}
@@ -179,28 +205,18 @@ func (ctx GateContext) CheckPairing(fromRevision string, strategy workloadtypes.
 			if inst.ServingPodCount <= 0 {
 				continue
 			}
-			proto := ""
-			if inst.RunningRevision != "" {
-				p, ok := protoByRevision[inst.RunningRevision]
-				if !ok {
-					var found bool
-					var gerr error
-					p, found, gerr = pairingProtocolForRevisionName(ctx.Ctx, ctx.Reads, ctx.ISVC.Namespace, inst.RunningRevision)
-					if gerr != nil {
-						return false, fmt.Sprintf("pairing gate: cannot read revision %s for serving %s instance %d, failing closed: %v",
-							inst.RunningRevision, comp, inst.Index, gerr)
+			for _, revision := range servingRevisions(inst) {
+				proto := ""
+				if revision != "" {
+					var reason string
+					if proto, reason = servingProtocol(revision, comp, inst.Index); reason != "" {
+						return false, reason
 					}
-					if !found {
-						return false, fmt.Sprintf("pairing gate: revision %s for serving %s instance %d not found, failing closed",
-							inst.RunningRevision, comp, inst.Index)
-					}
-					protoByRevision[inst.RunningRevision] = p
 				}
-				proto = p
-			}
-			serving[comp][proto]++
-			if proto != "" && proto != target {
-				transition = true
+				serving[comp][proto]++
+				if proto != "" && proto != target {
+					transition = true
+				}
 			}
 		}
 	}
@@ -287,6 +303,38 @@ func (ctx GateContext) CheckPairing(fromRevision string, strategy workloadtypes.
 			target, component, proto, target)
 	}
 	return true, ""
+}
+
+// servingRevisions names the revisions a serving Instance's pods run, one
+// entry per cohort in rotation. A settled row runs its RunningRevision; an
+// empty one is the empty cohort, which pairs with anything. A single-pod
+// surge keeps its replacement inside the source's Instance until the
+// promote, so once both pods are in rotation the row serves the running
+// revision and the one the surge is pinned to, and past the hand-over, with
+// the source out of rotation, the replacement is the row's serving pod. A
+// gang surge's replacement is its own row: it runs nothing yet and serves
+// the pinned revision.
+func servingRevisions(inst *v1beta1.OMENativeInstanceStatus) []string {
+	op := inst.Operation
+	if op == nil || op.Type != v1beta1.InstanceOperationUpdate || op.TargetRevision == "" {
+		return []string{inst.RunningRevision}
+	}
+	switch op.Step {
+	case workloadtypes.UpdateStepGangSurgeTarget:
+		return []string{op.TargetRevision}
+	case workloadtypes.UpdateStepSurge:
+		if op.SurgeIndex == nil && inst.ServingPodCount >= 2 {
+			return []string{inst.RunningRevision, op.TargetRevision}
+		}
+	case workloadtypes.UpdateStepSurgeDrain, workloadtypes.UpdateStepSurgeDrainSettle:
+		if op.SurgeIndex == nil {
+			if inst.ServingPodCount >= 2 {
+				return []string{inst.RunningRevision, op.TargetRevision}
+			}
+			return []string{op.TargetRevision}
+		}
+	}
+	return []string{inst.RunningRevision}
 }
 
 // startBreaksPairFloor reports whether the simulated step pushes a pairing

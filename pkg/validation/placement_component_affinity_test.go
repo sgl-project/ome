@@ -25,9 +25,13 @@ func TestComponentAffinityValidation(t *testing.T) {
 			payload: service(pd, `"policy":"ComponentAffinity","mode":"Split","componentAffinity":{"engine":`+weighted+`,"decoder":`+terms+`}`),
 		},
 		{
-			name:    "a Split router entry waits for controller support",
+			name:    "a Split router entry needs a router minimum",
 			payload: service(pd+`,"router":{}`, `"policy":"ComponentAffinity","mode":"Split","componentAffinity":{"engine":`+terms+`,"decoder":`+terms+`,"router":`+terms+`}`),
-			wantErr: "componentAffinity.router is not implemented for Split modes by this controller yet",
+			wantErr: "set a positive router.minReplicas",
+		},
+		{
+			name:    "a Split router entry with a minimum divides the routers",
+			payload: service(pd+`,"router":{"minReplicas":2}`, `"policy":"ComponentAffinity","mode":"Split","componentAffinity":{"engine":`+terms+`,"decoder":`+terms+`,"router":`+terms+`}`),
 		},
 		{
 			name:    "the policy requires per-component terms",

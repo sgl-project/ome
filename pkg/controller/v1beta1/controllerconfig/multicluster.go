@@ -358,9 +358,11 @@ func (c TrafficMapPublisherConfig) ResyncIntervalDuration() time.Duration {
 
 // +kubebuilder:object:generate=false
 // CapacityConfig is the operator-supplied configuration for polling each home
-// for what it can currently serve, applied as a ceiling on the planned
-// allocation -- never a raise.
+// for a replica ceiling or an authoritative routing weight.
 type CapacityConfig struct {
+	// Mode selects replica ceilings or authoritative reported weights.
+	Mode string `json:"mode,omitempty"`
+
 	// Path is the capacity endpoint appended to each home's endpoint. Empty
 	// turns the input off.
 	Path string `json:"path,omitempty"`
@@ -369,7 +371,7 @@ type CapacityConfig struct {
 	Method string `json:"method,omitempty"`
 
 	// Format names the response shape the home answers with. "Report" selects
-	// the built-in servable-count object. Other formats come from optional
+	// the built-in timestamped capacity object. Other formats come from optional
 	// packages compiled into the binary; naming one this build does not carry is
 	// a startup error rather than a silent fallback.
 	Format string `json:"format,omitempty"`

@@ -902,6 +902,12 @@ func TestCapacityPolicyDigestIsCanonicalAndComplete(t *testing.T) {
 	assert.Equal(t, digest, reorderedDigest,
 		"map insertion order must not change the digest")
 
+	explicitCeiling := cloneCapacityConfig(base)
+	explicitCeiling.Mode = v1beta1.RoutingCapacityModeCeiling
+	ceilingDigest, err := capacityPolicyDigest(explicitCeiling)
+	require.NoError(t, err)
+	assert.Equal(t, digest, ceilingDigest, "making the default explicit must preserve capacity samples")
+
 	withoutOptions := cloneCapacityConfig(base)
 	withoutOptions.Options = nil
 	emptyOptions := cloneCapacityConfig(base)
@@ -914,6 +920,9 @@ func TestCapacityPolicyDigestIsCanonicalAndComplete(t *testing.T) {
 		"nil and empty option maps represent the same policy")
 
 	mutations := map[string]func(*CapacityConfig){
+		"mode": func(capacity *CapacityConfig) {
+			capacity.Mode = v1beta1.RoutingCapacityModeReported
+		},
 		"path": func(capacity *CapacityConfig) {
 			capacity.Path = "/other"
 		},

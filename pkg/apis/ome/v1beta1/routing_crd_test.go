@@ -17,7 +17,7 @@ const (
 	routingTimeoutPeriodRule   = "!has(self.period) || !has(self.timeout) || duration(self.timeout) < duration(self.period)"
 	routingProbeSafeGateRule   = "!has(self.gateStatuses) || !self.gateStatuses.exists(s, s == 401 || s == 403 || s == 429)"
 
-	routingCapacityDisabledRule = "!(has(self.disabled) && self.disabled) || (!has(self.path) && !has(self.method) && !has(self.format) && !has(self.options) && !has(self.period) && !has(self.timeout) && !has(self.samples) && !has(self.quorum) && !has(self.maxAge))"
+	routingCapacityDisabledRule = "!(has(self.disabled) && self.disabled) || (!has(self.path) && !has(self.method) && !has(self.format) && !has(self.mode) && !has(self.options) && !has(self.period) && !has(self.timeout) && !has(self.samples) && !has(self.quorum) && !has(self.maxAge))"
 	routingCapacityCompleteRule = "(has(self.disabled) && self.disabled) || (has(self.path) && has(self.method) && has(self.format) && has(self.period) && has(self.timeout) && has(self.samples) && has(self.quorum) && has(self.maxAge))"
 	routingCapacityMaxAgeRule   = "!has(self.period) || !has(self.maxAge) || duration(self.maxAge) >= duration(self.period)"
 	routingCapacityQuorumRule   = "!has(self.samples) || !has(self.quorum) || self.quorum <= self.samples"

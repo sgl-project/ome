@@ -26,8 +26,8 @@ func TestInvalidPlacementCannotAcquireFinalizer(t *testing.T) {
 		{name: "empty affinity", placement: `{"mode":"Single","clusterAffinity":[]}`},
 		{name: "unsupported mode", placement: `{"mode":"Unexpected"}`},
 		{name: "obsolete annotation beside typed intent", placement: `{"mode":"Single"}`, legacyAnnotation: true},
-		{name: "a Split router entry waits for controller support", placement: `{"mode":"Split","componentAffinity":{"engine":[{"matchFields":[{"key":"metadata.name","operator":"In","values":["cluster-a"]}]}],"router":[{"matchFields":[{"key":"metadata.name","operator":"In","values":["cluster-a"]}]}]}}`,
-			policy: v1beta1.PlacementPolicyComponentAffinity, router: true, wantMessage: "componentAffinity.router is not implemented for Split modes"},
+		{name: "a Split router entry needs a router minimum", placement: `{"mode":"Split","componentAffinity":{"engine":[{"matchFields":[{"key":"metadata.name","operator":"In","values":["cluster-a"]}]}],"router":[{"matchFields":[{"key":"metadata.name","operator":"In","values":["cluster-a"]}]}]}}`,
+			policy: v1beta1.PlacementPolicyComponentAffinity, router: true, wantMessage: "set a positive router.minReplicas"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			source := srcISVC("")

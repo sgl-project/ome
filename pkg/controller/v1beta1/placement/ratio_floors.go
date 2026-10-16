@@ -41,7 +41,8 @@ func (m splitMinimums) secondaries() map[v1beta1.ComponentType]int32 {
 // is split.replicas or the engine minimum. A declared decoder minimum follows
 // the engine minimum in their declared ratio, scaled to the primary floor and
 // rounded up; without a declared ratio it is used as declared. An undeclared
-// decoder minimum pairs one decoder with each primary unit.
+// decoder minimum pairs one decoder with each primary unit. A router divided
+// across homes contributes its minimum, scaled the same way.
 func splitComponentMinimums(source *v1beta1.InferenceService) (splitMinimums, error) {
 	primaryFloor := splitDesiredReplicas(source)
 	if primaryFloor <= 0 {
@@ -73,7 +74,33 @@ func splitComponentMinimums(source *v1beta1.InferenceService) (splitMinimums, er
 	if out.primary == "" {
 		return splitMinimums{}, fmt.Errorf("placement requires an engine or decoder component")
 	}
+	if routerDivided(source) {
+		if source.Spec.Router.MinReplicas == nil || *source.Spec.Router.MinReplicas <= 0 {
+			return splitMinimums{}, fmt.Errorf("router.minReplicas must be positive to divide routers across homes")
+		}
+		minimum := int64(*source.Spec.Router.MinReplicas)
+		var declared *int
+		if out.primary == v1beta1.EngineComponent {
+			declared = source.Spec.Engine.MinReplicas
+		} else {
+			declared = source.Spec.Decoder.MinReplicas
+		}
+		if declared != nil && *declared > 0 && int64(*declared) != int64(primaryFloor) {
+			minimum = (minimum*int64(primaryFloor) + int64(*declared) - 1) / int64(*declared)
+		}
+		out.floors[v1beta1.RouterComponent] = int32(min(minimum, math.MaxInt32))
+	}
 	return out, nil
+}
+
+// routerDivided reports whether the source divides its routers across Split
+// homes: it gives the router its own terms. Otherwise every home runs the
+// source's full router policy.
+func routerDivided(source *v1beta1.InferenceService) bool {
+	p := source.Spec.Placement
+	mode := placementMode(source)
+	return source.Spec.Router != nil && p.UsesComponentAffinity() && p.ComponentAffinity != nil && p.ComponentAffinity.Router != nil &&
+		(mode == v1beta1.PlacementModeSplit || mode == v1beta1.PlacementModeSplitByCapacity)
 }
 
 // splitHomeFloors apportions every secondary component's minimum over the
@@ -289,6 +316,9 @@ func setPlannedReplicas(member *v1beta1.InferenceService, bounds map[v1beta1.Com
 	}
 	if bound, ok := bounds[v1beta1.DecoderComponent]; ok && member.Spec.Decoder != nil {
 		apply(&member.Spec.Decoder.ComponentExtensionSpec, bound)
+	}
+	if bound, ok := bounds[v1beta1.RouterComponent]; ok && member.Spec.Router != nil {
+		apply(&member.Spec.Router.ComponentExtensionSpec, bound)
 	}
 }
 

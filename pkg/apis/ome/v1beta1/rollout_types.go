@@ -295,6 +295,14 @@ type MaintainRatio struct {
 	// 0 means zero drift. When omitted, the operator-configured default (the
 	// coordination block of the operator's ConfigMap) applies; if the operator
 	// configures no default either, the group rolls with no drift bound.
+	// Admission rejects a drain-first member (RecreatePod, or an in-place
+	// strategy on multi-node gangs) whose single drain would empty its side or
+	// move the serving ratio more than twice the tolerance from the start,
+	// since such a member could never take its first step. A group whose
+	// members all roll drain-first is paced by the batch step instead: each
+	// member's drains are counted in batches of its maxUnavailable, and no
+	// member opens its next batch until every member's previous batch serves.
+	// The ratio band is not consulted for such a group, so admission admits it.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100

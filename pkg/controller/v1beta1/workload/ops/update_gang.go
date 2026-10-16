@@ -85,7 +85,7 @@ func gangSurgeUpdate(ctx context.Context, deps workload.Deps, input workload.Rec
 		if surgeMarker == nil {
 			cleanup := startingSurge && src.Phase == workload.InstancePhaseFailed
 			if startingSurge && !cleanup && src.Operation.TargetRevision != target.Name {
-				keep, err := supersededGangSurgeKeepsPin(ctx, deps, input, plan, inst, surgeIdx)
+				keep, err := supersededGangSurgeKeepsPin(ctx, deps, input, plan, inst, surgeIdx, src.Operation.TargetRevision)
 				if err != nil {
 					return false, err
 				}
@@ -193,7 +193,7 @@ func gangSurgeUpdate(ctx context.Context, deps workload.Deps, input workload.Rec
 	// pinned one while the source gang still stands; only a Ready
 	// replacement whose source is gone finishes on its pin.
 	if startingSurge && !promotedSurgeTarget && src.Operation.TargetRevision != target.Name {
-		keep, err := supersededGangSurgeKeepsPin(ctx, deps, input, plan, inst, *src.Operation.SurgeIndex)
+		keep, err := supersededGangSurgeKeepsPin(ctx, deps, input, plan, inst, *src.Operation.SurgeIndex, src.Operation.TargetRevision)
 		if err != nil {
 			return false, err
 		}
@@ -232,12 +232,13 @@ func gangSurgeUpdate(ctx context.Context, deps workload.Deps, input workload.Rec
 		return false, nil
 	}
 
-	// 2. Create the replacement gang at k on the target revision (leader
-	// + workers; createMissingPods picks the per-runner spec).
+	// 2. Create the replacement gang at k on the pinned revision, at the
+	// width that revision records (createMissingPods picks the per-runner
+	// spec).
 	surgeInst := workload.InstancePlan{
 		Index:         surgeIdx,
 		Incarnation:   1,
-		Runners:       append([]workload.RunnerPlan(nil), inst.Runners...),
+		Runners:       plan.RunnersFor(inst, surgeTargetName),
 		ExcludedNodes: inst.ExcludedNodes, // Exclusion memory follows the instance through surge replacement.
 	}
 	surgePods, err := query.LiveListPodsForInstance(ctx, deps.Reader(), ns, owner, comp, surgeIdx)
@@ -342,7 +343,7 @@ func gangSurgeUpdate(ctx context.Context, deps workload.Deps, input workload.Rec
 
 	// ContainersReady permits setting the serving gate; waiting for PodReady
 	// here would deadlock because PodReady includes that gate.
-	if int32(len(surgePods)) < inst.TotalPods() || !query.AllPodsRuntimeReady(surgePods) {
+	if int32(len(surgePods)) < surgeInst.TotalPods() || !query.AllPodsRuntimeReady(surgePods) {
 		return false, nil
 	}
 	for _, pod := range surgePods {
@@ -484,7 +485,7 @@ func gangSurgeUpdate(ctx context.Context, deps workload.Deps, input workload.Rec
 // replacement gang is runtime-ready, so the replacement is the Instance's
 // only pod set. While the source stands the surge is abandoned whether or
 // not the replacement is Ready, for the reasons surgeUpdate's redirect gives.
-func supersededGangSurgeKeepsPin(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, plan workload.ComponentPlan, inst workload.InstancePlan, surgeIdx int32) (bool, error) {
+func supersededGangSurgeKeepsPin(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, plan workload.ComponentPlan, inst workload.InstancePlan, surgeIdx int32, pinnedRevision string) (bool, error) {
 	ns, owner, comp := input.Key.Namespace, input.Key.OwnerName, plan.Component
 	sourcePods, err := query.LiveListPodsForInstance(ctx, deps.Reader(), ns, owner, comp, inst.Index)
 	if err != nil {
@@ -497,7 +498,9 @@ func supersededGangSurgeKeepsPin(ctx context.Context, deps workload.Deps, input 
 	if err != nil {
 		return false, fmt.Errorf("list surge gang pods for supersede check (instance=%d): %w", surgeIdx, err)
 	}
-	return int32(len(surgePods)) >= inst.TotalPods() && query.AllPodsRuntimeReady(surgePods), nil
+	// The replacement is complete at the width its pinned revision records.
+	pinned := workload.InstancePlan{Runners: plan.RunnersFor(inst, pinnedRevision)}
+	return int32(len(surgePods)) >= pinned.TotalPods() && query.AllPodsRuntimeReady(surgePods), nil
 }
 
 func gangSurgeSourceOwnsRemoval(row *workload.InstanceStatus, surgeIdx int32) bool {
@@ -838,9 +841,11 @@ func gangSurgeTargetOwnsRemoval(row *workload.InstanceStatus, requireCleanupMark
 // under the attempt as it stands, and members already missing at the
 // published count are a rebuild still pending, created and charged
 // nothing. A loss closes the attempt and counts it once on the pinned
-// revision's ladder; the next attempt rebuilds the set under a fresh
-// deadline once the ladder admits it, re-armed after its members are
-// created; a ladder that holds the revision ends the pair with the source
+// revision's ladder; the next pass rebuilds the set at once as the next
+// attempt, re-armed under a fresh deadline after its members are created,
+// with no wait on the ladder's backoff: the source is out of rotation
+// behind the replacement, so the Instance serves nothing until the member
+// is back. A ladder that holds the revision ends the pair with the source
 // Failed and no attempt. Reports whether the caller may create the missing
 // members this pass, and whether the source re-arms once they are created.
 func rebuildLostReplacement(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, plan workload.ComponentPlan, src, marker *workload.InstanceStatus, surgeIdx int32, pin string, recycled, observed, size int) (create, rearm bool, err error) {
@@ -880,10 +885,6 @@ func rebuildLostReplacement(ctx context.Context, deps workload.Deps, input workl
 	case block.State == workload.RetryBlockHeld:
 		_, err = holdLostGangSurge(ctx, deps, input, plan, src, surgeIdx, pin)
 		return false, false, err
-	}
-	if block.State == workload.RetryBlockBackoff && block.NextRetryAt != nil && input.Now().Before(block.NextRetryAt.Time) {
-		input.PassWake.Observe(block.NextRetryAt.Time.Sub(input.Now()))
-		return false, false, nil
 	}
 	return true, true, nil
 }

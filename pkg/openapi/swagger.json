@@ -5145,7 +5145,7 @@
       "type": "object",
       "properties": {
         "tolerance": {
-          "description": "Tolerance is the maximum percentage drift from the starting ratio. A roll step that would exceed it is paused until the pools rebalance. An explicit 0 means zero drift. When omitted, the operator-configured default (the coordination block of the operator's ConfigMap) applies; if the operator configures no default either, the group rolls with no drift bound.",
+          "description": "Tolerance is the maximum percentage drift from the starting ratio. A roll step that would exceed it is paused until the pools rebalance. An explicit 0 means zero drift. When omitted, the operator-configured default (the coordination block of the operator's ConfigMap) applies; if the operator configures no default either, the group rolls with no drift bound. Admission rejects a drain-first member (RecreatePod, or an in-place strategy on multi-node gangs) whose single drain would empty its side or move the serving ratio more than twice the tolerance from the start, since such a member could never take its first step. A group whose members all roll drain-first is paced by the batch step instead: each member's drains are counted in batches of its maxUnavailable, and no member opens its next batch until every member's previous batch serves. The ratio band is not consulted for such a group, so admission admits it.",
           "type": "integer",
           "format": "int32"
         }
@@ -7745,6 +7745,10 @@
           "description": "Method is the HTTP method used by the capacity request.",
           "type": "string"
         },
+        "mode": {
+          "description": "Mode selects a replica ceiling or an authoritative reported weight. Unset preserves Ceiling. In Reported mode a home's accepted report is its capacity in replicas, neither capped by its replica count nor scaled by its capacity factor. A home without one keeps its replica-based weight.",
+          "type": "string"
+        },
         "options": {
           "description": "Options contains format-specific settings interpreted by the configured capacity format.",
           "type": "object",
@@ -7762,7 +7766,7 @@
           "$ref": "#/definitions/v1.Duration"
         },
         "quorum": {
-          "description": "Quorum is the number of readings required to corroborate a lower capacity.",
+          "description": "Quorum is the number of readings required before a report applies. In Ceiling mode they corroborate a lower capacity; in Reported mode the lower median of the window applies.",
           "type": "integer",
           "format": "int32"
         },
@@ -8761,30 +8765,34 @@
       "type": "object",
       "properties": {
         "allocated": {
-          "description": "Allocated is the effective allocation ceiling for this home: the control-plane-admitted count, optionally lowered by a capacity report. Ready independently caps it when computing Weight.",
+          "description": "Allocated is the admitted replica count. In Ceiling mode a report can lower it, and Ready independently caps it when computing Weight. It is diagnostic when ReportedWeight is set, including when it is zero.",
           "type": "integer",
           "format": "int32"
         },
         "factor": {
-          "description": "Factor is the per-replica relative serving capacity of this home's accelerator (baseline \"1\", higher = faster), so heterogeneous hardware is weighted by capacity rather than raw replica count: weight is proportional to min(allocated, ready) * factor. Defaults to \"1\" (homogeneous) when unset — the multiplicative identity, i.e. no scaling. It is operator-supplied config, never derived from raw hardware FLOPS.",
+          "description": "Factor is the per-replica serving capacity of this home's accelerator (baseline \"1\", higher = faster), so heterogeneous hardware is weighted by capacity rather than raw replica count: weight is proportional to min(allocated, ready) * factor. Defaults to \"1\" (homogeneous) when unset — the multiplicative identity, i.e. no scaling. It is unset when ReportedWeight is, because the report already includes the hardware. It is operator-supplied config, never derived from raw hardware FLOPS.",
           "$ref": "#/definitions/resource.Quantity"
         },
         "fallbackReason": {
-          "description": "FallbackReason explains why a configured endpoint capacity source did not produce an applied ceiling and the control-plane allocation was retained. Empty means capacity polling is disabled or its latest result was usable.",
+          "description": "FallbackReason explains why a configured endpoint capacity source did not produce a current observation. The entry keeps its replica-based weight; in Reported mode it first uses a fresh cached report. Empty means the latest result was usable or polling is disabled.",
           "type": "string"
         },
         "ready": {
-          "description": "Ready is the home's live ready-replica count. It caps Allocated when computing Weight; zero health-gates the entry to weight 0.",
+          "description": "Ready is the live ready-replica count. It caps Weight unless ReportedWeight is set.",
           "type": "integer",
           "format": "int32"
         },
         "reported": {
-          "description": "Reported is the home's own servable-capacity figure, recorded whenever the endpoint source answered — including when it was at or above the plan and therefore did not lower Allocated. Keeping it visible in that case is what makes the ceiling auditable: Allocated alone cannot show that a report was received and found non-binding.",
+          "description": "Reported is the home's servable count in Ceiling mode, recorded whenever the endpoint source answered — including when it was at or above the plan and therefore did not lower Allocated. Keeping it visible in that case is what makes the ceiling auditable: Allocated alone cannot show that a report was received and found non-binding.",
           "type": "integer",
           "format": "int32"
         },
+        "reportedWeight": {
+          "description": "ReportedWeight is the accepted endpoint capacity in Reported mode, in replicas, and replaces the replica-based weight. Nil means no fresh quorum, so the entry weighs its replica count; zero means the reporter cannot serve traffic.",
+          "$ref": "#/definitions/resource.Quantity"
+        },
         "source": {
-          "description": "Source names which input produced Allocated. FallbackReason separately distinguishes an intentionally control-plane-only allocation from a configured endpoint source that could not supply a usable ceiling.",
+          "description": "Source names the capacity authority: Endpoint when a report lowered Allocated in Ceiling mode or ReportedWeight is set in Reported mode, and ControlPlane otherwise.",
           "type": "string"
         }
       }
@@ -8797,7 +8805,7 @@
       ],
       "properties": {
         "capacity": {
-          "description": "Capacity is the provenance of Weight: weight is proportional to min(allocated, ready) * factor, then gated by the active probe.",
+          "description": "Capacity records the inputs to Weight under spec.capacityMode.",
           "$ref": "#/definitions/v1beta1.TrafficMapCapacity"
         },
         "cluster": {
@@ -9021,6 +9029,10 @@
         "service"
       ],
       "properties": {
+        "capacityMode": {
+          "description": "CapacityMode identifies the capacity authority, even for an empty table. Reported disables retained-positive publication: replica status cannot override a current reported-capacity decision. Unset means Ceiling.",
+          "type": "string"
+        },
         "entries": {
           "description": "Entries is the routing table: one entry per serving home, each with its endpoint, final apply-verbatim weight, and the capacity/health provenance of that weight. Consumers apply the weights directly — no gating, fallback, or normalization is left for them to redo.",
           "type": "array",
