@@ -19,7 +19,7 @@ spec:
     scale, runtime sync, instance release-held) patch inferenceservices,
     inferencereplicas and inferencereplicas/scale. The docs carry
     ClusterRoles with the exact verbs:
-    https://ome-projects.github.io/ome/docs/tasks/kubectl-ome/
+    https://ome-project.org/docs/reference/kubectl-ome/overview
   platforms:
     - selector: {matchLabels: {os: linux, arch: amd64}}
       uri: https://github.com/ome-projects/ome/releases/download/VERSION/kubectl-ome_VERSION_linux_amd64.tar.gz

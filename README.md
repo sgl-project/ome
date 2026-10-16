@@ -2,7 +2,7 @@
 
 [![codecov](https://codecov.io/gh/ome-projects/ome/graph/badge.svg)](https://codecov.io/gh/ome-projects/ome)
 [![Latest Release](https://img.shields.io/github/v/release/ome-projects/ome?include_prereleases)](https://github.com/ome-projects/ome/releases/latest)
-[![API Reference](https://img.shields.io/badge/API-v1beta1-blue)](https://ome-projects.github.io/ome/docs/reference/ome.v1beta1/)
+[![API Reference](https://img.shields.io/badge/API-v1beta1-blue)](https://ome-project.org/docs/reference/api/ome.v1beta1)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ome-projects/ome)
 
@@ -15,7 +15,7 @@
 ## What is OME?
 OME (Open Model Engine) is a Kubernetes operator for enterprise-grade management and serving of Large Language Models (LLMs). It optimizes the deployment and operation of LLMs by automating model management, intelligent runtime selection, efficient resource utilization, and sophisticated deployment patterns.
 
-Read the [documentation](https://ome-projects.github.io/ome/docs/) to learn more about OME capabilities and features.
+Read the [documentation](https://ome-project.org/docs/) to learn more about OME capabilities and features.
 
 ## Features Overview
 
@@ -44,7 +44,7 @@ Read the [documentation](https://ome-projects.github.io/ome/docs/) to learn more
 ## Production Readiness Status
 
 - ✅ API version: v1beta1
-- ✅ Comprehensive [documentation](https://ome-projects.github.io/ome/docs/)
+- ✅ Comprehensive [documentation](https://ome-project.org/docs/)
 - ✅ Unit and integration test coverage
 - ✅ Production deployments with large-scale LLM workloads
 - ✅ Monitoring via standard metrics and Kubernetes events
@@ -67,7 +67,7 @@ helm upgrade --install ome-crd oci://ghcr.io/moirai-internal/charts/ome-crd --na
 helm upgrade --install ome oci://ghcr.io/moirai-internal/charts/ome-resources --namespace ome
 ```
 
-Moving an existing manifest install to these charts? See [Move a manifest install to the Helm charts](https://ome-projects.github.io/ome/docs/installation/#move-a-manifest-install-to-the-helm-charts) first.
+Moving an existing manifest install to these charts? See [Move a manifest install to the Helm charts](https://ome-project.org/docs/getting-started/install#move-a-manifest-install-to-the-helm-charts) first.
 
 ### Option 2: Install from Source
 
@@ -126,11 +126,11 @@ kubectl ome --help
 
 Installing the CLI does not install or upgrade the controller or CRDs. See the [CLI reference](cmd/kubectl-ome/README.md) for the full command tree, guarded-action safeguards, and required permissions.
 
-Read the [installation guide](https://ome-projects.github.io/ome/docs/installation/) for more options and advanced configurations.
+Read the [installation guide](https://ome-project.org/docs/getting-started/install) for more options and advanced configurations.
 
 Learn more about:
-- OME [concepts](https://ome-projects.github.io/ome/docs/concepts/)
-- Common [tasks](https://ome-projects.github.io/ome/docs/tasks/)
+- OME [concepts](https://ome-project.org/docs/concepts)
+- Step-by-step [guides](https://ome-project.org/docs/guides)
 
 ## Architecture
 
@@ -169,7 +169,7 @@ High-level overview of the main priorities:
 ## Community and Support
 
 - [GitHub Issues](https://github.com/ome-projects/ome/issues) for bug reports and feature requests
-- [Documentation](https://ome-projects.github.io/ome/docs/) for guides and reference
+- [Documentation](https://ome-project.org/docs/) for guides and reference
 
 ## License
 
