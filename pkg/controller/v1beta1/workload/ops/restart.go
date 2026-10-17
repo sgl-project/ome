@@ -676,7 +676,8 @@ func firstFailedPodTermination(pods []*corev1.Pod, now metav1.Time) *workload.In
 // stamped with that revision. target is the roll target the stored
 // template is composed against. found is false when that revision's
 // ControllerRevision is gone. A row that records no revision is rebuilt
-// from the current template with no revision label, as it was created.
+// from the current template with no revision label: the Component has no
+// roll target to name, or the rebuild's own pods were created unlabeled.
 func rebuildTemplate(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, plan workload.ComponentPlan, target *appsv1.ControllerRevision, idx int32) (podTemplate, bool, error) {
 	rev := rebuildRevision(input.ObservedState.Instance(idx))
 	if rev == "" {
@@ -787,12 +788,21 @@ func rollTargetOpen(input workload.ReconcileInput, plan workload.ComponentPlan, 
 // the step machine alone promotes. A rebuild whose pods exist finishes on
 // the revision they carry: replacing a starting pod set is the roll's job,
 // under its budget.
+//
+// A row that records no revision follows any target it has, whatever the
+// pause, the hold or the canary step say: its rebuild renders the current
+// template, which is the target's, so following changes only the label.
+// Ending a failed first start leaves such a row, and a pod without the
+// label is invisible to everything that counts pods by revision.
 func rebuildFollowsTarget(input workload.ReconcileInput, plan workload.ComponentPlan, idx int32, target *appsv1.ControllerRevision, rebuiltPods []*corev1.Pod) bool {
-	if len(query.ExcludeTerminalPods(rebuiltPods)) > 0 || !rollTargetOpen(input, plan, target) {
+	if target == nil || len(query.ExcludeTerminalPods(rebuiltPods)) > 0 {
 		return false
 	}
 	rev := rebuildRevision(input.ObservedState.Instance(idx))
-	return rev != "" && rev != target.Name && !canaryStepHeldIndices(input, plan, target)[idx]
+	if rev == "" {
+		return true
+	}
+	return rollTargetOpen(input, plan, target) && rev != target.Name && !canaryStepHeldIndices(input, plan, target)[idx]
 }
 
 // RunnerRestartedSinceReady reports whether pod's runner container carries

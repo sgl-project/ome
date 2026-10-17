@@ -108,6 +108,7 @@ func TestReportedCapacityHTTPContract(t *testing.T) {
 		{"fraction", map[string]any{"weight": 0.375, "observedAt": capacityTestNow}, kptr.To(0.375)},
 		{"zero", map[string]any{"weight": 0, "observedAt": capacityTestNow}, kptr.To(0.0)},
 		{"replicas are not weights", map[string]any{"servable": 30, "observedAt": capacityTestNow}, nil},
+		{"a servable of another type is ignored", map[string]any{"weight": 2.5, "servable": 2.5, "observedAt": capacityTestNow}, kptr.To(2.5)},
 		{"negative", map[string]any{"weight": -1, "observedAt": capacityTestNow}, nil},
 		{"missing timestamp", map[string]any{"weight": 30}, nil},
 		{"stale", map[string]any{"weight": 30, "observedAt": capacityTestNow.Add(-policy.Capacity.MaxAge)}, nil},

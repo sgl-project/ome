@@ -26058,6 +26058,22 @@ spec:
                       required:
                         - name
                       type: object
+                    capacityEndpoint:
+                      properties:
+                        path:
+                          maxLength: 1024
+                          minLength: 2
+                          pattern: ^/[^/?#]
+                          type: string
+                        port:
+                          format: int32
+                          maximum: 65535
+                          minimum: 1
+                          type: integer
+                      required:
+                        - path
+                        - port
+                      type: object
                     config:
                       additionalProperties:
                         type: string

@@ -191,6 +191,8 @@ func TestDispatchAutoscaler_Branches(t *testing.T) {
 		// Post-conditions asserted after a single DispatchAutoscaler.
 		wantHPAExists bool
 		wantSOExists  bool
+		// wantPending: the dispatch waits for KEDA to take over the HPA.
+		wantPending bool
 	}{
 		{
 			name:          "class=hpa, no preexisting → HPA created, no SO",
@@ -212,11 +214,12 @@ func TestDispatchAutoscaler_Branches(t *testing.T) {
 			wantSOExists:  true,
 		},
 		{
-			name:          "class=keda with one trigger, preexisting HPA → HPA deleted + SO created (cross-class switch hpa→keda)",
+			name:          "class=keda with one trigger, preexisting HPA → SO created to take the HPA over, HPA kept (cross-class switch hpa→keda)",
 			autoscaler:    &v1beta1.ComponentAutoscaler{Class: v1beta1.AutoscalerKEDA, Keda: kedaAutoscalerBlock()},
 			preExistHPA:   true,
-			wantHPAExists: false,
+			wantHPAExists: true,
 			wantSOExists:  true,
+			wantPending:   true,
 		},
 		{
 			name:          "class=external, preexisting HPA → HPA deleted, no SO (twin)",
@@ -294,7 +297,11 @@ func TestDispatchAutoscaler_Branches(t *testing.T) {
 				MinReplicas:    1,
 				MaxReplicas:    5,
 			})
-			require.NoError(t, err)
+			if tc.wantPending {
+				require.True(t, IsTransitionPending(err), "expected a pending switch, got %v", err)
+			} else {
+				require.NoError(t, err)
+			}
 
 			// HPA existence assertion.
 			gotHPA := &autoscalingv2.HorizontalPodAutoscaler{}
@@ -408,7 +415,10 @@ func TestDispatchAutoscaler_KEDARequiresTriggersBeforeMutation(t *testing.T) {
 	}
 }
 
-func TestDispatchAutoscaler_KEDAReservedHPANameFailsBeforeMutation(t *testing.T) {
+// TestDispatchAutoscaler_KEDARequestsComponentHPAName pins that a KEDA block
+// naming the Component's own HPA is accepted: the ScaledObject asks KEDA to
+// use that HPA, OME never writes or deletes it, and dispatch waits for KEDA.
+func TestDispatchAutoscaler_KEDARequestsComponentHPAName(t *testing.T) {
 	const (
 		ns   = "test-ns"
 		name = "demo-engine"
@@ -426,21 +436,30 @@ func TestDispatchAutoscaler_KEDAReservedHPANameFailsBeforeMutation(t *testing.T)
 		t.Run(tt.name, func(t *testing.T) {
 			scheme := dispatchScheme(t)
 			builder := fake.NewClientBuilder().WithScheme(scheme)
+			var original *autoscalingv2.HorizontalPodAutoscaler
 			if tt.existingHPA {
-				builder = builder.WithObjects(existingHPA(ns, name, dispatchOwner(name)))
+				original = existingHPA(ns, name, dispatchOwner(name))
+				original.UID = types.UID("working-hpa-uid")
+				builder = builder.WithObjects(original)
 			}
-			mutations := []string{}
+			hpaWrites := []string{}
 			cl := builder.WithInterceptorFuncs(interceptor.Funcs{
 				Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
-					mutations = append(mutations, "create "+obj.GetName())
+					if _, ok := obj.(*autoscalingv2.HorizontalPodAutoscaler); ok {
+						hpaWrites = append(hpaWrites, "create "+obj.GetName())
+					}
 					return c.Create(ctx, obj, opts...)
 				},
 				Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
-					mutations = append(mutations, "update "+obj.GetName())
+					if _, ok := obj.(*autoscalingv2.HorizontalPodAutoscaler); ok {
+						hpaWrites = append(hpaWrites, "update "+obj.GetName())
+					}
 					return c.Update(ctx, obj, opts...)
 				},
 				Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
-					mutations = append(mutations, "delete "+obj.GetName())
+					if _, ok := obj.(*autoscalingv2.HorizontalPodAutoscaler); ok {
+						hpaWrites = append(hpaWrites, "delete "+obj.GetName())
+					}
 					return c.Delete(ctx, obj, opts...)
 				},
 			}).Build()
@@ -460,19 +479,25 @@ func TestDispatchAutoscaler_KEDAReservedHPANameFailsBeforeMutation(t *testing.T)
 				MinReplicas:    1,
 				MaxReplicas:    5,
 			})
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "horizontalPodAutoscalerConfig.name")
-			assert.Contains(t, err.Error(), name)
-			assert.Empty(t, mutations)
+			require.True(t, IsTransitionPending(err), "expected dispatch to wait for KEDA, got %v", err)
+			assert.Empty(t, hpaWrites, "OME must leave the HPA to KEDA")
 
-			hpaErr := cl.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: name}, &autoscalingv2.HorizontalPodAutoscaler{})
+			so := &kedav1.ScaledObject{}
+			require.NoError(t, cl.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: utils.GetScaledObjectName(name)}, so))
+			require.NotNil(t, so.Spec.Advanced)
+			require.NotNil(t, so.Spec.Advanced.HorizontalPodAutoscalerConfig)
+			assert.Equal(t, name, so.Spec.Advanced.HorizontalPodAutoscalerConfig.Name)
+			assert.Equal(t, "true", so.Annotations[kedav1.ScaledObjectTransferHpaOwnershipAnnotation])
+
+			got := &autoscalingv2.HorizontalPodAutoscaler{}
+			hpaErr := cl.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: name}, got)
 			if tt.existingHPA {
 				require.NoError(t, hpaErr)
+				assert.Equal(t, original.UID, got.UID)
+				assert.Equal(t, dispatchOwner(name), *metav1.GetControllerOf(got))
 			} else {
-				assert.True(t, apierrors.IsNotFound(hpaErr))
+				assert.True(t, apierrors.IsNotFound(hpaErr), "KEDA, not OME, creates the HPA")
 			}
-			soErr := cl.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: utils.GetScaledObjectName(name)}, &kedav1.ScaledObject{})
-			assert.True(t, apierrors.IsNotFound(soErr))
 		})
 	}
 }
@@ -1257,15 +1282,29 @@ func TestDispatchAutoscaler_ManagedTransitionRejectsForeignReplacement(t *testin
 			MinReplicas:    1,
 			MaxReplicas:    5,
 		})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "not controlled by expected owner")
+		// The delete carries the inspected object's UID, so the replacement
+		// survives and dispatch retries instead of creating a second scaler.
+		require.True(t, IsTransitionPending(err), "expected a retry, got %v", err)
 
 		gotSO := &kedav1.ScaledObject{}
 		require.NoError(t, cl.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: utils.GetScaledObjectName(name)}, gotSO))
 		assert.Equal(t, foreign.UID, gotSO.UID)
-		gotHPA := &autoscalingv2.HorizontalPodAutoscaler{}
-		require.NoError(t, cl.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: name}, gotHPA))
-		assert.Equal(t, dispatchOwner(name), *metav1.GetControllerOf(gotHPA), "requested HPA should remain while the foreign ScaledObject blocks cleanup")
+		hpaErr := cl.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: name}, &autoscalingv2.HorizontalPodAutoscaler{})
+		assert.True(t, apierrors.IsNotFound(hpaErr), "no HPA may join the ScaledObject on the same target, got %v", hpaErr)
+
+		err = DispatchAutoscaler(context.Background(), DispatchParams{
+			Client:         cl,
+			Scheme:         scheme,
+			Owner:          dispatchOwner(name),
+			Namespace:      ns,
+			Name:           name,
+			ScaleTargetRef: dispatchScaleTargetRef(name),
+			Autoscaler:     &v1beta1.ComponentAutoscaler{Class: v1beta1.AutoscalerHPA},
+			MinReplicas:    1,
+			MaxReplicas:    5,
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not controlled by expected owner", "the retry sees the foreign ScaledObject")
 	})
 
 	t.Run("KEDA rejects HPA replaced after preflight", func(t *testing.T) {
@@ -1379,7 +1418,8 @@ func TestDispatchAutoscaler_ClassSwitchPreservesWorkingScalerWhenReplacementFail
 			MaxReplicas:    5,
 		})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "HPA reconcile")
+		assert.False(t, IsTransitionPending(err), "an invalid replacement is a failure, not a wait")
+		assert.Contains(t, err.Error(), "validate the replacement HPA")
 
 		got := &kedav1.ScaledObject{}
 		require.NoError(t, cl.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: utils.GetScaledObjectName(name)}, got))
@@ -1803,20 +1843,19 @@ func TestDispatchAutoscaler_TerminatingRequestedScalerPreservesWorkingSibling(t 
 }
 
 // TestDispatchAutoscaler_ClassSwitch_HPAToKEDA exercises the full
-// class-switch lifecycle on the SAME fake client: first DispatchAutoscaler
-// with class=hpa creates the HPA, the second with class=keda must delete
-// that HPA and create the SO. Mirrors the operator workflow of editing
-// isvc.spec.engine.autoscaler.class.
+// class-switch lifecycle on the SAME fake client: class=hpa creates the HPA;
+// class=keda creates a ScaledObject that asks KEDA to take that HPA over and
+// keeps the HPA scaling meanwhile; once KEDA controls the HPA and reports the
+// ScaledObject Ready, dispatch reports the switch complete. Mirrors the
+// operator workflow of editing isvc.spec.engine.autoscaler.class.
 func TestDispatchAutoscaler_ClassSwitch_HPAToKEDA(t *testing.T) {
 	const (
 		ns   = "test-ns"
 		name = "demo-engine"
 	)
 	scheme := dispatchScheme(t)
-	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
-
-	// First reconcile: class=hpa.
-	err := DispatchAutoscaler(context.Background(), DispatchParams{
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&kedav1.ScaledObject{}).Build()
+	params := DispatchParams{
 		Client:         cl,
 		Scheme:         scheme,
 		Owner:          dispatchOwner(name),
@@ -1826,37 +1865,39 @@ func TestDispatchAutoscaler_ClassSwitch_HPAToKEDA(t *testing.T) {
 		Autoscaler:     &v1beta1.ComponentAutoscaler{Class: v1beta1.AutoscalerHPA},
 		MinReplicas:    1,
 		MaxReplicas:    5,
-	})
-	require.NoError(t, err)
-
-	// HPA exists, SO does not.
-	hpaExists := func() bool {
-		err := cl.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: name}, &autoscalingv2.HorizontalPodAutoscaler{})
-		return err == nil
 	}
-	soExists := func() bool {
-		err := cl.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: utils.GetScaledObjectName(name)}, &kedav1.ScaledObject{})
-		return err == nil
-	}
-	assert.True(t, hpaExists(), "after class=hpa reconcile, HPA should exist")
-	assert.False(t, soExists(), "after class=hpa reconcile, SO should not exist")
 
-	// Second reconcile: class=keda — must delete the prior HPA and create the SO.
-	err = DispatchAutoscaler(context.Background(), DispatchParams{
-		Client:         cl,
-		Scheme:         scheme,
-		Owner:          dispatchOwner(name),
-		Namespace:      ns,
-		Name:           name,
-		ScaleTargetRef: dispatchScaleTargetRef(name),
-		Autoscaler:     &v1beta1.ComponentAutoscaler{Class: v1beta1.AutoscalerKEDA, Keda: kedaAutoscalerBlock()},
-		MinReplicas:    1,
-		MaxReplicas:    5,
-	})
-	require.NoError(t, err)
+	// First reconcile: class=hpa.
+	require.NoError(t, DispatchAutoscaler(context.Background(), params))
+	hpaKey := types.NamespacedName{Namespace: ns, Name: name}
+	soKey := types.NamespacedName{Namespace: ns, Name: utils.GetScaledObjectName(name)}
+	working := &autoscalingv2.HorizontalPodAutoscaler{}
+	require.NoError(t, cl.Get(context.Background(), hpaKey, working), "after class=hpa reconcile, HPA should exist")
+	assert.True(t, apierrors.IsNotFound(cl.Get(context.Background(), soKey, &kedav1.ScaledObject{})), "after class=hpa reconcile, SO should not exist")
 
-	assert.False(t, hpaExists(), "after class=keda reconcile, prior HPA should be deleted")
-	assert.True(t, soExists(), "after class=keda reconcile, SO should exist")
+	// Second reconcile: class=keda — the ScaledObject takes the HPA over.
+	params.Autoscaler = &v1beta1.ComponentAutoscaler{Class: v1beta1.AutoscalerKEDA, Keda: kedaAutoscalerBlock()}
+	err := DispatchAutoscaler(context.Background(), params)
+	require.True(t, IsTransitionPending(err), "dispatch waits for KEDA, got %v", err)
+	kept := &autoscalingv2.HorizontalPodAutoscaler{}
+	require.NoError(t, cl.Get(context.Background(), hpaKey, kept), "the HPA keeps scaling until KEDA takes it over")
+	assert.Equal(t, working.UID, kept.UID)
+	assert.Equal(t, working.ResourceVersion, kept.ResourceVersion, "OME stops writing the HPA")
+	so := &kedav1.ScaledObject{}
+	require.NoError(t, cl.Get(context.Background(), soKey, so))
+	assert.Equal(t, "true", so.Annotations[kedav1.ScaledObjectTransferHpaOwnershipAnnotation])
+	require.NotNil(t, so.Spec.Advanced)
+	require.NotNil(t, so.Spec.Advanced.HorizontalPodAutoscalerConfig)
+	assert.Equal(t, name, so.Spec.Advanced.HorizontalPodAutoscalerConfig.Name)
+
+	// KEDA takes the HPA over in place and reports the ScaledObject Ready.
+	simulateKEDATakeover(t, cl, so, kept)
+	markScaledObjectReady(t, cl, soKey)
+	require.NoError(t, DispatchAutoscaler(context.Background(), params), "the switch is complete")
+
+	adopted := &autoscalingv2.HorizontalPodAutoscaler{}
+	require.NoError(t, cl.Get(context.Background(), hpaKey, adopted))
+	assert.Equal(t, working.UID, adopted.UID, "KEDA reused the HPA OME created")
 }
 
 // TestDispatchAutoscaler_ClassSwitch_KEDAToHPA covers the reverse:

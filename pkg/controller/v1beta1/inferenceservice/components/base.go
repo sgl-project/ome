@@ -220,25 +220,45 @@ func mergeRequeueAfter(result ctrl.Result, after time.Duration) ctrl.Result {
 // trigger content stays frozen — or dispatches nothing at all when no record
 // exists: a policy failure never tears a scaler down and never substitutes a
 // default HPA.
-func dispatchIRAutoscaler(ctx context.Context, b *BaseComponentFields, isvc *v1beta1.InferenceService, ir *v1beta1.InferenceReplica, componentExt *v1beta1.ComponentExtensionSpec, res ComponentAutoscaling) error {
+//
+// A switch between an HPA and a KEDA ScaledObject that waits for KEDA, or
+// for a deletion, is not a failure: the pass requeues through the rate
+// limiter so the component status still gets written, and the next pass
+// checks again.
+func dispatchIRAutoscaler(ctx context.Context, b *BaseComponentFields, isvc *v1beta1.InferenceService, ir *v1beta1.InferenceReplica, componentExt *v1beta1.ComponentExtensionSpec, res ComponentAutoscaling) (ctrl.Result, error) {
 	dispatchBlock := res.Resolved
 	if res.Hold {
 		if ir.Spec.Autoscaler == nil {
-			return nil
+			return ctrl.Result{}, nil
 		}
 		dispatchBlock = ir.Spec.Autoscaler.DeepCopy()
 	} else if res.Source == autoscaler.SpecSourcePolicy {
 		if err := b.PolicyResolver.EnsureTriggerAuthentications(ctx, isvc.Namespace, res.Resolved); err != nil {
-			return err
+			return ctrl.Result{}, err
 		}
 	}
-	return autoscaler.DispatchForIRComponent(ctx, autoscaler.IRDispatchInput{
+	err := autoscaler.DispatchForIRComponent(ctx, autoscaler.IRDispatchInput{
 		Client:             b.Client,
 		Scheme:             b.Scheme,
 		IR:                 ir,
 		ResolvedAutoscaler: dispatchBlock,
 		ComponentExt:       componentExt,
 	})
+	if autoscaler.IsTransitionPending(err) {
+		b.Log.Info("Autoscaler switch in progress", "inferenceService", isvc.Name, "namespace", isvc.Namespace, "inferenceReplica", ir.Name, "reason", transitionPendingReason(err), "detail", err.Error())
+		return ctrl.Result{Requeue: true}, nil
+	}
+	return ctrl.Result{}, err
+}
+
+// transitionPendingReason returns the AutoscalerSwitched reason carried by a
+// pending autoscaler switch.
+func transitionPendingReason(err error) string {
+	var pending *autoscaler.TransitionPendingError
+	if errors.As(err, &pending) {
+		return pending.Reason
+	}
+	return ""
 }
 
 // resolveRawComponentAutoscaling is the RawDeployment counterpart: policy

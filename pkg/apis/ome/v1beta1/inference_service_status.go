@@ -646,6 +646,28 @@ type CandidatePlacement struct {
 	// source's rollout groups reference a RolloutPolicy.
 	// +optional
 	Rollout *CandidateRolloutStatus `json:"rollout,omitempty"`
+
+	// ComponentFloors records, on a Split home, each scaled component's floor:
+	// the one on the home's member copy now, and the one the accepted plan
+	// gives it. A current floor above the desired one is held there until its
+	// replacements on other homes are ready.
+	// +optional
+	// +listType=map
+	// +listMapKey=component
+	// +kubebuilder:validation:MaxItems=3
+	ComponentFloors []CandidateComponentFloor `json:"componentFloors,omitempty"`
+}
+
+// CandidateComponentFloor records one component's floor on a Split home.
+type CandidateComponentFloor struct {
+	// +kubebuilder:validation:Enum=engine;decoder;router
+	Component ComponentType `json:"component"`
+	// Current is the floor on the home's member copy; zero without a copy.
+	// +kubebuilder:validation:Minimum=0
+	Current int32 `json:"current"`
+	// Desired is the floor at the accepted plan's desired shares.
+	// +kubebuilder:validation:Minimum=0
+	Desired int32 `json:"desired"`
 }
 
 // CandidateAutoscalingStatus is the per-home AutoscalerPolicy digest state

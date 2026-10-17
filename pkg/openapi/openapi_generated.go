@@ -65,6 +65,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAllocationStatus":        schema_pkg_apis_ome_v1beta1_CandidateAllocationStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAutoscalingStatus":       schema_pkg_apis_ome_v1beta1_CandidateAutoscalingStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateComponentAutoscaling":    schema_pkg_apis_ome_v1beta1_CandidateComponentAutoscaling(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateComponentFloor":          schema_pkg_apis_ome_v1beta1_CandidateComponentFloor(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidatePlacement":               schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidatePolicyDigest":            schema_pkg_apis_ome_v1beta1_CandidatePolicyDigest(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutGroup":            schema_pkg_apis_ome_v1beta1_CandidateRolloutGroup(ref),
@@ -196,6 +197,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunTarget":                 schema_pkg_apis_ome_v1beta1_RolloutRunTarget(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutSpec":                      schema_pkg_apis_ome_v1beta1_RolloutSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutStatus":                    schema_pkg_apis_ome_v1beta1_RolloutStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterCapacityEndpoint":           schema_pkg_apis_ome_v1beta1_RouterCapacityEndpoint(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterSpec":                       schema_pkg_apis_ome_v1beta1_RouterSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RoutingCapacitySpec":              schema_pkg_apis_ome_v1beta1_RoutingCapacitySpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RoutingProbeSpec":                 schema_pkg_apis_ome_v1beta1_RoutingProbeSpec(ref),
@@ -3517,6 +3519,43 @@ func schema_pkg_apis_ome_v1beta1_CandidateComponentAutoscaling(ref common.Refere
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_CandidateComponentFloor(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CandidateComponentFloor records one component's floor on a Split home.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"component": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"current": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Current is the floor on the home's member copy; zero without a copy.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"desired": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Desired is the floor at the accepted plan's desired shares.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"component", "current", "desired"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -3597,12 +3636,34 @@ func schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref common.ReferenceCallback
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutStatus"),
 						},
 					},
+					"componentFloors": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"component",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ComponentFloors records, on a Split home, each scaled component's floor: the one on the home's member copy now, and the one the accepted plan gives it. A current floor above the desired one is held there until its replacements on other homes are ready.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateComponentFloor"),
+									},
+								},
+							},
+						},
+					},
 				},
 				Required: []string{"cluster"},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.Time", "knative.dev/pkg/apis.URL", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAllocationStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAutoscalingStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutStatus"},
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time", "knative.dev/pkg/apis.URL", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAllocationStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAutoscalingStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateComponentFloor", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutStatus"},
 	}
 }
 
@@ -4245,7 +4306,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentAutoscalerStatus(ref common.ReferenceC
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "Conditions mirrors the HPA's or ScaledObject's conditions verbatim (HPA: ScalingActive / AbleToScale / ScalingLimited; ScaledObject: Ready / Active / Fallback / Paused). Empty when ManagedBy != \"ome\" — operator-owned scalers are surfaced via scaleTargetRef instead.",
+							Description: "Conditions mirrors the HPA's or ScaledObject's conditions verbatim (HPA: ScalingActive / AbleToScale / ScalingLimited; ScaledObject: Ready / Active / Fallback / Paused). OME adds its own conditions next to them: AutoscalerSwitched when the Component moves between an OME HPA and a KEDA ScaledObject, and AutoscalerResolved when it carries an autoscalerPolicyRef. The scaler conditions are empty when ManagedBy != \"ome\" — operator-owned scalers are surfaced via scaleTargetRef instead.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -13076,6 +13137,36 @@ func schema_pkg_apis_ome_v1beta1_RolloutStatus(ref common.ReferenceCallback) com
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_RouterCapacityEndpoint(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RouterCapacityEndpoint names the router path that reports serving capacity and the router Service port that answers it.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"path": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Path is the exact request path, for example /capacity. It must equal spec.routing.capacity.path, which the control plane polls. \"/\" is rejected because it would send every request to Port.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"port": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Port is the router Service port that answers Path. OME adds the route only while the router Service exposes this port, so a wrong port leaves the capacity endpoint unreachable rather than the service unroutable.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"path", "port"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -13678,11 +13769,17 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 							},
 						},
 					},
+					"capacityEndpoint": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CapacityEndpoint exposes one router path on the service's gateway hostname from a router port other than the serving port. Set it when spec.routing.capacity polls the router, and the router answers that path on another port, for example its metrics port. Each serving cluster's top-level HTTPRoute then sends exactly this path to Port; every other path still reaches the serving port. Set it on the InferenceService; serving runtimes reject it.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterCapacityEndpoint"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec"},
+			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterCapacityEndpoint", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec"},
 	}
 }
 
@@ -13772,7 +13869,7 @@ func schema_pkg_apis_ome_v1beta1_RoutingCapacitySpec(ref common.ReferenceCallbac
 					},
 					"maxAge": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MaxAge is the maximum accepted age of a capacity report.",
+							Description: "MaxAge is the maximum accepted age of a capacity report. Choose it above quorum * period: otherwise the oldest reading can expire before the next poll lands, and the home briefly falls back to its replica count. In Reported mode each further period keeps a home on its reports through one more failed poll.",
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
 						},
 					},
@@ -16008,7 +16105,7 @@ func schema_pkg_apis_ome_v1beta1_TrafficMapSpec(ref common.ReferenceCallback) co
 					},
 					"capacityMode": {
 						SchemaProps: spec.SchemaProps{
-							Description: "CapacityMode identifies the capacity authority, even for an empty table. Reported disables retained-positive publication: replica status cannot override a current reported-capacity decision. Unset means Ceiling.",
+							Description: "CapacityMode identifies the capacity authority, even for an empty table. In Reported mode a table in which any entry carries a reported weight is published at once, and an earlier positive plan never replaces it. A table without one follows the same retained-positive rules as Ceiling. Unset means Ceiling.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

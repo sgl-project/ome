@@ -101,6 +101,8 @@ func TestDispatchForRawComponent_BranchesAndTransitions(t *testing.T) {
 		preSO      bool
 		wantHPA    bool
 		wantSO     bool
+		// wantPending: the ScaledObject waits for KEDA to take the HPA over.
+		wantPending bool
 	}{
 		{
 			name:       "typed HPA creates Deployment-targeted HPA",
@@ -113,10 +115,12 @@ func TestDispatchForRawComponent_BranchesAndTransitions(t *testing.T) {
 			wantSO:     true,
 		},
 		{
-			name:       "HPA to KEDA deletes stale HPA",
-			autoscaler: rawDispatchKEDAAutoscaler(),
-			preHPA:     true,
-			wantSO:     true,
+			name:        "HPA to KEDA hands the HPA to KEDA",
+			autoscaler:  rawDispatchKEDAAutoscaler(),
+			preHPA:      true,
+			wantHPA:     true,
+			wantSO:      true,
+			wantPending: true,
 		},
 		{
 			name:       "KEDA to HPA deletes stale ScaledObject",
@@ -152,7 +156,14 @@ func TestDispatchForRawComponent_BranchesAndTransitions(t *testing.T) {
 			scheme := dispatchScheme(t)
 			builder := fake.NewClientBuilder().WithScheme(scheme)
 			if tt.preHPA {
-				builder = builder.WithObjects(existingHPA(componentMeta.Namespace, componentMeta.Name, rawDispatchOwner()))
+				hpa := existingHPA(componentMeta.Namespace, componentMeta.Name, rawDispatchOwner())
+				hpa.Spec.ScaleTargetRef = dispatchDeploymentTargetRef(componentMeta.Name)
+				if tt.wantHPA && tt.autoscaler.HPA == nil {
+					hpa.Spec.MinReplicas = ptr.To(int32(2))
+					hpa.Spec.MaxReplicas = 7
+					hpa.Spec.Metrics = rawDispatchHPAAutoscaler().HPA.Metrics
+				}
+				builder = builder.WithObjects(hpa)
 			}
 			if tt.preSO {
 				builder = builder.WithObjects(existingScaledObject(componentMeta.Namespace, componentMeta.Name, rawDispatchOwner()))
@@ -167,7 +178,11 @@ func TestDispatchForRawComponent_BranchesAndTransitions(t *testing.T) {
 				ResolvedAutoscaler: tt.autoscaler,
 				ComponentExt:       rawDispatchComponentExt(),
 			})
-			require.NoError(t, err)
+			if tt.wantPending {
+				require.True(t, IsTransitionPending(err), "expected a pending switch, got %v", err)
+			} else {
+				require.NoError(t, err)
+			}
 
 			hpa := &autoscalingv2.HorizontalPodAutoscaler{}
 			hpaErr := cl.Get(context.Background(), types.NamespacedName{
@@ -184,7 +199,11 @@ func TestDispatchForRawComponent_BranchesAndTransitions(t *testing.T) {
 				require.NotNil(t, hpa.Spec.MinReplicas)
 				assert.Equal(t, int32(2), *hpa.Spec.MinReplicas)
 				assert.Equal(t, int32(7), hpa.Spec.MaxReplicas)
-				assert.Equal(t, tt.autoscaler.HPA.Metrics, hpa.Spec.Metrics)
+				wantMetrics := rawDispatchHPAAutoscaler().HPA.Metrics
+				if tt.autoscaler.HPA != nil {
+					wantMetrics = tt.autoscaler.HPA.Metrics
+				}
+				assert.Equal(t, wantMetrics, hpa.Spec.Metrics)
 				assertRawAutoscalerOwner(t, hpa.OwnerReferences)
 			} else {
 				assert.True(t, apierrors.IsNotFound(hpaErr), "expected HPA to be absent, got %v", hpaErr)
@@ -207,6 +226,12 @@ func TestDispatchForRawComponent_BranchesAndTransitions(t *testing.T) {
 				assert.Equal(t, int32(7), *so.Spec.MaxReplicaCount)
 				assert.Equal(t, tt.autoscaler.Keda.Triggers, so.Spec.Triggers)
 				assertRawAutoscalerOwner(t, so.OwnerReferences)
+				if tt.wantPending {
+					assert.Equal(t, "true", so.Annotations[kedav1.ScaledObjectTransferHpaOwnershipAnnotation])
+					require.NotNil(t, so.Spec.Advanced)
+					require.NotNil(t, so.Spec.Advanced.HorizontalPodAutoscalerConfig)
+					assert.Equal(t, componentMeta.Name, so.Spec.Advanced.HorizontalPodAutoscalerConfig.Name)
+				}
 			} else {
 				assert.True(t, apierrors.IsNotFound(soErr), "expected ScaledObject to be absent, got %v", soErr)
 			}
@@ -860,4 +885,34 @@ func TestDispatchForRawComponent_Guards(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.wantError)
 		})
 	}
+}
+
+// TestDispatchForRawComponent_PendingSwitchRecordsLastRendered pins that a
+// policy render applied while the switch to KEDA waits for KEDA is recorded
+// as last-known-good, and the pending result still reaches the caller.
+func TestDispatchForRawComponent_PendingSwitchRecordsLastRendered(t *testing.T) {
+	componentMeta := rawDispatchComponentMeta()
+	scheme := dispatchScheme(t)
+	require.NoError(t, appsv1.AddToScheme(scheme))
+	working := existingHPA(componentMeta.Namespace, componentMeta.Name, rawDispatchOwner())
+	working.Spec.ScaleTargetRef = dispatchDeploymentTargetRef(componentMeta.Name)
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: componentMeta.Namespace, Name: componentMeta.Name}}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(working, deployment).Build()
+
+	err := DispatchForRawComponent(context.Background(), RawDispatchInput{
+		Client:             cl,
+		Scheme:             scheme,
+		ISVC:               rawDispatchISVC(),
+		ComponentMeta:      componentMeta,
+		ResolvedAutoscaler: rawDispatchKEDAAutoscaler(),
+		ComponentExt:       rawDispatchComponentExt(),
+		PolicySourced:      true,
+	})
+	require.True(t, IsTransitionPending(err), "expected a pending switch, got %v", err)
+
+	stored := &appsv1.Deployment{}
+	require.NoError(t, cl.Get(context.Background(), types.NamespacedName{Namespace: componentMeta.Namespace, Name: componentMeta.Name}, stored))
+	recorded, err := UnmarshalLastRendered(stored.Annotations[constants.AutoscalerPolicyLastRendered])
+	require.NoError(t, err)
+	assert.Equal(t, rawDispatchKEDAAutoscaler(), recorded)
 }

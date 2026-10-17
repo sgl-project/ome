@@ -7,6 +7,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	"knative.dev/pkg/apis"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -449,8 +450,54 @@ func (b *HTTPRouteBuilder) buildTopLevelHTTPRoute(ctx context.Context, isvc *v1b
 	httpRouteRules := []gatewayapiv1.HTTPRouteRule{
 		b.createHTTPRouteRule(routeMatch, filters, serviceName, isvc.Namespace, port, timeout),
 	}
+	if irprojector.RoleDeclared(isvc, v1beta1.RouterComponent) {
+		if rule, ok := b.capacityEndpointRule(ctx, isvc, serviceName, timeout); ok {
+			httpRouteRules = append(httpRouteRules, rule)
+		}
+	}
 
 	return b.buildHTTPRouteResource(isvc, isvc.Name, httpRouteRules)
+}
+
+// capacityEndpointRule sends the router's capacity path to the router port
+// that answers it, so the control plane's capacity poll of this service's
+// endpoint reaches it. An exact match outranks the service's prefix rule. The
+// rule is omitted while the router Service does not expose the port: a
+// backend on a missing port would leave the whole route unresolved and the
+// service unroutable, which is worse than an unreachable capacity endpoint.
+func (b *HTTPRouteBuilder) capacityEndpointRule(ctx context.Context, isvc *v1beta1.InferenceService, routerService string, timeout *gatewayapiv1.Duration) (gatewayapiv1.HTTPRouteRule, bool) {
+	if isvc.Spec.Router == nil || isvc.Spec.Router.CapacityEndpoint == nil {
+		return gatewayapiv1.HTTPRouteRule{}, false
+	}
+	endpoint := isvc.Spec.Router.CapacityEndpoint
+	if !isvcutils.ServiceHasPort(ctx, b.client, isvc.Namespace, routerService, endpoint.Port) {
+		klog.InfoS("Router Service does not expose the capacity endpoint port; capacity path not routed",
+			"isvc", klog.KObj(isvc), "service", routerService, "port", endpoint.Port, "path", endpoint.Path)
+		return gatewayapiv1.HTTPRouteRule{}, false
+	}
+	filters := []gatewayapiv1.HTTPRouteFilter{b.addIsvcHeaders(isvc.Name, isvc.Namespace)}
+	matchPath := endpoint.Path
+	if !b.ingressConfig.PerISVCSubdomain {
+		// The shared host tells services apart by path prefix. Match the path
+		// under this service's prefix and send the router the path it serves.
+		matchPath = strings.TrimSuffix(b.pathPrefix(isvc, isvc.Name), "/") + endpoint.Path
+		filters = append(filters, gatewayapiv1.HTTPRouteFilter{
+			Type: gatewayapiv1.HTTPRouteFilterURLRewrite,
+			URLRewrite: &gatewayapiv1.HTTPURLRewriteFilter{
+				Path: &gatewayapiv1.HTTPPathModifier{
+					Type:            gatewayapiv1.FullPathHTTPPathModifier,
+					ReplaceFullPath: ptr.To(endpoint.Path),
+				},
+			},
+		})
+	}
+	match := gatewayapiv1.HTTPRouteMatch{
+		Path: &gatewayapiv1.HTTPPathMatch{
+			Type:  ptr.To(gatewayapiv1.PathMatchExact),
+			Value: ptr.To(matchPath),
+		},
+	}
+	return b.createHTTPRouteRule([]gatewayapiv1.HTTPRouteMatch{match}, filters, routerService, isvc.Namespace, endpoint.Port, timeout), true
 }
 
 func (b *HTTPRouteBuilder) buildHTTPRouteResource(isvc *v1beta1.InferenceService, name string, httpRouteRules []gatewayapiv1.HTTPRouteRule) (*gatewayapiv1.HTTPRoute, error) {

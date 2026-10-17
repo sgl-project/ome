@@ -25418,6 +25418,19 @@ spec:
                           minLength: 1
                           type: string
                       type: object
+                    capacityEndpoint:
+                      properties:
+                        path:
+                          maxLength: 1024
+                          minLength: 2
+                          pattern: ^/[^/?#]
+                          type: string
+                        port:
+                          format: int32
+                          maximum: 65535
+                          minimum: 1
+                          type: integer
+                      type: object
                     config:
                       additionalProperties:
                         type: string
@@ -29996,6 +30009,33 @@ spec:
                             type: object
                           cluster:
                             type: string
+                          componentFloors:
+                            items:
+                              properties:
+                                component:
+                                  enum:
+                                    - engine
+                                    - decoder
+                                    - router
+                                  type: string
+                                current:
+                                  format: int32
+                                  minimum: 0
+                                  type: integer
+                                desired:
+                                  format: int32
+                                  minimum: 0
+                                  type: integer
+                              required:
+                                - component
+                                - current
+                                - desired
+                              type: object
+                            maxItems: 3
+                            type: array
+                            x-kubernetes-list-map-keys:
+                              - component
+                            x-kubernetes-list-type: map
                           endpoint:
                             type: string
                           observationFailingSince:

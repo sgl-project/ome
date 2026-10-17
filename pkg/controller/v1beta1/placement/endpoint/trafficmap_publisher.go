@@ -1094,9 +1094,11 @@ func trafficMapFallbackEligibilityWithAllHomesUnready(
 	if trafficMap == nil || owner == nil {
 		return false, false
 	}
-	if trafficMap.Spec.CapacityMode == v1beta1.RoutingCapacityModeReported {
-		// Source identity and generation are checked before publication. Replica
-		// or condition lag cannot extend a reported weight beyond the current table.
+	if trafficMap.Spec.CapacityMode == v1beta1.RoutingCapacityModeReported && trafficMapCarriesReport(trafficMap) {
+		// A current report decides its home's weight, so replica or condition lag
+		// cannot delay the table and an earlier positive plan cannot replace it.
+		// Source identity and generation are checked before publication. A table
+		// without a report has fallen back to replica counts, like a Ceiling table.
 		return false, true
 	}
 	if _, found := owner.Annotations[constants.TrafficDrainAnnotation]; found {
@@ -1236,6 +1238,14 @@ func trafficMapFallbackEligibilityWithAllHomesUnready(
 	default:
 		return false, false
 	}
+}
+
+// trafficMapCarriesReport reports whether any entry's weight comes from an
+// accepted endpoint report.
+func trafficMapCarriesReport(trafficMap *v1beta1.TrafficMap) bool {
+	return slices.ContainsFunc(trafficMap.Spec.Entries, func(entry v1beta1.TrafficMapEntry) bool {
+		return entry.Capacity != nil && entry.Capacity.ReportedWeight != nil
+	})
 }
 
 func trafficMapSinglePlacementLost(

@@ -190,8 +190,10 @@ type TrafficMapSpec struct {
 	Mode PlacementMode `json:"mode,omitempty"`
 
 	// CapacityMode identifies the capacity authority, even for an empty table.
-	// Reported disables retained-positive publication: replica status cannot
-	// override a current reported-capacity decision. Unset means Ceiling.
+	// In Reported mode a table in which any entry carries a reported weight is
+	// published at once, and an earlier positive plan never replaces it. A table
+	// without one follows the same retained-positive rules as Ceiling. Unset
+	// means Ceiling.
 	// +optional
 	CapacityMode RoutingCapacityMode `json:"capacityMode,omitempty"`
 
