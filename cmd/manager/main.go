@@ -49,6 +49,7 @@ import (
 	v1beta1acceleratorclasscontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/acceleratorclass"
 	autoscalerpolicycontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/autoscalerpolicy"
 	v1beta1basemodelcontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel"
+	v1beta1benchmarkjobcontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/benchmark"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	v1beta1inferencereplicacontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/inferencereplica"
 	v1beta1isvccontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice"
@@ -67,6 +68,7 @@ import (
 	"sigs.k8s.io/ome/pkg/version"
 	autoscalerpolicywebhook "sigs.k8s.io/ome/pkg/webhook/admission/autoscalerpolicy"
 	basemodelwebhook "sigs.k8s.io/ome/pkg/webhook/admission/basemodel"
+	"sigs.k8s.io/ome/pkg/webhook/admission/benchmark"
 	inferencereplicawebhook "sigs.k8s.io/ome/pkg/webhook/admission/inferencereplica"
 	"sigs.k8s.io/ome/pkg/webhook/admission/isvc"
 	"sigs.k8s.io/ome/pkg/webhook/admission/pod"
@@ -656,7 +658,7 @@ func main() {
 	// controllers here would reconcile against an empty local catalog (no-op
 	// at best, churn at worst), so gate them off under the control-plane role.
 	if isControlPlane {
-		setupLog.Info("control-plane role: BaseModel/ClusterBaseModel/ServingRuntime/RuntimeRevisionGC controllers disabled")
+		setupLog.Info("control-plane role: BaseModel/ClusterBaseModel/BenchmarkJob/ServingRuntime/RuntimeRevisionGC controllers disabled")
 	} else {
 		setupLog.Info("Setting up BaseModel controller")
 		if err = (&v1beta1basemodelcontroller.BaseModelReconciler{
@@ -677,6 +679,20 @@ func main() {
 			OmeAgentConfig: omeAgentConfig,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "Failed to create ClusterBaseModel controller")
+			os.Exit(1)
+		}
+
+		benchmarkJobEventBroadcaster := newEventBroadcaster(eventRecorderSettings)
+		benchmarkJobEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+		setupLog.Info("Setting up BenchmarkJob controller")
+		if err = (&v1beta1benchmarkjobcontroller.BenchmarkJobReconciler{
+			Client:    mgr.GetClient(),
+			Clientset: clientSet,
+			Log:       ctrl.Log.WithName("BenchmarkJob"),
+			Scheme:    mgr.GetScheme(),
+			Recorder:  benchmarkJobEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create BenchmarkJob controller")
 			os.Exit(1)
 		}
 
@@ -795,6 +811,11 @@ func main() {
 		setupLog.Info("Registering serving runtime validator webhook to the webhook server")
 		hookServer.Register("/validate-ome-io-v1beta1-servingruntime", &webhook.Admission{
 			Handler: &servingruntime.ServingRuntimeValidator{Client: mgr.GetAPIReader(), Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
+
+		setupLog.Info("Registering benchmark job validator webhook to the webhook server")
+		hookServer.Register("/validate-ome-io-v1beta1-benchmarkjob", &webhook.Admission{
+			Handler: &benchmark.BenchmarkJobValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
 		setupLog.Info("Registering serving runtime engine-preset mutator webhooks to the webhook server")

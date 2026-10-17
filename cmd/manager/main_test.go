@@ -4,8 +4,13 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -322,6 +327,53 @@ func TestWebhookConfiguration(t *testing.T) {
 	}
 	assert.Equal(t, 8443, customOpts.webhookPort, "Custom webhook port should be set correctly")
 	assert.True(t, customOpts.enableWebhook, "Webhook should be enabled")
+}
+
+func TestDeclaredWebhooksAreRegistered(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), "main.go", nil, parser.SkipObjectResolution)
+	require.NoError(t, err)
+	registered := map[string]bool{}
+	ast.Inspect(file, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok || len(call.Args) == 0 {
+			return true
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		receiver, ok := selector.X.(*ast.Ident)
+		if path, isLit := call.Args[0].(*ast.BasicLit); isLit && ok && receiver.Name == "hookServer" && selector.Sel.Name == "Register" {
+			registered[strings.Trim(path.Value, `"`)] = true
+		}
+		if selector.Sel.Name == "NewWebhookManagedBy" && len(call.Args) == 2 {
+			// controller-runtime derives the validator path from the registered v1beta1 type.
+			if object, ok := call.Args[1].(*ast.UnaryExpr); ok {
+				if literal, ok := object.X.(*ast.CompositeLit); ok {
+					if kind, ok := literal.Type.(*ast.SelectorExpr); ok {
+						registered["/validate-ome-io-v1beta1-"+strings.ToLower(kind.Sel.Name)] = true
+					}
+				}
+			}
+		}
+		return true
+	})
+
+	manifests, err := filepath.Glob(filepath.Join("..", "..", "charts", "ome-resources", "templates", "ome-controller", "webhooks", "*.yaml"))
+	require.NoError(t, err)
+	manifests = append(manifests, filepath.Join("..", "..", "config", "webhook", "manifests.yaml"))
+	declared := 0
+	for _, manifest := range manifests {
+		data, err := os.ReadFile(manifest)
+		require.NoError(t, err)
+		for _, line := range strings.Split(string(data), "\n") {
+			if path, ok := strings.CutPrefix(strings.TrimSpace(line), "path: "); ok {
+				declared++
+				assert.True(t, registered[path], "%s declares %s but cmd/manager/main.go does not register it", manifest, path)
+			}
+		}
+	}
+	require.NotZero(t, declared, "no webhook paths found in the manifests")
 }
 
 func TestMetricsConfiguration(t *testing.T) {
