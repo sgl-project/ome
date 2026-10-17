@@ -991,3 +991,69 @@ func TestMergeSchedulerName(t *testing.T) {
 		MergeSchedulerName(runtimeWithScheduler(), nil, nil, nil)
 	})
 }
+
+// An env var holds either a value or a valueFrom. Merging by name must not
+// keep the runtime entry's half beside the override's, which the API server
+// rejects.
+func TestMergeEnvSources(t *testing.T) {
+	source := &v1.EnvVarSource{ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+		LocalObjectReference: v1.LocalObjectReference{Name: "settings"},
+		Key:                  "value",
+	}}
+	secret := &v1.EnvVarSource{SecretKeyRef: &v1.SecretKeySelector{
+		LocalObjectReference: v1.LocalObjectReference{Name: "credentials"},
+		Key:                  "value",
+	}}
+	tests := []struct {
+		name     string
+		runtime  []v1.EnvVar
+		override []v1.EnvVar
+		expected []v1.EnvVar
+	}{
+		{
+			name:     "literal replaced by source",
+			runtime:  []v1.EnvVar{{Name: "A", Value: "base"}, {Name: "B", Value: "keep"}},
+			override: []v1.EnvVar{{Name: "A", ValueFrom: source}},
+			expected: []v1.EnvVar{{Name: "A", ValueFrom: source}, {Name: "B", Value: "keep"}},
+		},
+		{
+			name:     "source replaced by literal",
+			runtime:  []v1.EnvVar{{Name: "A", ValueFrom: source}},
+			override: []v1.EnvVar{{Name: "A", Value: "new"}},
+			expected: []v1.EnvVar{{Name: "A", Value: "new"}},
+		},
+		{
+			name:     "configmap source replaced by secret source",
+			runtime:  []v1.EnvVar{{Name: "A", ValueFrom: source}},
+			override: []v1.EnvVar{{Name: "A", ValueFrom: secret}},
+			expected: []v1.EnvVar{{Name: "A", ValueFrom: secret}},
+		},
+		{
+			name:     "new entries are added",
+			runtime:  []v1.EnvVar{{Name: "A", Value: "base"}},
+			override: []v1.EnvVar{{Name: "B", Value: "b"}, {Name: "C", ValueFrom: source}},
+			expected: []v1.EnvVar{{Name: "A", Value: "base"}, {Name: "B", Value: "b"}, {Name: "C", ValueFrom: source}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner := func(env []v1.EnvVar) *v1beta1.RunnerSpec {
+				return &v1beta1.RunnerSpec{Container: v1.Container{Name: "ome-container", Env: env}}
+			}
+			merged, err := MergeEngineSpec(
+				&v1beta1.EngineSpec{Runner: runner(tt.runtime), Worker: &v1beta1.WorkerSpec{Runner: runner(tt.runtime)}},
+				&v1beta1.EngineSpec{Runner: runner(tt.override), Worker: &v1beta1.WorkerSpec{Runner: runner(tt.override)}},
+			)
+			assert.NoError(t, err)
+			assert.ElementsMatch(t, tt.expected, merged.Runner.Env)
+			assert.ElementsMatch(t, tt.expected, merged.Worker.Runner.Env)
+
+			container, err := MergeRuntimeContainers(
+				&v1.Container{Name: "ome-container", Env: tt.runtime},
+				&v1.Container{Env: tt.override},
+			)
+			assert.NoError(t, err)
+			assert.ElementsMatch(t, tt.expected, container.Env)
+		})
+	}
+}
