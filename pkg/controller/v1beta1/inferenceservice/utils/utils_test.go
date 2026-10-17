@@ -408,6 +408,24 @@ func TestUpdateEnvVars(t *testing.T) {
 			},
 		},
 		{
+			name: "replace sourced env var",
+			container: &v1.Container{
+				Env: []v1.EnvVar{{
+					Name: "TEST_VAR",
+					ValueFrom: &v1.EnvVarSource{
+						ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+							LocalObjectReference: v1.LocalObjectReference{Name: "settings"},
+							Key:                  "value",
+						},
+					},
+				}},
+			},
+			envVar: &v1.EnvVar{Name: "TEST_VAR", Value: "new-value"},
+			expectedEnv: []v1.EnvVar{
+				{Name: "TEST_VAR", Value: "new-value"},
+			},
+		},
+		{
 			name: "add new env var",
 			container: &v1.Container{
 				Env: []v1.EnvVar{
