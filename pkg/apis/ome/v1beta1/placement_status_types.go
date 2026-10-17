@@ -25,6 +25,11 @@ const PlacementCapacityFresh = "PlacementCapacityFresh"
 // OMENative. It is advisory and does not change observed serving readiness.
 const PlacementBackendReady = "PlacementBackendReady"
 
+// PlacementComponentShares reports, for a Split source with per-component
+// terms, whether each component follows the Engine shares or its own weights,
+// and which weights go unused. It is advisory and never gates placement.
+const PlacementComponentShares = "PlacementComponentShares"
+
 // PlacementReplicaFloorsReady reports whether resolved member floors match
 // placement authority. It does not change observed serving readiness.
 const PlacementReplicaFloorsReady = "PlacementReplicaFloorsReady"

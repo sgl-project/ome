@@ -56,8 +56,10 @@ func TestDispatchIRAutoscaler_HoldRedispatchesStoredBlock(t *testing.T) {
 	isvc := holdTestISVC(ext)
 	ir := holdTestIR("llm-a-engine", storedIRBlock())
 
-	require.NoError(t, dispatchIRAutoscaler(context.Background(), b, isvc, ir,
-		&ext, ComponentAutoscaling{Hold: true}))
+	holdResult, holdErr := dispatchIRAutoscaler(context.Background(), b, isvc, ir,
+		&ext, ComponentAutoscaling{Hold: true})
+	require.NoError(t, holdErr)
+	assert.Zero(t, holdResult, "a hold pass needs no requeue")
 
 	so := &kedav1.ScaledObject{}
 	require.NoError(t, cl.Get(context.Background(), types.NamespacedName{
@@ -87,8 +89,10 @@ func TestDispatchIRAutoscaler_HoldWithoutStoredBlockDispatchesNothing(t *testing
 	isvc := holdTestISVC(ext)
 	ir := holdTestIR("llm-a-engine", nil)
 
-	require.NoError(t, dispatchIRAutoscaler(context.Background(), b, isvc, ir,
-		&ext, ComponentAutoscaling{Hold: true}))
+	holdResult, holdErr := dispatchIRAutoscaler(context.Background(), b, isvc, ir,
+		&ext, ComponentAutoscaling{Hold: true})
+	require.NoError(t, holdErr)
+	assert.Zero(t, holdResult, "a hold pass needs no requeue")
 
 	so := &kedav1.ScaledObject{}
 	err := cl.Get(context.Background(), types.NamespacedName{

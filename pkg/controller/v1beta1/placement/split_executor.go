@@ -434,16 +434,18 @@ func (r *Reconciler) writeSplitObservations(ctx context.Context, source *v1beta1
 		}
 		return r.writeSinglePlanStatus(ctx, source, standing, reason, message)
 	}
-	res := placementResult{phase: v1beta1.PlacementPhasePending, conditions: []policyCondition{splitProgressCondition(reason, message)}}
+	res := placementResult{phase: v1beta1.PlacementPhasePending, conditions: []policyCondition{splitProgressCondition(reason, message), componentSharesCondition(source)}}
 	if placementMode(source) == v1beta1.PlacementModeSplitByCapacity {
 		res.conditions = append(res.conditions, capacityFreshCondition(corev1.ConditionTrue, "CapacityVerified", "Matched members have usable hardware and resolved demand"))
 	}
+	componentFloors := componentFloorsFor(source, observations)
 	for _, previous := range source.Status.Placement.Candidates {
 		observed := observations[previous.Cluster]
 		candidate := observed.Candidate
 		if candidate.Cluster == "" {
 			candidate = r.unknownCandidate(source, previous)
 		}
+		candidate.ComponentFloors = componentFloors[previous.Cluster]
 		res.candidates = append(res.candidates, candidate)
 		if (previous.Allocation.CurrentReplicas > 0 || previous.Allocation.CurrentHome != nil) && res.phase == v1beta1.PlacementPhasePending {
 			res.phase = v1beta1.PlacementPhaseAdmitting

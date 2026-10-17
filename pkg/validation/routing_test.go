@@ -248,3 +248,54 @@ func validRoutingCapacity() *v1beta1.RoutingCapacitySpec {
 		MaxAge:  metav1.Duration{Duration: time.Minute},
 	}
 }
+
+func TestValidateRouterCapacityEndpoint(t *testing.T) {
+	spec := func(path string, port int32, capacity *v1beta1.RoutingCapacitySpec) *v1beta1.InferenceServiceSpec {
+		s := &v1beta1.InferenceServiceSpec{Router: &v1beta1.RouterSpec{
+			CapacityEndpoint: &v1beta1.RouterCapacityEndpoint{Path: path, Port: port},
+		}}
+		if capacity != nil {
+			s.Routing = &v1beta1.RoutingSpec{Capacity: capacity}
+		}
+		return s
+	}
+
+	t.Run("valid without routing, as on a serving cluster's copy", func(t *testing.T) {
+		require.NoError(t, ValidateRouting(spec("/capacity", 9090, nil)))
+	})
+
+	t.Run("matching inline poll path is valid", func(t *testing.T) {
+		capacity := validRoutingCapacity()
+		capacity.Path = "/capacity"
+		require.NoError(t, ValidateRouting(spec("/capacity", 9090, capacity)))
+	})
+
+	t.Run("a different inline poll path is rejected", func(t *testing.T) {
+		capacity := validRoutingCapacity()
+		capacity.Path = "/load"
+		err := ValidateRouting(spec("/capacity", 9090, capacity))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must equal spec.routing.capacity.path")
+	})
+
+	t.Run("disabled polling does not compare paths", func(t *testing.T) {
+		require.NoError(t, ValidateRouting(spec("/capacity", 9090, &v1beta1.RoutingCapacitySpec{Disabled: true})))
+	})
+
+	for _, path := range []string{"", "capacity", "/", "//capacity", "/a//b", "/a/./b", "/a/../b", "/a/.", "/a/..",
+		"/a%2Fb", "/load?x=1", "/load#x", "/" + strings.Repeat("a", 1024)} {
+		t.Run("rejects path "+fmt.Sprintf("%.20q", path), func(t *testing.T) {
+			err := ValidateRouting(spec(path, 9090, nil))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "spec.router.capacityEndpoint.path")
+		})
+	}
+
+	for _, port := range []int32{0, -1, 65536} {
+		t.Run(fmt.Sprintf("rejects port %d", port), func(t *testing.T) {
+			err := ValidateRouting(spec("/capacity", port, nil))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "spec.router.capacityEndpoint.port")
+		})
+	}
+}

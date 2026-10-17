@@ -3036,6 +3036,158 @@ func TestRestart_HoldsWhenTheStampedRevisionIsGone(t *testing.T) {
 	}
 }
 
+// TestRestart_GangLossOnARowWithNoRevisionRebuildsUnderTheTarget: a gang
+// whose first start failed keeps no revision on its row, because ending the
+// failed attempt clears the Create operation, the only field that named the
+// revision its pods were created at. An operator reset then deletes both
+// pods; the wedged one is gone at once while its sibling is still
+// terminating, so the gang-loss trigger opens a repair. The rebuilt pods
+// run the Component's current template, which is the roll target's, so
+// they carry the target's revision label and the row records the target.
+func TestRestart_GangLossOnARowWithNoRevisionRebuildsUnderTheTarget(t *testing.T) {
+	resetExpectations(t)
+	isvc := minimalISVC("llama-70b", "prod", 1)
+	ir := instanceIR(isvc, workload.ComponentEngine, v1beta1.OMENativeInstanceStatus{
+		Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceFailed, PodCount: 2,
+		LastFailure: &v1beta1.InstanceTermination{
+			Reason:  "CreateContainerError",
+			PodName: query.PodName(isvc.Name, workload.ComponentEngine, 0, "worker", 0),
+		},
+	})
+	c := newFakeClient(t, isvc, ir)
+	spec := &corev1.PodSpec{Containers: []corev1.Container{{Name: "main", Image: "registry.example.com/runtime:v1"}}}
+	workerSpec := &corev1.PodSpec{Containers: []corev1.Container{{Name: "main", Image: "registry.example.com/runtime-worker:v1"}}}
+	target := mintEngineRevision(t, c, isvc, spec, workerSpec)
+	leader := gangPod(isvc, 0, "leader", 0, 1, false, false)
+	leader.UID = "leader-incarnation-1"
+	leader.Labels[query.LabelRevisionHash] = query.RevisionOf(target).Hash()
+	if err := c.Create(context.Background(), leader); err != nil {
+		t.Fatalf("seed the surviving leader: %v", err)
+	}
+
+	plan := buildPlanGangEngine(workload.RestartPolicyRecreateInstance)
+	deps := workload.Deps{Client: c}
+	reason := ""
+	for pass := 0; pass < 3; pass++ {
+		input := buildTestInput(isvc, c, workload.ComponentEngine)
+		input.DesiredSpec.PodSpec, input.DesiredSpec.WorkerPodSpec = spec, workerSpec
+		input.ObservedState.UpdateRevision = target.Name
+		plan.Instances[0].Incarnation = input.ObservedState.Instance(0).Incarnation
+		if pass == 0 {
+			needs, why, err := ops.DetectRestartTrigger(context.Background(), deps, input, plan, plan.Instances[0])
+			if err != nil {
+				t.Fatalf("DetectRestartTrigger: %v", err)
+			}
+			if !needs || !strings.Contains(why, "gang member lost") {
+				t.Fatalf("trigger = (%t, %q), want the gang-loss repair", needs, why)
+			}
+			reason = why
+		}
+		workload.DefaultExpectations.Forget(isvc.Namespace, isvc.Name, workload.ComponentEngine, 0)
+		if _, err := ops.Restart(context.Background(), deps, input, plan, plan.Instances[0], target, reason); err != nil {
+			t.Fatalf("pass %d: Restart: %v", pass, err)
+		}
+	}
+
+	pods := &corev1.PodList{}
+	if err := c.List(context.Background(), pods, client.InNamespace(isvc.Namespace)); err != nil {
+		t.Fatalf("list pods: %v", err)
+	}
+	if len(pods.Items) != 2 {
+		t.Fatalf("pods: got %d want the rebuilt leader and worker", len(pods.Items))
+	}
+	for _, pod := range pods.Items {
+		if got := pod.Labels[query.LabelInstanceIncarnation]; got != "2" {
+			t.Errorf("pod %s incarnation = %q, want the rebuild's 2", pod.Name, got)
+		}
+		if got := pod.Labels[query.LabelRevisionHash]; got != query.RevisionOf(target).Hash() {
+			t.Errorf("pod %s revision label = %q, want the target's %q", pod.Name, got, query.RevisionOf(target).Hash())
+		}
+	}
+	row := findInstanceStatusOnIR(c, isvc, workload.ComponentEngine, 0)
+	if row == nil || row.Phase != v1beta1.OMENativeInstanceRestarting || row.RunningRevision != target.Name {
+		t.Fatalf("row = %+v, want Restarting recording %s", row, target.Name)
+	}
+}
+
+// TestRestart_RebuildOfARowWithNoRevisionStampsTheTarget: a repair whose row
+// records no revision renders the Component's current template, which is the
+// roll target's, so the rebuilt pods carry the target's label and the row
+// records it before the first create. A pause or a held target changes
+// nothing here: the pods run the target's template either way, and only the
+// label says so. With no roll target there is no revision to name, and the
+// pods stay unlabeled.
+func TestRestart_RebuildOfARowWithNoRevisionStampsTheTarget(t *testing.T) {
+	const image = "registry.example.com/runtime:v1"
+	cases := []struct {
+		name     string
+		gang     bool
+		paused   bool
+		held     bool
+		noTarget bool
+	}{
+		{name: "single pod"},
+		{name: "gang", gang: true},
+		{name: "paused gang under a held target", gang: true, paused: true, held: true},
+		{name: "no roll target", gang: true, noTarget: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resetExpectations(t)
+			isvc, ir := isvcReadyAtIncarnation("llama-70b", "prod", 1)
+			c := newFakeClient(t, isvc, ir)
+			spec := &corev1.PodSpec{Containers: []corev1.Container{{Name: "main", Image: image}}}
+			var workerSpec *corev1.PodSpec
+			plan := buildPlanSinglePodEngineForRestart(c, isvc)
+			if tc.gang {
+				workerSpec = &corev1.PodSpec{Containers: []corev1.Container{{Name: "main", Image: image}}}
+				plan = buildPlanGangEngine(workload.RestartPolicyRecreateInstance)
+			}
+			restartingRow(t, c, isvc, "")
+
+			input := buildTestInput(isvc, c, workload.ComponentEngine)
+			input.DesiredSpec.PodSpec, input.DesiredSpec.WorkerPodSpec = spec, workerSpec
+			var target *appsv1.ControllerRevision
+			if !tc.noTarget {
+				target = mintEngineRevision(t, c, isvc, spec, workerSpec)
+				input.ObservedState.UpdateRevision = target.Name
+				if tc.held {
+					input.ObservedState.RetryBlocks = []workload.RetryBlock{{TargetRevision: target.Name, State: workload.RetryBlockHeld}}
+				}
+			}
+			plan.Paused = tc.paused
+
+			if _, err := ops.Restart(context.Background(), workload.Deps{Client: c}, input, plan, plan.Instances[0], target, "gang member lost: 1 of 2 pods present"); err != nil {
+				t.Fatalf("Restart: %v", err)
+			}
+
+			wantHash, wantRevision := "", ""
+			if target != nil {
+				wantHash, wantRevision = query.RevisionOf(target).Hash(), target.Name
+			}
+			pods := &corev1.PodList{}
+			if err := c.List(context.Background(), pods, client.InNamespace("prod")); err != nil {
+				t.Fatalf("list pods: %v", err)
+			}
+			if want := len(plan.Instances[0].Runners); len(pods.Items) != want {
+				t.Fatalf("pods: got %d want %d", len(pods.Items), want)
+			}
+			for _, pod := range pods.Items {
+				if got := pod.Labels[query.LabelRevisionHash]; got != wantHash {
+					t.Errorf("pod %s revision label = %q, want %q", pod.Name, got, wantHash)
+				}
+				if got := pod.Spec.Containers[0].Image; got != image {
+					t.Errorf("pod %s image = %q, want the current template's %q", pod.Name, got, image)
+				}
+			}
+			row := findInstanceStatusOnIR(c, isvc, workload.ComponentEngine, 0)
+			if row == nil || row.Phase != v1beta1.OMENativeInstanceRestarting || row.RunningRevision != wantRevision {
+				t.Fatalf("row = %+v, want Restarting recording %q", row, wantRevision)
+			}
+		})
+	}
+}
+
 // A crash loop the running revision's ladder holds, on a single-pod
 // Instance whose runner keeps dying after serving and coming back: the
 // hold parks the row while the pod is down and names the loop while it serves.

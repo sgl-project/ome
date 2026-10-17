@@ -79,6 +79,9 @@ func (sr *ServingRuntimeValidator) Handle(ctx context.Context, req admission.Req
 	if err := validation.ValidateRuntimeAutoscalerPolicyRefs(&servingRuntime.Spec); err != nil {
 		return admission.Denied(err.Error())
 	}
+	if err := validation.ValidateRuntimeRouterCapacityEndpoint(&servingRuntime.Spec); err != nil {
+		return admission.Denied(err.Error())
+	}
 
 	existing := &v1beta1.ServingRuntimeList{}
 	if err := sr.Client.List(ctx, existing, client.InNamespace(servingRuntime.Namespace)); err != nil {
@@ -150,6 +153,9 @@ func (csr *ClusterServingRuntimeValidator) Handle(ctx context.Context, req admis
 
 	// Policy refs attach on the InferenceService only; see ServingRuntime.Handle.
 	if err := validation.ValidateRuntimeAutoscalerPolicyRefs(&clusterServingRuntime.Spec); err != nil {
+		return admission.Denied(err.Error())
+	}
+	if err := validation.ValidateRuntimeRouterCapacityEndpoint(&clusterServingRuntime.Spec); err != nil {
 		return admission.Denied(err.Error())
 	}
 

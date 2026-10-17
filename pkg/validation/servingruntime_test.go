@@ -187,3 +187,20 @@ func TestValidateRuntimeAutoscalerPolicyRefs(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateRuntimeRouterCapacityEndpoint(t *testing.T) {
+	for _, spec := range []*v1beta1.ServingRuntimeSpec{nil, {}, {RouterConfig: &v1beta1.RouterSpec{}}} {
+		if err := ValidateRuntimeRouterCapacityEndpoint(spec); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+	err := ValidateRuntimeRouterCapacityEndpoint(&v1beta1.ServingRuntimeSpec{RouterConfig: &v1beta1.RouterSpec{
+		CapacityEndpoint: &v1beta1.RouterCapacityEndpoint{Path: "/capacity", Port: 9090},
+	}})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "set spec.router.capacityEndpoint on the InferenceService") {
+		t.Fatalf("error %q lacks the operator guidance", err.Error())
+	}
+}

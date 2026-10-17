@@ -469,3 +469,61 @@ func TestKEDAReconcilerRejectsForeignController(t *testing.T) {
 func intPtr(i int) *int {
 	return &i
 }
+
+func TestConfiguredHPAName(t *testing.T) {
+	testCases := []struct {
+		name     string
+		advanced *kedav1.AdvancedConfig
+		want     string
+	}{
+		{name: "no advanced block"},
+		{name: "no HPA config", advanced: &kedav1.AdvancedConfig{RestoreToOriginalReplicaCount: true}},
+		{name: "empty name", advanced: &kedav1.AdvancedConfig{HorizontalPodAutoscalerConfig: &kedav1.HorizontalPodAutoscalerConfig{}}},
+		{
+			name:     "configured name",
+			advanced: &kedav1.AdvancedConfig{HorizontalPodAutoscalerConfig: &kedav1.HorizontalPodAutoscalerConfig{Name: "demo-engine"}},
+			want:     "demo-engine",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ConfiguredHPAName(tc.advanced); got != tc.want {
+				t.Errorf("ConfiguredHPAName() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWithHPAName(t *testing.T) {
+	hpaConfig := &kedav1.HorizontalPodAutoscalerConfig{Name: "custom"}
+	requested := &v1beta1.KedaAutoscaler{
+		Triggers: []kedav1.ScaleTriggers{{Type: "cron", Metadata: map[string]string{"timezone": "UTC"}}},
+		Advanced: &kedav1.AdvancedConfig{RestoreToOriginalReplicaCount: true, HorizontalPodAutoscalerConfig: hpaConfig},
+	}
+	original := requested.DeepCopy()
+
+	got := WithHPAName(requested, "demo-engine")
+	if got == requested {
+		t.Fatal("WithHPAName must copy the block when it changes the name")
+	}
+	if diff := cmp.Diff(original, requested); diff != "" {
+		t.Errorf("WithHPAName changed the caller's block (-want +got):\n%s", diff)
+	}
+	if name := ConfiguredHPAName(got.Advanced); name != "demo-engine" {
+		t.Errorf("configured name = %q, want %q", name, "demo-engine")
+	}
+	if !got.Advanced.RestoreToOriginalReplicaCount || !cmp.Equal(original.Triggers, got.Triggers) {
+		t.Error("WithHPAName must keep every other field")
+	}
+
+	if same := WithHPAName(requested, "custom"); same != requested {
+		t.Error("WithHPAName must return the block itself when the name already matches")
+	}
+	if WithHPAName(nil, "demo-engine") != nil {
+		t.Error("WithHPAName(nil) must stay nil")
+	}
+	bare := WithHPAName(&v1beta1.KedaAutoscaler{}, "demo-engine")
+	if name := ConfiguredHPAName(bare.Advanced); name != "demo-engine" {
+		t.Errorf("configured name on a block without advanced = %q, want %q", name, "demo-engine")
+	}
+}

@@ -113,14 +113,52 @@ type ComponentAutoscalerStatus struct {
 
 	// Conditions mirrors the HPA's or ScaledObject's conditions
 	// verbatim (HPA: ScalingActive / AbleToScale / ScalingLimited;
-	// ScaledObject: Ready / Active / Fallback / Paused). Empty when
-	// ManagedBy != "ome" — operator-owned scalers are surfaced via
-	// scaleTargetRef instead.
+	// ScaledObject: Ready / Active / Fallback / Paused). OME adds its
+	// own conditions next to them: AutoscalerSwitched when the
+	// Component moves between an OME HPA and a KEDA ScaledObject, and
+	// AutoscalerResolved when it carries an autoscalerPolicyRef. The
+	// scaler conditions are empty when ManagedBy != "ome" —
+	// operator-owned scalers are surfaced via scaleTargetRef instead.
 	// +optional
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
+
+// AutoscalerSwitchedCondition reports, per Component, whether OME finished
+// moving the Component between its own HPA and a KEDA ScaledObject.
+//
+// Moving to KEDA: OME creates a ScaledObject that names the HPA it already
+// runs, and KEDA takes that HPA over in place, keeping the same object.
+// The condition turns True once the ScaledObject controls the HPA and KEDA
+// reports the ScaledObject Ready. It stays while the ScaledObject keeps
+// naming that HPA.
+//
+// Moving back to an HPA: OME deletes the ScaledObject and the HPAs KEDA
+// created for it, waits until they are gone, and then creates its own HPA.
+// The condition turns True once nothing KEDA created remains.
+const (
+	AutoscalerSwitchedCondition = "AutoscalerSwitched"
+
+	// AutoscalerSwitchedReasonHPAControlledByKEDA: KEDA controls the HPA
+	// through the ScaledObject and reports the ScaledObject Ready.
+	AutoscalerSwitchedReasonHPAControlledByKEDA = "HPAControlledByKEDA"
+	// AutoscalerSwitchedReasonScaledObjectRemoved: the ScaledObject and its
+	// HPAs are gone and OME runs its own HPA.
+	AutoscalerSwitchedReasonScaledObjectRemoved = "ScaledObjectRemoved"
+	// AutoscalerSwitchedReasonWaitingForKEDA: KEDA has not taken the HPA
+	// over yet.
+	AutoscalerSwitchedReasonWaitingForKEDA = "WaitingForKEDA"
+	// AutoscalerSwitchedReasonScaledObjectNotReady: KEDA controls the HPA
+	// but does not report the ScaledObject Ready.
+	AutoscalerSwitchedReasonScaledObjectNotReady = "ScaledObjectNotReady"
+	// AutoscalerSwitchedReasonWaitingForScaledObjectDeletion: the
+	// ScaledObject still exists, usually while KEDA finishes deleting it.
+	AutoscalerSwitchedReasonWaitingForScaledObjectDeletion = "WaitingForScaledObjectDeletion"
+	// AutoscalerSwitchedReasonWaitingForHPADeletion: an HPA that KEDA
+	// created still exists.
+	AutoscalerSwitchedReasonWaitingForHPADeletion = "WaitingForHPADeletion"
+)
 
 // ScaleTargetRef is a stripped-down reference to the canonical scale
 // target for a Component — the InferenceReplica (for OMENative) or the

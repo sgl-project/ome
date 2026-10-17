@@ -110,17 +110,18 @@ func init() {
 	}
 }
 
-// decodeReport reads the built-in shape, which carries its own stamp.
+// decodeReport reads the built-in shape, which carries its own stamp. Each mode
+// decodes only the field it reads, so a value of any type in the other mode's
+// field cannot invalidate the report.
 func decodeReport(body []byte, cfg CapacityConfig) (CapacityReport, string) {
-	var wire struct {
-		Servable   *int32    `json:"servable"`
-		Weight     *float64  `json:"weight"`
-		ObservedAt time.Time `json:"observedAt"`
-	}
-	if err := json.Unmarshal(body, &wire); err != nil {
-		return CapacityReport{}, fmt.Sprintf("capacity response is not a valid report: %v", err)
-	}
 	if cfg.Mode == v1beta1.RoutingCapacityModeReported {
+		var wire struct {
+			Weight     *float64  `json:"weight"`
+			ObservedAt time.Time `json:"observedAt"`
+		}
+		if err := json.Unmarshal(body, &wire); err != nil {
+			return CapacityReport{}, fmt.Sprintf("capacity response is not a valid report: %v", err)
+		}
 		if wire.Weight == nil {
 			return CapacityReport{}, "capacity report has no weight"
 		}
@@ -128,6 +129,13 @@ func decodeReport(body []byte, cfg CapacityConfig) (CapacityReport, string) {
 			return CapacityReport{}, "capacity report has no observedAt stamp"
 		}
 		return CapacityReport{Weight: wire.Weight, ObservedAt: wire.ObservedAt}, ""
+	}
+	var wire struct {
+		Servable   *int32    `json:"servable"`
+		ObservedAt time.Time `json:"observedAt"`
+	}
+	if err := json.Unmarshal(body, &wire); err != nil {
+		return CapacityReport{}, fmt.Sprintf("capacity response is not a valid report: %v", err)
 	}
 	if wire.Servable == nil {
 		return CapacityReport{}, "capacity report has no servable count"
@@ -137,7 +145,7 @@ func decodeReport(body []byte, cfg CapacityConfig) (CapacityReport, string) {
 		// one, so the staleness guard could never fire.
 		return CapacityReport{}, "capacity report has no observedAt stamp"
 	}
-	return CapacityReport{Servable: *wire.Servable, ObservedAt: wire.ObservedAt}, ""
+	return CapacityReport{Servable: wire.Servable, ObservedAt: wire.ObservedAt}, ""
 }
 
 // validateReport rejects options this format has no use for. The report already

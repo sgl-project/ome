@@ -24,8 +24,10 @@ import (
 // represents utilization. ObservedAt lets the poller reject frozen reports even
 // when the endpoint still answers.
 type CapacityReport struct {
-	// Servable is an absolute replica count in Ceiling mode.
-	Servable int32 `json:"servable"`
+	// Servable is an absolute replica count in Ceiling mode. A report without
+	// one omits the field, so a report written for Reported mode cannot tell a
+	// Ceiling consumer that the home serves zero replicas.
+	Servable *int32 `json:"servable,omitempty"`
 	// Weight is the home's capacity in replicas for Reported mode, already
 	// normalized by the producer for its hardware and workload.
 	Weight     *float64  `json:"weight,omitempty"`
@@ -449,12 +451,17 @@ func (c *CapacityPoller) pollOneDetailed(
 	if err := ctx.Err(); err != nil {
 		return nil, time.Time{}, fmt.Sprintf("capacity request did not complete: %v", err)
 	}
-	v := float64(report.Servable)
+	var v float64
 	if config.Mode == v1beta1.RoutingCapacityModeReported {
 		if report.Weight == nil {
 			return nil, time.Time{}, "capacity report has no weight"
 		}
 		v = *report.Weight
+	} else {
+		if report.Servable == nil {
+			return nil, time.Time{}, "capacity report has no servable count"
+		}
+		v = float64(*report.Servable)
 	}
 	if math.IsNaN(v) || math.IsInf(v, 0) || v > math.MaxInt32 {
 		return nil, time.Time{}, "capacity report must be finite and no greater than int32 maximum"

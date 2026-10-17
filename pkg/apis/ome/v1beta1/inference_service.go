@@ -515,6 +515,35 @@ type RouterSpec struct {
 	// This can include framework-specific settings.
 	// +optional
 	Config map[string]string `json:"config,omitempty"`
+
+	// CapacityEndpoint exposes one router path on the service's gateway
+	// hostname from a router port other than the serving port. Set it when
+	// spec.routing.capacity polls the router, and the router answers that
+	// path on another port, for example its metrics port. Each serving
+	// cluster's top-level HTTPRoute then sends exactly this path to Port;
+	// every other path still reaches the serving port. Set it on the
+	// InferenceService; serving runtimes reject it.
+	// +optional
+	CapacityEndpoint *RouterCapacityEndpoint `json:"capacityEndpoint,omitempty"`
+}
+
+// RouterCapacityEndpoint names the router path that reports serving capacity
+// and the router Service port that answers it.
+type RouterCapacityEndpoint struct {
+	// Path is the exact request path, for example /capacity. It must equal
+	// spec.routing.capacity.path, which the control plane polls. "/" is
+	// rejected because it would send every request to Port.
+	// +kubebuilder:validation:MinLength=2
+	// +kubebuilder:validation:MaxLength=1024
+	// +kubebuilder:validation:Pattern=`^/[^/?#]`
+	Path string `json:"path"`
+
+	// Port is the router Service port that answers Path. OME adds the route
+	// only while the router Service exposes this port, so a wrong port leaves
+	// the capacity endpoint unreachable rather than the service unroutable.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port int32 `json:"port"`
 }
 
 // RunnerSpec defines container configuration plus additional config settings.

@@ -197,12 +197,13 @@ func (r *Router) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferenc
 		// Autoscaler dispatch is always-on per InferenceReplica.
 		// See engine dispatch for the full owner-ref + scaleTargetRef
 		// rationale.
-		if err := dispatchIRAutoscaler(ctx, &r.BaseComponentFields, isvc, ir, &r.routerSpec.ComponentExtensionSpec, res); err != nil {
+		dispatchResult, err := dispatchIRAutoscaler(ctx, &r.BaseComponentFields, isvc, ir, &r.routerSpec.ComponentExtensionSpec, res)
+		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to dispatch autoscaler for router")
 		}
 		// A policy hold recovers via config edits that emit no event; carry
 		// its periodic requeue on the result (smaller-nonzero merge).
-		return mergeRequeueAfter(ctrl.Result{}, res.RequeueAfter), nil
+		return mergeRequeueAfter(dispatchResult, res.RequeueAfter), nil
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for router")
 	}

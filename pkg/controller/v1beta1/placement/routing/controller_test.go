@@ -1523,7 +1523,7 @@ func TestReconcile_InlineProbeDisableSkipsGlobalProbe(t *testing.T) {
 func TestReconcile_InlineCapacityPolicyDrivesObservationAndRequeue(t *testing.T) {
 	requests := make(chan string, 1)
 	now := testProbeNow
-	body, err := json.Marshal(CapacityReport{Servable: 1, ObservedAt: now})
+	body, err := json.Marshal(CapacityReport{Servable: k8sptr.To(int32(1)), ObservedAt: now})
 	require.NoError(t, err)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		requests <- request.URL.Path
@@ -1573,7 +1573,7 @@ func TestReconcile_InlineCapacityPolicyDrivesObservationAndRequeue(t *testing.T)
 func TestReconcile_CapacityExpiryReprojectsWithoutPollingEarly(t *testing.T) {
 	now := testProbeNow
 	body, err := json.Marshal(CapacityReport{
-		Servable:   1,
+		Servable:   k8sptr.To(int32(1)),
 		ObservedAt: now.Add(-25 * time.Second),
 	})
 	require.NoError(t, err)
@@ -1628,7 +1628,7 @@ func TestReconcile_CapacityExpiryReprojectsWithoutPollingEarly(t *testing.T) {
 
 func TestReconcile_InvalidCapacityEndpointDoesNotBlockValidTarget(t *testing.T) {
 	now := testProbeNow
-	body, err := json.Marshal(CapacityReport{Servable: 1, ObservedAt: now})
+	body, err := json.Marshal(CapacityReport{Servable: k8sptr.To(int32(1)), ObservedAt: now})
 	require.NoError(t, err)
 	requests := make(chan string, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
@@ -1710,7 +1710,7 @@ func TestReconcile_InlineCapacityDisableSkipsGlobalCapacity(t *testing.T) {
 func TestReconcile_UsesEarliestObservationDeadline(t *testing.T) {
 	now := testProbeNow
 	clk := clocktesting.NewFakeClock(now)
-	capacityBody, err := json.Marshal(CapacityReport{Servable: 3, ObservedAt: now})
+	capacityBody, err := json.Marshal(CapacityReport{Servable: k8sptr.To(int32(3)), ObservedAt: now})
 	require.NoError(t, err)
 	requests := make(chan string, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
@@ -1800,7 +1800,7 @@ func TestReconcile_ValidatesCompleteRoutingPolicyBeforeObservation(t *testing.T)
 
 func TestReconcile_NotPlacedForgetsStaleCapacityTargets(t *testing.T) {
 	now := testProbeNow
-	body, err := json.Marshal(CapacityReport{Servable: 1, ObservedAt: now})
+	body, err := json.Marshal(CapacityReport{Servable: k8sptr.To(int32(1)), ObservedAt: now})
 	require.NoError(t, err)
 	requests := make(chan struct{}, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

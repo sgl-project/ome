@@ -331,3 +331,31 @@ func (r *KEDAReconciler) Reconcile() error {
 func (r *KEDAReconciler) SetControllerReferences(owner metav1.Object, scheme *runtime.Scheme) error {
 	return controllerutil.SetControllerReference(owner, r.ScaledObject, scheme)
 }
+
+// ConfiguredHPAName returns advanced.horizontalPodAutoscalerConfig.name, the
+// HPA name a ScaledObject asks KEDA to use, or "" when KEDA picks the name.
+// KEDA deletes its HPA and creates a new one whenever this name changes.
+func ConfiguredHPAName(advanced *kedav1.AdvancedConfig) string {
+	if advanced == nil || advanced.HorizontalPodAutoscalerConfig == nil {
+		return ""
+	}
+	return advanced.HorizontalPodAutoscalerConfig.Name
+}
+
+// WithHPAName returns kedaSpec with advanced.horizontalPodAutoscalerConfig.name
+// set to name. It copies the block instead of changing the caller's object, and
+// returns kedaSpec itself when the name already matches.
+func WithHPAName(kedaSpec *v1beta1.KedaAutoscaler, name string) *v1beta1.KedaAutoscaler {
+	if kedaSpec == nil || ConfiguredHPAName(kedaSpec.Advanced) == name {
+		return kedaSpec
+	}
+	out := kedaSpec.DeepCopy()
+	if out.Advanced == nil {
+		out.Advanced = &kedav1.AdvancedConfig{}
+	}
+	if out.Advanced.HorizontalPodAutoscalerConfig == nil {
+		out.Advanced.HorizontalPodAutoscalerConfig = &kedav1.HorizontalPodAutoscalerConfig{}
+	}
+	out.Advanced.HorizontalPodAutoscalerConfig.Name = name
+	return out
+}

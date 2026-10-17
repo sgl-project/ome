@@ -198,7 +198,11 @@ type RoutingCapacitySpec struct {
 	// +optional
 	Quorum int32 `json:"quorum,omitempty"`
 
-	// MaxAge is the maximum accepted age of a capacity report.
+	// MaxAge is the maximum accepted age of a capacity report. Choose it above
+	// quorum * period: otherwise the oldest reading can expire before the next
+	// poll lands, and the home briefly falls back to its replica count. In
+	// Reported mode each further period keeps a home on its reports through one
+	// more failed poll.
 	// +optional
 	MaxAge metav1.Duration `json:"maxAge,omitempty"`
 }

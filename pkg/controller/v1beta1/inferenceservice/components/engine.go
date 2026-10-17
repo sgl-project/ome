@@ -210,12 +210,13 @@ func (e *Engine) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferenc
 		// /scale subresource. external + none are status-field twins —
 		// both fall through to the dispatch's "delete both" branch
 		// with no separate code path.
-		if err := dispatchIRAutoscaler(ctx, &e.BaseComponentFields, isvc, ir, &e.engineSpec.ComponentExtensionSpec, res); err != nil {
+		dispatchResult, err := dispatchIRAutoscaler(ctx, &e.BaseComponentFields, isvc, ir, &e.engineSpec.ComponentExtensionSpec, res)
+		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to dispatch autoscaler for engine")
 		}
 		// A policy hold recovers via config edits that emit no event; carry
 		// its periodic requeue on the result (smaller-nonzero merge).
-		return mergeRequeueAfter(ctrl.Result{}, res.RequeueAfter), nil
+		return mergeRequeueAfter(dispatchResult, res.RequeueAfter), nil
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for engine")
 	}

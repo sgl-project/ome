@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/clock"
 	clocktesting "k8s.io/utils/clock/testing"
+	kptr "k8s.io/utils/ptr"
 )
 
 const testCapacityMaxResponseBytes int64 = 1 << 20
@@ -117,7 +118,7 @@ func capacityServer(t *testing.T, status int, body string) *httptest.Server {
 }
 
 func freshReport(servable float64) string {
-	b, _ := json.Marshal(CapacityReport{Servable: int32(servable), ObservedAt: capacityTestNow})
+	b, _ := json.Marshal(CapacityReport{Servable: kptr.To(int32(servable)), ObservedAt: capacityTestNow})
 	return string(b)
 }
 
@@ -184,16 +185,34 @@ func TestCapacityPoller_AcceptsAReportOfZero(t *testing.T) {
 	}
 }
 
+func TestCapacityPoller_CeilingReadsOnlyTheServableField(t *testing.T) {
+	// The weight field belongs to Reported mode. A value of another type there
+	// must not cost a Ceiling consumer the count it reads.
+	body := fmt.Sprintf(`{"servable":3,"weight":"n/a","observedAt":%q}`, capacityTestNow.Format(time.RFC3339Nano))
+	srv := capacityServer(t, http.StatusOK, body)
+	p := newTestPoller(t)
+
+	got, reason := p.pollOne(context.Background(), testCapacityTarget("cluster-a", srv.URL), testCapacityConfig())
+	if got == nil {
+		t.Fatalf("report discarded: %s", reason)
+	}
+	if *got != 3 {
+		t.Fatalf("servable = %v, want 3", *got)
+	}
+}
+
 func TestCapacityPoller_FailsOpenOnEveryBadAnswer(t *testing.T) {
 	// Every one of these must leave the control-plane plan standing. Fail-closed
 	// would turn a control-plane-to-data-plane blip into a fleet-wide cutoff,
 	// and a malformed or stale number must never be able to black-hole a home.
-	stale, _ := json.Marshal(CapacityReport{Servable: 2, ObservedAt: capacityTestNow.Add(-time.Hour)})
-	future, _ := json.Marshal(CapacityReport{Servable: 2, ObservedAt: capacityTestNow.Add(time.Hour)})
-	negative, _ := json.Marshal(CapacityReport{Servable: -1, ObservedAt: capacityTestNow})
-	noStamp, _ := json.Marshal(CapacityReport{Servable: 2})
+	stale, _ := json.Marshal(CapacityReport{Servable: kptr.To(int32(2)), ObservedAt: capacityTestNow.Add(-time.Hour)})
+	future, _ := json.Marshal(CapacityReport{Servable: kptr.To(int32(2)), ObservedAt: capacityTestNow.Add(time.Hour)})
+	negative, _ := json.Marshal(CapacityReport{Servable: kptr.To(int32(-1)), ObservedAt: capacityTestNow})
+	noStamp, _ := json.Marshal(CapacityReport{Servable: kptr.To(int32(2))})
 	missingServable := fmt.Sprintf(`{"observedAt":%q}`, capacityTestNow.Format(time.RFC3339Nano))
 	nullServable := fmt.Sprintf(`{"servable":null,"observedAt":%q}`, capacityTestNow.Format(time.RFC3339Nano))
+	weight := 2.5
+	reportedOnly, _ := json.Marshal(CapacityReport{Weight: &weight, ObservedAt: capacityTestNow})
 
 	tests := []struct {
 		name   string
@@ -208,6 +227,9 @@ func TestCapacityPoller_FailsOpenOnEveryBadAnswer(t *testing.T) {
 		{"report with no observedAt stamp", http.StatusOK, string(noStamp)},
 		{"report with missing servable", http.StatusOK, missingServable},
 		{"report with null servable", http.StatusOK, nullServable},
+		// A report built for Reported mode carries no count, so it cannot read
+		// as a ceiling of zero.
+		{"report written for Reported mode", http.StatusOK, string(reportedOnly)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -720,7 +742,7 @@ func TestCapacityPollerReconcileUsesAbsoluteDeadlines(t *testing.T) {
 func TestCapacityPollerReconcileExpiresAReportBeforeTheNextPoll(t *testing.T) {
 	var requests atomic.Int32
 	observedAt := capacityTestNow.Add(-25 * time.Second)
-	body, err := json.Marshal(CapacityReport{Servable: 3, ObservedAt: observedAt})
+	body, err := json.Marshal(CapacityReport{Servable: kptr.To(int32(3)), ObservedAt: observedAt})
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}

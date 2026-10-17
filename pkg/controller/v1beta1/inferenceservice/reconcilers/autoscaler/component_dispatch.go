@@ -133,7 +133,7 @@ func DispatchForRawComponent(ctx context.Context, input RawDispatchInput) error 
 		Name:       input.ComponentMeta.Name,
 	}
 
-	if err := DispatchAutoscaler(ctx, DispatchParams{
+	dispatchErr := DispatchAutoscaler(ctx, DispatchParams{
 		Client:         input.Client,
 		Scheme:         input.Scheme,
 		Owner:          owner,
@@ -145,14 +145,19 @@ func DispatchForRawComponent(ctx context.Context, input RawDispatchInput) error 
 		Autoscaler:     input.ResolvedAutoscaler,
 		MinReplicas:    minR,
 		MaxReplicas:    maxR,
-	}); err != nil {
-		return err
+	})
+	// A pending HPA / KEDA switch has already applied this block, so it is
+	// recorded as last-known-good before the pending result is returned.
+	if dispatchErr != nil && !IsTransitionPending(dispatchErr) {
+		return dispatchErr
 	}
 
 	if input.PolicySourced && !input.PolicyHold {
-		return stampRawLastRendered(ctx, input.Client, input.ComponentMeta.Namespace, input.ComponentMeta.Name, input.ResolvedAutoscaler)
+		if err := stampRawLastRendered(ctx, input.Client, input.ComponentMeta.Namespace, input.ComponentMeta.Name, input.ResolvedAutoscaler); err != nil {
+			return err
+		}
 	}
-	return nil
+	return dispatchErr
 }
 
 // rawLastRendered reads the last-known-good policy render off the
