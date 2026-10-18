@@ -115,6 +115,74 @@ func TestHfArtifactRecoveryRestoresRelationshipsAsFailed(t *testing.T) {
 	}
 }
 
+func TestHfArtifactRecoveryRestoresChildOfInterruptedParent(t *testing.T) {
+	for _, duringDownload := range []bool{false, true} {
+		for _, periodic := range []bool{false, true} {
+			t.Run(fmt.Sprintf("download=%t/periodic=%t", duringDownload, periodic), func(t *testing.T) {
+				h, first, second := newTestHfArtifactRepair(t)
+				ctx := context.Background()
+				_, err := h.handleDownloadOverride(ctx, first, func(string) (bool, error) {
+					if duringDownload {
+						return false, nil
+					}
+					return false, context.Canceled
+				}, func(string) error { return context.Canceled })
+				require.ErrorIs(t, err, context.Canceled)
+				interrupted := testRepairParent(t, h, first)
+				require.True(t, interrupted.interrupted())
+				c := h.repository.configMaps
+				cm, err := c.getConfigMap(ctx)
+				require.NoError(t, err)
+				delete(cm.Data, first.ChildModelKey)
+				_, err = c.kubeClient.CoreV1().ConfigMaps(c.namespace).Update(ctx, cm, metav1.UpdateOptions{})
+				require.NoError(t, err)
+				if periodic {
+					c.reconcileConfigMaps()
+				} else {
+					snapshot := *c.modelCache[first.ChildModelKey]
+					c.restoreModelInConfigMap(first.ChildModelKey, &snapshot)
+				}
+				parent := testRepairParent(t, h, first)
+				assert.True(t, parent.interrupted())
+				assert.Equal(t, interrupted.LastCompletedLockID, parent.LastCompletedLockID)
+				assertTestRepairChildStatuses(t, h, map[string]ModelStatus{
+					first.ChildModelKey: ModelStatusFailed, second.ChildModelKey: ModelStatusFailed})
+				result, err := h.handleDownloadOverride(ctx, first,
+					func(string) (bool, error) { return true, nil },
+					func(string) error { t.Fatal("recovered files must be validated before redownload"); return nil })
+				require.NoError(t, err)
+				require.Equal(t, hfArtifactTaskDone, result.Outcome, "%v", result.RetryReason)
+				assertTestRepairChildStatuses(t, h, map[string]ModelStatus{
+					first.ChildModelKey: ModelStatusReady, second.ChildModelKey: ModelStatusReady})
+			})
+		}
+	}
+}
+
+func TestHfArtifactRecoveryWaitsForParentOwnerBeforeRestoringChild(t *testing.T) {
+	h, first, second := newTestHfArtifactRepair(t)
+	ctx := context.Background()
+	owned, acquired, err := h.repository.TryAcquireLockForRepair(ctx, first.Parent)
+	require.NoError(t, err)
+	require.True(t, acquired)
+	c := h.repository.configMaps
+	cm, err := c.getConfigMap(ctx)
+	require.NoError(t, err)
+	delete(cm.Data, first.ChildModelKey)
+	_, err = c.kubeClient.CoreV1().ConfigMaps(c.namespace).Update(ctx, cm, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	c.reconcileConfigMaps()
+	cm, err = c.getConfigMap(ctx)
+	require.NoError(t, err)
+	assert.NotContains(t, cm.Data, first.ChildModelKey)
+	assert.Equal(t, owned, testRepairParent(t, h, first), "recovery must not change an active owner's snapshot")
+	assertTestRepairChildStatuses(t, h, map[string]ModelStatus{second.ChildModelKey: ModelStatusReady})
+	require.NoError(t, h.repository.MarkInterrupted(ctx, owned))
+	c.reconcileConfigMaps()
+	assertTestRepairChildStatuses(t, h, map[string]ModelStatus{
+		first.ChildModelKey: ModelStatusFailed, second.ChildModelKey: ModelStatusFailed})
+}
+
 func TestHfArtifactRecoveryRestoresPendingDeletionAfterConfigMapLoss(t *testing.T) {
 	h, input, pending := newRecoveryCoveragePendingDeletion(t)
 	ctx := context.Background()
@@ -135,8 +203,8 @@ func TestHfArtifactRecoveryRestoresPendingDeletionAfterConfigMapLoss(t *testing.
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Empty(t, parent.Children)
-	assert.Equal(t, HfArtifactStatusFailed, parent.Status)
-	assert.Empty(t, parent.LockID)
+	assert.Equal(t, HfArtifactStatusUpdating, parent.Status)
+	assert.Equal(t, pending.ParentLockID, parent.LockID)
 	assertChildSymlinkTarget(t, input.ChildModelPath, input.Parent.LocalPath)
 
 	result, err := h.handleDelete(ctx, input)

@@ -35,6 +35,7 @@ type Scout struct {
 	clusterBaseModelSynced cache.InformerSynced
 	informerFactory        omev1beta1informers.SharedInformerFactory
 	gopherChan             chan<- *GopherTask
+	startupStopCh          <-chan struct{}
 	nodeName               string
 	nodeInfo               *v1.Node
 	nodeShapeAlias         string
@@ -65,6 +66,7 @@ func NewScout(ctx context.Context, nodeName string,
 	informerFactory omev1beta1informers.SharedInformerFactory,
 	gopherChan chan<- *GopherTask,
 	kubeClient *kubernetes.Clientset,
+	configMapReconciler *ConfigMapReconciler,
 	logger *zap.SugaredLogger) (*Scout, error) {
 
 	logger.Infof("Initializing Scout for node: %s", nodeName)
@@ -103,6 +105,29 @@ func NewScout(ctx context.Context, nodeName string,
 		logger:                 logger,
 	}
 
+	// Capture cleanup intents before workers start. Replay only initial Add
+	// events so subsequent placement updates retain informer delivery order.
+	startupCleanup := make(map[string]bool)
+	cm, err := configMapReconciler.getConfigMap(ctx)
+	if err != nil && !errors.IsNotFound(err) {
+		return nil, fmt.Errorf("read startup shared artifact cleanup: %w", err)
+	}
+	if err == nil {
+		for key := range cm.Data {
+			if isHfArtifactConfigMapKey(key) {
+				continue
+			}
+			entry, err := existingModelEntry(cm.Data, key)
+			if err != nil {
+				logger.Warnf("Cannot read startup cleanup for model %s: %v", key, err)
+				continue
+			}
+			if entry.HfArtifactPendingDeletion != nil || entry.HfArtifactPendingDownload != nil {
+				startupCleanup[key] = true
+			}
+		}
+	}
+
 	logger.Info("Setting up informer error handlers")
 	informers := map[string]cache.SharedInformer{
 		"baseModelInformer":        baseModelInformer.Informer(),
@@ -130,16 +155,32 @@ func NewScout(ctx context.Context, nodeName string,
 
 	logger.Info("Setting up event handlers")
 
-	if _, err := baseModelInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    scout.downloadBaseModel,
+	if _, err := baseModelInformer.Informer().AddEventHandler(cache.ResourceEventHandlerDetailedFuncs{
+		AddFunc: func(obj interface{}, initial bool) {
+			model, ok := obj.(*v1beta1.BaseModel)
+			if ok && initial && model.DeletionTimestamp.IsZero() && startupCleanup[getModelID(model, nil)] {
+				if scout.replayStartupCleanup(&GopherTask{TaskType: Delete, BaseModel: model, NodeIneligible: true, SharedArtifact: true}) {
+					return
+				}
+			}
+			scout.downloadBaseModel(obj)
+		},
 		UpdateFunc: scout.updateBaseModel,
 		DeleteFunc: scout.deleteBaseModel,
 	}); err != nil {
 		return nil, err
 	}
 
-	if _, err := clusterBaseModelInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    scout.downloadClusterBaseModel,
+	if _, err := clusterBaseModelInformer.Informer().AddEventHandler(cache.ResourceEventHandlerDetailedFuncs{
+		AddFunc: func(obj interface{}, initial bool) {
+			model, ok := obj.(*v1beta1.ClusterBaseModel)
+			if ok && initial && model.DeletionTimestamp.IsZero() && startupCleanup[getModelID(nil, model)] {
+				if scout.replayStartupCleanup(&GopherTask{TaskType: Delete, ClusterBaseModel: model, NodeIneligible: true, SharedArtifact: true}) {
+					return
+				}
+			}
+			scout.downloadClusterBaseModel(obj)
+		},
 		UpdateFunc: scout.updateClusterBaseModel,
 		DeleteFunc: scout.deleteClusterBaseModel,
 	}); err != nil {
@@ -149,8 +190,23 @@ func NewScout(ctx context.Context, nodeName string,
 	return scout, nil
 }
 
+// Cleanup checks paths declared by both kinds of model, so it must wait for
+// both stores. Waiting in the initial Add also keeps later updates behind it.
+func (w *Scout) replayStartupCleanup(task *GopherTask) bool {
+	if !cache.WaitForCacheSync(w.startupStopCh, w.baseModelSynced, w.clusterBaseModelSynced) {
+		return true
+	}
+	if w.shouldDownloadModel(taskModelSpec(task).Storage) {
+		return false
+	}
+	w.logger.Infof("Resuming shared artifact cleanup for ineligible model %s", getModelInfoForLogging(task))
+	w.gopherChan <- task
+	return true
+}
+
 func (w *Scout) Run(stopCh <-chan struct{}) error {
 	defer runtime.HandleCrash()
+	w.startupStopCh = stopCh
 
 	w.logger.Info("Starting scout")
 	w.logger.Info("Starting informer cache")

@@ -27,7 +27,9 @@ func TestStartupCoveragePendingFailureFencesEveryOperation(t *testing.T) {
 				parent, acquired, err := h.repository.TryAcquireLockForRepair(ctx, input.Parent)
 				require.NoError(t, err)
 				require.True(t, acquired)
-				h.pendingFailures.Store(parent.Key, &parent)
+				failed := parent
+				failed.Status = HfArtifactStatusFailed
+				h.pendingLockReleases.Store(parent.Key, &failed)
 				unavailable := true
 				h.repository.configMaps.kubeClient.(*fake.Clientset).PrependReactor(failedVerb, "configmaps", func(ktesting.Action) (bool, runtime.Object, error) {
 					if unavailable {
@@ -55,7 +57,7 @@ func TestStartupCoveragePendingFailureFencesEveryOperation(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, hfArtifactTaskRetry, result.Outcome)
 				require.ErrorContains(t, result.RetryReason, "pending failure API unavailable")
-				_, pending := h.pendingFailures.Load(parent.Key)
+				_, pending := h.pendingLockReleases.Load(parent.Key)
 				require.True(t, pending)
 				assertChildSymlinkTarget(t, input.ChildModelPath, parent.LocalPath)
 				unavailable = false
@@ -63,13 +65,13 @@ func TestStartupCoveragePendingFailureFencesEveryOperation(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, found)
 				assert.Equal(t, parent.LockID, stored.LockID)
-				require.NoError(t, h.retryPendingParentFailure(ctx, parent.Key))
+				require.NoError(t, h.retryPendingLockRelease(ctx, parent.Key))
 				stored, _, err = h.repository.Get(ctx, parent.Identity)
 				require.NoError(t, err)
 				assert.Equal(t, HfArtifactStatusFailed, stored.Status)
 				assert.Empty(t, stored.LockID)
 				assert.Equal(t, input.ChildModelPath, stored.Children[input.ChildModelKey])
-				_, pending = h.pendingFailures.Load(parent.Key)
+				_, pending = h.pendingLockReleases.Load(parent.Key)
 				assert.False(t, pending)
 			})
 		}
@@ -78,7 +80,7 @@ func TestStartupCoveragePendingFailureFencesEveryOperation(t *testing.T) {
 
 func TestStartupCoverageRecoveryRetriesStatusPublication(t *testing.T) {
 	for _, completed := range []bool{false, true} {
-		t.Run(map[bool]string{false: "failed owner", true: "completed owner"}[completed], func(t *testing.T) {
+		t.Run(map[bool]string{false: "interrupted owner", true: "completed owner"}[completed], func(t *testing.T) {
 			ctx := context.Background()
 			h, first, _ := newTestHfArtifactRepair(t)
 			parent, acquired, err := h.repository.TryAcquireLockForRepair(ctx, first.Parent)
@@ -105,7 +107,7 @@ func TestStartupCoverageRecoveryRetriesStatusPublication(t *testing.T) {
 			require.NoError(t, startup.recover(ctx))
 			stored, _, err = h.repository.Get(ctx, parent.Identity)
 			require.NoError(t, err)
-			want := HfArtifactStatusFailed
+			want := HfArtifactStatusUpdating
 			if completed {
 				want = HfArtifactStatusReady
 			}
@@ -126,7 +128,7 @@ func TestStartupCoverageQuarantinesInvalidOwnership(t *testing.T) {
 			require.NoError(t, err)
 			parent, err := decodeHfArtifactEntry(first.Parent.Key, cm.Data[first.Parent.Key])
 			require.NoError(t, err)
-			parent.Status, parent.LockID = status, ""
+			parent.Status, parent.LockID, parent.LastCompletedLockID = status, "", ""
 			raw, err := json.Marshal(parent)
 			require.NoError(t, err)
 			cm.Data[parent.Key] = string(raw)

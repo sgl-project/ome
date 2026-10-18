@@ -531,7 +531,7 @@ func (c hfArtifactRepairContextConfigMaps) Update(ctx context.Context, cm *corev
 	return c.ConfigMapInterface.Update(ctx, cm, opts)
 }
 
-func TestHfArtifactRepairCancellationStillPublishesFailedWithBoundedContext(t *testing.T) {
+func TestHfArtifactRepairCancellationReleasesLockWithBoundedContext(t *testing.T) {
 	for _, cancelDuring := range []string{"validation", "download"} {
 		t.Run(cancelDuring, func(t *testing.T) {
 			h, first, second := newTestHfArtifactRepair(t)
@@ -543,7 +543,7 @@ func TestHfArtifactRepairCancellationStillPublishesFailedWithBoundedContext(t *t
 				checkUpdate: func(cleanupCtx context.Context, cm *corev1.ConfigMap) {
 					parent, err := decodeHfArtifactEntry(first.Parent.Key, cm.Data[first.Parent.Key])
 					require.NoError(t, err)
-					if parent.Status != HfArtifactStatusFailed {
+					if parent.Status != HfArtifactStatusUpdating || parent.LockID != "" {
 						return
 					}
 					cleanupObserved = true
@@ -567,7 +567,7 @@ func TestHfArtifactRepairCancellationStillPublishesFailedWithBoundedContext(t *t
 			require.ErrorIs(t, err, context.Canceled)
 			assert.True(t, cleanupObserved)
 			parent := testRepairParent(t, h, first)
-			assert.Equal(t, HfArtifactStatusFailed, parent.Status)
+			assert.Equal(t, HfArtifactStatusUpdating, parent.Status)
 			assert.Empty(t, parent.LockID)
 			want := ModelStatusReady
 			if cancelDuring == "download" {

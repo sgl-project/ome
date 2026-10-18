@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -19,6 +20,21 @@ import (
 
 	"sigs.k8s.io/ome/pkg/constants"
 )
+
+func TestRetryPreservesLastError(t *testing.T) {
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded, errors.New("download failed")} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			attempts := 0
+			err := Retry(3, 0, func() error {
+				attempts++
+				return fmt.Errorf("download interrupted: %w", cause)
+			})
+			assert.Equal(t, 3, attempts)
+			assert.ErrorIs(t, err, cause)
+			assert.EqualError(t, err, fmt.Sprintf("after 3 attempts, last error: download interrupted: %s", cause))
+		})
+	}
+}
 
 func TestFilterUtil(t *testing.T) {
 	scenarios := map[string]struct {

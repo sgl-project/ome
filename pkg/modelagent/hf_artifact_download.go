@@ -18,7 +18,7 @@ func (h *hfArtifactTaskHandler) handleDownload(
 		return newHfArtifactRetryResult(input.Parent.Key, err), nil
 	}
 	defer unlock()
-	if err := h.retryPendingParentFailure(ctx, input.Parent.Key); err != nil {
+	if err := h.retryPendingLockRelease(ctx, input.Parent.Key); err != nil {
 		return newHfArtifactRetryResult(input.Parent.Key, err), nil
 	}
 	if result, pending := h.resumeDeletionBeforeDownload(ctx, input); pending {
@@ -44,8 +44,23 @@ func (h *hfArtifactTaskHandler) handleDownload(
 	if h.childPathConflictsWithParent(input.ChildModelPath, parent.LocalPath) {
 		return hfArtifactTaskResult{Outcome: hfArtifactTaskUseDefaultDownload}, nil
 	}
+	input.Parent = parent
+	if found && parent.blocksNewOperation() &&
+		!h.files.ParentReadyMarkerMatchesLock(parent) {
+		// An owned deletion must finish before another child registers a
+		// download intent that could prevent that deletion from completing.
+		return newHfArtifactRetryResult(parent.Key, nil), nil
+	}
+	if err := h.repository.rememberDownload(ctx, input); err != nil {
+		return newHfArtifactRetryResult(parent.Key, err), nil
+	}
 
-	if !found || parent.Status == HfArtifactStatusFailed {
+	if !found || parent.Status == HfArtifactStatusFailed || parent.interrupted() {
+		// Another task may have released a validation lock after the caller
+		// selected ordinary reuse. Preserve completed files for repair on retry.
+		if found && h.files.ParentReadyMarkerExists(parent) {
+			return newHfArtifactRetryResult(parent.Key, fmt.Errorf("shared Hugging Face parent %s requires repair", parent.Key)), nil
+		}
 		return h.downloadParentAndAttachChild(ctx, input, parent, download)
 	}
 	return h.reuseParent(ctx, input, parent)
@@ -73,7 +88,7 @@ func (h *hfArtifactTaskHandler) downloadParentAndAttachChild(
 		if acquired {
 			// The acquisition may have committed despite the error. Retain only
 			// our attempted owner so retry can release it before acquiring again.
-			h.pendingFailures.Store(parent.Key, &parent)
+			h.pendingLockReleases.Store(parent.Key, &parent)
 		}
 		return newHfArtifactRetryResult(input.Parent.Key, err), nil
 	}
@@ -85,20 +100,20 @@ func (h *hfArtifactTaskHandler) downloadParentAndAttachChild(
 	// Acquisition returns current state, not the earlier snapshot. Recheck both
 	// recorded and local children before resetting files under this lock.
 	if err := h.validateParentForInitialDownload(parent, root); err != nil {
-		return newHfArtifactRetryResult(parent.Key, errors.Join(err, h.markParentFailed(ctx, parent))), nil
+		return newHfArtifactRetryResult(parent.Key, errors.Join(err, h.releaseParentLock(ctx, parent, HfArtifactStatusFailed))), nil
 	}
 
 	if download == nil {
-		return h.markLockedParentFailed(ctx, parent, fmt.Errorf("download function for shared Hugging Face parent %s is nil", parent.Key))
+		return h.finishParentWithError(ctx, parent, fmt.Errorf("download function for shared Hugging Face parent %s is nil", parent.Key))
 	}
 	if err := h.files.ResetParentDirectory(parent.LocalPath); err != nil {
-		return h.markLockedParentFailed(ctx, parent, err)
+		return h.finishParentWithError(ctx, parent, err)
 	}
 	if err := download(parent.LocalPath); err != nil {
-		return h.markLockedParentFailed(ctx, parent, err)
+		return h.finishParentWithError(ctx, parent, err)
 	}
 	if err := h.files.WriteParentReadyMarker(parent); err != nil {
-		return h.markLockedParentFailed(ctx, parent, err)
+		return h.finishParentWithError(ctx, parent, err)
 	}
 	if err := h.markParentReady(ctx, parent); err != nil {
 		// Keep the marker: a retry can finish this update without downloading again.
