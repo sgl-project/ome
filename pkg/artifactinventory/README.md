@@ -61,8 +61,12 @@ or cause the builder to inspect other nodes.
 still check serving demand and eviction policy. The CM, CRs, and Jobs are not
 read atomically; this output is not a deletion authorization.
 
-The optional [RBAC example](../../config/artifact-inventory/rbac.yaml) grants
-only the required GET permissions. It is not installed by the OME charts.
+The caller's ServiceAccount needs `get` permission for BaseModels across model
+namespaces, ConfigMaps in the configured model-agent namespace, and
+ReplicationJobs in `default`. This library uses the caller's Kubernetes client
+and does not need a separate ServiceAccount. The
+[eviction controller RBAC](../../config/model-eviction-controller/rbac.yaml)
+already includes these permissions.
 
 ```sh
 go test -race ./pkg/artifactinventory
