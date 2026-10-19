@@ -413,6 +413,16 @@ func (s *Gopher) processTaskWithSourceAdapters(task *GopherTask, allowFallbackDo
 		baseModelSpec = task.ClusterBaseModel.Spec
 	}
 
+	if handled, err := s.processLocalArtifactRestore(ctx, task, allowFallbackDownload, func(path string) (bool, error) {
+		uri, err := getTargetDirPath(&baseModelSpec)
+		if err != nil {
+			return false, err
+		}
+		return s.validateHfOCIArtifact(ctx, task, uri, path)
+	}); handled {
+		return err
+	}
+
 	if task.TaskType == Download || task.TaskType == DownloadOverride {
 		if skip, runDeleteCleanup := s.shouldSkipStaleDownloadTask(task); skip {
 			if runDeleteCleanup {
